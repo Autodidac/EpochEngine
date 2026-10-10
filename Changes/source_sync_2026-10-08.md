@@ -30,6 +30,63 @@ not the dirty working directory. Keep earlier source admissions and runtime byte
 
 ## Delivery
 
+### October 10 Extensions reconciliation — v0.2.1
+
+The operator explicitly authorized closing the previously separate reconciliation
+gate. GitHub main now reads back
+`a003bcab58a859e170edb79ca8e63ed15707b2d5`, tree
+`986d824a88a5d2b2bdcc24fc81b3a94fe76e1df4`, with both original parents:
+GitHub `eccef139f982a9e6b64295cd9c8b976905ef0990` and Site
+`16007d4b492855ca770ac172b0e7a2e24400d8aa`. Both ancestry checks and git fsck
+pass. This is a true merge, not a force replacement of either unrelated history.
+Earlier pending-decision statements below are historical receipts superseded by
+this authorization and reconciliation.
+
+All 80 original GitHub paths remain; only the existing root README changes.
+All ten optional package source trees, their contracts/manifests/tools and policy
+bytes remain unchanged. The seven Site-only build/catalog/terrain paths are
+retained; terrain module, test and package notices are imported byte-for-byte.
+The root LICENSE retains the GitHub bytes; the Site root differs only in whitespace
+and remains in its original history. Root CMake v0.2.1 now builds the combined
+source with explicit authoritative Engine modules, registering the ten existing
+package CPU contracts plus terrain, catalog and manifest checks. All eight stable
+catalog entry identities/admission states remain unchanged. The catalog is not
+an exhaustive replacement of the ten package source trees.
+
+Windows CPU proof uses CMake 4.4.2, MSVC 19.44.35227.0, SDK 10.0.19041.0 and
+current v0.90.35 Engine modules. All 13 contracts pass in both Debug and Release.
+The independent terrain-only Release option also builds and passes 3/3 contracts.
+No original package or terrain C++ bytes were changed to obtain the result.
+Builds use the short task-owned `build/ext-msvc` output and single-node MSBuild.
+The earlier restricted multi-node stall and deeply nested generated paths
+exceeding Windows limits are retained as build-host evidence, not source defects.
+No renderer, model, listener, service or Editor child runs. Linux/macOS and native
+Package Manager integration are not newly qualified by these CPU checks.
+Logs and exact exports are retained under `build/extensions-reconcile-20261010`.
+
+Both exact committed exports contain 88 regular paths under
+`EpochEngineExtensions-0.2.1-source/`, with every ZIP/TAR file body hash matching:
+
+- ZIP: 127,456 bytes; SHA-256
+  `d518bdd7eb4271947e0bd5977b03afeee5331fc1d8f56d12be7690342f911d2f`.
+- TAR.GZ: 56,199 bytes; SHA-256
+  `e0a752ff4c890baa16c82cdb65f6b132dd6fd924d8627bc0ec62732209d7c67d`.
+
+The exact pair and merge are handed to the existing Site owner for fast-forward
+mirror publication and independent download/clone checks. The terminal Site
+deployment/readback receipt is still pending; a queued handoff is not publication.
+Historical v0.1.0/v0.2.0 tags, both parents and old source archives are preserved.
+No new runtime release, package activation or historical tag movement is part of
+this source reconciliation.
+
+Engine's dependency record now identifies this external reviewed revision while
+its fixture tree stays `e0d07b41af9f8b065b1a6caef402b1ee83e073fd`. The local
+Extensions directory is still engine-owned compatibility data, not the complete
+upstream mirror. No optional package source is copied into Engine core. EpochGui's
+exact mirror and unrelated operator solution/workspace changes remain untouched.
+These reference/documentation changes do not alter tested Engine production
+inputs or replace the Site's exact f8ecd7e8 Engine source pair or immutable runtimes.
+
 ### October 10 final Clang-corrected source publication
 
 Exact source checkpoint `f8ecd7e820c6608147d8c246813fafd28b7f13c6`, tree

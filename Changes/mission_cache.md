@@ -17,10 +17,13 @@ operator evidence before making a broader absence claim.
 
 - October 10 mirror decision: create a new canonical EpochGui Site Git mirror
   from GitHub c52e9129, preserving the old b9716742 mirror, its unrelated history
-  and availability. Verify an actual clone, not just staged assets. Extensions
-  Site v0.2.0/16007d4b contains seven terrain build/catalog/module/test paths absent
-  from GitHub eccef139; preserve both sources pending a separate reconciliation
-  decision. Foundation source entries are not completed consumer integrations.
+  and availability. Verify an actual clone, not just staged assets. The operator
+  subsequently authorizes Extensions reconciliation: join the GitHub package and
+  Site terrain histories, preserve both parents and all historical tags/archives,
+  and verify the combined source/build/publication rather than downgrading either
+  owner. Keep optional package source external and distinguish it from Engine's
+  embedded compatibility fixture. Foundation source entries are not completed
+  consumer integrations.
 - October 9 batching clarification: no arbitrary lifetime operation or plan-call
   quota. Use grouped semantic work and queued private jobs; measure actual batch
   cost and adjust per-transaction work to preserve responsiveness. Cumulative

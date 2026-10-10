@@ -149,8 +149,12 @@ Site v119's four standalone source pairs and the new canonical EpochGuiCurrent
 mirror at c52e9129 remain verified unchanged by anonymous clone/fsck. Old
 EpochGui.git b9716742 history/tags/refs remain unchanged. PlatformEngine is v0.1.1;
 Audio/Media are source foundations, not completed Engine integrations.
-Extensions Site v0.2.0/16007d4b has seven terrain paths absent from GitHub eccef139:
-preserve both pending the separate reconciliation decision; never downgrade it.
+The operator-authorized Extensions v0.2.1 reconciliation is merged/tested on
+GitHub at a003bcab, preserving both eccef139 and 16007d4b ancestries and all
+package/terrain source. Debug and Release pass 13/13 CPU contracts each. Exact
+paired exports are handed to the Site owner for verified fast-forward publication;
+an actual clone/download/deployment receipt, not a queued handoff, closes delivery.
+Historical v0.1.0/v0.2.0 tags/archives and the Engine fixture remain unchanged.
 
 Tracked source is canonical; authored Projects are durable; builds reproducible.
 Retained candidate folders hold edits, lineage and evidence, not disposable

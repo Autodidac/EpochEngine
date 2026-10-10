@@ -27,3 +27,17 @@ October 7 audit: EpochGui's bundled and upstream trees both equal
 `eccef139f982a9e6b64295cd9c8b976905ef0990`; its tree differs from the deliberately
 smaller Engine fixture. No dependency source edits or upstream pushes are needed
 for the Engine-only folder/input/AI-status repairs in this pass.
+
+October 10 reconciliation: Extensions v0.2.1 upstream is now
+`a003bcab58a859e170edb79ca8e63ed15707b2d5`, tree
+`986d824a88a5d2b2bdcc24fc81b3a94fe76e1df4`. It joins both GitHub eccef139 and
+Site 16007d4b histories, preserving all ten package source trees and the Site
+tiered-terrain module/contract/notices. All 13 CPU contracts pass in Debug and
+Release with authoritative current Engine modules. Existing v0.1.0/v0.2.0
+tags and archives remain immutable; publication is recorded in
+`Changes/source_sync_2026-10-08.md`.
+
+The `engine_owned_descriptor_fixture` record's revision identifies the reviewed
+external source; its tree identifies the deliberately smaller, unchanged Engine
+fixture, not the upstream repository tree. No optional source trees are copied
+into core, and source publication does not activate packages or grant execution.
