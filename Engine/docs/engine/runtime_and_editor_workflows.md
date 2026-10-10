@@ -794,7 +794,8 @@ execution.
 - Engine Development source proposals are two-pass and context-first. AI Controls
   owns ordinary-language objective entry and keeps model/endpoint evidence
   visible. Epoch uses host-side triage and a verified compact repository map;
-  model navigation chooses up to 12 paths per packet, not per whole project.
+  model navigation batches listed paths/read records within the active context
+  budget and the per-packet transport ceiling, not a twelve-file task limit.
   The host records and validates that selection before
   automatically opening only those bytes inside Candidate Lab. The model may
   request catalog-listed expansion, but cannot invent paths or permissions.
@@ -1568,8 +1569,11 @@ profile enables it; engine-source authority is never inherited by that project.
 In the operational panel, `Start With AI` accepts an ordinary description of the
 desired result. The operator does not name a source file or internal subsystem.
 Epoch keeps the selected provider and endpoint visible, uses host triage or asks
-the model to navigate a verified compact map (up to 12 paths per packet), records the validated choice
-in Detailed Session Activity, opens only those bytes inside Candidate Lab, and
+the model to navigate a verified byte-budgeted project map and batch missing
+source reads. The 256-record read transport ceiling is per packet, not a
+twelve-file mission limit; current FILE bodies remain exact edit evidence.
+It records the validated choice in Detailed Session Activity, opens the admitted
+bytes inside Candidate Lab, and
 continues into planning. The returned numbered plan is digest-bound, shown as
 the Saved Mission Plan, and fed back with selection checkpoints when the loop
 resumes. Plans describe outcomes and testable steps against the bound reviewed

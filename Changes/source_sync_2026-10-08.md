@@ -60,17 +60,36 @@ includes that header in the global module fragment; no renderer, queue order or
 AI protocol is changed. Optimized-symbols Editor/HeadlessCI rebuild and the
 complete pure suite pass at 04:36:02 on October 10; normal Release Editor/HeadlessCI
 rebuild and its pure suite pass at 04:39:50. Build and complete failed
-CI logs stay under build/batched-authoring-20261009. Hosted confirmation of this
-new correction is still required; local Ubuntu is blocked by its missing VHD.
+CI logs stay under build/batched-authoring-20261009. The tested correction is
+b3aae56ec867fa24d8c38143dacb714c6e1316d4, tree
+bf1e875825602b88f57c3ea3bb7b2e17c47103f8, atomically pushed/read back on main
+and stable. All five CMake jobs in run 38038863470 and MSBuild run 38038863481
+pass. Full-engine Clang passes 62/62 tests at 05:07:04 on October 10;
+clang-b3aae56e-passed-full.log retains its complete 5,229-line transcript.
+Local Ubuntu remains blocked by its missing VHD; this is hosted Linux proof.
 The operator's running normal Debug Editor is not stopped or overwritten.
 
-The interrupted standalone publication resumes in the existing Site-owner
-chat. v116 is confirmed deployed; archive activation and new mirror clone proof
-must be recorded separately, not inferred from deployment alone. The operator
-explicitly approves creating a new canonical EpochGui mirror from c52e9129 and
-preserving old b9716742 history/availability; their unrelated histories cannot
-fast-forward. PlatformEngine remains v0.1.1; Audio/Media are source foundations,
-not new implemented native engines or release packages.
+The interrupted standalone publication is now verified in the existing
+Site-owner chat. Four exact source pairs from v116 remain live in final Site
+v119, commit 574156f8c7f198c597fd049486f1b2d9d24c5724, deployment
+appgdep_6ac9fa69feac81918c3355ca940957d1. All 20 source assets were independently
+re-downloaded with exact sizes/hashes after final deployment. Current route
+/git/EpochGuiCurrent.git anonymously clones to c52e91293749a7a34959bfc042c582c3ac182504,
+tree 4f8fd154151cace2ecaea4aa69532daf4fff73bb, 53 files, with git fsck passing.
+All eight mirror object uploads/readbacks verify before activation. The old
+/git/EpochGui.git remains b97167423373b9a7af3f821dcf91d8a71613dbf2 with unchanged
+refs and v28/v29/v30 tags; no history join or force rewrite occurred.
+PlatformEngine remains v0.1.1; Audio/Media are source foundations, not new
+implemented native engines or release packages. All five EngCoder assets and
+nine Engine runtime assets re-download to unchanged hashes; latest/integrity/
+catalog bodies and valid Ed25519 signature are preserved. Public Engine Git
+remains 404 and private/admin authorization remains 401. All 95 Site tests and
+the production build pass; lint has zero errors/ten existing warnings. Two
+existing high-severity Site dependency advisories remain separate unfinished
+security work. Owned scratch helpers/clones were cleaned; canonical state and
+source/runtime rollback objects remain. The receipt-only documentation follow-up
+keeps this exact tested code, condenses the active gate, and removes stale
+twelve-path workflow text; native self-iteration/docking acceptance stays open.
 
 Do not downgrade Extensions Site v0.2.0/16007d4b to unversioned GitHub eccef139.
 Seven paths in the admitted Site terrain source are absent from GitHub:
