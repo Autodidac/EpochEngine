@@ -278,6 +278,8 @@ export namespace epochengine::ai
             McpToolCapability::author, McpToolRisk::workspace_write);
         add("scene.transform", "Transform Scene Object", "Transform one stable scene object through the canonical scene document command gateway.",
             McpToolCapability::author, McpToolRisk::workspace_write);
+        add("scene.arrange", "Arrange Scene Objects", "Arrange all objects of one archetype in a reviewed deterministic grid, including objects created earlier in the plan.",
+            McpToolCapability::author, McpToolRisk::workspace_write);
         add("scene.clear", "Clear Scene", "Remove current scene objects through one approved semantic transaction.",
             McpToolCapability::author, McpToolRisk::workspace_write);
         add("gui.create", "Create GUI Widget", "Create a bounded widget through the canonical GUI document gateway.",
@@ -379,6 +381,12 @@ export namespace epochengine::ai
             return value;
         }
 
+        [[nodiscard]] inline bool has_forbidden_controls(std::string_view value) noexcept
+        {
+            return std::ranges::any_of(value, [](unsigned char ch)
+                { return (ch < 0x20u && ch != '\n' && ch != '\r' && ch != '\t') || ch == 0x7fu; });
+        }
+
         [[nodiscard]] inline const McpArgument* argument(
             const McpToolCall& call,
             std::string_view name) noexcept
@@ -459,10 +467,11 @@ export namespace epochengine::ai
             const bool sceneTool = sceneCreateTool || sceneReconcileTool;
             const bool sceneClearTool = call.tool == "scene.clear";
             const bool sceneTransformTool = call.tool == "scene.transform";
+            const bool sceneArrangeTool = call.tool == "scene.arrange";
             const bool guiTool = call.tool == "gui.create";
-            if (!sceneTool && !sceneClearTool && !sceneTransformTool && !guiTool)
+            if (!sceneTool && !sceneClearTool && !sceneTransformTool && !sceneArrangeTool && !guiTool)
             {
-                message = "Only scene.clear, scene.create, scene.reconcile, scene.transform, and gui.create are available in the authoring plan lane.";
+                message = "Only scene.clear, scene.create, scene.reconcile, scene.transform, scene.arrange, and gui.create are available in the authoring plan lane.";
                 return false;
             }
 
@@ -477,27 +486,70 @@ export namespace epochengine::ai
                 return true;
             }
 
+            if (sceneArrangeTool)
+            {
+                const auto* archetype = argument(call, "archetype");
+                const auto* columns = argument(call, "columns");
+                const auto* spacing = argument(call, "spacing");
+                const auto* origin = argument(call, "origin");
+                const auto* placement = argument(call, "placement");
+                unsigned width{};
+                std::array<float, 3> vector{};
+                if (!archetype || !one_of(archetype->value, sceneArchetypes)
+                    || !columns || !spacing || !origin)
+                {
+                    message = "scene.arrange requires archetype, columns, spacing=x,y,z and origin=x,y,z.";
+                    return false;
+                }
+                const auto converted = std::from_chars(columns->value.data(),
+                    columns->value.data() + columns->value.size(), width);
+                if (converted.ec != std::errc{}
+                    || converted.ptr != columns->value.data() + columns->value.size()
+                    || width == 0u || width > kAuthoringMaximumObjects
+                    || !parse_vector3(spacing->value, vector)
+                    || vector[0] <= 0.0f || vector[1] < 0.0f || vector[2] <= 0.0f
+                    || std::ranges::any_of(vector, [](float v) { return v > 100000.0f; })
+                    || !parse_vector3(origin->value, vector)
+                    || std::ranges::any_of(vector, [](float v) { return std::abs(v) > 100000.0f; })
+                    || (placement && placement->value != "support" && placement->value != "free")
+                    || call.arguments.size() != 4u + (placement ? 1u : 0u))
+                {
+                    message = "scene.arrange has invalid, duplicate, unknown or unbounded grid arguments.";
+                    return false;
+                }
+                return true;
+            }
             if (sceneTransformTool)
             {
                 const McpArgument* objectId = argument(call, "object_id");
+                const McpArgument* objectName = argument(call, "object_name");
                 const McpArgument* position = argument(call, "position");
                 const McpArgument* rotation = argument(call, "rotation");
                 const McpArgument* scale = argument(call, "scale");
                 const McpArgument* placement = argument(call, "placement");
-                if (!objectId || (!position && !rotation && !scale))
+                if ((!objectId == !objectName) || (!position && !rotation && !scale))
                 {
-                    message = "scene.transform requires object_id and at least one position, rotation, or scale vector.";
+                    message = "scene.transform requires exactly one object_id or exact object_name and at least one transform vector.";
+                    return false;
+                }
+                if (objectName && (objectName->value.empty() || objectName->value.size() > 256u
+                    || std::ranges::any_of(objectName->value, [](unsigned char ch)
+                        { return ch <= 0x20u || ch == 0x7fu; })))
+                {
+                    message = "scene.transform object_name must be one bounded exact inventory name without control bytes or spaces.";
                     return false;
                 }
                 std::uint64_t parsedId{};
-                const char* const idFirst = objectId->value.data();
-                const char* const idLast = idFirst + objectId->value.size();
-                const auto convertedId = std::from_chars(idFirst, idLast, parsedId);
-                if (convertedId.ec != std::errc{} || convertedId.ptr != idLast
-                    || parsedId == 0u)
+                if (objectId)
                 {
-                    message = "scene.transform object_id must be a nonzero stable scene object ID.";
-                    return false;
+                    const char* const idFirst = objectId->value.data();
+                    const char* const idLast = idFirst + objectId->value.size();
+                    const auto convertedId = std::from_chars(idFirst, idLast, parsedId);
+                    if (convertedId.ec != std::errc{} || convertedId.ptr != idLast || parsedId == 0u)
+                    {
+                        message = "scene.transform object_id must be a nonzero stable scene object ID.";
+                        return false;
+                    }
                 }
                 std::array<float, 3> parsed{};
                 if (position && (!parse_vector3(position->value, parsed)
@@ -611,6 +663,12 @@ export namespace epochengine::ai
             result.message = "The model response exceeded the authoring-plan byte budget.";
             return result;
         }
+        if (authoring_plan_detail::has_forbidden_controls(response))
+        {
+            result.code = AuthoringPlanCode::invalid_argument;
+            result.message = "The authoring plan contains forbidden control bytes.";
+            return result;
+        }
 
         bool headerSeen = false;
         bool endSeen = false;
@@ -716,6 +774,7 @@ export namespace epochengine::ai
             if (tool != "scene.clear" && tool != "scene.create"
                 && tool != "scene.reconcile"
                 && tool != "scene.transform"
+                && tool != "scene.arrange"
                 && tool != "gui.create")
             {
                 result.code = AuthoringPlanCode::unsupported_tool;
@@ -823,7 +882,8 @@ export namespace epochengine::ai
             " - scene.clear: scope=all\n"
             " - scene.create: archetype=<cube|ground|light|spawn|camera> and optional count=1..4096\n"
             " - scene.reconcile: archetype=<cube|ground|light|spawn|camera> and count=0..4096\n"
-            " - scene.transform: object_id=<stable id> and one or more of position=x,y,z rotation=x,y,z scale=x,y,z; optional placement=<support|free>\n"
+            " - scene.transform: exactly one object_id=<listed stable id> or object_name=<exact listed single-token name>, and one or more of position=x,y,z rotation=x,y,z scale=x,y,z; optional placement=<support|free>\n"
+            " - scene.arrange: archetype=<cube|ground|light|spawn|camera> columns=1..4096 spacing=x,y,z origin=x,y,z; optional placement=<support|free>. Arrange ALL matching objects in document order in an XZ grid (row Y increment is spacing.y), including those created earlier in this plan. X/Z spacing must be positive; Y spacing nonnegative.\n"
             " - gui.create: widget=<panel|button|text|image|image_button|tabs|input|slider|scroll> and optional count=1..4096\n"
             "Treat the supplied canonical scene inventory as authoritative. Reuse existing objects instead of duplicating them.\n"
             "Use scene.reconcile when the request describes a desired final count. It preserves matching objects and creates or removes only the difference.\n"
@@ -831,7 +891,7 @@ export namespace epochengine::ai
             "Solid meshes default to placement=support and Epoch snaps their lower face to the primary support surface after position or scale changes. Use placement=free only when the operator explicitly requests free vertical placement.\n"
             "Use scene.create only for explicitly additive requests. Use scene.clear scope=all only when the operator explicitly asks to clear, replace, reset, or start over, and disclose that removal in SUMMARY.\n"
             "When a request describes a complete final scene, reconcile every constrained archetype, including count=0 for conflicting managed archetypes. Preserve editor infrastructure unless removal is explicitly required.\n"
-            "Honor the complete requested counts. Native scene/light/ground/camera capacity still applies; the host will not silently clamp them. New objects receive host IDs: do not invent IDs for transforms in the same plan. If a later placement step needs newly created IDs, use a fresh inventory after this plan is applied.\n"
+            "Honor the complete requested counts. Native capacity still applies; the host will not silently clamp. For creating and spreading 100 cubes, reconcile count=100 then scene.arrange in the SAME approved plan. The host resolves names/groups and generated IDs; never ask the user for internal IDs or a scene inventory, never invent IDs, and never delete/recreate objects just to obtain IDs. Questions are for missing USER intent, not host bookkeeping.\n"
             "Do not request files, source edits, native commands, Git, builds, runs, network access, updater work, or approval.";
     }
 
@@ -919,6 +979,12 @@ export namespace epochengine::ai
             result.code = ToolPlanCode::too_large;
             result.message =
                 "The model response exceeded the tool-plan byte budget.";
+            return result;
+        }
+        if (authoring_plan_detail::has_forbidden_controls(response))
+        {
+            result.code = ToolPlanCode::invalid_argument;
+            result.message = "The tool plan contains forbidden control bytes.";
             return result;
         }
 
@@ -1142,6 +1208,7 @@ export namespace epochengine::ai
             registry.find("scene.create") == nullptr ||
             registry.find("scene.reconcile") == nullptr ||
             registry.find("scene.transform") == nullptr ||
+            registry.find("scene.arrange") == nullptr ||
             registry.find("gui.create") == nullptr ||
             registry.find("diagnostics.read") == nullptr)
             return false;
@@ -1197,6 +1264,37 @@ export namespace epochengine::ai
         {
             return false;
         }
+
+        const auto validGrid = parse_authoring_plan(
+            "EPOCH_AUTHORING_PLAN_V1\nTITLE Grid\nSUMMARY Arrange in one approved batch.\n"
+            "CALL scene.reconcile archetype=cube count=100\n"
+            "CALL scene.arrange archetype=cube columns=10 spacing=2,0,2 origin=-9,0,-9\n"
+            "CALL scene.transform object_name=StaticMesh_100 rotation=0,45,0\nEND\n");
+        if (!validGrid || validGrid.plan.calls.size() != 3u) return false;
+        for (const auto invalidCall : {
+            "scene.arrange archetype=cube columns=10 columns=10 spacing=2,0,2 origin=0,0,0",
+            "scene.arrange archetype=cube columns=0 spacing=2,0,2 origin=0,0,0",
+            "scene.arrange archetype=cube columns=42949672960 spacing=2,0,2 origin=0,0,0",
+            "scene.arrange archetype=cube columns=10 spacing=2,-1,2 origin=0,0,0",
+            "scene.arrange archetype=cube columns=10 spacing=nan,0,2 origin=0,0,0",
+            "scene.arrange archetype=cube columns=10 spacing=2,0,2 origin=100001,0,0",
+            "scene.arrange archetype=cube columns=10 spacing=2,0,2 origin=0,0,0 path=foreign",
+            "scene.transform object_id=42 object_name=StaticMesh_100 position=0,0,0",
+            "scene.transform object_name=StaticMesh_100 position=0,inf,0",
+            "scene.transform object_name=StaticMesh_100 position=0,0,0 position=1,1,1"})
+        {
+            if (parse_authoring_plan(std::string{"EPOCH_AUTHORING_PLAN_V1\nTITLE Bad\nSUMMARY Reject.\nCALL "}
+                + invalidCall + "\nEND\n").code != AuthoringPlanCode::invalid_argument)
+                return false;
+        }
+        std::string hiddenControl{"EPOCH_AUTHORING_PLAN_V1\nTITLE Hidden"};
+        hiddenControl.push_back('\0');
+        hiddenControl += "\nSUMMARY Reject control bytes.\nCALL scene.clear scope=all\nEND\n";
+        std::string hiddenTool{"EPOCH_TOOL_PLAN_V1\nTITLE Hidden"};
+        hiddenTool.push_back('\x1b');
+        hiddenTool += "\nSUMMARY Reject control bytes.\nCALL project.inspect\nEND\n";
+        if (parse_authoring_plan(hiddenControl).code != AuthoringPlanCode::invalid_argument
+            || parse_tool_plan(hiddenTool).code != ToolPlanCode::invalid_argument) return false;
 
 
         McpToolCall inspect{

@@ -163,6 +163,11 @@ namespace epochengine::ai
                     || failure == ModelAttemptFailure::operation_timeout);
         }
 
+        [[nodiscard]] constexpr std::size_t model_attempt_limit(std::string_view phase) noexcept
+        {
+            return phase.compare("project authoring/tool plan") == 0 ? 1u : 2u;
+        }
+
         [[nodiscard]] constexpr bool model_total_budget_elapsed(
             std::uint64_t elapsedMilliseconds, std::uint32_t budgetSeconds) noexcept
         {
@@ -175,10 +180,10 @@ namespace epochengine::ai
 
         [[nodiscard]] std::string model_timeout_message(std::size_t attempt,
             std::uint64_t elapsedMilliseconds, std::uint32_t budgetSeconds,
-            bool totalBudget, std::string_view transportDetail)
+            bool totalBudget, std::string_view transportDetail, std::size_t maximumAttempts = 2u)
         {
             return "Local OpenAI-compatible request failed: attempt "
-                + std::to_string(attempt + 1u) + "/2, elapsed "
+                + std::to_string(attempt + 1u) + "/" + std::to_string(maximumAttempts) + ", elapsed "
                 + std::to_string(elapsedMilliseconds / 1'000u) + "s, per-attempt limit "
                 + std::to_string(budgetSeconds) + "s. "
                 + (totalBudget
@@ -5627,6 +5632,7 @@ namespace epochengine::ai
                 ? std::string{source_stage_name(source_request_stage(input, structuredSource))}
                 : std::string{workloadPhase};
             std::string replyDiagnostic;
+            ModelRequestProgress completedProgress{};
             const auto request_once = [&](bool recoveryRequest, std::string* rawResponse) -> std::string
             {
                 replyDiagnostic.clear();
@@ -5668,6 +5674,7 @@ namespace epochengine::ai
                     return cancelled();
                 const std::string resp = stream.finish(wireResponse);
                 stream.update_progress(progress);
+                completedProgress = progress;
                 notify_model_progress(progressObserver, progress);
                 if (rawResponse)
                     *rawResponse = resp;
@@ -5739,14 +5746,18 @@ namespace epochengine::ai
             };
 
             std::string lastFailure{};
-            for (std::size_t attempt = 0u; attempt < 2u; ++attempt)
+            // Interactive project work is one operator-owned generation. An
+            // empty/reasoning-only completion must not silently start another
+            // expensive inference. Source recovery retains its separate policy.
+            const std::size_t maximumAttempts = model_attempt_limit(phase);
+            for (std::size_t attempt = 0u; attempt < maximumAttempts; ++attempt)
             {
                 if (cancellation.stop_requested())
                     return cancelled();
                 const auto attemptStarted = std::chrono::steady_clock::now();
                 ModelAttemptFailure failure{ModelAttemptFailure::recoverable};
                 const auto startedMessage = "Local model transport attempt "
-                    + std::to_string(attempt + 1u) + "/2 started; per-attempt wall budget "
+                    + std::to_string(attempt + 1u) + "/" + std::to_string(maximumAttempts) + " started; per-attempt wall budget "
                     + std::to_string(timeoutSeconds)
                     + "s; stage=" + phase
                     + "; prompt_bytes=" + std::to_string(input.size())
@@ -5766,6 +5777,10 @@ namespace epochengine::ai
                             std::chrono::steady_clock::now() - attemptStarted).count())
                         + "; response_bytes=" + std::to_string(rawResponse.size())
                         + "; visible_reply_bytes=" + std::to_string(reply.size())
+                        + "; stream_events=" + std::to_string(completedProgress.response_events)
+                        + "; content_bytes=" + std::to_string(completedProgress.content_bytes)
+                        + "; tool_argument_bytes=" + std::to_string(completedProgress.tool_argument_bytes)
+                        + "; reasoning_bytes=" + std::to_string(completedProgress.reasoning_bytes)
                         + "; reply_kind=" + std::string{model_reply_kind(reply)};
                     core::log::info("ai", epochengine::string_view{receivedMessage.data(), receivedMessage.size()});
                     logger::get("Engine.AI.Transport").log(logger::LogLevel::INFO, receivedMessage);
@@ -5802,11 +5817,11 @@ namespace epochengine::ai
                             return reply;
                         lastFailure =
                             !replyDiagnostic.empty() ? replyDiagnostic
-                            : has_hidden_reasoning_without_visible_content(rawResponse)
+                            : (completedProgress.reasoning_bytes > 0u || has_hidden_reasoning_without_visible_content(rawResponse))
                             ? std::string{
-                                "Local model returned reasoning without a usable stage result. Epoch retried with the explicit stage contract but received no usable result."}
+                                "Local model finished without a usable final answer (reasoning is not an action). No project change was applied. Use Retry on your message to request another generation."}
                             : std::string{
-                                "Local model returned no decodable assistant text. Check the selected model, endpoint, and OpenAI-compatible /v1/chat/completions response."};
+                                "Local model completed the request without decodable assistant text. No project change was applied. Use Retry on your message; check the provider's final-output and token-budget settings."};
                         if (sourceReply != StructuredSourceReply::none)
                             return "EPOCH_SOURCE_ACTION_REJECTED_V1\nNo completed source function was decoded. Call exactly one allowed function with complete arguments; reasoning and partial arguments are not an action.";
                     }
@@ -5845,7 +5860,7 @@ namespace epochengine::ai
                         std::chrono::steady_clock::now() - attemptStarted).count();
                     lastFailure = model_timeout_message(attempt,
                         static_cast<std::uint64_t>((std::max)(elapsed, decltype(elapsed){0})),
-                        timeoutSeconds, timeout.total_budget, timeout.what());
+                        timeoutSeconds, timeout.total_budget, timeout.what(), maximumAttempts);
                     core::log::warn("ai", epochengine::string_view{lastFailure.data(), lastFailure.size()});
                     logger::get("Engine.AI.Transport").log(logger::LogLevel::Error, lastFailure);
                 }
@@ -5870,7 +5885,7 @@ namespace epochengine::ai
 
                 if (cancellation.stop_requested())
                     return cancelled();
-                if (!retry_model_attempt(attempt, failure, false))
+                if (attempt + 1u >= maximumAttempts || !retry_model_attempt(attempt, failure, false))
                     break;
                 if (attempt == 0u)
                 {
@@ -8200,7 +8215,9 @@ namespace epochengine::ai
             if (!rejected) return failed(__LINE__);
         }
         const auto codingBudget = inference_budget(InferenceWorkload::source_iteration);
-        if (!codingBudget.valid() || codingBudget.timeout_seconds != 10'800u
+        if (model_attempt_limit("project authoring/tool plan") != 1u
+            || model_attempt_limit("source proposal") != 2u
+            || !codingBudget.valid() || codingBudget.timeout_seconds != 10'800u
             || inference_budget(InferenceWorkload::chat).timeout_seconds != 180u
             || inference_budget(InferenceWorkload::authoring).timeout_seconds != 900u
             || inference_budget(InferenceWorkload::source_self_review).timeout_seconds != 10'800u
@@ -8238,11 +8255,14 @@ namespace epochengine::ai
             true, "synthetic timeout evidence");
         const auto operationMessage = model_timeout_message(1u, 10'010u, 1'800u,
             false, "synthetic connect timeout");
+        const auto interactiveMessage = model_timeout_message(0u, 900'001u, 900u,
+            true, "synthetic project timeout", model_attempt_limit("project authoring/tool plan"));
         if (!model_reply_is_failure(exhaustedMessage)
             || exhaustedMessage.find("attempt 1/2, elapsed 1800s, per-attempt limit 1800s") == std::string::npos
             || exhaustedMessage.find("not automatically restarted") == std::string::npos
             || operationMessage.find("attempt 2/2, elapsed 10s") == std::string::npos
-            || operationMessage.find("before the whole request budget") == std::string::npos)
+            || operationMessage.find("before the whole request budget") == std::string::npos
+            || interactiveMessage.find("attempt 1/1") == std::string::npos)
             return failed(__LINE__);
 #if defined(_WIN32)
         // Exercise the real asynchronous wait without creating a session,

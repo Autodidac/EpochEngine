@@ -113,7 +113,7 @@ For engine/tooling developers:
 - v0.90.26 isolates GLFW-only standalone Vulkan camera input behind `EPOCH_VULKAN_STANDALONE`, fixing normal MSVC editor builds while preserving the v0.90.25 focus-owned input behavior.
 - v0.90.25 makes Windows input focus-owned per native Epoch context, expands event-renderer frame-path labels, and prevents internal AI protocol packets from leaking into user chat while recovering bounded plans from short transport/debug prefixes.
 - v0.90.24 mainlined the bounded neuromorphic signal graph, event-camera front end, timeline/task-graph adapters, and a weighted invalidation bridge for the OpenGL event renderer. The old Neuro Lab/experimental branch UI is not carried into main.
-- v0.90.23 exposes the production path directly in Scene -> World Settings: live CACHED/PARTIAL/FULL/CONVENTIONAL state, fallback reason, dirty coverage and render timing, an Event renderer A/B toggle, and an optional dirty-region viewport overlay.
+- v0.90.23 exposes the production path directly in Scene -> Global Settings: live CACHED/PARTIAL/FULL/CONVENTIONAL state, fallback reason, dirty coverage and render timing, an Event renderer A/B toggle, and an optional dirty-region viewport overlay.
 - Current source includes renderer-neutral math, bounded lighting, CPU ray
   queries, explicit request-driven temporal mapping/history, temporal texture
   documents, deterministic physics/audio managers and PCM mixing, optional
@@ -204,6 +204,14 @@ For engine/tooling developers:
   inferred from API names or build success alone.
 
 ## In Action
+
+Current v0.90.35 Windows editor scene supplied by the operator: multiple meshes,
+ground and lighting. This is scene/editor evidence, not proof of completed AI
+candidate succession.
+
+<p align="center">
+  <img src="Images/readme/windows-scene-v09035.png" alt="Current Epoch Windows editor with a multi-object scene, ground and lighting" />
+</p>
 
 The image below demonstrates Epoch's multicontext diagnostic shell. Normal
 editor work owns one active backend; multicontext remains a comparison and

@@ -446,6 +446,19 @@ namespace epochengine::core
 #endif
         }
 
+        // Hover-wheel delivery is allowed to an uncovered client without
+        // granting keyboard, button, capture or scene-camera input.
+        [[nodiscard]] bool has_hover_scroll_safe() const noexcept
+        {
+#if defined(_WIN32) && !defined(EPOCH_MAIN_HEADLESS)
+            POINT cursor{};
+            return ::GetCursorPos(&cursor)
+                && owns_input_window_safe(::WindowFromPoint(cursor));
+#else
+            return true;
+#endif
+        }
+
         [[nodiscard]] bool has_pointer_input_safe() const noexcept
         {
 #if defined(_WIN32) && !defined(EPOCH_MAIN_HEADLESS)

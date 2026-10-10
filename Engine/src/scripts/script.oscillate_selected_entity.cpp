@@ -49,5 +49,5 @@ EPOCH_SCRIPT_EXPORT void run_script(EpochScriptHost* host)
         return;
     }
 
-    host_log(host, "oscillate_selected_entity: attached. Press Play, then enable A/B Render Benchmark in World Settings.");
+    host_log(host, "oscillate_selected_entity: attached. Press Play, then enable A/B Render Benchmark in Global Settings.");
 }

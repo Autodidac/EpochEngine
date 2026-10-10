@@ -5526,7 +5526,7 @@ namespace epochengine::core
             {
                 return DetachedPanelRouteMetadata{
                     .title = route == "pane.world_settings"
-                        ? "Epoch World Settings"
+                        ? "Epoch Global Settings"
                         : "Epoch Properties",
                     .width = 460,
                     .height = 620,

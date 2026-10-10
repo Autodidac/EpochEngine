@@ -1429,6 +1429,25 @@ date/time and configuration; Systems also displays the running executable path.
 Use those values to distinguish a rebuilt output from an older still-open
 Editor. They identify a binary build, not a source commit or validation receipt.
 
+### Project Assistant Continuation And Input
+
+Project assistance is separate from self-iteration: one complete scene/GUI
+plan is staged and requires one explicit approval for its entire batch. The
+host supplies fresh canonical inventory and can resolve unique object names or
+arrange an archetype group in one grid, including newly created objects. It
+must not ask the operator for hidden IDs. Clarification generations retain the
+same objective plus actual questions/answers; changing objective clears them.
+Interactive HTTP authoring/tool failures or empty finals require explicit Retry,
+and an applied/already-satisfied project-goal milestone pauses for Next Plan.
+Engine self-iteration has its own supervisor/worker continuation below.
+
+The shared chat control stays project-bound when switching editor workspaces.
+Windows hover-wheel events may scroll an uncovered GUI panel without focusing
+it; keyboard/buttons/capture remain focus-owned. Scene/canvas wheel navigation
+remains blocked while unfocused. These input paths have pure filter contracts;
+native focus/scroll eye tests remain operator-owned. The visible inspector panel
+is named Global Settings; its durable layout/provider identity is unchanged.
+
 ### How Engine Self-Iteration Actually Works
 
 1. **Objective and supervisor.** Engine intent routes the visible User request
@@ -1724,7 +1743,7 @@ working path and are documented with the next promotion/removal condition.
 Current editor-shell integration and remaining gaps (scheduled only by the
 roadmap):
 
-- World, World Outliner, World Settings and the two command rows are accepted
+- World, World Outliner, Global Settings and the two command rows are accepted
   for now; only a demonstrated regression makes them a current redesign target
 - the engine GUI now has reusable `tab_bar`, `scroll_text_panel`, and modal
   focus overlay paths, plus real text-range selection/copy and editing contracts.

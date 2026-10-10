@@ -824,7 +824,7 @@ export namespace epochengine::editor_workspace
                 VisibilityRule::project_required, CloseRule::hideable,
                 0u, true, true);
             detail::add_tab(layout, "epoch.tab.standard.world_settings",
-                "World Settings", inspector, "epoch.provider.world_settings",
+                "Global Settings", inspector, "epoch.provider.world_settings",
                 TabCategory::tool, SurfaceKind::inspector,
                 ContentRole::world_settings, VisibilityRule::project_required,
                 CloseRule::hideable, 1u, true, false);

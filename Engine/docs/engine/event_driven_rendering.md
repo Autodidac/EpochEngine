@@ -38,7 +38,7 @@ The useful measurement is end-to-end frame cost, not only dirty-region bookkeepi
 
 ## v0.90.23 live diagnostics and A/B controls
 
-The production path now exposes its live decision state through `render.event_debug`. In the editor, open the Scene inspector's **World Settings** panel. The **Event-Driven Rendering** section reports the current path (`CACHED`, `PARTIAL`, `FULL`, or `CONVENTIONAL`), fallback reason, dirty-region count and coverage, last OpenGL preview render time, and cumulative path counts.
+The production path now exposes its live decision state through `render.event_debug`. In the editor, open the Scene inspector's **Global Settings** panel. The **Event-Driven Rendering** section reports the current path (`CACHED`, `PARTIAL`, `FULL`, or `CONVENTIONAL`), fallback reason, dirty-region count and coverage, last OpenGL preview render time, and cumulative path counts.
 
 Three runtime controls are available there:
 
@@ -73,7 +73,7 @@ Localized movement now preserves a second diagnostic rectangle set for previous 
 
 ## v0.90.28 alternating A/B benchmark
 
-World Settings now exposes **A/B render benchmark**. While enabled, eligible OpenGL editor-scene frames alternate deterministically:
+Global Settings exposes **A/B render benchmark**. While enabled, eligible OpenGL editor-scene frames alternate deterministically:
 
 - **SELECTIVE**: the normal event-driven path chooses cached, partial, or conservative full reconstruction from the real dirty-region/neural policy.
 - **FULL BASELINE**: the same persistent scene cache is forcibly reconstructed over 100% of the viewport, then presented through the same final cache blit.

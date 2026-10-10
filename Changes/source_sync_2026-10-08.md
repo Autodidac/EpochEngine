@@ -30,6 +30,26 @@ not the dirty working directory. Keep earlier source admissions and runtime byte
 
 ## Delivery
 
+### October 9 Project Assistant and input checkpoint
+
+The focused batch fixes host inventory truncation, adds unique-name resolution
+and one-approved-batch grid arrangement, preserves actual clarification history,
+and gates Project Assistant continuation/HTTP retries explicitly. It also
+revalidates arguments/control bytes, separates inactive hover scrolling from
+scene input, renames visible Global Settings and adds the supplied current
+scene screenshot without rewriting the restored README or its old proof.
+Both prior Clang failures share the repaired missing initializer_list include.
+
+Normal Debug and ReleaseWithDebugInfo Editor/HeadlessCI production builds and
+complete pure contracts pass at 21:48:08 / 21:51:30; naming/layout/exact dependency
+guards pass. Normal Release PID 14696 is deliberately left at its older build.
+No GUI/model/candidate is launched; native acceptance remains operator-owned.
+Ubuntu's registered VHD is missing, so hosted Clang proof is not substituted
+with an invented local Linux result. No dependency mirror source changed.
+Public runtime authorities, Site hold and unrelated dirty solution/workspace
+files remain unchanged. GitHub delivery below must name actual read-back heads,
+not merely a requested push or passing local build.
+
 ### October 9 context compaction and normal binary follow-up
 
 Automatic HTTP packing defaults to 81920 tokens, with smaller reported/declared

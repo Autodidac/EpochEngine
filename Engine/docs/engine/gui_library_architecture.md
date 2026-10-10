@@ -338,7 +338,7 @@ belong in central workspaces, modal windows, or Inspector-owned panels.
 
 Docking defaults to in-host tool-tab stacks over one live editor projection.
 World Outliner, Asset Browser, GUI Hierarchy, Script Browser, Tile Map,
-Properties, World Settings, Output, and AI Chat each own an independent tool
+Properties, Global Settings, Output, and AI Chat each own an independent tool
 route. They may move between the left, right, Bottom Left, and Bottom Right
 groups without entering
 the main document strip or creating another editor, renderer, project session,

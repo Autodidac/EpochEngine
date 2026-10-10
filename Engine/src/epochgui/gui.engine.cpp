@@ -577,7 +577,7 @@ namespace epochengine::gui
         // Native focus loss is cancellation, not a button release. In
         // particular, it must not activate a button when the user switches apps.
         [[nodiscard]] static bool filter_frame_input(
-            bool keyboardAllowed, bool pointerAllowed) noexcept
+            bool keyboardAllowed, bool pointerAllowed, bool wheelAllowed = false) noexcept
         {
             bool cancelled = false;
             for (std::size_t index = g_frame.events.size(); index > 0; --index)
@@ -589,16 +589,19 @@ namespace epochengine::gui
                 break;
             }
             if (!keyboardAllowed)
-                g_frame.events.clear();
+                std::erase_if(g_frame.events, [wheelAllowed](const InputEvent& event)
+                {
+                    return !wheelAllowed || event.type != EventType::MouseWheel;
+                });
             else if (!pointerAllowed)
-                std::erase_if(g_frame.events, [](const InputEvent& event)
+                std::erase_if(g_frame.events, [wheelAllowed](const InputEvent& event)
                 {
                     return event.type == EventType::MouseMove
                         || event.type == EventType::MouseDown
                         || event.type == EventType::MouseUp
-                        || event.type == EventType::MouseWheel;
+                        || (event.type == EventType::MouseWheel && !wheelAllowed);
                 });
-            g_frame.pointerInputAllowed = pointerAllowed;
+            g_frame.pointerInputAllowed = pointerAllowed || wheelAllowed;
             return cancelled || !pointerAllowed;
         }
 
@@ -3469,7 +3472,10 @@ namespace epochengine::gui
 
     int consume_mouse_wheel_delta() noexcept
     {
-        if (!point_in_modal_input_capture(g_frame.mousePos))
+        // Scene/canvas consumers use this accessor. UI scroll controls consume
+        // their own clipped wheel state; background hover must not zoom a scene.
+        if ((g_frame.ctx && !g_frame.ctx->has_input_focus_safe())
+            || !point_in_modal_input_capture(g_frame.mousePos))
         {
             g_frame.mouseWheelDelta = 0;
             return 0;
@@ -3697,7 +3703,8 @@ namespace epochengine::gui
         const bool keyboardAllowed = !nativeContext || rawCtx->has_input_focus_safe();
         const bool pointerAllowed = keyboardAllowed
             && (!nativeContext || rawCtx->has_pointer_input_safe());
-        if (filter_frame_input(keyboardAllowed, pointerAllowed))
+        const bool wheelAllowed = !nativeContext || rawCtx->has_hover_scroll_safe();
+        if (filter_frame_input(keyboardAllowed, pointerAllowed, wheelAllowed))
         {
             prevMouseDown = false;
             prevMouseRightDown = false;
@@ -6704,9 +6711,17 @@ namespace epochengine::gui
             && g_frame.events.size() == 1
             && !point_in_modal_input_capture({0.0f, 0.0f});
         const bool inactive = filter_frame_input(false, false) && g_frame.events.empty();
+        g_frame.events = {{.type = EventType::MouseDown},
+            {.type = EventType::TextInput, .text = "blocked"},
+            {.type = EventType::MouseWheel, .wheel_delta = 120}};
+        const bool hoverWheelOnly = filter_frame_input(false, false, true)
+            && g_frame.events.size() == 1u
+            && g_frame.events.front().type == EventType::MouseWheel;
+        const bool occludedWheel = filter_frame_input(false, false, false)
+            && g_frame.events.empty();
         g_frame.events = previousEvents;
         g_frame.pointerInputAllowed = previousPointerAllowed;
-        return freshOnly && covered && inactive;
+        return freshOnly && covered && inactive && hoverWheelOnly && occludedWheel;
     }
 
     bool run_runtime_surface_contract() noexcept

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-MIT-NoSell
 #include <cstdint>
+#include <initializer_list>
 #include <limits>
 
 import platform.work_admission;

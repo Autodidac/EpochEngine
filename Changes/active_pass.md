@@ -1,6 +1,6 @@
 # Active Pass
 
-Updated October 9, 2026, after context compaction and the three normal Windows builds. Only unfinished acceptance
+Updated October 9, 2026, after Project Assistant and input repair. Only unfinished acceptance
 belongs here. Product order: roadmap.md; durable intent: mission_cache.md;
 completed work/evidence: changelog.txt; behavior: owning subsystem contracts.
 Historical process IDs and dates are evidence, not live instructions.
@@ -16,6 +16,46 @@ A read, emitted tokens, accepted patch or passing host contract is not a built
 successor. Preserve older unfinished goals; do not widen this gate.
 
 ## Latest Native Evidence
+
+The operator confirms that the AI did not lock up. The older Release transport
+completed replies at 21:08:16 and 21:15:58 with zero usable assistant bytes;
+Epoch automatically regenerated the first empty reply. Those receipts do not
+prove a provider crash. Interactive HTTP authoring/tool work now makes one
+attempt and stops visibly for explicit Retry; source recovery remains separate.
+Terminal receipt metadata separates content/tool arguments/reasoning bytes.
+
+Project Assistant inventory no longer stops at 32 objects. Unique names resolve
+through the host; scene.arrange places an archetype group, including new objects,
+in one approved batch without asking the operator for internal IDs. Clarification
+generations retain the objective and actual question/answer history. Applied or
+already-satisfied goal milestones pause for explicit Next Plan. Parsing rejects
+hidden control bytes and application revalidates decoded arguments; native
+mutation gates and whole-plan failure rollback remain. Windows hover-wheel
+permits uncovered GUI scrolling but not unfocused scene/canvas navigation,
+keyboard or buttons. Global Settings replaces the visible World Settings label
+without changing durable layout/provider identity.
+
+Normal Debug and ReleaseWithDebugInfo Editor/HeadlessCI builds pass; final pure
+engine suites pass at 21:48:08 and 21:51:30. Logs:
+`build/project-assistant-20261009/{Debug,ReleaseWithDebugInfo}-final.log` and each
+output's `logs/Engine.Editor.SelfTest.log`. New fixtures exercise 100 arranged
+cubes, full inventory, retained/scoped clarification data, unique/ambiguous
+names, explicit next-plan gating, forged arguments, control bytes, overflow/
+stale-ID rollback and inactive hover-event filtering. The first compiler error
+in the new attempt-policy helper was corrected before final proof. Existing
+logger/optimizer warnings remain. Normal Release PID 14696 (started 20:26:44)
+is left untouched at its older 17:45 build; use the repaired normal Debug or
+ReleaseWithDebugInfo output for the next operator test. No model, GUI, renderer
+or candidate was launched by this repair. Native succession remains open.
+
+Both failed Clang jobs for d49a45b6/run 37995829943 share the earliest error:
+platform.work_admission_contract.cpp used a braced list without including
+initializer_list. The owner now includes it explicitly. Local Linux proof is
+blocked by Ubuntu's missing registered ext4.vhdx, not an invented engine error;
+hosted new-code Clang validation remains separate. Naming (610), layout and exact
+dependency guards pass. The supplied current multi-object screenshot is added
+to README beside, not instead of, historical Windows/multicontext/Linux proof.
+No dependency mirror changed; unrelated solution/workspace changes are preserved.
 
 The operator stopped the normal Debug run (PID 25044) before updating binaries.
 Its campaign was session_117412737122305, analytics key
@@ -317,8 +357,9 @@ a scene. AI acceptance remains first.
    Confirm actual dispatch, admitted ranges, supervisor handoff, useful atomic
    patch and compiler receipt. Old native results cannot prove new-code behavior.
    Do not hot-change an active inference, executable or configuration.
-   The operator closed the old run; all three normal Windows modes now contain
-   the repair. Test the normal x64/Release/EpochEditor.exe. Automatic context
+   The operator's older normal Release remains open; the latest Assistant/input
+   repair is in normal x64/Debug and x64/ReleaseWithDebugInfo. Test one of those,
+   and rebuild Release after that process is closed. Automatic context
    defaults to 81920 when the provider omits capacity; only enter an override
    when the actual loaded value differs. Start a fresh mission and inspect its
    compaction/residency and useful patch/build receipts, not the old session.

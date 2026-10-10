@@ -1128,16 +1128,24 @@ review, approval, permit issuance, and execution authority.
 
 Ordinary AI Authoring uses a separate bounded data protocol,
 `EPOCH_AUTHORING_PLAN_V1`. The selected model may propose only `scene.clear`,
-`scene.create`, `scene.reconcile`, stable-ID `scene.transform`, and `gui.create`
+`scene.create`, `scene.reconcile`, `scene.transform`, `scene.arrange`, and `gui.create`
 calls through fixed allowlists. `scene.create` and `gui.create` are idempotent
 minimum-count requests: matching canonical scene objects or GUI widgets are reused
 and only a missing remainder may be created. `scene.reconcile` expresses an exact
 final count from zero through 4,096 and creates or removes only the difference.
 `scene.transform` applies bounded finite position, rotation, or scale values to
-one exact canonical object. Create counts range from one through 4,096. Native
+one canonical object resolved by a listed stable ID or exact unique single-token
+name. Ambiguous/stale names fail rather than selecting an arbitrary object.
+`scene.arrange` resolves every object of one archetype in document order and
+applies a reviewed XZ grid from columns, spacing and origin, including objects
+created earlier in that same plan. It does not need model-generated IDs.
+Create counts range from one through 4,096. Native
 scene/light/ground/camera capacities still apply and are never silently clamped.
 Replies are bounded to 32 KiB and 256 semantic calls; malformed, unknown, duplicate, incomplete, or
-trailing content fails closed.
+trailing content fails closed. C0 control bytes other than protocol whitespace
+and DEL are refused; all decoded arguments are revalidated at application, not
+only during parsing. Non-finite/out-of-range values and grid expansion beyond
+canonical transform bounds fail without retaining partial changes.
 
 Epoch displays the parsed title, summary, and every call before mutation. Only
 the operator's visible `Apply Plan` action creates call-scoped
@@ -1147,9 +1155,14 @@ scene and GUI semantic gateways used by human controls, and appends structured
 tool evidence. If a later semantic command fails, canonical scene/GUI documents,
 projections, selection, revision and undo history are restored; partial edits are
 not left behind. Successful commands retain ordinary semantic undo history, not
-a new whole-batch undo operation. New objects receive host IDs; a subsequent
-placement plan uses fresh inventory rather than inventing those IDs. Pure
-contracts cover ground/light/100 cubes and rollback after a stale transform.
+a new whole-batch undo operation. New objects receive host IDs; a create/reconcile
+and arrange batch can place 100 objects in one approval. Fresh inventory is
+host-owned, byte-budgeted rather than clipped at 32 objects, and refreshed for
+later proposals. The operator is never asked to obtain hidden IDs or inventories.
+Names and clarification question/answer data are escaped in prompt framing;
+this is not a claim of prompt-injection immunity. Pure contracts cover
+ground/light/100 arranged cubes, unique-name resolution, ambiguity refusal,
+pre-apply argument validation and rollback after stale IDs or grid overflow.
 Native model/scene eye-test acceptance remains separate. Opening AI Authoring does not change the active project or enter
 the Engine Development Sandbox.
 
@@ -1161,7 +1174,7 @@ proposal remains unapplied until Apply Plan is pressed. Successful application
 reports created, removed, reused, and transformed results, advances the
 canonical scene revision, and refreshes the scene view. An idempotent create or
 reconcile milestone whose target already exists records reuse rather than adding
-a duplicate and requests a distinct unmet milestone. Every attempted milestone
+a duplicate and pauses for an explicit next-plan request. Every attempted milestone
 signature is retained for the active goal. The semantic tool-call signature,
 rather than model-authored title or summary wording, detects repeats across the
 whole goal; a repeated satisfied call pauses the goal. Any other no-op plan pauses
@@ -1169,15 +1182,24 @@ immediately instead of claiming completion.
 
 `/plan <request>` asks for one scene-aware bounded proposal. `/goal <objective>`
 starts or replaces a persistent objective, bare `/goal` resumes it, and
-`/goal stop` ends it. The persistent AI Chat task strip provides Play/Pause,
+`/goal stop` ends it. The persistent AI Chat task strip provides Next Plan/Pause,
 Edit, and Delete controls so the objective can change during a session. Each
 milestone is independently parsed, displayed, approved, applied, and recorded;
-the next milestone queues automatically only after the previous approved plan
-changes canonical scene revision. A goal never grants continuing mutation
-authority. The prompt includes stable IDs, transforms, canonical archetype
+every applied/already-satisfied milestone pauses instead of automatically
+queuing more generations. Explicit Next Plan or `/goal` requests another plan;
+a goal never grants continuing generation or mutation authority. Interactive
+HTTP authoring/tool transport makes one attempt; empty/reasoning-only final
+output or failure stops visibly and requires the message's Retry action.
+Source-iteration recovery retains its separate policy. Completed transport
+receipts distinguish content, tool-argument and reasoning bytes without treating
+reasoning as an action or inferring a provider crash. The prompt includes stable
+IDs, transforms, canonical archetype
 counts, and object inventory so proposals reuse existing scene meaning,
 reconcile duplicates or constrained objects, transform exact objects, and
-preserve unconstrained editor infrastructure.
+preserve unconstrained editor infrastructure. Authoring clarification answers
+retain the original objective and actual preceding question/answer history,
+not a new mission; a new objective clears that history. Switching editor
+workspaces retains the same project chat control identity and scroll state.
 
 This lane cannot save, build, run, test, edit source, start processes, invoke
 native commands, alter Git, mutate the updater, publish a release, or approve
