@@ -1048,9 +1048,11 @@ raw provider bodies are not copied into logs, chat or source staging. Queued
 retries are not described or recorded as successful recovery. The dedicated
 `Engine.AI.Transport` log stores stage/attempt/sizes and classified HTTP failures,
 not credentials, prompts, reasoning or response bodies.
-Planning and source-selection requests allow at most 4,096 output tokens;
-code proposals/repairs retain 32,768. The host-owned stage envelope selects that
-budget, not quoted source text. Context/source-byte limits and the independent
+All source roles, including supervisor planning and source selection, reserve
+32,768 output tokens; chat reserves 8,192 and project authoring 16,384, reduced
+when the actual loaded context is smaller. Reasoning can consume a provider's
+completion allowance before a final action, so there is no separate 4,096-token
+control-stage cap. Context/source-byte limits and the independent
 wall ceiling remain separate. Automatic HTTP packing defaults to 81,920 context
 tokens when inventory omits capacity; reported/declared smaller capacities win.
 Plans return actionable task checkpoints without word/step quotas; the host
@@ -1069,7 +1071,9 @@ HTTP generation uses OpenAI-compatible streamed chat deltas (SSE), not Bionic
 agent events. Worker-local assembly is bounded to an 8 MiB wire envelope and
 1 MiB per assembled text/action field. It accepts one choice/function, keeps
 reasoning separate, and requires terminal stop/tool_calls plus DONE before the
-existing full-message phase validation. Truncated/length-finished, multiple,
+existing full-message phase validation. A length-finished response reports the
+provider's output-limit cause explicitly and is not automatically regenerated;
+partial content or arguments are never admitted. Truncated, multiple,
 mutated and late actions never stage source. A server ignoring stream=true may
 return complete JSON via the same request; early delta checks cannot run while
 that server withholds its nonstream response. No additional endpoint is opened.
@@ -1132,16 +1136,18 @@ Ordinary AI Authoring uses a separate bounded data protocol,
 calls through fixed allowlists. `scene.create` and `gui.create` are idempotent
 minimum-count requests: matching canonical scene objects or GUI widgets are reused
 and only a missing remainder may be created. `scene.reconcile` expresses an exact
-final count from zero through 4,096 and creates or removes only the difference.
+representable nonnegative unsigned final count and creates or removes only the difference.
 `scene.transform` applies bounded finite position, rotation, or scale values to
 one canonical object resolved by a listed stable ID or exact unique single-token
 name. Ambiguous/stale names fail rather than selecting an arbitrary object.
 `scene.arrange` resolves every object of one archetype in document order and
 applies a reviewed XZ grid from columns, spacing and origin, including objects
 created earlier in that same plan. It does not need model-generated IDs.
-Create counts range from one through 4,096. Native
+Create counts are positive representable unsigned integers. This preserves
+large population intent without granting allocation authority. Native
 scene/light/ground/camera capacities still apply and are never silently clamped.
-Replies are bounded to 32 KiB and 256 semantic calls; malformed, unknown, duplicate, incomplete, or
+Replies are bounded to 512 KiB, not an arbitrary semantic-call count; work can
+continue in subsequent explicitly approved plans. Malformed, unknown, duplicate, incomplete, or
 trailing content fails closed. C0 control bytes other than protocol whitespace
 and DEL are refused; all decoded arguments are revalidated at application, not
 only during parsing. Non-finite/out-of-range values and grid expansion beyond
@@ -1154,11 +1160,28 @@ or eight-object negotiation. The host revalidates all calls before mutation, app
 scene and GUI semantic gateways used by human controls, and appends structured
 tool evidence. If a later semantic command fails, canonical scene/GUI documents,
 projections, selection, revision and undo history are restored; partial edits are
-not left behind. Successful commands retain ordinary semantic undo history, not
+not left behind. Apply queues a cancellable task on the existing editor job
+pool. It owns a private scene/GUI snapshot. Each semantic transaction starts at
+32 work items and adapts toward an 8 ms measured worker-cost target, shrinking
+immediately on expensive batches and growing at most twofold to a ceiling of
+128 items. This is per-transaction backpressure, not a total operation quota.
+The visible counters include completed commands/items/batches, next batch size,
+last and peak worker microseconds. Workers yield between transactions and honor
+cancellation. These timings measure document work, not GPU or frame-time telemetry;
+a single costly transaction can exceed the target. The
+live owner publishes the complete result only if the project, revisions and
+exact plan still match; cancellation or intervening edits discard it. Workers
+do not touch rendering or live editor state. Successful commands retain ordinary semantic undo history, not
 a new whole-batch undo operation. New objects receive host IDs; a create/reconcile
 and arrange batch can place 100 objects in one approval. Fresh inventory is
 host-owned, byte-budgeted rather than clipped at 32 objects, and refreshed for
 later proposals. The operator is never asked to obtain hidden IDs or inventories.
+The current default canonical profile still admits 4,096 native objects, 256
+lights and 32 grounds. Operation count is distinct from simultaneously resident
+object count: repeated edits are not limited to that many lifetime operations.
+Oversized native populations still fail before allocation, never clamp counts;
+raising resident capacity requires representation/resource qualification.
+The authoring job is process-local, not a durable cold-start resume checkpoint.
 Names and clarification question/answer data are escaped in prompt framing;
 this is not a claim of prompt-injection immunity. Pure contracts cover
 ground/light/100 arranged cubes, unique-name resolution, ambiguity refusal,

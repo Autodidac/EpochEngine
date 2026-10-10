@@ -15,6 +15,17 @@ operator evidence before making a broader absence claim.
 
 ## Overall Intent And Pass Continuity
 
+- October 9 batching clarification: no arbitrary lifetime operation or plan-call
+  quota. Use grouped semantic work and queued private jobs; measure actual batch
+  cost and adjust per-transaction work to preserve responsiveness. Cumulative
+  operations are not simultaneous resident objects. Keep cancellation, finite
+  transport envelopes, canonical resource admission and explicit project-plan
+  approval/Next Plan gating; never silently reduce the requested work.
+- October 9 renewed delivery direction supersedes the earlier Site wrap-up
+  hold: deliver the tested source checkpoint to GitHub main/stable, then the
+  existing Site owner for exact paired private source admission. Inspect other
+  repositories by their actual ownership; do not manufacture unchanged mirror
+  commits or copy renderer adapters into standalone libraries.
 - October 9 integration clarification: use the supplied EngCoder 0.7.1 backend
   behind Epoch's existing interface; do not import its GUI/window stack. Preserve
   useful supervisor/worker/task memory behavior, but qualify private candidate
@@ -401,10 +412,13 @@ These are durable requirements, not completion claims:
 - Establish that current stable base and prove CLI/platform-window template
   generation, build, run, exit, and rapid rebuild before broad context feature
   expansion. Keep incomplete self-coding work out of stable-base claims.
-- Gradually form EpochPlatformEngine as the reusable platform/context/window/
-  input foundation with clear Engine/runtime/editor consumers. Review boundaries
-  before extraction, migrate incrementally, and avoid duplicate implementations,
-  a wholesale rename, or breaking existing generated projects.
+- EpochPlatformEngine already exists as a separate renderer-neutral v0.1.1
+  library (reviewed main 8ab286e4d943adf8a24537c8ea25a87489288f4c). Integrate
+  its typed host/input/context boundary incrementally with clear consumers,
+  following its headless -> detached Win32 -> parent/child -> X11 migration.
+  It is not currently an Engine dependency mirror. Qualify native parity before
+  deleting existing owners; avoid duplicate implementations, wholesale renames
+  or breaking generated projects. Repository existence is not integration proof.
 - Design one typed public context contract over backend-owned implementations.
   Inventory each context's real needs before changing the fragile multicontext
   system: native/process ownership, borrowed versus owned windows, thread and

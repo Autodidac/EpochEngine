@@ -129,12 +129,12 @@ export namespace epochengine::ai
         switch (workload)
         {
         case InferenceWorkload::chat:
-            return {81'920u, 2'048u, 210u * 1024u, 64u * 1024u, 180u};
+            return {81'920u, 8'192u, 192u * 1024u, 256u * 1024u, 180u};
         case InferenceWorkload::authoring:
             // A scene/tool plan can outlast a conversation, especially while
             // an operator-managed model loads. Keep a finite, visible ceiling
             // without restarting an expired generation or accepting fragments.
-            return {81'920u, 4'096u, 204u * 1024u, 128u * 1024u, 15u * 60u};
+            return {81'920u, 16'384u, 168u * 1024u, 512u * 1024u, 15u * 60u};
         case InferenceWorkload::source_iteration:
             // Local coding includes prompt evaluation and long reasoning. The
             // finite per-attempt budget is independent of window focus; an

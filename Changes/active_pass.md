@@ -1,6 +1,6 @@
 # Active Pass
 
-Updated October 9, 2026, after Project Assistant and input repair. Only unfinished acceptance
+Updated October 9, 2026, after AI cutoff and adaptive authoring repair. Only unfinished acceptance
 belongs here. Product order: roadmap.md; durable intent: mission_cache.md;
 completed work/evidence: changelog.txt; behavior: owning subsystem contracts.
 Historical process IDs and dates are evidence, not live instructions.
@@ -16,6 +16,48 @@ A read, emitted tokens, accepted patch or passing host contract is not a built
 successor. Preserve older unfinished goals; do not widen this gate.
 
 ## Latest Native Evidence
+
+The latest stopped operator Release campaign failed during the initial supervisor
+plan, before any source patch or build. Its planning requests at 21:40:36 and
+21:55:05 used a 4,096-token wire limit; both completed with an 82-byte normalized
+reply and zero usable assistant text. The old log did not retain finish_reason,
+so output exhaustion is not asserted as the proven provider cause. The new host
+uses 32,768 reserved output tokens for all source roles, 16,384 for authoring and
+8,192 for chat (smaller loaded contexts reduce these). Both streaming and whole
+reply decoding report finish_reason=length explicitly; no partial plan/action is
+applied and identical automatic regeneration is suppressed for that outcome.
+
+Project Assistant has no fixed 256-command or 24-milestone lifetime quota. An
+encoded reply still has a finite byte envelope; successive plans retain explicit
+operator approval/Next Plan gating. Approved work runs in a cancellable private
+document job, with canonical transactions adapting from 32 items toward an 8 ms
+worker-cost target (1–128 items). Status reports command/item/batch counts and
+last/peak worker cost. This is not measured GPU/frame-time control or a guarantee
+that an indivisible transaction finishes within 8 ms. Simultaneously resident
+native scene capacity remains distinct from cumulative operation count.
+Revision/project/plan guards reject stale results instead of overwriting live
+changes. Runtime UI/model/docking proof remains with the operator.
+
+The later hosted linux-clang-engine failure in run 38015016930 is distinct from
+the earlier initializer_list repair: ai.engine.cpp used from_chars without
+including charconv. The complete failed transcript identifies that first cause;
+the owning translation unit now includes it. New hosted confirmation is pending.
+The supplied README scene is operator-confirmed Project Assistant evidence:
+Qwen Next Flash created 100 cube objects and implemented lighting. It is not
+candidate succession evidence. Historical Linux/multicontext proof remains.
+
+Final production Editor/HeadlessCI Debug and ReleaseWithDebugInfo builds pass;
+their complete pure engine suites pass at 22:50:11 and 22:47:33. Logs:
+`build/batched-authoring-20261009/{Debug,ReleaseWithDebugInfo}-adaptive-final.log`
+and each output's `logs/Engine.Editor.SelfTest.log`. New fixtures exercise
+provider length exhaustion in SSE/whole replies, 1,000-call admission, measured
+batch growth/shrinkage, 1,000-object private creation/arrangement, cancellation,
+stale-result rejection and large clear/history preservation. Source naming
+(610), physical/project/filter references, exact remote dependency-sync and
+diff guards pass. One intermediate Debug relink hit LNK1168 while the pure
+contract process still held the executable; after it exited, the same production
+relink and final suite passed. Existing logger/optimizer warnings remain.
+Normal Release PID 14696 stays unchanged. No GUI/model/GPU/candidate was launched.
 
 The operator confirms that the AI did not lock up. The older Release transport
 completed replies at 21:08:16 and 21:15:58 with zero usable assistant bytes;
@@ -410,11 +452,13 @@ portable builds remain Debug/Release. Never restore a combined-build project.
 The operator authorizes a focused tested GitHub source checkpoint on main and
 the fast-forward stable mirror. Preserve the original base in history; freeze
 only after reusable software/context acceptance. Delivery belongs in
-source_sync_2026-10-08.md. Site publication is held by its subsequent operator
-wrap-up instruction; renewed direction is required. GitHub and Site are separate.
+source_sync_2026-10-08.md. The October 9 operator explicitly renewed Site source
+publication after the earlier wrap-up hold. Send the exact tested committed
+source pair to the existing Site owner; wait for its publication receipt.
+GitHub and Site are separate; this does not authorize replacing runtime bytes.
 The current Project Assistant/input/Clang code repair is pushed and read back on
 main/stable at `7a7b85d2`. Hosted MSBuild and linux-clang/linux-gcc checks pass;
-full linux-clang-engine is still building at this receipt. The documentation-only
+full linux-clang-engine subsequently failed on the charconv include above. The documentation-only
 follow-up changes no tested code and does not restart CI. No dependency mirror,
 Site or release publication is claimed.
 The preceding tested code batch was pushed on main/stable at `717d2c27`; both remote heads

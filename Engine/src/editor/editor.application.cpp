@@ -1420,6 +1420,16 @@ namespace epochengine
             float frequency_hz{ 0.5f };
         };
 
+        struct AiAuthoringApplyProgress final
+        {
+            std::atomic<std::size_t> batches{};
+            std::atomic<std::size_t> objects{};
+            std::atomic<std::size_t> commands{};
+            std::atomic<std::size_t> nextBatch{32u};
+            std::atomic<std::uint64_t> lastBatchUs{};
+            std::atomic<std::uint64_t> peakBatchUs{};
+        };
+
         struct EditorState
         {
             bool initialized{ false };
@@ -1810,6 +1820,14 @@ namespace epochengine
             std::string aiGoalDraft{};
             epochengine::ai::voice::Session aiVoiceSession{};
             epochengine::ai::AuthoringPlanParseResult aiAuthoringPlan{};
+            // A worker owns only a detached authoring snapshot, never this
+            // live context or its renderer. Publication is revision guarded.
+            std::optional<std::future<std::unique_ptr<EditorState>>> aiAuthoringApplyPending{};
+            editor_tasks::CancellationTicket aiAuthoringApplyCancellation{};
+            std::shared_ptr<AiAuthoringApplyProgress> aiAuthoringApplyProgress{};
+            std::uint64_t aiAuthoringApplySceneRevision{};
+            std::uint64_t aiAuthoringApplyGuiRevision{};
+            bool aiAuthoringApplyCancelled{};
             epochengine::ai::ToolPlanParseResult aiToolPlan{};
             std::string aiAuthoringStatus{
                 "Describe scene or GUI objects for the selected local model to plan."};
@@ -5177,6 +5195,11 @@ namespace epochengine
             state.plantLabCompiledContentHash = 0u;
             state.plantLabDocumentInitialized = false;
             state.aiAuthoringPlan = {};
+            if (state.aiAuthoringApplyCancellation.valid() && state.taskScheduler)
+                (void)state.taskScheduler->cancel(state.aiAuthoringApplyCancellation);
+            state.aiAuthoringApplyPending.reset();
+            state.aiAuthoringApplyProgress.reset();
+            state.aiAuthoringApplyCancellation = {};
             state.aiToolPlan = {};
             state.aiAuthoringAwaitingReply = false;
             state.aiToolAwaitingReply = false;
@@ -5282,21 +5305,29 @@ namespace epochengine
             return nullptr;
         }
 
-        [[nodiscard]] std::string make_entity_name(const EditorState& state, std::string_view base)
+        [[nodiscard]] std::string make_entity_name(const EditorState& state, std::string_view base,
+            std::size_t ordinalOffset = 0u)
         {
             std::size_t ordinal = 1;
             for (const auto& entity : state.entities)
             {
-                if (entity.name.starts_with(base))
-                    ++ordinal;
+                if (!entity.name.starts_with(base) || entity.name.size() <= base.size()
+                    || entity.name[base.size()] != '_') continue;
+                const std::string_view suffix{entity.name.data() + base.size() + 1u,
+                    entity.name.size() - base.size() - 1u};
+                std::size_t value{};
+                const auto converted = std::from_chars(suffix.data(), suffix.data() + suffix.size(), value);
+                if (converted.ec == std::errc{} && converted.ptr == suffix.data() + suffix.size()
+                    && value < (std::numeric_limits<std::size_t>::max)())
+                    ordinal = (std::max)(ordinal, value + 1u);
             }
 
-            return epochengine::format_text("{}_{:02}", base, ordinal);
+            return epochengine::format_text("{}_{:02}", base, ordinal + ordinalOffset);
         }
 
         [[nodiscard]] std::array<float, 3> next_entity_position(
             const EditorState& state,
-            float baseY = 0.5f)
+            float baseY = 0.5f, std::size_t ordinalOffset = 0u)
         {
             const std::size_t worldEntityCount = static_cast<std::size_t>(
                 std::count_if(
@@ -5308,12 +5339,12 @@ namespace epochengine
                             && !entity.type.starts_with("Gui");
                     }));
             const float offset =
-                static_cast<float>(worldEntityCount % 5u) * 1.35f;
+                static_cast<float>((worldEntityCount + ordinalOffset) % 5u) * 1.35f;
             return {
                 -2.7f + offset,
                 baseY,
                 1.6f
-                    - static_cast<float>((worldEntityCount / 5u) % 4u)
+                    - static_cast<float>(((worldEntityCount + ordinalOffset) / 5u) % 4u)
                         * 1.15f
             };
         }
@@ -7299,29 +7330,30 @@ namespace epochengine
             }
         }
 
-        bool add_entity(EditorState& state, std::string_view archetype)
+        [[nodiscard]] std::optional<EditorEntity> make_editor_entity(
+            EditorState& state, std::string_view archetype, std::size_t ordinalOffset = 0u)
         {
             EditorEntity entity{};
             if (archetype == "cube")
             {
-                entity.name = make_entity_name(state, "StaticMesh");
+                entity.name = make_entity_name(state, "StaticMesh", ordinalOffset);
                 entity.type = "StaticMesh";
                 entity.category = "Gameplay";
                 entity.position = next_entity_position(
                     state,
-                    primary_ground_top_y(state));
+                    primary_ground_top_y(state), ordinalOffset);
                 if (!align_editor_entity_bottom_to_surface(
                         entity,
                         primary_ground_top_y(state)))
                 {
                     state.projectStatus =
                         "Static mesh creation rejected invalid surface bounds.";
-                    return false;
+                    return std::nullopt;
                 }
             }
             else if (archetype == "ground")
             {
-                entity.name = make_entity_name(state, "GroundPlatform");
+                entity.name = make_entity_name(state, "GroundPlatform", ordinalOffset);
                 entity.type = "Ground";
                 entity.category = "World";
                 entity.position = { 0.0f, -0.25f, 0.0f };
@@ -7329,35 +7361,35 @@ namespace epochengine
             }
             else if (archetype == "light")
             {
-                entity.name = make_entity_name(state, "PointLight");
+                entity.name = make_entity_name(state, "PointLight", ordinalOffset);
                 entity.type = "Light";
                 entity.category = "Lighting";
                 entity.position = next_entity_position(
                     state,
-                    primary_ground_top_y(state) + 2.4f);
+                    primary_ground_top_y(state) + 2.4f, ordinalOffset);
             }
             else if (archetype == "spawn")
             {
-                entity.name = make_entity_name(state, "PlayerStart");
+                entity.name = make_entity_name(state, "PlayerStart", ordinalOffset);
                 entity.type = "Spawn";
                 entity.category = "Gameplay";
                 entity.position = next_entity_position(
                     state,
-                    primary_ground_top_y(state) + 0.05f);
+                    primary_ground_top_y(state) + 0.05f, ordinalOffset);
             }
             else if (archetype == "camera")
             {
-                entity.name = make_entity_name(state, "PreviewCamera");
+                entity.name = make_entity_name(state, "PreviewCamera", ordinalOffset);
                 entity.type = "Camera";
                 entity.category = "Gameplay";
                 entity.position = next_entity_position(
                     state,
-                    primary_ground_top_y(state) + 1.8f);
+                    primary_ground_top_y(state) + 1.8f, ordinalOffset);
                 entity.rotation = { -18.0f, 0.0f, 0.0f };
             }
             else
             {
-                const std::size_t guiWidgetCount = static_cast<std::size_t>(
+                const std::size_t guiWidgetCount = ordinalOffset + static_cast<std::size_t>(
                     std::count_if(
                         state.entities.begin(),
                         state.entities.end(),
@@ -7378,34 +7410,34 @@ namespace epochengine
 
                 if (archetype == "gui_panel")
                 {
-                    entity.name = make_entity_name(state, "Panel");
+                    entity.name = make_entity_name(state, "Panel", ordinalOffset);
                     entity.type = "GuiPanel";
                     entity.scale = { 4.8f, 2.8f, 1.0f };
                 }
                 else if (archetype == "gui_button")
                 {
-                    entity.name = make_entity_name(state, "Button");
+                    entity.name = make_entity_name(state, "Button", ordinalOffset);
                     entity.type = "GuiButton";
                     entity.position[1] -= 0.72f;
                     entity.scale = { 2.2f, 0.64f, 1.0f };
                 }
                 else if (archetype == "gui_text")
                 {
-                    entity.name = make_entity_name(state, "Text");
+                    entity.name = make_entity_name(state, "Text", ordinalOffset);
                     entity.type = "GuiText";
                     entity.position[1] += 0.78f;
                     entity.scale = { 3.4f, 0.42f, 1.0f };
                 }
                 else if (archetype == "gui_image")
                 {
-                    entity.name = make_entity_name(state, "Image");
+                    entity.name = make_entity_name(state, "Image", ordinalOffset);
                     entity.type = "GuiImage";
                     entity.position[0] -= 1.15f;
                     entity.scale = { 1.5f, 1.5f, 1.0f };
                 }
                 else if (archetype == "gui_image_button")
                 {
-                    entity.name = make_entity_name(state, "ImageButton");
+                    entity.name = make_entity_name(state, "ImageButton", ordinalOffset);
                     entity.type = "GuiImageButton";
                     entity.position[0] -= 1.15f;
                     entity.position[1] -= 0.82f;
@@ -7413,40 +7445,47 @@ namespace epochengine
                 }
                 else if (archetype == "gui_tabs")
                 {
-                    entity.name = make_entity_name(state, "TabSet");
+                    entity.name = make_entity_name(state, "TabSet", ordinalOffset);
                     entity.type = "GuiTabSet";
                     entity.position[1] += 1.16f;
                     entity.scale = { 4.0f, 0.56f, 1.0f };
                 }
                 else if (archetype == "gui_input")
                 {
-                    entity.name = make_entity_name(state, "TextInput");
+                    entity.name = make_entity_name(state, "TextInput", ordinalOffset);
                     entity.type = "GuiTextInput";
                     entity.scale = { 3.2f, 0.58f, 1.0f };
                 }
                 else if (archetype == "gui_slider")
                 {
-                    entity.name = make_entity_name(state, "Slider");
+                    entity.name = make_entity_name(state, "Slider", ordinalOffset);
                     entity.type = "GuiSlider";
                     entity.position[1] -= 1.08f;
                     entity.scale = { 3.0f, 0.32f, 1.0f };
                 }
                 else if (archetype == "gui_scroll")
                 {
-                    entity.name = make_entity_name(state, "ScrollArea");
+                    entity.name = make_entity_name(state, "ScrollArea", ordinalOffset);
                     entity.type = "GuiScrollArea";
                     entity.position[0] += 1.15f;
                     entity.scale = { 3.4f, 2.6f, 1.0f };
                 }
                 else
                 {
-                    return false;
+                    return std::nullopt;
                 }
             }
 
-            const std::string addedName = entity.name;
-            const std::string addedType = entity.type;
-            if (!create_editor_scene_entity(state, std::move(entity), "Create " + addedName))
+            return entity;
+        }
+
+        bool add_entity(EditorState& state, std::string_view archetype)
+        {
+            auto entity = make_editor_entity(state, archetype);
+            if (!entity) return false;
+            const std::string addedName = entity->name;
+            const std::string addedType = entity->type;
+            if (!create_editor_scene_entity(state, std::move(*entity), "Create " + addedName))
             {
                 push_editor_log(state, "[entity] Could not create " + addedName + ".");
                 return false;
@@ -7634,7 +7673,6 @@ namespace epochengine
             return value;
         }
 
-        constexpr std::size_t kAiGoalMaximumMilestones = 24u;
 
         [[nodiscard]] std::optional<std::string>
             recover_bare_ai_authoring_call(std::string_view response)
@@ -8141,10 +8179,84 @@ namespace epochengine
             std::string error{};
         };
 
+        // A task has no aggregate work-item quota. Bound each canonical
+        // transaction and adapt to its measured worker cost, not an invented
+        // renderer/GPU measurement. Leave capacity for settings operations.
+        constexpr std::size_t kAiAuthoringMaximumBatchObjects = 128u;
+        constexpr std::uint64_t kAiAuthoringTargetBatchUs = 8'000u;
+
+        [[nodiscard]] std::size_t ai_authoring_batch_size(const EditorState& editor,
+            std::size_t remaining)
+        {
+            const auto requested = editor.aiAuthoringApplyProgress
+                ? editor.aiAuthoringApplyProgress->nextBatch.load(std::memory_order_relaxed)
+                : kAiAuthoringMaximumBatchObjects;
+            return (std::min)(remaining, (std::clamp)(requested,
+                std::size_t{1u}, kAiAuthoringMaximumBatchObjects));
+        }
+
+        void observe_ai_authoring_batch(AiAuthoringApplyProgress& progress,
+            std::size_t count, std::uint64_t elapsedUs)
+        {
+            progress.objects.fetch_add(count, std::memory_order_relaxed);
+            progress.batches.fetch_add(1u, std::memory_order_relaxed);
+            progress.lastBatchUs.store(elapsedUs, std::memory_order_relaxed);
+            progress.peakBatchUs.store((std::max)(elapsedUs,
+                progress.peakBatchUs.load(std::memory_order_relaxed)), std::memory_order_relaxed);
+            const auto current = progress.nextBatch.load(std::memory_order_relaxed);
+            // Don't learn from a short final batch. Grow gradually; a slow
+            // transaction shrinks immediately, including down to one item.
+            if (count >= current || elapsedUs > kAiAuthoringTargetBatchUs)
+            {
+                const auto estimate = (std::max)(std::uint64_t{1u},
+                    count * kAiAuthoringTargetBatchUs / (std::max)(elapsedUs, std::uint64_t{1u}));
+                const auto next = elapsedUs > kAiAuthoringTargetBatchUs
+                    ? (std::min)(estimate, static_cast<std::uint64_t>(current))
+                    : (std::min)(estimate, static_cast<std::uint64_t>(current * 2u));
+                progress.nextBatch.store(static_cast<std::size_t>((std::clamp)(next,
+                    std::uint64_t{1u}, static_cast<std::uint64_t>(kAiAuthoringMaximumBatchObjects))),
+                    std::memory_order_relaxed);
+            }
+        }
+
+        void record_ai_authoring_batch(EditorState& editor, std::size_t count,
+            std::chrono::steady_clock::time_point started)
+        {
+            if (!editor.aiAuthoringApplyProgress) return;
+            const auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::steady_clock::now() - started).count();
+            observe_ai_authoring_batch(*editor.aiAuthoringApplyProgress, count,
+                static_cast<std::uint64_t>((std::max)(elapsed, decltype(elapsed){0})));
+            std::this_thread::yield();
+        }
+
+        [[nodiscard]] bool create_ai_entity_batch(EditorState& editor,
+            std::string_view archetype, std::size_t count, std::string& error,
+            std::stop_token cancellation = {})
+        {
+            const auto started = std::chrono::steady_clock::now();
+            std::vector<EditorEntity> created;
+            created.reserve(count);
+            for (std::size_t index = 0u; index < count; ++index)
+            {
+                if (cancellation.stop_requested()) { error = "Authoring job cancelled."; return false; }
+                auto entity = make_editor_entity(editor, archetype, index);
+                if (!entity) { error = editor.projectStatus; return false; }
+                created.push_back(std::move(*entity));
+            }
+            if (!create_editor_scene_entities(editor, std::move(created), "AI approved batch creation"))
+            {
+                error = editor.projectStatus;
+                return false;
+            }
+            record_ai_authoring_batch(editor, count, started);
+            return true;
+        }
+
         [[nodiscard]] AiSceneReconcileResult reconcile_ai_scene_archetype(
             EditorState& editor,
             std::string_view archetype,
-            std::size_t targetCount)
+            std::size_t targetCount, std::stop_token cancellation = {})
         {
             AiSceneReconcileResult result{};
             std::vector<scene::SceneObjectId> matchingIds{};
@@ -8159,57 +8271,45 @@ namespace epochengine
             }
 
             result.reused = (std::min)(matchingIds.size(), targetCount);
-            for (std::size_t index = matchingIds.size(); index > targetCount;
-                --index)
+            for (std::size_t remaining = matchingIds.size(); remaining > targetCount;)
             {
-                const scene::SceneObjectId id = matchingIds[index - 1u];
-                const auto entity = editor_entity_index(editor, id);
-                const std::string name = entity
-                    ? editor.entities[*entity].name
-                    : std::string{archetype};
-                if (!destroy_editor_scene_entity(
-                        editor,
-                        id,
-                        "AI reconcile remove " + name))
+                if (cancellation.stop_requested()) { result.error = "Authoring job cancelled."; return result; }
+                const auto started = std::chrono::steady_clock::now();
+                const auto batch = ai_authoring_batch_size(editor, remaining - targetCount);
+                std::vector<authoring::scene::SceneOperation> operations;
+                auto settings = editor.sceneDocument.project_settings();
+                bool settingsChanged{};
+                for (std::size_t index = 0u; index < batch; ++index)
                 {
-                    result.error = "scene.reconcile could not remove " + name
-                        + " through the canonical scene history.";
+                    const auto id = matchingIds[remaining - index - 1u];
+                    const auto handle = editor.sceneDocument.find(authoring::scene::ObjectId{id});
+                    if (!handle) { result.error = "Reconciliation target became stale."; return result; }
+                    operations.emplace_back(authoring::scene::ObjectDestroyedOperation{.object = *handle});
+                    if (settings.primary_camera.value == id) { settings.primary_camera = {}; settingsChanged = true; }
+                    if (settings.primary_spawn.value == id) { settings.primary_spawn = {}; settingsChanged = true; }
+                }
+                if (settingsChanged)
+                {
+                    settings.run_state = scene_tier0::ProjectRunState::blocked;
+                    operations.emplace_back(authoring::scene::ProjectSettingsChangedOperation{.value = settings});
+                }
+                if (!apply_editor_scene_transaction(editor, operations, "AI approved batch removal"))
+                {
+                    result.error = editor.projectStatus;
                     return result;
                 }
-                ++result.removed;
+                result.removed += batch;
+                remaining -= batch;
+                record_ai_authoring_batch(editor, batch, started);
             }
 
             const std::size_t retainedCount = matchingIds.size() - result.removed;
-            for (std::size_t index = retainedCount; index < targetCount; ++index)
+            for (std::size_t index = retainedCount; index < targetCount;)
             {
-                const std::size_t before = editor.entities.size();
-                const std::size_t canonicalBefore =
-                    editor.sceneDocument.initialized()
-                    ? editor.sceneDocument.objects().size()
-                    : before;
-                const std::uint64_t revisionBefore =
-                    editor.sceneDocumentRevision;
-                const bool created = add_entity(editor, archetype);
-                const std::size_t canonicalAfter =
-                    editor.sceneDocument.initialized()
-                    ? editor.sceneDocument.objects().size()
-                    : 0u;
-                if (!created
-                    || editor.entities.size() != before + 1u
-                    || canonicalAfter != canonicalBefore + 1u
-                    || editor.sceneDocumentRevision == revisionBefore)
-                {
-                    result.error = epochengine::format_text(
-                        "scene.reconcile did not commit a new {} revision (revision {}, objects {} -> {}).",
-                        archetype,
-                        editor.sceneDocumentRevision,
-                        canonicalBefore,
-                        canonicalAfter);
-                    if (!created && !editor.projectStatus.empty())
-                        result.error += " Cause: " + editor.projectStatus;
-                    return result;
-                }
-                ++result.created;
+                const auto batch = ai_authoring_batch_size(editor, targetCount - index);
+                if (!create_ai_entity_batch(editor, archetype, batch, result.error, cancellation)) return result;
+                result.created += batch;
+                index += batch;
             }
 
             const std::size_t finalCount = static_cast<std::size_t>(
@@ -8334,7 +8434,7 @@ namespace epochengine
 
         [[nodiscard]] bool arrange_ai_scene_objects(EditorState& editor,
             const epochengine::ai::McpToolCall& call, std::size_t& changed,
-            std::string& error)
+            std::string& error, std::stop_token cancellation = {})
         {
             const auto* archetype = ai_authoring_argument(call, "archetype");
             const auto* columns = ai_authoring_argument(call, "columns");
@@ -8347,18 +8447,28 @@ namespace epochengine
                 columns->value.data() + columns->value.size(), width);
             if (converted.ec != std::errc{} || converted.ptr != columns->value.data() + columns->value.size()
                 || width == 0u) return false;
-            std::vector<scene::SceneObjectId> targets;
+            std::vector<EditorEntity> targets;
             for (const auto& entity : editor.entities)
                 if (!is_screen_space_gui_entity(entity)
                     && ai_authoring_scene_archetype(entity) == archetype->value)
-                    targets.push_back(entity.sceneObjectId);
-            if (targets.empty() || targets.size() > epochengine::ai::kAuthoringMaximumObjects)
+                    targets.push_back(entity);
+            if (targets.empty())
             {
                 error = "scene.arrange requires an existing bounded group; create/reconcile it earlier in the approved plan.";
                 return false;
             }
-            for (std::size_t index = 0; index < targets.size(); ++index)
+            std::unordered_map<scene::SceneObjectId, authoring::scene::ObjectHandle> handles;
+            for (const auto& object : editor.sceneDocument.objects()) handles.emplace(object.descriptor.id.value, object.handle);
+            const auto* placement = ai_authoring_argument(call, "placement");
+            const float groundTop = primary_ground_top_y(editor);
+            for (std::size_t first = 0u; first < targets.size();)
             {
+              const auto started = std::chrono::steady_clock::now();
+              if (cancellation.stop_requested()) { error = "Authoring job cancelled."; return false; }
+              std::vector<authoring::scene::SceneOperation> operations;
+              const auto end = first + ai_authoring_batch_size(editor, targets.size() - first);
+              for (std::size_t index = first; index < end; ++index)
+              {
                 const float row = static_cast<float>(index / width);
                 const std::array position{origin[0] + static_cast<float>(index % width) * spacing[0],
                     origin[1] + row * spacing[1], origin[2] + row * spacing[2]};
@@ -8368,20 +8478,56 @@ namespace epochengine
                     error = "scene.arrange grid exceeds the canonical transform bounds.";
                     return false;
                 }
-                epochengine::ai::McpToolCall transform{};
-                transform.tool = "scene.transform";
-                transform.arguments = {{"object_id", std::to_string(targets[index])},
-                    {"position", epochengine::format_text("{},{},{}", position[0], position[1], position[2])}};
-                if (const auto* placement = ai_authoring_argument(call, "placement"))
-                    transform.arguments.push_back(*placement);
-                const auto revision = editor.sceneDocumentRevision;
-                if (!transform_ai_scene_object(editor, transform, error)) return false;
-                if (editor.sceneDocumentRevision != revision) ++changed;
+                auto transformed = targets[index];
+                transformed.position = position;
+                if (transformed.type == "StaticMesh" && (!placement || placement->value == "support")
+                    && !align_editor_entity_bottom_to_surface(transformed, groundTop))
+                { error = "Grid support alignment failed."; return false; }
+                if (transformed.position == targets[index].position) continue;
+                operations.emplace_back(authoring::scene::ObjectTransformChangedOperation{
+                    .object = handles.at(transformed.sceneObjectId),
+                    .value = {
+                        .position = {transformed.position[0], transformed.position[1], transformed.position[2]},
+                        .rotation_degrees = {transformed.rotation[0], transformed.rotation[1], transformed.rotation[2]},
+                        .scale = {transformed.scale[0], transformed.scale[1], transformed.scale[2]}}});
+              }
+              if (!operations.empty() && !apply_editor_scene_transaction(editor, operations, "AI approved grid batch"))
+              { error = editor.projectStatus; return false; }
+              changed += operations.size();
+              record_ai_authoring_batch(editor, end - first, started);
+              first = end;
             }
             return true;
         }
 
-        [[nodiscard]] bool apply_ai_authoring_plan(EditorState& editor, bool publishTrace = true)
+        [[nodiscard]] bool clear_ai_scene_batches(EditorState& editor,
+            std::string& error, std::stop_token cancellation)
+        {
+            while (!editor.entities.empty())
+            {
+                const auto started = std::chrono::steady_clock::now();
+                if (cancellation.stop_requested()) { error = "Authoring job cancelled."; return false; }
+                const auto objects = editor.sceneDocument.objects();
+                const auto batch = ai_authoring_batch_size(editor, objects.size());
+                if (batch == 0u) { error = "Scene projection does not match its document."; return false; }
+                auto settings = editor.sceneDocument.project_settings();
+                settings.primary_camera = {}; settings.primary_spawn = {};
+                settings.run_state = scene_tier0::ProjectRunState::blocked;
+                std::vector<authoring::scene::SceneOperation> operations{
+                    authoring::scene::ProjectSettingsChangedOperation{.value = settings}};
+                for (std::size_t index = 0; index < batch; ++index)
+                    operations.emplace_back(authoring::scene::ObjectDestroyedOperation{
+                        .object = objects[objects.size() - index - 1u].handle});
+                if (!apply_editor_scene_transaction(editor, operations, "AI approved clear batch"))
+                { error = editor.projectStatus; return false; }
+                record_ai_authoring_batch(editor, batch, started);
+            }
+            clear_editor_selection(editor);
+            return true;
+        }
+
+        [[nodiscard]] bool apply_ai_authoring_plan(EditorState& editor, bool publishTrace = true,
+            std::stop_token cancellation = {})
         {
             if (!editor.aiAuthoringPlan
                 || editor.aiAuthoringPlan.plan.calls.empty()
@@ -8392,39 +8538,40 @@ namespace epochengine
                 return false;
             }
 
-            if (editor.aiAuthoringPlan.plan.calls.size() > epochengine::ai::kAuthoringMaximumCalls)
-            {
-                if (editor.aiAuthoringPlanForGoal)
-                {
-                    editor.aiGoalRunning = false;
-                    editor.aiGoalPlanNextQueued = false;
-                }
-                editor.aiAuthoringStatus =
-                    "AI authoring plan exceeded its command materialization limit. "
-                    "The plan was rejected before any scene or GUI change.";
-                return false;
-            }
-
             const auto registry =
                 epochengine::ai::make_epoch_project_tool_registry({
-                    .maximum_session_steps = static_cast<std::uint32_t>(epochengine::ai::kAuthoringMaximumCalls)});
+                    .maximum_session_steps = (std::numeric_limits<std::uint32_t>::max)()});
             epochengine::ai::McpSessionAuthority authority{
                 .session_id = "editor-authoring-preview",
                 .granted_capabilities =
                     epochengine::ai::McpToolCapability::author};
-            const std::size_t objectBudget = epochengine::ai::kAuthoringMaximumObjects;
-            std::size_t totalObjects = 0u;
+            const auto limits = editor.sceneDocument.initialized()
+                ? editor.sceneDocument.limits() : authoring::scene::DocumentLimits{};
+            // Counts describe final state, not allocation authority or a sum of
+            // every repeated reconcile. Admit against the actual native profile
+            // before any work/allocation; never silently clamp a large request.
+            std::unordered_map<std::string, std::size_t> counts;
+            std::size_t totalObjects = editor.entities.size();
+            for (const auto& entity : editor.entities)
+            {
+                if (const auto kind = ai_authoring_scene_archetype(entity)) ++counts[std::string{*kind}];
+                else if (const auto kind = ai_authoring_gui_widget(entity)) ++counts["gui_" + std::string{*kind}];
+            }
             for (const auto& call : editor.aiAuthoringPlan.plan.calls)
             {
                 authority.approved_call_ids.push_back(call.call_id);
-                if (call.tool == "scene.clear"
-                    || call.tool == "scene.transform" || call.tool == "scene.arrange")
-                    continue;
-                const unsigned count = ai_authoring_count(call);
-                const bool zeroIsValid = call.tool == "scene.reconcile";
-                if ((!zeroIsValid && count == 0u)
-                    || count > objectBudget
-                    || totalObjects > objectBudget - count)
+                if (call.tool == "scene.clear") { counts.clear(); totalObjects = 0u; continue; }
+                if (call.tool == "scene.transform" || call.tool == "scene.arrange") continue;
+                const auto* kind = ai_authoring_argument(call, call.tool == "gui.create" ? "widget" : "archetype");
+                if (!kind) continue; // The exact argument validator below owns malformed calls.
+                const std::string key = call.tool == "gui.create" ? "gui_" + kind->value : kind->value;
+                auto& existing = counts[key];
+                const auto requested = static_cast<std::size_t>(ai_authoring_count(call));
+                const auto target = call.tool == "scene.reconcile" ? requested : (std::max)(existing, requested);
+                totalObjects = totalObjects - existing + target;
+                existing = target;
+                if (totalObjects > limits.maximum_active_objects
+                    || counts["light"] > limits.maximum_lights || counts["ground"] > limits.maximum_grounds)
                 {
                     if (editor.aiAuthoringPlanForGoal)
                     {
@@ -8432,14 +8579,13 @@ namespace epochengine
                         editor.aiGoalPlanNextQueued = false;
                     }
                     editor.aiAuthoringStatus = epochengine::format_text(
-                        "AI authoring plan exceeded the {}-object apply budget{}.",
-                        objectBudget,
+                        "Requested {} native objects; this scene profile admits {} objects, {} lights and {} grounds. Large populations require an instanced/streamed representation, not silently reduced counts{}.",
+                        totalObjects, limits.maximum_active_objects, limits.maximum_lights, limits.maximum_grounds,
                         editor.aiAuthoringPlanForGoal
                             ? "; the goal was paused"
                             : "");
                     return false;
                 }
-                totalObjects += count;
             }
             for (const auto& call : editor.aiAuthoringPlan.plan.calls)
             {
@@ -8495,11 +8641,12 @@ namespace epochengine
                         || call.tool == "gui.create");
                 bool callSucceeded = false;
                 std::string callFailure{};
-                if (call.tool == "scene.clear")
+                if (cancellation.stop_requested()) callFailure = "Authoring job cancelled.";
+                else if (call.tool == "scene.clear")
                 {
-                    callSucceeded = clear_editor_scene(
-                        editor,
-                        "AI approved scene replacement");
+                    if (!editor.sceneDocument.initialized())
+                        (void)rebuild_editor_scene_document(editor, "Initialize AI clear batch");
+                    callSucceeded = clear_ai_scene_batches(editor, callFailure, cancellation);
                     sceneCleared = sceneCleared || callSucceeded;
                 }
                 else if (call.tool == "scene.reconcile")
@@ -8512,7 +8659,7 @@ namespace epochengine
                             reconcile_ai_scene_archetype(
                                 editor,
                                 kind->value,
-                                ai_authoring_count(call));
+                                ai_authoring_count(call), cancellation);
                         callSucceeded = reconcile.succeeded;
                         createdObjects += reconcile.created;
                         removedObjects += reconcile.removed;
@@ -8534,7 +8681,7 @@ namespace epochengine
                 }
                 else if (call.tool == "scene.arrange")
                 {
-                    callSucceeded = arrange_ai_scene_objects(editor, call, transformedObjects, callFailure);
+                    callSucceeded = arrange_ai_scene_objects(editor, call, transformedObjects, callFailure, cancellation);
                 }
                 else if (call.tool == "scene.create")
                 {
@@ -8565,7 +8712,7 @@ namespace epochengine
                                 (std::max)(
                                     existing,
                                     static_cast<std::size_t>(
-                                        ai_authoring_count(call))));
+                                        ai_authoring_count(call))), cancellation);
                         callSucceeded = reconcile.succeeded;
                         createdObjects += reconcile.created;
                         reusedObjects += reconcile.reused;
@@ -8602,44 +8749,12 @@ namespace epochengine
                             createdObjects;
                         for (std::size_t index = existing;
                             callSucceeded && index < target;
-                            ++index)
+                            )
                         {
-                            const std::size_t canonicalBefore =
-                                editor.sceneDocument.initialized()
-                                ? editor.sceneDocument.objects().size()
-                                : editor.entities.size();
-                            const std::uint64_t revisionBefore =
-                                editor.sceneDocumentRevision;
-                            const bool created =
-                                add_entity(editor, "gui_" + kind->value);
-                            const std::size_t canonicalAfter =
-                                editor.sceneDocument.initialized()
-                                ? editor.sceneDocument.objects().size()
-                                : editor.entities.size();
-                            callSucceeded = created
-                                && canonicalAfter == canonicalBefore + 1u
-                                && editor.sceneDocumentRevision
-                                    != revisionBefore;
-                            if (!callSucceeded)
-                            {
-                                callFailure = epochengine::format_text(
-                                    "gui.create did not commit a new {} widget "
-                                    "(revision {}, objects {} -> {}).",
-                                    kind->value,
-                                    editor.sceneDocumentRevision,
-                                    canonicalBefore,
-                                    canonicalAfter);
-                                if (!created
-                                    && !editor.projectStatus.empty())
-                                {
-                                    callFailure +=
-                                        " Cause: " + editor.projectStatus;
-                                }
-                            }
-                            else
-                            {
-                                ++createdObjects;
-                            }
+                            const auto batch = ai_authoring_batch_size(editor, target - index);
+                            callSucceeded = create_ai_entity_batch(editor, "gui_" + kind->value, batch, callFailure, cancellation);
+                            if (callSucceeded) createdObjects += batch;
+                            index += batch;
                         }
                         guiChanged = guiChanged
                             || createdObjects > createdBefore;
@@ -8653,6 +8768,8 @@ namespace epochengine
 
                 if (callSucceeded)
                     ++appliedCommands;
+                if (editor.aiAuthoringApplyProgress)
+                    editor.aiAuthoringApplyProgress->commands.store(appliedCommands, std::memory_order_relaxed);
                 if (publishTrace) epochengine::ai::append_tool_trace(
                     epochengine::ai::McpCaptureRecord{
                         .session_id = editor.projectId.empty()
@@ -8780,23 +8897,10 @@ namespace epochengine
             if (editor.aiAuthoringPlanForGoal && editor.aiGoalActive)
             {
                 ++editor.aiGoalCompletedMilestones;
-                if (editor.aiGoalCompletedMilestones
-                    >= kAiGoalMaximumMilestones)
-                {
-                    editor.aiGoalRunning = false;
-                    editor.aiGoalPlanNextQueued = false;
-                }
-                else
-                {
-                    editor.aiGoalRunning = editor.aiGoalPlanNextQueued = false;
-                }
+                editor.aiGoalRunning = editor.aiGoalPlanNextQueued = false;
                 goalReceipt = epochengine::format_text(
-                    " Goal milestone {} is complete{}",
-                    editor.aiGoalCompletedMilestones,
-                    editor.aiGoalCompletedMilestones
-                            >= kAiGoalMaximumMilestones
-                        ? "; the 24-milestone safety limit paused the goal"
-                        : "; goal is paused; explicitly request the next plan");
+                    " Goal milestone {} is complete; goal is paused; explicitly request the next plan",
+                    editor.aiGoalCompletedMilestones);
             }
             if (editor.aiAuthoringPlanForGoal && editor.aiGoalActive)
             {
@@ -8832,6 +8936,174 @@ namespace epochengine
                 "[ai] " + editor.aiAuthoringStatus);
             return true;
         }
+        [[nodiscard]] std::unique_ptr<EditorState> snapshot_ai_authoring(const EditorState& editor)
+        {
+            auto working = std::make_unique<EditorState>();
+            working->projectId = editor.projectId;
+            working->projectName = editor.projectName;
+            working->projectKind = editor.projectKind;
+            working->projectRoot = editor.projectRoot;
+            working->projectScenePath = editor.projectScenePath;
+            working->sceneDocument = editor.sceneDocument;
+            working->sceneDocumentRevision = editor.sceneDocumentRevision;
+            working->entities = editor.entities;
+            working->selectedEntityId = editor.selectedEntityId;
+            working->selectedEntityIds = editor.selectedEntityIds;
+            working->selectedEntity = editor.selectedEntity;
+            working->timeSnapshot = editor.timeSnapshot;
+            working->mainSurface = editor.mainSurface;
+            working->aiAuthoringSurface = editor.aiAuthoringSurface;
+            working->outlinerToolTab = editor.outlinerToolTab;
+            working->viewportCameraMode = editor.viewportCameraMode;
+            working->guiDocument = editor.guiDocument
+                ? std::make_unique<authoring::gui::GuiDocument>(*editor.guiDocument) : nullptr;
+            working->guiDocumentWidgets = editor.guiDocumentWidgets;
+            working->guiDocumentRoot = editor.guiDocumentRoot;
+            working->guiProjectionTombstones = editor.guiProjectionTombstones;
+            working->guiDocumentStatus = editor.guiDocumentStatus;
+            // Worker snapshots never load or save project files. Pure document
+            // generation is allowed; persistence remains with the live owner.
+            working->guiDocumentLoadAttempted = true;
+            working->guiDocumentSourcePath = editor.guiDocumentSourcePath;
+            working->guiDocumentSavedRevision = editor.guiDocumentSavedRevision;
+            working->guiTemplatePreset = editor.guiTemplatePreset;
+            working->aiAuthoringPlan = editor.aiAuthoringPlan;
+            working->aiAuthoringRequest = editor.aiAuthoringRequest;
+            working->aiAuthoringRequestedGeneration = editor.aiAuthoringRequestedGeneration;
+            working->aiAuthoringPlanForGoal = editor.aiAuthoringPlanForGoal;
+            working->aiGoal = editor.aiGoal;
+            working->aiGoalActive = editor.aiGoalActive;
+            working->aiGoalRunning = editor.aiGoalRunning;
+            working->aiGoalCompletedMilestones = editor.aiGoalCompletedMilestones;
+            working->aiGoalAttemptedMilestoneSignatures = editor.aiGoalAttemptedMilestoneSignatures;
+            working->aiGoalLastMilestoneSignature = editor.aiGoalLastMilestoneSignature;
+            working->aiGoalLastMilestoneReceipt = editor.aiGoalLastMilestoneReceipt;
+            return working;
+        }
+
+        [[nodiscard]] bool publish_ai_authoring_snapshot(EditorState& editor, EditorState& working)
+        {
+            const auto guiRevision = editor.guiDocument ? editor.guiDocument->revision().sequence : 0u;
+            if (editor.aiAuthoringApplyCancelled || editor.projectId != working.projectId
+                || editor.projectRoot != working.projectRoot
+                || editor.projectScenePath != working.projectScenePath
+                || editor.sceneDocumentRevision != editor.aiAuthoringApplySceneRevision
+                || guiRevision != editor.aiAuthoringApplyGuiRevision
+                || editor.aiAuthoringRequestedGeneration != working.aiAuthoringRequestedGeneration
+                || ai_authoring_plan_signature(editor.aiAuthoringPlan.plan) != ai_authoring_plan_signature(working.aiAuthoringPlan.plan)
+                || editor.aiGoal != working.aiGoal)
+            {
+                editor.aiAuthoringStatus = "Authoring result discarded: cancelled or its project/scene/GUI/plan changed while the worker ran. No live edits were overwritten. Review and apply a fresh plan.";
+                return false;
+            }
+            editor.aiAuthoringStatus = working.aiAuthoringStatus;
+            if (!working.aiAuthoringPlanApplied)
+            {
+                editor.aiGoalRunning = editor.aiGoalPlanNextQueued = false;
+                return false;
+            }
+            // One complete publication on the owner thread. Workers never
+            // mutate renderer state, editor input, the chat or live documents.
+            editor.sceneDocument = std::move(working.sceneDocument);
+            editor.sceneDocumentRevision = working.sceneDocumentRevision;
+            editor.entities = std::move(working.entities);
+            editor.guiDocument = std::move(working.guiDocument);
+            editor.guiDocumentWidgets = std::move(working.guiDocumentWidgets);
+            editor.guiDocumentRoot = working.guiDocumentRoot;
+            editor.guiProjectionTombstones = std::move(working.guiProjectionTombstones);
+            editor.guiDocumentSourcePath = std::move(working.guiDocumentSourcePath);
+            editor.guiDocumentStatus = std::move(working.guiDocumentStatus);
+            editor.selectedEntityId = working.selectedEntityId;
+            editor.selectedEntityIds = std::move(working.selectedEntityIds);
+            editor.selectedEntity = working.selectedEntity;
+            editor.aiAuthoringPlanApplied = true;
+            editor.aiAuthoringSurface = editor.mainSurface = working.mainSurface;
+            editor.outlinerToolTab = working.outlinerToolTab;
+            editor.viewportCameraMode = working.viewportCameraMode;
+            editor.aiGoalRunning = editor.aiGoalPlanNextQueued = false;
+            editor.aiGoalCompletedMilestones = working.aiGoalCompletedMilestones;
+            editor.aiGoalAttemptedMilestoneSignatures = std::move(working.aiGoalAttemptedMilestoneSignatures);
+            editor.aiGoalLastMilestoneSignature = std::move(working.aiGoalLastMilestoneSignature);
+            editor.aiGoalLastMilestoneReceipt = std::move(working.aiGoalLastMilestoneReceipt);
+            editor.sceneInteractionDirty = editor.sceneLightingDirty = true;
+            editor.surfaceSettleFrames = (std::max)(editor.surfaceSettleFrames, 2);
+            return true;
+        }
+
+        [[nodiscard]] bool queue_ai_authoring_apply(EditorState& editor)
+        {
+            if (editor.aiAuthoringApplyPending || !editor.aiAuthoringPlan || editor.aiAuthoringPlanApplied) return false;
+            try
+            {
+                auto working = snapshot_ai_authoring(editor);
+                editor.aiAuthoringApplySceneRevision = editor.sceneDocumentRevision;
+                editor.aiAuthoringApplyGuiRevision = editor.guiDocument ? editor.guiDocument->revision().sequence : 0u;
+                editor.aiAuthoringApplyCancelled = false;
+                editor.aiAuthoringApplyProgress = std::make_shared<AiAuthoringApplyProgress>();
+                working->aiAuthoringApplyProgress = editor.aiAuthoringApplyProgress;
+                auto submitted = schedule_editor_cancellable_task(editor, "Approved project authoring batches",
+                    [working = std::move(working)](std::stop_token stop) mutable
+                    {
+                        (void)apply_ai_authoring_plan(*working, false, stop);
+                        return std::move(working);
+                    });
+                editor.aiAuthoringApplyCancellation = submitted.cancellation;
+                editor.aiAuthoringApplyPending.emplace(std::move(submitted.completion));
+                editor.aiAuthoringStatus = "Approved authoring job queued. Bounded batches run on a private document snapshot; the live scene stays unchanged until the complete result is validated. Cancel remains available.";
+                return true;
+            }
+            catch (const std::exception& error)
+            {
+                editor.aiAuthoringStatus = "Could not queue approved authoring: " + std::string{error.what()};
+                editor.aiAuthoringApplyProgress.reset();
+                return false;
+            }
+        }
+
+        [[nodiscard]] bool poll_ai_authoring_apply(EditorState& editor)
+        {
+            if (!editor.aiAuthoringApplyPending) return false;
+            if (editor.aiAuthoringApplyPending->wait_for(0ms) != std::future_status::ready)
+            {
+                const auto& progress = editor.aiAuthoringApplyProgress;
+                if (progress) editor.aiAuthoringStatus = epochengine::format_text(
+                    "Authoring worker: {} commands complete, {} work items in {} batches; next batch {} items, last {} us, peak {} us (8 ms worker target). Live scene unchanged; Cancel is available.",
+                    progress->commands.load(std::memory_order_relaxed),
+                    progress->objects.load(std::memory_order_relaxed),
+                    progress->batches.load(std::memory_order_relaxed),
+                    progress->nextBatch.load(std::memory_order_relaxed),
+                    progress->lastBatchUs.load(std::memory_order_relaxed),
+                    progress->peakBatchUs.load(std::memory_order_relaxed));
+                return false;
+            }
+            try
+            {
+                auto working = editor.aiAuthoringApplyPending->get();
+                if (working && publish_ai_authoring_snapshot(editor, *working))
+                {
+                    for (const auto& call : editor.aiAuthoringPlan.plan.calls)
+                        epochengine::ai::append_tool_trace(epochengine::ai::McpCaptureRecord{
+                            .session_id = editor.projectId.empty() ? "editor-authoring" : editor.projectId + "-editor-authoring",
+                            .call_id = call.call_id, .server = "editor", .tool = call.tool,
+                            .prompt = editor.aiAuthoringPlanForGoal ? editor.aiGoal : editor.aiAuthoringRequest,
+                            .normalized_output = "approved batched authoring result published",
+                            .source_path = editor.projectScenePath,
+                            .state = epochengine::ai::McpCallState::succeeded,
+                            .error = epochengine::ai::McpErrorCode::none});
+                }
+            }
+            catch (const std::exception& error)
+            {
+                editor.aiAuthoringStatus = "Authoring job ended without publication: " + std::string{error.what()};
+                editor.aiGoalRunning = editor.aiGoalPlanNextQueued = false;
+            }
+            editor.aiAuthoringApplyPending.reset();
+            editor.aiAuthoringApplyProgress.reset();
+            editor.aiAuthoringApplyCancellation = {};
+            push_editor_log(editor, "[ai] " + editor.aiAuthoringStatus);
+            return true;
+        }
+
         void ensure_2d_canvas_entity(EditorState& state)
         {
             const auto existing = std::find_if(
@@ -23454,6 +23726,7 @@ namespace epochengine
             if (editor.taskScheduler)
             {
                 for (const auto ticket : {
+                    editor.aiAuthoringApplyCancellation,
                     editor.aiSourceWorkspaceCancellation,
                     editor.aiSourceBuildCancellation,
                     editor.aiSourceTestCancellation})
@@ -23886,6 +24159,90 @@ namespace epochengine
                 if (!state->aiAuthoringPlan || apply_ai_authoring_plan(*state, false)
                     || state->sceneDocumentRevision != revision || state->entities.size() != count
                     || state->sceneDocument.history().size() != history) return false;
+            }
+
+            trace.stage = "measured_authoring_batch_backpressure";
+            {
+                AiAuthoringApplyProgress progress;
+                observe_ai_authoring_batch(progress, 32u, 1000u);
+                if (progress.nextBatch.load() != 64u) return false;
+                observe_ai_authoring_batch(progress, 64u, 64000u);
+                if (progress.nextBatch.load() != 8u) return false;
+                observe_ai_authoring_batch(progress, 8u, 80000u);
+                if (progress.nextBatch.load() != 1u) return false;
+                observe_ai_authoring_batch(progress, 1u, 1000u);
+                if (progress.nextBatch.load() != 2u || progress.peakBatchUs.load() != 80000u
+                    || progress.objects.load() != 105u || progress.batches.load() != 4u) return false;
+                observe_ai_authoring_batch(progress, 1u, 1u);
+                if (progress.nextBatch.load() != 2u) return false;
+                observe_ai_authoring_batch(progress, 2u, 1u);
+                if (progress.nextBatch.load() != 4u) return false;
+            }
+
+            trace.stage = "thousand_object_private_batched_authoring";
+            {
+                auto live = std::make_unique<EditorState>();
+                live->entities.clear();
+                live->aiAuthoringPlan = ai::parse_authoring_plan(
+                    "EPOCH_AUTHORING_PLAN_V1\nTITLE Thousand cubes\nSUMMARY Batch a large approved scene.\n"
+                    "CALL scene.reconcile archetype=cube count=1000\n"
+                    "CALL scene.arrange archetype=cube columns=40 spacing=2,0,2 origin=0,1,0 placement=free\nEND\n");
+                if (!live->aiAuthoringPlan) return false;
+                const auto originalRevision = live->sceneDocumentRevision;
+                live->aiAuthoringApplySceneRevision = originalRevision;
+                live->aiAuthoringApplyGuiRevision = 0u;
+                auto working = snapshot_ai_authoring(*live);
+                working->aiAuthoringApplyProgress = std::make_shared<AiAuthoringApplyProgress>();
+                if (!apply_ai_authoring_plan(*working, false)
+                    || !live->entities.empty() || live->sceneDocumentRevision != originalRevision
+                    || working->entities.size() != 1000u
+                    || working->aiAuthoringApplyProgress->batches.load() < 16u
+                    || working->aiAuthoringApplyProgress->objects.load() != 2000u
+                    || working->aiAuthoringApplyProgress->commands.load() != 2u) return false;
+                std::unordered_set<std::string> names;
+                for (std::size_t index = 0u; index < working->entities.size(); ++index)
+                {
+                    const auto& entity = working->entities[index];
+                    if (!names.emplace(entity.name).second || entity.position != std::array{
+                            static_cast<float>(index % 40u) * 2.0f, 1.0f,
+                            static_cast<float>(index / 40u) * 2.0f}) return false;
+                }
+                trace.stage = "cancelled_completed_worker_not_published";
+                live->aiAuthoringApplyCancelled = true;
+                if (publish_ai_authoring_snapshot(*live, *working) || !live->entities.empty()) return false;
+                live->aiAuthoringApplyCancelled = false;
+                trace.stage = "stale_authoring_snapshot_not_published";
+                ++live->sceneDocumentRevision;
+                if (publish_ai_authoring_snapshot(*live, *working) || !live->entities.empty()) return false;
+                live->sceneDocumentRevision = originalRevision;
+                if (!publish_ai_authoring_snapshot(*live, *working) || live->entities.size() != 1000u
+                    || !live->aiAuthoringPlanApplied) return false;
+
+                trace.stage = "million_intent_native_preflight_no_allocation";
+                const auto revision = live->sceneDocumentRevision;
+                const auto history = live->sceneDocument.history().size();
+                live->aiAuthoringPlanApplied = false;
+                live->aiAuthoringPlan = ai::parse_authoring_plan(
+                    "EPOCH_AUTHORING_PLAN_V1\nTITLE Population\nSUMMARY Preserve the user's requested scale.\n"
+                    "CALL scene.reconcile archetype=cube count=1000000\nEND\n");
+                if (!live->aiAuthoringPlan || apply_ai_authoring_plan(*live, false)
+                    || live->sceneDocumentRevision != revision || live->entities.size() != 1000u
+                    || live->sceneDocument.history().size() != history
+                    || live->aiAuthoringStatus.find("instanced/streamed") == std::string::npos) return false;
+
+                trace.stage = "cancelled_authoring_keeps_undo_and_scene";
+                live->aiAuthoringPlan = ai::parse_authoring_plan(
+                    "EPOCH_AUTHORING_PLAN_V1\nTITLE Clear\nSUMMARY Clear the approved scene.\n"
+                    "CALL scene.clear scope=all\nEND\n");
+                std::stop_source stop;
+                stop.request_stop();
+                if (apply_ai_authoring_plan(*live, false, stop.get_token())
+                    || live->sceneDocumentRevision != revision || live->entities.size() != 1000u
+                    || live->sceneDocument.history().size() != history) return false;
+                trace.stage = "large_clear_bounded_transactions";
+                if (!apply_ai_authoring_plan(*live, false) || !live->entities.empty()
+                    || !live->sceneDocument.objects().empty()
+                    || live->sceneDocument.history().size() != history + 8u) return false;
             }
 
             trace.stage = "path_admission";
@@ -28849,6 +29206,11 @@ namespace epochengine
 
         auto request_ai_authoring_plan = [&](bool goalMilestone = false) -> bool
         {
+            if (editor.aiAuthoringApplyPending)
+            {
+                chat.append_status("An approved authoring job is still running. Cancel or wait for publication before requesting another plan.");
+                return false;
+            }
             chat.statusRequestKind = AiDeferredRequestKind::Authoring;
             if (goalMilestone
                 && (!editor.aiGoalActive || !editor.aiGoalRunning))
@@ -29194,6 +29556,8 @@ namespace epochengine
             apply_source_model_completion(input, chat, editor.aiSourceRequestedGeneration);
             return input;
         };
+        if (poll_ai_authoring_apply(editor)) chat.append_status(editor.aiAuthoringStatus);
+
         // Model completion and successor planning belong to the context tick,
         // never to the visibility of the AI Controls dock tab.
         if (editor.aiDevelopmentPanel)
@@ -29577,7 +29941,7 @@ namespace epochengine
                 editor.aiDeferredRequestKind != AiDeferredRequestKind::None
                 && !epochengine::ai::is_model_use_confirmed();
             const bool planAwaitingApproval = editor.aiAuthoringPlan
-                && !editor.aiAuthoringPlanApplied;
+                && !editor.aiAuthoringPlanApplied && !editor.aiAuthoringApplyPending;
             const bool toolPlanAwaitingApproval = editor.aiToolPlan
                 && !editor.aiToolPlanApplied;
             const bool toolTestPending = editor.aiToolTestPending.has_value();
@@ -29775,6 +30139,7 @@ namespace epochengine
             && editor.aiGoalRunning
             && chat.queuedInput.empty()
             && !editor.aiAuthoringAwaitingReply
+            && !editor.aiAuthoringApplyPending
             && !goalPlanAwaitingApproval
             && !source_model_slot_busy(editor, chat)
             && !editor.aiRetainedSourceRequest
@@ -29784,7 +30149,8 @@ namespace epochengine
             (void)request_ai_authoring_plan(true);
         }
 
-        if (editor.aiDeferredRequestKind == AiDeferredRequestKind::None)
+        if (editor.aiDeferredRequestKind == AiDeferredRequestKind::None
+            && !editor.aiAuthoringApplyPending)
         {
             if (auto queued = chat.take_queued_input())
             {
@@ -35202,7 +35568,7 @@ namespace epochengine
                     2'048u,
                     true);
                 const bool planAwaitingApproval = editor.aiAuthoringPlan
-                    && !editor.aiAuthoringPlanApplied;
+                    && !editor.aiAuthoringPlanApplied && !editor.aiAuthoringApplyPending;
                 const std::array requestActions{
                     gui::InlineButtonSpec{
                         .label = editor.aiAuthoringAwaitingReply
@@ -35212,10 +35578,11 @@ namespace epochengine
                                 : "Plan Changes",
                         .width = planAwaitingApproval ? 168.0f : 132.0f,
                         .enabled = !editor.aiAuthoringAwaitingReply
-                            && !planAwaitingApproval},
+                            && !editor.aiAuthoringApplyPending && !planAwaitingApproval},
                     gui::InlineButtonSpec{
                         .label = "Discard",
-                        .width = 88.0f}
+                        .width = 88.0f,
+                        .enabled = !editor.aiAuthoringApplyPending}
                 };
                 const auto requestAction = gui::inline_button_row(
                     requestActions,
@@ -40415,7 +40782,7 @@ namespace epochengine
         const bool consentModelReady = !consentInventoryPending
             && !editor.aiPendingModelSelection.empty();
         const bool planAwaitingApproval = editor.aiAuthoringPlan
-            && !editor.aiAuthoringPlanApplied;
+            && !editor.aiAuthoringPlanApplied && !editor.aiAuthoringApplyPending;
         const bool toolPlanAwaitingApproval = editor.aiToolPlan
             && !editor.aiToolPlanApplied;
         const bool toolTestPending =
@@ -40446,6 +40813,8 @@ namespace epochengine
                 ->has_verified_source_candidate();
         const bool sourcePromotionAvailable =
             sourcePromotionStaged || sourceCandidateVerified;
+        const std::array applyJobActions{
+            gui::ConsoleWindowActionSpec{.label = "Cancel Authoring Job", .width = 180.0f, .activate_on_press = true}};
         const std::array planActions{
             gui::ConsoleWindowActionSpec{
                 .label = "Apply Plan",
@@ -40601,7 +40970,9 @@ namespace epochengine
                 .activate_on_press = true}
         };
         const std::span<const gui::ConsoleWindowActionSpec> messageActions =
-            editor.aiIntentClarificationPending
+            editor.aiAuthoringApplyPending
+            ? std::span<const gui::ConsoleWindowActionSpec>{applyJobActions}
+            : editor.aiIntentClarificationPending
                 && editor.aiIntentClarificationResumeIntent == AiChatIntent::Ambiguous
             ? std::span<const gui::ConsoleWindowActionSpec>{intentClarificationActions}
             : editor.aiIntentClarificationPending
@@ -40656,6 +41027,7 @@ namespace epochengine
         const auto chatLineRoles = ai_chat_message_roles(chat.lines);
         const auto chatRetryableLines = chat.retryable_lines();
         const bool chatCanAccept = !chat.pending && !chat.worker.joinable()
+            && !editor.aiAuthoringApplyPending
             && !chat.requestRetirementFailed && chat.queuedInput.empty()
             && editor.aiDeferredRequestKind == AiDeferredRequestKind::None;
         const std::string aiChatPanelId = epochengine::format_text(
@@ -40887,7 +41259,13 @@ namespace epochengine
         }
         if (messageActionIndex)
         {
-            if (editor.aiIntentClarificationPending
+            if (editor.aiAuthoringApplyPending)
+            {
+                editor.aiAuthoringApplyCancelled = true;
+                (void)editor_task_scheduler(editor).cancel(editor.aiAuthoringApplyCancellation);
+                chat.append_status("Authoring cancellation requested. The live scene was not changed; the private worker result will be discarded.");
+            }
+            else if (editor.aiIntentClarificationPending
                 && editor.aiIntentClarificationResumeIntent
                     != AiChatIntent::Ambiguous)
             {
@@ -40989,15 +41367,9 @@ namespace epochengine
             }
             else if (planAwaitingApproval && *messageActionIndex == 0u)
             {
-                const std::uint64_t revisionBefore =
-                    editor.sceneDocumentRevision;
-                const bool applied = apply_ai_authoring_plan(editor);
-                chat.append_status(epochengine::format_text(
-                    "{} Scene revision {} -> {}.",
-                    editor.aiAuthoringStatus,
-                    revisionBefore,
-                    editor.sceneDocumentRevision));
-                if (!applied)
+                const bool queued = queue_ai_authoring_apply(editor);
+                chat.append_status(editor.aiAuthoringStatus);
+                if (!queued)
                     editor.surfaceSettleFrames = (std::max)(editor.surfaceSettleFrames, 1);
             }
             else if (planAwaitingApproval)

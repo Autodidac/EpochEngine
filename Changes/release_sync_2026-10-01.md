@@ -46,9 +46,7 @@ macOS 0.89.30 remain unchanged.
 
 Site chat confirmed successful v108 publication: source
 `b7087c209cf8a16500de1a3b234e1716ae28bdc7`, deployment
-`appgdep_6abf3cb942b08191a0972914974e8d52`. The live project and downloads are
-https://epoch.adamrushford.chatgpt.site/projects/epoch-engine and
-https://epoch.adamrushford.chatgpt.site/downloads . Nine public objects passed
+`appgdep_6abf3cb942b08191a0972914974e8d52`. Nine public objects passed
 independent HTTP 200/no-redirect readback, exact hash/size, MIME, attachment,
 immutable caching and nosniff checks before activation. Runtime/receipt sidecars
 match their exact names and bodies. The Site's runtime-only checksum manifest is

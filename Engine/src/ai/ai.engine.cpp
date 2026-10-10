@@ -52,6 +52,7 @@ module;
 #include <algorithm>
 #include <atomic>
 #include <array>
+#include <charconv>
 #include <chrono>
 #include <condition_variable>
 #include <exception>
@@ -3082,13 +3083,11 @@ namespace epochengine::ai
                         budget.context_tokens, budget.output_tokens);
                 }
             }
-            const auto stage = source_request_stage(
-                input, workload == InferenceWorkload::source_iteration);
-            // Control steps need paths or a short plan, not a whole patch-sized
-            // generation. Preserve source/context capacity and the independent
-            // wall ceiling; a code proposal/repair retains its full token budget.
-            if (stage == SourceRequestStage::plan || stage == SourceRequestStage::context)
-                budget.output_tokens = (std::min)(budget.output_tokens, std::size_t{4'096u});
+            // Completion limits include reasoning on many local providers.
+            // A small supervisor/read quota can exhaust the entire generation
+            // before its final action. Use the loaded-context budget for every
+            // source role, reserving that output before admitting source bytes.
+            (void)input;
             return budget;
         }
 
@@ -3608,6 +3607,13 @@ namespace epochengine::ai
             bool inString_{}, escaped_{}, isKey_{}, afterColon_{};
         };
 
+        class ModelOutputLimit final : public std::runtime_error
+        {
+        public:
+            ModelOutputLimit() : std::runtime_error{
+                "The provider ended generation at its output-token limit (finish_reason=length). Reasoning can consume this limit before final content. No partial answer, plan or edit was admitted; the same generation was not automatically restarted. Check the provider's output limit or reasoning setting, then use Retry/resume from the retained checkpoint."} {}
+        };
+
         // Worker-owned SSE assembly. Deltas are data, never executable actions.
         // Publication still uses the existing full-message phase/schema checks.
         class ModelReplyStream final
@@ -3666,6 +3672,7 @@ namespace epochengine::ai
                         {
                             const auto item = model_json_fields(*choice);
                             const auto reason = model_json_string(model_json_field(item, "finish_reason"));
+                            if (reason == "length") throw ModelOutputLimit{};
                             if (!reason.empty() && reason != "stop" && reason != "tool_calls")
                                 invalid_model_stream();
                         }
@@ -3778,6 +3785,7 @@ namespace epochengine::ai
                 const auto reason = model_json_string(model_json_field(item, "finish_reason"));
                 if (!reason.empty())
                 {
+                    if (reason == "length") throw ModelOutputLimit{};
                     if (reason != "stop" && reason != "tool_calls") invalid_model_stream();
                     if ((reason == "tool_calls") != toolSeen_) invalid_model_stream();
                     finished_ = true;
@@ -5825,6 +5833,15 @@ namespace epochengine::ai
                         if (sourceReply != StructuredSourceReply::none)
                             return "EPOCH_SOURCE_ACTION_REJECTED_V1\nNo completed source function was decoded. Call exactly one allowed function with complete arguments; reasoning and partial arguments are not an action.";
                     }
+                }
+                catch (const ModelOutputLimit& limit)
+                {
+                    if (cancellation.stop_requested()) return cancelled();
+                    terminalFailure = ModelTerminalFailure::request_rejected;
+                    lastFailure = "Local OpenAI-compatible request failed: " + std::string{limit.what()}
+                        + " Epoch requested " + std::to_string(maximumTokens) + " output tokens.";
+                    logger::get("Engine.AI.Transport").log(logger::LogLevel::Error, lastFailure);
+                    return lastFailure;
                 }
                 catch (const ModelTransportRetirementFailure&)
                 {
@@ -8081,14 +8098,13 @@ namespace epochengine::ai
         {
             const auto requestBudget = request_inference_budget(
                 InferenceWorkload::source_iteration, fixture.input);
-            const auto expectedTokens = fixture.stage == Stage::plan || fixture.stage == Stage::context
-                ? 4'096u : 32'768u;
+            const auto expectedTokens = 32'768u;
             if (!requestBudget.valid() || requestBudget.output_tokens != expectedTokens
                 || requestBudget.context_tokens != 81'920u
                 || requestBudget.timeout_seconds != 10'800u
                 || requestBudget.maximum_prompt_bytes != source_prompt_byte_budget(81'920u, 32'768u)
                 || requestBudget.maximum_reply_bytes != 1024u * 1024u
-                || request_inference_budget(InferenceWorkload::chat, fixture.input).output_tokens != 2'048u)
+                || request_inference_budget(InferenceWorkload::chat, fixture.input).output_tokens != 8'192u)
                 return failed(__LINE__);
             if (source_request_stage(fixture.input, true) != fixture.stage
                 || structured_source_reply_for(fixture.input, true) != fixture.shape
@@ -8503,6 +8519,22 @@ namespace epochengine::ai
             catch (const std::runtime_error&) { return true; }
             return false;
         };
+        // Length exhaustion is a provider terminal result, not malformed JSON
+        // or a transport disconnect. Preserve that distinction in both modes.
+        for (const auto& cutoff : std::vector<std::string>{
+            frame(R"json({"reasoning_content":"Unfinished private draft"})json")
+                + frame("{}", "\"length\"") + "data: [DONE]\n\n",
+            R"json({"choices":[{"message":{"content":"partial answer","reasoning_content":"draft"},"finish_reason":"length"}]})json"})
+        {
+            bool exhausted{};
+            try { ModelReplyStream stream{false}; stream.feed(cutoff); (void)stream.finish(cutoff); }
+            catch (const ModelOutputLimit& error)
+            {
+                exhausted = std::string_view{error.what()}.find("finish_reason=length") != std::string_view::npos;
+            }
+            catch (...) { return failed(__LINE__); }
+            if (!exhausted) return failed(__LINE__);
+        }
         for (const auto& invalid : std::vector<std::string>{
             toolFrame(streamArgs, true), // Missing terminal frame: no partial edit.
             "data: [DONE]\n\n",

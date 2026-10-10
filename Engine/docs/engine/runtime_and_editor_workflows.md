@@ -1655,8 +1655,12 @@ Total time follows monotonic owning-context ticks across setup, retries, builds
 and Keep/Choose, including hidden-pane updates. Start/Restart resets the total;
 Stop or terminal failure freezes it; same-process Resume excludes the stopped
 interval. Saved sessions from another process have no reconstructed timer history.
-Plan/selection output limits are 4,096 tokens with concise actionable planning;
-patch/repair retains 32,768. Context/output reservations remain checked; large
+Supervisor, selection and patch/repair each reserve 32,768 output tokens in the
+81,920-token default context; smaller actual capacities reduce that reservation.
+Chat reserves 8,192 and project plans 16,384 because reasoning can exhaust a
+small completion cap before any final answer. A provider length-limit finish is
+shown explicitly, with no partial admission or identical automatic resend.
+Context/output reservations remain checked; large
 model capacity does not authorize an unbounded transcript or source dump.
 Stage/elapsed/size diagnostics omit request and response bodies. These contracts
 do not prove native responsiveness or faster successful model output.

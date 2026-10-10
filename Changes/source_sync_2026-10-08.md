@@ -30,6 +30,54 @@ not the dirty working directory. Keep earlier source admissions and runtime byte
 
 ## Delivery
 
+### October 9 renewed Site source delivery and adaptive authoring
+
+The operator renewed GitHub/Site source synchronization after the earlier hold.
+This batch raises source-role output reserves consistently, distinguishes
+provider length exhaustion from disconnect/empty replies, removes arbitrary
+authoring call/lifetime milestone quotas, and queues private cancellable
+document work in measured adaptive batches. Reply bytes, canonical resident
+capacity, plan approval and revision/authority guards remain. It corrects the
+README caption to operator-confirmed Qwen-assisted 100-cube/lighting evidence,
+preserves historical Linux/multicontext proof and removes the quoted historical
+Site hyperlinks. No new runtime release or candidate succession is asserted.
+
+The previous CMake run 38015016930 finished with all lanes passing except
+linux-clang-engine. Its complete failing transcript identifies the missing
+charconv include in ai.engine.cpp, now fixed. Local Linux proof remains blocked
+by the registered Ubuntu VHD being missing; new hosted confirmation is separate.
+
+Read-only related-repository identity checks on October 9:
+
+- EpochGui: c52e91293749a7a34959bfc042c582c3ac182504, exact clean Engine mirror;
+  no changed mirrored bytes and no gratuitous standalone commit.
+- EpochEngineExtensions: eccef139f982a9e6b64295cd9c8b976905ef0990; Engine's local
+  folder is an engine-owned descriptor fixture, not the entire upstream mirror.
+- EpochPlatformEngine: 8ab286e4d943adf8a24537c8ea25a87489288f4c, existing v0.1.1
+  typed renderer-neutral host library. Its incremental consumer migration is
+  still open; Engine's renderer-owned adapters are not blindly copied upstream.
+- EpochAudioEngine: 8683c8e655985e85c4e879fd844f9fdad4c34d9a and EpochMediaEngine:
+  23369dfb87a66889246f0d80868e2529ab166397. Their current tracked foundation
+  consists of README/license/ignore files, with no corresponding changed Engine
+  mirror to publish. Repository identity and source ownership are not inferred
+  from a nested folder's Engine Git status.
+
+Publish only paired exports of the tested committed tree through the existing
+Site owner, after exact member/count/hash verification and GitHub readback.
+Preserve EngCoder v114, prior source admissions, immutable Windows/Linux
+v0.90.33 and macOS v0.89.30 runtime downloads and signed admission authority.
+Queued handoff is not publication. Native testing stays operator-owned.
+Earlier hold statements below record their historical receipts, not current
+authority; no undocumented dependency integration is claimed.
+
+Final Debug and ReleaseWithDebugInfo Editor/HeadlessCI production builds pass;
+complete pure engine suites pass at 22:50:11 and 22:47:33. Build logs:
+`build/batched-authoring-20261009/{Debug,ReleaseWithDebugInfo}-adaptive-final.log`.
+Names (610), layout/filter/project references, remote exact dependency identity
+and diff guards pass. An intermediate Debug relink was held by the pure test
+process (LNK1168); retry after its exit and the final suite pass. Normal Release
+PID 14696 remains untouched; no model, GUI, GPU or candidate test was launched.
+
 ### October 9 Project Assistant and input checkpoint
 
 The focused batch fixes host inventory truncation, adds unique-name resolution

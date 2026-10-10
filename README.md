@@ -205,9 +205,10 @@ For engine/tooling developers:
 
 ## In Action
 
-Current v0.90.35 Windows editor scene supplied by the operator: multiple meshes,
-ground and lighting. This is scene/editor evidence, not proof of completed AI
-candidate succession.
+Current v0.90.35 Windows Project Assistant proof supplied by the operator:
+Qwen Next Flash created 100 cube objects, with ground and implemented lighting
+shown in the scene. This proves assisted scene authoring, not engine-source
+self-iteration or candidate succession.
 
 <p align="center">
   <img src="Images/readme/windows-scene-v09035.png" alt="Current Epoch Windows editor with a multi-object scene, ground and lighting" />
