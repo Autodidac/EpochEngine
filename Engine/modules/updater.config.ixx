@@ -56,7 +56,7 @@ namespace epochengine::updater
 #endif
 
     export inline constexpr bool SOURCE_UPDATE_FALLBACK_ENABLED =
-        SITE_DISTRIBUTION
+        true
 #if defined(EPOCH_BINARY_ONLY_DISTRIBUTION) && EPOCH_BINARY_ONLY_DISTRIBUTION
         && false
 #endif
@@ -223,7 +223,8 @@ namespace epochengine::updater
     export inline std::string PROJECT_SOURCE_VERSION_URL()
     {
         return SITE_DISTRIBUTION
-            ? std::string{ EPOCH_SITE_BASE } + "/api/epoch/source-version" : std::string{};
+            ? std::string{ EPOCH_SITE_BASE } + "/api/epoch/source-version"
+            : "https://raw.githubusercontent.com/Autodidac/EpochEngine/main/Engine/modules/epoch.version.ixx";
     }
 
     export inline std::string PROJECT_SOURCE_ARCHIVE_EXTENSION()
@@ -311,15 +312,18 @@ namespace epochengine::updater
     export inline std::string PROJECT_SOURCE_URL()
     {
         return SOURCE_UPDATE_FALLBACK_ENABLED
-            ? std::string{EPOCH_SITE_BASE} + "/api/epoch/source-archive/source"
-                + PROJECT_SOURCE_ARCHIVE_EXTENSION()
+            ? (SITE_DISTRIBUTION
+                ? std::string{EPOCH_SITE_BASE} + "/api/epoch/source-archive/source" + PROJECT_SOURCE_ARCHIVE_EXTENSION()
+                : std::string{GITHUB_BASE} + "Autodidac/EpochEngine/archive/refs/heads/main" + PROJECT_SOURCE_ARCHIVE_EXTENSION())
             : std::string{};
     }
 
     export inline std::string PROJECT_SOURCE_CHECKSUM_URL()
     {
         const std::string source_url = PROJECT_SOURCE_URL();
-        return source_url.empty() ? std::string{} : source_url + ".sha256";
+        return source_url.empty() ? std::string{} : (SITE_DISTRIBUTION
+            ? source_url + ".sha256"
+            : std::string{GITHUB_BASE} + "Autodidac/EpochEngine/releases/latest/download/epoch-source-main" + PROJECT_SOURCE_ARCHIVE_EXTENSION() + ".sha256");
     }
 
     export inline std::vector<std::string> PROJECT_SOURCE_FALLBACK_URLS()
