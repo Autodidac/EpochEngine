@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       source_sha256:
-        description: SHA-256 of the frozen public Site 0.90.45 tar archive
+        description: SHA-256 of the frozen public Site 0.90.46 tar archive
         required: true
         type: string
 permissions:
@@ -19,7 +19,7 @@ jobs:
         run: |
           set -euo pipefail
           [[ "$SOURCE_SHA256" =~ ^[0-9a-f]{64}$ ]]
-          curl --fail --location --retry 2 https://epoch.adamrushford.chatgpt.site/downloads/releases/v0.90.45/EpochEngine-0.90.45-source.tar.gz -o "$RUNNER_TEMP/site-source.tar.gz"
+          curl --fail --location --retry 2 https://epoch.adamrushford.chatgpt.site/downloads/releases/v0.90.46/EpochEngine-0.90.46-source.tar.gz -o "$RUNNER_TEMP/site-source.tar.gz"
           printf '%s  %s\n' "$SOURCE_SHA256" "$RUNNER_TEMP/site-source.tar.gz" | sha256sum --check
           mkdir -p "$RUNNER_TEMP/site-source"
           tar -xf "$RUNNER_TEMP/site-source.tar.gz" -C "$RUNNER_TEMP/site-source" --strip-components=1
@@ -39,7 +39,7 @@ jobs:
           set -euo pipefail
           cd "$RUNNER_TEMP/site-source/Engine/Bin/Clang-Release"
           ./epoch --version | tee "$RUNNER_TEMP/site-version.log"
-          grep -F 'Epoch v0.90.45' "$RUNNER_TEMP/site-version.log"
+          grep -F 'Epoch v0.90.46' "$RUNNER_TEMP/site-version.log"
           ./epoch --engine-contract-self-test --candidate-data-root "$RUNNER_TEMP/site-contract" > "$RUNNER_TEMP/site-contract.log" 2>&1
           grep -F 'engine_contract_self_test.result=pass' "$RUNNER_TEMP/site-contract.log"
       - name: Record build-only validation
@@ -50,7 +50,7 @@ jobs:
           import json, os
           from pathlib import Path
           Path(os.environ['RUNNER_TEMP'], 'site-linux-validation.json').write_text(json.dumps({
-            'version': '0.90.45', 'source_sha256': os.environ['SOURCE_SHA256'],
+            'version': '0.90.46', 'source_sha256': os.environ['SOURCE_SHA256'],
             'run_id': os.environ['GITHUB_RUN_ID'], 'build': 'pass', 'pure_contracts': 'pass',
             'native_model_inference': 'not run', 'renderer_smoke': 'not run',
             'source_scope': 'Public Site archive fetched temporarily for compilation only'
