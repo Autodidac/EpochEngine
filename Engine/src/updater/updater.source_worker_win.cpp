@@ -156,7 +156,8 @@ namespace epochengine::updater
             << "$ProgressPreference = 'SilentlyContinue'\n"
             << "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12\n"
             << "$sourceUrl = '" << esc(channel.source_url) << "'\n"
-            << "$sourceChecksumUrl = $sourceUrl + '.sha256'\n"
+            << "$sourceChecksumUrl = '" << esc(channel.source_url == PROJECT_SOURCE_URL()
+                ? PROJECT_SOURCE_CHECKSUM_URL() : channel.source_url + ".sha256") << "'\n"
             << "$preparedSourceArchive = '" << esc(prepared_source.archive_path.string()) << "'\n"
             << "$preparedSourceCleanupRoot = '" << esc(prepared_source.cleanup_root.string()) << "'\n"
             << "$sourceFallbackUrls = @(\n";

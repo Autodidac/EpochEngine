@@ -5536,7 +5536,8 @@ namespace epochengine::updater
             if (download_update_file_atomic(url, final_path))
             {
                 const auto expected =
-                    system_detail::download_expected_sha256(url + ".sha256");
+                    system_detail::download_expected_sha256(url == PROJECT_SOURCE_URL()
+                        ? PROJECT_SOURCE_CHECKSUM_URL() : url + ".sha256");
                 if (expected
                     && system_detail::verify_sha256(final_path, *expected))
                 {
@@ -6260,7 +6261,12 @@ namespace epochengine::updater
                (!SOURCE_UPDATE_FALLBACK_ENABLED ||
                    PROJECT_SOURCE_URL().ends_with(PROJECT_SOURCE_ARCHIVE_EXTENSION())) &&
                PROJECT_SOURCE_VERSION_URL() == (SITE_DISTRIBUTION
-                   ? std::string{EPOCH_SITE_BASE} + "/api/epoch/source-version" : std::string{}) &&
+                   ? std::string{EPOCH_SITE_BASE} + "/api/epoch/source-version"
+                   : std::string{"https://raw.githubusercontent.com/Autodidac/EpochEngine/main/Engine/modules/epoch.version.ixx"}) &&
+               PROJECT_SOURCE_URL().starts_with(SITE_DISTRIBUTION
+                   ? std::string{EPOCH_SITE_BASE} : std::string{GITHUB_BASE}) &&
+               PROJECT_SOURCE_CHECKSUM_URL().starts_with(SITE_DISTRIBUTION
+                   ? std::string{EPOCH_SITE_BASE} : std::string{GITHUB_BASE}) &&
                PROJECT_RELEASE_DOWNLOAD_PREFIX() == (SITE_DISTRIBUTION
                    ? std::string{EPOCH_SITE_BASE} + "/downloads/releases/"
                    : std::string{GITHUB_BASE} + "Autodidac/EpochEngine/releases/download/") &&
