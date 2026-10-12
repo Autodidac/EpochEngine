@@ -40,7 +40,8 @@ jobs:
           cd "$RUNNER_TEMP/site-source/Engine/Bin/Clang-Release"
           ./epoch --version | tee "$RUNNER_TEMP/site-version.log"
           grep -F 'Epoch v0.90.46' "$RUNNER_TEMP/site-version.log"
-          ./epoch --engine-contract-self-test --candidate-data-root "$RUNNER_TEMP/site-contract" > "$RUNNER_TEMP/site-contract.log" 2>&1
+          mkdir -p "$RUNNER_TEMP/site-contract"
+          ./epoch --engine-contract-self-test --candidate-data-root "$RUNNER_TEMP/site-contract" > "$RUNNER_TEMP/site-contract.log" 2>&1 || { cat "$RUNNER_TEMP/site-contract.log"; exit 1; }
           grep -F 'engine_contract_self_test.result=pass' "$RUNNER_TEMP/site-contract.log"
       - name: Record build-only validation
         env:
@@ -61,4 +62,15 @@ jobs:
           name: site-linux-build-validation
           path: ${{ runner.temp }}/site-linux-validation.json
           if-no-files-found: error
+          retention-days: 7
+      - name: Preserve build and contract diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: site-linux-build-diagnostics
+          path: |
+            ${{ runner.temp }}/site-build.log
+            ${{ runner.temp }}/site-version.log
+            ${{ runner.temp }}/site-contract.log
+          if-no-files-found: warn
           retention-days: 7
