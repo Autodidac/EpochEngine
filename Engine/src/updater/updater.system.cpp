@@ -1678,8 +1678,7 @@ namespace epochengine::updater
             }
             const auto binary_prefix = PACKAGED_BINARY_ASSET_PREFIX();
             const auto binary_suffix = PACKAGED_BINARY_ASSET_SUFFIX();
-            const std::string trusted_download_prefix =
-                std::string{ EPOCH_SITE_BASE } + "/downloads/releases/";
+            const std::string trusted_download_prefix = PROJECT_RELEASE_DOWNLOAD_PREFIX();
 
             for (const auto& release : releases)
             {
@@ -6257,8 +6256,16 @@ namespace epochengine::updater
                system_detail::compare_versions("0.90.02", "0.89.35") > 0 &&
                system_detail::compare_versions("0.89.30", "0.90.02") < 0 &&
                system_detail::compare_versions("0.89.06", "0.89.6") == 0 &&
-               PROJECT_SOURCE_VERSION_URL() ==
-                   std::string{EPOCH_SITE_BASE} + "/api/epoch/source-version";
+               SOURCE_VERSION_FILE_NAME() == "Engine/modules/epoch.version.ixx" &&
+               (!SOURCE_UPDATE_FALLBACK_ENABLED ||
+                   PROJECT_SOURCE_URL().ends_with(PROJECT_SOURCE_ARCHIVE_EXTENSION())) &&
+               PROJECT_SOURCE_VERSION_URL() == (SITE_DISTRIBUTION
+                   ? std::string{EPOCH_SITE_BASE} + "/api/epoch/source-version" : std::string{}) &&
+               PROJECT_RELEASE_DOWNLOAD_PREFIX() == (SITE_DISTRIBUTION
+                   ? std::string{EPOCH_SITE_BASE} + "/downloads/releases/"
+                   : std::string{GITHUB_BASE} + "Autodidac/EpochEngine/releases/download/") &&
+               PROJECT_RELEASE_INTEGRITY_URL().starts_with(SITE_DISTRIBUTION
+                   ? std::string{EPOCH_SITE_BASE} : std::string{GITHUB_BASE});
     }
 
     std::filesystem::path source_update_log_path()

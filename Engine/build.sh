@@ -693,7 +693,7 @@ prepare_managed_vcpkg_baseline() {
     return 1
   fi
 
-  (cd "${staging_root}" && run_cancellable ./bootstrap-vcpkg.sh -disableMetrics) || return $?
+  (cd "${staging_root}" && run_cancellable ./bootstrap-vcpkg.sh -disableMetrics >&2) || return $?
   if [[ ! -x "${staging_root}/vcpkg" ]]; then
     echo "Managed vcpkg bootstrap completed without producing the vcpkg executable." >&2
     rm -rf "${staging_root}"
