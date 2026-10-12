@@ -27,6 +27,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="$(MSBuildThisFileDirectory)include\engine.config.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)include\updater.distribution.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)include\epoch.engine.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)include\epoch.app_api.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)include\epoch.config.hpp" />

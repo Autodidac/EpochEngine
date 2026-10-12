@@ -30,6 +30,7 @@
  ***********************************************/
 module;
 
+#include "../include/updater.distribution.hpp"
 #include <string>
 #include <string_view>
 #include <vector>
@@ -41,6 +42,7 @@ import epoch.version;
 
 namespace epochengine::updater
 {
+    export inline constexpr bool SITE_DISTRIBUTION = EPOCH_UPDATE_DISTRIBUTION_SITE != 0;
     // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // Installation behavior
     // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -50,13 +52,17 @@ namespace epochengine::updater
 #if defined(EPOCH_BINARY_ONLY_DISTRIBUTION) && EPOCH_BINARY_ONLY_DISTRIBUTION
     export inline constexpr bool AUTHORIZED_SOURCE_DISTRIBUTION_ENABLED = false;
 #else
-    export inline constexpr bool AUTHORIZED_SOURCE_DISTRIBUTION_ENABLED = true;
+    export inline constexpr bool AUTHORIZED_SOURCE_DISTRIBUTION_ENABLED = false;
 #endif
 
     export inline constexpr bool SOURCE_UPDATE_FALLBACK_ENABLED =
-        AUTHORIZED_SOURCE_DISTRIBUTION_ENABLED;
+        SITE_DISTRIBUTION
+#if defined(EPOCH_BINARY_ONLY_DISTRIBUTION) && EPOCH_BINARY_ONLY_DISTRIBUTION
+        && false
+#endif
+        ;
     export inline constexpr bool SOURCE_PROJECT_DOWNLOAD_ENABLED =
-        AUTHORIZED_SOURCE_DISTRIBUTION_ENABLED;
+        SOURCE_UPDATE_FALLBACK_ENABLED;
 
     // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // Project identity
@@ -150,7 +156,7 @@ namespace epochengine::updater
 
     export inline std::string SOURCE_VERSION_FILE_NAME()
     {
-        return "Engine/modules/engine.version.ixx";
+        return "Engine/modules/epoch.version.ixx";
     }
 
     export inline std::string SOURCE_MAIN_FILE()
@@ -216,7 +222,8 @@ namespace epochengine::updater
 
     export inline std::string PROJECT_SOURCE_VERSION_URL()
     {
-        return std::string{ EPOCH_SITE_BASE } + "/api/epoch/source-version";
+        return SITE_DISTRIBUTION
+            ? std::string{ EPOCH_SITE_BASE } + "/api/epoch/source-version" : std::string{};
     }
 
     export inline std::string PROJECT_SOURCE_ARCHIVE_EXTENSION()
@@ -303,7 +310,10 @@ namespace epochengine::updater
 
     export inline std::string PROJECT_SOURCE_URL()
     {
-        return {};
+        return SOURCE_UPDATE_FALLBACK_ENABLED
+            ? std::string{EPOCH_SITE_BASE} + "/api/epoch/source-archive/source"
+                + PROJECT_SOURCE_ARCHIVE_EXTENSION()
+            : std::string{};
     }
 
     export inline std::string PROJECT_SOURCE_CHECKSUM_URL()
@@ -324,7 +334,8 @@ namespace epochengine::updater
 
     export inline std::string PROJECT_ACTION_RUNS_API_URL()
     {
-        return std::string{ EPOCH_SITE_BASE } + "/api/epoch/actions/runs";
+        return SITE_DISTRIBUTION ? std::string{ EPOCH_SITE_BASE } + "/api/epoch/actions/runs"
+            : std::string{GITHUB_API_BASE} + "Autodidac/EpochEngine/actions/runs";
     }
 
     export inline std::string PROJECT_UPDATE_BUILD_JOB_NAME()
@@ -342,17 +353,26 @@ namespace epochengine::updater
 
     export inline std::string PROJECT_RELEASE_API_URL()
     {
-        return std::string{ EPOCH_SITE_BASE } + "/api/epoch/releases/latest";
+        return SITE_DISTRIBUTION ? std::string{ EPOCH_SITE_BASE } + "/api/epoch/releases/latest"
+            : std::string{GITHUB_API_BASE} + "Autodidac/EpochEngine/releases/latest";
     }
 
     export inline std::string PROJECT_RELEASES_API_URL()
     {
-        return std::string{ EPOCH_SITE_BASE } + "/api/epoch/releases";
+        return SITE_DISTRIBUTION ? std::string{ EPOCH_SITE_BASE } + "/api/epoch/releases"
+            : std::string{GITHUB_API_BASE} + "Autodidac/EpochEngine/releases";
     }
 
     export inline std::string PROJECT_RELEASE_INTEGRITY_URL()
     {
-        return std::string{ EPOCH_SITE_BASE } + "/api/epoch/release-integrity";
+        return SITE_DISTRIBUTION ? std::string{ EPOCH_SITE_BASE } + "/api/epoch/release-integrity"
+            : std::string{GITHUB_BASE} + "Autodidac/EpochEngine/releases/latest/download/epoch-release-integrity.json";
+    }
+
+    export inline std::string PROJECT_RELEASE_DOWNLOAD_PREFIX()
+    {
+        return SITE_DISTRIBUTION ? std::string{EPOCH_SITE_BASE} + "/downloads/releases/"
+            : std::string{GITHUB_BASE} + "Autodidac/EpochEngine/releases/download/";
     }
 
     export inline constexpr std::string_view PROJECT_RELEASE_INTEGRITY_SCHEMA =
