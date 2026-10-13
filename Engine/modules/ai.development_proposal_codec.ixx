@@ -199,6 +199,20 @@ export namespace epochengine::ai::development_proposal_codec
         [[nodiscard]] explicit operator bool() const noexcept { return accepted; }
     };
 
+    struct ExactBlockMatch final
+    {
+        bool accepted{};
+        bool ambiguous{};
+        std::size_t offset{};
+        std::size_t byte_count{};
+        [[nodiscard]] explicit operator bool() const noexcept { return accepted; }
+    };
+
+    // Transport LF and source CRLF are equivalent only at newline boundaries.
+    // All other bytes, uniqueness and original byte offsets remain exact.
+    [[nodiscard]] ExactBlockMatch match_exact_block(
+        std::string_view source, std::string_view search);
+
     // All same-file searches resolve against one immutable host preimage.
     // Independent edits are composed into one atomic file operation.
     [[nodiscard]] PostimageResult compose_postimage(

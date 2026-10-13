@@ -1,5 +1,22 @@
 # AI Source Discovery Architecture
 
+Exact-block ingestion treats LF and CRLF as equivalent only at newline boundaries.
+The shared matcher returns offsets and lengths in the original source bytes;
+composition retains the matched source's newline style and rejects duplicate or
+overlapping anchors. Excerpt quality and missing-window recovery use this same
+matcher. Every other byte remains exact. Summary wording does not override valid
+exact-block grounding; whole-file replacement retains its separate quality checks.
+
+> **October 11, local v0.90.41 clarification:** The current source workflow
+> dispatches a direct coding worker; the separate supervisor step described
+> in historical sections below is not mandatory for every new objective.
+> The host now reads a short applicable recipe from
+> `ai_task_recipes.md` into source prompts where available, as navigation
+> only, not as edit authority. Cumulative novel-file reads are bounded by
+> v0.90.40's discovery budget. Successful acceptance still requires actual
+> changed candidate bytes, build/test and native successor evidence.
+
+
 Epoch Engine Self-Coding uses a host-owned retrieval layer. The model does not receive the whole repository and does not gain arbitrary filesystem authority.
 
 ## Operator Workflow And Its Actual Boundaries
@@ -357,3 +374,21 @@ for a fresh objective's implementation plan. CPU fixtures prove the compact
 plan -> saved checkpoint -> coding handoff, review cadence and reuse, with legacy
 reload, journal bounds and failed-publication regressions. Native task usefulness
 is measured by an actual patch/build/candidate, not by a plan response.
+
+### Documentation-owned edit packets
+
+`Engine/docs/engine/ai_task_recipes.md` can declare `SOURCE_REGION | path |
+inclusive start literal | exclusive end literal` rows. The host resolves them
+against current admitted candidate files, expands to whole line boundaries and
+binds them to the complete source hash. All packet bytes and framing are reserved
+before optional history/new lookups. A budget that cannot fit the packet is an
+explicit failure; it cannot quietly remove one required dependency and trigger
+another expensive model read. Requested supplemental windows remain possible.
+
+Theme navigation initially supplies the enum, palette members, lookup, a full
+existing palette/rounded-control example, choices/resolver, snapshot validator
+and layout decoder. Its source packet is approximately 25 KiB. Broad unrelated
+interfaces do not enter that initial scope. The map is shared as exact source and
+may be updated through the same candidate edit/promotion flow as code. The host
+never treats documentation prose as permission or substitutes prose for verified
+source bytes. Directories and literal spans remain bounded and source-contained.

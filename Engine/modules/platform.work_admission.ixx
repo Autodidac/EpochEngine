@@ -42,10 +42,12 @@ export namespace epochengine::platform::work_admission
         std::uint64_t minimum_available_memory_bytes{2ull * 1024ull * 1024ull * 1024ull};
         double minimum_available_memory_fraction{0.05};
         double maximum_cpu_busy_fraction{0.90};
+        bool resource_checks{true};
 
         [[nodiscard]] bool valid() const noexcept
         {
-            return cooldown_ms > 0u && maximum_sample_age_ms > 0u
+            if (!resource_checks) return true;
+            return maximum_sample_age_ms > 0u
                 && minimum_available_memory_bytes > 0u
                 && std::isfinite(minimum_available_memory_fraction)
                 && minimum_available_memory_fraction >= 0.0
@@ -85,7 +87,7 @@ export namespace epochengine::platform::work_admission
         case Reason::cpu_pressure: return "Waiting for host CPU load to settle before starting more work.";
         case Reason::invalid_policy: return "The resource admission policy is invalid; no work was started.";
         case Reason::clock_changed: return "The timing reference changed; restarting the nonblocking cooldown.";
-        case Reason::ready: return "Resource checks and cooldown passed; ready to start.";
+        case Reason::ready: return "Ready to start the queued operation.";
         }
         return "Unknown resource admission state.";
     }
@@ -236,6 +238,7 @@ export namespace epochengine::platform::work_admission
 
         [[nodiscard]] Reason assess(const ResourceSample& sample, std::uint64_t now) const noexcept
         {
+            if (!policy_.resource_checks) return Reason::ready;
             if (!sample.memory_valid || !sample.cpu_valid
                 || sample.total_memory_bytes == 0u
                 || sample.available_memory_bytes > sample.total_memory_bytes

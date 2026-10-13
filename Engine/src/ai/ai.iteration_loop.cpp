@@ -117,8 +117,10 @@ namespace epochengine::ai::iteration
                 "must still pass exact source, compiler and validation checks.";
             result.recommended_model_class =
                 "Choose an agentic coding model with enough context for the task. "
-                "Qwen 3.5+ is the requested coding tier, with 3.8 preferred; "
-                "newer operator-selected models are not rejected by name.";
+                "Qwen3.8-Flash-Next through an explicitly selected EngCoder "
+                "0.7.1+ endpoint is the preferred hosted lane; Qwen3.8 27B "
+                "remains a standalone fallback. Evaluate actual loaded "
+                "context and tool support, not just the model name.";
             return result;
         }
 

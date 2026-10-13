@@ -1043,6 +1043,25 @@ namespace epochengine::ai::self_iteration_orchestrator
             std::move(summary), true, true);
     }
 
+    Result Orchestrator::begin_coding(ActionToken action, std::string_view handoff)
+    {
+        if (snapshot_.phase != Phase::awaiting_plan_request
+            || !action_matches(action) || !action.operator_approved
+            || handoff.empty() || handoff.find('\0') != std::string_view::npos
+            || handoff.size() > limits_.maximum_plan_bytes)
+            return reject("Direct coding requires the current approved objective and a bounded host handoff.");
+        Orchestrator staged = *this;
+        staged.snapshot_.plan_bytes.assign(handoff);
+        staged.snapshot_.plan_sha256 = digest_text(handoff);
+        auto committed = staged.commit(Phase::awaiting_curated_evidence,
+            EvidenceKind::configured, std::move(action.transition_id),
+            staged.snapshot_.plan_sha256,
+            "Operator objective and retained host checkpoint admitted for direct coding; no supervisor model request or model reply was created.", true);
+        if (!committed) return reject(committed.status);
+        *this = std::move(staged);
+        return committed;
+    }
+
     Result Orchestrator::request_plan(ActionToken action)
     {
         if (snapshot_.phase != Phase::awaiting_plan_request)

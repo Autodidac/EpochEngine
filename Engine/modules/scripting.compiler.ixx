@@ -39,6 +39,7 @@ module;
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
+#include <chrono>
 #include <fstream>
 #include <limits>
 #include <span>
@@ -278,6 +279,10 @@ namespace epochengine::compiler
         FileEvidence candidate{};
         FileEvidence published{};
         bool compiler_started{};
+        std::filesystem::path compiler_log_path{};
+        std::string compiler_diagnostics{};
+        std::int32_t compiler_exit_code{};
+        bool compiler_exit_code_valid{};
         bool scope_revalidated{};
         bool source_revalidated{};
         bool output_ownership_revalidated{};
@@ -734,11 +739,12 @@ namespace epochengine::compiler
 
             for (const auto& candidate : candidates)
             {
-                if (std::filesystem::exists(candidate, ec))
+                ec.clear();
+                if (std::filesystem::is_regular_file(candidate / "scripting.epoch_api.h", ec) && !ec)
                     return candidate;
             }
 
-            return epochengine::core::path::normalize(input.parent_path().parent_path().parent_path() / "include");
+            return {};
         }
 
         [[nodiscard]] inline std::vector<std::filesystem::path> resolve_include_roots(
@@ -875,6 +881,8 @@ namespace epochengine::compiler
             bool cancelled{};
             std::int32_t exit_code{};
             bool exit_code_valid{};
+            std::filesystem::path log_path{};
+            std::string diagnostics{};
         };
 
         [[nodiscard]] inline SpawnResult spawn_compiler(
@@ -934,6 +942,13 @@ namespace epochengine::compiler
             request.exclusive_group = "epoch.script.compile";
             request.display_name = "Epoch C++23 Script Compiler";
             request.window_mode = platform::child_process::WindowMode::hidden;
+            auto capturePath = output;
+            capturePath += ".compiler_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) + ".log";
+            std::error_code captureError{};
+            if (!platform::filesystem::exclusive_create_and_write(capturePath, std::span<const std::byte>{}, captureError))
+                return {.diagnostics = "Could not create an owned script compiler capture: " + captureError.message()};
+            request.merged_output_path = capturePath;
+            request.disconnect_standard_input = true;
             const platform::child_process::LaunchResult launched =
                 platform::child_process::launch_or_focus(request);
             if (launched.code != platform::child_process::LaunchCode::started)
@@ -944,12 +959,20 @@ namespace epochengine::compiler
                     "failed to launch script compiler: {} ({})",
                     compilerPath.string(),
                     launched.message);
-                return {};
+                return {.log_path = capturePath, .diagnostics = launched.message};
             }
 
             const platform::child_process::WaitResult waited =
                 platform::child_process::wait(launched.handle, cancellation);
             (void)platform::child_process::release(launched.handle);
+            std::string diagnostics(8192u, '\0');
+            std::ifstream captured{capturePath, std::ios::binary};
+            captured.read(diagnostics.data(), static_cast<std::streamsize>(diagnostics.size()));
+            diagnostics.resize(static_cast<std::size_t>(captured.gcount()));
+            captureError.clear();
+            const auto captureBytes = std::filesystem::file_size(capturePath, captureError);
+            if (!captureError && captureBytes > diagnostics.size())
+                diagnostics += "\n[Compiler output excerpt truncated; full output retained in the compiler log.]\n";
             if (waited.code == platform::child_process::WaitCode::cancelled)
             {
                 return {
@@ -959,7 +982,8 @@ namespace epochengine::compiler
                         ? waited.process->exit_code
                         : 0,
                     .exit_code_valid = waited.process
-                        && waited.process->exit_code_valid};
+                        && waited.process->exit_code_valid,
+                    .log_path = capturePath, .diagnostics = std::move(diagnostics)};
             }
             if (waited.code != platform::child_process::WaitCode::exited
                 || !waited.process || !waited.process->exit_code_valid)
@@ -969,7 +993,7 @@ namespace epochengine::compiler
                     std::source_location::current(),
                     "script compiler process failed while waiting: {}",
                     waited.message);
-                return {.launched = true};
+                return {.launched = true, .log_path = capturePath, .diagnostics = std::move(diagnostics)};
             }
 
             const bool succeeded = waited.process->exit_code == 0;
@@ -985,7 +1009,8 @@ namespace epochengine::compiler
                 .launched = true,
                 .succeeded = succeeded,
                 .exit_code = waited.process->exit_code,
-                .exit_code_valid = true};
+                .exit_code_valid = true,
+                .log_path = capturePath, .diagnostics = std::move(diagnostics)};
         }
     }
 
@@ -1419,6 +1444,10 @@ namespace epochengine::compiler
             plan.library_roots,
             request.cancellation);
         result.evidence.compiler_started = spawned.launched;
+        result.evidence.compiler_log_path = spawned.log_path;
+        result.evidence.compiler_diagnostics = spawned.diagnostics;
+        result.evidence.compiler_exit_code = spawned.exit_code;
+        result.evidence.compiler_exit_code_valid = spawned.exit_code_valid;
         if (spawned.cancelled)
         {
             detail::cleanup_temporary_artifacts(plan.temporary_output_path);
@@ -1426,7 +1455,8 @@ namespace epochengine::compiler
             result.refusal = CompileRefusal::cancelled;
             result.message = "script compilation was cancelled while the compiler process was running";
             return result;
-        }        if (!spawned.succeeded)
+        }
+        if (!spawned.succeeded)
         {
             if (spawned.launched)
                 detail::cleanup_temporary_artifacts(plan.temporary_output_path);
@@ -1436,6 +1466,11 @@ namespace epochengine::compiler
                 spawned.launched
                     ? "script compiler returned an unsuccessful process result"
                     : "script compiler process could not be started";
+            if (spawned.exit_code_valid) result.message += " (exit " + std::to_string(spawned.exit_code) + ")";
+            if (!spawned.log_path.empty()) result.message += ". Compiler log: " + spawned.log_path.generic_string();
+            if (!spawned.diagnostics.empty())
+                result.message += "\nVERIFIED_SCRIPT_COMPILER_DIAGNOSTICS_BEGIN\n" + spawned.diagnostics
+                    + "\nVERIFIED_SCRIPT_COMPILER_DIAGNOSTICS_END";
             return result;
         }
         if (request.cancellation.stop_requested())

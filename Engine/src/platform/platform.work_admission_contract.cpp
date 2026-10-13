@@ -17,6 +17,20 @@ namespace
 
     [[nodiscard]] int run_contract()
     {
+        // Epoch AI's operator-selected unrestricted policy admits work even
+        // with missing/stale metrics or a fully occupied model, while retaining
+        // ownership, candidate choice and token retirement.
+        Controller unrestricted{Policy{.cooldown_ms = 0u, .resource_checks = false}};
+        ResourceSample occupied{0u, 32u * gib, 0u, 1.0, true, true};
+        if (!unrestricted.queue({1u, WorkKind::model}, 100u)
+            || !unrestricted.poll(100u, {}, false, false).ready()
+            || unrestricted.poll(101u, occupied, true, false).reason != Reason::awaiting_choice
+            || unrestricted.poll(102u, occupied, false, true).reason != Reason::other_work_active
+            || !unrestricted.consume(1u, 103u, occupied, false, false)
+            || unrestricted.queue({1u, WorkKind::model}, 104u)) return 60;
+        unrestricted.note_finished(105u);
+        if (!unrestricted.queue({2u, WorkKind::compiler}, 105u)
+            || !unrestricted.consume(2u, 105u, {}, false, false)) return 61;
         Controller quick{};
         if (quick.policy().cooldown_ms != 6'000u
             || !quick.queue({1u, WorkKind::model}, 0u)

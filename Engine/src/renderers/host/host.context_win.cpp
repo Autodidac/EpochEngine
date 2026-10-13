@@ -32,6 +32,7 @@
  //
 
 #include <include/engine.config.hpp>
+#include "host.log_policy.hpp"
 
 #if defined(_WIN32)
 #   include "../../../resource/resource.h"
@@ -5154,8 +5155,10 @@ namespace epochengine::core
         epochengine::perf::frame_pacing_plan activeDesiredFramePlan{};
         epochengine::perf::frame_pacing_plan activeCoreFramePlan{};
         bool hasActiveCoreFramePlan = false;
-        epochengine::rendercontext::WindowState activeFrameWindowState{};
-        bool hasActiveFrameWindowState = false;
+        epochengine::rendercontext::logging::WindowStateLogGate<
+            epochengine::rendercontext::WindowState> windowLogGate{};
+        epochengine::perf::frame_pacing_plan lastLoggedFramePlan{};
+        bool hasLoggedFramePlan = false;
         const auto resolveCoreFramePolicy = []() noexcept
         {
             const bool standaloneProject =
@@ -5228,10 +5231,10 @@ namespace epochengine::core
         {
             const auto state = resolveFrameWindowState();
             ctx->publish_frame_window_state(state);
-            if (!hasActiveFrameWindowState || state != activeFrameWindowState)
+            // Always publish fresh dimensions to rendering; only diagnostics
+            // wait for resize activity to settle.
+            if (windowLogGate.should_report(state))
             {
-                activeFrameWindowState = state;
-                hasActiveFrameWindowState = true;
                 epochengine::logger::get(kLogSys).logf(
                     epochengine::logger::LogLevel::INFO,
                     std::source_location::current(),
@@ -5277,20 +5280,27 @@ namespace epochengine::core
                 activeDesiredFramePlan = desiredPlan;
             activeCoreFramePlan = framePlan;
             hasActiveCoreFramePlan = !ctx->apply_frame_pacing || nativeResult.configured;
-            epochengine::logger::get(kLogSys).logf(
-                epochengine::logger::LogLevel::INFO,
-                std::source_location::current(),
-                "Backend {} pacing requested={} configured_hz={} effective={} effective_hz={} activity={} native_requested={} native_configured={} native_active={} cpu_wait={}.",
-                ctx->backendName,
-                epochengine::perf::to_string(framePlan.requested_mode),
-                framePlan.configured_hz,
-                epochengine::perf::to_string(framePlan.effective_mode),
-                framePlan.effective_hz,
-                epochengine::perf::to_string(framePlan.activity),
-                framePlan.native_pacing_requested,
-                framePlan.native_pacing_configured,
-                framePlan.native_pacing_active,
-                framePlan.cpu_deadline_wait);
+            // Failed backend pacing configuration may retry every frame.
+            // Report actual plan transitions, not identical retry results.
+            if (!hasLoggedFramePlan || framePlan != lastLoggedFramePlan)
+            {
+                lastLoggedFramePlan = framePlan;
+                hasLoggedFramePlan = true;
+                epochengine::logger::get(kLogSys).logf(
+                    epochengine::logger::LogLevel::INFO,
+                    std::source_location::current(),
+                    "Backend {} pacing requested={} configured_hz={} effective={} effective_hz={} activity={} native_requested={} native_configured={} native_active={} cpu_wait={}.",
+                    ctx->backendName,
+                    epochengine::perf::to_string(framePlan.requested_mode),
+                    framePlan.configured_hz,
+                    epochengine::perf::to_string(framePlan.effective_mode),
+                    framePlan.effective_hz,
+                    epochengine::perf::to_string(framePlan.activity),
+                    framePlan.native_pacing_requested,
+                    framePlan.native_pacing_configured,
+                    framePlan.native_pacing_active,
+                    framePlan.cpu_deadline_wait);
+            }
         };
 
         while (running.load(std::memory_order_acquire) && win.running && !win.get_should_close())

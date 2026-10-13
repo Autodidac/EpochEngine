@@ -1,7 +1,7 @@
 # Epoch - Creative Software And Game Engine
 
 <p align="left">
-  <img src="https://img.shields.io/badge/Current_Source_Development-v0.90.35-1F7A4C?style=for-the-badge" alt="Current development source v0.90.35" />
+  <img src="https://img.shields.io/badge/Current_Source_Development-v0.90.45-1F7A4C?style=for-the-badge" alt="Current development source v0.90.45" />
   <img src="https://img.shields.io/badge/Published_Windows_Linux_Runtime-v0.90.35-2C6A8A?style=for-the-badge" alt="Published Windows/Linux runtime v0.90.35" />
 </p>
 
@@ -77,7 +77,7 @@ For engine/tooling developers:
 
 ## Current Snapshot
 
-- Active development source is `v0.90.35`, including source-informed supervisor
+- Active development source is `v0.90.38`, including source-informed supervisor
   handoffs, incremental task memory and cumulative source-residency repairs.
   Windows/Linux `v0.90.35` packaging and publication evidence is recorded in
   [the current release checkpoint](Changes/release_sync_2026-10-10.md).
@@ -420,3 +420,21 @@ LicenseRef-MIT-NoSell
 Epoch is free for non-commercial use. For commercial use or any legal edge
 case, read [LICENSE](LICENSE) directly and follow the full agreement text
 instead of relying on the README summary.
+
+
+### Native EngCoder (0.90.43)
+
+MSVC compatibility hotfix: Qwen transport Windows `min`/`max` macro isolation, Debug vcpkg libcurl/zlib library selection. See `Engine/docs/engine/ai_native_runtime_architecture.md` for dependency and validation requirements.
+The embedded EngCoder 0.7.1 native runtime and Qwen Flash Next manager are available from EpochGui AI model controls. No EngCoderServer or web GUI is required. See `Engine/docs/engine/ai_native_runtime_architecture.md`. Windows/MSVC and GPU end-to-end validation is pending.
+
+### 0.90.44 — Embedded EngCoder Windows linker integration
+
+The EpochEditor MSVC project now explicitly enables its existing vcpkg manifest integration (except for the `BuildAll` utility configuration), and links libcurl directly without forcing a separate zlib import library. The project keeps `zlib` in the vcpkg manifest as a transitive dependency for libraries such as curl. Native/model code is unchanged. The standard engine logger remains in the engine shared items; the alternate headless-only logger is no longer compiled there. Windows preprocessor macros are guarded to avoid redeclaration warnings. See `Engine/docs/engine/ai_native_runtime_architecture.md` for the dependency checklist. Windows MSVC linker and live model tests are pending.
+
+### 0.90.45 — Epoch-owned embedded AI model installation
+
+- The embedded native agent owns its mutable runtime workspace, state, model catalog, training records and new model downloads at `%LOCALAPPDATA%/EpochEngine/AI/native/` (Windows), never `%LOCALAPPDATA%/EngCoder/`.
+- Create directories before constructing the native runtime; fixing **Install Model** failing immediately with `workspace is not a directory`.
+- Retain Qwen Flash's existing shared GGUF-cache discovery so already-downloaded complete shards need not be duplicated. GPU/offload tunables are not silently reset.
+- Track asynchronous native model installs through terminal installed/failed states, with cache bytes displayed when available. Runtime provisioning also reports real asynchronous status instead of queued-as-success.
+- Runtime provisioning still requires a compatible installed Qwen Flash worker or the specialized installer; the source archive does not include the large worker binaries or pretrained weights. Actual Windows/MSVC and model installation remain operator acceptance checks.

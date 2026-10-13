@@ -1,6 +1,6 @@
 {
   "name": "epoch-engine",
-  "version-string": "0.90.33",
+  "version-string": "0.90.46",
   "builtin-baseline": "5f96cd15fd745122cf27e0524606d6c1efc5fd07",
   "dependencies": [
     "asio",
@@ -48,6 +48,9 @@
       "name": "raylib",
       "default-features": false
     },
-    "zlib"
+    "zlib",
+    "nlohmann-json",
+    "cpp-httplib",
+    "sqlite3"
   ]
 }

@@ -938,6 +938,67 @@ if(EPOCH_ENABLE_AUTHORING_PLATFORM AND EPOCH_ENABLE_TILEMAP_EDITOR)
 endif()
 
 
+# Epoch owns its native AI task/model runtime; no separate frontend server.
+option(EPOCH_ENABLE_NATIVE_AI "Compile native Epoch AI agent and Qwen Flash runtime" ON)
+if(EPOCH_ENABLE_NATIVE_AI)
+    find_package(nlohmann_json CONFIG REQUIRED)
+    find_package(httplib CONFIG REQUIRED)
+    find_package(CURL REQUIRED)
+    find_package(unofficial-sqlite3 CONFIG REQUIRED)
+    add_library(epoch_ai_native STATIC
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_core_config.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_core_error.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_core_event_bus.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_core_ids.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_core_file_replace_windows.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_core_file_replace_posix.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_model_lm_studio_provider.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_model_runtime_model.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_model_qwen_flash_runtime.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_model_native_model_manager.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_model_internal_model_host.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_model_multiplex_provider.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_models_model_registry.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_residency_model_residency_manager.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_addons_addon_registry.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_controller_architect_controller.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_controller_task_intent.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_learning_learning_service.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_memory_episode_store.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_training_training_service.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_decision_decision_engine.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_workspace_workspace.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_workspace_checkpoint_store.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_process_process.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_process_process_windows.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_process_process_posix.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_tools_tool_registry.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_tools_builtin_tools.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_persistence_session_store.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_agent_context_manager.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_agent_handoff_contract.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_agent_agent_runtime.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_agent_task_scheduler.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_runtime_runtime_host.cpp"
+    )
+    target_compile_features(epoch_ai_native PUBLIC cxx_std_23)
+    target_include_directories(epoch_ai_native PUBLIC
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native")
+    target_link_libraries(epoch_ai_native PUBLIC
+        nlohmann_json::nlohmann_json httplib::httplib CURL::libcurl unofficial::sqlite3::sqlite3)
+    target_compile_definitions(epoch_ai_native PRIVATE
+        $<$<PLATFORM_ID:Windows>:NOMINMAX;WIN32_LEAN_AND_MEAN>)
+    list(APPEND EPOCH_SOURCES src/ai/ai.native_runtime.cpp)
+    list(APPEND EPOCH_SOURCES src/ai/ai.voice_runtime_win.cpp)
+    if(WIN32)
+        target_link_libraries(epoch_ai_native PUBLIC sapi ole32 uuid)
+    endif()
+    if(TARGET epoch_ai_transport_contract)
+        target_sources(epoch_ai_transport_contract PRIVATE src/ai/ai.native_runtime.cpp)
+        target_link_libraries(epoch_ai_transport_contract PRIVATE epoch_ai_native)
+    endif()
+endif()
+
 if(EPOCH_BUILD_STATIC_RUNTIME)
     add_library(epoch STATIC ${EPOCH_SOURCES})
     target_compile_definitions(epoch PRIVATE
@@ -1160,6 +1221,10 @@ target_include_directories(epoch PRIVATE
 )
 
 target_link_libraries(epoch PRIVATE epoch_gui)
+if(EPOCH_ENABLE_NATIVE_AI)
+    target_link_libraries(epoch PRIVATE epoch_ai_native)
+    target_include_directories(epoch PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native")
+endif()
 
 find_path(CGLTF_INCLUDE_DIR cgltf.h)
 if(CGLTF_INCLUDE_DIR)

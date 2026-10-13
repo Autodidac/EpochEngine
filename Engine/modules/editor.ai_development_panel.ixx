@@ -221,6 +221,8 @@ export namespace epochengine::editor_ai_development_panel
         // Changes only on an explicit Start/Restart, not source reads/repairs.
         [[nodiscard]] std::uint64_t active_session_id() const;
         [[nodiscard]] RenderResult stop_source_iteration();
+        [[nodiscard]] bool select_model_transport(ModelTransport transport);
+        [[nodiscard]] ModelTransport selected_model_transport() const;
         [[nodiscard]] bool has_reviewed_plan() const;
         [[nodiscard]] RenderResult approve_latest_plan();
         [[nodiscard]] bool sandbox_session_failed() const;

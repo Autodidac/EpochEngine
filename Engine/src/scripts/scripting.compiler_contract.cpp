@@ -32,7 +32,8 @@ namespace epochengine::compiler::contract
         cancelled,
         execution,
         publication,
-        stale_output
+        stale_output,
+        compiler_diagnostics
     };
 
     [[nodiscard]] Failure run(const std::filesystem::path& parent) noexcept
@@ -56,7 +57,11 @@ namespace epochengine::compiler::contract
 #endif
             {
                 std::ofstream stream(source, std::ios::binary | std::ios::trunc);
-                stream << "extern \"C\" void run_script(void*) {}\n";
+                stream << "#include <scripting.epoch_api.h>\n"
+                    "EPOCH_SCRIPT_EXPORT void run_script(EpochScriptHost* host) {\n"
+                    "if (!host) return;\n"
+                    "if (host->arrange_cubes) host->arrange_cubes(host->user_data, 10u, 3.0f, 3.0f, 0.0f, 1.0f, 0.0f);\n"
+                    "if (host->attach_cube_oscillators) host->attach_cube_oscillators(host->user_data, 12u, 0, 2.0f, 0.5f);\n}\n";
                 if (!stream)
                     return Failure::setup;
             }
@@ -284,6 +289,9 @@ namespace epochengine::compiler::contract
                 || !compiled.evidence.publication_scope_revalidated
                 || !compiled.evidence.atomic_replace_committed
                 || !compiled.evidence.published_artifact_verified
+                || !compiled.evidence.compiler_exit_code_valid
+                || compiled.evidence.compiler_exit_code != 0
+                || !fs::is_regular_file(compiled.evidence.compiler_log_path)
                 || compiled.evidence.published.size_bytes == 0u
                 || compiled.evidence.candidate.size_bytes
                     != compiled.evidence.published.size_bytes
@@ -313,6 +321,19 @@ namespace epochengine::compiler::contract
             {
                 return Failure::stale_output;
             }
+            { std::ofstream broken{source, std::ios::binary | std::ios::trunc};
+              broken << "#include <scripting.epoch_api.h>\nEPOCH_SCRIPT_EXPORT void run_script(EpochScriptHost*) { EPOCH_PROJECT_SCRIPT_DIAGNOSTIC_CAUSE; }\n"; }
+            execution.request_generation = 9u;
+            const auto failedCompile = compile_script(execution);
+            const auto retainedOutput = inspect_file(output, kDefaultMaximumArtifactBytes);
+            if (failedCompile.status != CompileStatus::compiler_failed
+                || !failedCompile.evidence.compiler_started || !failedCompile.evidence.compiler_exit_code_valid
+                || failedCompile.evidence.compiler_exit_code == 0
+                || failedCompile.evidence.compiler_diagnostics.find("EPOCH_PROJECT_SCRIPT_DIAGNOSTIC_CAUSE") == std::string::npos
+                || failedCompile.message.find("VERIFIED_SCRIPT_COMPILER_DIAGNOSTICS_BEGIN") == std::string::npos
+                || !fs::is_regular_file(failedCompile.evidence.compiler_log_path)
+                || !retainedOutput || !(retainedOutput.evidence.content == compiled.evidence.published.content))
+                return Failure::compiler_diagnostics;
             return Failure::none;
         }
         catch (...)

@@ -34,7 +34,9 @@
     <ClCompile Include="epoch.editor_entry.cpp" />
   </ItemGroup>
   <ItemGroup Condition="'$(Configuration)'!='BuildAll'">
-    <ResourceCompile Include="..\..\resource\WinResource.rc" />
+    <ResourceCompile Include="..\..\resource\WinResource.rc">
+      <AdditionalIncludeDirectories>$(MSBuildProjectDirectory)\..\..\resource;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
   </ItemGroup>
   <ItemGroup Condition="'$(Configuration)'!='BuildAll'">
     <ProjectReference Include="..\EpochEngine\EpochEngine.vcxproj">
@@ -138,7 +140,9 @@
     <IntDir>$(SolutionDir)\Release\$(Platform)\$(ProjectName)\$(Configuration)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Label="Vcpkg">
+    <VcpkgEnabled Condition="'$(Configuration)'!='BuildAll'">true</VcpkgEnabled>
     <VcpkgEnableManifest>true</VcpkgEnableManifest>
+    <VcpkgAutoLink>false</VcpkgAutoLink>
     <VcpkgTriplet Condition="'$(VcpkgTriplet)'=='' and '$(Platform)'=='x64'">x64-windows</VcpkgTriplet>
     <VcpkgTriplet Condition="'$(VcpkgTriplet)'=='' and '$(Platform)'=='Win32'">x86-windows</VcpkgTriplet>
     <VcpkgManifestInstall>true</VcpkgManifestInstall>
@@ -171,7 +175,7 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NOMINMAX;WIN32_LEAN_AND_MEAN;WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp23</LanguageStandard>
       <LanguageStandard_C>stdc17</LanguageStandard_C>
@@ -189,7 +193,7 @@
       <FunctionLevelLinking>false</FunctionLevelLinking>
       <IntrinsicFunctions>false</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NOMINMAX;WIN32_LEAN_AND_MEAN;WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp23</LanguageStandard>
       <LanguageStandard_C>stdc17</LanguageStandard_C>
@@ -207,7 +211,7 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>ENGINE_STATICLIB;$(EpochRaylibDllDefine)_DEBUG;_CONSOLE;$(EpochExtraDefines)%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NOMINMAX;WIN32_LEAN_AND_MEAN;ENGINE_STATICLIB;$(EpochRaylibDllDefine)_DEBUG;_CONSOLE;$(EpochExtraDefines)%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp23</LanguageStandard>
       <AdditionalIncludeDirectories>$(SolutionDir)Engine\dep\EpochGui\include;$(SolutionDir)Engine\include;$(EpochVcpkgInstallRoot)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
@@ -224,7 +228,7 @@
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>$(SolutionDir)$(Platform)\$(Configuration)\;$(EpochVcpkgInstallRoot)debug\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>sfml-graphics-d.lib;sfml-window-d.lib;sfml-system-d.lib;raylib.lib;libcrypto.lib;setupapi.lib;cfgmgr32.lib;version.lib;imm32.lib;winmm.lib;ole32.lib;oleaut32.lib;uuid.lib;advapi32.lib;user32.lib;gdi32.lib;shell32.lib;comdlg32.lib;EpochEngine.lib;EpochGui.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>sfml-graphics-d.lib;sfml-window-d.lib;sfml-system-d.lib;raylib.lib;sqlite3.lib;libcurl-d.lib;ws2_32.lib;crypt32.lib;wldap32.lib;libcrypto.lib;setupapi.lib;cfgmgr32.lib;version.lib;imm32.lib;winmm.lib;ole32.lib;oleaut32.lib;uuid.lib;advapi32.lib;user32.lib;gdi32.lib;shell32.lib;comdlg32.lib;EpochEngine.lib;EpochGui.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <EntryPointSymbol>mainCRTStartup</EntryPointSymbol>
       <NoEntryPoint>false</NoEntryPoint>
     </Link>
@@ -235,7 +239,7 @@
       <FunctionLevelLinking>false</FunctionLevelLinking>
       <IntrinsicFunctions>false</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>ENGINE_STATICLIB;$(EpochRaylibDllDefine)NDEBUG;_CONSOLE;$(EpochExtraDefines)%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NOMINMAX;WIN32_LEAN_AND_MEAN;ENGINE_STATICLIB;$(EpochRaylibDllDefine)NDEBUG;_CONSOLE;$(EpochExtraDefines)%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp23</LanguageStandard>
       <AdditionalIncludeDirectories>$(SolutionDir)Engine\dep\EpochGui\include;$(SolutionDir)Engine\include;$(EpochVcpkgInstallRoot)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
@@ -255,12 +259,15 @@
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>$(SolutionDir)$(Platform)\$(Configuration)\;$(EpochVcpkgInstallRoot)lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>sfml-graphics.lib;sfml-window.lib;sfml-system.lib;raylib.lib;libcrypto.lib;setupapi.lib;cfgmgr32.lib;version.lib;imm32.lib;winmm.lib;ole32.lib;oleaut32.lib;uuid.lib;advapi32.lib;user32.lib;gdi32.lib;shell32.lib;comdlg32.lib;EpochEngine.lib;EpochGui.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>sfml-graphics.lib;sfml-window.lib;sfml-system.lib;raylib.lib;sqlite3.lib;libcurl.lib;ws2_32.lib;crypt32.lib;wldap32.lib;libcrypto.lib;setupapi.lib;cfgmgr32.lib;version.lib;imm32.lib;winmm.lib;sapi.lib;ole32.lib;oleaut32.lib;uuid.lib;advapi32.lib;user32.lib;gdi32.lib;shell32.lib;comdlg32.lib;EpochEngine.lib;EpochGui.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <EntryPointSymbol>mainCRTStartup</EntryPointSymbol>
       <NoEntryPoint>false</NoEntryPoint>
     </Link>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <Target Name="EpochRecordHostCompilerDependencies" AfterTargets="Build" Condition="'$(Configuration)'!='BuildAll' And '$(VcpkgInstalledDir)'!=''">
+    <WriteLinesToFile File="$(OutDir)epoch.host_dependencies.txt" Lines="epoch.host_dependencies.v1;source=$(SolutionDir);installed=$(VcpkgInstalledDir)" Overwrite="true" Encoding="UTF-8" />
+  </Target>
   <Target Name="EpochCopyDebugVcpkgRuntimeDlls" AfterTargets="Build" Condition="'$(Configuration)|$(Platform)'=='Debug|x64' And '$(VcpkgUseStatic)'!='true'">
     <ItemGroup>
       <EpochDebugVcpkgRuntimeDlls Include="$(EpochVcpkgInstallRoot)debug\bin\*.dll" />

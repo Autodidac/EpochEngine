@@ -14,12 +14,15 @@
   "status": "awaiting-model-selection",
   "coding_model_lanes": [
     {
-      "id": "nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16",
-      "url": "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16",
-      "license": "nvidia-nemotron-open-model-license",
-      "role": "fast local coding/review helper",
-      "download_target": "cache/models/nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16",
-      "project_bundle_default": false
+      "id": "unsloth/Qwen3.8-Flash-Next-GGUF",
+      "url": "https://huggingface.co/unsloth/Qwen3.8-Flash-Next-GGUF",
+      "license": "qwen-community-1.0",
+      "role": "preferred EngCoder 0.7.1+ hosted coding model (operator-owned GGUF shards)",
+      "inference_endpoint": "http://127.0.0.1:14321/v1",
+      "download_target": "external EngCoder model cache; no automatic weights transfer",
+      "project_bundle_default": false,
+      "automatic_download": false,
+      "selection": "explicit; use the actual /v1/models ID"
     },
     {
       "id": "Qwen/Qwen3.8-27B",
@@ -73,5 +76,15 @@
       "project_bundle_default": false
     }
   ],
-  "notes": "Epoch does not ship bundled model weights. Qwen, Nemotron, Bonsai, FLUX, Wan, and TRELLIS weights are downloaded on demand into executable-local cache/models when the operator requests them. Bonsai Ternary 4B is the recommended default local image lane; Bonsai Binary 4B is the low-memory lane; FLUX.2 Klein 4B remains a higher-memory fallback. Guarded engine development uses operator-selected OS model lanes through evidence gates and never trains or mutates them; generated projects include model weights only after an explicit package opt-in with license/notice review."
+  "notes": "Epoch does not ship or automatically download model weights. Qwen3.8-Flash-Next runs in an installed/operator-owned EngCoder 0.7.1+ backend on :14321; Epoch uses /v1/chat/completions and does not overwrite model or GPU settings. Qwen3.8 27B remains a standalone local fallback. Historical Nemotron stays optional for compatibility. Creative model downloads and project bundling remain explicitly opt-in and license-checked.",
+  "legacy_optional_coding_model_lanes": [
+    {
+      "id": "nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16",
+      "url": "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16",
+      "license": "nvidia-nemotron-open-model-license",
+      "role": "legacy optional model; not a coding default",
+      "download_target": "cache/models/nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16",
+      "project_bundle_default": false
+    }
+  ]
 }

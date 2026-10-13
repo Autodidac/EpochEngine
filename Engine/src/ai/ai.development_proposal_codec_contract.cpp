@@ -128,6 +128,47 @@ namespace epochengine::ai::development_proposal_codec
             return reverse && reverse.bytes == "int longer_validate() { return 111; }\nint result() { return 3; }\n";
         }
 
+        [[nodiscard]] bool newline_patch_contract()
+        {
+            auto proposal = decode(valid_patch_packet()).proposal;
+            const auto path = proposal.changes.front().relative_path;
+            const std::string source = "// untouched\r\nint validate() { return 0; }\r\n// tail\r\n";
+            const auto match = match_exact_block(source, proposal.changes.front().match_bytes);
+            if (!match || match.offset != 14u || match.byte_count != 30u) return false;
+            const auto patched = compose_postimage(proposal, path, source, true);
+            if (!patched || patched.bytes != "// untouched\r\nint validate() { return 1; }\r\n// tail\r\n") return false;
+            const auto frame = [&](std::string_view bytes)
+            {
+                return "FILE_EXCERPT_SIZE " + path + " " + std::to_string(bytes.size())
+                    + "\nFILE_EXCERPT_BEGIN " + path + "\n" + std::string{bytes}
+                    + "FILE_EXCERPT_END " + path + "\n";
+            };
+            if (!validate_quality(proposal, "Repair parser bounds", frame(source))) return false;
+            proposal.changes.front().summary = "Add the new capability";
+            if (!validate_quality(proposal, "Repair parser bounds", frame(source))) return false;
+            // A second LF/CRLF-equivalent anchor must still be ambiguous.
+            if (match_exact_block(source + proposal.changes.front().match_bytes,
+                    proposal.changes.front().match_bytes)
+                || validate_quality(proposal, "Repair parser bounds", frame(source) + frame(source))) return false;
+            proposal.changes.front().replacement_bytes = "int validate() { return 0; }\r\n";
+            if (compose_postimage(proposal, path, source, true)
+                || validate_quality(proposal, "Repair parser bounds", frame(source))) return false;
+            if (match_exact_block("a\rb\n", "ab\n") || match_exact_block("a  b\n", "a b\n")) return false;
+            proposal.changes.front().match_bytes = "int validate() { return 0; }\r\n";
+            proposal.changes.front().replacement_bytes = "int validate() { return 2; }\r\n";
+            const auto lf = compose_postimage(proposal, path, "int validate() { return 0; }\n", true);
+            if (!lf || lf.bytes != "int validate() { return 2; }\n") return false;
+            // Two original CRLF offsets compose atomically, including a changed length.
+            proposal.changes.front().match_bytes = "int validate() { return 0; }\n";
+            proposal.changes.front().replacement_bytes = "int validate() { return 1000; }\n";
+            auto second = proposal.changes.front();
+            second.match_bytes = "// tail\n";
+            second.replacement_bytes = "// changed tail\n";
+            proposal.changes.push_back(second);
+            const auto both = compose_postimage(proposal, path, source, true);
+            return both && both.bytes == "// untouched\r\nint validate() { return 1000; }\r\n// changed tail\r\n";
+        }
+
         [[nodiscard]] bool ordered_decode_contract()
         {
             const DecodeResult decoded = decode(valid_packet());
@@ -679,6 +720,7 @@ namespace epochengine::ai::development_proposal_codec
             if (!ordered_decode_contract()) return 1;
             if (!exact_patch_decode_contract()) return 8;
             if (!same_file_patch_contract()) return 10;
+            if (!newline_patch_contract()) return 11;
             if (!strict_envelope_contract()) return 2;
             if (!path_and_operation_contract()) return 3;
             if (!strict_context_request_contract()) return 4;

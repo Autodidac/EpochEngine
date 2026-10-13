@@ -12,6 +12,17 @@ $nativeSource = Join-Path $engcoderSource 'projects\native'
 if (!(Test-Path -LiteralPath (Join-Path $nativeSource 'CMakeLists.txt'))) {
     throw 'SourceRoot must contain the supplied EngCoder projects/native source.'
 }
+# The integration requires the Qwen native serving and live-output contracts
+# present in EngCoder 0.7.1. Do not silently build an older backend.
+$nativeCmake = Get-Content -LiteralPath (Join-Path $nativeSource 'CMakeLists.txt') -Raw
+if ($nativeCmake -notmatch '(?m)^project\(EngCoder\s+VERSION\s+(?<version>\d+\.\d+\.\d+)\s+LANGUAGES') {
+    throw 'Could not determine the EngCoder backend version; expected CMake project(EngCoder VERSION ...).'
+}
+$sourceVersion = [version]$Matches.version
+if ($sourceVersion -lt [version]'0.7.1') {
+    throw "EngCoder $sourceVersion is too old. Use EngCoder 0.7.1 or newer, with Qwen Flash native serving."
+}
+Write-Output "Selected EngCoder backend source version: $sourceVersion"
 if (!$DependencyRoot) {
     $DependencyRoot = Join-Path $engcoderSource 'out\build\windows-vs2022\vcpkg_installed'
 }

@@ -1,5 +1,13 @@
 # OS AI, MCP, Harness, And Evidence Policy
 
+> **October 11, local v0.90.41:** This file retains historical published
+> models and older installed provider contracts. The intended native Qwen Next
+> Flash and other model-family adapter split, chat UI and project-independent
+> SDK are specified in `ai_model_runtime_and_chat_plan.md`. The present
+> EngCoder 0.7.1+ host is optional and does not establish an in-engine loader.
+> GPU offload is under observation, not a confirmed regression.
+
+
 Epoch does not train or silently activate a model. Public Windows/Linux source
 and packaged-runtime authority is immutable `v0.90.33` at `f33d3d6758ab` on
 GitHub and the Site; later AI source checkpoints are not those release bytes.
@@ -198,12 +206,15 @@ The durable orchestration pipeline is now source- and contract-complete:
   documented at `eadfea94`. They are Site-readable evidence with upload and
   release authority false.
 
-The editor operational flow is deliberately guided rather than disconnected.
-Starting Candidate Lab constructs its queue, scheduler, supervisor, and bridge,
-shows the selected provider and endpoint, then submits the first bounded plan
-request. The returned numbered plan is digest-bound, displayed, retained across
-candidate selections, and supplied with selection checkpoints to each next
-generation. Same-scope proposal, disposable apply, validation, and bounded
+Automatic Candidate Lab starts with the approved operator objective or retained
+checkpoint and immediately requests a coding proposal against current exact
+source. Its host-authored NEXT_GENERATION handoff is digest-bound and explicitly
+recorded as configuration, never as a model plan/reply. This transition consumes
+no model-call budget and creates no pending supervisor operation. An explicit
+manual planning workflow retains the queue/scheduler/supervisor/bridge path.
+Neither initial automatic work nor later source reads force periodic supervisor
+generations. Saved handoff, actual observations and candidate selections accompany
+each coding request. Same-scope proposal, disposable apply, validation, and bounded
 repair proceed automatically until a validated candidate is ready for native
 comparison. This does not approve live-source mutation, promotion, Git, upload,
 publication, listener, server, or release. Complete model responses remain
@@ -861,6 +872,15 @@ Accepted old evidence remains discovery history, while resident exact bytes are
 packed within the current prompt budget. Direct requests and insufficient-evidence
 navigation use the same real-evidence progress accounting; two unchanged reads
 stop the stalled loop rather than restarting an identical expensive request.
+Repeated selectors are resolved before that decision: a literal can advance or
+restore an archived range. Progress compares current whole-file hashes and byte
+coverage; narrowing a resident excerpt or changing query text is not progress.
+Reselection retains the outstanding campaign, prompt and residency until a new
+bundle is admitted, so a rejected/redundant read cannot erase its own retry
+context or reset progress accounting. After materialization, reads, curated
+bundles and new campaign file hashes use the existing candidate snapshot. Repair
+reselection never reopens the unedited parent as current candidate source.
+Replacement campaigns use the observed host creation time, not a future offset.
 Source iteration also recognizes exactly
 `EPOCH_SOURCE_EVIDENCE_INSUFFICIENT_V1` as a safe refusal after expansion is
 exhausted. Framed and raw direct-CLI transcripts use the same line-boundary
@@ -990,11 +1010,11 @@ The supplied EngCoder 0.7.1 source was inspected without running or importing
 its GUI, training services or server. Its full task API, like 0.6.9, uses the configured global workspace;
 its TaskRequest does not bind a private Epoch candidate root or tool allowlist.
 Persistent external task/session roles are not a substitute for that boundary.
-Epoch therefore uses separate administrative supervisor and coding-worker
-generations through the existing selected Chat provider, retaining its own
-plan/handoff and host-outcome checkpoint. Epoch owns exact edits, compiler actors
-and human candidate choice. This is role integration, not full `/api/tasks`
-execution or a grant of filesystem/network authority to EngCoder.
+Epoch uses the selected Chat provider for its automatic coding worker, retaining
+the operator objective, exact source and host-outcome checkpoint without a
+mandatory administrative generation. Manual model planning remains available.
+Epoch owns exact reads/edits, compiler actors and human candidate choice; the
+EngCoder task API is not given those authorities.
 
 The October 9 operator clarification excludes importing EngCoder's GUI. Backend
 integration must use Epoch's existing interface and reconstruct only necessary
@@ -1009,10 +1029,22 @@ existing dependency cache/toolchain. It disables GUI/tests and dependency
 installation, stages only backend executables/DLLs under ignored addons/EngCoder,
 and starts no listener, model or training job. This optional tool installation is
 not linked into Epoch, a public package, or admission of its full task API.
-Never launch it from the original source directory with an implicit workspace:
-its server defaults tools to the working directory and training enabled. Any
-later lifecycle adapter must explicitly bind private candidate/data roots, disable
-unrequested training and qualify tool/network authority before runtime activation.
+Epoch AI's inline Model / Options surface provides Connect EngCoder and an
+explicit Start Backend :14321 action for the installed headless executable.
+Start uses the existing supervised child-process owner, verified executable
+identity and private workspace/profile/data/learning roots in executable-local
+AI cache. Training, controller/addon routing and external model auto-loading are
+disabled. Existing model-cache and Qwen-runtime paths are editable before Start;
+weights are reused without copying. No listener starts on discovery, Send or
+Editor startup. Confirming a discovered model and sending a request permits the
+backend's normal selected-model preparation. Epoch stops/releases only its owned
+backend, including at whole-chat-system shutdown; Connect never owns or stops
+an external EngCoder host. This is private path routing, not OS confinement.
+The supplied server binds all IPv4 interfaces and rejects non-loopback clients
+while remote serving is disabled. Epoch does not enable remote serving or claim
+OS network confinement for this optional backend.
+The backend build disables GUI and adds no EngCoder SDL/window stack to Epoch.
+Full task/training/learning execution still needs its own ownership integration.
 
 Any selected approved loopback endpoint accepts a session-only credential through
 Model Settings > Paste API Key, bound to its exact scheme/host/port identity.
@@ -1060,6 +1092,30 @@ compacts complete records and preserves the complete next-generation handoff.
 Current requested source and mission owners stay resident before unrelated
 historical source, which remains retrievable. Compaction is reported visibly and
 in Engine.AI.Context, with byte estimates distinguished from token counts.
+When disjoint remembered regions of one passive file exceed its allocation,
+packing retains bounded exact slices across those regions instead of consuming
+all capacity with the newest window. Automatic literal navigation distinguishes
+current resident matches from archived matches, so an omitted declaration can
+be restored before advancing to later occurrences. Explicit line cursors keep
+their semantics. Each restored slice is reread against the current whole-file
+hash; remembered ranges alone never authorize a patch.
+Fresh reads in an active file also share their allocation with uncovered slices
+of that file's retained verified history. Automatic initial declaration/module
+seeding is bounded like implementation seeding; an explicit admitted read can
+still retrieve a complete file within the actual budget.
+Literal searches return focused 2 KiB edit anchors instead of requesting an
+entire declaration file or another broad implementation window. Explicit line
+cursors with empty queries provide longer continuations; an explicit automatic
+empty-query read retains full-file admission within the real budget. Batch
+framing remains bounded even when many literal matches overlap. Read-only
+search terms may be hypotheses; the returned exact matches, rather than guessed
+symbols or remembered text, establish source evidence.
+Discovery progress compares all cumulatively read bytes at the current file
+revision, separately from prompt residency. Restoring an archived region remains
+permitted, but it cannot reset the no-progress budget. Two consecutive reads
+that only recycle known source pause automatic dispatch while retaining the
+latest panel context and candidate. A changed file revision or genuinely new
+source coverage can establish new discovery; prompt rotation cannot.
 Selection requests ask for one coherent working set, not a
 speculative investigation without file bytes. Provider reasoning mode remains
 unchanged; these budgets need real-model qualification and do not guarantee speed.
@@ -1283,6 +1339,36 @@ Project creation, Save, Build, and external Run use the same admission, path,
 package, process, generation, and evidence contracts as human controls.
 Selected-script compilation is a separate C++23 operation and cannot mark the
 project built or authorize external Run.
+
+Project Assistant script intent uses the bounded `EPOCH_PROJECT_SCRIPT_V1`
+complete-source envelope rather than scene/GUI semantic calls. Host-authored
+script context permits proposing C++23 against the real EpochScriptHost API;
+ordinary chat or copied user data does not acquire that authority. A completed
+reply stages a project-local direct `scripts/*.ascript.cpp` destination and its
+exact preimage for review. Save Script publishes only those reviewed bytes;
+Save, Build + Run additionally requests the existing selected-script compiler
+and in-Editor script execution. Publication and completion revalidate the
+canonical project/path, document revision, source bytes and build generation.
+Unsaved edits, stale operations or failed compilation cannot execute the previous
+DLL. Compiler futures are polled from the normal frame owner; Stop cancels the
+owned build and pending run/repair. Compiler output is retained in a unique
+native log with its verified exit and a bounded diagnostic excerpt. A failed
+build can request a corrected draft, which requires a new source review.
+The real compiler include search must find `scripting.epoch_api.h`, rather than
+accepting an arbitrary existing script directory as the engine include root.
+
+The Editor's appended script-host callbacks arrange existing project cubes and
+attach bounded timeline oscillators without model-supplied object IDs. Other
+hosts can leave these optional callbacks null; scripts check availability.
+This does not establish generated-project runtime support, conversation-bearing
+NPC/GUI identities or general project setup/build/run/process inspection.
+
+Windows MSBuild records the selected host compiler dependency tree in
+`epoch.host_dependencies.txt` beside the built Editor. Candidate build fallback
+reads only that host-local receipt, validates its schema and canonical source
+authority, and checks the installed include tree. An existing valid default
+source-local tree takes precedence. Candidate/model-authored locations cannot
+replace the verified original host cache; no dependency installation is implied.
 
 Engine-source writes require engine-source permission, exact content states,
 review, operator approval, and resulting evidence. Ordinary AI development

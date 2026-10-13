@@ -346,6 +346,9 @@ namespace
                 return std::nullopt;
             };
             if (lookup("EPOCH_CHILD_PRIVATE_SENTINEL")) return false;
+#if defined(_WIN32)
+            if (lookup("PATHEXT") != ".COM;.EXE;.BAT;.CMD") return false;
+#endif
             const auto process = root / "cache" / "process";
             const std::vector<std::pair<std::string, std::filesystem::path>> expected{
                 {"TEMP", process / "temp"}, {"TMP", process / "temp"},
