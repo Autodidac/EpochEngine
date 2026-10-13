@@ -1,4 +1,81 @@
+## Distribution authorization (October 13)
+
+The operator explicitly approved publishing the full v0.90.50 engine, including
+embedded Epoch AI/Qwen, on both GitHub and ChatGPT Site. Earlier Site-only native
+source restrictions are superseded. GitHub downloads and rebuilt source update
+from GitHub; Site downloads and rebuilt source update from the Site. Current
+release listings should show one package per supported platform plus companion
+checksums/receipts. Historical bytes/refs remain immutable.
+
+## Exact proposal ingestion (October 13)
+
+The operator's complete theme proposal proves documentation-guided discovery now
+reaches a coherent edit. LF transport against CRLF source caused an avoidable
+host rejection and another long inference. Newline matching must preserve original
+offsets and all non-newline bytes, reject duplicate anchors and retain target style.
+Exact-block summaries may name the new capability; unique reviewed bytes ground
+the edit. Production-code replay of the exact ten operations and three postimages
+passes. Build proof still does not prove a live useful candidate/successor.
+The operator subsequently reached compiled candidates and validation repair. Real
+full-validation failures were input-profile fixtures and missing PATHEXT for
+MSBuild, not the new theme's semantic sprites. Keep named failed checks in repair
+evidence, keep temporary fixture roots short/unique, and retain the fixed native
+command extension list in owned Windows child environments.
+
+## Native AI ownership and separate distribution authority (October 12)
+
+The operator owns the incorporated native backend and requests Epoch integration
+without a separate EngCoder title, license or frontend. Epoch owns implementation,
+GUI, lifecycle, model state and source iteration. Preserve external dependency and
+model notices and compatible cache identifiers; do not delete shared model weights.
+Controlled source/project/evidence requests use the existing Epoch request schema
+and one provider completion. Keep plans and exact verified source through coherent
+edits, compilation failures and repairs; do not restart supervisor/source discovery
+as a routine handoff. Source iteration must not train model weights.
+
+Public native source and runtimes belong on the ChatGPT Site. GitHub remains the
+updater-only public source line until the operator explicitly authorizes native
+publication there. Each distribution's source and runtime updater uses its own
+hosted origin and signed release evidence. Public source on the Site is explicitly
+authorized without the earlier private-source restriction. Build-only hosted CI
+may temporarily fetch that source; it must not commit or release native source on
+GitHub. Actual delivery receipts belong in Changes/release_sync_2026-10-12.md.
+
+## Epoch-owned native AI storage and installer (v0.90.45)
+
+All native agent state and **new** model downloads belong under `%LOCALAPPDATA%/EpochEngine/AI/native`, not `%LOCALAPPDATA%/EngCoder`. Do not duplicate shared model weights when an existing complete GGUF cache can be reused. Preserve user-specified inference/GPU tuning. Track actual asynchronous installs, failures, and progress; do not report queued work as completed. Ship or implement a verified dedicated Qwen Flash runtime installer in a future pass (current source includes no special installer script). Do not regress the in-engine GUI, agent tools, source isolation, or future model adapter/project SDK milestones.
+
+## Windows native EngCoder link gate (0.90.44)
+
+The editor should depend directly only on libraries it calls, while retaining transitive libraries in the vcpkg manifest. The 0.90.43 build had all engine components compiled, with final editor link blocked by an unnecessary direct zlib import library. Keep a single normal logger in MSVC shared engine items, with the fallback headless logger limited to its own CMake headless target. Do not alter the engine entrypoint or switch to an EngCoderServer/web frontend. Future releases must validate real MSVC build configurations and native Qwen load, not just mock tests.
+
 # Mission Cache
+
+## October 11 late-session AI UX, model, and reuse decisions (not completed)
+
+- The operator observed a GUI theme self-coding run at 40+ minutes, pass six,
+  only beginning patch text. Measured first-patch, first-compilation and
+  effective model work are mandatory, not just pass/discovery counters.
+- Use existing Engine documentation as a maintained *reusable AI task guide*
+  for theme additions, common upgrades and repairs before expensive source
+  traversal. Keep a bounded task-recipe system and real-source evidence separate.
+- In-engine, native EpochGui AI windows must show comprehensible color-coded
+  action/validation blocks, append distinct history instead of overwriting,
+  and eventually retain live raw model/tool output with chat-style composer
+  conveniences, per-chat persistence and cancellation. No EngCoder web/SDL UI.
+- Full agentic harness behavior and all model backends must be services reusable
+  by authored projects without editor/runtime coupling. Project/Engine AI
+  ownership, sandbox, permissions, model weights and session history stay
+  isolated. Qwen Next Flash requires a different loader from normal dense/MoE
+  Qwen and Nemotron backends. The user also wants Qwen3.8 27B, Qwen3.6 27B
+  and 35B-A3B, Nemotron 9B. Do not silently replace explicit model settings.
+- GPU offload regression is unconfirmed by the operator; preserve current
+  settings and add actual runtime layer/VRAM/KV/launch telemetry before
+  comparing or tuning.
+- Maintain the staged unaccepted requirements in
+  `Engine/docs/engine/ai_model_runtime_and_chat_plan.md`; never equate
+  a hosting endpoint with native self-contained model execution.
+
 
 This file preserves durable operator intent and safety boundaries, including
 older unfinished goals. It is not a completion log or a second schedule. Proven
@@ -15,6 +92,30 @@ operator evidence before making a broader absence claim.
 
 ## Overall Intent And Pass Continuity
 
+- October 11 renewed AI/EngCoder direction: integrate EngCoder's useful agent,
+  task, model/options and retained-work functionality inside Epoch's existing AI
+  and GUI systems, without importing EngCoder's SDL, GUI or window dependencies.
+  Inspect once, retain verified findings, implement coherent units, build/test
+  and repair actual failures; repeated supervisor handoffs and cycling source
+  windows are bugs, not useful iteration. Keep exact candidate edits, validation,
+  process ownership and successor choice in Epoch's existing production systems.
+  Project Assistant must carry project setup -> script/source editing -> build ->
+  run -> inspection of the spawned process through owned lifecycle/evidence and
+  cancellation. It needs real scripting authority after reviewed proposals, not
+  a scene-only prompt that rejects the requested work. Native actions remain
+  tied to the actual reviewed operation; an API inventory is not execution proof.
+  Preserve the project-agent target: scripts/components can route conversation
+  through an NPC, world object, screen GUI or 3D GUI, with durable agent identity,
+  configurable/generated random identities and explicit model/session ownership.
+  This target is not yet established by the current Editor chat or script host.
+- October 11 GUI priority: give the GPT-like composer, code/output blocks,
+  activity and flat model/options layout substantial readability and interaction
+  work, without nested menu chains or extra windows. Reusable control/window
+  shadows and font shadows comparable to the supplied SDL UI are top priorities
+  owned by EpochGui; preserve the proven draw/queue/replay model. Completely
+  replace STB image writing across production/build/dependency paths, retaining
+  actual image-format, capture/export and portable build proof. Recording these
+  priorities does not claim their implementation or visual acceptance.
 - October 10 mirror decision: create a new canonical EpochGui Site Git mirror
   from GitHub c52e9129, preserving the old b9716742 mirror, its unrelated history
   and availability. Verify an actual clone, not just staged assets. The operator
@@ -48,12 +149,13 @@ operator evidence before making a broader absence claim.
 
 - October 8 incremental-work requirement: save the short task plan and complete
   small buildable source units so model reloads need not restart the mission.
-  Use an administrative supervisor generation to retain the task list and
-  explicit next-worker handoff, then reconcile actual read/edit/validation
-  observations periodically rather than relearning the original prompt. Keep
-  this memory distinct from exact source, approvals and compiler proof. The
-  supervisor/worker may share the selected provider; full EngCoder agent tasks
-  require a qualified private-workspace/tool boundary first.
+  Retain the task list, explicit next-worker handoff and actual read/edit/
+  validation observations in the host checkpoint rather than relearning the
+  original prompt. The October 10/11 direct-worker clarification supersedes the
+  earlier mandatory administrative generation/periodic supervisor arrangement;
+  manual supervisor work may still use the selected provider. Keep
+  this memory distinct from exact source, approvals and compiler proof. Keep
+  full EngCoder agent tasks behind a qualified private-workspace/tool boundary.
   Prefer one file, but retain coupled edits needed for a valid unit. Persist
   completed work/diagnostics/next step separately from unfinished generation.
   Reload must never apply partial tool JSON, reuse stale receipts or claim token
@@ -558,3 +660,43 @@ These are durable requirements, not completion claims:
   moves to history with evidence; keep durable product contracts and every
   older unfinished mission traceable. Never infer completion from a code stub,
   a source-only check, a rewritten plan or a deadline.
+
+
+## Epoch 0.90.42 native EngCoder milestone (2026-10-12)
+
+- Embedded the provided EngCoder 0.7.1 C++ sources as a native EpochEngine static-library dependency; the EngCoderServer/Web/SDL applications are not used.
+- Qwen Flash retains its dedicated runtime loader and EngCoder profile; normal GGUF and other models remain separate selectable providers.
+- EpochGui controls native model installation, load/unload and agent routing.
+- Acceptance remains: Windows MSVC Debug/Release builds, loading Qwen Flash on target GPU, streaming/tokens, native self-iteration producing files, and project-level isolation.
+- See `Engine/docs/ai_embedded_engcoder_native.md` for architecture, build, gaps and acceptance tests.
+
+October 12 operator steering and v0.90.47 source repair:
+- Remove RAM/CPU permission gates and cooldown from Epoch AI production admission.
+  Keep owned operation retirement and human candidate promotion/review.
+- Remove the fixed three-round discovery stop. New verified source can advance;
+  repeated unchanged evidence still stops a stalled loop. Theme requests seed the
+  existing palette, theme enum, registration and preference serialization regions.
+- AI method selection/setup, model roles, explicit internal training, System 1
+  activity, tools/guidance and Windows dictation/voice are integrated into chat.
+  Raw tokens appear only in chat; the sidebar remains evidence/status.
+- Production builds and pure contracts are evidence, not a claim of live model,
+  microphone/training or successor success. Qwen runtime installation and Python
+  training dependencies remain real prerequisites with visible setup errors.
+- Preserve older GUI shadow/font-shadow, image-writer replacement and NPC/GUI
+  agent embodiment objectives. They are not completed by this AI usability pass.
+- Native source/releases remain Site-only. GitHub v0.90.36 stays updater-only;
+  immutable Site v0.90.46 and older releases must remain intact.
+
+## October 12 corrected AI interface and documentation intent
+
+- Setup, provider/model selection, roles, training and guidance belong in AI
+  Controls. The chat contains the finished composer/actions, activity and raw
+  token transcript. Do not put setup forms back into the chat.
+- Entire raw histories must be easy to copy across response blocks. Streaming
+  must not dismiss the copy menu; Copy all must copy complete retained records.
+- A 5–15 minute Qwen inference needs a complete useful edit surface. Resolve a
+  human-readable engine navigation document against actual candidate source;
+  retain related exact definitions together instead of alternating read/evict.
+  Themes are the first mapped subsystem. Grow the documentation through normal
+  reviewed source edits as other ownership becomes known. No hidden training or
+  claimed completion from read counts. Preserve older engine/product goals.

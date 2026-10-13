@@ -1943,6 +1943,9 @@ namespace epochengine::platform::child_process
             variables.push_back({"WINDIR", utf8(windows)});
             variables.push_back({"SystemDrive", utf8(windows.root_name())});
             variables.push_back({"COMSPEC", utf8(system / "cmd.exe")});
+            // PowerShell uses PATHEXT to recognize native commands in pipelines.
+            // Supply an owned fixed list, never ambient user command extensions.
+            variables.push_back({"PATHEXT", ".COM;.EXE;.BAT;.CMD"});
             variables.push_back({"PATH", utf8(system)});
             variables.push_back({"HOMEDRIVE", utf8(profile.root_name())});
             variables.push_back({"HOMEPATH", utf8(profile.root_directory() / profile.relative_path())});

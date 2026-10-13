@@ -318,6 +318,12 @@ belong in proper GUI windows:
   self-iteration status. Opt-in message bubbles use existing rounded semantic
   backgrounds, bounded wrapping, content-sized rows and right-aligned user
   messages; ordinary Output/text lists keep their existing presentation.
+  Console hosts may place the action row beside the prompt, show a selectable
+  two-line activity block, and expose flat inline controls in a bounded scroll
+  area. Multiline prompts reserve three text lines. Epoch AI uses these shared
+  controls for Model / Options, EngCoder lifecycle and endpoint/model settings
+  inside the existing conversation pane. Consecutive engine-host status updates
+  replace one activity message; the candidate journal retains detailed evidence.
   Send first publishes the user row and presents a frame before routing/model
   preparation. Queued requests block duplicate submission. Right-click Retry
   Request resubmits the original operator input through normal routing and fresh

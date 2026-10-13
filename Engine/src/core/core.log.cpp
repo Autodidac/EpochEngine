@@ -33,6 +33,7 @@ module;
 #include <algorithm>
 #include "../../include/core.stl_types.hpp"
 #include "../build/build.cpp_feature_probe.hpp"
+#include "core.log_compact.hpp"
 
 #include <chrono>
 #include <cstdint>
@@ -47,8 +48,12 @@ module;
 #include <thread>
 
 #if defined(_WIN32)
-#  define WIN32_LEAN_AND_MEAN
-#  define NOMINMAX
+#  ifndef WIN32_LEAN_AND_MEAN
+#    define WIN32_LEAN_AND_MEAN
+#  endif
+#  ifndef NOMINMAX
+#    define NOMINMAX
+#  endif
 #  include <windows.h>
 #endif
 
@@ -135,16 +140,18 @@ namespace epochengine::core::log
 #endif
         }
 
-        static void sink_write(epochengine::string_view line)
+        static void sink_write(
+            const std::string_view detailed,
+            const std::string_view foreground)
         {
-            const std::string_view sv = epochengine::to_std(line);
-
+            // Keep full, untruncated diagnostics in the file. The console and
+            // VS debugger get a smaller view of the same event.
             if (g_console)
-                write_console(sv);
+                write_console(foreground);
 
             if (g_file.is_open())
             {
-                g_file.write(sv.data(), static_cast<std::streamsize>(sv.size()));
+                g_file.write(detailed.data(), static_cast<std::streamsize>(detailed.size()));
                 g_file.put('\n');
                 g_file.flush();
             }
@@ -152,8 +159,7 @@ namespace epochengine::core::log
 #if defined(_WIN32)
             if (g_debugger)
             {
-                // OutputDebugStringA expects NUL-terminated.
-                std::string tmp(sv);
+                std::string tmp{ foreground };
                 tmp.push_back('\n');
                 ::OutputDebugStringA(tmp.c_str());
             }
@@ -263,7 +269,9 @@ namespace epochengine::core::log
         line.append("] - ");
         append_sv(line, msg);
 
-        sink_write(epochengine::to_view(std::string_view{ line }));
+        sink_write(line, display::format_line(
+            timestamp, epochengine::to_std(lvl_text(lvl)),
+            epochengine::to_std(tag), epochengine::to_std(msg)));
     }
 
     void write_kv(level lvl,
@@ -290,6 +298,7 @@ namespace epochengine::core::log
         line.append("] [tid=");
         append_u64(line, tid);
         line.append("] - ");
+        const auto message_offset = line.size();
         append_sv(line, msg);
 
         for (std::size_t i = 0; i < fields.size; ++i)
@@ -301,7 +310,9 @@ namespace epochengine::core::log
             append_sv(line, field.value);
         }
 
-        sink_write(epochengine::to_view(std::string_view{ line }));
+        sink_write(line, display::format_line(
+            timestamp, epochengine::to_std(lvl_text(lvl)),
+            epochengine::to_std(tag), std::string_view{ line }.substr(message_offset)));
     }
 }
 

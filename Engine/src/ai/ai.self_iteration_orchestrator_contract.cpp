@@ -602,6 +602,29 @@ namespace epochengine::ai::self_iteration_orchestrator
             fs::remove_all(root, ec);
             return false;
         }
+        auto direct_configuration = configuration;
+        direct_configuration.cache_root /= "direct-coding";
+        Orchestrator direct{};
+        auto direct_step = direct.begin(direct_configuration);
+        if (!direct_step) return false;
+        const auto direct_before = direct_step.snapshot.state_sha256;
+        if (direct.begin_coding(action(direct_step.snapshot, "unapproved-direct", now + 4u, false), saved_plan)
+            || direct.snapshot().state_sha256 != direct_before) return false;
+        direct_step = direct.begin_coding(action(direct.snapshot(), "approved-direct", now + 4u), saved_plan);
+        if (!direct_step || direct_step.pending_operation
+            || direct_step.snapshot.phase != Phase::awaiting_curated_evidence
+            || direct_step.snapshot.plan_bytes != saved_plan
+            || direct_step.snapshot.campaign.counters.model_calls != 0u
+            || direct_step.snapshot.evidence.back().kind == EvidenceKind::plan_received
+            || direct.request_plan(action(direct.snapshot(), "extra-plan", now + 4u))) return false;
+        direct_step = direct.share_curated_evidence(action(direct.snapshot(), "direct-source", now + 5u),
+            direct.snapshot().campaign.session.scope_digest,
+            core::sha256::hex(core::sha256::hash("exact direct source")), "Exact direct source shared.");
+        if (direct_step) direct_step = direct.request_proposal(action(direct.snapshot(), "direct-worker", now + 6u));
+        if (!direct_step || !direct_step.pending_operation
+            || direct_step.pending_operation->kind() != OperationKind::model_proposal
+            || direct_step.snapshot.campaign.counters.model_calls != 1u) return false;
+
         Result planned = restarted.record_plan(
             receipt(*fresh_plan.pending_operation, now + 5u),
             saved_plan,

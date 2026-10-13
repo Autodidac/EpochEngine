@@ -7,6 +7,7 @@ module;
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -46,13 +47,24 @@ namespace epochengine::project_input
                     path.clear();
                     return;
                 }
-                path /= "epoch_project_input_profile_contract_"
-                    + std::to_string(next_contract_id());
-                fs::remove_all(path, error);
-                error.clear();
-                fs::create_directories(path, error);
-                if (error)
-                    path.clear();
+                const auto parent = path;
+                // Candidate TEMP roots are already nested. Keep fixture names
+                // short enough for Windows transaction suffixes, and never
+                // remove another process's fixture while claiming a fresh root.
+                const auto token = static_cast<std::uint32_t>(
+                    std::chrono::steady_clock::now().time_since_epoch().count());
+                path.clear();
+                for (unsigned attempt = 0u; attempt < 16u; ++attempt)
+                {
+                    const auto candidate = parent / ("eip-" + std::to_string(token)
+                        + "-" + std::to_string(next_contract_id()));
+                    if (fs::create_directory(candidate, error))
+                    {
+                        path = candidate;
+                        return;
+                    }
+                    if (error) return;
+                }
             }
 
             ~ContractRoot()

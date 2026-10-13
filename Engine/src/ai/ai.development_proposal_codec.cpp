@@ -20,6 +20,37 @@ namespace epochengine::ai::development_proposal_codec
 {
     namespace
     {
+        [[nodiscard]] std::string canonical_newlines(std::string_view bytes)
+        {
+            std::string result;
+            result.reserve(bytes.size());
+            for (std::size_t i = 0u; i < bytes.size(); ++i)
+            {
+                if (bytes[i] == '\r' && i + 1u < bytes.size() && bytes[i + 1u] == '\n') continue;
+                result.push_back(bytes[i]);
+            }
+            return result;
+        }
+
+        [[nodiscard]] std::string replacement_newlines(
+            std::string_view replacement, std::string_view matched, std::string_view source)
+        {
+            auto style = matched;
+            if (style.find('\n') == std::string_view::npos) style = source;
+            const auto newline = style.find('\n');
+            const bool crlf = newline != std::string_view::npos && newline > 0u && style[newline - 1u] == '\r';
+            const auto canonical = canonical_newlines(replacement);
+            if (!crlf) return canonical;
+            std::string result;
+            result.reserve(canonical.size());
+            for (const char c : canonical)
+            {
+                if (c == '\n') result.push_back('\r');
+                result.push_back(c);
+            }
+            return result;
+        }
+
         constexpr std::string_view header{"EPOCH_SOURCE_PROPOSAL_V1"};
         constexpr std::string_view patch_header{
             "EPOCH_SOURCE_PATCH_PROPOSAL_V1"};
@@ -474,12 +505,11 @@ namespace epochengine::ai::development_proposal_codec
                 if (!evidence.substr(terminatorBegin).starts_with(terminator))
                     return std::nullopt;
                 if (requiredMatch.empty()) return content;
-                const auto found = content.find(requiredMatch);
-                if (found != std::string_view::npos)
+                const auto found = match_exact_block(content, requiredMatch);
+                if (found.ambiguous) return std::nullopt;
+                if (found)
                 {
-                    if (selected || content.find(requiredMatch,
-                            found + requiredMatch.size()) != std::string_view::npos)
-                        return std::nullopt;
+                    if (selected) return std::nullopt;
                     selected = content;
                 }
                 cursor = terminatorBegin + terminator.size();
@@ -1346,6 +1376,28 @@ namespace epochengine::ai::development_proposal_codec
             .proposal = std::move(proposal)};
     }
 
+    ExactBlockMatch match_exact_block(std::string_view source, std::string_view search)
+    {
+        if (search.empty()) return {};
+        const auto normalizedSource = canonical_newlines(source);
+        const auto normalizedSearch = canonical_newlines(search);
+        const auto first = normalizedSource.find(normalizedSearch);
+        if (first == std::string::npos) return {};
+        if (normalizedSource.find(normalizedSearch, first + 1u) != std::string::npos)
+            return {.ambiguous = true};
+        std::size_t original{}, logical{};
+        const auto advance = [&]()
+        {
+            original += source[original] == '\r' && original + 1u < source.size()
+                && source[original + 1u] == '\n' ? 2u : 1u;
+            ++logical;
+        };
+        while (logical < first) advance();
+        const auto begin = original;
+        while (logical < first + normalizedSearch.size()) advance();
+        return {.accepted = true, .offset = begin, .byte_count = original - begin};
+    }
+
     PostimageResult compose_postimage(
         const Proposal& proposal,
         std::string_view relativePath,
@@ -1360,7 +1412,8 @@ namespace epochengine::ai::development_proposal_codec
         struct LocatedEdit final
         {
             std::size_t offset{};
-            const SourceChange* change{};
+            std::size_t byte_count{};
+            std::string replacement{};
         };
         std::vector<LocatedEdit> edits{};
         const SourceChange* wholeFile{};
@@ -1382,15 +1435,16 @@ namespace epochengine::ai::development_proposal_codec
             }
             if (wholeFile || !preimageExists || change.match_bytes.empty())
                 return refuse("Exact-block edits require one existing immutable file preimage.");
-            const auto first = preimage.find(change.match_bytes);
-            if (first == std::string_view::npos
-                || preimage.find(change.match_bytes, first + 1u) != std::string_view::npos)
+            const auto match = match_exact_block(preimage, change.match_bytes);
+            if (!match)
             {
                 return refuse("Exact-block search is absent or ambiguous in the host-captured preimage.");
             }
-            if (change.match_bytes == change.replacement_bytes)
+            auto replacement = replacement_newlines(change.replacement_bytes,
+                preimage.substr(match.offset, match.byte_count), preimage);
+            if (canonical_newlines(change.match_bytes) == canonical_newlines(replacement))
                 return refuse("Exact-block replacement makes no change.");
-            edits.push_back({first, &change});
+            edits.push_back({match.offset, match.byte_count, std::move(replacement)});
         }
         if (!area) return refuse("No source edits target this file.");
         if (wholeFile)
@@ -1406,21 +1460,20 @@ namespace epochengine::ai::development_proposal_codec
         {
             if (edit.offset < priorEnd)
                 return refuse("Same-file exact-block searches overlap or repeat. Supply independent blocks from the original preimage.");
-            priorEnd = edit.offset + edit.change->match_bytes.size();
-            finalSize -= edit.change->match_bytes.size();
+            priorEnd = edit.offset + edit.byte_count;
+            finalSize -= edit.byte_count;
         }
         for (const auto& edit : edits)
         {
-            if (edit.change->replacement_bytes.size() > maximumBytes - finalSize)
+            if (edit.replacement.size() > maximumBytes - finalSize)
                 return refuse("Source postimage exceeds the file byte budget.");
-            finalSize += edit.change->replacement_bytes.size();
+            finalSize += edit.replacement.size();
         }
         std::string postimage{preimage};
         // Descending original offsets prevent one replacement from becoming
         // another edit's search target or shifting the remaining anchors.
         for (auto edit = edits.rbegin(); edit != edits.rend(); ++edit)
-            postimage.replace(edit->offset, edit->change->match_bytes.size(),
-                edit->change->replacement_bytes);
+            postimage.replace(edit->offset, edit->byte_count, edit->replacement);
         return {.accepted = true, .bytes = std::move(postimage)};
     }
 
@@ -1470,21 +1523,14 @@ namespace epochengine::ai::development_proposal_codec
                         "Proposal rejected: exact-block edits require existing "
                         "reviewed source for " + change.relative_path + ".");
                 }
-                const std::size_t first = reviewed->find(change.match_bytes);
-                const std::size_t second = first == std::string_view::npos
-                    ? std::string_view::npos
-                    : reviewed->find(change.match_bytes,
-                        first + change.match_bytes.size());
-                if (change.match_bytes.empty()
-                    || first == std::string_view::npos
-                    || second != std::string_view::npos)
+                if (!match_exact_block(*reviewed, change.match_bytes))
                 {
                     return quality_failure(
                         "Proposal rejected: the exact search block is absent or "
                         "ambiguous in reviewed source for " + change.relative_path
                         + ".");
                 }
-                if (change.replacement_bytes == change.match_bytes)
+                if (canonical_newlines(change.replacement_bytes) == canonical_newlines(change.match_bytes))
                 {
                     return quality_failure(
                         "Proposal rejected: the exact-block replacement for "
@@ -1548,7 +1594,9 @@ namespace epochengine::ai::development_proposal_codec
                 }
                 continue;
             }
-            if (is_cxx_source_path(change.relative_path))
+            // Exact blocks already prove their target through reviewed bytes.
+            // A summary may name the new feature rather than an old identifier.
+            if (!exactBlock && is_cxx_source_path(change.relative_path))
             {
                 const IdentifierReferenceResult reference =
                     references_source_identifier(change.summary, *reviewed);
@@ -1858,7 +1906,7 @@ namespace epochengine::ai::development_proposal_codec
             "functions, emit EPOCH_SOURCE_PATCH_PROPOSAL_V1 followed by one valid "
             "packet, EPOCH_SOURCE_CONTEXT_REQUEST_V1 when more listed source is "
             "needed, or exactly EPOCH_SOURCE_EVIDENCE_INSUFFICIENT_V1. Never emit "
-            "analysis, a preface, a suffix, or Markdown.";
+            "analysis, a preface, a suffix, or Markdown.\nEPOCH_SOURCE_EDIT_CONTRACT_END\n";
         return prompt;
     }
 }

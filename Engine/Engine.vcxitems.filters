@@ -244,6 +244,9 @@
     <Filter Include="Public Headers\scripting">
       <UniqueIdentifier>{54abe2da-7c49-bbfe-15cb-6d88655a7431}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Public Headers\updater">
+      <UniqueIdentifier>{eb6ebcec-5ba0-2f77-3de6-eb425fdaf47f}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Resource Files">
       <UniqueIdentifier>{88d016ff-11dc-4da7-9ccf-b0f86a1f39e4}</UniqueIdentifier>
     </Filter>
@@ -252,6 +255,9 @@
     </Filter>
     <Filter Include="Source Files\ai">
       <UniqueIdentifier>{d98072a5-9c2a-5f88-00dd-e16665587788}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\ai\native">
+      <UniqueIdentifier>{fcdcb98b-ed85-1cec-f1ad-818ab622e675}</UniqueIdentifier>
     </Filter>
     <Filter Include="Source Files\assets">
       <UniqueIdentifier>{46c42b2a-77ff-6f41-1648-edca0427dce2}</UniqueIdentifier>
@@ -491,6 +497,12 @@
     </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)include\ai\ai.self_iteration_analytics.hpp">
       <Filter>Public Headers\ai</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)include\updater.distribution.hpp">
+      <Filter>Public Headers\updater</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai.native_runtime.hpp">
+      <Filter>Internal Headers\ai</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -1279,9 +1291,6 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\opengl\opengl.canvas2d_scene.cpp">
       <Filter>Source Files\renderers\opengl</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\core\core.log_headless.cpp">
-      <Filter>Source Files\core</Filter>
-    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\raylib\raylib.api.cpp">
       <Filter>Source Files\renderers\raylib</Filter>
     </ClCompile>
@@ -1824,6 +1833,111 @@
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.project_input_settings_contract.cpp">
       <Filter>Source Files\editor</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.native_runtime.cpp">
+      <Filter>Source Files\ai</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_core_config.cpp">
+      <Filter>Source Files\ai\native</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_core_error.cpp">
+      <Filter>Source Files\ai\native</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_core_event_bus.cpp">
+      <Filter>Source Files\ai\native</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_core_ids.cpp">
+      <Filter>Source Files\ai\native</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_core_file_replace_windows.cpp">
+      <Filter>Source Files\ai\native</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_core_file_replace_posix.cpp">
+      <Filter>Source Files\ai\native</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_model_lm_studio_provider.cpp">
+      <Filter>Source Files\ai\native</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_model_runtime_model.cpp">
+      <Filter>Source Files\ai\native</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_model_qwen_flash_runtime.cpp">
+      <Filter>Source Files\ai\native</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_model_native_model_manager.cpp">
+      <Filter>Source Files\ai\native</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_model_internal_model_host.cpp">
+      <Filter>Source Files\ai\native</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_model_multiplex_provider.cpp">
+      <Filter>Source Files\ai\native</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_models_model_registry.cpp">
+      <Filter>Source Files\ai\native</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_residency_model_residency_manager.cpp">
+      <Filter>Source Files\ai\native</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_addons_addon_registry.cpp">
+      <Filter>Source Files\ai\native</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_controller_architect_controller.cpp">
+      <Filter>Source Files\ai\native</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_controller_task_intent.cpp">
+      <Filter>Source Files\ai\native</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_learning_learning_service.cpp">
+      <Filter>Source Files\ai\native</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_memory_episode_store.cpp">
+      <Filter>Source Files\ai\native</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_training_training_service.cpp">
+      <Filter>Source Files\ai\native</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_decision_decision_engine.cpp">
+      <Filter>Source Files\ai\native</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_workspace_workspace.cpp">
+      <Filter>Source Files\ai\native</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_workspace_checkpoint_store.cpp">
+      <Filter>Source Files\ai\native</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_process_process.cpp">
+      <Filter>Source Files\ai\native</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_process_process_windows.cpp">
+      <Filter>Source Files\ai\native</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_process_process_posix.cpp">
+      <Filter>Source Files\ai\native</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_tools_tool_registry.cpp">
+      <Filter>Source Files\ai\native</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_tools_builtin_tools.cpp">
+      <Filter>Source Files\ai\native</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_persistence_session_store.cpp">
+      <Filter>Source Files\ai\native</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_agent_context_manager.cpp">
+      <Filter>Source Files\ai\native</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_agent_handoff_contract.cpp">
+      <Filter>Source Files\ai\native</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_agent_agent_runtime.cpp">
+      <Filter>Source Files\ai\native</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_agent_task_scheduler.cpp">
+      <Filter>Source Files\ai\native</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_runtime_runtime_host.cpp">
+      <Filter>Source Files\ai\native</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

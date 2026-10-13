@@ -1,5 +1,16 @@
 # Epoch Documentation
 
+## October 11 AI source guidance and native harness plan (local v0.90.41)
+
+- [Reusable AI task recipes](engine/ai_task_recipes.md): bounded read-only
+  objective-specific guide, automatically used by Engine self-coding prompts.
+- [Native AI model runtime, chat and project SDK plan](engine/ai_model_runtime_and_chat_plan.md):
+  backend matrix, Qwen Next Flash ownership, engine-native agentic harness,
+  raw/chat UX, offload diagnostics, portability and acceptance gates.
+
+
+- [Embedded native AI storage and install state](engine/ai_native_runtime_architecture.md): Epoch-owned paths, download lifecycle, Qwen Flash prerequisites.
+
 ## Start Here
 
 Epoch is a reusable engine for software and games, with an optional editor and
@@ -42,7 +53,7 @@ release chronology, abandoned approaches, and durable mission memory live under
 
 ## Current Delivery
 
-Active source and the Windows/Linux release line are v0.90.35.
+Local development source is v0.90.45. Published Windows/Linux remains v0.90.35.
 Exact packaging/publication receipts are recorded in
 `../../Changes/release_sync_2026-10-10.md`; prior source synchronization is in
 `../../Changes/source_sync_2026-10-08.md`. Historical Windows/Linux v0.90.33 and

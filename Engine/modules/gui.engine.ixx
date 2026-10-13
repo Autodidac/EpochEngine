@@ -31,6 +31,7 @@
 module;
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <span>
@@ -296,6 +297,11 @@ namespace epochengine::gui
         float task_action_gap{ 6.0f };
         std::span<const ConsoleWindowActionSpec> header_actions{};
         float header_action_gap{ 6.0f };
+        bool header_actions_at_input{};
+        // Reuse this window for selectable activity and a flat settings surface.
+        std::string_view activity_text{};
+        std::function<void(float)> inline_controls{};
+        float inline_controls_height{ 240.0f };
         std::span<const ConsoleWindowActionSpec> message_actions{};
         float message_action_gap{ 6.0f };
         std::span<const ConsoleWindowActionSpec> footer_actions{};
@@ -982,6 +988,7 @@ namespace epochengine::gui
         Vec2 size{};
         float row_height{ 28.0f };
         std::size_t max_visible_options{ 8 };
+        bool enabled{true};
     };
 
     export struct SelectBoxResult

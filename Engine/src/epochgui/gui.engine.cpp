@@ -9511,6 +9511,7 @@ namespace epochengine::gui
         const std::string key = widget_state_key(
             options.id.empty() ? std::string_view{ "__select_box" } : options.id);
         auto& state = g_selectBoxStates[key];
+        if(!options.enabled){state.open=false;state.alignSelectedOnOpen=false;}
 
         std::string selectedLabel = options.selected.empty()
             ? std::string(options.placeholder)
@@ -9518,7 +9519,11 @@ namespace epochengine::gui
         selectedLabel += state.open ? "  ^" : "  v";
 
         bool toggledThisFrame = false;
-        if (button(selectedLabel, { width, closedHeight }))
+        const bool pressed=options.enabled?button(selectedLabel,{width,closedHeight}):[&]{
+            const std::array disabled{InlineButtonSpec{.label=selectedLabel,.width=width,.enabled=false}};
+            (void)inline_button_row(disabled,closedHeight,0.0f);return false;
+        }();
+        if (pressed)
         {
             const bool nextOpen = !state.open;
             for (auto& [otherKey, otherState] : g_selectBoxStates)
@@ -10284,6 +10289,21 @@ namespace epochengine::gui
 
         const bool hovered = point_in_rect(g_frame.mousePos, pos.x, pos.y, width, height)
             && point_in_active_clip(g_frame.mousePos);
+        if (options.selectable && hovered)
+        {
+            for (const auto& event : g_frame.events)
+            {
+                if (event.type != EventType::KeyDown || !event.ctrl_down) continue;
+                if (event.key == 'A' || event.key == 'a')
+                {
+                    state.selectionAnchorLine = 0u;
+                    state.selectedLine = lineCount == 0u ? 0u : lineCount - 1u;
+                    state.hasSelection = lineCount != 0u;
+                }
+                else if (event.key == 'C' || event.key == 'c')
+                    (void)clipboard_write_text(selected_lines_text());
+            }
+        }
         if (hovered && g_frame.mouseWheelDelta != 0)
         {
             const int wheelSteps = (std::max)(1, std::abs(g_frame.mouseWheelDelta) / 120);
@@ -10485,7 +10505,7 @@ namespace epochengine::gui
         // the old row index while the popup was open.
         if (state.contextMenuOpen
             && (state.contextLineIndex >= options.lines.size()
-                || options.lines[state.contextLineIndex] != state.contextLineText))
+                || !options.lines[state.contextLineIndex].starts_with(state.contextLineText)))
             state.contextMenuOpen = false;
 
         if (state.contextMenuOpen)
@@ -10496,8 +10516,8 @@ namespace epochengine::gui
             const bool retryable = state.contextLineIndex < options.retryable_lines.size()
                 && options.retryable_lines[state.contextLineIndex] != 0u;
             const float menuHeight = menuPadding * 2.0f
-                + rowHeight * (retryable ? 4.0f : 3.0f)
-                + kContentPadding * (retryable ? 3.0f : 2.0f);
+                + rowHeight * (retryable ? 5.0f : 4.0f)
+                + kContentPadding * (retryable ? 4.0f : 3.0f);
             Vec2 menuPos = state.contextMenuPos;
             menuPos.x = (std::min)(menuPos.x, (std::max)(0.0f, g_frame.origin.x + g_frame.windowSize.x - menuWidth - kContentPadding));
             menuPos.y = (std::min)(menuPos.y, (std::max)(0.0f, g_frame.origin.y + g_frame.windowSize.y - menuHeight - kContentPadding));
@@ -10544,6 +10564,17 @@ namespace epochengine::gui
                 if (button("Copy Selection", { menuWidth - 2.0f * menuPadding, rowHeight }))
                 {
                     (void)clipboard_write_text(selected_lines_text());
+                    state.contextMenuOpen = false;
+                }
+                if (button("Copy All", { menuWidth - 2.0f * menuPadding, rowHeight }))
+                {
+                    std::string transcript;
+                    for (const auto& line : options.lines)
+                    {
+                        if (!transcript.empty()) transcript += "\n\n";
+                        transcript += line;
+                    }
+                    (void)clipboard_write_text(transcript);
                     state.contextMenuOpen = false;
                 }
                 if (button("Clear Selection", { menuWidth - 2.0f * menuPadding, rowHeight }))
@@ -10614,11 +10645,19 @@ namespace epochengine::gui
         const float taskActionHeight = options.task_actions.empty()
             ? 0.0f : controlRowHeight;
         const float fieldHeight = options.input
-            ? controlRowHeight
+            ? (options.multiline_input
+                ? 3.0f * base_line_height(kFontScale) + 2.0f * kBoxInnerPadding
+                : controlRowHeight)
             : 0.0f;
         const float headerHeight = options.header_actions.empty()
             ? 0.0f
             : controlRowHeight;
+        const float topHeaderHeight = options.header_actions_at_input ? 0.0f : headerHeight;
+        const float activityHeight = options.activity_text.empty() ? 0.0f
+            : 2.0f * base_line_height(kFontScale) + 2.0f * kBoxInnerPadding;
+        float inlineHeight = options.inline_controls
+            ? (std::max)(0.0f, (std::min)(options.inline_controls_height, options.size.y * 0.35f))
+            : 0.0f;
         const float messageHeight = options.message_actions.empty()
             ? 0.0f
             : controlRowHeight;
@@ -10637,18 +10676,32 @@ namespace epochengine::gui
         const float contentX = g_frame.cursor.x;
         const float contentBottomY = options.position.y + options.size.y - kContentPadding;
         const float headerY = contentTopY + taskBlockHeight
-            + (taskBlockHeight > 0.0f && headerHeight > 0.0f
+            + (taskBlockHeight > 0.0f && topHeaderHeight > 0.0f
                 ? kContentPadding : 0.0f);
-        const float logTopY = headerY + headerHeight
-            + (taskBlockHeight > 0.0f && headerHeight == 0.0f
+        float logTopY = headerY + topHeaderHeight
+            + (taskBlockHeight > 0.0f && topHeaderHeight == 0.0f
                 ? kContentPadding : 0.0f)
-            + (headerHeight > 0.0f ? kContentPadding : 0.0f);
+            + (topHeaderHeight > 0.0f ? kContentPadding : 0.0f)
+            + (activityHeight > 0.0f ? activityHeight + kContentPadding : 0.0f)
+            + (inlineHeight > 0.0f ? inlineHeight + kContentPadding : 0.0f);
         const float controlHeight = fieldHeight + interControlGap + footerHeight;
         float reservedBottom = 0.0f;
+        if (options.header_actions_at_input && headerHeight > 0.0f)
+            reservedBottom += headerHeight + kContentPadding;
         if (messageHeight > 0.0f)
             reservedBottom += messageHeight + kContentPadding;
         if (controlHeight > 0.0f)
             reservedBottom += controlHeight + kContentPadding;
+
+        if (inlineHeight > 0.0f)
+        {
+            const auto remaining = (std::max)(0.0f,
+                contentBottomY - (logTopY - inlineHeight) - reservedBottom - 48.0f);
+            const auto bounded = (std::min)(inlineHeight, remaining);
+            logTopY -= inlineHeight - bounded;
+            inlineHeight = bounded;
+            if (inlineHeight == 0.0f) logTopY -= kContentPadding;
+        }
 
         const float logHeight = (std::max)(0.0f, contentBottomY - logTopY - reservedBottom);
         const Vec2 logPos{g_frame.cursor.x, logTopY};
@@ -10742,11 +10795,32 @@ namespace epochengine::gui
                 result.task_action_index);
         }
 
-        render_actions(
-            options.header_actions,
-            options.header_action_gap,
-            headerY,
-            result.header_action_index);
+        if (!options.header_actions_at_input)
+            render_actions(options.header_actions, options.header_action_gap,
+                headerY, result.header_action_index);
+
+        float detailY = headerY + topHeaderHeight
+            + (topHeaderHeight > 0.0f ? kContentPadding : 0.0f)
+            + (taskBlockHeight > 0.0f && topHeaderHeight == 0.0f ? kContentPadding : 0.0f);
+        if (activityHeight > 0.0f)
+        {
+            set_cursor({contentX, detailY});
+            const std::vector<std::string> activityLines{std::string{options.activity_text}};
+            (void)scroll_text_panel(ScrollTextPanelOptions{
+                .id = std::string{options.log_id} + ".activity",
+                .size = {availableWidth, activityHeight}, .lines = activityLines,
+                .selectable = true});
+            detailY += activityHeight + kContentPadding;
+        }
+        if (inlineHeight > 0.0f)
+        {
+            set_cursor({contentX, detailY});
+            const std::string settingsId = std::string{options.log_id} + ".settings";
+            (void)begin_scroll_area(ScrollAreaOptions{
+                .id = settingsId, .size = {availableWidth, inlineHeight}});
+            options.inline_controls((std::max)(1.0f, availableWidth - 20.0f));
+            end_scroll_area();
+        }
 
         if (availableWidth > 0.0f && logHeight > 0.0f)
         {
@@ -10783,7 +10857,12 @@ namespace epochengine::gui
             result.message_action_index);
 
         const float controlsY = messageY + messageHeight
-            + (controlHeight > 0.0f ? kContentPadding : 0.0f);
+            + (controlHeight > 0.0f ? kContentPadding : 0.0f)
+            + (options.header_actions_at_input && headerHeight > 0.0f
+                ? headerHeight + kContentPadding : 0.0f);
+        if (options.header_actions_at_input)
+            render_actions(options.header_actions, options.header_action_gap,
+                controlsY - headerHeight - kContentPadding, result.header_action_index);
         set_cursor({ logPos.x, controlsY });
 
         if (options.input)

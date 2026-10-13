@@ -6,6 +6,8 @@ module;
 
 #include "core.format_text.hpp"
 #include "ai/ai.self_iteration_analytics.hpp"
+#include "editor.ai_source_discovery_budget.hpp"
+#include "editor.ai_documentation_guide.hpp"
 
 #include <algorithm>
 #include <array>
@@ -192,6 +194,7 @@ namespace epochengine::editor_ai_development_panel
             1024u * 1024u;
         constexpr std::size_t maximum_source_excerpt_bytes =
             maximum_full_source_context_bytes;
+        constexpr std::size_t literal_source_excerpt_bytes = 2048u;
         constexpr std::size_t maximum_source_context_paths =
             ai::iteration_session::kMaximumCuratedFiles;
         constexpr std::size_t maximum_source_paths_per_navigation =
@@ -659,7 +662,20 @@ namespace epochengine::editor_ai_development_panel
                 phrases,
                 [text](const std::string_view phrase)
                 {
-                    return text.find(phrase) != std::string_view::npos;
+                    for (auto at = text.find(phrase); at != std::string_view::npos;
+                         at = text.find(phrase, at + phrase.size()))
+                    {
+                        // "repair" and "fair" are not AI objectives. This
+                        // short owner name needs token boundaries; longer
+                        // subsystem terms retain their existing plural matching.
+                        if (phrase != "ai") return true;
+                        const auto isIdentifierByte = [](unsigned char value)
+                        { return std::isalnum(value) != 0 || value == '_'; };
+                        if ((at == 0u || !isIdentifierByte(text[at - 1u]))
+                            && (at + phrase.size() == text.size()
+                                || !isIdentifierByte(text[at + phrase.size()]))) return true;
+                    }
+                    return false;
                 });
         }
 
@@ -860,6 +876,9 @@ namespace epochengine::editor_ai_development_panel
         [[nodiscard]] bool source_context_extension(
             const std::filesystem::path& path)
         {
+            const auto normalized = path.generic_string();
+            if (normalized == "Engine/docs/engine/ai_task_recipes.md"
+                || normalized.ends_with("/Engine/docs/engine/ai_task_recipes.md")) return true;
             const std::string extension = lower_ascii(path.extension().string());
             return extension == ".cpp" || extension == ".h"
                 || extension == ".hpp" || extension == ".ixx";
@@ -1250,6 +1269,22 @@ namespace epochengine::editor_ai_development_panel
                 return result;
             }
 
+            const auto isObjectiveOwner = [&](const std::string& path)
+            {
+                const auto lowered = lower_ascii(path);
+                return std::ranges::any_of(systems, [&](const auto& system)
+                {
+                    return std::ranges::any_of(system.path_hints, [&](const auto& hint)
+                    { return lowered.starts_with(hint); });
+                });
+            };
+            // A resolved subsystem supplies concrete owners. Generic words in
+            // the objective must not seed unrelated readers of those owners.
+            const bool ownersResolved = std::ranges::any_of(ranked,
+                [&](const auto& hit) { return isObjectiveOwner(hit.path); });
+            if (ownersResolved)
+                std::erase_if(ranked, [&](const auto& hit) { return !isObjectiveOwner(hit.path); });
+
             // This is only the seed set. Discovery can accumulate more exact
             // source later; the real residency limit is the evidence/token
             // budget, not this initial navigation batch.
@@ -1267,7 +1302,17 @@ namespace epochengine::editor_ai_development_panel
             // avoid one highly connected implementation consuming the seed.
             std::vector<std::vector<ai::source_index::SearchHit>> related{};
             for (std::size_t i{}; i < directSeeds; ++i)
-                related.push_back(index.related_sources(ranked[i].path, 8u));
+            {
+                auto neighbors = index.related_sources(ranked[i].path, 8u);
+                if (ownersResolved)
+                    std::erase_if(neighbors, [&](const auto& hit)
+                    {
+                        return !isObjectiveOwner(hit.relative_path)
+                            && !hit.preview.starts_with("same module:")
+                            && hit.preview != "direct include";
+                    });
+                related.push_back(std::move(neighbors));
+            }
             for (std::size_t depth{}; depth < 8u && result.paths.size() < maximumSeedPaths; ++depth)
                 for (const auto& neighbors : related)
                     if (depth < neighbors.size()) append_path(neighbors[depth].relative_path);
@@ -1341,6 +1386,58 @@ namespace epochengine::editor_ai_development_panel
             return reads;
         }
 
+        // Resolve the documentation map once per request against the current
+        // candidate. Hashes bind the complete task packet to these exact bytes.
+        [[nodiscard]] std::vector<ai::source_workspace::VerifiedRange> documented_source_ranges(
+            std::string_view sourceRoot, std::string_view objective,
+            const std::vector<std::string>& admittedPaths, std::string_view navigationRoot = {})
+        {
+            std::vector<ai::source_workspace::VerifiedRange> result;
+            auto recipe = documentation_guide::load_recipe(std::filesystem::path{sourceRoot}, objective);
+            auto regions = documentation_guide::source_regions(recipe);
+            // Retained candidates can predate the navigation map. Resolve the
+            // current host's map against their bytes, without replacing files.
+            if (regions.empty() && !navigationRoot.empty())
+            {
+                recipe = documentation_guide::load_recipe(std::filesystem::path{navigationRoot}, objective);
+                regions = documentation_guide::source_regions(recipe);
+            }
+            std::error_code error;
+            const auto root = std::filesystem::weakly_canonical(std::filesystem::path{sourceRoot}, error);
+            if (error) return result;
+            for (const auto& path : admittedPaths)
+            {
+                const bool guideFile = path == "Engine/docs/engine/ai_task_recipes.md";
+                if (!guideFile && std::ranges::none_of(regions, [&](const auto& region) { return region.path == path; })) continue;
+                const auto file = std::filesystem::weakly_canonical(root / path, error);
+                if (error || !path_is_within(root, file) || !source_context_extension(file)) continue;
+                const auto size = std::filesystem::file_size(file, error);
+                if (error || size > maximum_source_file_read_bytes) continue;
+                std::ifstream input{file, std::ios::binary};
+                const std::string bytes{std::istreambuf_iterator<char>{input}, {}};
+                core::sha256::Hasher hasher;
+                hasher.update(bytes);
+                const auto sha = core::sha256::hex(hasher.finish());
+                if (guideFile && !bytes.empty() && bytes.size() <= documentation_guide::maximum_document_bytes)
+                    result.push_back({path, sha, 0u, bytes.size()});
+                for (const auto& region : regions)
+                {
+                    if (region.path != path) continue;
+                    const auto first = bytes.find(region.begin);
+                    if (first == std::string::npos) continue;
+                    const auto last = bytes.find(region.end, first + region.begin.size());
+                    if (last == std::string::npos) continue;
+                    const auto previous = bytes.rfind('\n', first);
+                    const auto begin = previous == std::string::npos ? 0u : previous + 1u;
+                    const auto endLine = bytes.rfind('\n', last);
+                    const auto end = endLine == std::string::npos ? last : endLine + 1u;
+                    if (end <= begin || end - begin > 48u * 1024u) continue;
+                    result.push_back({path, sha, begin, end - begin});
+                }
+            }
+            return result;
+        }
+
         [[nodiscard]] SourceContextLoadResult load_reviewed_source_context(
             std::string_view sourceRoot,
             const std::vector<std::string>& relativePaths,
@@ -1350,7 +1447,9 @@ namespace epochengine::editor_ai_development_panel
             const std::size_t evidenceBudget = maximum_source_context_evidence_bytes,
             const std::vector<ai::source_workspace::VerifiedRange>& retainedRanges = {},
             const std::vector<std::string>& currentPaths = {},
-            const std::vector<std::string>& protectedPaths = {})
+            const std::vector<std::string>& protectedPaths = {},
+            const std::vector<ai::source_workspace::VerifiedRange>* residentRanges = nullptr,
+            const std::vector<ai::source_workspace::VerifiedRange>& pinnedRanges = {})
         {
             SourceContextLoadResult result{};
             if (sourceRoot.empty() || relativePaths.empty())
@@ -1430,7 +1529,7 @@ namespace epochengine::editor_ai_development_panel
                     || std::find(relativePaths.begin(), relativePaths.begin() + index, text)
                         != relativePaths.begin() + index)
                 {
-                    result.status = "The reviewed source path is not a unique relative C++ source file inside the selected root: " + text + ".";
+                    result.status = "The reviewed source path is not a unique relative supported source file inside the selected root: " + text + ".";
                     return result;
                 }
                 error.clear();
@@ -1457,16 +1556,27 @@ namespace epochengine::editor_ai_development_panel
                         static_cast<std::uintmax_t>(evidenceBudget - envelopeBytes)}));
                     const auto readCount = static_cast<std::size_t>(std::ranges::count(reads, text,
                         &ai::development_proposal_codec::ContextRead::path));
+                    const bool literalOnly = readCount != 0u && std::ranges::all_of(reads,
+                        [&](const auto& read) { return read.path != text || !read.query.empty(); });
                     // A newly requested region needs a usable function, not the
                     // 1 KiB scraps left after replaying every historical range.
                     // Read small interfaces whole; giant implementations stay
                     // sparse and share the real model budget across selectors.
                     const bool declaration = relative.extension() == ".ixx"
                         || relative.extension() == ".hpp" || relative.extension() == ".h";
-                    requestedDemand = declaration && size <= 64u * 1024u
+                    const bool wholeDeclaration = declaration && size <= 64u * 1024u
+                        && std::ranges::any_of(reads, [&](const auto& read)
+                            { return read.path == text && read.first_line == 0u && read.query.empty(); });
+                    requestedDemand = wholeDeclaration
                         ? static_cast<std::size_t>(size)
                         : (std::min)(static_cast<std::size_t>(size),
-                            (std::max)(readCount, std::size_t{1u}) * 8192u);
+                            (std::max)(readCount, std::size_t{1u})
+                                * (literalOnly ? literal_source_excerpt_bytes : 8192u));
+                    // Initial host triage has no navigation cursor or history.
+                    // Supply the requested working unit instead of padding each
+                    // giant implementation until the context budget is full.
+                    if (reads.empty() && retainedRanges.empty())
+                        desired = (std::min)(desired, requestedDemand);
                     if (readCount > 1u)
                         desired = (std::min)(maximum_full_source_context_bytes,
                             readCount * (maximum_source_excerpt_bytes + 10u * text.size() + 384u));
@@ -1479,7 +1589,19 @@ namespace epochengine::editor_ai_development_panel
                                 desired + prior.byte_count + 10u * text.size() + 384u);
                         }
                     retainedDemand = (std::min)(retainedDemand, static_cast<std::size_t>(size));
-                    desired = (std::min)(desired, static_cast<std::size_t>(size));
+                    // A directed read asks for one window, not all remaining
+                    // capacity in the file. That includes line-based reads of
+                    // interfaces; only an explicit automatic whole-interface
+                    // request may reserve the complete declaration file.
+                    if (readCount != 0u && std::ranges::all_of(reads, [&](const auto& read)
+                        { return read.path != text || read.first_line != 0u || !read.query.empty(); }))
+                        desired = (std::min)(maximum_full_source_context_bytes,
+                            requestedDemand + retainedDemand
+                                + readCount * (10u * text.size() + 384u));
+                    const auto maximumFileDemand = static_cast<std::size_t>(size)
+                        + (readCount > 1u
+                            ? (readCount - 1u) * (10u * text.size() + 384u) : 0u);
+                    desired = (std::min)(desired, maximumFileDemand);
                     // Passive history asks only for its verified bytes, not a
                     // fresh broad excerpt that crowds out the active lookup.
                     if (!currentPaths.empty() && std::ranges::find(currentPaths, text) == currentPaths.end())
@@ -1502,8 +1624,25 @@ namespace epochengine::editor_ai_development_panel
                     || std::ranges::find(currentPaths, text) != currentPaths.end(), retainedDemand,
                     requestedDemand, std::ranges::find(protectedPaths, text) != protectedPaths.end()});
             }
-            const auto allocations = ai::source_workspace::allocate_source_bytes(
-                demands, evidenceBudget - envelopeBytes);
+            std::vector<std::size_t> pinnedCosts(relativePaths.size());
+            std::size_t pinnedTotal{};
+            for (const auto& range : pinnedRanges)
+            {
+                const auto found = std::ranges::find(relativePaths, range.path);
+                if (found == relativePaths.end()) continue;
+                const auto cost = range.byte_count + 10u * range.path.size() + 384u;
+                if (cost > evidenceBudget - envelopeBytes - pinnedTotal)
+                {
+                    result.status = "The documented edit packet exceeds this model's source budget. Narrow the recipe or select a larger context; no partial packet was sent.";
+                    return result;
+                }
+                pinnedCosts[static_cast<std::size_t>(found - relativePaths.begin())] += cost;
+                pinnedTotal += cost;
+            }
+            auto allocations = ai::source_workspace::allocate_source_bytes(
+                demands, evidenceBudget - envelopeBytes - pinnedTotal);
+            for (std::size_t index{}; index < allocations.size(); ++index)
+                allocations[index] += pinnedCosts[index];
 
             result.evidence.assign(baseEvidence);
             if (!result.evidence.empty() && !result.evidence.ends_with('\n'))
@@ -1626,7 +1765,8 @@ namespace epochengine::editor_ai_development_panel
                 const bool historicalOnly = !currentPaths.empty()
                     && std::ranges::find(currentPaths, relativeText) == currentPaths.end();
                 const bool preferFull = !historicalOnly && std::ranges::all_of(selectors,
-                    [](const auto* selector) { return selector->first_line == 0u; });
+                    [&](const auto* selector) { return selector->first_line == 0u
+                        && (selector->query.empty() || bytes.size() <= literal_source_excerpt_bytes); });
                 // Old selectors describe past navigation, not a new request to
                 // advance that query while another file is being read.
                 if ((historicalOnly || selectors.empty() || (selectors.size() == 1u
@@ -1664,9 +1804,24 @@ namespace epochengine::editor_ai_development_panel
                         && !remembered.first_line)
                     ? (availableWindows - historyReserve) / selectors.size()
                     : availableWindows;
-                const auto excerptBudget = (std::min)(maximum_source_excerpt_bytes, windowBudget);
-                const auto select_window = [&](const ai::development_proposal_codec::ContextRead* selector) -> Window
+                // A fresh lookup must not consume this file's entire allocation
+                // and evict the exact dependencies read on the previous turn.
+                const auto defaultExcerptBudget = (std::min)(
+                    prior != retainedRanges.rend() && !historicalOnly && !remembered.first_line
+                        ? std::size_t{8192u} : maximum_source_excerpt_bytes, windowBudget);
+                const auto select_window = [&](const ai::development_proposal_codec::ContextRead* selector,
+                    const ai::source_workspace::VerifiedRange* memoryRange = nullptr,
+                    std::size_t memoryBudget = 0u) -> Window
                 {
+                    const auto excerptBudget = memoryRange ? memoryBudget
+                        : memoryBudget != 0u ? (std::min)(memoryBudget, defaultExcerptBudget)
+                        : selector && !selector->query.empty()
+                            ? (std::min)(defaultExcerptBudget, literal_source_excerpt_bytes)
+                            : selector && selector->first_line != 0u
+                                ? (std::min)(defaultExcerptBudget, std::size_t{8192u})
+                            : defaultExcerptBudget;
+                    if (memoryRange && memoryRange->byte_count <= excerptBudget)
+                        return {memoryRange->byte_offset, memoryRange->byte_offset + memoryRange->byte_count};
                     std::string_view sharedBytes{bytes};
                     std::size_t excerptOffset{};
                     bool directed = selector != nullptr
@@ -1700,9 +1855,10 @@ namespace epochengine::editor_ai_development_panel
                                 directedAnchor = bytes.find(selector->query, requestedOffset);
                                 if (directedAnchor != std::string::npos && selector->first_line == 0u)
                                 {
-                                    // Automatic literal lookup should reach an
-                                    // unseen implementation instead of replaying
-                                    // its already reviewed declaration forever.
+                                    // A compacted definition must become visible
+                                    // again before advancing to another call site.
+                                    // Only currently resident bytes satisfy a
+                                    // lookup; archived navigation is not source.
                                     // An explicit first_line keeps exact cursor semantics.
                                     const auto firstMatch = directedAnchor;
                                     std::size_t selectedMatch = firstMatch;
@@ -1712,12 +1868,13 @@ namespace epochengine::editor_ai_development_panel
                                     {
                                         if (count < 16u)
                                             matches += " " + std::to_string(reviewed_first_line(bytes, directedAnchor));
-                                        const auto covering = std::ranges::find_if(retainedRanges, [&](const auto& range)
+                                        const auto& visibleRanges = residentRanges ? *residentRanges : retainedRanges;
+                                        const auto covering = std::ranges::find_if(visibleRanges, [&](const auto& range)
                                         {
                                             return valid_prior(range) && directedAnchor >= range.byte_offset
                                                 && directedAnchor + selector->query.size() <= range.byte_offset + range.byte_count;
                                         });
-                                        const bool reviewed = covering != retainedRanges.end();
+                                        const bool reviewed = covering != visibleRanges.end();
                                         if (!reviewed && !selectedUnseen)
                                         {
                                             selectedMatch = directedAnchor;
@@ -1768,7 +1925,7 @@ namespace epochengine::editor_ai_development_panel
                     // A lookup in a file that fits need not turn a complete
                     // declaration/implementation into another partial window.
                     // Explicit cursor/query semantics above still resolve first.
-                    if (preferFull && bytes.size() <= perFileBudget)
+                    if (!memoryRange && preferFull && bytes.size() <= perFileBudget)
                     {
                         if (!navigationFallback.empty())
                         {
@@ -1777,14 +1934,15 @@ namespace epochengine::editor_ai_development_panel
                         }
                         return {0u, bytes.size()};
                     }
-                    if (directed || bytes.size() > (std::min)(maximum_full_source_context_bytes, windowBudget))
+                    if (memoryRange || directed || bytes.size() > (std::min)(maximum_full_source_context_bytes, windowBudget))
                     {
                         std::size_t anchor = directedAnchor;
-                        const bool clippedMemory = selector == &remembered
-                            && prior != retainedRanges.rend() && prior->byte_count > excerptBudget;
-                        const auto memoryBegin = clippedMemory ? prior->byte_offset : 0u;
+                        const auto* rememberedRange = memoryRange ? memoryRange
+                            : selector == &remembered && prior != retainedRanges.rend() ? &*prior : nullptr;
+                        const bool clippedMemory = rememberedRange && rememberedRange->byte_count > excerptBudget;
+                        const auto memoryBegin = clippedMemory ? rememberedRange->byte_offset : 0u;
                         const auto memoryEnd = clippedMemory
-                            ? prior->byte_offset + prior->byte_count : bytes.size();
+                            ? rememberedRange->byte_offset + rememberedRange->byte_count : bytes.size();
                         if (!directed || clippedMemory)
                         {
                             // Repacking old evidence must retain useful source,
@@ -1900,17 +2058,61 @@ namespace epochengine::editor_ai_development_panel
                 };
                 std::vector<Window> windows{};
                 std::size_t residentBytes{};
-                // Passive files are exact working-set evidence, not another
-                // navigation request. Do not enlarge the newest window until
-                // it crowds out older palette/enum regions in the same file.
-                if (historicalOnly && historicalBytes != 0u
-                    && historicalBytes - extraEnvelope <= perFileBudget)
+                if (pinnedCosts[pathIndex] != 0u)
                 {
-                    for (const auto& range : retainedRanges)
+                    for (const auto& range : pinnedRanges)
                     {
-                        if (!valid_prior(range)) continue;
-                        residentBytes += range.byte_count + (windows.empty() ? 0u : extraEnvelope);
+                        if (range.path != relativeText) continue;
+                        if (!valid_prior(range))
+                        {
+                            result.status = "The documented source changed while packing its edit packet; retry from current source.";
+                            return result;
+                        }
                         windows.push_back({range.byte_offset, range.byte_offset + range.byte_count});
+                        residentBytes += range.byte_count + extraEnvelope;
+                    }
+                    // Explicit additional reads supplement the packet. Generic
+                    // history and automatic broad reads cannot evict its anchors.
+                    const auto supplement = (std::min)(std::size_t{8192u},
+                        (perFileBudget - residentBytes) / (selectors.size() + 1u));
+                    if (supplement > extraEnvelope + 256u) for (const auto* selector : selectors)
+                    {
+                        if (!selector || (selector->first_line == 0u && selector->query.empty())) continue;
+                        const auto window = select_window(selector, nullptr, supplement - extraEnvelope);
+                        if (window.begin != window.end) windows.push_back(window);
+                    }
+                }
+                else
+                {
+                // Under pressure keep a useful slice of each remembered region,
+                // rather than spending the entire allocation on the newest one
+                // and dropping every older dependency that no longer fits whole.
+                if (historicalOnly && historicalBytes != 0u)
+                {
+                    std::vector<const ai::source_workspace::VerifiedRange*> history{};
+                    const auto rangeLimit = (std::max)(std::size_t{1u},
+                        (perFileBudget + extraEnvelope) / (1024u + extraEnvelope));
+                    for (auto range = retainedRanges.rbegin(); range != retainedRanges.rend(); ++range)
+                    {
+                        if (!valid_prior(*range)) continue;
+                        if (history.size() >= rangeLimit
+                            || result.reviewed_slices.size() + history.size()
+                                + relativePaths.size() - pathIndex > maximum_source_context_paths) break;
+                        history.push_back(&*range);
+                    }
+                    const auto historyFraming = history.empty() ? 0u : (history.size() - 1u) * extraEnvelope;
+                    std::vector<ai::source_workspace::SourceDemand> historyDemands{};
+                    for (const auto* range : history)
+                        historyDemands.push_back({range->byte_count, false, range->byte_count});
+                    const auto historyAllocations = ai::source_workspace::allocate_source_bytes(
+                        historyDemands, perFileBudget - historyFraming);
+                    for (std::size_t index{}; index < history.size(); ++index)
+                    {
+                        if (historyAllocations[index] == 0u) continue;
+                        const auto window = select_window(nullptr, history[index], historyAllocations[index]);
+                        if (window.begin == window.end) continue;
+                        residentBytes += window.end - window.begin + (windows.empty() ? 0u : extraEnvelope);
+                        windows.push_back(window);
                     }
                 }
                 if (windows.empty()) for (const auto* selector : selectors)
@@ -1921,9 +2123,6 @@ namespace epochengine::editor_ai_development_panel
                     windows.push_back(window);
                     if (window.begin == 0u && window.end == bytes.size()) break;
                 }
-                std::string_view sharedBytes{};
-                std::size_t excerptOffset{};
-                bool excerpted{};
                 for (auto prior = retainedRanges.rbegin(); prior != retainedRanges.rend(); ++prior)
                 {
                     if (prior->path != relativeText || prior->source_sha256 != sourceSha
@@ -1970,6 +2169,59 @@ namespace epochengine::editor_ai_development_panel
                     windows.push_back(candidate);
                     residentBytes += candidate.end - candidate.begin + extraEnvelope;
                 }
+                // Whole historical regions may no longer fit after a new read.
+                // Pack their uncovered bytes together instead of dropping every
+                // region in an actively requested file. Passive-only packing
+                // above already supplies a bounded slice of each dependency.
+                if (!historicalOnly && residentBytes < perFileBudget)
+                {
+                    std::vector<ai::source_workspace::VerifiedRange> missing{};
+                    for (const auto& range : retainedRanges)
+                    {
+                        if (!valid_prior(range)) continue;
+                        std::vector<Window> pieces{{range.byte_offset, range.byte_offset + range.byte_count}};
+                        for (const auto& window : windows)
+                        {
+                            std::vector<Window> remainder{};
+                            for (const auto& piece : pieces)
+                            {
+                                if (window.end <= piece.begin || window.begin >= piece.end)
+                                    remainder.push_back(piece);
+                                else
+                                {
+                                    if (piece.begin < window.begin) remainder.push_back({piece.begin, window.begin});
+                                    if (window.end < piece.end) remainder.push_back({window.end, piece.end});
+                                }
+                            }
+                            pieces = std::move(remainder);
+                        }
+                        for (const auto& piece : pieces)
+                            missing.push_back({relativeText, sourceSha, piece.begin, piece.end - piece.begin});
+                    }
+                    const auto remaining = perFileBudget - residentBytes;
+                    const auto occupied = result.reviewed_slices.size() + windows.size()
+                        + relativePaths.size() - pathIndex - 1u;
+                    const auto slots = occupied < maximum_source_context_paths ? maximum_source_context_paths - occupied : 0u;
+                    const auto limit = (std::min)(slots, remaining / (1024u + extraEnvelope));
+                    if (missing.size() > limit) missing.erase(missing.begin(), missing.end() - limit);
+                    const auto framing = missing.size() * extraEnvelope;
+                    std::vector<ai::source_workspace::SourceDemand> historyDemands{};
+                    for (const auto& range : missing)
+                        historyDemands.push_back({range.byte_count, false, range.byte_count});
+                    const auto historyAllocations = ai::source_workspace::allocate_source_bytes(
+                        historyDemands, remaining - framing);
+                    for (std::size_t index{}; index < missing.size(); ++index)
+                    {
+                        const auto window = select_window(nullptr, &missing[index], historyAllocations[index]);
+                        if (window.begin == window.end) continue;
+                        windows.push_back(window);
+                        residentBytes += window.end - window.begin + extraEnvelope;
+                    }
+                }
+                }
+                std::string_view sharedBytes{};
+                std::size_t excerptOffset{};
+                bool excerpted{};
                 std::ranges::sort(windows, {}, &Window::begin);
                 // A newly widened range may cover another retained window.
                 for (std::size_t index = 1u; index < windows.size();)
@@ -2070,6 +2322,84 @@ namespace epochengine::editor_ai_development_panel
                 result.reviewed_slices.size());
             return result;
         }
+        // A model can propose an exact block from an earlier source window
+        // after that window was evicted by bounded context compaction. This is
+        // missing evidence, not an unsafe write and not a reason to spend two
+        // more inference turns on an unchanged prompt. Recover only exact,
+        // unique anchors in files already admitted to the reviewed scope.
+        [[nodiscard]] std::vector<ai::development_proposal_codec::ContextRead>
+            missing_proposal_source_windows(
+                const ai::development_proposal_codec::Proposal& proposal,
+                std::string_view snapshotRoot,
+                const std::vector<std::string>& reviewedPaths,
+                const std::vector<ai::source_workspace::VerifiedRange>& residentRanges)
+        {
+            using ContextRead = ai::development_proposal_codec::ContextRead;
+            std::vector<ContextRead> missing{};
+            std::error_code error{};
+            const auto root = std::filesystem::weakly_canonical(
+                std::filesystem::path{snapshotRoot}, error);
+            if (error || !root.is_absolute()
+                || !std::filesystem::is_directory(root, error) || error)
+                return missing;
+
+            for (const auto& change : proposal.changes)
+            {
+                if (missing.size() >= maximum_source_paths_per_navigation)
+                    break;
+                if (change.edit_kind
+                        != ai::development_proposal_codec::SourceEditKind::replace_exact_block
+                    || change.match_bytes.empty() || change.match_bytes.size() > 4096u
+                    || std::ranges::find(reviewedPaths, change.relative_path)
+                        == reviewedPaths.end())
+                    continue;
+                const std::filesystem::path relative{change.relative_path};
+                if (relative.is_absolute() || relative.has_root_name()
+                    || std::ranges::any_of(relative, [](const auto& part) { return part == ".."; })
+                    || !source_context_extension(relative))
+                    continue;
+                error.clear();
+                const auto source = std::filesystem::weakly_canonical(root / relative, error);
+                if (error || !path_is_within(root, source)
+                    || !std::filesystem::is_regular_file(source, error) || error)
+                    continue;
+                const auto size = std::filesystem::file_size(source, error);
+                if (error || size > maximum_source_file_read_bytes)
+                    continue;
+                std::string bytes(static_cast<std::size_t>(size), '\0');
+                std::ifstream stream{source, std::ios::binary};
+                if (!stream || (!bytes.empty() && !stream.read(
+                        bytes.data(), static_cast<std::streamsize>(bytes.size()))))
+                    continue;
+                const auto match = ai::development_proposal_codec::match_exact_block(bytes, change.match_bytes);
+                if (!match) continue;
+                const auto offset = match.offset;
+
+                core::sha256::Hasher hash{};
+                hash.update(bytes);
+                const auto revision = core::sha256::hex(hash.finish());
+                const bool resident = std::ranges::any_of(residentRanges, [&](const auto& range)
+                {
+                    return range.path == change.relative_path
+                        && range.source_sha256 == revision
+                        && range.byte_offset <= offset
+                        && range.byte_count >= match.byte_count
+                        && offset - range.byte_offset
+                            <= range.byte_count - match.byte_count;
+                });
+                if (resident)
+                    continue;
+                const auto line = reviewed_first_line(bytes, offset);
+                if (line == 0u || line > 1'000'000u)
+                    continue;
+                if (std::ranges::none_of(missing, [&](const ContextRead& read)
+                        { return read.path == change.relative_path
+                            && read.first_line == line; }))
+                    missing.push_back({.path = change.relative_path, .first_line = line});
+            }
+            return missing;
+        }
+
         struct GroundingResult final
         {
             bool accepted{};
@@ -2279,6 +2609,7 @@ namespace epochengine::editor_ai_development_panel
         std::string context_compaction_status{};
         std::size_t context_compaction_count{};
         std::size_t resident_source_bytes{};
+        std::vector<ai::source_workspace::VerifiedRange> resident_source_ranges{};
         std::uint32_t sandbox_source_turns_since_review{};
         std::vector<std::string> sandbox_lab_checkpoints{};
         std::string candidate_preview_status{
@@ -2303,6 +2634,33 @@ namespace epochengine::editor_ai_development_panel
         std::uint64_t operator_session_id{};
         mutable std::vector<ai::self_iteration_analytics::Record> pending_iteration_analytics{};
 
+        void reset_campaign_control()
+        {
+            campaign_supervisor.reset();
+            campaign_scheduler.reset();
+            campaign_queue.reset();
+            campaign_bridge.reset();
+            campaign_orchestrator.reset();
+            campaign_bridge_receipt.reset();
+            campaign_pending_operation.reset();
+            campaign_pending_response.clear();
+            campaign_pending_response_digest.clear();
+            campaign_plan_review.clear();
+            campaign_plan_review_digest.clear();
+            campaign_state_path.clear();
+            campaign_transition_generation = 0u;
+            campaign_control_generation = 0u;
+        }
+
+        [[nodiscard]] const std::string& reviewed_source_root() const
+        {
+            // Once materialized, the candidate owns subsequent reads. A repair
+            // may have changed bytes that no longer match the original parent.
+            return source_workspace_ready && !source_workspace_pending
+                    && !workspace_root.empty()
+                ? workspace_root : source_root;
+        }
+
         void reset_controller(
             std::string requestedWorkspace,
             std::string requestedSourceRoot,
@@ -2318,18 +2676,8 @@ namespace epochengine::editor_ai_development_panel
                 context_compaction_status.clear();
                 context_compaction_count = 0u;
                 resident_source_bytes = 0u;
-                campaign_supervisor.reset();
-                campaign_scheduler.reset();
-                campaign_queue.reset();
-                campaign_bridge.reset();
-                campaign_orchestrator.reset();
-                campaign_bridge_receipt.reset();
-                campaign_pending_operation.reset();
-                campaign_pending_response.clear();
-                campaign_pending_response_digest.clear();
-                campaign_plan_review.clear();
-                campaign_plan_review_digest.clear();
-                campaign_state_path.clear();
+                resident_source_ranges.clear();
+                reset_campaign_control();
                 campaign_scope_digest.clear();
                 campaign_request_digest.clear();
                 campaign_bundle_summary.clear();
@@ -2338,8 +2686,6 @@ namespace epochengine::editor_ai_development_panel
                 campaign_reviewed_evidence.clear();
                 campaign_reviewed_paths.clear();
                 campaign_reviewed_reads.clear();
-                campaign_transition_generation = 0u;
-                campaign_control_generation = 0u;
             }
             source_patch_review.reset();
             source_patch_review_binding = {};
@@ -2647,7 +2993,10 @@ namespace epochengine::editor_ai_development_panel
                 const auto line = remaining.substr(0u, end);
                 if (line.find(": error ") != std::string_view::npos
                     || line.find("error:") != std::string_view::npos
-                    || line.find("fatal error") != std::string_view::npos)
+                    || line.find("fatal error") != std::string_view::npos
+                    || line.find("=fail") != std::string_view::npos
+                    || line.find(".failed_stage=") != std::string_view::npos
+                    || line.find("[ERROR]") != std::string_view::npos)
                 {
                     if (line.find("MSB4181") == std::string_view::npos)
                     {
@@ -2671,7 +3020,7 @@ namespace epochengine::editor_ai_development_panel
                 evidence.size(), digest_text(evidence)));
             if (!firstError.empty())
             {
-                append("First compiler diagnostic: ");
+                append("First causal diagnostic: ");
                 append(prefix(firstError, (std::min)(std::size_t{1024u}, maximumBytes / 3u)));
                 append("\n");
             }
@@ -3008,7 +3357,7 @@ namespace epochengine::editor_ai_development_panel
             context::Request request{};
             std::error_code error{};
             request.binding.reviewed_root = std::filesystem::weakly_canonical(
-                std::filesystem::path{source_root}, error);
+                std::filesystem::path{reviewed_source_root()}, error);
             if (error)
                 request.binding.reviewed_root.clear();
             request.binding.project_id = "epoch-engine";
@@ -3318,10 +3667,9 @@ namespace epochengine::editor_ai_development_panel
                 return false;
 
             // Reuse the admitted objective-specific plan across source reads
-            // and repairs. A fresh objective gets one compact model planning
-            // turn below; the generic host lifecycle is not a task plan.
-            if (sandbox_lab_enabled && !sandbox_lab_plan.empty()
-                && sandbox_source_turns_since_review < 3u)
+            // and repairs. This explicit planning path also supports a fresh
+            // manual model plan; automatic coding starts through begin_coding.
+            if (sandbox_lab_enabled && !sandbox_lab_plan.empty())
             {
                 const auto pending = *campaign_pending_operation;
                 campaign_plan_review = sandbox_lab_plan;
@@ -3639,7 +3987,7 @@ namespace epochengine::editor_ai_development_panel
             }
             std::error_code error{};
             const auto root = std::filesystem::weakly_canonical(
-                std::filesystem::path{source_root}, error);
+                std::filesystem::path{reviewed_source_root()}, error);
             if (error || !root.is_absolute())
             {
                 refusal = "The verified Engine source root is unavailable.";
@@ -3647,7 +3995,9 @@ namespace epochengine::editor_ai_development_panel
             }
             SourceAuthority authority{
                 .target_kind = IterationTargetKind::engine_source,
-                .kind = input.source_authority_kind == "explicit_checkout"
+                .kind = reviewed_source_root() != source_root
+                    ? SourceAuthorityKind::local_snapshot
+                    : input.source_authority_kind == "explicit_checkout"
                     ? SourceAuthorityKind::explicit_checkout
                     : input.source_authority_kind == "local_snapshot"
                         ? SourceAuthorityKind::local_snapshot
@@ -3755,7 +4105,8 @@ namespace epochengine::editor_ai_development_panel
         }
 
         void append_source_path_catalog(
-            std::string& prompt, std::string_view catalog = {}, bool administrative = false) const
+            std::string& prompt, std::string_view catalog = {}, bool administrative = false,
+            bool focused = false) const
         {
             const auto budget = active_source_prompt_budget_bytes();
             if (catalog.empty()) catalog = source_path_catalog_evidence;
@@ -3784,7 +4135,7 @@ namespace epochengine::editor_ai_development_panel
             const auto available = budget - prompt.size();
             const auto envelope = heading.size() + ending.size();
             const auto finalNewline = catalog.ends_with('\n') ? 0u : 1u;
-            if (available >= envelope + finalNewline
+            if (!focused && available >= envelope + finalNewline
                 && catalog.size() <= available - envelope - finalNewline)
             {
                 prompt += heading;
@@ -3862,7 +4213,7 @@ namespace epochengine::editor_ai_development_panel
                         priority = 0u;
                         break;
                     }
-                    if ((!directory(reviewed).empty() && directory(path) == directory(reviewed))
+                    if ((!focused && !directory(reviewed).empty() && directory(path) == directory(reviewed))
                         || (!owner(reviewed).empty() && owner(path) == owner(reviewed)))
                         priority = 1u;
                 }
@@ -3873,9 +4224,12 @@ namespace epochengine::editor_ai_development_panel
             std::string selected{};
             selected.reserve(maximumCatalogBytes);
             for (const auto& lines : priorityLines)
+            {
+                if (focused && &lines == &priorityLines.back()) break;
                 for (const auto line : lines)
                     if (line.size() <= maximumCatalogBytes - selected.size())
                         selected += line;
+            }
             if (selected.empty()) return;
             prompt += heading;
             prompt += selected;
@@ -3970,11 +4324,47 @@ namespace epochengine::editor_ai_development_panel
                 "Use the host observations and current exact bytes to recognize "
                 "a satisfied handoff and advance to the next unfinished task. A saved "
                 "investigation handoff is not a permanent investigation-only lock. "
-                "Batch all known missing dependencies in one read action; search "
-                "observed callable/definition names rather than repeatedly guessing "
-                "generic theme/type words. Use SOURCE_QUERY_MATCH_LINES for explicit "
+                "Batch all known missing dependencies in one read action. Literal searches "
+                "return focused edit anchors; use explicit first_line with an empty query "
+                "when you need a longer continuation. Read-only search terms may be hypotheses; "
+                "the host verifies actual matches. Use SOURCE_QUERY_MATCH_LINES for explicit "
                 "cursors. Do not restart a generic investigation or invent a defect.";
+            if (cumulative_source_workspace.stagnant_rounds() != 0u)
+                prompt += "\nThe last read restored previously seen bytes without discovering new source. "
+                    "Use the supplied exact blocks to implement the next unit, or batch all genuinely missing "
+                    "dependencies once. Repeatedly rotating known ranges is not progress and pauses this run.\n";
             return true;
+        }
+
+        void append_task_recipe(std::string& prompt) const
+        {
+            if (active_domain != Domain::engine_source
+                || controller_source_snapshot_root.empty()) return;
+            auto guide = documentation_guide::load_recipe(
+                std::filesystem::path{controller_source_snapshot_root},
+                development_objective);
+            if (documentation_guide::source_regions(guide).empty())
+            {
+                const auto currentGuide = documentation_guide::load_recipe(
+                    std::filesystem::path{source_root}, development_objective);
+                if (!documentation_guide::source_regions(currentGuide).empty()) guide = currentGuide;
+            }
+            if (guide.empty()) return;
+            constexpr std::string_view prefix =
+                "\nHOST_CURATED_DOCUMENTATION_NAVIGATION (not patch evidence)\n";
+            constexpr std::string_view suffix =
+                "\nEND_HOST_CURATED_DOCUMENTATION_NAVIGATION\n"
+                "Docs identify likely owners only; source IDs and exact FILE "
+                "bytes in this request alone authorize changes.\n";
+            const auto budget = active_source_prompt_budget_bytes();
+            if (prompt.size() <= budget
+                && guide.size() + prefix.size() + suffix.size()
+                    <= budget - prompt.size())
+            {
+                prompt += prefix;
+                prompt += guide;
+                prompt += suffix;
+            }
         }
 
         [[nodiscard]] std::size_t source_request_evidence_budget_bytes() const
@@ -3984,6 +4374,10 @@ namespace epochengine::editor_ai_development_panel
                 : ai::development_proposal_codec::SourceArea::project;
             std::string envelope = ai::development_proposal_codec::protocol_prompt(
                 area, development_objective, {});
+            // Reserve the selected documentation recipe before source packing.
+            // Otherwise exact FILE evidence can consume the whole prompt and
+            // silently omit the guide on the very first coding pass.
+            append_task_recipe(envelope);
             if (!append_investigation_continuity(envelope)) return 0u;
             if (!append_repair_diagnostic(envelope)) return 0u;
             // Reserve mandatory task/repair framing before loading FILE bytes.
@@ -4091,10 +4485,16 @@ namespace epochengine::editor_ai_development_panel
                 + "\nEND_CAMPAIGN_BINDING\n\n"
                 + ai::development_proposal_codec::protocol_prompt(
                     area, development_objective, source_context_evidence);
+            if (discovery_budget::prioritize_edit(
+                    cumulative_source_workspace.discovery_rounds(), source_repair_attempts))
+                prompt += "\nHOST_DISCOVERY_BUDGET: Submit a grounded source-edit "
+                    "proposal now using the current exact FILE blocks. Request "
+                    "only a genuinely missing dependency. New verified bytes "
+                    "are admitted; repeated unchanged evidence is stopped.\n";
             if (!append_investigation_continuity(prompt)) return {};
             if (!append_repair_diagnostic(prompt))
                 return {};
-            append_source_path_catalog(prompt);
+            append_source_path_catalog(prompt, {}, false, true);
             return prompt;
         }
 
@@ -4743,9 +5143,28 @@ namespace epochengine::editor_ai_development_panel
             auto begun = campaign_orchestrator->begin(campaign_configuration);
             const bool accepted = static_cast<bool>(begun);
             capture_campaign_result(output, std::move(begun));
-            if (accepted && initialize_campaign_control(output, now)
-                && stage_campaign_plan_request(output, now))
-                (void)send_staged_campaign_plan(output, now);
+            if (!accepted) return output;
+            // The operator already requested automatic work in this private
+            // candidate. Let the coding model decide the next exact read/edit;
+            // an administrative model generation must not gate every campaign.
+            const std::string handoff = sandbox_lab_plan.empty()
+                ? "OPERATOR_OBJECTIVE_HANDOFF\n" + development_objective
+                    + "\nNEXT_GENERATION\nUse the supplied exact source. Return the next coherent edit when it is sufficient; otherwise request the specific missing source in one batch. Epoch applies and validates the candidate, then returns actual outcomes.\nEND_NEXT_GENERATION\n"
+                : sandbox_lab_plan;
+            auto directed = campaign_orchestrator->begin_coding(
+                campaign_action(campaign_orchestrator->snapshot(), "direct-coding", now), handoff);
+            const bool directedAccepted = static_cast<bool>(directed);
+            capture_campaign_result(output, std::move(directed));
+            if (!directedAccepted) return output;
+            sandbox_lab_plan = handoff;
+            auto shared = campaign_orchestrator->share_curated_evidence(
+                campaign_action(campaign_orchestrator->snapshot(), "direct-source", now),
+                campaign_orchestrator->snapshot().campaign.session.scope_digest,
+                campaign_scope_digest,
+                "Approved automatic coding received the exact current candidate source scope.");
+            const bool sharedAccepted = static_cast<bool>(shared);
+            capture_campaign_result(output, std::move(shared));
+            if (sharedAccepted) (void)request_campaign_proposal(output, now);
             return output;
         }
 
@@ -4915,43 +5334,6 @@ namespace epochengine::editor_ai_development_panel
                         : std::string{"Configured - "} + input.selected_transport);
             }
 
-            if (input.external_mcp_available
-                && (!campaign_orchestrator || terminal))
-            {
-                const std::array providerActions{
-                    gui::InlineButtonSpec{
-                        .label = "Use local model",
-                        .width = 0.0f,
-                        .enabled = true},
-                    gui::InlineButtonSpec{
-                        .label = "Use external MCP",
-                        .width = 0.0f,
-                        .enabled = true}}
-                ;
-                if (const auto provider = gui::inline_button_row(
-                        providerActions, 29.0f, 5.0f))
-                {
-                    const auto selectedProvider = *provider == 0u
-                        ? ai::project_profile::Provider::epoch_local_qwen38
-                        : ai::project_profile::Provider::external_mcp;
-                    if (selectedProvider != campaign_provider)
-                    {
-                        campaign_provider = selectedProvider;
-                        campaign_scope_digest.clear();
-                        campaign_request_digest.clear();
-                        campaign_bundle_summary.clear();
-                        campaign_bundle_objective.clear();
-                        campaign_bundle_binding_digest.clear();
-                        campaign_reviewed_evidence.clear();
-                        campaign_reviewed_paths.clear();
-                        campaign_reviewed_reads.clear();
-                    }
-                    status_message = std::string{"Selected "}
-                        + std::string{campaign_provider_name(campaign_provider)}
-                        + "; no session started and no source sent.";
-                    output.campaign_evidence.push_back(status_message);
-                }
-            }
             if (campaign_provider
                 == ai::project_profile::Provider::external_mcp)
             {
@@ -5646,6 +6028,19 @@ namespace epochengine::editor_ai_development_panel
                 output.model_prompt +=
                     "\nEND_EPOCH_SOURCE_CONTEXT_CORRECTION_V1";
             }
+            if (discovery_budget::prioritize_edit(
+                    cumulative_source_workspace.discovery_rounds(), source_repair_attempts))
+            {
+                output.model_prompt +=
+                    "\nHOST_IMPLEMENTATION_FOCUS: Prefer a coherent edit now. "
+                    "Use the current exact FILE blocks to produce the smallest buildable "
+                    "edit now. Batch necessary bounded reads for exact missing "
+                    "dependencies; new source evidence remains available. If you cannot produce "
+                    "a grounded edit, return EPOCH_SOURCE_EVIDENCE_INSUFFICIENT_V1 "
+                    "rather than repeating discovery. The host never accepts "
+                    "a patch without validated source evidence.\n";
+            }
+            append_task_recipe(output.model_prompt);
             if (!append_investigation_continuity(output.model_prompt)) return reject_model_prompt_budget();
             if (!append_repair_diagnostic(output.model_prompt, !hasReviewedSource))
                 return reject_model_prompt_budget();
@@ -5694,6 +6089,16 @@ namespace epochengine::editor_ai_development_panel
                 output.model_prompt += model_reply_correction_diagnostic;
                 output.model_prompt += "\nEND_EPOCH_SOURCE_PROTOCOL_CORRECTION_V1";
             }
+            if (discovery_budget::prioritize_edit(
+                    cumulative_source_workspace.discovery_rounds(), source_repair_attempts))
+            {
+                output.model_prompt +=
+                    "\nHOST_DISCOVERY_BUDGET: Produce one grounded, buildable "
+                    "source edit using current verified FILE blocks. Further "
+                    "exploration is bounded; do not restart source discovery "
+                    "without an exact missing dependency.\n";
+            }
+            append_task_recipe(output.model_prompt);
             if (!append_investigation_continuity(output.model_prompt)) return reject_model_prompt_budget();
             if (!append_repair_diagnostic(output.model_prompt))
                 return reject_model_prompt_budget();
@@ -5909,7 +6314,9 @@ namespace epochengine::editor_ai_development_panel
                 preservedWorkspaceRoot, preservedReviewedPaths, {},
                 preservedObjective, repairReads,
                 source_request_evidence_budget_bytes(),
-                cumulative_source_workspace.ranges(), causalPaths);
+                cumulative_source_workspace.ranges(), causalPaths, {}, nullptr,
+                documented_source_ranges(preservedWorkspaceRoot, preservedObjective,
+                    preservedReviewedPaths, preservedSourceRoot));
             if (!repairedContext.accepted)
             {
                 output = reject_model_prompt_budget();
@@ -5920,6 +6327,8 @@ namespace epochengine::editor_ai_development_panel
             }
             source_navigation_fallbacks += repairedContext.navigation_fallbacks;
             source_context_evidence = repairedContext.evidence;
+            resident_source_bytes = repairedContext.source_bytes;
+            resident_source_ranges = repairedContext.verified_ranges;
             source_baseline_evidence = repairedContext.evidence;
             campaign_reviewed_reads = std::move(repairReads);
 
@@ -6082,6 +6491,9 @@ namespace epochengine::editor_ai_development_panel
                     maximum_source_paths_per_navigation);
             if (contextRequest.recognized)
             {
+                // Admit a valid missing dependency even after the implementation
+                // reminder. Returned bytes/residency, not a fixed read count,
+                // determine whether discovery is actually making progress.
                 pending_source_context_systems.clear();
                 pending_source_context_paths.clear();
                 pending_source_context_reads.clear();
@@ -6166,43 +6578,9 @@ namespace epochengine::editor_ai_development_panel
                 }
                 contextRequest.request.paths = std::move(admittedPaths);
                 contextRequest.request.reads = std::move(admittedReads);
-                bool addsNewEvidence{};
-                for (const auto& path : contextRequest.request.paths)
-                {
-                    const auto existing = std::ranges::find(
-                        cumulative_source_workspace.reviewed(), path,
-                        &ai::source_workspace::ReviewedSlice::path);
-                    if (existing == cumulative_source_workspace.reviewed().end())
-                    {
-                        addsNewEvidence = true;
-                        break;
-                    }
-                    if (std::ranges::any_of(contextRequest.request.reads, [&](const auto& read)
-                        { return read.path == path && (existing->first_line != read.first_line
-                            || existing->query != read.query); }))
-                    {
-                        addsNewEvidence = true;
-                        break;
-                    }
-                }
-                if (!addsNewEvidence)
-                {
-                    cumulative_source_workspace.note_discovery_round(false);
-                    if (cumulative_source_workspace.stagnant_rounds()
-                        >= maximum_stagnant_source_discovery_rounds)
-                    {
-                        model_request_failed = true;
-                        sandbox_lab_enabled = false;
-                        status_message =
-                            "Source discovery stopped after two searches added no new verified evidence. "
-                            "No source was staged; the reviewed workspace is preserved for diagnosis.";
-                        output.status = status_message;
-                        return output;
-                    }
-                    return queue_source_context_reply_correction(
-                        "That source request repeats evidence already retained in the cumulative workspace. "
-                        "Request a new SOURCE_ID or a different first_line/query window that targets the missing dependency.");
-                }
+                // Selector identity is not source residency. The same query can
+                // advance to another match or restore a compacted dependency.
+                // Check actual returned bytes in share_requested_source_context.
                 ++source_context_expansions;
                 pending_source_context_systems.clear();
                 pending_source_context_paths = contextRequest.request.paths;
@@ -6285,6 +6663,34 @@ namespace epochengine::editor_ai_development_panel
                 development_objective,
                 evidence,
                 groundingRoot);
+            // Recover a candidate's exact missing edit windows through the
+            // same reviewed-source / digest-bound read pipeline. Never accept
+            // the old packet directly: a fresh model action must cite the
+            // freshly resident bytes before staging is permitted.
+            const auto missingWindows = missing_proposal_source_windows(
+                decoded.proposal, groundingRoot,
+                cumulative_source_workspace.reviewed_paths(), resident_source_ranges);
+            if (!missingWindows.empty())
+            {
+                pending_source_context_paths.clear();
+                for (const auto& read : missingWindows)
+                    if (std::ranges::find(pending_source_context_paths, read.path)
+                        == pending_source_context_paths.end())
+                        pending_source_context_paths.push_back(read.path);
+                pending_source_context_reads = missingWindows;
+                pending_source_context_systems.clear();
+                pending_source_context_reason =
+                    "Host-confirmed unique exact edit anchors were compacted out; "
+                    "restore these current candidate source windows before retrying.";
+                pending_source_context_objective = development_objective;
+                ++source_context_expansions;
+                status_message = epochengine::format_text(
+                    "Recovering {} exact model edit window(s) from the already reviewed "
+                    "candidate source. No patch was staged or source modified.",
+                    missingWindows.size());
+                output.status = status_message;
+                return output;
+            }
             if (!grounding.accepted)
             {
                 return queue_model_reply_correction(grounding.status);
@@ -6480,6 +6886,7 @@ namespace epochengine::editor_ai_development_panel
         state.pending_source_context_reason.clear();
         state.pending_source_context_objective.clear();
         state.source_context_evidence = catalog.evidence;
+        state.resident_source_ranges.clear();
         state.source_path_catalog_evidence = catalog.evidence;
         state.source_context_expansions = 0u;
         state.source_navigation_fallbacks = 0u;
@@ -6516,6 +6923,23 @@ namespace epochengine::editor_ai_development_panel
         {
             state.pending_source_context_systems = hostSelection.systems;
             state.pending_source_context_paths = hostSelection.paths;
+            // Documentation owns task navigation; don't keep a second hardcoded
+            // palette map in the supervisor. Normal authority checks below still
+            // validate every source path before it is shared.
+            const auto recipe = documentation_guide::load_recipe(
+                std::filesystem::path{state.source_root}, state.development_objective);
+            const auto regions = documentation_guide::source_regions(recipe);
+            if (!regions.empty())
+            {
+                state.pending_source_context_paths.clear();
+                for (const auto& region : regions)
+                    if (std::ranges::find(state.pending_source_context_paths, region.path)
+                        == state.pending_source_context_paths.end())
+                        state.pending_source_context_paths.push_back(region.path);
+                // The navigation document can evolve through the same exact
+                // candidate edit/review path as its source, never hidden memory.
+                state.pending_source_context_paths.push_back("Engine/docs/engine/ai_task_recipes.md");
+            }
             state.pending_source_context_reason =
                 "Host System-1 source triage: " + hostSelection.status;
             state.pending_source_context_objective =
@@ -6571,6 +6995,25 @@ namespace epochengine::editor_ai_development_panel
         return implementation_
             ? implementation_->request_session_stop("The operator stopped self-coding.")
             : RenderResult{};
+    }
+
+    bool Panel::select_model_transport(ModelTransport transport) {
+        if(!implementation_)return false;
+        auto& state=*implementation_;
+        if(state.sandbox_lab_enabled&&!state.session_stopped())return false;
+        const auto provider=transport==ModelTransport::external_mcp
+            ?ai::project_profile::Provider::external_mcp:ai::project_profile::Provider::epoch_local_qwen38;
+        if(state.campaign_provider==provider)return true;
+        state.campaign_provider=provider;
+        state.campaign_scope_digest.clear();state.campaign_request_digest.clear();
+        state.campaign_bundle_summary.clear();state.campaign_bundle_objective.clear();
+        state.campaign_bundle_binding_digest.clear();state.campaign_reviewed_evidence.clear();
+        state.campaign_reviewed_paths.clear();state.campaign_reviewed_reads.clear();
+        return true;
+    }
+    ModelTransport Panel::selected_model_transport() const {
+        return implementation_&&implementation_->campaign_provider==ai::project_profile::Provider::external_mcp
+            ?ModelTransport::external_mcp:ModelTransport::local_inference;
     }
 
     bool Panel::has_reviewed_plan() const
@@ -6745,6 +7188,7 @@ namespace epochengine::editor_ai_development_panel
         }
         state.source_path_catalog_evidence = catalog.evidence;
         state.source_context_evidence = catalog.evidence;
+        state.resident_source_ranges.clear();
         state.source_context_evidence_objective = objective;
 
         state.pending_source_context_systems.clear();
@@ -7116,7 +7560,7 @@ namespace epochengine::editor_ai_development_panel
             || failedRepairState.source_workspace_pending
             || failedRepairState.source_workspace_ready)
         {
-            return false;
+            return failed(__LINE__);
         }
 
         Panel manualRepairWorkspace{};
@@ -7130,7 +7574,7 @@ namespace epochengine::editor_ai_development_panel
             || !manualRepairState.source_workspace_ready
             || manualRepairWorkspace.sandbox_session_failed())
         {
-            return false;
+            return failed(__LINE__);
         }
 
         Panel invalidRepairCampaign{};
@@ -7147,7 +7591,7 @@ namespace epochengine::editor_ai_development_panel
             || !invalidRepairCampaign.sandbox_session_failed()
             || invalidRepairState.sandbox_lab_enabled)
         {
-            return false;
+            return failed(__LINE__);
         }
 
         Panel exhaustedRepair{};
@@ -7164,18 +7608,18 @@ namespace epochengine::editor_ai_development_panel
             || exhaustedRepairState.sandbox_lab_enabled
             || exhaustedRepairState.source_workspace_pending)
         {
-            return false;
+            return failed(__LINE__);
         }
         const auto repairPromptBudget = active_source_prompt_budget_bytes();
         exhaustedRepairState.source_repair_diagnostic = std::string(2'048u, 'x');
         std::string nearlyFullPrompt(repairPromptBudget - 1'024u, 'p');
         if (exhaustedRepairState.append_repair_diagnostic(nearlyFullPrompt)
             || nearlyFullPrompt != std::string(repairPromptBudget - 1'024u, 'p'))
-            return false;
+            return failed(__LINE__);
         std::string fullPrompt(repairPromptBudget, 'p');
         if (exhaustedRepairState.append_repair_diagnostic(fullPrompt)
             || fullPrompt != std::string(repairPromptBudget, 'p'))
-            return false;
+            return failed(__LINE__);
         // A real full-validation failure includes a 32 KiB diagnostic and a
         // failed proposal. Both must survive; exact source receives the space
         // left after mandatory framing rather than the old fixed reserve.
@@ -7283,6 +7727,7 @@ namespace epochengine::editor_ai_development_panel
             "FILE_CONTENT_BEGIN Engine/src/ai/example.cpp\n"
             "int value = 0;\n"
             "FILE_CONTENT_END Engine/src/ai/example.cpp\n";
+        proposalPromptState.campaign_reviewed_paths = {"Engine/src/ai/example.cpp"};
         proposalPromptState.source_path_catalog_evidence =
             "PATH Engine/src/ai/example.cpp\n"
             "PATH Engine/modules/ai.example.ixx\n";
@@ -7407,8 +7852,14 @@ namespace epochengine::editor_ai_development_panel
             verboseFailure, 2048u);
         const auto repairExcerpt = Implementation::bounded_host_validation_evidence(
             verboseFailure, 32u * 1024u);
+        const std::string namedContractFailure =
+            "engine_contract_self_test.project.asset_spine.paired_artifact_ahead_repair=fail";
+        const auto contractExcerpt = Implementation::bounded_host_validation_evidence(
+            "Validation output\n" + std::string(8192u, 'p') + "\n" + namedContractFailure
+                + "\n" + std::string(56u * 1024u, 'v') + "\ncontracts.code=7\n", 2048u);
         if (receiptExcerpt.size() > 2048u
             || repairExcerpt.size() > 32u * 1024u
+            || contractExcerpt.find(namedContractFailure) == std::string::npos
             || receiptExcerpt.find(compilerDiagnostic) == std::string::npos
             || repairExcerpt.find(compilerDiagnostic) == std::string::npos
             || receiptExcerpt.find(Implementation::digest_text(verboseFailure))
@@ -7524,7 +7975,8 @@ namespace epochengine::editor_ai_development_panel
         const auto expectedSource = budgetPromptState.source_context_evidence;
         const auto expectedCatalog = budgetPromptState.source_path_catalog_evidence;
         const auto expectedRepair = budgetPromptState.source_repair_diagnostic;
-        const auto checkBudgetPrompt = [&](const std::string& prompt, const bool withRepair)
+        const auto checkBudgetPrompt = [&](const std::string& prompt, const bool withRepair,
+            const bool focused = false)
         {
             if (prompt.empty() || prompt.size() > repairPromptBudget
                 || prompt.find(expectedSource) == std::string::npos)
@@ -7562,7 +8014,8 @@ namespace epochengine::editor_ai_development_panel
             const auto siblingAt = body.find("PATH Engine/src/renderers/opengl/opengl.context.cpp\n");
             const auto globalAt = body.find("PATH Engine/modules/aa.catalog_");
             if (ownerAt == std::string_view::npos || siblingAt == std::string_view::npos
-                || globalAt == std::string_view::npos || ownerAt > globalAt || siblingAt > globalAt)
+                || (focused ? globalAt != std::string_view::npos
+                    : globalAt == std::string_view::npos || ownerAt > globalAt || siblingAt > globalAt))
                 return failed(__LINE__);
             for (const auto& path : budgetPromptState.campaign_reviewed_paths)
             {
@@ -7580,14 +8033,14 @@ namespace epochengine::editor_ai_development_panel
                     return failed(__LINE__);
                 begin = end + 1u;
             }
-            return body.find("_\xe2\x82\xac.cpp\n") != std::string_view::npos
+            return (focused || body.find("_\xe2\x82\xac.cpp\n") != std::string_view::npos)
                 && budgetPromptState.source_context_evidence == expectedSource
                 && budgetPromptState.source_path_catalog_evidence == expectedCatalog;
         };
         const auto maximumCampaignPrompt = budgetPromptState.campaign_model_prompt(
             ai::self_iteration_orchestrator::OperationKind::model_proposal);
         const auto maximumRetryPrompt = budgetPromptState.source_model_request();
-        if (!checkBudgetPrompt(maximumCampaignPrompt, true)
+        if (!checkBudgetPrompt(maximumCampaignPrompt, true, true)
             || maximumRetryPrompt.action != HostAction::request_model_source_proposal
             || !checkBudgetPrompt(maximumRetryPrompt.model_prompt, true)
             || maximumRetryPrompt.model_prompt.find("EPOCH_SOURCE_PROTOCOL_CORRECTION_V1")
@@ -7619,7 +8072,7 @@ namespace epochengine::editor_ai_development_panel
             ai::self_iteration_orchestrator::OperationKind::model_proposal);
         const auto maximumPlainRetry = budgetPromptState.source_model_request();
         const auto maximumPlainSelection = budgetPromptState.source_context_model_request();
-        if (!checkBudgetPrompt(maximumPlainPrompt, false)
+        if (!checkBudgetPrompt(maximumPlainPrompt, false, true)
             || maximumPlainRetry.action != HostAction::request_model_source_proposal
             || !checkBudgetPrompt(maximumPlainRetry.model_prompt, false)
             || maximumPlainSelection.action != HostAction::request_model_source_proposal
@@ -8068,6 +8521,56 @@ namespace epochengine::editor_ai_development_panel
                     std::istreambuf_iterator<char>{input},
                     std::istreambuf_iterator<char>{}};
             };
+            trace.stage = "documented edit packet survives repeated source reads";
+            const std::string packetRoot = (fixture.path / "packet").generic_string();
+            const std::string packetPath = "Engine/src/editor/editor.packet_contract.cpp";
+            std::string packetSource, recipe = "<!-- EPOCH_RECIPE_THEME_BEGIN -->\n";
+            for (std::size_t index{}; index < 7u; ++index)
+            {
+                const auto anchor = "anchor_" + std::to_string(index);
+                const auto end = "end_" + std::to_string(index);
+                recipe += "SOURCE_REGION | " + packetPath + " | " + anchor + " | " + end + "\n";
+                packetSource += anchor + "\n" + std::string(2048u, 'x') + "\n" + end + "\n";
+                packetSource += std::string(8192u, ' ') + "\n";
+            }
+            recipe += "<!-- EPOCH_RECIPE_THEME_END -->\n";
+            if (!writeFixtureSource("packet/Engine/docs/engine/ai_task_recipes.md", recipe)
+                || !writeFixtureSource("packet/" + packetPath, packetSource)) return failed(__LINE__);
+            const auto packet = documented_source_ranges(packetRoot, "add a theme", {packetPath});
+            if (packet.size() != 7u || !documented_source_ranges(packetRoot, "add a theme", {}).empty())
+                return failed(__LINE__);
+            std::vector<ai::source_workspace::VerifiedRange> retainedPacket;
+            for (std::size_t round{}; round < 10u; ++round)
+            {
+                const auto packed = load_reviewed_source_context(packetRoot, {packetPath}, {}, "add a theme",
+                    round == 0u ? std::vector<ai::development_proposal_codec::ContextRead>{} : std::vector<ai::development_proposal_codec::ContextRead>{{
+                        .path = packetPath, .query = "end_" + std::to_string(round % 7u)}},
+                    32u * 1024u, retainedPacket, {packetPath}, {packetPath}, &retainedPacket, packet);
+                if (!packed.accepted || packed.evidence.size() > 32u * 1024u) return failed(__LINE__);
+                for (const auto& required : packet)
+                    if (std::ranges::none_of(packed.verified_ranges, [&](const auto& resident) {
+                        return resident.path == required.path && resident.source_sha256 == required.source_sha256
+                            && resident.byte_offset <= required.byte_offset
+                            && resident.byte_offset + resident.byte_count >= required.byte_offset + required.byte_count;
+                    })) return failed(__LINE__);
+                retainedPacket = packed.verified_ranges;
+            }
+            if (load_reviewed_source_context(packetRoot, {packetPath}, {}, "add a theme", {},
+                    8u * 1024u, {}, {}, {}, nullptr, packet).accepted) return failed(__LINE__);
+            if (!writeFixtureSource("packet/" + packetPath, "// changed source\n" + packetSource)
+                || load_reviewed_source_context(packetRoot, {packetPath}, {}, "add a theme", {},
+                    32u * 1024u, {}, {}, {}, nullptr, packet).accepted) return failed(__LINE__);
+            if (!documentation_guide::source_regions("SOURCE_REGION | Engine/../outside.cpp | a | b").empty())
+                return failed(__LINE__);
+
+            if (!writeFixtureSource("packet-navigation/Engine/docs/engine/ai_task_recipes.md", recipe)
+                || !writeFixtureSource("packet/Engine/docs/engine/ai_task_recipes.md", "legacy navigation\n"))
+                return failed(__LINE__);
+            const auto resumedPacket = documented_source_ranges(packetRoot, "add a theme", {packetPath},
+                (fixture.path / "packet-navigation").generic_string());
+            if (resumedPacket.size() != 7u || resumedPacket.front().source_sha256 == packet.front().source_sha256)
+                return failed(__LINE__);
+            trace.stage = "source authority and bounded navigation";
             std::string aiImplementation{
                 "namespace epochengine::ai { int ai_development_panel = 1; "
                 "int direct_runtime = 1; }\n"};
@@ -8124,6 +8627,19 @@ namespace epochengine::editor_ai_development_panel
             {
                 return failed(__LINE__);
             }
+            if (!writeFixtureSource("Engine/modules/gui.engine.ixx",
+                    "export module gui.engine;\nexport enum class ThemeVariant { Dark };\n")
+                || !writeFixtureSource("Engine/src/epochgui/gui.engine.cpp",
+                    "module gui.engine;\nstruct PaletteSprites {};\nvoid theme_choices() {}\n")
+                || !writeFixtureSource("Engine/src/editor/editor.application.cpp",
+                    "module editor.application;\nvoid theme_selector() {}\n")) return failed(__LINE__);
+            const auto themeSelection = curate_source_context(fixture.path.generic_string(),
+                Domain::engine_source, "create a new fire engine red theme and add it to the theme selector");
+            if (!themeSelection.accepted || themeSelection.paths.size() != 3u
+                || std::ranges::find(themeSelection.paths, "Engine/src/ai/ai.engine.cpp") != themeSelection.paths.end()
+                || std::ranges::find(themeSelection.paths, "Engine/src/epochgui/gui.engine.cpp") == themeSelection.paths.end())
+                return failed(__LINE__);
+
             const HostSourceContextSelection openGlSelection =
                 curate_source_context(
                     fixture.path.generic_string(),
@@ -8210,6 +8726,8 @@ namespace epochengine::editor_ai_development_panel
             const std::string focusedObjective =
                 "Add a contract proving direct llama.cpp transcript parsing "
                 "cannot be confused by an Assistant: line inside the user prompt.";
+            if (!resolve_source_systems("repair AdmittedLookup").empty()
+                || resolve_source_systems("repair the AI prompt").empty()) return failed(__LINE__);
             constexpr std::string_view ownerPath = "Engine/modules/core.declaration_owner.ixx";
             constexpr std::string_view implementationPath = "Engine/src/editor/editor.lookup_fixture.cpp";
             constexpr std::string_view probePath = "Engine/src/build/build.cpp_feature_probe.hpp";
@@ -8284,9 +8802,9 @@ namespace epochengine::editor_ai_development_panel
                     {},
                     focusedObjective);
             if (escapedLoad.accepted || nonSourceLoad.accepted
-                || escapedLoad.status.find("relative C++ source")
+                || escapedLoad.status.find("relative supported source")
                     == std::string::npos
-                || nonSourceLoad.status.find("relative C++ source")
+                || nonSourceLoad.status.find("relative supported source")
                     == std::string::npos)
             {
                 return failed(__LINE__);
@@ -8300,7 +8818,8 @@ namespace epochengine::editor_ai_development_panel
             if (!writeFixtureSource(completeOne, wholeOne) || !writeFixtureSource(completeTwo, wholeTwo))
                 return failed(__LINE__);
             const auto completePair = load_reviewed_source_context(fixture.path.generic_string(),
-                {std::string{completeOne}, std::string{completeTwo}}, {}, {}, {}, 512u * 1024u);
+                {std::string{completeOne}, std::string{completeTwo}}, {}, {},
+                {{.path = std::string{completeOne}}, {.path = std::string{completeTwo}}}, 512u * 1024u);
             if (!completePair.accepted || completePair.reviewed_slices.size() != 2u
                 || !completePair.reviewed_slices[0].complete_file || !completePair.reviewed_slices[1].complete_file
                 || completePair.reviewed_slices[0].exact_bytes != wholeOne
@@ -8341,14 +8860,57 @@ namespace epochengine::editor_ai_development_panel
                 navigationSource += "// " + std::to_string(line) + std::string(96u, ' ');
                 if (line == 100u || line == 900u)
                     navigationSource += "navigation_target_\xc3\xa9";
+                if (line % 100u == 0u)
+                    navigationSource += " cycle_edit_anchor_" + std::to_string(line);
                 navigationSource += '\n';
             }
             if (!writeFixtureSource(navigationPath, navigationSource))
                 return false;
             using ContextRead = ai::development_proposal_codec::ContextRead;
             constexpr std::size_t navigationBudget = 32u * 1024u;
-            const auto automaticRead = load_reviewed_source_context(
+            const auto seedRead = load_reviewed_source_context(
                 fixture.path.generic_string(), {navigationPath}, {}, "make it better", {}, navigationBudget);
+            if (!seedRead.accepted || seedRead.source_bytes > 8192u
+                || seedRead.reviewed_slices.front().complete_file) return failed(__LINE__);
+            trace.stage = "compacted exact edit anchors automatically recover reviewed source";
+            ai::development_proposal_codec::Proposal compactedProposal{};
+            compactedProposal.changes.push_back({
+                .area = ai::development_proposal_codec::SourceArea::engine,
+                .relative_path = navigationPath,
+                .summary = "Fix the reviewed cycle edit anchor",
+                .edit_kind = ai::development_proposal_codec::SourceEditKind::replace_exact_block,
+                .match_bytes = "cycle_edit_anchor_900",
+                .replacement_bytes = "cycle_edit_anchor_900_fixed"});
+            const auto recoveryReads = missing_proposal_source_windows(
+                compactedProposal, fixture.path.generic_string(), {navigationPath},
+                seedRead.verified_ranges);
+            if (recoveryReads.size() != 1u || recoveryReads.front().path != navigationPath
+                || recoveryReads.front().first_line != 900u)
+                return failed(__LINE__);
+            const auto recoveredEditWindow = load_reviewed_source_context(
+                fixture.path.generic_string(), {navigationPath}, {}, "fix the anchor",
+                recoveryReads, navigationBudget, seedRead.verified_ranges, {navigationPath});
+            if (!recoveredEditWindow.accepted
+                || recoveredEditWindow.evidence.find("cycle_edit_anchor_900")
+                    == std::string::npos
+                || !missing_proposal_source_windows(compactedProposal,
+                    fixture.path.generic_string(), {navigationPath},
+                    recoveredEditWindow.verified_ranges).empty())
+                return failed(__LINE__);
+            // A model-suggested out-of-scope file or non-unique search never
+            // authorizes a host read or a candidate patch.
+            const auto unlistedRecovery = missing_proposal_source_windows(
+                compactedProposal, fixture.path.generic_string(),
+                {"Engine/src/editor/editor.unlisted.cpp"}, {});
+            compactedProposal.changes.front().match_bytes = "navigation_target_\xc3\xa9";
+            const auto ambiguousRecovery = missing_proposal_source_windows(
+                compactedProposal, fixture.path.generic_string(), {navigationPath}, {});
+            if (!unlistedRecovery.empty() || !ambiguousRecovery.empty())
+                return failed(__LINE__);
+
+            const auto automaticRead = load_reviewed_source_context(
+                fixture.path.generic_string(), {navigationPath}, {}, "make it better",
+                {ContextRead{.path = navigationPath}}, navigationBudget);
             const auto lineRead = load_reviewed_source_context(
                 fixture.path.generic_string(), {navigationPath}, {}, "make it better",
                 {ContextRead{.path = navigationPath, .first_line = 900u}}, navigationBudget);
@@ -8389,6 +8951,44 @@ namespace epochengine::editor_ai_development_panel
                 || explicitQuery.evidence.find("SOURCE_QUERY_SELECTED_LINE") != std::string::npos
                 || explicitQuery.reviewed_slices.front().first_line > 100u
                 || explicitQuery.reviewed_slices.front().last_line < 100u)
+                return failed(__LINE__);
+
+            trace.stage = "repeated focused queries retain all exact edit anchors";
+            ai::source_workspace::Workspace focusedHistory{};
+            (void)focusedHistory.merge(navigationPath);
+            std::vector<ai::source_workspace::VerifiedRange> focusedResident{};
+            for (std::size_t turn{}; turn < 16u; ++turn)
+            {
+                const auto anchorLine = (turn % 8u + 1u) * 100u;
+                const auto focused = load_reviewed_source_context(fixture.path.generic_string(),
+                    {navigationPath}, {}, "Update the eight coupled edit anchors",
+                    {{.path = navigationPath, .query = "cycle_edit_anchor_" + std::to_string(anchorLine)}},
+                    navigationBudget, focusedHistory.ranges(), {navigationPath}, {}, &focusedResident);
+                if (!focused.accepted || focused.evidence.size() > navigationBudget)
+                    return failed(__LINE__);
+                for (std::size_t anchor = 1u; anchor <= (std::min)(turn + 1u, std::size_t{8u}); ++anchor)
+                    if (focused.evidence.find("cycle_edit_anchor_" + std::to_string(anchor * 100u)) == std::string::npos)
+                        return failed(__LINE__);
+                for (const auto& range : focused.verified_ranges) focusedHistory.remember_range(range);
+                focusedResident = focused.verified_ranges;
+            }
+
+            trace.stage = "compacted query restores its archived definition before walking call sites";
+            auto queryHistory = firstQuery.verified_ranges;
+            queryHistory.insert(queryHistory.end(), nextQuery.verified_ranges.begin(), nextQuery.verified_ranges.end());
+            const auto restoredQuery = load_reviewed_source_context(
+                fixture.path.generic_string(), {navigationPath}, {}, {},
+                {ContextRead{.path = navigationPath, .query = "navigation_target_\xc3\xa9"}},
+                navigationBudget, queryHistory, {navigationPath}, {}, &nextQuery.verified_ranges);
+            const auto visibleQuery = load_reviewed_source_context(
+                fixture.path.generic_string(), {navigationPath}, {}, {},
+                {ContextRead{.path = navigationPath, .query = "navigation_target_\xc3\xa9"}},
+                navigationBudget, queryHistory, {navigationPath}, {}, &firstQuery.verified_ranges);
+            if (!restoredQuery.accepted || !visibleQuery.accepted
+                || restoredQuery.evidence.find("SOURCE_QUERY_SELECTED_LINE " + navigationPath + " 100\n") == std::string::npos
+                || visibleQuery.evidence.find("SOURCE_QUERY_SELECTED_LINE " + navigationPath + " 900\n") == std::string::npos
+                || restoredQuery.evidence.size() > navigationBudget
+                || restoredQuery.evidence.find("navigation_target_\xc3\xa9") == std::string::npos)
                 return failed(__LINE__);
 
             trace.stage = "automatic lookup finds unseen matches beyond display hints";
@@ -8460,7 +9060,41 @@ namespace epochengine::editor_ai_development_panel
                         && supplied.byte_offset <= range.byte_offset
                         && supplied.byte_offset + supplied.byte_count >= range.byte_offset + range.byte_count; }))
                     return failed(__LINE__);
+            trace.stage = "context pressure keeps disjoint historical dependencies visible together";
+            const auto pressureHistory = load_reviewed_source_context(fixture.path.generic_string(),
+                {navigationPath, reviewedPath}, {}, "Inspect navigation_target_",
+                {ContextRead{.path = navigationPath, .query = "navigation_target_\xc3\xa9"}},
+                16u * 1024u, multiRead.verified_ranges, {reviewedPath}, {navigationPath});
+            if (!pressureHistory.accepted || pressureHistory.evidence.size() > 16u * 1024u
+                || pressureHistory.evidence.find("SOURCE_QUERY_SELECTED_LINE") != std::string::npos
+                || !ai::development_proposal_codec::valid_context_text(pressureHistory.evidence)
+                || std::ranges::none_of(pressureHistory.reviewed_slices, [&](const auto& slice)
+                    { return slice.relative_path == navigationPath && slice.first_line <= 100u && slice.last_line >= 100u; })
+                || std::ranges::none_of(pressureHistory.reviewed_slices, [&](const auto& slice)
+                    { return slice.relative_path == navigationPath && slice.first_line <= 900u && slice.last_line >= 900u; })
+                || readFixtureSource(fixture.path / navigationPath) != navigationSource)
+                return failed(__LINE__);
+            for (const auto& supplied : pressureHistory.verified_ranges)
+                if (supplied.path == navigationPath
+                    && std::ranges::none_of(multiRead.verified_ranges, [&](const auto& original)
+                        { return supplied.source_sha256 == original.source_sha256
+                            && supplied.byte_offset >= original.byte_offset
+                            && supplied.byte_offset + supplied.byte_count <= original.byte_offset + original.byte_count; }))
+                    return failed(__LINE__);
+
             trace.stage = "mission compaction archives unrelated source before evicting task owners";
+            const auto activeHistory = load_reviewed_source_context(fixture.path.generic_string(),
+                {navigationPath, reviewedPath}, {}, "Inspect navigation_target_",
+                {ContextRead{.path = navigationPath, .first_line = 500u}},
+                32u * 1024u, multiRead.verified_ranges, {navigationPath}, {navigationPath});
+            if (!activeHistory.accepted || activeHistory.evidence.size() > 32u * 1024u
+                || std::ranges::none_of(activeHistory.reviewed_slices, [&](const auto& slice)
+                    { return slice.relative_path == navigationPath && slice.first_line <= 100u && slice.last_line >= 100u; })
+                || std::ranges::none_of(activeHistory.reviewed_slices, [&](const auto& slice)
+                    { return slice.relative_path == navigationPath && slice.first_line <= 500u && slice.last_line >= 500u; })
+                || std::ranges::none_of(activeHistory.reviewed_slices, [&](const auto& slice)
+                    { return slice.relative_path == navigationPath && slice.first_line <= 900u && slice.last_line >= 900u; }))
+                return failed(__LINE__);
             std::vector<std::string> broadPaths{declarationPath, navigationPath, std::string{completeOne}};
             for (std::size_t i{}; i < 12u; ++i)
             {
@@ -8528,13 +9162,28 @@ namespace epochengine::editor_ai_development_panel
                 || !pinnedMemory.accepted || pinnedMemory.reviewed_slices.front().first_line != 1u
                 || pinnedMemory.reviewed_slices.front().exact_bytes.find(memorySymbol) != std::string::npos
                 || readFixtureSource(fixture.path / memoryPath) != memorySource)
+            {
+                logger::get("Engine.Editor.SelfTest").log(logger::LogLevel::Error,
+                    epochengine::format_text("memory contract: full accepted={} bytes={}/{}; clipped accepted={} slices={} bytes={} symbol={}; pinned accepted={} slices={} line={} symbol={}; clipped status={}",
+                        fullMemory.accepted, fullMemory.source_bytes, memorySource.size(),
+                        clippedMemory.accepted, clippedMemory.reviewed_slices.size(), clippedMemory.source_bytes,
+                        !clippedMemory.reviewed_slices.empty() && clippedMemory.reviewed_slices.front().exact_bytes.find(memorySymbol) != std::string::npos,
+                        pinnedMemory.accepted, pinnedMemory.reviewed_slices.size(), pinnedMemory.reviewed_slices.empty() ? 0u : pinnedMemory.reviewed_slices.front().first_line,
+                        !pinnedMemory.reviewed_slices.empty() && pinnedMemory.reviewed_slices.front().exact_bytes.find(memorySymbol) != std::string::npos,
+                        clippedMemory.status));
                 return failed(__LINE__);
+            }
 
+            trace.stage = "fresh windows preserve cumulative and overlapping source";
             const auto cumulativeRead = load_reviewed_source_context(
                 fixture.path.generic_string(), {navigationPath}, {}, {},
                 {ContextRead{.path = navigationPath, .first_line = 900u}},
                 maximum_source_context_evidence_bytes, automaticRead.verified_ranges);
             const auto overlappingRead = load_reviewed_source_context(
+                fixture.path.generic_string(), {navigationPath}, {}, {},
+                {ContextRead{.path = navigationPath, .first_line = 300u}},
+                maximum_source_context_evidence_bytes, automaticRead.verified_ranges);
+            const auto alreadyCoveredRead = load_reviewed_source_context(
                 fixture.path.generic_string(), {navigationPath}, {}, {},
                 {ContextRead{.path = navigationPath, .first_line = 200u}},
                 maximum_source_context_evidence_bytes, automaticRead.verified_ranges);
@@ -8545,7 +9194,8 @@ namespace epochengine::editor_ai_development_panel
                 || cumulativeRead.evidence.find("// 900 ") == std::string::npos
                 || !overlappingRead.accepted || overlappingRead.reviewed_slices.size() != 1u
                 || overlappingRead.reviewed_slices.front().first_line != 1u
-                || overlappingRead.source_bytes <= automaticRead.source_bytes)
+                || overlappingRead.source_bytes <= automaticRead.source_bytes
+                || !alreadyCoveredRead.accepted || alreadyCoveredRead.source_bytes != automaticRead.source_bytes)
                 return failed(__LINE__);
             if (!writeFixtureSource(navigationPath, navigationSource + "// changed revision\n"))
                 return failed(__LINE__);
@@ -8667,7 +9317,7 @@ namespace epochengine::editor_ai_development_panel
             pressurePaths.push_back(navigationPath);
             const auto pressureRead = load_reviewed_source_context(
                 fixture.path.generic_string(), pressurePaths, {}, "navigation target",
-                {{.path = pressureModule, .query = " "},
+                {{.path = pressureModule},
                     {.path = navigationPath, .first_line = 1u},
                     {.path = navigationPath, .first_line = 900u}},
                 96u * 1024u, twelveLoaded.verified_ranges, {pressureModule, navigationPath});
@@ -8678,7 +9328,34 @@ namespace epochengine::editor_ai_development_panel
                 || std::ranges::count_if(pressureRead.reviewed_slices, [&](const auto& slice)
                     { return slice.relative_path == navigationPath && slice.exact_bytes.size() >= 6u * 1024u; }) < 2)
                 return failed(__LINE__);
-            trace.stage = "whole-file automatic queries share one frame";
+            trace.stage = "overlapping focused queries share one exact frame";
+            // Reproduce the native palette investigation's competing demands:
+            // two separated implementation reads and a cursor into a 36 KiB
+            // module. A cursor must not reserve that complete module, and a
+            // subsequent read must leave every earlier exact region resident
+            // when the combined windows fit the real prompt budget.
+            const auto directedInterface = load_reviewed_source_context(
+                fixture.path.generic_string(), {pressureModule, navigationPath}, {}, {},
+                {{.path = pressureModule, .first_line = 1u},
+                    {.path = navigationPath, .first_line = 100u},
+                    {.path = navigationPath, .first_line = 900u}},
+                48u * 1024u, {}, {pressureModule, navigationPath});
+            if (!directedInterface.accepted || directedInterface.source_bytes > 24u * 1024u
+                || std::ranges::any_of(directedInterface.reviewed_slices, [&](const auto& slice)
+                    { return slice.relative_path == pressureModule && slice.complete_file; }))
+                return failed(__LINE__);
+            const auto continuedInterface = load_reviewed_source_context(
+                fixture.path.generic_string(), {pressureModule, navigationPath}, {}, {},
+                {{.path = navigationPath, .first_line = 500u}}, 48u * 1024u,
+                directedInterface.verified_ranges, {navigationPath});
+            if (!continuedInterface.accepted || continuedInterface.source_bytes > 32u * 1024u)
+                return failed(__LINE__);
+            for (const auto& old : directedInterface.verified_ranges)
+                if (std::ranges::none_of(continuedInterface.verified_ranges, [&](const auto& current)
+                    { return current.path == old.path && current.source_sha256 == old.source_sha256
+                        && current.byte_offset <= old.byte_offset
+                        && current.byte_offset + current.byte_count >= old.byte_offset + old.byte_count; }))
+                    return failed(__LINE__);
             std::vector<ContextRead> completeQueries{};
             for (std::size_t index{}; index < 48u; ++index)
                 completeQueries.push_back({.path = pressureModule, .query = std::string(index + 1u, ' ')});
@@ -8687,8 +9364,10 @@ namespace epochengine::editor_ai_development_panel
                 96u * 1024u, {}, {pressureModule});
             if (!completeQueryRead.accepted || completeQueryRead.retryable_selection
                 || completeQueryRead.reviewed_slices.size() != 1u
-                || !completeQueryRead.reviewed_slices.front().complete_file
-                || completeQueryRead.reviewed_slices.front().exact_bytes != pressureInterface
+                || completeQueryRead.reviewed_slices.front().complete_file
+                || completeQueryRead.source_bytes > literal_source_excerpt_bytes
+                || completeQueryRead.reviewed_slices.front().exact_bytes
+                    != pressureInterface.substr(0u, completeQueryRead.source_bytes)
                 || completeQueryRead.evidence.size() > 96u * 1024u)
                 return failed(__LINE__);
             // The discovery ceiling is no longer the initial twelve-file
@@ -8747,11 +9426,11 @@ namespace epochengine::editor_ai_development_panel
             if (!packedRead.accepted || packedRead.file_count != 41u
                 || packedRead.reviewed_slices.size() != 42u
                 || packedRead.evidence.size() > 184u * 1024u
-                || packedRead.source_bytes < 140u * 1024u
+                || packedRead.source_bytes < 40u * 2049u + automaticRead.source_bytes + 1024u
                 || !packedBundle || packedBundle.bundle.entries.size() != 42u)
                 return failed(__LINE__);
 
-            trace.stage = "evicted reviewed range can become resident again";
+            trace.stage = "bounded reads retain both regions and reject a redundant third read";
             Panel residencyPanel{};
             auto& residencyState = *residencyPanel.implementation_;
             auto residencyInput = localOpenInput;
@@ -8765,6 +9444,7 @@ namespace epochengine::editor_ai_development_panel
                 residencyInput.source_snapshot_root, residencyInput.workspace_root);
             residencyState.development_objective = residencyInput.development_objective;
             bool firstResidency = true;
+            std::size_t residencyTurn{};
             for (const auto line : {1u, 900u, 1u})
             {
                 residencyState.pending_source_context_paths = {navigationPath};
@@ -8773,18 +9453,48 @@ namespace epochengine::editor_ai_development_panel
                 residencyState.pending_source_context_objective = residencyInput.development_objective;
                 const auto shared = residencyPanel.share_requested_source_context(residencyInput);
                 if (shared.action != (firstResidency
-                        ? HostAction::materialize_source_workspace : HostAction::none)
-                    || residencyState.cumulative_source_workspace.stagnant_rounds() != 0u
+                        ? HostAction::materialize_source_workspace
+                        : residencyTurn == 2u ? HostAction::request_model_source_proposal : HostAction::none)
+                    || residencyState.cumulative_source_workspace.stagnant_rounds() != (residencyTurn == 2u ? 1u : 0u)
                     || std::ranges::none_of(residencyState.campaign_reviewed_evidence,
                         [&](const auto& evidence) { return evidence.first_line == line; }))
                     return failed(__LINE__);
-                // Residency can retain several ranges and adjust their widths
-                // under real pressure. Exact requested bytes, not an old window
-                // count/width, establish successful re-entry.
+                // The bounded windows now fit together: the third read is
+                // redundant, so its correction must permit an edit using the
+                // same exact context rather than count a restore as progress.
+                if (residencyTurn == 2u && (shared.model_prompt.find("EPOCH_SOURCE_EDIT_REQUEST_V1") == std::string::npos
+                    || shared.model_prompt.find("FILE_EXCERPT_BEGIN " + navigationPath) == std::string::npos))
+                    return failed(__LINE__);
                 firstResidency = false;
+                ++residencyTurn;
             }
             if (residencyState.cumulative_source_workspace.ranges().size() != 2u)
                 return failed(__LINE__);
+
+            trace.stage = "restored source cannot reset the cumulative discovery watchdog";
+            // All bytes are already known; force alternating prompt residency
+            // to reproduce the native campaign's read/compact/read cycle.
+            residencyState.cumulative_source_workspace.remember_range({navigationPath,
+                core::sha256::hex(core::sha256::hash(navigationSource)), 0u, navigationSource.size()});
+            residencyState.cumulative_source_workspace.note_discovery_round(true);
+            residencyState.sandbox_lab_enabled = true;
+            for (std::size_t turn{}; turn < 2u; ++turn)
+            {
+                residencyState.resident_source_ranges.clear();
+                residencyState.pending_source_context_paths = {navigationPath};
+                residencyState.pending_source_context_reads = {{.path = navigationPath,
+                    .query = turn == 0u ? "cycle_edit_anchor_100" : "cycle_edit_anchor_900"}};
+                residencyState.pending_source_context_objective = residencyInput.development_objective;
+                const auto restored = residencyPanel.share_requested_source_context(residencyInput);
+                if (residencyState.cumulative_source_workspace.stagnant_rounds() != turn + 1u
+                    || residencyState.source_context_evidence.find("cycle_edit_anchor_"
+                        + std::string{turn == 0u ? "100" : "900"}) == std::string::npos)
+                    return failed(__LINE__);
+                if (turn == 1u && (restored.action != HostAction::none
+                    || !residencyState.model_request_failed || residencyState.sandbox_lab_enabled
+                    || restored.status.find("recycled previously read code") == std::string::npos))
+                    return failed(__LINE__);
+            }
 
             trace.stage = "hidden-pane progression and stopped-session restart";
             // Exercise the same non-render entry point used by the context
@@ -8838,6 +9548,11 @@ namespace epochengine::editor_ai_development_panel
                     || automatic.advance_source_iteration(automaticInput).action != HostAction::none)
                     return failed(__LINE__);
                 const auto currentGeneration = automaticState.generation;
+                if (!writeFixtureSource(
+                        (std::filesystem::path{automaticState.workspace_root} / reviewedPath)
+                            .lexically_relative(fixture.path).generic_string(),
+                        readFixtureSource(std::filesystem::path{parent} / reviewedPath)))
+                    return failed(__LINE__);
                 const auto materialized = automatic.complete_source_workspace(
                     currentGeneration, true, "Owned fixture copied.", 1u, 64u);
                 if (materialized.action != HostAction::none)
@@ -8858,49 +9573,48 @@ namespace epochengine::editor_ai_development_panel
                 if (planned.action != HostAction::request_model_source_proposal
                     || automatic.active_session_id() != 7u
                     || !automaticState.campaign_pending_operation) return failed(__LINE__);
-                if (!retainedPlan || reviewDue)
-                {
-                    if (planned.model_prompt.find("EPOCH_SELF_ITERATION_PLAN_V2") == std::string::npos
-                        || planned.model_prompt.find(automaticInput.development_objective) == std::string::npos
-                        || !automaticState.campaign_orchestrator->snapshot().plan_bytes.empty()
-                        || automaticState.campaign_pending_operation->kind()
-                            != ai::self_iteration_orchestrator::OperationKind::model_plan)
-                        return failed(__LINE__);
-                    if (planned.model_prompt.find("ROLE: mission supervisor") == std::string::npos
-                        || planned.model_prompt.find(automaticState.source_context_evidence) == std::string::npos
-                        || planned.model_prompt.find("SUPERVISOR_REVIEWED_SOURCE_BEGIN") == std::string::npos
-                        || (reviewDue && (planned.model_prompt.find("Retain completed work") == std::string::npos
-                            || planned.model_prompt.find("READ admitted: exact fixture value") == std::string::npos
-                            || automaticState.campaign_orchestrator->snapshot().continuity_bytes
-                                != automaticState.sandbox_lab_continuity)))
-                        return failed(__LINE__);
-                    auto replyInput = automaticInput;
-                    replyInput.latest_raw_model_reply = "1. Implement the reviewed value change.\n2. Build the same candidate and validate the changed behavior.\n3. Present the validated candidate for comparison.\nNEXT_GENERATION\nChange the exact value from 1 to 2; return the atomic patch.\nEND_NEXT_GENERATION";
-                    const auto coding = automatic.stage_latest_model_proposal(replyInput);
-                    if (coding.action != HostAction::request_model_source_proposal
-                        || coding.model_prompt.find("EPOCH_SELF_ITERATION_PROPOSAL_V2") == std::string::npos
-                        || automaticState.sandbox_lab_plan != replyInput.latest_raw_model_reply
-                        || automaticState.campaign_orchestrator->snapshot().plan_bytes != replyInput.latest_raw_model_reply
-                        || automaticState.sandbox_source_turns_since_review != 0u
-                        || automaticState.campaign_orchestrator->snapshot().source_turns_since_review != 0u
-                        || coding.model_prompt.find("ROLE: incremental coding worker") == std::string::npos
-                        || coding.model_prompt.find("Change the exact value from 1 to 2") == std::string::npos)
-                        return failed(__LINE__);
-                }
-                else if (planned.model_prompt.find("EPOCH_SELF_ITERATION_PROPOSAL_V2") == std::string::npos
-                    || planned.model_prompt.find("RETAINED_INVESTIGATION_PLAN") == std::string::npos
-                    || planned.model_prompt.find("Retain completed work; continue the next step.") == std::string::npos
-                    || automaticState.campaign_orchestrator->snapshot().plan_bytes
-                        != "Retain completed work; continue the next step."
-                    || automaticState.campaign_orchestrator->snapshot().source_turns_since_review
-                        != automaticState.sandbox_source_turns_since_review
+                if (planned.model_prompt.find("EPOCH_SELF_ITERATION_PROPOSAL_V2") == std::string::npos
+                    || planned.model_prompt.find("EPOCH_SELF_ITERATION_PLAN_V2") != std::string::npos
+                    || planned.model_prompt.find(automaticState.source_context_evidence) == std::string::npos
                     || automaticState.campaign_pending_operation->kind()
-                        != ai::self_iteration_orchestrator::OperationKind::model_proposal)
+                        != ai::self_iteration_orchestrator::OperationKind::model_proposal
+                    || automaticState.sandbox_lab_pass_iteration != 1u
+                    || automaticState.campaign_scheduler || automaticState.campaign_supervisor
+                    || (retainedPlan && automaticState.campaign_orchestrator->snapshot().plan_bytes
+                        != "Retain completed work; continue the next step.")
+                    || (!retainedPlan && planned.model_prompt.find("OPERATOR_OBJECTIVE_HANDOFF") == std::string::npos)
+                    || (reviewDue && planned.model_prompt.find("READ admitted: exact fixture value") == std::string::npos))
                     return failed(__LINE__);
                 const auto plannedState = automaticState.campaign_orchestrator->snapshot().state_sha256;
                 if (automatic.advance_source_iteration(automaticInput).action != HostAction::none
                     || automaticState.campaign_orchestrator->snapshot().state_sha256 != plannedState)
                     return failed(__LINE__);
+
+                if (scenario == 0u)
+                {
+                    trace.stage = "redundant campaign reads retain residency and pending operation";
+                    auto repeatedInput = automaticInput;
+                    repeatedInput.latest_raw_model_reply =
+                        "EPOCH_SOURCE_CONTEXT_REQUEST_V1\nreason: Recheck the reviewed value\n"
+                        "path_count: 1\npath: " + reviewedPath + "\nend_request\n";
+                    const auto retainedContext = automaticState.source_context_evidence;
+                    const auto retainedOperation = automaticState.campaign_pending_operation->operation_id();
+                    const auto redundant = automatic.stage_latest_model_proposal(repeatedInput);
+                    if (redundant.action != HostAction::request_model_source_proposal
+                        || automaticState.generation != currentGeneration
+                        || automaticState.cumulative_source_workspace.stagnant_rounds() != 1u
+                        || automaticState.source_context_evidence != retainedContext
+                        || automaticState.campaign_orchestrator->snapshot().state_sha256 != plannedState
+                        || !automaticState.campaign_pending_operation
+                        || automaticState.campaign_pending_operation->operation_id() != retainedOperation)
+                        return failed(__LINE__);
+                    const auto stoppedRead = automatic.stage_latest_model_proposal(repeatedInput);
+                    if (stoppedRead.action != HostAction::none
+                        || !automatic.sandbox_session_failed()
+                        || automaticState.cumulative_source_workspace.stagnant_rounds() != 2u
+                        || automaticState.source_context_evidence != retainedContext)
+                        return failed(__LINE__);
+                }
 
                 const auto stopped = automaticState.request_session_stop("Stop the pending plan.");
                 if (stopped.action != HostAction::cancel_model_source_request
@@ -9143,6 +9857,11 @@ namespace epochengine::editor_ai_development_panel
             if (fixtureError)
                 return false;
             trace.stage = "campaign materialization and reviewed plan";
+            if (!writeFixtureSource(
+                    (std::filesystem::path{localOpenState.workspace_root} / reviewedPath)
+                        .lexically_relative(fixture.path).generic_string(),
+                    readFixtureSource(fixture.path / reviewedPath)))
+                return failed(__LINE__);
             const RenderResult workspaceCompleted =
                 localOpen.complete_source_workspace(
                     opened.workspace_generation,
@@ -9567,6 +10286,66 @@ namespace epochengine::editor_ai_development_panel
                 "end_replacement\n"
                 "end_operation\n"
                 "end_proposal\n";
+            // Exercise the operator's direct failure -> correction -> rebuild
+            // path. The larger fixture below also requests extra source, which
+            // refreshes campaign state and can conceal a broken direct retry.
+            {
+                trace.stage = "automatic compiler repair without an intervening source read";
+                Panel directRepair{};
+                auto directInput = localOpenInput;
+                directInput.workspace_id = "direct-compiler-repair";
+                directInput.workspace_root = (fixture.path / directInput.workspace_id).generic_string();
+                auto& directState = *directRepair.implementation_;
+                directState.sandbox_lab_enabled = true;
+                (void)directState.ensure(directInput.workspace_id, directInput.source_snapshot_root,
+                    directInput.workspace_root);
+                directState.development_objective = directInput.development_objective;
+                directState.pending_source_context_paths = {reviewedPath};
+                directState.pending_source_context_objective = directInput.development_objective;
+                const auto shared = directRepair.share_requested_source_context(directInput);
+                const auto candidatePath = std::filesystem::path{directState.workspace_root} / reviewedPath;
+                if (shared.action != HostAction::materialize_source_workspace
+                    || !writeFixtureSource(candidatePath.lexically_relative(fixture.path).generic_string(),
+                        "namespace epochengine::reviewed { int value = 1; }\n"))
+                    return failed(__LINE__);
+                (void)directRepair.complete_source_workspace(directState.generation, true, "Fixture source copied.", 1u, 64u);
+                if (directRepair.advance_source_iteration(directInput).action != HostAction::request_model_source_proposal)
+                    return failed(__LINE__);
+                directInput.latest_raw_model_reply = proposalResponseInput.latest_raw_model_reply;
+                const auto firstBuild = directRepair.stage_latest_model_proposal(directInput);
+                if (firstBuild.action != HostAction::compile_source_workspace)
+                {
+                    logger::get("Engine.Editor.SelfTest").log(logger::LogLevel::Error, firstBuild.status);
+                    return failed(__LINE__);
+                }
+                const auto firstGeneration = directState.generation;
+                const auto repair = directRepair.complete_source_build(firstGeneration, false,
+                    reviewedPath + "(1,1): error C2338: fixture requests value 3\n");
+                if (repair.action != HostAction::request_model_source_proposal
+                    || directState.source_build_pending || directState.generation == firstGeneration
+                    || repair.model_prompt.find("int value = 2;") == std::string::npos)
+                    return failed(__LINE__);
+                auto corrected = proposalResponseInput.latest_raw_model_reply;
+                const std::string before = "|namespace epochengine::reviewed { int value = 1; }";
+                const std::string after = "|namespace epochengine::reviewed { int value = 2; }";
+                corrected.replace(corrected.find(after), after.size(),
+                    "|namespace epochengine::reviewed { int value = 3; }");
+                corrected.replace(corrected.find(before), before.size(), after);
+                directInput.latest_raw_model_reply = std::move(corrected);
+                const auto rebuild = directRepair.stage_latest_model_proposal(directInput);
+                if (rebuild.action != HostAction::compile_source_workspace || !directState.source_build_pending
+                    || readFixtureSource(candidatePath) != "namespace epochengine::reviewed { int value = 3; }\n"
+                    || readFixtureSource(fixture.path / reviewedPath) != "namespace epochengine::reviewed { int value = 1; }\n")
+                {
+                    logger::get("Engine.Editor.SelfTest").log(logger::LogLevel::Error,
+                        "Direct compiler repair: " + rebuild.status);
+                    return failed(__LINE__);
+                }
+                if (directRepair.complete_source_build(firstGeneration, false, "Late previous completion").action
+                    != HostAction::none || !directState.source_build_pending)
+                    return failed(__LINE__);
+            }
+            trace.stage = "campaign proposal response";
             const RenderResult proposalReviewed =
                 localOpen.stage_latest_model_proposal(proposalResponseInput);
             std::string campaignCandidateEvidence{};
@@ -9698,6 +10477,37 @@ namespace epochengine::editor_ai_development_panel
             }
             // The remaining fixture exercises the separate manual review path;
             // the automatic repair dispatcher above already targets the same sandbox.
+            trace.stage = "repair source reselection uses candidate bytes and retained campaign memory";
+            const std::string extraRepairPath = "Engine/src/editor/editor.context_0.cpp";
+            if (!writeFixtureSource(
+                    (std::filesystem::path{failedWorkspace} / extraRepairPath)
+                        .lexically_relative(fixture.path).generic_string(),
+                    "namespace epochengine::repair { int dependency = 7; }\n"))
+                return failed(__LINE__);
+            localOpenState.sandbox_lab_enabled = true;
+            localOpenState.sandbox_lab_plan = planResponseInput.latest_raw_model_reply;
+            auto repairReadInput = localOpenInput;
+            repairReadInput.latest_raw_model_reply =
+                "EPOCH_SOURCE_CONTEXT_REQUEST_V1\nreason: Inspect the candidate and its repair dependency\n"
+                "path_count: 2\npath: " + reviewedPath + "\npath: " + extraRepairPath + "\nend_request\n";
+            const auto repairRead = localOpen.stage_latest_model_proposal(repairReadInput);
+            if (repairRead.action != HostAction::request_model_source_proposal
+                || localOpenState.workspace_root != failedWorkspace
+                || localOpenState.source_repair_attempts != 1u
+                || localOpenState.source_context_evidence.find("int value = 2;") == std::string::npos
+                || localOpenState.source_context_evidence.find("int value = 1;") != std::string::npos
+                || localOpenState.source_context_evidence.find("int dependency = 7;") == std::string::npos
+                || repairRead.model_prompt.find(compilerDiagnostic) == std::string::npos
+                || !localOpenState.campaign_pending_operation
+                || localOpenState.campaign_pending_operation->kind()
+                    != ai::self_iteration_orchestrator::OperationKind::model_proposal
+                || localOpenState.campaign_configuration.authority.root
+                    != std::filesystem::path{failedWorkspace}
+                || localOpenState.campaign_configuration.authority.kind
+                    != ai::iteration_session::SourceAuthorityKind::local_snapshot
+                || readFixtureSource(fixture.path / reviewedPath)
+                    != "namespace epochengine::reviewed { int value = 1; }\n")
+                return failed(__LINE__);
             localOpenState.sandbox_lab_enabled = false;
 
             Input repairProposalInput = localOpenInput;
@@ -9729,16 +10539,23 @@ namespace epochengine::editor_ai_development_panel
                 || !localOpenState.campaign_candidate_ready(
                     repairCandidateEvidence))
             {
-                return false;
+                logger::get("Engine.Editor.SelfTest").log(logger::LogLevel::Error,
+                    "Repair proposal: " + repairProposalReviewed.status
+                        + " | Candidate: " + repairCandidateEvidence,
+                    std::source_location::current());
+                return failed(__LINE__);
             }
             const RenderResult repairedCampaign =
                 localOpenState.approve_campaign_candidate_and_queue_build(
-                    campaignNow + 5u);
+                    logical_time_now().value);
             if (repairedCampaign.action
                     != HostAction::compile_source_workspace
                 || !localOpenState.source_build_pending)
             {
-                return false;
+                logger::get("Engine.Editor.SelfTest").log(logger::LogLevel::Error,
+                    "Repair apply: " + repairedCampaign.status,
+                    std::source_location::current());
+                return failed(__LINE__);
             }
             {
                 std::ifstream repairedSource{repairSource, std::ios::binary};
@@ -9852,7 +10669,7 @@ namespace epochengine::editor_ai_development_panel
                     return false;
             }
             trace.stage = "repair preserves cumulative discovery telemetry";
-            if (localOpenState.source_context_expansions != 7u
+            if (localOpenState.source_context_expansions != 8u
                 || localOpenState.source_path_catalog_evidence != repairCatalog)
             {
                 return false;
@@ -10275,28 +11092,44 @@ namespace epochengine::editor_ai_development_panel
                 != std::vector<std::string>{
                     "Engine/src/renderers/opengl/opengl.context.cpp"})
             return false;
-        // Discovery is cumulative: once exact evidence is retained, repeating
-        // the same navigation request is rejected, and a second stagnant round
-        // stops instead of entering the historical 24-expansion loop.
+        // Repeated selectors reach the byte/residency check: they may restore
+        // compacted evidence or advance a literal query to a later occurrence.
         (void)expandingContextState.cumulative_source_workspace.merge(
             "Engine/src/renderers/opengl/opengl.context.cpp");
         expandingContextState.pending_source_context_paths.clear();
         const auto repeatedContext = expandingContextState.stage_source_reply(
             diagnosticInsufficientInput, revisedSelection, logical_time_now());
-        if (repeatedContext.action != HostAction::request_model_source_proposal
-            || expandingContextState.cumulative_source_workspace.stagnant_rounds() != 1u
-            || !expandingContextState.pending_source_context_paths.empty())
-            return false;
-        const auto stagnantStop = expandingContextState.stage_source_reply(
-            diagnosticInsufficientInput, revisedSelection, logical_time_now());
-        if (stagnantStop.action != HostAction::none
-            || !expandingContext.sandbox_session_failed()
-            || expandingContextState.cumulative_source_workspace.stagnant_rounds() != 2u
-            || stagnantStop.status.find("two searches added no new verified evidence")
-                == std::string::npos)
+        if (repeatedContext.action != HostAction::none
+            || expandingContextState.cumulative_source_workspace.stagnant_rounds() != 0u
+            || expandingContextState.pending_source_context_paths
+                != std::vector<std::string>{"Engine/src/renderers/opengl/opengl.context.cpp"})
             return false;
 
         auto& packetCorrectionState = *packetCorrection.implementation_;
+
+        trace.stage = "necessary source reads remain admitted beyond the implementation reminder";
+        if (!discovery_budget::prioritize_edit(2u, 0u)
+            || !discovery_budget::prioritize_edit(3u, 0u)
+            || !discovery_budget::prioritize_edit(4u, 1u))
+            return false;
+        Panel boundedDiscovery{};
+        auto& boundedState = *boundedDiscovery.implementation_;
+        boundedState.development_objective = "Add a GUI theme variant.";
+        boundedState.sandbox_lab_enabled = true;
+        boundedState.source_path_catalog_evidence =
+            "PATH Engine/src/renderers/opengl/opengl.context.cpp\n";
+        boundedState.cumulative_source_workspace.reset(boundedState.development_objective);
+        for (std::size_t read{}; read < discovery_budget::initial_rounds; ++read)
+            boundedState.cumulative_source_workspace.note_discovery_round(true);
+        const auto overBudget = boundedState.stage_source_reply(
+            diagnosticInsufficientInput, revisedSelection, logical_time_now());
+        if (overBudget.action != HostAction::none
+            || boundedState.model_request_failed
+            || !boundedState.sandbox_lab_enabled
+            || boundedState.pending_source_context_paths
+                != std::vector<std::string>{"Engine/src/renderers/opengl/opengl.context.cpp"})
+            return false;
+
         packetCorrectionState.development_objective =
             "Repair the exact parser implementation.";
         packetCorrectionState.source_context_evidence =
@@ -10769,7 +11602,7 @@ namespace epochengine::editor_ai_development_panel
         {
             gui::property_row("Status", "Idle");
             gui::wrapped_label(
-                "Use Epoch AI and enable Work on Engine. Your next natural-language message becomes the isolated engine objective; no slash command is required.",
+                "Describe the engine change in Epoch AI. Engine Next explicitly targets your next message at engine source; no slash command is required.",
                 width);
         }
 
@@ -10796,7 +11629,7 @@ namespace epochengine::editor_ai_development_panel
             if (state.development_objective.empty())
             {
                 gui::wrapped_label(
-                    "No engine objective is active. Use the Work on Engine switch in Epoch AI and send the change in normal language.",
+                    "No engine objective is active. Use Engine Next in Epoch AI and send the change in normal language.",
                     width);
             }
             else
@@ -11564,12 +12397,22 @@ namespace epochengine::editor_ai_development_panel
                     }
                     if (!state.pending_source_context_paths.empty())
                     {
-                        // The model supplies the complete next working set.
-                        // Appending would silently discard new paths at the
-                        // twelve-file ceiling and replay the same evidence.
-                        std::vector<std::string> expandedPaths =
-                            state.pending_source_context_paths;
-                        auto expandedReads = state.pending_source_context_reads;
+                        // Resolve the read while the previous residency and
+                        // pending campaign still exist. A redundant/failed read
+                        // must retry that operation, not destroy its source or
+                        // start a new campaign that falsely counts progress.
+                        const auto priorRequest = state.campaign_request_digest;
+                        RenderResult expanded = share_requested_source_context(input);
+                        if (expanded.action != HostAction::none)
+                            return expanded;
+                        if (state.campaign_request_digest == priorRequest
+                            || !state.pending_source_context_paths.empty()
+                            || state.model_request_failed)
+                        {
+                            state.model_request_failed = true;
+                            state.sandbox_lab_enabled = false;
+                            return expanded;
+                        }
                         const auto campaignSnapshot =
                             state.campaign_orchestrator->snapshot();
                         state.capture_campaign_result(
@@ -11580,8 +12423,15 @@ namespace epochengine::editor_ai_development_panel
                                     "expand-source-context",
                                     now),
                                 "The model requested a revised source selection; "
-                                "the incomplete campaign is being replaced by a "
-                                "fresh sandbox campaign with the selected scope."));
+                                "the incomplete campaign is being replaced with "
+                                "the admitted scope in the same candidate workspace."));
+                        if (state.campaign_orchestrator->snapshot().phase
+                            != ai::self_iteration_orchestrator::Phase::cancelled)
+                        {
+                            state.model_request_failed = true;
+                            state.sandbox_lab_enabled = false;
+                            return staged;
+                        }
                         const std::string objective =
                             state.development_objective;
                         const std::string sourceRoot = state.source_root;
@@ -11596,8 +12446,9 @@ namespace epochengine::editor_ai_development_panel
                         const auto repairCount = state.source_repair_attempts;
                         const auto repairDiagnostic = state.source_repair_diagnostic;
                         const auto priorCorrections = state.model_reply_corrections;
-                        const std::string selectionReason =
-                            state.pending_source_context_reason;
+                        const auto sourceEvidence = state.source_context_evidence;
+                        const auto baselineEvidence = state.source_baseline_evidence;
+                        const auto evidenceObjective = state.source_context_evidence_objective;
                         const auto provider = state.campaign_provider;
                         const auto priorEvidence =
                             std::move(staged.campaign_evidence);
@@ -11625,9 +12476,12 @@ namespace epochengine::editor_ai_development_panel
                             input.workspace_id,
                             sourceRoot,
                             input.workspace_root,
-                            /*preserveCampaign=*/false,
+                            /*preserveCampaign=*/true,
                             /*reuseWorkspace=*/true,
                             /*snapshotFromWorkspace=*/true);
+                        // The newly admitted source bundle survives the control
+                        // reset; only the superseded campaign is retired.
+                        state.reset_campaign_control();
                         state.sandbox_lab_enabled = true;
                         state.sandbox_parent_root = sandboxParent;
                         state.development_objective = objective;
@@ -11642,30 +12496,17 @@ namespace epochengine::editor_ai_development_panel
                         state.source_repair_attempts = repairCount;
                         state.source_repair_diagnostic = repairDiagnostic;
                         state.model_reply_corrections = priorCorrections;
-                        state.pending_source_context_paths =
-                            std::move(expandedPaths);
-                        state.pending_source_context_reads = std::move(expandedReads);
-                        state.pending_source_context_reason =
-                            selectionReason;
-                        state.pending_source_context_objective = objective;
-                        RenderResult expanded =
-                            share_requested_source_context(input);
+                        state.source_context_evidence = sourceEvidence;
+                        state.source_baseline_evidence = baselineEvidence;
+                        state.source_context_evidence_objective = evidenceObjective;
                         expanded.campaign_evidence.insert(
                             expanded.campaign_evidence.begin(),
                             priorEvidence.begin(),
                             priorEvidence.end());
-                        if (expanded.action != HostAction::none)
-                            return expanded;
-                        if (!state.source_workspace_ready
-                            || state.model_request_failed)
-                        {
-                            state.model_request_failed = true;
-                            state.sandbox_lab_enabled = false;
-                            return expanded;
-                        }
-
+                        // Keep creation on the observed host clock. A future
+                        // timestamp would reject a fast local reply as stale.
                         RenderResult resumed =
-                            state.start_campaign(input, now + 1u);
+                            state.start_campaign(input, now);
                         resumed.campaign_evidence.insert(
                             resumed.campaign_evidence.begin(),
                             expanded.campaign_evidence.begin(),
@@ -11822,14 +12663,16 @@ namespace epochengine::editor_ai_development_panel
             }
         }
         ai::iteration_session::SourceAuthority authority{
-            .kind = input.source_authority_kind == "explicit_checkout"
+            .kind = state.reviewed_source_root() != state.source_root
+                ? ai::iteration_session::SourceAuthorityKind::local_snapshot
+                : input.source_authority_kind == "explicit_checkout"
                 ? ai::iteration_session::SourceAuthorityKind::explicit_checkout
                 : input.source_authority_kind == "local_snapshot"
                     ? ai::iteration_session::SourceAuthorityKind::local_snapshot
                     : input.source_authority_kind == "verified_cache"
                         ? ai::iteration_session::SourceAuthorityKind::verified_cache
                         : ai::iteration_session::SourceAuthorityKind::unavailable,
-            .root = std::filesystem::path{state.source_root},
+            .root = std::filesystem::path{state.reviewed_source_root()},
             .source_version = input.source_authority_version,
             .commit = input.source_authority_commit,
             .receipt_digest = input.source_authority_receipt_digest,
@@ -11844,14 +12687,18 @@ namespace epochengine::editor_ai_development_panel
             return output;
         }
         const auto loaded = load_reviewed_source_context(
-            state.source_root,
+            state.reviewed_source_root(),
             sharedSourcePaths,
             input.architecture_evidence,
             state.development_objective,
             sharedReads,
             state.source_request_evidence_budget_bytes(),
-            pendingWorkspace.ranges(),
-            state.pending_source_context_paths, sharedSourcePaths);
+            // Preserve the actual working set. Cumulative navigation below
+            // still remembers every verified read, but archived bytes must not
+            // automatically re-enter and evict the current edit dependencies.
+            state.resident_source_ranges,
+            state.pending_source_context_paths, sharedSourcePaths, &state.resident_source_ranges,
+            documented_source_ranges(state.reviewed_source_root(), state.development_objective, sharedSourcePaths, state.source_root));
         state.status_message = loaded.status;
         state.source_navigation_fallbacks += loaded.navigation_fallbacks;
         if (loaded.navigation_fallbacks != 0u)
@@ -11883,27 +12730,38 @@ namespace epochengine::editor_ai_development_panel
         }
 
         bool addedSourceEvidence{};
-        for (const auto& slice : loaded.reviewed_slices)
+        bool discoveredSourceEvidence{};
+        for (const auto& range : loaded.verified_ranges)
         {
             // Repacking historical files changes window widths. That is not
             // evidence that this model's requested lookup found anything new.
             if (std::ranges::find(state.pending_source_context_paths,
-                    slice.relative_path) == state.pending_source_context_paths.end())
+                    range.path) == state.pending_source_context_paths.end())
                 continue;
-            // A changed query/line, or a fallback annotation, is not new source.
-            // Bind progress to the bytes actually supplied, not model intent.
-            const auto contentSha = Implementation::digest_text(slice.exact_bytes);
-            const bool alreadyResident = std::ranges::any_of(state.campaign_reviewed_evidence,
-                [&](const auto& prior)
-                {
-                    return prior.project_relative_path == slice.relative_path
-                        && prior.first_line == slice.first_line
-                        && prior.last_line == slice.last_line
-                        && prior.content_sha256 == contentSha;
-                });
-            addedSourceEvidence = pendingWorkspace.remember_evidence(
-                slice.relative_path + "\n" + std::to_string(slice.first_line)
-                + "\n" + contentSha) || !alreadyResident || addedSourceEvidence;
+            // Compare byte coverage, not selector text or excerpt width. A
+            // smaller slice of currently visible source is still redundant;
+            // archived source and changed candidate bytes can be useful again.
+            std::size_t covered{};
+            for (const auto& resident : state.resident_source_ranges)
+            {
+                if (resident.path != range.path
+                    || resident.source_sha256 != range.source_sha256) continue;
+                const auto begin = (std::max)(resident.byte_offset, range.byte_offset);
+                const auto end = (std::min)(resident.byte_offset + resident.byte_count,
+                    range.byte_offset + range.byte_count);
+                if (begin < end) covered += end - begin;
+            }
+            addedSourceEvidence = covered < range.byte_count || addedSourceEvidence;
+            std::size_t previouslyRead{};
+            for (const auto& known : state.cumulative_source_workspace.ranges())
+            {
+                if (known.path != range.path || known.source_sha256 != range.source_sha256) continue;
+                const auto begin = (std::max)(known.byte_offset, range.byte_offset);
+                const auto end = (std::min)(known.byte_offset + known.byte_count,
+                    range.byte_offset + range.byte_count);
+                if (begin < end) previouslyRead += end - begin;
+            }
+            discoveredSourceEvidence = previouslyRead < range.byte_count || discoveredSourceEvidence;
         }
         if (!state.cumulative_source_workspace.reviewed().empty()
             && !addedSourceEvidence)
@@ -11943,7 +12801,9 @@ namespace epochengine::editor_ai_development_panel
             output.status = state.status_message;
             return output;
         }
-        pendingWorkspace.note_discovery_round(addedSourceEvidence);
+        // Restoring a compacted range can be useful once, but it cannot reset
+        // the discovery watchdog forever as two known windows evict each other.
+        pendingWorkspace.note_discovery_round(discoveredSourceEvidence);
         for (std::size_t index{}; index < loaded.resolved_fallbacks.size(); ++index)
         {
             const auto& resolved = loaded.resolved_fallbacks[index];
@@ -11974,6 +12834,7 @@ namespace epochengine::editor_ai_development_panel
                 state.campaign_reviewed_paths.push_back(evidence.project_relative_path);
         state.campaign_reviewed_reads = sharedReads;
         state.resident_source_bytes = loaded.source_bytes;
+        state.resident_source_ranges = loaded.verified_ranges;
         std::size_t archivedRanges{};
         std::size_t archivedBytes{};
         for (const auto& known : state.cumulative_source_workspace.ranges())
@@ -12124,7 +12985,7 @@ namespace epochengine::editor_ai_development_panel
                         slice.relative_path, slice.first_line, slice.last_line, slice.exact_bytes.size(),
                         slice.complete_file ? "Complete file" : "Partial file"));
         }
-        if (addedSourceEvidence) state.no_progress_retries = 0u;
+        if (discoveredSourceEvidence) state.no_progress_retries = 0u;
         state.model_reply_corrections = 0u;
         state.plan_reply_corrections = 0u;
         state.model_reply_correction_diagnostic.clear();
@@ -12135,6 +12996,17 @@ namespace epochengine::editor_ai_development_panel
         state.pending_source_context_reads.clear();
         state.pending_source_context_reason.clear();
         state.pending_source_context_objective.clear();
+        if (state.cumulative_source_workspace.stagnant_rounds()
+            >= Implementation::maximum_stagnant_source_discovery_rounds)
+        {
+            state.model_request_failed = true;
+            state.sandbox_lab_enabled = false;
+            state.status_message = "Source discovery paused: consecutive reads only recycled previously read code. "
+                "The latest exact context, checkpoint and sandbox are preserved. No further model request was queued.";
+            state.emit_iteration_analytics("source_discovery_stagnant", "recycled", "pending");
+            output.status = state.status_message;
+            return output;
+        }
         state.active_domain = input.domain;
         if (!state.source_workspace_ready)
         {

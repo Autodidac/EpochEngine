@@ -12,7 +12,7 @@
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
-      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories);$(MSBuildThisFileDirectory)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories);$(MSBuildThisFileDirectory);$(MSBuildThisFileDirectory)src\ai\native</AdditionalIncludeDirectories>
       <ForcedIncludeFiles>compare;%(ForcedIncludeFiles)</ForcedIncludeFiles>
     </ClCompile>
     <Link>
@@ -47,6 +47,8 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)resource\pch.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)resource\resource.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai.model.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai.native_runtime.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai.voice_runtime.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai.service.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai.response.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\vulkan\vulkan.context_shared.hpp" />
@@ -414,7 +416,6 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.visibility.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\systems.registry.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.runtime.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\core\core.log_headless.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\vulkan\vulkan.dispatch_storage.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\assets\image.stb.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\vulkan\vulkan.context_texture.cpp">
@@ -583,6 +584,43 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\core\core.string.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\core\core.time.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.engine.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.native_runtime.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.voice_runtime_win.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_core_config.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_core_error.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_core_event_bus.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_core_ids.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_core_file_replace_windows.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_core_file_replace_posix.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_model_lm_studio_provider.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_model_runtime_model.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_model_qwen_flash_runtime.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_model_native_model_manager.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_model_internal_model_host.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_model_multiplex_provider.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_models_model_registry.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_residency_model_residency_manager.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_addons_addon_registry.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_controller_architect_controller.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_controller_task_intent.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_learning_learning_service.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_memory_episode_store.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_training_training_service.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_decision_decision_engine.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_workspace_workspace.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_workspace_checkpoint_store.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_process_process.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_process_process_windows.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_process_process_posix.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_tools_tool_registry.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_tools_builtin_tools.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_persistence_session_store.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_agent_context_manager.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_agent_handoff_contract.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_agent_agent_runtime.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_agent_task_scheduler.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_runtime_runtime_host.cpp" />
+
     <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch\epoch.engine.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch\epoch.headers.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\platform\platform.context_epoch.cpp" />

@@ -49,4 +49,8 @@ struct EpochScriptHost
         int axis,
         float amplitude,
         float frequency_hz);
+    int (*arrange_cubes)(void* user_data, unsigned columns,
+        float spacing_x, float spacing_z, float origin_x, float origin_y, float origin_z);
+    int (*attach_cube_oscillators)(void* user_data, unsigned count,
+        int axis, float amplitude, float frequency_hz);
 };

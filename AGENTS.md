@@ -89,11 +89,16 @@
   work runs, offers Cancel for source rebuilds, and shows Restart only after
   verified handoff evidence. The editor must not close itself or claim success
   because a worker merely started.
-- Current development source and public Windows/Linux packaged runtime are
-  `v0.90.35`. Immutable release-source authority is
-  `b9d5f8a18ff045fc957342cba81039cebf31ef08`, published and independently read
-  back on GitHub and Site v123. Exact artifacts, build provenance and terminal
-  publication receipts are in `Changes/release_sync_2026-10-10.md`.
+- Current native development source and Site Windows/Linux packaged runtime are
+  `v0.90.46`, with public Site source authority
+  `9177e8c4d9578f411bd701dffeb461c295148d7b` and Site deployment v124.
+  GitHub remains updater-only `v0.90.36` at
+  `436c96500a13829b00eafd19b7763df7b9c994aa`; do not publish native AI source
+  there without explicit operator authorization. Both channels' public artifact
+  hashes/signatures are verified. Exact receipts:
+  `Changes/release_sync_2026-10-12.md`. Preserve historical `v0.90.35` authority
+  `b9d5f8a18ff045fc957342cba81039cebf31ef08`, GitHub assets and Site v123;
+  its receipts remain `Changes/release_sync_2026-10-10.md`.
   Preserve historical `v0.90.33` at
   `f33d3d6758abf402747870df4f8887e7887a2035` and every older asset/tag.
   Closing delivery docs and later AI source checkpoints do not replace release

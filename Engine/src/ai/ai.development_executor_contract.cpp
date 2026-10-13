@@ -443,10 +443,16 @@ namespace epochengine::ai::development_executor
             constexpr std::string_view module{"module-v1"};
             constexpr std::string_view buildPolicy{"release-symbol-policy-v1"};
             constexpr std::string_view buildProbe{"#pragma once\n// first-party build feature probe\n"};
+            constexpr std::string_view nativeHeader{"#pragma once\ninline constexpr int native_value = 1;\n"};
+            constexpr std::string_view nativeSource{"#include \"ai.backend_fixture.hpp\"\nint native_fixture() { return native_value; }\n"};
+            fs::create_directories(source / "Engine/src/ai/native", error);
+            if (error) return false;
             if (!write(source / "Engine.sln", solution)
                 || !write(source / "Directory.Build.props", buildPolicy)
                 || !write(source / "Directory.Build.targets", buildPolicy)
                 || !write(source / "Engine/src/build/build.cpp_feature_probe.hpp", buildProbe)
+                || !write(source / "Engine/src/ai/native/ai.backend_fixture.hpp", nativeHeader)
+                || !write(source / "Engine/src/ai/native/ai.backend_fixture.cpp", nativeSource)
                 || !write(source / "Engine/build/generated.hpp", "output-cache")
                 || !write(source / "Engine/src/build/cache/generated.hpp", "nested-cache")
                 || !write(
@@ -478,9 +484,10 @@ namespace epochengine::ai::development_executor
                 materializer.materialize(request);
             const std::uint64_t expectedBytes =
                 solution.size() + implementation.size() + module.size()
-                    + 2u * buildPolicy.size() + buildProbe.size();
+                    + 2u * buildPolicy.size() + buildProbe.size()
+                    + nativeHeader.size() + nativeSource.size();
             if (!copied
-                || copied.file_count != 6u
+                || copied.file_count != 8u
                 || copied.total_bytes != expectedBytes
                 || copied.evidence_digest != digest(copied.evidence_manifest)
                 || copied.evidence_manifest.find(
@@ -492,6 +499,8 @@ namespace epochengine::ai::development_executor
                 || read(sandbox / "Directory.Build.props") != buildPolicy
                 || read(sandbox / "Directory.Build.targets") != buildPolicy
                 || read(sandbox / "Engine/src/build/build.cpp_feature_probe.hpp") != buildProbe
+                || read(sandbox / "Engine/src/ai/native/ai.backend_fixture.hpp") != nativeHeader
+                || read(sandbox / "Engine/src/ai/native/ai.backend_fixture.cpp") != nativeSource
                 || fs::exists(sandbox / "Engine/build/generated.hpp")
                 || fs::exists(sandbox / "Engine/src/build/cache/generated.hpp")
                 || read(sandbox / "Engine/src/ai/ai.worker.cpp")

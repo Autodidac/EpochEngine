@@ -1,4 +1,33 @@
+## 0.90.45 Epoch-native AI ownership acceptance (open)
+
+Verify Install Model initializes `%LOCALAPPDATA%/EpochEngine/AI/native`, reports install progress and terminal outcome, then load Qwen Flash on a real Windows/MSVC build. A preinstalled compatible QFR inference worker can be reused; full specialized runtime bootstrap installer and additional model-family adapters remain future work. No writes or deletes in `%LOCALAPPDATA%/EngCoder`; no GPU offload setting changes.
+
+## 0.90.44 Windows build acceptance (open)
+
+Following the successful v0.90.43 EpochEngine library build, rerun MSVC Debug x64 EpochEditor link after removing unused direct zlib linkage. Verify native Qwen Next Flash loader, model residency, chat raw streaming, and sandbox edit/compile after build succeeds. Do not imply a successful native runtime test from a source-level check.
+
 # Epoch Roadmap
+
+## October 11 priority: in-engine agentic AI and reusable model services
+
+**Current behavior is NOT full EngCoder parity.** A 40-minute sixth model
+pass just starting a theme patch is an explicit P0 performance failure.
+The first useful unit must be a genuine sandbox edit, not additional source
+reading. In v0.90.41 a short, selected source-owned task recipe can guide
+first-pass discovery, while distinct activity blocks and a completed-response
+Raw Output inspector improve observability. Their native acceptance is open.
+
+Next required bounded units, in order: real first-patch timing / theme
+end-to-end acceptance; live raw streaming, ordered typed events and durable
+chat history; independently reusable AI core/backends and project SDK; verified
+native Qwen Next Flash backend (no EngCoder web or SDL), then verified
+Qwen3.8 27B, Qwen3.6 27B/35B-A3B and Nemotron 9B adapters, complete agent
+harness/task/subagent/tool parity. Treat offload behavior as **unconfirmed**;
+first display configured/actual values without changing user settings.
+Acceptance and design: `Engine/docs/engine/ai_model_runtime_and_chat_plan.md`.
+Preserve existing D0-D5/P0-P4 missions below; the new work does not cancel
+2D, Extensions, EpochGui or standalone software delivery.
+
 
 This file schedules only unfinished product work. Completed implementation and
 verification history lives in `Changes/changelog.txt` and Git history. The
@@ -446,3 +475,12 @@ cards, docs, checksums, and rollback state all identify the same accepted tree.
   No unverified implementation is erased from the queue as if complete.
 - Use the cross-system architecture review to propose measured improvements,
   not speculative blanket rewrites; put the next bounded change in active_pass.
+
+
+## Epoch 0.90.42 native EngCoder milestone (2026-10-12)
+
+- Embedded the provided EngCoder 0.7.1 C++ sources as a native EpochEngine static-library dependency; the EngCoderServer/Web/SDL applications are not used.
+- Qwen Flash retains its dedicated runtime loader and EngCoder profile; normal GGUF and other models remain separate selectable providers.
+- EpochGui controls native model installation, load/unload and agent routing.
+- Acceptance remains: Windows MSVC Debug/Release builds, loading Qwen Flash on target GPU, streaming/tokens, native self-iteration producing files, and project-level isolation.
+- See `Engine/docs/ai_embedded_engcoder_native.md` for architecture, build, gaps and acceptance tests.

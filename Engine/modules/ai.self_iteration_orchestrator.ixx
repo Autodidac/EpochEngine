@@ -259,6 +259,10 @@ export namespace epochengine::ai::self_iteration_orchestrator
             std::uint64_t now_unix_seconds,
             Limits limits = {});
         [[nodiscard]] Result request_plan(ActionToken action);
+        // Automatic coding may start from the approved operator objective and
+        // retained host checkpoint. This does not fabricate a model reply.
+        [[nodiscard]] Result begin_coding(
+            ActionToken action, std::string_view handoff);
         [[nodiscard]] Result record_plan(
             OperationReceipt receipt,
             std::string_view plan_bytes,
