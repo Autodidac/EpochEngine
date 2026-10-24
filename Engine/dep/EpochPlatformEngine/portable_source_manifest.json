@@ -1,7 +1,7 @@
 {
   "schema": "epoch.portable_source_parity.v1",
   "repository": "Autodidac/EpochPlatformEngine",
-  "upstream_revision": "871d408437ae65116581aaf4e50e21d9b6b65181",
+  "upstream_revision": "46a50542c111eb32ff6b24d6f6c2a30f19bfae6c",
   "scope": [
     "include",
     "modules",
@@ -188,7 +188,7 @@
     },
     {
       "path": "src/runtime_host.cpp",
-      "sha256": "96e28f8c4834d8d3762ae3f901f725d90a2c4349157056216c188e6f5ac7b4ed"
+      "sha256": "894ae59fbc8f7e9965a144640c0f077465f3c00866ba3df36f8f6a0d5c180897"
     },
     {
       "path": "src/runtime_internal.hpp",
@@ -220,7 +220,7 @@
     },
     {
       "path": "tests/platform_tests.cpp",
-      "sha256": "dd894ba2034cb2123c9ff81e30b68d7fb043feb8c808feb639671bf1c559120d"
+      "sha256": "4b671ec760fbf01d3e101baf004febbfef3e7a4e1a0bf33deee976e2fe3021c3"
     },
     {
       "path": "examples/basic_app.cpp",

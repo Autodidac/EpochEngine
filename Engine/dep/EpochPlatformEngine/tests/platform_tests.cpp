@@ -16,8 +16,60 @@ namespace
     }
 }
 
+namespace {
+    using namespace epochengine::platform;
+    Runtime* shutdown_runtime{};
+    std::atomic_bool shutdown_observed{};
+    class ShutdownProbeDriver final : public IPlatformDriver {
+        std::unique_ptr<IPlatformDriver> inner = create_headless_driver();
+    public:
+        DriverKind kind() const noexcept override { return inner->kind(); }
+        std::string_view name() const noexcept override { return inner->name(); }
+        DriverCapabilities capabilities() const noexcept override { return inner->capabilities(); }
+        Status initialize(const DriverInit& init) noexcept override { return inner->initialize(init); }
+        void shutdown() noexcept override {
+            // Driver-thread teardown may still read its owning runtime registry.
+            (void)shutdown_runtime->context_count();
+            inner->shutdown();
+            shutdown_observed.store(true);
+        }
+        Result<NativeWindowHandle> create_window(ContextId id, const WindowDesc& desc) noexcept override { return inner->create_window(id, desc); }
+        void destroy_window(ContextId id) noexcept override { inner->destroy_window(id); }
+        void pump_events(const EventSink& sink) noexcept override { inner->pump_events(sink); }
+        NativeWindowHandle native_handle(ContextId id) const noexcept override { return inner->native_handle(id); }
+        Status set_title(ContextId id, std::string_view title) noexcept override { return inner->set_title(id, title); }
+        Status set_visible(ContextId id, bool visible) noexcept override { return inner->set_visible(id, visible); }
+        Status resize(ContextId id, std::int32_t width, std::int32_t height) noexcept override { return inner->resize(id, width, height); }
+        Status reparent(ContextId id, NativeWindowHandle parent, WindowMode mode) noexcept override { return inner->reparent(id, parent, mode); }
+        void request_close(ContextId id) noexcept override { inner->request_close(id); }
+    };
+    void test_driver_join_releases_registry() {
+        std::jthread watchdog([](std::stop_token stop) {
+            const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+            while (!stop.stop_requested() && std::chrono::steady_clock::now() < deadline)
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            if (!stop.stop_requested()) fail("driver shutdown blocked on runtime registry");
+        });
+        {
+            Runtime probe;
+            shutdown_runtime = &probe;
+            if (!probe.register_driver(DriverKind::headless, +[]() -> std::unique_ptr<IPlatformDriver> { return std::make_unique<ShutdownProbeDriver>(); }))
+                fail("probe driver registration");
+            ContextDesc desc{};
+            desc.driver = DriverKind::headless;
+            desc.thread_policy = ThreadPolicy::dedicated_driver_thread;
+            desc.window.visible = false;
+            if (!probe.create_context(desc)) fail("probe context creation");
+        }
+        watchdog.request_stop();
+        if (!shutdown_observed.load()) fail("driver shutdown was skipped");
+        shutdown_runtime = nullptr;
+    }
+}
+
 int main()
 {
+    test_driver_join_releases_registry();
     using namespace epochengine::platform;
 
     Runtime runtime(RuntimeDesc{
