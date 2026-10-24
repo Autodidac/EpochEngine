@@ -1198,7 +1198,7 @@
     "Tools/build/epoch_package_layout.ps1": "5016fd412e4c96d8def36151430d362af340cab209b7289b7ca2379729401dd7",
     "Tools/build/get_epoch_version.ps1": "ab9f142c3918c4de0dff763f5f9d1114b23996596e9dee8b0d9715472aa4b80f",
     "Tools/build/stage_epoch_linux_release.ps1": "0cbf37195309aaa548ca1ad80a9b7eb458eeeae75b138e8322d201c4b2235255",
-    "Tools/build/stage_epoch_windows_release.ps1": "556177b158d9e16917caf5e769c586b19e0322c7aa62a2a803675ab7a9b05eee",
+    "Tools/build/stage_epoch_windows_release.ps1": "ce482b730fcfb6e5323644b777f7a3c57c210381642adf2de600091ad7929623",
     "Tools/build/verify_epoch_project_source.py": "ff7f785b277c860a794ee7df7bb217e75f28f0a8adfa8a0b5d6fde895be3ec4c",
     "Tools/build/verify_public_source.py": "0bc213a63eca0e1712ebf72702432c7b3904ede125fdf950c7c81c7711370885",
     "Tools/build/write_epoch_build_validation_receipt.ps1": "f5ac4c57780bb3d297699299d80954ba117441d648e87ebd85f598c53bf92843",
