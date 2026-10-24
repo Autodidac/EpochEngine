@@ -30,11 +30,11 @@ HASH_TEXT_SUFFIXES = CPP | {
     '.vcxproj','.filters','.props','.targets','.natvis','.sln','.bat','.cmd',
     '.sh','.in','.yml','.yaml','.toml','.rc','.env','.ini','.cfg','.css','.js',
     '.ts','.tsx','.jsx','.mjs','.cjs','.glsl','.vert','.frag','.geom','.comp',
-    '.hlsl','.metal','.html','.manifest','.gltf',
+    '.hlsl','.metal','.html','.manifest','.gltf','.mm',
 }
 HASH_TEXT_NAMES = {'.gitattributes','.gitignore','.editorconfig','cmakelists.txt',
                    'doxyfile','dockerfile','makefile','gnumakefile','license',
-                   'licence','notice','copying','readme','authors','version'}
+                   'licence','notice','copying','readme','authors','version','release_version'}
 SOURCE_HASH_NORMALIZATION = (
     'Text extensions/basenames listed in Tools/build/verify_public_source.py: '
     'replace CRLF with LF only; preserve BOMs, lone CR and all other bytes. '
