@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-MIT-NoSell
+// Epoch system notes (auto-checked):
+// Epoch Editor: keep editor state and source changes within their owning workflows.
 module;
 
 #include <array>
@@ -188,7 +190,7 @@ export namespace epochengine
 
         // Preserve the old launch id without reopening the authoring editor:
         // Forest Factory now belongs to the standard editor placement portal.
-        if (project_id == "forestfactory")
+        if (project_id == "forestfactory" || project_id == "projectlauncher")
             return &standard_editor_application();
         return nullptr;
     }
@@ -205,11 +207,16 @@ export namespace epochengine
             || !editor_application_supports_surface(application, application.default_surface)
             || scene.owner != application.kind
             || scene.scene_id != application.scene_id
-            || scene.world_name.empty()
-            || scene.entities.empty())
+            || scene.world_name.empty())
         {
             return false;
         }
+
+        // The standard editor's viewport camera is an editor service, not a
+        // generated project entity. An empty authoring workspace is valid.
+        if (scene.entities.empty())
+            return application.kind == EditorApplicationKind::Standard
+                && application.project_id.empty();
 
         std::size_t camera_count = 0u;
         for (std::size_t i = 0u; i < scene.entities.size(); ++i)

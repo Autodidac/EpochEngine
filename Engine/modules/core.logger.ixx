@@ -28,6 +28,8 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
+// Epoch system notes (auto-checked):
+// Epoch Core: preserve engine-defined primitives, APIs and module contracts.
 module;
 
 #include "core.format_text.hpp"
@@ -46,6 +48,16 @@ module;
 #include <unordered_map>
 #include <utility>
 
+#if defined(_WIN32)
+#  ifndef WIN32_LEAN_AND_MEAN
+#    define WIN32_LEAN_AND_MEAN
+#  endif
+#  ifndef NOMINMAX
+#    define NOMINMAX
+#  endif
+#  include <windows.h>
+#endif
+
 export module core.logger;
 
 import core.log;
@@ -53,6 +65,23 @@ import core.time;
 
 export namespace epochengine::logger
 {
+    [[nodiscard]] inline std::filesystem::path default_log_directory()
+    {
+#if defined(_WIN32)
+        // Resolve the actual executable, not the process working directory.
+        // Candidate processes explicitly override this with their private logs.
+        std::wstring executable(32'768u, L'\0');
+        const auto count = ::GetModuleFileNameW(nullptr, executable.data(),
+            static_cast<DWORD>(executable.size()));
+        if (count > 0u && count < executable.size())
+        {
+            executable.resize(count);
+            return std::filesystem::path{executable}.parent_path() / "logs";
+        }
+#endif
+        return std::filesystem::path{"logs"};
+    }
+
     enum class LogLevel : int
     {
         INFO = 0,
@@ -63,7 +92,7 @@ export namespace epochengine::logger
 
     struct LogConfig
     {
-        std::filesystem::path root_dir = "logs";
+        std::filesystem::path root_dir = default_log_directory();
         LogLevel level = LogLevel::INFO;
 
         bool flush_each_write = true;

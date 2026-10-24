@@ -19,8 +19,8 @@
       "name": "vcpkg-windows",
       "hidden": true,
       "generator": "Visual Studio 17 2022",
-      "binaryDir": "${sourceDir}/bin/${presetName}",
-      "installDir": "${sourceDir}/bin/install/${presetName}",
+      "binaryDir": "${sourceDir}/../build/cmake/${presetName}",
+      "installDir": "${sourceDir}/../build/install/cmake/${presetName}",
       "cacheVariables": {
         "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/epoch_vcpkg_toolchain.cmake",
         "VCPKG_FEATURE_FLAGS": "manifests",
@@ -41,8 +41,8 @@
       "displayName": "Linux Debug (vcpkg)",
       "inherits": [ "vcpkg" ],
       "generator": "Ninja",
-      "binaryDir": "${sourceDir}/bin/${presetName}",
-      "installDir": "${sourceDir}/bin/install/${presetName}",
+      "binaryDir": "${sourceDir}/../build/cmake/${presetName}",
+      "installDir": "${sourceDir}/../build/install/cmake/${presetName}",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug"
       },
@@ -70,8 +70,8 @@
       "displayName": "macOS Debug (vcpkg)",
       "inherits": [ "vcpkg" ],
       "generator": "Ninja",
-      "binaryDir": "${sourceDir}/bin/${presetName}",
-      "installDir": "${sourceDir}/bin/install/${presetName}",
+      "binaryDir": "${sourceDir}/../build/cmake/${presetName}",
+      "installDir": "${sourceDir}/../build/install/cmake/${presetName}",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug"
       },
@@ -134,8 +134,8 @@
       "name": "windows-gcc-base",
       "hidden": true,
       "generator": "MinGW Makefiles",
-      "binaryDir": "${sourceDir}/bin/${presetName}",
-      "installDir": "${sourceDir}/bin/install/${presetName}",
+      "binaryDir": "${sourceDir}/../build/cmake/${presetName}",
+      "installDir": "${sourceDir}/../build/install/cmake/${presetName}",
       "cacheVariables": {
         "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/epoch_vcpkg_toolchain.cmake",
         "VCPKG_FEATURE_FLAGS": "manifests",

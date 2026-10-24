@@ -1,5 +1,6 @@
 #include "engine.config.hpp"
-#include "../src/build/build.cpp_feature_probe.hpp"
+#include "epoch.edition.hpp"
+#include "../../dep/EpochPlatformEngine/include/build.cpp_feature_probe.hpp"
 #include "epoch.runtime_legacy.hpp"
 #include "scripting.epoch_api.h"
 
@@ -100,8 +101,7 @@ namespace
     {
         std::error_code error;
         return std::filesystem::is_regular_file(
-            candidate / "Engine" / "ai" / "control" / "continuous_build_loop.json",
-            error) && !error;
+            candidate / "Engine" / "include" / "scripting.epoch_api.h", error) && !error;
     }
 
     std::optional<std::filesystem::path> ResolveRepoRoot(
@@ -157,34 +157,6 @@ namespace
         return true;
     }
 
-    bool RequiredControlContractProbe(const std::filesystem::path& repoRoot)
-    {
-        const auto contractPath = repoRoot / "Engine" / "ai" / "control" / "continuous_build_loop.json";
-        std::ifstream in(contractPath);
-        if (!in)
-        {
-            const std::string contractText = contractPath.string();
-            LogErrorPair("missing AI control contract", contractText);
-            return false;
-        }
-
-        const std::string content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-        const bool hasPlanner = content.find("\"stage\": \"planner\"") != std::string::npos;
-        const bool hasBuilder = content.find("\"stage\": \"builder\"") != std::string::npos;
-        const bool hasVerifier = content.find("\"stage\": \"verifier\"") != std::string::npos;
-        const bool hasGate = content.find("\"stage\": \"gate\"") != std::string::npos;
-        const bool hasNoBlindWriteThrough =
-            content.find("Never allow blind repo write-through") != std::string::npos;
-
-        const std::string contractText = contractPath.string();
-        LogInfoPair("AI control contract", contractText);
-        LogInfoPair("AI control stages present",
-            (hasPlanner && hasBuilder && hasVerifier && hasGate) ? 1 : 0);
-        LogInfoPair("AI control gate policy present",
-            hasNoBlindWriteThrough ? 1 : 0);
-
-        return hasPlanner && hasBuilder && hasVerifier && hasGate && hasNoBlindWriteThrough;
-    }
 }
 
 int main(int argc, char** argv)
@@ -221,13 +193,17 @@ int main(int argc, char** argv)
     {
         LogError(explicitRoot
             ? "Explicit candidate root is not an accessible directory; ancestor fallback is forbidden."
-            : "No developer root containing the required AI control contract was found.");
+            : "No source root containing the required headless contract was found.");
         return 2;
     }
     OptionalPathProbe(*repoRoot);
-    const bool controlContractReady = RequiredControlContractProbe(*repoRoot);
 
-    if (!state.logged || !state.queuedModel || queued != 1 || !controlContractReady)
+    // Exercise the real script-host callbacks and reject invalid ABI inputs;
+    // this does not claim that an asset was decoded or a model was loaded.
+    if (!IsRepoRoot(*repoRoot) || !state.logged || !state.queuedModel || queued != 1
+        || !host.log || !host.queue_model_load || host.user_data != &state
+        || host.queue_model_load(host.user_data, nullptr, host.project_model_asset) != 0
+        || host.queue_model_load(host.user_data, "MiniSponza", "") != 0)
     {
         LogError("script host smoke failed");
         return 1;

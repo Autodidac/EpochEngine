@@ -1,0 +1,150 @@
+name: Public source checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: epoch-public-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CMAKE_BUILD_PARALLEL_LEVEL: 2
+  VCPKG_MAX_CONCURRENCY: 2
+  VCPKG_DISABLE_METRICS: 1
+
+jobs:
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify public edition and source content
+        run: python Tools/build/verify_public_source.py
+      - name: Install build tools
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -m pip install cmake==4.4.0
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $toolRoot = Join-Path $PWD 'build/public-ci/tools'
+          New-Item -ItemType Directory -Force -Path $toolRoot | Out-Null
+          $archive = Join-Path $toolRoot 'ninja-win.zip'
+          Invoke-WebRequest 'https://github.com/ninja-build/ninja/releases/download/v1.13.2/ninja-win.zip' -OutFile $archive
+          $expected = '55d3d891e8fc6c8ad7f92e172125319896761e57c5125944613d9bbfa5b9374387e9fc1468ad5bcb31464f43fb1c455ea251343942595f42955dc67090aa12ee'
+          if ((Get-FileHash -Algorithm SHA512 $archive).Hash.ToLowerInvariant() -cne $expected) { throw 'Ninja checksum mismatch' }
+          Expand-Archive -LiteralPath $archive -DestinationPath $toolRoot -Force
+          Add-Content -Path $env:GITHUB_PATH -Value $toolRoot
+      - name: Prepare manifest-pinned dependencies
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $baseline = (Get-Content Engine/vcpkg.json -Raw | ConvertFrom-Json).'builtin-baseline'
+          if ($baseline -cnotmatch '^[0-9a-f]{40}$') { throw 'Invalid dependency baseline' }
+          $root = Join-Path $PWD 'build/public-ci/vcpkg'
+          git init $root
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git -C $root remote add origin https://github.com/microsoft/vcpkg.git
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git -C $root fetch --depth 1 origin $baseline
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git -C $root checkout --detach FETCH_HEAD
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & "$root/bootstrap-vcpkg.bat" -disableMetrics
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "EPOCH_VCPKG_ROOT=$root" | Add-Content -Path $env:GITHUB_ENV
+      - name: Build actual Debug engine and CPU target
+        shell: pwsh
+        run: |
+          cmake --preset windows-msvc-debug "-DVCPKG_INSTALLED_DIR=$PWD/Engine/vcpkg_installed" -DBUILD_TESTING=ON
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cmake --build --preset windows-msvc-debug --target epoch epoch_ci_headless --parallel 2
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Run build-safe contracts only
+        shell: pwsh
+        run: |
+          $env:PATH = "$PWD/Engine/vcpkg_installed/x64-windows/debug/bin;$PWD/Engine/vcpkg_installed/x64-windows/bin;$env:PATH"
+          ctest --preset windows-msvc-debug --output-on-failure -R '^(epoch_engine_contract|epoch_ci_headless)$'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+  linux:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 180
+    env:
+      DISPLAY: ''
+      WAYLAND_DISPLAY: ''
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify public edition and source content
+        run: python Tools/build/verify_public_source.py
+      - name: Install native build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential curl git unzip xz-utils pkg-config autoconf autoconf-archive automake libtool \
+            libasound2-dev libdbus-1-dev libibus-1.0-dev libegl1-mesa-dev libgl1-mesa-dev libvulkan-dev \
+            libudev-dev libx11-dev libxcursor-dev libxext-dev libxft-dev libxinerama-dev libxi-dev libxrandr-dev \
+            libxrender-dev libxtst-dev libwayland-dev libxkbcommon-dev wayland-protocols xvfb xauth libgl1-mesa-dri mesa-utils
+      - name: Prepare manifest-pinned dependencies
+        run: |
+          set -euo pipefail
+          baseline="$(python -c 'import json; print(json.load(open("Engine/vcpkg.json"))["builtin-baseline"])')"
+          [[ "$baseline" =~ ^[0-9a-f]{40}$ ]]
+          root="$GITHUB_WORKSPACE/build/public-ci/vcpkg"
+          git init "$root"
+          git -C "$root" remote add origin https://github.com/microsoft/vcpkg.git
+          git -C "$root" fetch --depth 1 origin "$baseline"
+          git -C "$root" checkout --detach FETCH_HEAD
+          "$root/bootstrap-vcpkg.sh" -disableMetrics
+          echo "EPOCH_VCPKG_ROOT=$root" >> "$GITHUB_ENV"
+      - name: Build with production pinned Clang bootstrap
+        run: |
+          set -euo pipefail
+          bash Engine/build.sh --bootstrap-current-toolchain --tool-cache-root "$GITHUB_WORKSPACE/build/public-ci/tools" \
+            --vcpkg-root "$EPOCH_VCPKG_ROOT" clang Release -- -DBUILD_TESTING=ON
+      - name: Run build-safe contracts only
+        run: |
+          set -euo pipefail
+          build_dir="$GITHUB_WORKSPACE/build/cmake/linux/public/Clang-Release"
+          cache="$build_dir/CMakeCache.txt"
+          cmake_bin="$(sed -n 's/^CMAKE_COMMAND:INTERNAL=//p' "$cache")"
+          test -x "$cmake_bin"
+          "$(dirname "$cmake_bin")/ctest" --test-dir "$build_dir" --output-on-failure \
+            -R '^(epoch_engine_contract|epoch_ci_headless)$'
+      - name: Stage and audit software OpenGL Linux runtime
+        id: package
+        run: |
+          set -euo pipefail
+          version="$(pwsh -NoProfile -File Tools/build/get_epoch_version.ps1)"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a pwsh -NoProfile -File Tools/build/stage_epoch_linux_release.ps1 -Configuration Clang-Release
+          python Tools/build/verify_public_source.py
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Return audited Linux runtime only
+        uses: actions/upload-artifact@v4
+        with:
+          name: epoch-public-linux-runtime
+          if-no-files-found: error
+          retention-days: 7
+          include-hidden-files: false
+          path: |
+            build/packages/public/v${{ steps.package.outputs.version }}/epoch_linux_x64_v${{ steps.package.outputs.version }}.tar.gz
+            build/packages/public/v${{ steps.package.outputs.version }}/epoch_linux_x64_v${{ steps.package.outputs.version }}.tar.gz.sha256
+            build/packages/public/v${{ steps.package.outputs.version }}/epoch_linux_x64_v${{ steps.package.outputs.version }}.tar.gz.build-validation.json

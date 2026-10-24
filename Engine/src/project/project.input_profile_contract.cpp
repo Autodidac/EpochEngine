@@ -12,11 +12,14 @@ module;
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <source_location>
 #include <string>
 #include <system_error>
 #include <vector>
 
 module project.input_profile;
+
+import core.logger;
 
 namespace epochengine::project_input
 {
@@ -726,6 +729,9 @@ namespace epochengine::project_input
         if (seal_profile_source(artifactAheadSource, limits)
                 != ValidationCode::ready)
         {
+            logger::get("Engine.Editor.SelfTest").log(logger::LogLevel::Error,
+                "input profile artifact-ahead fixture: source seal failed",
+                std::source_location::current());
             return ContractFailure::paired_artifact_ahead_repair;
         }
         const CompiledProfileResult artifactAheadCompiled = compile_profile(
@@ -735,6 +741,10 @@ namespace epochengine::project_input
             || !artifactAheadStore.publish_artifact(
                 artifactAheadCompiled.artifact))
         {
+            logger::get("Engine.Editor.SelfTest").log(logger::LogLevel::Error,
+                "input profile artifact-ahead fixture: initial publication failed; compiled="
+                    + std::to_string(static_cast<bool>(artifactAheadCompiled)),
+                std::source_location::current());
             return ContractFailure::paired_artifact_ahead_repair;
         }
         const auto repairedPair =
@@ -751,6 +761,15 @@ namespace epochengine::project_input
             || !repairedArtifact
             || repairedArtifact.artifact != modifiedArtifact.artifact)
         {
+            logger::get("Engine.Editor.SelfTest").log(logger::LogLevel::Error,
+                "input profile artifact-ahead repair: pair=" + std::string{store_code_name(repairedPair.code)}
+                    + " source=" + std::string{store_code_name(repairedPair.source.code)}
+                    + " artifact=" + std::string{store_code_name(repairedPair.artifact.code)}
+                    + " reopened_source=" + std::string{store_code_name(repairedSource.code)}
+                    + " source_matches=" + std::to_string(repairedSource.source == modified)
+                    + " reopened_artifact=" + std::string{store_code_name(repairedArtifact.code)}
+                    + " artifact_matches=" + std::to_string(repairedArtifact.artifact == modifiedArtifact.artifact),
+                std::source_location::current());
             return ContractFailure::paired_artifact_ahead_repair;
         }
 
@@ -764,7 +783,12 @@ namespace epochengine::project_input
         std::error_code partialError{};
         fs::create_directories(partialStore.artifact_path(), partialError);
         if (partialError)
+        {
+            logger::get("Engine.Editor.SelfTest").log(logger::LogLevel::Error,
+                "input profile partial-save fixture directory: " + partialError.message(),
+                std::source_location::current());
             return ContractFailure::paired_partial_save_reopen;
+        }
         {
             std::ofstream blocker{
                 partialStore.artifact_path() / "keep",
@@ -806,6 +830,18 @@ namespace epochengine::project_input
                 != beforePartial.bytes_written
                     + partialPair.source.serialized_bytes)
         {
+            logger::get("Engine.Editor.SelfTest").log(logger::LogLevel::Error,
+                "input profile partial-save: pair=" + std::string{store_code_name(partialPair.code)}
+                    + " source=" + std::string{store_code_name(partialPair.source.code)}
+                    + " artifact=" + std::string{store_code_name(partialPair.artifact.code)}
+                    + " reopened=" + std::string{store_code_name(reopenedPartialSource.code)}
+                    + " source_matches=" + std::to_string(reopenedPartialSource.source == modified)
+                    + " partial_saves=" + std::to_string(afterPartial.paired_partial_saves)
+                    + " rejected=" + std::to_string(afterPartial.rejected_operations)
+                    + " bytes_delta=" + std::to_string(afterPartial.bytes_written - beforePartial.bytes_written)
+                    + " source_bytes=" + std::to_string(partialPair.source.serialized_bytes)
+                    + " path=" + partialStore.artifact_path().string(),
+                std::source_location::current());
             return ContractFailure::paired_partial_save_reopen;
         }
 

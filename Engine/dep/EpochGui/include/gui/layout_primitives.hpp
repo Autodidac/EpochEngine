@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MPL-2.0
 #pragma once
 
 #include "floating_window.hpp"
@@ -6,6 +7,27 @@
 
 namespace epochengine::gui_lib
 {
+    // Vertical scrollbar geometry shared by scroll areas and text/chat views.
+    struct ScrollbarLayoutOptions
+    {
+        Rect track{};
+        float content_extent{};
+        float scroll_offset{};
+        float minimum_thumb_extent{ 18.0f };
+    };
+
+    struct ScrollbarLayout
+    {
+        Rect track{};
+        Rect thumb{};
+        float maximum_scroll_offset{};
+        float scroll_offset{};
+    };
+
+    [[nodiscard]] ScrollbarLayout make_scrollbar_layout(const ScrollbarLayoutOptions& options) noexcept;
+    [[nodiscard]] float scrollbar_grab_offset(const ScrollbarLayout& layout, float pointer_y, bool thumb_hovered) noexcept;
+    [[nodiscard]] float scrollbar_offset_from_pointer(const ScrollbarLayout& layout, float pointer_y, float grab_offset) noexcept;
+
     enum class SplitterAxis : std::uint8_t
     {
         vertical,

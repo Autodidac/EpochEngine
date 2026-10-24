@@ -58,6 +58,7 @@ module;
 // OpenGL basic typedefs (GLuint, GLint, etc.)
 // IMPORTANT: do NOT include GL/wglext.h here.
 #   include <glad/glad.h>
+#   include "../src/renderers/opengl/opengl.frame_admission.hpp"
 
 #if defined(__linux__)
 #   include <X11/Xlib.h>
@@ -133,6 +134,7 @@ export namespace epochengine::openglstate
         timing::Timer pollTimer = timing::createTimer(1.0);
         timing::Timer fpsTimer = timing::createTimer(1.0);
         int frameCount = 0;
+        epochengine::openglcontext::frame_admission::State frameAdmission{};
 
         // GL objects / uniform locations
         GLuint shader = 0;
@@ -143,6 +145,12 @@ export namespace epochengine::openglstate
         GLuint vbo = 0;
         GLuint ebo = 0;
         GLuint fbo = 0;
+        // Owned by this native context, separate from the immediate quad.
+        GLuint spriteStreamVao = 0;
+        GLuint spriteStreamVbo = 0;
+        bool spriteStreamUnavailable = false;
+        std::uint64_t guiSpritesSubmitted = 0;
+        std::uint64_t guiDrawCallsSubmitted = 0;
 
         GLuint sceneShader = 0;
         GLint sceneMvpLoc = -1;

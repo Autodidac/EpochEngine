@@ -28,6 +28,8 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
+// Epoch system notes (auto-checked):
+// Epoch Context: window/context state, dispatch and input ownership remain scoped.
  // no graphics operations context for testing and driverless engine usage.
 // a test framework can be launched from here to automate build testing.
 

@@ -28,6 +28,8 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
+// Epoch system notes (auto-checked):
+// Epoch Context: window/context state, dispatch and input ownership remain scoped.
 module;
 
 #include "core.format_text.hpp"
@@ -325,6 +327,10 @@ namespace epochengine::raylibcontext
                 }
             }
 
+            // Standalone GLFW windows have no Epoch ChildProc/DockableProc.
+            // Bind the same per-context input adapter after publishing the live
+            // HWND identity; docked windows already carrying it are ignored.
+            epochengine::core::MultiContextManager::AttachBackendInputAdapter(raylibHwnd);
             epochengine::core::RequestActiveParentLayout();
         }
 

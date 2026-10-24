@@ -1,4 +1,6 @@
 // Epoch Engine AI runtime - SPDX-License-Identifier: LicenseRef-MIT-NoSell
+// Epoch system notes (auto-checked):
+// Epoch AI: preserve model selection, candidate isolation and host verification gates.
 #include "ai.backend_core_config.hpp"
 
 #include <algorithm>
@@ -131,7 +133,7 @@ namespace {
         "C++ Addon",
         "C++23 implementation, compiler diagnostics, systems code, API usage, and focused code review",
         "75M-250M",
-        "You are the C++23 specialist inside Epoch AI. Analyze only the focused problem you are given. "
+        "You are the Assistant's C++23 specialist. Analyze only the focused problem you are given. "
         "Prefer modern, safe, efficient, cross-platform C++23. Identify exact compiler/runtime issues and return concise advisory guidance or a concrete implementation approach. "
         "Do not claim to have edited files or run tools.",
         {"c++", "cpp", "cmake", "compiler", "compile", "template", "constexpr", "std::", "msvc", "clang", "gcc", ".hpp", ".cpp"}));
@@ -140,7 +142,7 @@ namespace {
         "Documentation Addon",
         "technical documentation, API contracts, specifications, and repository documentation extraction",
         "50M-150M",
-        "You are the documentation specialist inside Epoch AI. Extract constraints, APIs, contracts, and contradictions from the supplied material. "
+        "You are the Assistant's documentation specialist. Extract constraints, APIs, contracts, and contradictions from the supplied material. "
         "Return only facts relevant to the core agent's task and clearly mark uncertainty. Do not invent undocumented behavior.",
         {"documentation", "docs", "readme", "api", "manual", "spec", "protocol", "reference", "agents.md"}));
     addons.push_back(make_addon(
@@ -148,7 +150,7 @@ namespace {
         "Planning Addon",
         "task decomposition, architecture sequencing, implementation planning, and risk identification",
         "50M-150M",
-        "You are the planning specialist inside Epoch AI. Decompose the requested work into the fewest coherent implementation steps, identify dependencies and verification points, "
+        "You are the Assistant's planning specialist. Decompose the requested work into the fewest coherent implementation steps, identify dependencies and verification points, "
         "and return a compact plan to the core agent. Do not perform the work or invent repository facts.",
         {"plan", "architecture", "design", "refactor", "roadmap", "milestone", "sequence", "strategy", "restructure"}));
     addons.push_back(make_addon(
@@ -156,7 +158,7 @@ namespace {
         "Tool-Use Addon",
         "tool selection, structured tool arguments, command construction, and constrained action planning",
         "50M-150M",
-        "You are the structured tool-use specialist inside Epoch AI. Given a task and available context, recommend the smallest safe tool action and exact structured arguments. "
+        "You are the Assistant's structured tool-use specialist. Given a task and available context, recommend the smallest safe tool action and exact structured arguments. "
         "Never claim the action ran. Avoid shell pipelines and hidden side effects.",
         {"tool", "json", "arguments", "command", "execute", "build", "test", "search", "patch", "workspace"}));
     addons.push_back(make_addon(
@@ -164,7 +166,7 @@ namespace {
         "Context Reranker",
         "ranking retrieved context and selecting the smallest evidence set worth keeping active",
         "20M-100M",
-        "You are the context reranking specialist inside Epoch AI. Rank the supplied evidence by relevance to the task and return only the smallest high-value subset with short reasons. "
+        "You are the Assistant's context reranking specialist. Rank the supplied evidence by relevance to the task and return only the smallest high-value subset with short reasons. "
         "Do not solve the task itself.",
         {"rerank", "retrieval", "context", "relevant", "evidence", "search results", "which files"}));
     return addons;
@@ -185,7 +187,7 @@ void set_addon_model(std::vector<AddonConfig>& addons, std::string_view id, std:
         .model = std::move(model),
         .purpose = "custom advisory specialist",
         .recommended_size = "task dependent",
-        .system_prompt = "You are a narrow advisory specialist inside Epoch AI. Return concise evidence to the core agent and do not claim tool execution.",
+        .system_prompt = "You are the Assistant's narrow advisory specialist. Return concise evidence to the core agent and do not claim tool execution.",
         .triggers = {std::string{id}},
     });
 }
@@ -225,7 +227,7 @@ Config Config::from_environment() {
     config.controller_model = product_environment_value(
         "ARCHITECT_MODEL",
         product_environment_value("CONTROLLER_MODEL", product_environment_value("ROUTER_MODEL")));
-    config.controller_enabled = truthy(product_environment_value("CONTROLLER_ENABLED", "true"));
+    config.controller_enabled = truthy(product_environment_value("CONTROLLER_ENABLED", "false"));
     config.router_model = product_environment_value("ROUTER_MODEL", config.controller_model);
     config.addon_auto_route = truthy(product_environment_value(
         "ADDON_AUTO_ROUTE", product_environment_value("EXPERT_AUTO_ROUTE", "true")));
@@ -370,12 +372,7 @@ Config Config::from_environment() {
     config.learning_root = product_environment_value(
         "LEARNING_ROOT",
         (config.data_root / "learning").string());
-    config.training_backend = product_environment_value(
-        "TRAINING_BACKEND",
-        (config.workspace / "projects" / "native" / "resources" / "training" / "model_worker.py").string());
     config.python_executable = product_environment_value("PYTHON", config.python_executable);
-    config.training_enabled = truthy(product_environment_value("TRAINING_ENABLED", "true"));
-    config.training_preempt_for_inference = truthy(product_environment_value("TRAINING_PREEMPT_FOR_INFERENCE", "true"));
     const auto vram_budget = product_environment_value("VRAM_BUDGET_GIB");
     if (!vram_budget.empty()) {
         try { config.vram_budget_gib = std::max(0.5, std::stod(vram_budget)); } catch (...) {}

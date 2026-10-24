@@ -1,20 +1,74 @@
 // Epoch Engine AI runtime - SPDX-License-Identifier: LicenseRef-MIT-NoSell
+// Epoch system notes (auto-checked):
+// Epoch AI: preserve model selection, candidate isolation and host verification gates.
 #pragma once
 
 #include <cstdint>
+#include <array>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <string_view>
+
+#include "../ai.native_multimodel_gpu_budget.hpp"
 
 #include <nlohmann/json.hpp>
 
 namespace epoch_ai::model {
 
-// Slider 100% is deliberately limited to 60% of the former layer-offload
-// range. This is a limit on model layers, not on total GPU memory usage.
-inline constexpr std::uint32_t gpu_offload_legacy_ceiling_percent = 60U;
-inline constexpr std::uint32_t gpu_offload_default_percent = 50U;
-inline constexpr std::uint32_t runtime_profile_revision = 9U;
+// Use only a unique, already-installed sidecar beside this model or inside
+// its exact Hugging Face snapshot. Never download or guess from another repo.
+[[nodiscard]] inline std::filesystem::path matching_cached_vision_projector(
+    const std::filesystem::path& model)
+{
+    if (model.empty()) return {};
+    const auto folder = model.parent_path();
+    const auto snapshot = folder.parent_path();
+    const std::array folders{folder,
+        snapshot.parent_path().filename() == "snapshots" ? snapshot : std::filesystem::path{}};
+    std::filesystem::path found;
+    for (const auto& directory : folders)
+    {
+        if (directory.empty()) continue;
+        std::error_code ec;
+        std::size_t visited{};
+        for (std::filesystem::directory_iterator it{directory, ec}, end;
+            !ec && it != end && visited++ < 128u; it.increment(ec))
+        {
+            const auto name = it->path().filename().string();
+            if (!name.starts_with("mmproj") || !name.ends_with(".gguf")) continue;
+            if (!it->is_regular_file(ec) || ec) return {};
+            const auto bytes = it->file_size(ec);
+            if (ec || bytes == 0u) return {};
+            if (!found.empty() && found != it->path()) return {};
+            found = it->path();
+        }
+        if (ec || visited >= 128u) return {};
+    }
+    return found;
+}
+
+// The serving runtime advertises loaded image support independently of a
+// model's name/family. Missing or malformed metadata never confirms vision.
+[[nodiscard]] inline std::optional<bool> runtime_image_input_capability(const nlohmann::json& properties)
+{
+    if (!properties.is_object() || !properties.contains("modalities")) return {};
+    const auto& modalities = properties.at("modalities");
+    if (!modalities.is_object() || !modalities.contains("vision")
+        || !modalities.at("vision").is_boolean()) return {};
+    return modalities.at("vision").get<bool>();
+}
+
+// All native models use their layer-count hint: slider 0..100 maps to
+// 0..model layers, with automatic VRAM and cohort limits. This is NOT a
+// percentage of VRAM. Multi-model cohorts additionally cap weight budgets.
+inline constexpr std::uint32_t gpu_offload_maximum_layers =
+    epochengine::ai::native_runtime::gpu_budget::maximum_gpu_layers;
+// The former scale belongs only to migration of old manifests; do not use
+// it to calculate any new model's layer count.
+inline constexpr std::uint32_t gpu_offload_legacy_ceiling_percent = 70U;
+inline constexpr std::uint32_t gpu_offload_default_percent = 100U;
+inline constexpr std::uint32_t runtime_profile_revision = 15U;
 
 enum class RuntimeKind {
     internal_keymaker,
@@ -51,6 +105,8 @@ struct RuntimeModelProfile {
     std::string runtime_policy{"recommended"};
     std::uint32_t gpu_offload_percent{gpu_offload_default_percent};
     std::uint32_t gpu_layer_count_hint{48};
+    // Transient per-launch VRAM safeguard; never persisted to manifest JSON.
+    bool multimodel_memory_saver{false};
 
     // Context / concurrency. Qwen3.8-Flash-Next is 262,144 native; Epoch AI's
     // recommended 5080/64 GiB profile starts at 81,920 with one slot so the
@@ -105,8 +161,8 @@ struct RuntimeModelProfile {
 [[nodiscard]] std::string_view to_string(ModelSourceKind value) noexcept;
 [[nodiscard]] std::string runtime_model_uri(const RuntimeModelProfile& profile);
 [[nodiscard]] std::uint32_t effective_context_tokens(const RuntimeModelProfile& profile) noexcept;
-// Resolve llama.cpp -ngl. The 0..100 user scale covers only 0..60% of the
-// former layer range; even literal overrides/all are capped at that ceiling.
+// Resolve llama.cpp -ngl. The slider uses the model layer-count hint; automatic
+// runtime resolution additionally applies weight/VRAM limits.
 [[nodiscard]] std::string effective_gpu_layers(const RuntimeModelProfile& profile);
 [[nodiscard]] nlohmann::json to_json(const RuntimeModelProfile& profile);
 [[nodiscard]] RuntimeModelProfile runtime_model_from_json(const nlohmann::json& value);

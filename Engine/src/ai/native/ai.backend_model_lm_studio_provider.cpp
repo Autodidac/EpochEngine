@@ -2,6 +2,8 @@
 // Windows headers may define function-like min/max macros. The embedded
 // provider uses std::min, std::max and numeric_limits<T>::max(); do not let
 // those macros rewrite standard C++ library calls during an MSVC build.
+// Epoch system notes (auto-checked):
+// Epoch AI: preserve model selection, candidate isolation and host verification gates.
 #if defined(_WIN32)
 #  ifndef WIN32_LEAN_AND_MEAN
 #    define WIN32_LEAN_AND_MEAN
@@ -13,6 +15,7 @@
 
 #include "ai.backend_model_lm_studio_provider.hpp"
 #include "ai.backend_core_ids.hpp"
+#include "ai.backend_model_tool_arguments.hpp"
 
 #include <curl/curl.h>
 
@@ -206,6 +209,7 @@ struct StreamedToolCall {
     std::string arguments;
     std::size_t emitted_argument_bytes{};
     bool announced{};
+    ToolArgumentGuard argument_guard{};
 };
 
 void announce_tool(StreamedToolCall& call, std::size_t index, const StreamCallback& callback) {
@@ -305,7 +309,10 @@ void consume_chat_data(ChatStreamState& state, std::string_view payload) {
             if (function.contains("arguments") && function["arguments"].is_string()) {
                 const auto fragment = function["arguments"].get<std::string>();
                 call.arguments += fragment;
-                if (call.announced && state.callback && !fragment.empty()) {
+                // Some local providers deliver tool identity after argument
+                // bytes. Display/audit those bytes immediately; announcing a
+                // tool is metadata, never permission to execute it.
+                if (state.callback && !fragment.empty()) {
                     state.callback(StreamEvent{
                         .kind = StreamEventKind::tool_argument_delta,
                         .index = index,
@@ -315,6 +322,7 @@ void consume_chat_data(ChatStreamState& state, std::string_view payload) {
                     });
                     call.emitted_argument_bytes = call.arguments.size();
                 }
+                call.argument_guard.append(fragment);
             }
         }
     }
@@ -447,6 +455,8 @@ void consume_responses_data(ResponsesStreamState& state, std::string_view payloa
         call.name = item.value("name", call.name);
         if (item.contains("arguments") && item["arguments"].is_string()) {
             call.arguments = item["arguments"].get<std::string>();
+            call.argument_guard = {};
+            call.argument_guard.append(call.arguments);
         }
         const auto item_id = item.value("id", std::string{});
         if (!item_id.empty()) {
@@ -461,7 +471,7 @@ void consume_responses_data(ResponsesStreamState& state, std::string_view payloa
         auto& call = state.calls[index];
         const auto fragment = event.value("delta", std::string{});
         call.arguments += fragment;
-        if (call.announced && state.callback && !fragment.empty()) {
+        if (state.callback && !fragment.empty()) {
             state.callback(StreamEvent{
                 .kind = StreamEventKind::tool_argument_delta,
                 .index = index,
@@ -471,6 +481,7 @@ void consume_responses_data(ResponsesStreamState& state, std::string_view payloa
             });
             call.emitted_argument_bytes = call.arguments.size();
         }
+        call.argument_guard.append(fragment);
         return;
     }
 
@@ -479,6 +490,8 @@ void consume_responses_data(ResponsesStreamState& state, std::string_view payloa
         auto& call = state.calls[index];
         if (event.contains("arguments") && event["arguments"].is_string()) {
             call.arguments = event["arguments"].get<std::string>();
+            call.argument_guard = {};
+            call.argument_guard.append(call.arguments);
         }
     }
 }
@@ -520,7 +533,8 @@ json to_chat_body(std::string_view model, const ModelRequest& request, bool stre
 
     body["messages"] = json::array();
     for (const auto& message : request.messages) {
-        json item{{"role", message.role}, {"content", message.content}};
+        json item{{"role", message.role}, {"content", message.content_parts.is_null()
+            ? json(message.content) : message.content_parts}};
         if (!message.tool_calls.empty()) {
             item["tool_calls"] = message.tool_calls;
         }
@@ -531,6 +545,9 @@ json to_chat_body(std::string_view model, const ModelRequest& request, bool stre
     }
 
     if (request.max_tokens > 0) body["max_tokens"] = request.max_tokens;
+    if (request.enable_thinking.has_value()) {
+        body["chat_template_kwargs"] = {{"enable_thinking", *request.enable_thinking}};
+    }
 
     if (!request.tools.empty()) body["tools"] = request.tools;
     if (!request.tool_choice.is_null()) body["tool_choice"] = request.tool_choice;
@@ -549,7 +566,15 @@ json to_responses_body(std::string_view model, const ModelRequest& request, bool
             continue;
         }
 
-        input.push_back({{"role", message.role}, {"content", message.content}});
+        json parts = message.content;
+        if (!message.content_parts.is_null()) {
+            parts = json::array();
+            for (const auto& part : message.content_parts) {
+                if (part.at("type") == "text") parts.push_back({{"type", "input_text"}, {"text", part.at("text")}});
+                else parts.push_back({{"type", "input_image"}, {"image_url", part.at("image_url").at("url")}});
+            }
+        }
+        input.push_back({{"role", message.role}, {"content", std::move(parts)}});
         if (!message.tool_calls.empty()) {
             for (const auto& raw_call : message.tool_calls) {
                 if (!raw_call.contains("function")) {
@@ -872,7 +897,7 @@ std::expected<json, core::Error> LmStudioProvider::discover_with_deadline(
     if (!native && !openai && !legacy) {
         return std::unexpected(combined_error(
             "Local model API is not reachable at " + config_.lm_studio_url +
-            ". Start the configured local model server or update Epoch AI's provider endpoint.",
+            ". Start the configured local model server or update the Local Models provider endpoint.",
             failures));
     }
 
@@ -1136,7 +1161,7 @@ std::expected<ModelResponse, core::Error> LmStudioProvider::complete_chat(const 
             call.name = function.at("name").get<std::string>();
             const auto arguments = function.value("arguments", json::object());
             call.arguments = arguments.is_string()
-                ? json::parse(arguments.get<std::string>())
+                ? parse_tool_arguments(arguments.get<std::string>())
                 : arguments;
             out.tool_calls.push_back(std::move(call));
         }
@@ -1214,6 +1239,7 @@ std::expected<ModelResponse, core::Error> LmStudioProvider::complete_chat_stream
     }
 
     if (!state.parser_error.empty()) {
+        mark_generation_termination_uncertain();
         return std::unexpected(core::Error{
             core::make_error_code(core::Errc::model_protocol_error),
             "LM Studio Chat Completions stream parse failed: " + state.parser_error
@@ -1246,7 +1272,7 @@ std::expected<ModelResponse, core::Error> LmStudioProvider::complete_chat_stream
         try {
             call.arguments = streamed.arguments.empty()
                 ? json::object()
-                : json::parse(streamed.arguments);
+                : parse_tool_arguments(streamed.arguments);
         } catch (const std::exception& error) {
             return std::unexpected(core::Error{
                 core::make_error_code(core::Errc::model_protocol_error),
@@ -1302,7 +1328,7 @@ std::expected<ModelResponse, core::Error> LmStudioProvider::complete_responses(c
                 }
                 const auto arguments = item.value("arguments", json::object());
                 call.arguments = arguments.is_string()
-                    ? json::parse(arguments.get<std::string>())
+                    ? parse_tool_arguments(arguments.get<std::string>())
                     : arguments;
                 out.tool_calls.push_back(std::move(call));
             }
@@ -1381,6 +1407,7 @@ std::expected<ModelResponse, core::Error> LmStudioProvider::complete_responses_s
     }
 
     if (!state.parser_error.empty()) {
+        mark_generation_termination_uncertain();
         return std::unexpected(core::Error{
             core::make_error_code(core::Errc::model_protocol_error),
             "LM Studio Responses stream parse failed: " + state.parser_error
@@ -1416,7 +1443,7 @@ std::expected<ModelResponse, core::Error> LmStudioProvider::complete_responses_s
         try {
             call.arguments = streamed.arguments.empty()
                 ? json::object()
-                : json::parse(streamed.arguments);
+                : parse_tool_arguments(streamed.arguments);
         } catch (const std::exception& error) {
             return std::unexpected(core::Error{
                 core::make_error_code(core::Errc::model_protocol_error),

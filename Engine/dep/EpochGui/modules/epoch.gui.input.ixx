@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MPL-2.0
 module;
 
 #include <array>
@@ -106,18 +107,26 @@ export namespace epochengine::gui_lib::input
     public:
         void begin(Rect bounds) noexcept;
         void block_until_clear() noexcept;
+        // A bounded modal is not sufficient: background controls may overlap
+        // the same rectangle. Only the owning modal phase may take input.
+        void require_owner_scope() noexcept;
+        void enter_owner_scope() noexcept;
+        void leave_owner_scope() noexcept;
         void clear() noexcept;
 
         [[nodiscard]] ModalInputMode mode() const noexcept;
         [[nodiscard]] Rect bounds() const noexcept;
         [[nodiscard]] bool active() const noexcept;
         [[nodiscard]] bool keyboard_captured() const noexcept;
+        [[nodiscard]] bool owner_input_allowed() const noexcept;
         [[nodiscard]] bool pointer_allowed(Vec2 position) const noexcept;
         [[nodiscard]] bool background_input_allowed() const noexcept;
 
     private:
         Rect bounds_{};
         ModalInputMode mode_{ ModalInputMode::inactive };
+        bool exclusive_owner_{ false };
+        bool inside_owner_{ false };
     };
 
     struct ContextMenuRequest

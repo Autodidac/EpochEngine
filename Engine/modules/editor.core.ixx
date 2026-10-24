@@ -28,7 +28,10 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
+// Epoch system notes (auto-checked):
+// Epoch Editor: keep editor state and source changes within their owning workflows.
 module;
+#include "../include/epoch.edition.hpp"
 
 #include <array>
 #include <cstddef>
@@ -52,7 +55,6 @@ import render.preview_grid;
 import scene.snapshot;
 
 export import editor.application;
-export import project.ai_self_iteration;
 
 namespace epochengine
 {
@@ -70,7 +72,8 @@ namespace epochengine
     {
         Game = 0,
         Tool,
-        EngineDevelopment
+        EngineDevelopment,
+        Editor
     };
 
     export enum class EditorProjectInputProvision : unsigned char
@@ -79,8 +82,6 @@ namespace epochengine
         explicitly_enabled
     };
 
-    export using EditorProjectSelfIterationProvision =
-        project_ai_iteration::Provision;
 
     export [[nodiscard]] constexpr bool editor_project_input_profile_enabled(
         EditorProjectKind kind,
@@ -115,6 +116,11 @@ namespace epochengine
         core::ContextType requested_context_type{ core::ContextType::None };
         bool close_current_context_after_command{ false };
     };
+
+    // Renderer backend replacement is a lifecycle operation, not a work-mode
+    // switch. An owned Engine Work session must never be retired implicitly.
+    export [[nodiscard]] bool editor_engine_work_blocks_context_switch(
+        const core::Context* ctx);
 
     export [[nodiscard]] constexpr bool editor_context_selection_allowed(
         bool target_selectable,
@@ -473,8 +479,10 @@ namespace epochengine
         float tile_map_pan_y{};
         std::uint8_t input_profile_preset{ 0 };
         gui::ThemePreference theme_preference{ gui::ThemePreference::FollowSystemDark };
+        std::uint32_t theme_cycle_interval_seconds{30u};
         bool rounded_rectangles{ true };
         double editor_frame_limit_fps{ 120.0 };
+        bool editor_frame_vsync_requested{ false };
         std::string selected_project_file{};
         std::string selected_asset_path{};
         std::vector<EditorContextSnapshotEntity> entities{};
@@ -561,10 +569,6 @@ namespace epochengine
     export [[nodiscard]] EditorProjectCreationResult editor_create_project_shell(
         EditorProjectKind kind,
         EditorProjectInputProvision input_provision);
-    export [[nodiscard]] EditorProjectCreationResult editor_create_project_shell(
-        EditorProjectKind kind,
-        EditorProjectInputProvision input_provision,
-        project_ai_iteration::Provision self_iteration_provision);
     export [[nodiscard]] bool editor_project_manifest_capability_contract() noexcept;
     export [[nodiscard]] EditorProjectCreationResult editor_ensure_project_shell(std::string_view project_id);
     export [[nodiscard]] EditorScriptBuildResult editor_build_script(std::string_view script_name);
@@ -652,5 +656,4 @@ namespace epochengine
     export void shutdown_chat_system();
     export [[nodiscard]] bool editor_ai_request_cancellation_contract() noexcept;
     export [[nodiscard]] bool editor_ai_model_selection_contract() noexcept;
-    export [[nodiscard]] bool editor_ai_source_path_contract() noexcept;
 }

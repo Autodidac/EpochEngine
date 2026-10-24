@@ -28,6 +28,8 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
+// Epoch system notes (auto-checked):
+// Epoch Platform: keep native code isolated behind platform-specific interfaces.
 module;
 
 export module platform.pump;

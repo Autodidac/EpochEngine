@@ -1,3 +1,6 @@
+// Epoch system notes (auto-checked):
+// Epoch Context: window/context state, dispatch and input ownership remain scoped.
+// Epoch Render: preserve backend boundaries and resource lifetime contracts.
 #pragma once
 
 #include <algorithm>

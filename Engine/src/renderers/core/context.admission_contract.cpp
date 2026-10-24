@@ -1,4 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-MIT-NoSell
+// Epoch system notes (auto-checked):
+// Epoch Context: window/context state, dispatch and input ownership remain scoped.
+// Epoch Core: preserve engine-defined primitives, APIs and module contracts.
 import context.admission;
 import context.type;
 

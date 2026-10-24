@@ -28,6 +28,8 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
+// Epoch system notes (auto-checked):
+// Epoch Render: preserve backend boundaries and resource lifetime contracts.
 #include "core.format_text.hpp"
 #include <algorithm>
 #include <chrono>

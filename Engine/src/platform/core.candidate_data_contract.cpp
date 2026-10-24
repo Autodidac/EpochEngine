@@ -1,3 +1,5 @@
+// Epoch system notes (auto-checked):
+// Epoch Platform: keep native code isolated behind platform-specific interfaces.
 #include <chrono>
 #include <cstddef>
 #include <cstring>

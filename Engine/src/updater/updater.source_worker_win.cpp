@@ -31,6 +31,15 @@ namespace epochengine::updater
                     system_detail::remove_update_cache_path_best_effort(prepared_source.cleanup_root);
             };
 
+        if (!PROJECT_SOURCE_CHANNEL_ALLOWED(channel.source_url, channel.source_version_url)
+            || (PUBLIC_DISTRIBUTION && has_prepared_source)
+            || (!PUBLIC_DISTRIBUTION && !has_prepared_source))
+        {
+            cleanup_prepared_source();
+            system_detail::log_error("Source worker refused a different edition or unauthenticated development source.");
+            return false;
+        }
+
         if (!has_prepared_source && channel.source_url.empty())
         {
             system_detail::log_error("Source update URL is not configured.");
@@ -918,6 +927,12 @@ namespace epochengine::updater
             << "  throw ('Downloaded source snapshot did not contain Engine\\vcpkg.json at: ' + $manifestFile)\n"
             << "}\n"
             << "Write-Step 'INFO' ('Source snapshot ready at: ' + $sourceRoot)\n"
+            << "$editionMarker = Join-Path $sourceRoot 'Engine\\include\\epoch.edition.hpp'\n"
+            << "if (-not (Test-Path -LiteralPath $editionMarker -PathType Leaf)) { throw 'Source edition marker is missing.' }\n"
+            << "$editionText = Get-Content -LiteralPath $editionMarker -Raw\n"
+            << "$editionDefines = [regex]::Matches($editionText, '(?m)^#define EPOCH_SOURCE_EDITION_PUBLIC ([01])\\r?$')\n"
+            << "if ($editionText.Length -gt 4096 -or $editionDefines.Count -ne 1 -or $editionDefines[0].Groups[1].Value -ne '"
+            << (PUBLIC_DISTRIBUTION ? "1" : "0") << "') { throw 'Source edition differs from the installed engine.' }\n"
             << "Write-Handoff 'INFO' 'Source snapshot downloaded and extracted.'\n"
             << "Test-Cancel\n"
             << "if (-not [string]::IsNullOrWhiteSpace($env:VCPKG_ROOT)) {\n"

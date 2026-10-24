@@ -28,9 +28,11 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
+// Epoch system notes (auto-checked):
+// Epoch STL: honor core.stl_types.hpp types/operators; fix callers, not core overloads.
+// Epoch Render: preserve backend boundaries and resource lifetime contracts.
 module;
 
-#include "../include/epoch.config.hpp"
 #include "../src/epoch/epoch.common.hpp"
 #include "../include/core.stl_types.hpp"
 

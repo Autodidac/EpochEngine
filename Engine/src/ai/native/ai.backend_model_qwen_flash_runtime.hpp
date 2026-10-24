@@ -1,4 +1,6 @@
 // Epoch Engine AI runtime - SPDX-License-Identifier: LicenseRef-MIT-NoSell
+// Epoch system notes (auto-checked):
+// Epoch AI: preserve model selection, candidate isolation and host verification gates.
 #pragma once
 
 #include <atomic>
@@ -92,6 +94,8 @@ private:
     std::optional<core::Error> last_startup_error_;
     std::atomic_bool running_{false};
     std::atomic_bool worker_exited_{true};
+    // Last loaded server's advertised /props modality; -1 means unconfirmed.
+    std::atomic<int> active_image_input_{-1};
     std::string active_model_id_;
     std::uint32_t active_context_tokens_{0};
     std::uint32_t active_parallel_slots_{0};

@@ -1,5 +1,8 @@
 // Epoch Engine AI runtime - SPDX-License-Identifier: LicenseRef-MIT-NoSell
+// Epoch system notes (auto-checked):
+// Epoch AI: preserve model selection, candidate isolation and host verification gates.
 #pragma once
+#include "../../../include/epoch.edition.hpp"
 
 #include <atomic>
 #include <cstdint>
@@ -22,12 +25,6 @@ namespace epoch_ai::training {
 
 using json = nlohmann::json;
 
-struct TrainingRequest {
-    std::string scope{"keymaker-foundation"};
-    std::uint32_t max_steps{500};
-    std::uint32_t checkpoint_steps{50};
-    bool require_cuda{true};
-};
 
 class TrainingService {
 public:
@@ -41,34 +38,15 @@ public:
     TrainingService(const TrainingService&) = delete;
     TrainingService& operator=(const TrainingService&) = delete;
 
-    [[nodiscard]] std::expected<json, core::Error> doctor(std::stop_token stop = {}) const;
-    [[nodiscard]] std::expected<json, core::Error> initialize(std::string_view profile = "micro", bool force = false, std::stop_token stop = {});
-    [[nodiscard]] std::expected<void, core::Error> start(TrainingRequest request);
-    void cancel();
-    void enable_explicit_training() noexcept;
-    void set_paused(bool paused);
     void begin_inference();
     void end_inference();
 
     [[nodiscard]] json status() const;
-    [[nodiscard]] bool running() const noexcept { return running_.load(std::memory_order_acquire); }
+#if EPOCH_EDITION_PUBLIC
+    [[nodiscard]] bool running() const noexcept { return false; }
+#endif
 
 private:
-    [[nodiscard]] std::expected<json, core::Error> run_worker(const std::vector<std::string>& arguments, std::stop_token stop = {}) const;
-    void ensure_training_data() const;
-    void run_training(std::stop_token stop, TrainingRequest request);
-    void write_marker(const std::filesystem::path& path, bool present) const;
-
-    const core::Config& config_;
-    std::filesystem::path state_root_;
-    std::filesystem::path control_root_;
-    models::ModelRegistry& models_;
-    residency::ModelResidencyManager& residency_;
-    mutable std::mutex mutex_;
-    json last_status_ = json{{"state", "idle"}};
-    std::jthread worker_;
-    std::atomic_bool running_{false};
-    std::atomic_bool explicit_training_enabled_{false};
     std::atomic_uint32_t inference_users_{0};
 };
 

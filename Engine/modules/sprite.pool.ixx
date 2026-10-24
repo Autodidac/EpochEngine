@@ -30,6 +30,8 @@
  ***********************************************/
 module;
 
+#include "../include/engine.config.hpp"
+
 #include <vector>
 #include <atomic>
 #include <optional>
@@ -88,7 +90,7 @@ namespace epochengine::spritepool
         generations.assign(capacity, 0);
         lastAllocIndex.store(0, std::memory_order_relaxed);
 
-#if defined(DEBUG_TEXTURE_RENDERING_VERBOSE)
+#if EPOCH_ENABLE_TEXTURE_DIAGNOSTICS
         logger::infof_loc("SpritePool", std::source_location::current(), "Initialized with capacity {}", capacity);
 #endif
     }
@@ -114,7 +116,7 @@ namespace epochengine::spritepool
         std::fill(generations.begin(), generations.end(), 0);
         lastAllocIndex.store(0, std::memory_order_relaxed);
 
-#if defined(DEBUG_TEXTURE_RENDERING_VERBOSE)
+#if EPOCH_ENABLE_TEXTURE_DIAGNOSTICS
         logger::info("SpritePool", "Reset");
 #endif
     }

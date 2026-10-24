@@ -1,0 +1,118 @@
+/************************************************
+ *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
+ *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
+ *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
+ *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
+ *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
+ *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
+ *                                              *
+ *   This file is part of the Epoch   Project.  *
+ *   epochengine - Modular C++ Framework        *
+ *                                              *
+ *   SPDX-License-Identifier: MPL-2.0             *
+ *                                              *
+ *   Provided "AS IS", without warranty         *
+ *   of any kind.                               *
+ *                                              *
+ *                                              *
+ *   Redistribution Allowed with This Notice    *
+ *   and LICENSE file.                          *
+ *                                              *
+ *                                              *
+ *   See LICENSE file for full terms.           *
+ *                                              *
+ ***********************************************/
+// Epoch system notes (auto-checked):
+// Epoch STL: honor core.stl_types.hpp types/operators; fix callers, not core overloads.
+// Epoch Core: preserve engine-defined primitives, APIs and module contracts.
+module;
+
+#include "../../include/core.stl_types.hpp"
+
+#if defined(_WIN32)
+#  include <windows.h>
+#else
+#  include <cstdlib>
+#endif
+
+module core.env;
+
+namespace epochengine::core::env
+{
+#if defined(_WIN32)
+    namespace
+    {
+        std::wstring utf8_to_wide(epochengine::string_view s)
+        {
+            if (s.empty()) return {};
+            const int needed = MultiByteToWideChar(CP_UTF8, 0, s.data, (int)s.size, nullptr, 0);
+            if (needed <= 0) return {};
+            std::wstring w;
+            w.resize((size_t)needed);
+            MultiByteToWideChar(CP_UTF8, 0, s.data, (int)s.size, w.data(), needed);
+            return w;
+        }
+
+        std::string wide_to_utf8(std::wstring_view w)
+        {
+            if (w.empty()) return {};
+            const int needed = WideCharToMultiByte(CP_UTF8, 0, w.data(), (int)w.size(), nullptr, 0, nullptr, nullptr);
+            if (needed <= 0) return {};
+            std::string s;
+            s.resize((size_t)needed);
+            WideCharToMultiByte(CP_UTF8, 0, w.data(), (int)w.size(), s.data(), needed, nullptr, nullptr);
+            return s;
+        }
+    }
+#endif
+
+    epochengine::optional<epochengine::string> get(epochengine::string_view name)
+    {
+#if defined(_WIN32)
+        const std::wstring wname = utf8_to_wide(name);
+        if (wname.empty()) return std::nullopt;
+
+        DWORD needed = GetEnvironmentVariableW(wname.c_str(), nullptr, 0);
+        if (needed == 0) return std::nullopt;
+
+        std::wstring buf;
+        buf.resize((size_t)needed);
+        const DWORD got = GetEnvironmentVariableW(wname.c_str(), buf.data(), needed);
+        if (got == 0) return std::nullopt;
+
+        if (!buf.empty() && buf.back() == L'\0') buf.pop_back();
+        return epochengine::string{ wide_to_utf8(buf) };
+#else
+        const std::string key{ epochengine::to_std(name) }; // copy
+        if (const char* v = std::getenv(key.c_str()); v != nullptr)
+            return epochengine::string{ v };
+        return std::nullopt;
+#endif
+    }
+
+    bool set(epochengine::string_view name, epochengine::string_view value)
+    {
+#if defined(_WIN32)
+        const std::wstring wname = utf8_to_wide(name);
+        const std::wstring wval = utf8_to_wide(value);
+        if (wname.empty()) return false;
+        return SetEnvironmentVariableW(wname.c_str(), wval.c_str()) != 0;
+#else
+        const std::string n{ epochengine::to_std(name) };
+        const std::string v{ epochengine::to_std(value) };
+        return ::setenv(n.c_str(), v.c_str(), 1) == 0;
+#endif
+    }
+
+    bool unset(epochengine::string_view name)
+    {
+#if defined(_WIN32)
+        const std::wstring wname = utf8_to_wide(name);
+        if (wname.empty()) return false;
+        return SetEnvironmentVariableW(wname.c_str(), nullptr) != 0;
+#else
+        const std::string n{ epochengine::to_std(name) };
+        return ::unsetenv(n.c_str()) == 0;
+#endif
+    }
+}

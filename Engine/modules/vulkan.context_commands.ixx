@@ -45,6 +45,7 @@ module;
 #include <limits>
 #include <span>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 
 #ifndef EPOCH_USING_VULKAN
@@ -592,10 +593,28 @@ namespace epochengine::vulkancontext
         guiState.guiDraws.clear();
     }
 
+    void Application::createPresentSyncObjects()
+    {
+        // Presentation waits retire when this image is acquired again, rather
+        // than when a CPU frame slot's graphics fence signals.
+        if (swapChainImages.empty())
+            throw std::runtime_error("[ Vulkan ] - Cannot create presentation sync without swapchain images.");
+        std::vector<vk::UniqueSemaphore> semaphores;
+        semaphores.reserve(swapChainImages.size());
+        const vk::SemaphoreCreateInfo info{};
+        for (std::size_t i = 0; i < swapChainImages.size(); ++i)
+        {
+            auto [result, semaphore] = device->createSemaphoreUnique(info);
+            if (result != vk::Result::eSuccess)
+                throw std::runtime_error("[ Vulkan ] - createSemaphoreUnique(presentation) failed.");
+            semaphores.push_back(std::move(semaphore));
+        }
+        renderFinishedSemaphores.swap(semaphores);
+    }
+
     void Application::createSyncObjects()
     {
         imageAvailableSemaphores.resize(kMaxFramesInFlight);
-        renderFinishedSemaphores.resize(kMaxFramesInFlight);
         inFlightFences.resize(kMaxFramesInFlight);
 
         vk::SemaphoreCreateInfo semInfo{};
@@ -609,12 +628,6 @@ namespace epochengine::vulkancontext
                 if (r != vk::Result::eSuccess)
                     throw std::runtime_error("[ Vulkan ] - createSemaphoreUnique(imageAvailable) failed.");
                 imageAvailableSemaphores[i] = std::move(sem);
-            }
-            {
-                auto [r, sem] = device->createSemaphoreUnique(semInfo);
-                if (r != vk::Result::eSuccess)
-                    throw std::runtime_error("[ Vulkan ] - createSemaphoreUnique(renderFinished) failed.");
-                renderFinishedSemaphores[i] = std::move(sem);
             }
             {
                 auto [r, f] = device->createFenceUnique(fenceInfo);
@@ -688,7 +701,7 @@ namespace epochengine::vulkancontext
         const vk::Semaphore waitSems[] = { *imageAvailableSemaphores[currentFrame] };
         const vk::PipelineStageFlags waitStages[] = { vk::PipelineStageFlagBits::eColorAttachmentOutput };
         const vk::CommandBuffer submitCmds[] = { *commandBuffers[imageIndex] };
-        const vk::Semaphore signalSems[] = { *renderFinishedSemaphores[currentFrame] };
+        const vk::Semaphore signalSems[] = { *renderFinishedSemaphores.at(imageIndex) };
 
         vk::SubmitInfo submitInfo{};
         submitInfo.waitSemaphoreCount = 1;
@@ -718,9 +731,17 @@ namespace epochengine::vulkancontext
         // also needs an if running
         vk::Result presentRes = presentQueue.presentKHR(presentInfo);
 
-        if (presentRes == vk::Result::eErrorOutOfDateKHR || presentRes == vk::Result::eSuboptimalKHR)
+        if (presentRes == vk::Result::eErrorOutOfDateKHR)
         {
+            // OUT_OF_DATE invalidates presentation; rebuild before the next frame.
             recreateSwapChain();
+        }
+        else if (presentRes == vk::Result::eSuboptimalKHR)
+        {
+            // SUBOPTIMAL is still presentable. Do not destroy the GUI atlases,
+            // pipelines and swapchain on a transient driver/compositor hint.
+            // An actual resize, pacing-mode change or OUT_OF_DATE result still
+            // requests recreation through the existing paths.
         }
         else if (presentRes == vk::Result::eErrorSurfaceLostKHR)
         {

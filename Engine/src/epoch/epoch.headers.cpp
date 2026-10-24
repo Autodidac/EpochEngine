@@ -29,6 +29,5 @@
  *                                              *
  ***********************************************/
 // Engine/src/epoch/epoch.headers.cpp
-#include "../../include/epoch.config.hpp"
 #include "epoch.common.hpp"
 // Intentionally empty.

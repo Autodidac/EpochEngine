@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-MIT-NoSell
-#include "epoch.software_application.hpp"
+
 
 #include <charconv>
 #include <cstdint>
@@ -7,10 +7,11 @@
 #include <string_view>
 
 import core.log;
+import platform.application;
 
 namespace
 {
-    using namespace epochengine::software;
+    using namespace epochengine::platform::application;
 
     void log(std::string_view message, bool error = false)
     {
@@ -38,25 +39,25 @@ namespace
         bool invalid_tick{};
     };
 
-    int APP_CALL initialize(void*)
+    int initialize(void*)
     {
         log("application.init; first tick has no warmup delay");
         return 0;
     }
 
-    void APP_CALL tick(void* user, std::uint64_t frame, double elapsed)
+    void tick(void* user, std::uint64_t frame, double elapsed)
     {
         auto& app = *static_cast<Application*>(user);
         app.invalid_tick = app.invalid_tick || frame != app.ticks || elapsed < 0.0;
         ++app.ticks;
     }
 
-    bool APP_CALL should_quit(void* user)
+    bool should_quit(void* user)
     {
         return static_cast<Application*>(user)->invalid_tick;
     }
 
-    void APP_CALL shutdown(void*)
+    void shutdown(void*)
     {
         log("application.shutdown; no child processes or renderer were started");
     }
@@ -152,7 +153,7 @@ int main(int argc, char** argv)
         }
         Application app{};
         const app_callbacks_v1 callbacks{
-            APP_API_VERSION, sizeof(app_callbacks_v1), &app,
+            callback_api_version, sizeof(app_callbacks_v1), &app,
             initialize, tick, should_quit, shutdown };
         const auto report = run(options, callbacks);
         const bool passed = report.succeeded() && !app.invalid_tick && report.ticks == app.ticks;

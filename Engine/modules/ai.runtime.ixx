@@ -1,3 +1,5 @@
+// Epoch system notes (auto-checked):
+// Epoch AI: preserve model selection, candidate isolation and host verification gates.
 module;
 
 #include <cstdint>

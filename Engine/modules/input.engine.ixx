@@ -738,6 +738,29 @@ namespace epochengine::input
     // --------------------------------------------------------
     // Per-frame polling
     // --------------------------------------------------------
+    [[nodiscard]] inline bool allows_foreground_polling() noexcept
+    {
+        const HWND foreground = ::GetForegroundWindow();
+        DWORD foregroundProcess{};
+        if (!foreground || !::GetWindowThreadProcessId(foreground, &foregroundProcess))
+            return false;
+        if (foregroundProcess == ::GetCurrentProcessId())
+            return true;
+
+        // A docked candidate's foreground root belongs to the parent process.
+        // Permit polling only while this input thread has actual focus on our
+        // own child beneath that root. Hover or an unrelated foreground app
+        // must not enable global keyboard/button sampling.
+        GUITHREADINFO info{};
+        info.cbSize = sizeof(info);
+        if (!::GetGUIThreadInfo(::GetCurrentThreadId(), &info) || !info.hwndFocus)
+            return false;
+        DWORD focusedProcess{};
+        return ::GetWindowThreadProcessId(info.hwndFocus, &focusedProcess) != 0
+            && focusedProcess == ::GetCurrentProcessId()
+            && ::IsChild(foreground, info.hwndFocus) != FALSE;
+    }
+
     export inline void poll_input()
     {
         if (!can_poll_on_this_thread())
@@ -749,14 +772,9 @@ namespace epochengine::input
         mousePressed.reset();
         mouseWheel.store(0, std::memory_order_relaxed);
 
-        // GetAsyncKeyState is process-external/global state. Never sample it while
-        // another process owns the foreground window, or editor/game shortcuts can
-        // keep firing while the operator is typing into another application.
-        const HWND foreground = ::GetForegroundWindow();
-        DWORD foregroundProcessId{};
-        if (!foreground
-            || ::GetWindowThreadProcessId(foreground, &foregroundProcessId) == 0
-            || foregroundProcessId != ::GetCurrentProcessId())
+        // Keep the global sampler and context focus gates consistent for
+        // independently launched Editors docked inside another process.
+        if (!allows_foreground_polling())
         {
             keyDown.reset();
             mouseDown.reset();

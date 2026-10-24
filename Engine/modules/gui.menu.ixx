@@ -28,6 +28,9 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
+// Epoch system notes (auto-checked):
+// Epoch Context: window/context state, dispatch and input ownership remain scoped.
+// EpochGUI: use consistent draw/hit-test geometry and preserve child input ownership.
 module; // REQUIRED global module fragment
 
 #include <include/engine.config.hpp> // for EPOCH_USING Macros 		// for EPOCH_USING_SDL
