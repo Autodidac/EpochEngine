@@ -1,3 +1,5 @@
+// Epoch system notes (auto-checked):
+// Epoch Core: preserve engine-defined primitives, APIs and module contracts.
 #include <cstdint>
 #include <cstdio>
 #include <mutex>

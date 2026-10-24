@@ -2,6 +2,8 @@
  * Epoch Engine
  * SPDX-License-Identifier: LicenseRef-MIT-NoSell
  ************************************************/
+// Epoch system notes (auto-checked):
+// EpochGUI: use consistent draw/hit-test geometry and preserve child input ownership.
 #include <array>
 #include <cmath>
 #include <cstddef>

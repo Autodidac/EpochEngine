@@ -1,4 +1,7 @@
+// Epoch system notes (auto-checked):
+// Epoch Editor: keep editor state and source changes within their owning workflows.
 #pragma once
+#include "../../include/epoch.edition.hpp"
 
 #include <algorithm>
 #include <array>
@@ -25,7 +28,25 @@ namespace epochengine::editor_update_modal
         bool projectSourceDownload = false;
         bool sourceCancelAvailable = false;
         bool sourceAuthorizationRunning = false;
+        bool sourceApprovalPending = false;
     };
+
+    struct DiscoveryPresentation
+    {
+        bool failed{};
+        bool available{};
+        bool modalVisible{};
+    };
+
+    // Discovery retains its failure/availability evidence independently of UI
+    // prominence. Startup checks never open a dialog; an explicitly requested
+    // check, or a dialog the operator already opened, stays visible.
+    [[nodiscard]] constexpr DiscoveryPresentation discovery_presentation(
+        const bool passive, const bool modalVisible,
+        const bool failed, const bool available) noexcept
+    {
+        return {failed, !failed && available, modalVisible || !passive};
+    }
 
     struct ToolbarState
     {
@@ -39,16 +60,20 @@ namespace epochengine::editor_update_modal
     // Run underneath the pointer. Restart is exclusively verified handoff state.
     [[nodiscard]] constexpr ToolbarState update_toolbar_state(const UpdateFlags flags) noexcept
     {
-        const bool visible = flags.installableUpdate || flags.restartReady;
+        const bool visible = flags.installableUpdate || flags.restartReady || flags.updateRunning;
         const bool busy = flags.updateRunning || flags.sourceWorkerRunning
             || flags.sourceAuthorizationRunning;
         return {visible, visible && !busy,
-            flags.restartReady ? "Restart" : "Update Available"};
+            flags.restartReady ? "Restart"
+                : flags.updateRunning && !flags.sourceWorkerRunning ? "Checking for updates..."
+                : flags.sourceWorkerRunning ? "Updating..." : "Update Available"};
     }
 
     static_assert(update_toolbar_state({.updateRunning = true, .installableUpdate = true}).visible);
     static_assert(!update_toolbar_state({.updateRunning = true, .installableUpdate = true}).enabled);
-    static_assert(!update_toolbar_state({.updateRunning = true}).visible);
+    static_assert(update_toolbar_state({.updateRunning = true}).visible);
+    static_assert(update_toolbar_state({.updateRunning = true}).label == "Checking for updates...");
+    static_assert(!update_toolbar_state({}).visible);
     static_assert(update_toolbar_state({.restartReady = true}).label == "Restart");
     static_assert(update_toolbar_state({.checkFailed = true, .installableUpdate = true}).visible);
 
@@ -329,12 +354,15 @@ namespace epochengine::editor_update_modal
 
     [[nodiscard]] inline std::string_view source_line(std::size_t index) noexcept
     {
+#if EPOCH_EDITION_PUBLIC
         constexpr std::array<std::string_view, 4> kLines{
-            "The first authorized source action pairs this device in the browser. Later actions use its protected OS signing key without reopening the browser.",
-            "Pair / Re-pair forgets only the nonsecret device registration ID; the next source action performs explicit enrollment.",
-            "Build / Update From Source decrypts into a restricted temporary cache, builds locally, then removes the temporary source payload.",
-            "Download Source Project extracts the same verified encrypted snapshot into the project source cache without changing the running runtime."
+            "Public Epoch source comes from its GitHub repository without signing in.",
+            "Public builds stay on the public update channel and do not download private development source.",
+            "Build / Update From Source downloads the public source and builds it locally with visible progress and cancellation.",
+            "Download Source Project saves the public snapshot in the project source cache without changing the running runtime."
         };
+#else
+#endif
         return index < kLines.size() ? kLines[index] : std::string_view{};
     }
 
@@ -395,8 +423,11 @@ namespace epochengine::editor_update_modal
     [[nodiscard]] inline ActionStrip source_action_strip(const float contentWidth) noexcept
     {
         ActionStrip strip{};
-        strip.widths = { 104.0f, 168.0f, 208.0f, 220.0f };
-        strip.count = strip.widths.size();
+#if EPOCH_EDITION_PUBLIC
+        strip.widths = { 104.0f, 208.0f, 220.0f, 0.0f };
+        strip.count = 3u;
+#else
+#endif
         strip.height = action_strip_height(strip.widths, strip.count, contentWidth);
         strip.stacked = strip.height > kButtonHeight + 0.5f;
         return strip;

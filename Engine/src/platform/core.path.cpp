@@ -28,6 +28,8 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
+// Epoch system notes (auto-checked):
+// Epoch Platform: keep native code isolated behind platform-specific interfaces.
 module;
 
 #include <filesystem>
@@ -523,11 +525,13 @@ namespace epochengine::core::path
         if (const path overridePath = env_override_path("EPOCH_LOG_DIR"); !overridePath.empty())
             return overridePath;
 
-        if (const path runtimeRoot = runtime_root_dir(); !runtimeRoot.empty())
-            return normalize(runtimeRoot / "logs");
-
+        // Source discovery is for inputs. Mutable runtime evidence follows the
+        // executable so a source checkout never gains a root-level logs tree.
         if (const path exeDir = executable_dir(); !exeDir.empty())
             return normalize(exeDir / "logs");
+
+        if (const path runtimeRoot = runtime_root_dir(); !runtimeRoot.empty())
+            return normalize(runtimeRoot / "logs");
 
         return {};
     }

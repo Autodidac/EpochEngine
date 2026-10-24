@@ -28,6 +28,8 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
+// Epoch system notes (auto-checked):
+// Epoch STL: honor core.stl_types.hpp types/operators; fix callers, not core overloads.
 module;
 
 #include <cstddef>
@@ -385,6 +387,67 @@ inline constexpr std::string_view kFluxKleinImagePackageId = "os_model_flux_2_kl
         return id == kEpochGuiCatalogAuthorityId
             || id == kEpochEngineExtensionsCatalogAuthorityId;
     }
+
+    enum class CatalogSection : std::uint8_t
+    {
+        ProjectPackages,
+        ProjectAiResources,
+        ModelManager
+    };
+
+    [[nodiscard]] constexpr CatalogSection catalog_section(std::string_view id) noexcept
+    {
+        // Registry identities, rather than names containing "model" or "AI",
+        // distinguish project media resources from inference infrastructure.
+        if (id == kBonsaiImageTernaryPackageId
+            || id == kBonsaiImageBinaryPackageId
+            || id == kFluxKleinImagePackageId)
+            return CatalogSection::ProjectAiResources;
+        const auto* package = find(id);
+        if (id == kLocalAiLlamaCppRuntimePackageId
+            || (package && package->kind == PackageKind::ModelAsset))
+            return CatalogSection::ModelManager;
+        return CatalogSection::ProjectPackages;
+    }
+
+    [[nodiscard]] constexpr std::string_view project_resource_purpose(std::string_view id) noexcept
+    {
+        if (id == kBonsaiImageTernaryPackageId)
+            return "Generate or edit project images; balanced image resource.";
+        if (id == kBonsaiImageBinaryPackageId)
+            return "Generate or edit project images; smaller image resource.";
+        if (id == kFluxKleinImagePackageId)
+            return "Generate or edit project images; higher-memory image resource.";
+        return {};
+    }
+
+    [[nodiscard]] constexpr bool catalog_section_contract() noexcept
+    {
+        std::size_t projectResources{};
+        std::size_t inferenceResources{};
+        for (const auto& package : kKnownPackages)
+        {
+            const auto section = catalog_section(package.id);
+            if (section == CatalogSection::ProjectAiResources)
+            {
+                if (package.kind != PackageKind::ModelAsset
+                    || project_resource_purpose(package.id).empty())
+                    return false;
+                ++projectResources;
+            }
+            else if (section == CatalogSection::ModelManager)
+                ++inferenceResources;
+        }
+        return projectResources == 3u && inferenceResources == 3u
+            && catalog_section(kQwenCoderPackageId) == CatalogSection::ModelManager
+            && catalog_section(kNemotronNanoPackageId) == CatalogSection::ModelManager
+            && catalog_section(kLocalAiLlamaCppRuntimePackageId) == CatalogSection::ModelManager
+            && catalog_section(kEpochEngineExtensionsCatalogAuthorityId) == CatalogSection::ProjectPackages
+            && catalog_section("project_ai_image_tools") == CatalogSection::ProjectPackages
+            && project_resource_purpose(kEpochEngineExtensionsCatalogAuthorityId).empty();
+    }
+
+    static_assert(catalog_section_contract());
 
     [[nodiscard]] constexpr bool is_network_sensitive(const PackageDescriptor& package) noexcept
     {
@@ -748,7 +811,8 @@ inline constexpr std::string_view kFluxKleinImagePackageId = "os_model_flux_2_kl
             }
         }
 
-        result.ok = result.ok && is_model_asset(recommended_local_image_model_id());
+        result.ok = result.ok && is_model_asset(recommended_local_image_model_id())
+            && catalog_section_contract();
         return result;
     }
 }

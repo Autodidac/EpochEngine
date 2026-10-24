@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-MIT-NoSell
+// Epoch system notes (auto-checked):
+// Epoch AI: preserve model selection, candidate isolation and host verification gates.
 #pragma once
 #include <cstdint>
 #include <string>

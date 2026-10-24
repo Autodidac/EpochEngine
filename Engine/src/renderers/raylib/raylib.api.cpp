@@ -237,7 +237,8 @@ namespace epochengine::raylib_api
     {
         // Epoch's vcpkg Raylib is built with SUPPORT_CUSTOM_FRAME_CONTROL.
         // EndDrawing() flushes rlgl in that mode but deliberately omits the
-        // native buffer swap and event pump, so the engine owns both steps.
+        // native swap, event pump and frame wait. The engine owns swap/events
+        // here and its shared host deadline owns selected frame rates.
         ::EndDrawing();
         ::SwapScreenBuffer();
         ::PollInputEvents();

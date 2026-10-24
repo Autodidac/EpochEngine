@@ -1,8 +1,11 @@
 // Epoch Engine AI runtime - SPDX-License-Identifier: LicenseRef-MIT-NoSell
+// Epoch system notes (auto-checked):
+// Epoch AI: preserve model selection, candidate isolation and host verification gates.
 #include "ai.backend_controller_architect_controller.hpp"
 
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <sstream>
 
 namespace epoch_ai::controller {
@@ -67,6 +70,9 @@ std::optional<ControllerDecision> ArchitectController::learned_decision(std::str
     model_request.tool_choice = "none";
     model_request.parallel_tool_calls = false;
     model_request.stop = stop;
+    // Optional model-based routing must never consume the foundation model's
+    // full generation timeout before the real user task even starts.
+    model_request.deadline = std::chrono::steady_clock::now() + std::chrono::seconds{8};
     model_request.messages = {
         {
             "system",

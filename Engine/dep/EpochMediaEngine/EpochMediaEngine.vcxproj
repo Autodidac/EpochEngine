@@ -1,0 +1,22 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" DefaultTargets="Build">
+<ItemGroup Label="ProjectConfigurations">
+<ProjectConfiguration Include="Debug|x64"><Configuration>Debug</Configuration><Platform>x64</Platform></ProjectConfiguration>
+<ProjectConfiguration Include="Debug|Win32"><Configuration>Debug</Configuration><Platform>Win32</Platform></ProjectConfiguration>
+<ProjectConfiguration Include="Release|x64"><Configuration>Release</Configuration><Platform>x64</Platform></ProjectConfiguration>
+<ProjectConfiguration Include="Release|Win32"><Configuration>Release</Configuration><Platform>Win32</Platform></ProjectConfiguration>
+<ProjectConfiguration Include="ReleaseWithDebugInfo|x64"><Configuration>ReleaseWithDebugInfo</Configuration><Platform>x64</Platform></ProjectConfiguration>
+<ProjectConfiguration Include="ReleaseWithDebugInfo|Win32"><Configuration>ReleaseWithDebugInfo</Configuration><Platform>Win32</Platform></ProjectConfiguration>
+</ItemGroup>
+<PropertyGroup Label="Globals"><ProjectGuid>{C4FD64B9-B958-543A-86A1-FC447091E9EA}</ProjectGuid><ProjectName>EpochMediaEngine</ProjectName><WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion></PropertyGroup>
+<Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+<PropertyGroup Label="Configuration"><ConfigurationType>StaticLibrary</ConfigurationType><PlatformToolset>v143</PlatformToolset><CharacterSet>Unicode</CharacterSet><UseDebugLibraries Condition="'$(Configuration)'=='Debug'">true</UseDebugLibraries></PropertyGroup>
+<Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+<PropertyGroup><VcpkgEnabled>false</VcpkgEnabled><VcpkgEnableManifest>false</VcpkgEnableManifest><VcpkgAutoLink>false</VcpkgAutoLink><OutDir>$(ProjectDir)build\bin\$(Platform)\$(Configuration)\</OutDir><IntDir>$(ProjectDir)build\obj\$(Platform)\$(Configuration)\</IntDir></PropertyGroup>
+<Import Project="..\..\..\Tools\MSVC\EpochOutputLayout.props" Condition="Exists('$(MSBuildThisFileDirectory)..\..\..\Tools\MSVC\EpochOutputLayout.props')" />
+<ItemDefinitionGroup><ClCompile><LanguageStandard>stdcpp23</LanguageStandard><ConformanceMode>true</ConformanceMode><SDLCheck>true</SDLCheck><ScanSourceForModuleDependencies>true</ScanSourceForModuleDependencies><RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary><RuntimeLibrary Condition="'$(Configuration)'=='Debug'">MultiThreadedDebugDLL</RuntimeLibrary><PreprocessorDefinitions>WIN32_LEAN_AND_MEAN;NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions><PreprocessorDefinitions Condition="'$(Configuration)'=='Debug'">_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions><PreprocessorDefinitions Condition="'$(Configuration)'!='Debug'">NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions><AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions></ClCompile></ItemDefinitionGroup>
+<ItemGroup>
+<ClCompile Include="modules\media.timeline_preview.ixx" />
+</ItemGroup>
+<Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

@@ -35,6 +35,23 @@ class WindowsResourceContract(unittest.TestCase):
         self.assertIn("STRINGTABLE", script)
         self.assertIn("VS_VERSION_INFO VERSIONINFO", script)
 
+    def test_resource_compile_belongs_to_editor_executable_only(self):
+        shared = (ROOT / "Engine" / "Engine.vcxitems").read_text(encoding="utf-8")
+        editor = (ROOT / "Engine" / "examples" / "EpochEditor" / "EpochEditor.vcxproj").read_text(encoding="utf-8")
+        self.assertNotIn('ResourceCompile Include="$(MSBuildThisFileDirectory)resource\\WinResource.rc"', shared)
+        self.assertNotIn('Image Include="$(MSBuildThisFileDirectory)resource\\icon.ico"', shared)
+        shared_filters = (ROOT / "Engine" / "Engine.vcxitems.filters").read_text(encoding="utf-8")
+        self.assertNotIn("WinResource.rc", shared_filters)
+        self.assertNotIn("icon.ico", shared_filters)
+        self.assertIn('ResourceCompile Include="..\\..\\resource\\WinResource.rc"', editor)
+        self.assertIn('$(MSBuildProjectDirectory)\\..\\..\\resource', editor)
+
+    def test_release_preflight_rejects_bom_before_decoding(self):
+        script = (ROOT / "Tools" / "build_release_verified.ps1").read_text(encoding="utf-8")
+        self.assertIn("[IO.File]::ReadAllBytes($resourceFile)", script)
+        self.assertIn("if ($value -gt 127)", script)
+        self.assertIn("WinResource.rc must not be compiled by the shared", script)
+
     def test_resource_version_matches_source_version(self):
         source = VERSION_MODULE.read_text(encoding="utf-8")
         def value(name):

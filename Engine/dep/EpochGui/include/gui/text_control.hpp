@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MPL-2.0
 #pragma once
 
 #include "floating_window.hpp"
@@ -5,11 +6,45 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <span>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace epochengine::gui_lib
 {
+    struct TextVisualLine final
+    {
+        std::size_t first{};
+        std::size_t past_last{};
+    };
+
+    // Font ownership stays with the consumer; byte boundaries and wrap-space
+    // classification must match that consumer's drawable UTF-8 glyph policy.
+    struct TextGlyphMetrics
+    {
+        std::size_t byte_count{1u};
+        float advance{};
+        bool wrap_space{};
+    };
+    using TextGlyphMeasure = TextGlyphMetrics (*)(std::string_view, std::size_t, const void*);
+    struct TextLayoutMetrics
+    {
+        TextGlyphMeasure measure{};
+        const void* context{};
+        float minimum_width{1.0f};
+    };
+    [[nodiscard]] std::vector<TextVisualLine> text_visual_lines(std::string_view text,
+        float wrap_width, bool multiline, const TextLayoutMetrics& metrics);
+    [[nodiscard]] std::size_t text_visual_line_for_index(std::span<const TextVisualLine> lines,
+        std::size_t index) noexcept;
+    // Supplied line ranges are clamped to text; reversed ranges become empty.
+    // NaN coordinates select the first row/start; infinite Y selects an endpoint.
+    // Non-finite line advance uses one pixel. Metrics only receive in-range indices.
+    [[nodiscard]] std::size_t text_index_from_point(std::string_view text,
+        std::span<const TextVisualLine> lines, Vec2 local_point, float line_advance,
+        bool multiline, const TextLayoutMetrics& metrics) noexcept;
+
     inline constexpr std::size_t invalid_text_index = (std::numeric_limits<std::size_t>::max)();
 
     enum class TextControlCommand : std::uint8_t
@@ -32,7 +67,9 @@ namespace epochengine::gui_lib
         insert_text,
         copy_selection,
         cut_selection,
-        paste_text
+        paste_text,
+        undo,
+        redo
     };
 
     struct TextSelectionRange
@@ -58,6 +95,13 @@ namespace epochengine::gui_lib
         std::size_t column{};
     };
 
+    struct TextControlSnapshot
+    {
+        std::string text{};
+        std::size_t anchor{};
+        std::size_t caret{};
+    };
+
     struct TextControlState
     {
         std::string text{};
@@ -67,6 +111,9 @@ namespace epochengine::gui_lib
         Vec2 scroll{};
         bool focused{};
         bool changed_this_frame{};
+        // Owned by EpochGUI: editor-specific clients need no private undo stack.
+        std::vector<TextControlSnapshot> undo_history{};
+        std::vector<TextControlSnapshot> redo_history{};
     };
 
     struct TextControlOptions

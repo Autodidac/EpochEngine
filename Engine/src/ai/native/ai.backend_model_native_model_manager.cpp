@@ -1,4 +1,6 @@
 // Epoch Engine AI runtime - SPDX-License-Identifier: LicenseRef-MIT-NoSell
+// Epoch system notes (auto-checked):
+// Epoch AI: preserve model selection, candidate isolation and host verification gates.
 #include "ai.backend_model_native_model_manager.hpp"
 
 #include "ai.backend_process_process.hpp"
@@ -6,6 +8,7 @@
 #include "ai.backend_core_file_replace.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 extern "C" void core_log_write(std::uint32_t, const char*, const char*);
 #include <chrono>
@@ -59,8 +62,9 @@ namespace {
     return true;
 }
 
-// Revision 9 changes the scale, not the physical meaning of old saved values:
-// old 18% -> new 30%; old 55% -> new 92%; old >=60% -> new 100%.
+// Revision 9 changed the scale, not the physical meaning of old saved values.
+// A v8 profile set to 55% should still offload approximately 55% of layers
+// after migration: with the v0.90.131 70%-ceiling scale, 55% -> 79%.
 // Keep the old load approximately unchanged for customized profiles. The
 // recognizable factory built-in preset instead uses the current default.
 [[nodiscard]] std::uint32_t rescale_legacy_gpu_percent(std::uint32_t old_percent) noexcept {
@@ -70,12 +74,110 @@ namespace {
 }
 
 [[nodiscard]] bool migrate_legacy_gpu_scale(nlohmann::json& manifest) {
-    if (!manifest.is_object() || manifest.value("profile_revision", 1U) >= runtime_profile_revision) {
+    // Scale migration belongs only to pre-v9 manifests. Revision 10 updates
+    // untouched defaults; applying the v9 rescale to an existing v9 model
+    // would silently raise GPU offload a second time.
+    if (!manifest.is_object() || manifest.value("profile_revision", 1U) >= 9U) {
         return false;
     }
     const auto old_percent = manifest.value("gpu_offload_percent", 36U);
     if (old_percent > 100U) return false; // Validation will reject it.
     manifest["gpu_offload_percent"] = rescale_legacy_gpu_percent(old_percent);
+    manifest["profile_revision"] = 9U;
+    return true;
+}
+
+// One-time offload bump for the recognizable factory recommended profile.
+// Preserve manual and custom layer counts; do not rewrite GPU weight budgets.
+[[nodiscard]] bool migrate_gpu_default_60(nlohmann::json& manifest) {
+    if (!manifest.is_object() || manifest.value("profile_revision", 1U) >= 10U)
+        return false;
+    if (manifest.value("profile_revision", 1U) != 9U
+        || manifest.value("gpu_offload_percent", 0U) != 50U
+        || manifest.value("runtime_policy", std::string{}) != "recommended"
+        || manifest.value("gpu_layers", std::string{}) != "auto"
+        || manifest.value("gpu_layer_count_hint", 0U) != 48U)
+        return false;
+    manifest["gpu_offload_percent"] = 60U;
+    manifest["profile_revision"] = 10U;
+    return true;
+}
+
+// Revision 11 gives every existing native model an additional ten percentage
+// points of GPU-layer target once. An explicit CPU-only profile remains CPU-only;
+// exact manual layer overrides are left intact. Never compound this on restart.
+[[nodiscard]] bool migrate_gpu_default_70(nlohmann::json& manifest) {
+    if (!manifest.is_object() || (manifest.value("profile_revision", 1U) != 10U
+        && manifest.value("profile_revision", 1U) != 9U))
+        return false;
+    const auto it = manifest.find("gpu_offload_percent");
+    if (it == manifest.end() || !it->is_number_unsigned()) return false;
+    const auto previous = it->get<std::uint32_t>();
+    if (previous > 100U) return false;
+    if (previous != 0U)
+        manifest["gpu_offload_percent"] = std::min(100U, previous + 10U);
+    manifest["profile_revision"] = 11U;
+    return true;
+}
+
+// One-time 0.90.146 uplift for the standard 70% native preset. Only
+// automatic 70% profiles move to 90%; tuned sliders, CPU-only models, and
+// manual layer counts remain intact. The revision prevents repeat upgrades.
+[[nodiscard]] bool migrate_gpu_default_90(nlohmann::json& manifest) {
+    if (!manifest.is_object() || manifest.value("profile_revision", 1U) != 11U)
+        return false;
+    if (manifest.value("runtime_policy", std::string{}) == "recommended"
+        && manifest.value("gpu_layers", std::string{}) == "auto"
+        && manifest.value("gpu_offload_percent", 0U) == 70U)
+        manifest["gpu_offload_percent"] = 90U;
+    manifest["profile_revision"] = 12U;
+    return true;
+}
+
+// Revision 13 raises only untouched recommended 90%-of-layers presets to
+// the operator-selected 100% target. A manual policy, exact layer override,
+// customized target and CPU-only model never change during migration.
+[[nodiscard]] bool migrate_gpu_default_100(nlohmann::json& manifest) {
+    if (!manifest.is_object() || manifest.value("profile_revision", 1U) != 12U)
+        return false;
+    if (manifest.value("runtime_policy", std::string{}) == "recommended"
+        && manifest.value("gpu_layers", std::string{}) == "auto"
+        && manifest.value("gpu_layer_count_hint", 0U) == 48U
+        && manifest.value("gpu_offload_percent", 0U) == 90U)
+        manifest["gpu_offload_percent"] = 100U;
+    manifest["profile_revision"] = 13U;
+    return true;
+}
+
+// Revision 14 changes the *default* to 60% on a doubled requested-layer
+// range (60% of 96 ~= 58 layers vs the old 48). Only untouched recommended
+// factory profiles are reset; manual settings and explicit CPU-only stay put.
+[[nodiscard]] bool migrate_gpu_range_166(nlohmann::json& manifest) {
+    if (!manifest.is_object() || manifest.value("profile_revision", 1U) != 13U)
+        return false;
+    const bool untouched = manifest.value("runtime_policy", std::string{}) == "recommended"
+        && manifest.value("gpu_layers", std::string{}) == "auto"
+        && manifest.value("gpu_layer_count_hint", 0U) == 48U
+        && manifest.value("gpu_offload_percent", 0U) == 100U
+        && manifest.value("threads", 0U) == 12U
+        && manifest.value("batch_size", 0U) == 1024U;
+    if (untouched) manifest["gpu_offload_percent"] = 60U;
+    manifest["profile_revision"] = 14U;
+    return true;
+}
+
+// Revision 15 adopts the operator v180 absolute 30-layer scale without
+// downgrading v174 revision-14 profiles or changing manually tuned percentages.
+[[nodiscard]] bool migrate_gpu_absolute_30(nlohmann::json& manifest) {
+    if (!manifest.is_object() || manifest.value("profile_revision", 1U) >= 15U)
+        return false;
+    if (manifest.value("runtime_policy", std::string{}) == "recommended"
+        && manifest.value("gpu_layers", std::string{}) == "auto"
+        && manifest.value("gpu_offload_percent", 0U) == 60U
+        && manifest.value("gpu_layer_count_hint", 0U) == 48U
+        && manifest.value("threads", 0U) == 12U
+        && manifest.value("batch_size", 0U) == 1024U)
+        manifest["gpu_offload_percent"] = gpu_offload_default_percent;
     manifest["profile_revision"] = runtime_profile_revision;
     return true;
 }
@@ -189,6 +291,79 @@ namespace {
 
 } // namespace
 
+// Runtime configuration has stable storage for the entire server lifetime.
+// A second model must never reuse the first server's port or terminate it.
+struct NativeModelManager::RuntimeSlot {
+    static core::Config with_port(const core::Config& original, std::uint32_t port) {
+        auto adjusted = original;
+        adjusted.qwen_flash_port = static_cast<std::uint16_t>(port);
+        return adjusted;
+    }
+    RuntimeSlot(const core::Config& source, const std::filesystem::path& state_root, std::uint32_t port)
+        : config(with_port(source, port)), runtime(config, state_root) {}
+    core::Config config;
+    QwenFlashRuntime runtime;
+};
+
+std::shared_ptr<NativeModelManager::RuntimeSlot> NativeModelManager::find_slot(
+    std::string_view id_or_uri) const {
+    const auto id = normalize_id(id_or_uri);
+    std::scoped_lock lock(slots_mutex_);
+    auto it = slots_.find(id);
+    return it == slots_.end() ? nullptr : it->second;
+}
+
+std::shared_ptr<NativeModelManager::RuntimeSlot> NativeModelManager::slot_for(
+    const RuntimeModelProfile& profile) {
+    std::scoped_lock lock(slots_mutex_);
+    const auto existing=slots_.find(profile.id);
+    const auto running_for_this_model = existing!=slots_.end() && existing->second->runtime.running();
+    // 1-3 local models are practical on most desktops. Never assign a port
+    // outside the OS range or silently evict another model on capacity.
+    constexpr std::size_t max_resident_slots = 3;
+    constexpr std::size_t max_registered_slots = 16;
+    const auto resident = std::count_if(slots_.begin(), slots_.end(),
+        [](const auto& entry) { return entry.second->runtime.running(); });
+    if (resident >= max_resident_slots && !running_for_this_model) return {};
+    if (existing != slots_.end()) return existing->second;
+    if (slots_.size() >= max_registered_slots ||
+        static_cast<std::uint32_t>(config_.qwen_flash_port) + max_registered_slots > 65535u)
+        return {};
+    const auto port = static_cast<std::uint32_t>(config_.qwen_flash_port) +
+        static_cast<std::uint32_t>(slots_.size());
+    auto slot = std::make_shared<RuntimeSlot>(config_, state_root_, port);
+    slots_.emplace(profile.id, slot);
+    return slot;
+}
+
+bool NativeModelManager::model_loaded(std::string_view id_or_uri) const {
+    const auto slot = find_slot(id_or_uri);
+    return slot && slot->runtime.running();
+}
+
+nlohmann::json NativeModelManager::model_runtime_status(std::string_view id_or_uri) const {
+    const auto slot = find_slot(id_or_uri);
+    if (!slot) return nlohmann::json{{"running", false}};
+    return slot->runtime.describe();
+}
+
+void NativeModelManager::prefer_model(std::string_view id_or_uri) {
+    const auto id = normalize_id(id_or_uri);
+    std::scoped_lock lock(slots_mutex_);
+    if (auto it = slots_.find(id); it != slots_.end() && it->second->runtime.running())
+        last_active_id_ = id;
+}
+
+void NativeModelManager::stop_model(std::string_view id_or_uri) {
+    if (auto slot = find_slot(id_or_uri)) slot->runtime.stop();
+    std::scoped_lock lock(slots_mutex_);
+    if (last_active_id_ == normalize_id(id_or_uri)) {
+        last_active_id_.clear();
+        for (const auto& [id, candidate] : slots_)
+            if (candidate->runtime.running()) { last_active_id_ = id; break; }
+    }
+}
+
 bool is_native_runtime_model(std::string_view model) noexcept {
     return model.starts_with("qwenflash://");
 }
@@ -211,7 +386,7 @@ NativeModelManager::~NativeModelManager() {
 
     // ensure_started() can be waiting for a large first-time download. Stop the
     // native runtime before joining workers so shutdown remains cancellable.
-    qwen_flash_.stop();
+    stop_active();
     if (install_worker_.joinable()) install_worker_.join();
     if (runtime_worker_.joinable()) runtime_worker_.join();
 }
@@ -337,6 +512,10 @@ void NativeModelManager::seed_defaults() {
     auto existing_json = read_json(builtin_manifest);
     try {
         const bool draft_repaired = repair_legacy_self_draft(existing_json);
+        const bool offload_tuned = migrate_gpu_default_70(existing_json);
+        const bool gpu90_tuned = migrate_gpu_default_90(existing_json);
+        const bool gpu100_tuned = migrate_gpu_default_100(existing_json);
+        const bool doubled = migrate_gpu_range_166(existing_json);
         auto existing = runtime_model_from_json(existing_json);
         const bool untouched_v060 =
             existing.profile_revision < 2U &&
@@ -395,7 +574,9 @@ void NativeModelManager::seed_defaults() {
         // a cache path that crashes UD-Q2_K_XL on the older backend.
         if (existing.profile_revision < 4U) existing.expert_cache_mode = "auto";
 
-        if (existing.profile_revision < runtime_profile_revision) {
+        // Revision 9 already uses the 70%-ceiling scale. Never rescale it
+        // merely because revision 10 updates the default target.
+        if (existing.profile_revision < 9U) {
             const bool untouched_builtin_gpu =
                 existing.runtime_policy == "recommended" &&
                 existing.gpu_offload_percent == 36U &&
@@ -406,12 +587,32 @@ void NativeModelManager::seed_defaults() {
             existing.gpu_offload_percent = untouched_builtin_gpu
                 ? gpu_offload_default_percent
                 : rescale_legacy_gpu_percent(existing.gpu_offload_percent);
+            if (!untouched_builtin_gpu && existing.gpu_offload_percent != 0U)
+                existing.gpu_offload_percent = std::min(100U,
+                    existing.gpu_offload_percent + 10U);
         }
+        // Revision 9 recommended defaults received the prior 50->60 bump;
+        // now target 70. Older manual/custom settings also receive exactly
+        // ten points without converting manual layer limits or CPU-only 0.
+        if (existing.profile_revision == 9U) {
+            const bool untouched = existing.runtime_policy == "recommended" &&
+                existing.gpu_offload_percent == 50U &&
+                existing.gpu_layers == "auto" && existing.gpu_layer_count_hint == 48U;
+            if (untouched) existing.gpu_offload_percent = gpu_offload_default_percent;
+            else if (existing.gpu_offload_percent != 0U)
+                existing.gpu_offload_percent = std::min(100U,
+                    existing.gpu_offload_percent + 10U);
+        }
+        if (existing.profile_revision == 11U &&
+            existing.runtime_policy == "recommended" &&
+            existing.gpu_layers == "auto" &&
+            existing.gpu_offload_percent == 70U)
+            existing.gpu_offload_percent = gpu_offload_default_percent;
         existing.profile_revision = runtime_profile_revision;
         // The old path reserialized the built-in profile on *every launch*.
         // Only commit actual migrations/normalization changes; this also uses
         // the [[nodiscard]] repair result instead of silently discarding it.
-        if (draft_repaired || to_json(existing) != existing_json) save_profile(existing);
+        if (draft_repaired || offload_tuned || gpu90_tuned || gpu100_tuned || doubled || to_json(existing) != existing_json) save_profile(existing);
     } catch (const std::exception& error) {
         // Never overwrite a user's saved profile with defaults because it
         // fails parsing or migration. Keep the original for manual recovery.
@@ -433,8 +634,14 @@ void NativeModelManager::load_profiles_locked() {
         try {
             const bool repaired = repair_legacy_self_draft(manifest);
             const bool rescaled = migrate_legacy_gpu_scale(manifest);
+            const bool tuned = migrate_gpu_default_60(manifest);
+            const bool increased = migrate_gpu_default_70(manifest);
+            const bool gpu90 = migrate_gpu_default_90(manifest);
+            const bool gpu100 = migrate_gpu_default_100(manifest);
+            const bool doubled = migrate_gpu_range_166(manifest);
+            const bool absolute = migrate_gpu_absolute_30(manifest);
             auto profile = runtime_model_from_json(manifest);
-            if (repaired || rescaled) {
+            if (repaired || rescaled || tuned || increased || gpu90 || gpu100 || doubled || absolute) {
                 profile.profile_revision = runtime_profile_revision;
                 save_profile(profile);
             }
@@ -464,6 +671,82 @@ std::optional<RuntimeModelProfile> NativeModelManager::find_locked(std::string_v
 std::optional<RuntimeModelProfile> NativeModelManager::find(std::string_view id_or_uri) const {
     std::scoped_lock lock(mutex_);
     return find_locked(id_or_uri);
+}
+
+std::expected<nlohmann::json, core::Error> NativeModelManager::set_gpu_offload(
+    std::string_view id_or_uri, std::uint32_t percent) {
+    if (percent > 100U) return std::unexpected(core::Error{
+        core::make_error_code(core::Errc::invalid_argument),
+        "GPU offload target must be in 0..100"});
+    std::scoped_lock lock(mutex_);
+    const auto original = find_locked(id_or_uri);
+    if (!original) return std::unexpected(core::Error{
+        core::make_error_code(core::Errc::model_unavailable),
+        "Unknown native model: " + std::string{id_or_uri}});
+    auto updated = *original;
+    updated.gpu_offload_percent = percent;
+    // The per-model percentage must not be defeated by an old exact-layer
+    // override. Moving this control selects automatic GPU-layer targeting.
+    updated.gpu_layers = "auto";
+    updated.profile_revision = runtime_profile_revision;
+    try {
+        save_profile(updated); // atomic file replacement BEFORE publishing
+    } catch (const std::exception& error) {
+        return std::unexpected(core::Error{core::make_error_code(core::Errc::io_error),
+            error.what()});
+    }
+    auto it = std::ranges::find_if(profiles_, [&](const auto& profile) {
+        return profile.id == updated.id;
+    });
+    if (it != profiles_.end()) *it = updated;
+    return nlohmann::json{{"model", runtime_model_uri(updated)},
+        {"gpu_offload_percent", percent},
+        {"effective_gpu_layers", effective_gpu_layers(updated)},
+        {"requires_reload", model_loaded(updated.id)}};
+}
+
+std::expected<nlohmann::json, core::Error> NativeModelManager::update_tuning(
+    std::string_view id_or_uri, const nlohmann::json& changes) {
+    if (!changes.is_object()) return std::unexpected(core::Error{
+        core::make_error_code(core::Errc::invalid_argument), "Model tuning requires an object"});
+    // Whitelist only non-identity runtime settings. Never accept a caller's
+    // id/path/repo/command override via the settings GUI.
+    static constexpr std::array<std::string_view, 24> allowed{
+        "runtime_policy", "gpu_layers", "gpu_layer_count_hint", "context_tokens", "parallel_slots",
+        "context_reserve_tokens", "auto_compact", "compact_trigger_ratio", "compact_target_ratio",
+        "threads", "batch_threads", "batch_size", "ubatch_size", "flash_attention",
+        "kv_type_k", "kv_type_v", "kv_offload", "kv_cpu_pinned", "kv_gpu_layers",
+        "prompt_cache_mib", "expert_cache_mode", "expert_cache_mib", "pinned_host_mib",
+        "speculative_enabled"};
+    for (auto it = changes.begin(); it != changes.end(); ++it) {
+        if (std::ranges::find(allowed, std::string_view{it.key()}) == allowed.end()
+            && it.key() != "speculative_model" && it.key() != "speculative_tokens")
+            return std::unexpected(core::Error{core::make_error_code(core::Errc::invalid_argument),
+                "Unsupported or immutable model setting: " + it.key()});
+    }
+    std::scoped_lock lock(mutex_);
+    const auto original = find_locked(id_or_uri);
+    if (!original) return std::unexpected(core::Error{
+        core::make_error_code(core::Errc::model_unavailable),
+        "Unknown native model: " + std::string{id_or_uri}});
+    auto modified = to_json(*original);
+    for (auto it = changes.begin(); it != changes.end(); ++it) modified[it.key()] = it.value();
+    modified["profile_revision"] = runtime_profile_revision;
+    RuntimeModelProfile updated{};
+    try {
+        updated = runtime_model_from_json(modified);
+        if (updated.speculative_enabled && updated.speculative_model.empty())
+            throw std::invalid_argument("MTP needs a dedicated local GGUF sidecar");
+        save_profile(updated); // atomic write; keep old in-memory profile on failure
+    } catch (const std::exception& error) {
+        return std::unexpected(core::Error{core::make_error_code(core::Errc::invalid_argument),
+            std::string{"Model profile not saved: "} + error.what()});
+    }
+    auto it = std::ranges::find_if(profiles_, [&](const auto& profile) {return profile.id == updated.id;});
+    if (it != profiles_.end()) *it = updated;
+    return nlohmann::json{{"model", runtime_model_uri(updated)},
+        {"requires_reload", model_loaded(updated.id)},
+        {"effective_gpu_layers", effective_gpu_layers(updated)}};
 }
 
 std::expected<nlohmann::json, core::Error> NativeModelManager::register_model(const nlohmann::json& spec) {
@@ -555,8 +838,7 @@ std::expected<nlohmann::json, core::Error> NativeModelManager::register_model(co
         if (profile.compact_target_ratio >= profile.compact_trigger_ratio) throw std::invalid_argument("compact target must be below compact trigger");
         profile = runtime_model_from_json(to_json(profile));
 
-        const bool runtime_reload_required =
-            qwen_flash_.running() && qwen_flash_.active_model_id() == profile.id;
+        const bool runtime_reload_required = model_loaded(profile.id);
 
         // Runtime-profile edits are configuration changes, not lifecycle
         // commands. Persist them even while this model is loaded, but never
@@ -633,7 +915,7 @@ std::expected<nlohmann::json, core::Error> NativeModelManager::install(std::stri
             }
         }
     }
-    if (qwen_flash_.running()) {
+    if (model_loaded(id_or_uri)) {
         return std::unexpected(core::Error{
             core::make_error_code(core::Errc::process_failed),
             "Stop the active Qwen Flash model before downloading another model",
@@ -644,7 +926,13 @@ std::expected<nlohmann::json, core::Error> NativeModelManager::install(std::stri
     set_install_state({{"state", "installing"}, {"model", runtime_model_uri(profile)}, {"display_name", profile.display_name}});
     install_worker_ = std::jthread([this, profile](std::stop_token stop) {
         if (stop.stop_requested()) return;
-        auto started = qwen_flash_.ensure_started(profile);
+        auto slot = slot_for(profile);
+        if (!slot) {
+            set_install_state({{"state", "failed"}, {"model", runtime_model_uri(profile)},
+                {"error", "Insufficient free native model slots/ports for install-only load"}});
+            return;
+        }
+        auto started = slot->runtime.ensure_started(profile, std::chrono::steady_clock::time_point::max(), stop);
         if (!started) {
             set_install_state({
                 {"state", "failed"},
@@ -654,7 +942,7 @@ std::expected<nlohmann::json, core::Error> NativeModelManager::install(std::stri
             });
             return;
         }
-        qwen_flash_.stop();
+        slot->runtime.stop();
         set_install_state({
             {"state", "installed"},
             {"model", runtime_model_uri(profile)},
@@ -772,7 +1060,8 @@ std::expected<nlohmann::json, core::Error> NativeModelManager::provision_runtime
 std::expected<std::string, core::Error> NativeModelManager::prepare(
     std::string_view id_or_uri,
     std::chrono::steady_clock::time_point deadline,
-    std::stop_token stop) {
+    std::stop_token stop,
+    std::optional<std::uint32_t> gpu_offload_cap_percent) {
     RuntimeModelProfile profile;
     {
         std::scoped_lock lock(mutex_);
@@ -798,7 +1087,31 @@ std::expected<std::string, core::Error> NativeModelManager::prepare(
             });
         }
     }
-    return qwen_flash_.ensure_started(profile, deadline, stop);
+    if (gpu_offload_cap_percent) {
+        // Apply a launch-only ceiling *after* reading the saved standalone
+        // profile. Manual exact-layer overrides also obey the cohort cap.
+        auto capped = profile;
+        capped.gpu_layers = "auto";
+        capped.gpu_offload_percent = std::min(profile.gpu_offload_percent,
+            std::min(*gpu_offload_cap_percent, 100u));
+        const auto capped_layers = static_cast<std::uint32_t>(
+            std::stoul(effective_gpu_layers(capped)));
+        const auto original_layers = static_cast<std::uint32_t>(
+            std::stoul(effective_gpu_layers(profile)));
+        profile.gpu_layers = std::to_string(std::min(capped_layers, original_layers));
+        profile.gpu_offload_percent = capped.gpu_offload_percent;
+        profile.multimodel_memory_saver = true;
+        profile.expert_cache_mode = "off";
+        profile.speculative_enabled = false;
+    }
+    auto slot = slot_for(profile);
+    if (!slot) return std::unexpected(core::Error{
+        core::make_error_code(core::Errc::model_unavailable),
+        "Native resident-model limit (3 concurrent processes) or port capacity reached. Unload a model."});
+    auto result = slot->runtime.ensure_started(profile, deadline, stop);
+    if (result) { std::scoped_lock lock(slots_mutex_);
+        if (last_active_id_.empty()) last_active_id_ = profile.id; }
+    return result;
 }
 
 std::expected<std::string, core::Error> NativeModelManager::prepare_with_local_override(
@@ -864,30 +1177,34 @@ std::expected<std::string, core::Error> NativeModelManager::prepare_with_local_o
     profile.local_path = *normalized_local;
     // A direct load override must never fall back to -hf or another cache.
     // Keeping repo/quant is useful only as profile metadata.
-    return qwen_flash_.ensure_started(profile, deadline, stop);
+    auto slot = slot_for(profile);
+    if (!slot) return std::unexpected(core::Error{
+        core::make_error_code(core::Errc::model_unavailable),
+        "Native resident-model limit (3 concurrent processes) or port capacity reached. Unload a model."});
+    auto result = slot->runtime.ensure_started(profile, deadline, stop);
+    if (result) { std::scoped_lock lock(slots_mutex_);
+        if (last_active_id_.empty()) last_active_id_ = profile.id; }
+    return result;
 }
 
 std::optional<std::string> NativeModelManager::active_model_uri() const {
-    if (!qwen_flash_.running()) return std::nullopt;
-
-    const auto active_id = qwen_flash_.active_model_id();
-    if (active_id.empty()) return std::nullopt;
-
-    std::scoped_lock lock(mutex_);
-    if (const auto profile = find_locked(active_id); profile.has_value()) {
-        return runtime_model_uri(*profile);
-    }
-
-    // Preserve a usable route even if a catalog entry was removed while the
-    // runtime is still winding down. This should be transient, but it is safer
-    // than silently falling through to an unrelated external provider.
-    return "qwenflash://" + active_id;
+    std::scoped_lock lock(slots_mutex_);
+    if (const auto it=slots_.find(last_active_id_); it!=slots_.end() && it->second->runtime.running())
+        return "qwenflash://" + it->first;
+    for (const auto& [id, slot] : slots_)
+        if (slot->runtime.running()) return "qwenflash://" + id;
+    return std::nullopt;
 }
 
 void NativeModelManager::stop_active() {
-    qwen_flash_.stop();
+    std::vector<std::shared_ptr<RuntimeSlot>> current;
+    {
+        std::scoped_lock lock(slots_mutex_);
+        for (const auto& [id, slot] : slots_) current.push_back(slot);
+        last_active_id_.clear();
+    }
+    for (const auto& slot : current) slot->runtime.stop();
 }
-
 
 std::expected<nlohmann::json, core::Error> NativeModelManager::clear_transient_cache(std::string_view id_or_uri) {
     auto profile = find(id_or_uri);
@@ -899,7 +1216,7 @@ std::expected<nlohmann::json, core::Error> NativeModelManager::clear_transient_c
                 "Wait for the model download to finish before clearing temporary cache files"});
         }
     }
-    if (qwen_flash_.running()) {
+    if (model_loaded(id_or_uri)) {
         return std::unexpected(core::Error{core::make_error_code(core::Errc::process_failed),
             "Unload the native model before clearing temporary cache files"});
     }
@@ -955,11 +1272,11 @@ std::expected<nlohmann::json, core::Error> NativeModelManager::delete_downloaded
                 "Wait for the model download to finish before deleting downloaded model weights"});
         }
     }
-    if (qwen_flash_.running() && qwen_flash_.active_model_id() == profile->id) {
+    if (model_loaded(profile->id)) {
         return std::unexpected(core::Error{core::make_error_code(core::Errc::process_failed), "Unload the model before deleting downloaded weights"});
     }
     if (profile->source == ModelSourceKind::local_gguf) {
-        return std::unexpected(core::Error{core::make_error_code(core::Errc::invalid_argument), "Epoch AI will not delete a Local GGUF file. Delete external model files manually if intended."});
+        return std::unexpected(core::Error{core::make_error_code(core::Errc::invalid_argument), "Local Models will not delete a Local GGUF file. Delete external model files manually if intended."});
     }
 
     const auto cache = qwen_flash_.cache_status(*profile);
@@ -970,7 +1287,7 @@ std::expected<nlohmann::json, core::Error> NativeModelManager::delete_downloaded
     ec.clear();
     const auto candidate = std::filesystem::weakly_canonical(path, ec);
     if (ec || configured.empty() || candidate.empty() || !path_is_within(candidate, configured)) {
-        return std::unexpected(core::Error{core::make_error_code(core::Errc::invalid_argument), "Refusing to delete model weights outside Epoch AI's configured model cache"});
+        return std::unexpected(core::Error{core::make_error_code(core::Errc::invalid_argument), "Refusing to delete model weights outside the configured local model cache"});
     }
     const auto bytes = cache.value("cached_bytes", std::uint64_t{});
     std::filesystem::remove_all(candidate, ec);
@@ -981,7 +1298,7 @@ std::expected<nlohmann::json, core::Error> NativeModelManager::delete_downloaded
 std::expected<nlohmann::json, core::Error> NativeModelManager::remove(std::string_view id_or_uri, bool delete_cache) {
     auto profile = find(id_or_uri);
     if (!profile) return std::unexpected(core::Error{core::make_error_code(core::Errc::model_unavailable), "Unknown native model"});
-    if (qwen_flash_.running() && qwen_flash_.active_model_id() == profile->id) {
+    if (model_loaded(profile->id)) {
         return std::unexpected(core::Error{core::make_error_code(core::Errc::process_failed), "Cannot remove the active model; unload it first"});
     }
 
@@ -1088,8 +1405,10 @@ nlohmann::json NativeModelManager::describe() const {
     for (const auto& profile : models()) {
         auto item = to_json(profile);
         item["uri"] = runtime_model_uri(profile);
+        item["effective_gpu_layers"] = effective_gpu_layers(profile);
         item["cache"] = qwen_flash_.cache_status(profile);
-        item["active"] = qwen_flash_.running() && qwen_flash_.active_model_id() == profile.id;
+        item["active"] = model_loaded(profile.id);
+        item["runtime_state"] = model_runtime_status(profile.id);
         items.push_back(std::move(item));
     }
     nlohmann::json install;
@@ -1119,6 +1438,8 @@ nlohmann::json NativeModelManager::describe() const {
             }
         }
     }
+    std::size_t resident_count = 0;
+    for (const auto& item : items) if (item.value("active", false)) ++resident_count;
     std::error_code space_error;
     const auto space = std::filesystem::space(config_.model_cache_root, space_error);
     return {
@@ -1132,7 +1453,9 @@ nlohmann::json NativeModelManager::describe() const {
             {"available_bytes", space_error ? nlohmann::json(nullptr) : nlohmann::json(space.available)},
             {"capacity_bytes", space_error ? nlohmann::json(nullptr) : nlohmann::json(space.capacity)},
         }},
-        {"qwen_flash", qwen_flash_.describe()},
+        {"resident_count", resident_count},
+        {"resident_limit", 3},
+        {"qwen_flash", active_model_uri() ? model_runtime_status(*active_model_uri()) : qwen_flash_.describe()},
     };
 }
 

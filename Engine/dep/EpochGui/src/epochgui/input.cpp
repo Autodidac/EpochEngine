@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MPL-2.0
 module;
 
 #include <algorithm>
@@ -176,10 +177,29 @@ namespace epochengine::gui_lib::input
         mode_ = ModalInputMode::blocked_until_clear;
     }
 
+    void ModalInputArbiter::require_owner_scope() noexcept
+    {
+        exclusive_owner_ = active();
+        inside_owner_ = false;
+    }
+
+    void ModalInputArbiter::enter_owner_scope() noexcept
+    {
+        if (exclusive_owner_)
+            inside_owner_ = true;
+    }
+
+    void ModalInputArbiter::leave_owner_scope() noexcept
+    {
+        inside_owner_ = false;
+    }
+
     void ModalInputArbiter::clear() noexcept
     {
         bounds_ = {};
         mode_ = ModalInputMode::inactive;
+        exclusive_owner_ = false;
+        inside_owner_ = false;
     }
 
     ModalInputMode ModalInputArbiter::mode() const noexcept
@@ -202,8 +222,15 @@ namespace epochengine::gui_lib::input
         return active();
     }
 
+    bool ModalInputArbiter::owner_input_allowed() const noexcept
+    {
+        return !exclusive_owner_ || inside_owner_;
+    }
+
     bool ModalInputArbiter::pointer_allowed(Vec2 position) const noexcept
     {
+        if (!owner_input_allowed())
+            return false;
         switch (mode_)
         {
         case ModalInputMode::inactive:

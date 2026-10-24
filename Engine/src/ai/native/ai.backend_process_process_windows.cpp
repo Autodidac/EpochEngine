@@ -1,4 +1,6 @@
 // Epoch Engine AI runtime - SPDX-License-Identifier: LicenseRef-MIT-NoSell
+// Epoch system notes (auto-checked):
+// Epoch AI: preserve model selection, candidate isolation and host verification gates.
 #include "ai.backend_process_process.hpp"
 #ifdef _WIN32
 
@@ -115,11 +117,27 @@ void append_tail(std::string& output, const char* data, std::size_t size, std::s
     output.append(data, size);
 }
 
-void read_pipe(HANDLE pipe, std::string& output, std::size_t limit) {
+void read_pipe(HANDLE pipe, std::string& output, std::size_t limit, std::stop_token stop) {
     char buffer[4096];
-    DWORD bytes_read = 0;
-    while (ReadFile(pipe, buffer, sizeof(buffer), &bytes_read, nullptr) && bytes_read > 0) {
-        append_tail(output, buffer, static_cast<std::size_t>(bytes_read), limit);
+    for (;;) {
+        DWORD available = 0;
+        if (!PeekNamedPipe(pipe, nullptr, 0, nullptr, &available, nullptr)) return;
+        // On retirement drain only the already queued bytes. An inherited
+        // writer must never turn reader.join() into an unbounded second wait.
+        const bool retiring = stop.stop_requested();
+        if (available == 0) {
+            if (retiring) return;
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            continue;
+        }
+        do {
+            DWORD bytes_read = 0;
+            const auto count = (std::min)(available, static_cast<DWORD>(sizeof(buffer)));
+            if (!ReadFile(pipe, buffer, count, &bytes_read, nullptr) || bytes_read == 0) return;
+            append_tail(output, buffer, static_cast<std::size_t>(bytes_read), limit);
+            available -= bytes_read;
+        } while (retiring && available > 0);
+        if (retiring) return;
     }
 }
 
@@ -253,8 +271,8 @@ std::expected<Result, core::Error> run_windows(const Request& request, std::stop
     }
 
     Result result;
-    std::jthread stdout_reader([&] { read_pipe(stdout_read, result.stdout_text, request.max_output_bytes); });
-    std::jthread stderr_reader([&] { read_pipe(stderr_read, result.stderr_text, request.max_output_bytes); });
+    std::jthread stdout_reader([&](std::stop_token token) { read_pipe(stdout_read, result.stdout_text, request.max_output_bytes, token); });
+    std::jthread stderr_reader([&](std::stop_token token) { read_pipe(stderr_read, result.stderr_text, request.max_output_bytes, token); });
     const auto deadline = std::chrono::steady_clock::now() + request.timeout;
 
     for (;;) {
@@ -284,6 +302,11 @@ std::expected<Result, core::Error> run_windows(const Request& request, std::stop
         result.exit_code = static_cast<int>(exit_code);
     }
 
+    // Successful parent exit does not imply its descendants released stdout.
+    // Retire the owned tree before waiting for readers, preserving parent status.
+    close_if(job);
+    stdout_reader.request_stop();
+    stderr_reader.request_stop();
     if (stdout_reader.joinable()) { stdout_reader.join(); }
     if (stderr_reader.joinable()) { stderr_reader.join(); }
 

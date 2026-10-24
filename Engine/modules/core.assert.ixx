@@ -28,6 +28,9 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
+// Epoch system notes (auto-checked):
+// Epoch STL: honor core.stl_types.hpp types/operators; fix callers, not core overloads.
+// Epoch Core: preserve engine-defined primitives, APIs and module contracts.
 // not exclusively but this was created as an always-on assertion module for the engine to catch critical errors upon termination.
 // It is not a replacement for exceptions or error handling, but rather a tool to catch programming errors and logic violations during development and debugging.
 module;

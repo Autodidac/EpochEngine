@@ -28,6 +28,8 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
+// Epoch system notes (auto-checked):
+// EpochGUI: use consistent draw/hit-test geometry and preserve child input ownership.
 module;
 
 #include <cstdint>
@@ -85,7 +87,9 @@ namespace epochengine::gui
         MidnightBlue,
         EmberForge,
         ForestTerminal,
-        AuroraSteel
+        AuroraSteel,
+        StudioNavy,
+        CodexBlack
     };
 
     export enum class ThemePreference : std::uint8_t
@@ -98,13 +102,23 @@ namespace epochengine::gui
         ForestTerminal,
         AuroraSteel,
         Light,
-        Dark
+        Dark,
+        StudioNavy,
+        ThemeCycle,
+        RemovedLegacyTheme = 11, // Reserved persisted ordinal; always loads as Dark.
+        CodexBlack = 12 // New ID; never reuse old persisted ordinals.
     };
 
     export struct ThemePreferenceChoice
     {
         std::string_view label{};
         ThemePreference preference{ ThemePreference::FollowSystemDark };
+    };
+
+    export struct ThemeCycleIntervalChoice
+    {
+        std::string_view label{};
+        std::uint32_t seconds{30u};
     };
 
     export class ScopedTheme
@@ -144,7 +158,8 @@ namespace epochengine::gui
         KeyDown,
         KeyUp,
         TextInput,
-        FocusLost
+        FocusLost,
+        FileDrop
     };
 
     export struct InputEvent
@@ -158,6 +173,7 @@ namespace epochengine::gui
         bool shift_down{};
         bool alt_down{};
         std::string text{};
+        std::vector<std::string> files{};
     };
 
     export struct WidgetBounds
@@ -249,6 +265,13 @@ namespace epochengine::gui
         SemanticTone tone{ SemanticTone::neutral };
     };
 
+    // Reusable two-level composer menu. Editor actions do not enter EpochGUI.
+    export struct ConsoleComposerMenuGroupSpec
+    {
+        std::string_view label{};
+        std::span<const ConsoleWindowActionSpec> actions{};
+    };
+
     export enum class TextMessageRole : std::uint8_t
     {
         neutral,
@@ -262,6 +285,57 @@ namespace epochengine::gui
         engine
     };
 
+    // One host-observed event within the active turn. Events are grouped by
+    // the outer Worked disclosure but retain their own individual expansion.
+    export struct ChatActivityEvent
+    {
+        std::string group{};
+        std::string summary{};
+        std::string detail{};
+        std::string id{};    // Native tool-call identity; never model-generated routing.
+        std::string status{};
+        bool tool{};
+    };
+
+    // A truthful snapshot of one request, not the current session model.
+    // The editor supplies routing evidence; EpochGUI only presents it.
+    export struct ChatImageAttachment
+    {
+        std::string id{}, name{}, status{};
+        SpriteHandle preview{};
+        Vec2 source_size{};
+    };
+
+    export struct ChatFileAttachment
+    {
+        std::string name{}, content{};
+    };
+
+    export struct ChatMessageRunInfo
+    {
+        std::string model{};
+        std::string route{};
+        std::string architect{};
+        std::string duration{};
+        std::string tps{}; // Optional reported-token historical mean, labeled explicitly.
+        std::string status{};
+        // Only verified transport/host observations; never a synthetic agent trace.
+        std::string evidence{};
+        std::vector<ChatActivityEvent> activity_events{};
+        std::uint64_t run_id{}; // Stable within one chat, including history pruning.
+        // Host-observed activity and reviewed tool-call results are nested
+        // disclosures. Provider token/reasoning deltas are not chat records.
+        bool stream_block{false};
+        bool stream_live{false};
+        std::vector<ChatImageAttachment> images{};
+        std::vector<ChatFileAttachment> files{};
+        std::uint64_t image_request_id{};
+        [[nodiscard]] bool present() const noexcept
+        {
+            return stream_block || !model.empty() || !route.empty() || !files.empty();
+        }
+    };
+
     export struct ConsoleWindowOptions
     {
         std::string_view title{};
@@ -270,9 +344,16 @@ namespace epochengine::gui
 
         const std::vector<std::string>& lines;
         std::span<const TextMessageRole> line_roles{};
+        std::span<const ChatMessageRunInfo> line_run_details{};
         std::span<const std::uint8_t> retryable_lines{};
         bool retry_enabled{ false };
         bool message_bubbles{ false };
+        bool conversation_style{ false };
+        bool expand_activity{ false };
+        // Opt-in for append-only message collections, such as model raw tokens.
+        // Retain per-block wrap measurements across frames without affecting
+        // ordinary mutable chat/activity views.
+        bool incremental_line_measurements{ false };
         std::size_t max_visible_lines{ 200 };
         std::string_view log_id{};
         bool follow_tail{ true };
@@ -281,6 +362,25 @@ namespace epochengine::gui
         std::string* input{ nullptr };
         std::size_t max_input_chars{ 4096 };
         bool multiline_input{ false };
+        // Modern chat composer: compact, grows to six wrapped lines, Enter sends.
+        bool chat_composer{ false };
+        // Place the microphone in the composer, alongside the Send/Stop control.
+        bool composer_microphone{ false };
+        bool composer_microphone_active{ false };
+        bool composer_pause{ false };
+        bool composer_paused{ false };
+        std::span<const std::string_view> composer_attachment_labels{};
+        std::function<bool()> composer_paste{};
+        // Dock panes supply their own tab title; hide only the redundant inner title.
+        bool show_title_bar{ true };
+        std::span<const ConsoleWindowActionSpec> composer_menu_actions{};
+        // In-place quick selector for verified resident model identities.
+        std::span<const ConsoleWindowActionSpec> model_picker_actions{};
+        bool model_picker_open{};
+        // When provided, the compact + menu shows categories and their actions.
+        // The flat list above remains supported for existing clients.
+        std::span<const ConsoleComposerMenuGroupSpec> composer_menu_groups{};
+        std::string_view composer_placeholder{ "What should we create?" };
         TextInputKeyboardPolicy input_keyboard_policy{
             TextInputKeyboardPolicy::focused };
         bool show_send_button{ false };
@@ -289,6 +389,7 @@ namespace epochengine::gui
         std::string_view send_button_label{ "Send >" };
         std::string_view task_label{};
         std::string_view task_value{};
+        bool task_wrap{}; // Multi-line, neutral live-status header.
         SemanticTone task_tone{ SemanticTone::neutral };
         std::string* task_edit_buffer{ nullptr };
         std::size_t task_max_input_chars{ 1024 };
@@ -306,6 +407,8 @@ namespace epochengine::gui
         float message_action_gap{ 6.0f };
         std::span<const ConsoleWindowActionSpec> footer_actions{};
         float footer_action_gap{ 6.0f };
+        std::span<const ChatImageAttachment> composer_image_previews{};
+        std::span<const ChatFileAttachment> composer_files{};
     };
 
     export struct ConsoleWindowResult
@@ -314,14 +417,25 @@ namespace epochengine::gui
         EditBoxResult task_input{};
         std::optional<std::size_t> task_action_index{};
         bool send_clicked{};
+        std::optional<std::size_t> attachment_remove_index{};
+        std::optional<std::size_t> file_remove_index{};
+        std::optional<std::size_t> composer_menu_action_index{};
+        std::optional<std::size_t> composer_menu_group_index{};
+        std::optional<std::size_t> composer_voice_action_index{};
+        bool composer_pause_clicked{};
+        std::optional<std::size_t> model_picker_action_index{};
+        bool model_picker_dismissed{};
         std::optional<std::size_t> header_action_index{};
         std::optional<std::size_t> message_action_index{};
         std::optional<std::size_t> footer_action_index{};
         std::optional<std::size_t> retry_line_index{};
+        std::optional<std::size_t> copy_line_index{};
+        std::optional<std::size_t> edit_line_index{};
         bool log_user_scrolled{};
         bool log_at_end{ true };
         float log_scroll_y{};
         float log_maximum_scroll_y{};
+        std::vector<std::string> dropped_files{};
     };
 
     export struct ScrollTextPanelOptions
@@ -330,14 +444,19 @@ namespace epochengine::gui
         Vec2 size{};
         const std::vector<std::string>& lines;
         std::span<const TextMessageRole> line_roles{};
+        std::span<const ChatMessageRunInfo> line_run_details{};
         std::span<const std::uint8_t> retryable_lines{};
         bool retry_enabled{ false };
         bool message_bubbles{ false };
+        bool conversation_style{ false };
+        bool expand_activity{ false };
+        bool incremental_line_measurements{ false };
         std::size_t max_line_chars{ 768 };
         bool selectable{ true };
         bool stick_to_bottom{ true };
         bool wrap_lines{ true };
         std::uint64_t scroll_to_end_generation{};
+        bool show_scroll_to_end{ false };
     };
 
     export struct ScrollTextPanelResult
@@ -345,6 +464,8 @@ namespace epochengine::gui
         std::size_t first_visible_line{};
         std::optional<std::size_t> selected_line{};
         std::optional<std::size_t> retry_line_index{};
+        std::optional<std::size_t> copy_line_index{};
+        std::optional<std::size_t> edit_line_index{};
         bool wheel_scrolled{};
         bool user_scrolled{};
         bool at_end{ true };
@@ -609,7 +730,14 @@ namespace epochengine::gui
     };
 
     export void begin_modal_input_capture(Vec2 position, Vec2 size) noexcept;
+    // Call before drawing background panels. Only begin_modal_window's scoped
+    // controls may consume input, even if a covered control overlaps the modal.
+    export void begin_modal_background_capture(Vec2 position, Vec2 size) noexcept;
     export void block_input_until_clear() noexcept;
+    export void block_background_for_popup() noexcept;
+    export void allow_background_for_popup() noexcept;
+    export void begin_application_popup_input() noexcept;
+    export void end_application_popup_input() noexcept;
     export void clear_modal_input_capture() noexcept;
 
     export struct SegmentedButtonSpec
@@ -923,6 +1051,44 @@ namespace epochengine::gui
         float width{};
         bool enabled{ true };
     };
+    export enum class InlineButtonSizing : std::uint8_t
+    {
+        Fill,
+        FitContent
+    };
+    export enum class InlineButtonAlignment : std::uint8_t
+    {
+        Start,
+        End,
+        Center
+    };
+    export struct InlineButtonRowOptions
+    {
+        InlineButtonSizing sizing{ InlineButtonSizing::Fill };
+        InlineButtonAlignment alignment{ InlineButtonAlignment::Start };
+        bool wrap{};
+        float available_width{};
+    };
+    export enum class MenuItemIndicator : std::uint8_t
+    {
+        None,
+        Check,
+        Radio
+    };
+
+    // Flat popup commands share one label/indicator/shortcut layout and hit row.
+    // The owner supplies commands and availability; these rows never execute
+    // keyboard shortcuts or change selection state on the owner's behalf.
+    export struct MenuItemOptions
+    {
+        std::string_view label{};
+        std::string_view shortcut{};
+        Vec2 size{};
+        bool enabled{ true };
+        MenuItemIndicator indicator{ MenuItemIndicator::None };
+        bool checked{};
+        bool separator_before{};
+    };
     export enum class ChromeItemRole : std::uint8_t
     {
         Label,
@@ -957,6 +1123,7 @@ namespace epochengine::gui
         float zone_gap{ 12.0f };
         float overflow_width{ 82.0f };
         float horizontal_padding{ 12.0f };
+        float center_shift_x{};
     };
 
     export struct ChromeBarResult
@@ -978,6 +1145,51 @@ namespace epochengine::gui
         bool valid{};
     };
 
+
+    // Always-visible status fields. The row count is calculated before dock
+    // geometry so a constrained window wraps instead of clipping status data.
+    export struct StatusStripItem
+    {
+        std::string_view label{};
+        std::string_view compact_label{};
+        std::string_view minimal_label{};
+        SemanticTone tone{ SemanticTone::neutral };
+        // Larger priorities abbreviate before lower priorities.
+        std::uint16_t compression_priority{};
+        std::string_view tooltip{};
+        // Reserve representative numeric text to avoid live-value layout jitter.
+        std::string_view width_reference{}, compact_width_reference{}, minimal_width_reference{};
+    };
+
+    export struct StatusStripOptions
+    {
+        std::span<const StatusStripItem> items{};
+        Vec2 position{};
+        float available_width{};
+        float item_height{ 26.0f };
+        float item_gap{ 4.0f };
+        float row_gap{ 4.0f };
+        float horizontal_padding{ 12.0f };
+        bool align_right{ false };
+        // Keep leading fields under compression; trailing fields yield first.
+        bool single_row{ false };
+    };
+
+    export struct StatusStripResult
+    {
+        std::optional<std::size_t> selected_index{};
+        std::size_t rows{};
+        float height{};
+    };
+
+    // A positive available_width selects the fitting label density and returns
+    // its occupied width; zero measures unconstrained full labels.
+    export float status_strip_preferred_width(const StatusStripOptions& options) noexcept;
+    // Smallest label allocation for all fields, before dropping fields or
+    // overflowing adjacent commands. Uses the same reserved numeric widths.
+    export float status_strip_minimum_width(const StatusStripOptions& options) noexcept;
+    export float status_strip_height(const StatusStripOptions& options) noexcept;
+    export StatusStripResult status_strip(const StatusStripOptions& options) noexcept;
 
     export struct SelectBoxOptions
     {
@@ -1069,6 +1281,7 @@ namespace epochengine::gui
 
     export void begin_window(std::string_view title, Vec2 position, Vec2 size) noexcept;
     export void begin_window(std::string_view title, Vec2 position, Vec2 size, bool draw_background) noexcept;
+    export void begin_window(std::string_view title, Vec2 position, Vec2 size, bool draw_background, bool show_title_bar) noexcept;
     export void end_window() noexcept;
     export void begin_top_layer() noexcept;
     export void end_top_layer() noexcept;
@@ -1104,6 +1317,25 @@ namespace epochengine::gui
     export std::span<const ThemePreferenceChoice> theme_preference_choices() noexcept;
     export std::string_view theme_preference_label(ThemePreference preference) noexcept;
     export ThemeVariant resolve_theme_preference(ThemePreference preference) noexcept;
+    // Publish editor theme policy for OS-owned title bars and detached windows.
+    // The Win32 host applies chrome on its owning window threads.
+    export void publish_native_window_theme(ThemePreference preference) noexcept;
+    export struct NativeWindowChromePalette
+    {
+        std::uint8_t paletteId{};
+        bool isLight{};
+        std::uint32_t backgroundRgb{};
+        std::uint32_t captionRgb{};
+        std::uint32_t borderRgb{};
+        std::uint32_t textRgb{};
+    };
+    export NativeWindowChromePalette native_window_chrome_palette() noexcept;
+    export bool native_window_prefers_dark() noexcept;
+    export ThemeVariant published_window_theme_variant() noexcept;
+    export std::span<const ThemeCycleIntervalChoice> theme_cycle_interval_choices() noexcept;
+    export std::string_view theme_cycle_interval_label(std::uint32_t seconds) noexcept;
+    export std::uint32_t normalize_theme_cycle_interval(std::uint32_t seconds) noexcept;
+    export void set_theme_cycle_interval(std::uint32_t seconds) noexcept;
     export void push_theme(ThemeVariant theme) noexcept;
     export void pop_theme() noexcept;
     export bool rounded_rectangles_enabled() noexcept;
@@ -1115,6 +1347,9 @@ namespace epochengine::gui
 
     export bool button(std::string_view label, Vec2 size) noexcept;
     export bool button_selected(std::string_view label, Vec2 size, bool selected) noexcept;
+    export float menu_item_row_height() noexcept;
+    export float menu_item_preferred_width(const MenuItemOptions& options) noexcept;
+    export bool menu_item(const MenuItemOptions& options) noexcept;
     export bool toggle_switch(std::string_view label, bool& value, Vec2 size = { 160.0f, 28.0f }) noexcept;
     export bool text_link(std::string_view label, Vec2 size, bool selected = false) noexcept;
     export bool titlebar_close_button(Vec2 window_position, Vec2 window_size) noexcept;
@@ -1146,7 +1381,8 @@ namespace epochengine::gui
         std::span<const TabButtonSpec> tabs,
         float height = 30.0f,
         float gap = 1.0f,
-        TabBarPresentation presentation = TabBarPresentation::Document) noexcept;
+        TabBarPresentation presentation = TabBarPresentation::Document,
+        Vec2 keyboard_region_size = {}) noexcept;
     export TabBarResult responsive_tab_bar_buttons(
         const ResponsiveTabBarOptions& options) noexcept;
     export ChromeBarResult chrome_bar(
@@ -1154,7 +1390,13 @@ namespace epochengine::gui
     export std::optional<std::size_t> inline_button_row(
         std::span<const InlineButtonSpec> items,
         float height = 24.0f,
-        float gap = 6.0f) noexcept;
+        float gap = 6.0f,
+        const InlineButtonRowOptions& options = {}) noexcept;
+    export float inline_button_row_height(
+        std::span<const InlineButtonSpec> items,
+        float height = 24.0f,
+        float gap = 6.0f,
+        const InlineButtonRowOptions& options = {}) noexcept;
     export SelectBoxResult select_box(const SelectBoxOptions& options) noexcept;
     export void progress_bar(const ProgressBarOptions& options) noexcept;
     export LoadingScreenResult loading_screen(const LoadingScreenOptions& options) noexcept;
@@ -1164,8 +1406,16 @@ namespace epochengine::gui
         std::size_t max_chars = 0,
         bool multiline = false,
         TextInputKeyboardPolicy keyboard_policy =
-            TextInputKeyboardPolicy::focused) noexcept;
+            TextInputKeyboardPolicy::focused,
+        bool submit_on_enter = false,
+        std::string_view placeholder = {},
+        bool stable_focus = false,
+        bool integrated_composer = false,
+        const std::function<bool()>& paste_handler = {}) noexcept;
     export void select_all_text_in_edit_box(std::string& text) noexcept;
+    // Insert programmatic clipboard/file/voice text through the same undo history.
+    export bool paste_text_in_edit_box(std::string& text,
+        std::string_view inserted, std::size_t maximum_bytes = 0u) noexcept;
     export SourceEditorResult source_editor(std::string& text, const SourceEditorOptions& options) noexcept;
     export [[nodiscard]] std::string clipboard_text() noexcept;
     export bool set_clipboard_text(std::string_view text) noexcept;
@@ -1178,6 +1428,10 @@ namespace epochengine::gui
     export ConsoleWindowResult console_window(const ConsoleWindowOptions& options) noexcept;
 
     export void label(std::string_view text) noexcept;
+    export void status_label(std::string_view text, SemanticTone tone, Vec2 position) noexcept;
+    export void section_heading(std::string_view text) noexcept;
+    export void workflow_step(std::string_view state, std::string_view description,
+        SemanticTone tone, float width = 0.0f) noexcept;
     export void wrapped_label(std::string_view text, float width = 0.0f) noexcept;
     export void semantic_block(std::string_view text, SemanticTone tone,
         float max_width = 0.0f) noexcept;

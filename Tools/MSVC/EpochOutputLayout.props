@@ -1,0 +1,25 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <!-- epoch.build-output-layout/v1 -->
+  <!-- All first-party solution products share one edition-owned build tree. -->
+  <PropertyGroup>
+    <EpochRepositoryRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\'))</EpochRepositoryRoot>
+    <EpochEditionSource>$([System.IO.File]::ReadAllText('$(EpochRepositoryRoot)Engine\include\epoch.edition.hpp'))</EpochEditionSource>
+    <EpochOutputEdition>development</EpochOutputEdition>
+    <EpochOutputEdition Condition="$(EpochEditionSource.Contains('#define EPOCH_SOURCE_EDITION_PUBLIC 1'))">public</EpochOutputEdition>
+    <EpochBuildRoot Condition="'$(EpochBuildRoot)'==''">$(EpochRepositoryRoot)build\</EpochBuildRoot>
+    <EpochResolvedBuildRoot>$([MSBuild]::EnsureTrailingSlash('$(EpochBuildRoot)'))</EpochResolvedBuildRoot>
+    <OutDir>$(EpochResolvedBuildRoot)bin\windows\$(EpochOutputEdition)\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(EpochResolvedBuildRoot)obj\msvc\$(EpochOutputEdition)\$(Platform)\$(Configuration)\$(ProjectName)\</IntDir>
+  </PropertyGroup>
+  <Target Name="EpochStageSharedRuntimeAssets" AfterTargets="Build" Condition="'$(ConfigurationType)'=='Application'">
+    <ItemGroup>
+      <EpochSharedRuntimeAssets Include="$(EpochRepositoryRoot)Engine\assets\fonts\**\*">
+        <AssetDirectory>fonts\</AssetDirectory>
+      </EpochSharedRuntimeAssets>
+      <EpochSharedRuntimeAssets Include="$(EpochRepositoryRoot)Engine\assets\vulkan\**\*">
+        <AssetDirectory>vulkan\</AssetDirectory>
+      </EpochSharedRuntimeAssets>
+    </ItemGroup>
+    <Copy SourceFiles="@(EpochSharedRuntimeAssets)" DestinationFiles="@(EpochSharedRuntimeAssets->'$(OutDir)assets\%(AssetDirectory)%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+  </Target>
+</Project>

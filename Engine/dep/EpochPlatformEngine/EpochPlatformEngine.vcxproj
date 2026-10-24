@@ -1,0 +1,65 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" DefaultTargets="Build">
+<ItemGroup Label="ProjectConfigurations">
+<ProjectConfiguration Include="Debug|x64"><Configuration>Debug</Configuration><Platform>x64</Platform></ProjectConfiguration>
+<ProjectConfiguration Include="Debug|Win32"><Configuration>Debug</Configuration><Platform>Win32</Platform></ProjectConfiguration>
+<ProjectConfiguration Include="Release|x64"><Configuration>Release</Configuration><Platform>x64</Platform></ProjectConfiguration>
+<ProjectConfiguration Include="Release|Win32"><Configuration>Release</Configuration><Platform>Win32</Platform></ProjectConfiguration>
+<ProjectConfiguration Include="ReleaseWithDebugInfo|x64"><Configuration>ReleaseWithDebugInfo</Configuration><Platform>x64</Platform></ProjectConfiguration>
+<ProjectConfiguration Include="ReleaseWithDebugInfo|Win32"><Configuration>ReleaseWithDebugInfo</Configuration><Platform>Win32</Platform></ProjectConfiguration>
+</ItemGroup>
+<PropertyGroup Label="Globals"><ProjectGuid>{DFA26C91-27C8-4F23-A7BF-1CCB74811899}</ProjectGuid><ProjectName>EpochPlatformEngine</ProjectName><WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion></PropertyGroup>
+<Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+<PropertyGroup Label="Configuration"><ConfigurationType>StaticLibrary</ConfigurationType><PlatformToolset>v143</PlatformToolset><CharacterSet>Unicode</CharacterSet><UseDebugLibraries Condition="'$(Configuration)'=='Debug'">true</UseDebugLibraries></PropertyGroup>
+<Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+<PropertyGroup><VcpkgEnabled>false</VcpkgEnabled><VcpkgEnableManifest>false</VcpkgEnableManifest><VcpkgAutoLink>false</VcpkgAutoLink><OutDir>$(ProjectDir)build\bin\$(Platform)\$(Configuration)\</OutDir><IntDir>$(ProjectDir)build\obj\$(Platform)\$(Configuration)\</IntDir></PropertyGroup>
+<Import Project="..\..\..\Tools\MSVC\EpochOutputLayout.props" Condition="Exists('$(MSBuildThisFileDirectory)..\..\..\Tools\MSVC\EpochOutputLayout.props')" />
+<ItemDefinitionGroup><ClCompile><LanguageStandard>stdcpp23</LanguageStandard><ConformanceMode>true</ConformanceMode><SDLCheck>true</SDLCheck><ScanSourceForModuleDependencies>true</ScanSourceForModuleDependencies><AdditionalIncludeDirectories>$(ProjectDir)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories><RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary><RuntimeLibrary Condition="'$(Configuration)'=='Debug'">MultiThreadedDebugDLL</RuntimeLibrary><PreprocessorDefinitions>EPOCH_PLATFORM_ENGINE_STATIC=1;WIN32_LEAN_AND_MEAN;NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions><PreprocessorDefinitions Condition="'$(Configuration)'=='Debug'">_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions><PreprocessorDefinitions Condition="'$(Configuration)'!='Debug'">NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions><AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions></ClCompile></ItemDefinitionGroup>
+<ItemGroup>
+<ClInclude Include="include\build.cpp_feature_probe.hpp" />
+<ClInclude Include="include\core.abi_types.hpp" />
+<ClInclude Include="include\core.log_compact.hpp" />
+<ClInclude Include="include\core.stl_types.hpp" />
+<ClInclude Include="include\epoch.app_api.h" />
+<ClInclude Include="include\epoch.software_application.hpp" />
+<ClCompile Include="modules\context.admission.ixx" />
+<ClCompile Include="modules\context.type.ixx" />
+<ClCompile Include="modules\core.env.ixx" />
+<ClCompile Include="modules\core.error.ixx" />
+<ClCompile Include="modules\core.log.ixx" />
+<ClCompile Include="modules\core.time.ixx" />
+<ClCompile Include="modules\perf.select.ixx" />
+<ClCompile Include="modules\perf.tier.ixx" />
+<ClCompile Include="modules\platform.application.ixx" />
+<ClCompile Include="modules\platform.budgets.ixx" />
+<ClCompile Include="modules\platform.capabilities.ixx" />
+<ClCompile Include="modules\platform.engine.ixx" />
+<ClCompile Include="modules\platform.window.ixx" />
+<ClCompile Include="modules\platform.window_attachment.ixx" />
+<ClCompile Include="src\core\core.env.cpp" />
+<ClCompile Include="src\core\core.log.cpp" />
+<ClCompile Include="src\core\core.time.cpp" />
+<ClCompile Include="src\epoch\epoch.software_application.cpp" />
+<ClInclude Include="src\epoch\epoch.software_application_internal.hpp" />
+<ClCompile Include="src\platform\platform.window.cpp" />
+<ClCompile Include="src\platform\platform.window_attachment.cpp" />
+</ItemGroup>
+<ItemGroup>
+<ClCompile Include="modules\platform.native.ixx" />
+<ClCompile Include="src\application.cpp" />
+<ClCompile Include="src\runtime.cpp" />
+<ClCompile Include="src\runtime_host.cpp" />
+<ClCompile Include="src\types.cpp" />
+<ClCompile Include="src\drivers\headless_driver.cpp" />
+<ClCompile Include="src\drivers\win32_driver.cpp" />
+<ClInclude Include="include\epochplatformengine\application.hpp" />
+<ClInclude Include="include\epochplatformengine\driver.hpp" />
+<ClInclude Include="include\epochplatformengine\epoch_platform_engine.hpp" />
+<ClInclude Include="include\epochplatformengine\export.hpp" />
+<ClInclude Include="include\epochplatformengine\runtime.hpp" />
+<ClInclude Include="include\epochplatformengine\types.hpp" />
+<ClInclude Include="src\runtime_internal.hpp" />
+</ItemGroup>
+<Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+<ItemGroup><ClInclude Include="include\core.utf8.hpp" /></ItemGroup>
+</Project>

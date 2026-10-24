@@ -28,6 +28,9 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
+// Epoch system notes (auto-checked):
+// Epoch STL: honor core.stl_types.hpp types/operators; fix callers, not core overloads.
+// Epoch AI: preserve model selection, candidate isolation and host verification gates.
  /**************************************************************
  *   Epoch Engine - AI Integration (Local OpenAI-Compatible)
  *   License: MIT (adapt as needed)
@@ -35,6 +38,7 @@
 module;
 
 #include "../include/core.stl_types.hpp"
+#include "../include/epoch.edition.hpp"
 
 #if defined(_WIN32)
 #   ifndef WIN32_LEAN_AND_MEAN
@@ -48,6 +52,7 @@ module;
 #include <cstdint>
 #include <functional>
 #include <stop_token>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -76,8 +81,6 @@ export namespace epochengine::ai
     {
         chat,
         authoring,
-        source_iteration,
-        source_self_review
     };
 
     enum class ModelRequestStage : std::uint8_t
@@ -102,7 +105,20 @@ export namespace epochengine::ai
         std::size_t content_bytes{};
         std::size_t tool_argument_bytes{};
         std::size_t reasoning_bytes{};
+        // Exact completed usage from the provider, never byte-derived.
+        double measured_tps{};
+        bool tps_known{};
         std::uint32_t timeout_seconds{};
+        // Provider-reported completion tokens; never derive these from wire bytes,
+        // stream event count, or UTF-8 characters. Generation is measured from
+        // the first streamed payload where that boundary is observable.
+        std::uint64_t completion_tokens{};
+        double generation_ms{};
+        bool token_usage_reported{};
+        // True only when generation_ms is supplied as provider decode timing.
+        // Otherwise it is a measured first-payload-to-completion interval.
+        bool provider_generation_timing{};
+        std::uint64_t input_image_tokens{}; // Positive only from provider input-usage metadata.
     };
     using ModelProgressObserver = std::function<void(const ModelRequestProgress&)>;
 
@@ -137,13 +153,6 @@ export namespace epochengine::ai
             // an operator-managed model loads. Keep a finite, visible ceiling
             // without restarting an expired generation or accepting fragments.
             return {81'920u, 16'384u, 168u * 1024u, 512u * 1024u, 15u * 60u};
-        case InferenceWorkload::source_iteration:
-            // Local coding includes prompt evaluation and long reasoning. The
-            // finite per-attempt budget is independent of window focus; an
-            // exhausted whole budget must not automatically restart that work.
-            return {81'920u, 32'768u, 120u * 1024u, 1024u * 1024u, 3u * 60u * 60u};
-        case InferenceWorkload::source_self_review:
-            return {81'920u, 8'192u, 192u * 1024u, 256u * 1024u, 3u * 60u * 60u};
         }
         return {};
     }
@@ -250,6 +259,14 @@ export namespace epochengine::ai
         ModelTerminalFailure terminal_failure{ModelTerminalFailure::none};
     };
 
+    struct ReferenceImage final
+    {
+        std::string name{};
+        std::string mime_type{};
+        std::string bytes{};
+        std::string client_id{}; // Local preview/receipt identity; never sent to the model.
+    };
+
     class EngineAiModel
     {
     public:
@@ -274,12 +291,33 @@ export namespace epochengine::ai
             InferenceWorkload workload = InferenceWorkload::chat,
             std::stop_token cancellation = {},
             ModelRequestObserver observer = {},
-            ModelProgressObserver progress_observer = {});
+            ModelProgressObserver progress_observer = {},
+            std::span<const ReferenceImage> images = {});
 
     private:
         Config m_cfg{};
         std::string m_endpoint_full{}; // normalized to /v1/chat/completions
     };
+
+    enum class VisualReviewVerdict : std::uint8_t
+    {
+        unavailable, pass, revise, inconclusive
+    };
+
+    struct VisualReviewResult final
+    {
+        VisualReviewVerdict verdict{VisualReviewVerdict::unavailable};
+        std::string detail{};
+    };
+
+    // Only an explicitly selected, confirmed OpenAI-compatible vision model
+    // may receive sandbox screenshots. Native text-only transports are skipped.
+    [[nodiscard]] bool visual_review_model_available(bool try_unlisted_model = false);
+    [[nodiscard]] VisualReviewResult review_candidate_screenshot(
+        std::string_view png_path,
+        std::stop_token cancellation = {},
+        bool try_unlisted_model = false,
+        std::string_view feature_objective = {});
 
     // Engine-global service wrapper (simple singleton)
     void init_engine_ai();
@@ -294,7 +332,8 @@ export namespace epochengine::ai
         std::stop_token cancellation = {},
         ModelRequestObserver observer = {},
         ModelTerminalFailure* terminal_failure = nullptr,
-        ModelProgressObserver progress_observer = {});
+        ModelProgressObserver progress_observer = {},
+        std::span<const ReferenceImage> images = {});
     [[nodiscard]] std::string default_workspace_root();
     [[nodiscard]] std::string review_fixtures_root();
     [[nodiscard]] std::string evals_root();
@@ -328,6 +367,21 @@ export namespace epochengine::ai
     };
     // Local endpoint selection/persistence does not query, load or start a model.
     // Responses/agent URLs are reference routes, not Chat Completions transports.
+    struct LocalApiModelSuggestion
+    {
+        std::string endpoint{};
+        std::string model_id{};
+    };
+    struct LocalApiModelScanTarget
+    {
+        std::string endpoint{};
+        std::vector<std::pair<std::string, std::string>> headers{};
+    };
+    // UI thread only: snapshot preferences, environment, and authorized headers.
+    [[nodiscard]] std::vector<LocalApiModelScanTarget> prepare_local_api_model_scan();
+    // Worker thread: bounded HTTP only; no preference/path/logging/UI access.
+    [[nodiscard]] std::vector<LocalApiModelSuggestion> scan_local_api_model_suggestions(
+        std::vector<LocalApiModelScanTarget> targets);
     [[nodiscard]] std::vector<std::string> saved_local_api_endpoints();
     [[nodiscard]] LocalApiEndpoint active_local_api_endpoint();
     [[nodiscard]] bool select_local_api_endpoint(std::string_view endpoint);
@@ -337,6 +391,11 @@ export namespace epochengine::ai
     [[nodiscard]] std::size_t local_model_context_override();
     [[nodiscard]] bool set_local_model_context_override(std::size_t tokens);
     [[nodiscard]] std::string active_model_name();
+    // Chat composer policy: "automatic" resolves per-model on each request.
+    // Qwen 3.8 dense defaults to Off; Flash Next is exempt and starts Low.
+    [[nodiscard]] std::string model_thinking_mode(std::string_view model);
+    [[nodiscard]] bool cycle_model_thinking_mode(std::string_view model);
+
     enum class LocalModelSelectionOrigin : unsigned char
     {
         none,
@@ -377,15 +436,12 @@ export namespace epochengine::ai
     void append_tool_trace(const McpCaptureRecord& record);
 
     [[nodiscard]] bool promote_eval_case(const EvalCase& record, std::string_view suite_name = "editor_ai_smoke");
+    [[nodiscard]] bool valid_project_context_text(std::string_view text) noexcept;
     [[nodiscard]] std::string normalize_assistant_reply(std::string_view reply);
     [[nodiscard]] std::string normalize_direct_llama_cpp_reply(
         std::string_view transcript,
         std::string_view user_text);
-    [[nodiscard]] std::string normalize_direct_llama_cpp_source_reply(
-        std::string_view transcript,
-        std::string_view user_text);
     [[nodiscard]] bool direct_llama_cpp_prompt_transport_contract();
-    [[nodiscard]] bool openai_source_iteration_request_contract();
     [[nodiscard]] bool model_request_cancellation_contract();
     [[nodiscard]] bool is_promotable_assistant_reply(std::string_view reply);
     [[nodiscard]] HelperReviewGateResult classify_helper_review_reply(std::string_view reply);

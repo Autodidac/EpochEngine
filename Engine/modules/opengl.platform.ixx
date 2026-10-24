@@ -186,14 +186,17 @@ export namespace epochengine::openglcontext::PlatformGL
 #endif
     }
 
-    inline void swap_buffers(const PlatformGLContext& ctx) noexcept
+    [[nodiscard]] inline bool swap_buffers(const PlatformGLContext& ctx) noexcept
     {
 #if defined(_WIN32)
-        if (ctx.device) (void)::SwapBuffers(ctx.device);
+        return ctx.device && ::SwapBuffers(ctx.device) == TRUE;
 #elif defined(__linux__)
-        if (ctx.display && ctx.drawable) ::glXSwapBuffers(ctx.display, ctx.drawable);
+        if (!ctx.display || !ctx.drawable) return false;
+        ::glXSwapBuffers(ctx.display, ctx.drawable);
+        return true; // GLX has no synchronous success return for this request.
 #else
         (void)ctx;
+        return false;
 #endif
     }
 

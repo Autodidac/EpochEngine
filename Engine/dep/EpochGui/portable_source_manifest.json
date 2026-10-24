@@ -1,0 +1,246 @@
+{
+  "schema": "epoch.portable_source_parity.v1",
+  "repository": "Autodidac/EpochGui",
+  "upstream_revision": "a990d4202ccb21a1b745aa999012a96fdc986d5e",
+  "scope": [
+    "src",
+    "include",
+    "modules",
+    "tests"
+  ],
+  "full_tree_mirror": false,
+  "files": [
+    {
+      "path": "src/epochgui/dockable_window.cpp",
+      "sha256": "6eb4413e723f33a1357e7171d2d0b23966438239e24dfab1c7b6f5ca7746cfcf"
+    },
+    {
+      "path": "src/epochgui/dock_layout.cpp",
+      "sha256": "0faa8314eb81d193db3403b4e6dd6a2e2f2940dfba41d37b1d1c6424c944e47e"
+    },
+    {
+      "path": "src/epochgui/floating_window.cpp",
+      "sha256": "65ea698fae14b9c280a343689b7c963f6eeb66c987c6abdc7761097ae5ef3b98"
+    },
+    {
+      "path": "src/epochgui/gui.scrollbar_layout.cpp",
+      "sha256": "a5f83376ab3abc970e57165dac26823f32b97682e26b5cb4f1cd1fc344a8ff1e"
+    },
+    {
+      "path": "src/epochgui/gui.text_layout.cpp",
+      "sha256": "e7703506890302359add7191663bacfbb5cce3af6e270cb751c07f71ef01cf2b"
+    },
+    {
+      "path": "src/epochgui/hierarchy_tree.cpp",
+      "sha256": "32e30b454a48e77300f52ee0127902062c01f539531c1429b002ddfc65289d98"
+    },
+    {
+      "path": "src/epochgui/image.cpp",
+      "sha256": "e4bc9ed732ba6a14e0584ae1cc2a2b490801ec7a534e1cbd1a748af934d8921c"
+    },
+    {
+      "path": "src/epochgui/input.cpp",
+      "sha256": "bfc74330c54e744d258a728c599192be38423cfe30772661ce6fd4df18ca4a5e"
+    },
+    {
+      "path": "src/epochgui/node_graph_workspace.cpp",
+      "sha256": "8a4f4c89853caf80d9bd55316d6d55398c6036e952af755d1f3954c6386c8774"
+    },
+    {
+      "path": "src/epochgui/panel_host.cpp",
+      "sha256": "88f4732a2d4eb6f65e949435b1c2b56badb12a335b07b579bead08b66cb7050e"
+    },
+    {
+      "path": "src/epochgui/popup_layout.cpp",
+      "sha256": "5cf5833f1645c804dbb494aefae93fdbf8dd67fe43fb76d09e571d82f5040669"
+    },
+    {
+      "path": "src/epochgui/rounded_rect.cpp",
+      "sha256": "6e51ab97c1af40acaf1fd90f46b6b83925cbc9cfbf65d6d79511af809b392fba"
+    },
+    {
+      "path": "src/epochgui/system_workspace.cpp",
+      "sha256": "ef7ac9f8476499bc36aba6d7690280e2ee40e447584b0a3bdc5e72640f1825d9"
+    },
+    {
+      "path": "src/epochgui/text_control.cpp",
+      "sha256": "ce8b36316627073f73aa868ce5cee19c0a61e550db299b588b86260e32e38bee"
+    },
+    {
+      "path": "src/epochgui/text_editor.cpp",
+      "sha256": "5bc9de549b153a2a8d8db2b96d31256d49d03b7231f0249af71e9e12b5764359"
+    },
+    {
+      "path": "src/epochgui/tile_workspace.cpp",
+      "sha256": "b6d4298c03d951114c28939ea6079921f6ed991753c90b466b9aaa8798d5a9f0"
+    },
+    {
+      "path": "include/gui/chat_composer_layout.hpp",
+      "sha256": "67ce9509c9d7e64e33abe5860021010dd860c54b50b7650f10e61b5782f31512"
+    },
+    {
+      "path": "include/gui/circle_raster.hpp",
+      "sha256": "b2d7be6bcd42bbae7477861a042ed701b306f1d491b71507086b56683bb90eb2"
+    },
+    {
+      "path": "include/gui/dockable_window.hpp",
+      "sha256": "e9f0abb1c09c5e5aa5e587a8dcbf20f044737b9db1aed7bd55fe6a3ebd12ea7a"
+    },
+    {
+      "path": "include/gui/dock_layout.hpp",
+      "sha256": "7071b0296396b0f474fe51f7867288325cfa51c5ccc22eaab929e75e9127b563"
+    },
+    {
+      "path": "include/gui/floating_window.hpp",
+      "sha256": "5f178f12b021314ff193383d2e189acd7990ef77497648f7b9b29638d7a67920"
+    },
+    {
+      "path": "include/gui/font.hpp",
+      "sha256": "228c901937358a003fdcc690bf7d899e60552e1a6bd520b594a9f67b1ddd3788"
+    },
+    {
+      "path": "include/gui/hierarchy_tree.hpp",
+      "sha256": "6a31ad199951fb4e5bce9c9ee0b4315b4845fb4f5e3c38e5f78cc0c553b37bba"
+    },
+    {
+      "path": "include/gui/layout_primitives.hpp",
+      "sha256": "4b6f0b3b841d4320f3133484dbde17b51d551b01c990817ff0c0c6af80b64d1f"
+    },
+    {
+      "path": "include/gui/node_graph_workspace.hpp",
+      "sha256": "083fdf47db0ef60bd6136de40ee98d4b3fa673451aaa1cc62fa5d7617d031a54"
+    },
+    {
+      "path": "include/gui/panel_host.hpp",
+      "sha256": "5109745a44361bdb5494a173733a1760ed6baacc45feddbdb87f9513ea86fbc2"
+    },
+    {
+      "path": "include/gui/popup_layout.hpp",
+      "sha256": "54eddfc22ded0d368e0a3df46ea2c7b80adb5126cf292c27167096edd96d5105"
+    },
+    {
+      "path": "include/gui/rounded_corner_raster.hpp",
+      "sha256": "7c393c9cd21e8a047e9c2939cf989b4c58cc8f071d0aaa61638e1d2dfcf98e92"
+    },
+    {
+      "path": "include/gui/status_strip_layout.hpp",
+      "sha256": "01f980bba7a1fd951b2db6b4658f7db21d9ed121c4433c42ebefd90f381f5bdc"
+    },
+    {
+      "path": "include/gui/system_workspace.hpp",
+      "sha256": "31d04513709c389901fe044e56b317b180054d1d923e0aae69d6a95013415308"
+    },
+    {
+      "path": "include/gui/text_control.hpp",
+      "sha256": "7df60866fa60e04aec05470d3a09faef1070fbd2c61d29e3e54f273eaf3f979b"
+    },
+    {
+      "path": "include/gui/text_editor.hpp",
+      "sha256": "2b880907654025f153092192d22a7ebb5a011dc56a9f17bf0010f3b0cc1cc1ee"
+    },
+    {
+      "path": "include/gui/utf8_text_layout.hpp",
+      "sha256": "e81d8d9b1f1b1165f4d28bdce859f050109557cb21a8806b805f4feca4456316"
+    },
+    {
+      "path": "include/gui/version.hpp",
+      "sha256": "fba84652c17fe3086b291be88c47dbc7d05c1c025b66274b590f28bb19a813cb"
+    },
+    {
+      "path": "modules/epoch.gui.font.ixx",
+      "sha256": "5f1638a80f5be8dca941ec2bf54afe01370f0b8b4d6209b7facd5ca91d675f9c"
+    },
+    {
+      "path": "modules/epoch.gui.image.ixx",
+      "sha256": "2baa686c0b3cfee833eed32957bcbca299caac31d2e0c24ad2c2f79ba837bf6e"
+    },
+    {
+      "path": "modules/epoch.gui.input.ixx",
+      "sha256": "3539137c4c830fc53dc18114a22fd36a6b9afffda9042ce1c0aad90d52a43ad8"
+    },
+    {
+      "path": "modules/epoch.gui.ixx",
+      "sha256": "68c6d354ec1bbaafc19979887d6778454dc7742eefb032ae00265ed299b39623"
+    },
+    {
+      "path": "modules/epoch.gui.rounded_rect.ixx",
+      "sha256": "36f4bb80bda277dea3de607623b4e99140f960eabb90baf117770c139abcb153"
+    },
+    {
+      "path": "modules/epoch.gui.tile_workspace.ixx",
+      "sha256": "b7e9d93a9da2ab457d3de3f79ed2e0fda3d1e09bbd74c498ba88f6b844fdec0b"
+    },
+    {
+      "path": "tests/asset_grid_tests.cpp",
+      "sha256": "e44ef4ca5be72d10a878b9cc0d77c128f9dc604ad6620790d99554949aacf9d0"
+    },
+    {
+      "path": "tests/chat_composer_layout_tests.cpp",
+      "sha256": "c5726ccd09debc3d48d70e2397d0b1c8f33378b4c3637c82a7f43e84175a02c2"
+    },
+    {
+      "path": "tests/circle_raster_tests.cpp",
+      "sha256": "38a9fcc36577d36f7707c99722321d0d24e3498625921a7bd22bea2ee3124c57"
+    },
+    {
+      "path": "tests/dock_layout_tests.cpp",
+      "sha256": "35ba42ea98c936e06b7f3f9120d30cb8dbea7c8ae84d6e42dfe7e9df54c1fb25"
+    },
+    {
+      "path": "tests/font_tests.cpp",
+      "sha256": "63399001bd3d5c545f33a6f3a68066d90ec3822cd07f4ed048a6f51d48c2f4c7"
+    },
+    {
+      "path": "tests/gui.portable_helpers_tests.cpp",
+      "sha256": "63b3742a824a9821d3bd719e1df9dab7697634a8ce518e986510ecd4ded9d88d"
+    },
+    {
+      "path": "tests/gui.scrollbar_layout_tests.cpp",
+      "sha256": "dbe8583d0d2cf66bf6f0f27edbf6ce865332654aa75d497185cfd50fb6aa1a50"
+    },
+    {
+      "path": "tests/gui.text_layout_tests.cpp",
+      "sha256": "f13aaae196ae7c5dd60c3b8a9a3adc5f6586516b0737625c316d99f8909b26df"
+    },
+    {
+      "path": "tests/hierarchy_tree_tests.cpp",
+      "sha256": "f3a8f0bc9a08faa618481839c381750d90483b039ac6c94155f791bdc83c4f96"
+    },
+    {
+      "path": "tests/image_tests.cpp",
+      "sha256": "faa33948e831c7962577b96a35bfa49f467ffb625b8ca53a7502f4aaec48fbb4"
+    },
+    {
+      "path": "tests/input_tests.cpp",
+      "sha256": "0ba0a8c63eb6fe7cba0780341b97634faf0065683c823b6f2b4a7a75a363b24b"
+    },
+    {
+      "path": "tests/node_graph_workspace_tests.cpp",
+      "sha256": "b5e154e5c26a50f4cf1feae551d2e4c32b57398bec285a3b24d202c0f1f4c779"
+    },
+    {
+      "path": "tests/popup_layout_tests.cpp",
+      "sha256": "a48819fc8b9ce0337e5baa92ff6c048822c842d6ae5a1bad5140387040a5355d"
+    },
+    {
+      "path": "tests/rounded_corner_raster_tests.cpp",
+      "sha256": "07680c4ab2b98208ac9dd5ec0d6d9c62207ebe88807592f4bb6587c063a29675"
+    },
+    {
+      "path": "tests/rounded_rect_tests.cpp",
+      "sha256": "87f1543db16d9b82822bc4630e2f339c00a44d2d5271745e5238e48ebba1087f"
+    },
+    {
+      "path": "tests/system_workspace_tests.cpp",
+      "sha256": "407a86aceec005538d8605bc2b9251d6712ac2cea6856271e259fa3b8b822b31"
+    },
+    {
+      "path": "tests/text_control_tests.cpp",
+      "sha256": "1ccc827e9e474ceb5ce9837dbcf0da9650fe2bd991c9d3c77e28ddc3b37a3d96"
+    },
+    {
+      "path": "tests/tile_workspace_tests.cpp",
+      "sha256": "00629abe79d2a302a295b6893511c19161e87478a3847b373baa32e5ec7a9466"
+    }
+  ]
+}

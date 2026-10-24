@@ -28,12 +28,13 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
+// Epoch system notes (auto-checked):
+// Epoch STL: honor core.stl_types.hpp types/operators; fix callers, not core overloads.
 module;
 
 #include <deque>
 #include <mutex>
 
-#include "../include/epoch.config.hpp"
 #include "../src/epoch/epoch.common.hpp"
 #include "../include/core.stl_types.hpp"
 

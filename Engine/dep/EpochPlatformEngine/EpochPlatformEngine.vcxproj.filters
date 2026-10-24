@@ -1,0 +1,141 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
+  <ItemGroup>
+    <Filter Include="include" />
+    <Filter Include="include\epochplatformengine" />
+    <Filter Include="modules" />
+    <Filter Include="src" />
+    <Filter Include="src\core" />
+    <Filter Include="src\drivers" />
+    <Filter Include="src\epoch" />
+    <Filter Include="src\platform" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="include\build.cpp_feature_probe.hpp">
+      <Filter>include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\core.abi_types.hpp">
+      <Filter>include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\core.log_compact.hpp">
+      <Filter>include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\core.stl_types.hpp">
+      <Filter>include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\epoch.app_api.h">
+      <Filter>include</Filter>
+    </ClInclude>
+    <ClInclude Include="include\epoch.software_application.hpp">
+      <Filter>include</Filter>
+    </ClInclude>
+    <ClCompile Include="modules\context.admission.ixx">
+      <Filter>modules</Filter>
+    </ClCompile>
+    <ClCompile Include="modules\context.type.ixx">
+      <Filter>modules</Filter>
+    </ClCompile>
+    <ClCompile Include="modules\core.env.ixx">
+      <Filter>modules</Filter>
+    </ClCompile>
+    <ClCompile Include="modules\core.error.ixx">
+      <Filter>modules</Filter>
+    </ClCompile>
+    <ClCompile Include="modules\core.log.ixx">
+      <Filter>modules</Filter>
+    </ClCompile>
+    <ClCompile Include="modules\core.time.ixx">
+      <Filter>modules</Filter>
+    </ClCompile>
+    <ClCompile Include="modules\perf.select.ixx">
+      <Filter>modules</Filter>
+    </ClCompile>
+    <ClCompile Include="modules\perf.tier.ixx">
+      <Filter>modules</Filter>
+    </ClCompile>
+    <ClCompile Include="modules\platform.application.ixx">
+      <Filter>modules</Filter>
+    </ClCompile>
+    <ClCompile Include="modules\platform.budgets.ixx">
+      <Filter>modules</Filter>
+    </ClCompile>
+    <ClCompile Include="modules\platform.capabilities.ixx">
+      <Filter>modules</Filter>
+    </ClCompile>
+    <ClCompile Include="modules\platform.engine.ixx">
+      <Filter>modules</Filter>
+    </ClCompile>
+    <ClCompile Include="modules\platform.window.ixx">
+      <Filter>modules</Filter>
+    </ClCompile>
+    <ClCompile Include="modules\platform.window_attachment.ixx">
+      <Filter>modules</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\core.env.cpp">
+      <Filter>src\core</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\core.log.cpp">
+      <Filter>src\core</Filter>
+    </ClCompile>
+    <ClCompile Include="src\core\core.time.cpp">
+      <Filter>src\core</Filter>
+    </ClCompile>
+    <ClCompile Include="src\epoch\epoch.software_application.cpp">
+      <Filter>src\epoch</Filter>
+    </ClCompile>
+    <ClInclude Include="src\epoch\epoch.software_application_internal.hpp">
+      <Filter>src\epoch</Filter>
+    </ClInclude>
+    <ClCompile Include="src\platform\platform.window.cpp">
+      <Filter>src\platform</Filter>
+    </ClCompile>
+    <ClCompile Include="src\platform\platform.window_attachment.cpp">
+      <Filter>src\platform</Filter>
+    </ClCompile>
+    <ClCompile Include="modules\platform.native.ixx">
+      <Filter>modules</Filter>
+    </ClCompile>
+    <ClCompile Include="src\application.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime_host.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\types.cpp">
+      <Filter>src</Filter>
+    </ClCompile>
+    <ClCompile Include="src\drivers\headless_driver.cpp">
+      <Filter>src\drivers</Filter>
+    </ClCompile>
+    <ClCompile Include="src\drivers\win32_driver.cpp">
+      <Filter>src\drivers</Filter>
+    </ClCompile>
+    <ClInclude Include="include\epochplatformengine\application.hpp">
+      <Filter>include\epochplatformengine</Filter>
+    </ClInclude>
+    <ClInclude Include="include\epochplatformengine\driver.hpp">
+      <Filter>include\epochplatformengine</Filter>
+    </ClInclude>
+    <ClInclude Include="include\epochplatformengine\epoch_platform_engine.hpp">
+      <Filter>include\epochplatformengine</Filter>
+    </ClInclude>
+    <ClInclude Include="include\epochplatformengine\export.hpp">
+      <Filter>include\epochplatformengine</Filter>
+    </ClInclude>
+    <ClInclude Include="include\epochplatformengine\runtime.hpp">
+      <Filter>include\epochplatformengine</Filter>
+    </ClInclude>
+    <ClInclude Include="include\epochplatformengine\types.hpp">
+      <Filter>include\epochplatformengine</Filter>
+    </ClInclude>
+    <ClInclude Include="src\runtime_internal.hpp">
+      <Filter>src</Filter>
+    </ClInclude>
+    <ClInclude Include="include\core.utf8.hpp">
+      <Filter>include</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>

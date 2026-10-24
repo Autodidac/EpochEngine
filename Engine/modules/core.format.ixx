@@ -28,6 +28,9 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
+// Epoch system notes (auto-checked):
+// Epoch STL: honor core.stl_types.hpp types/operators; fix callers, not core overloads.
+// Epoch Core: preserve engine-defined primitives, APIs and module contracts.
  // ============================================================================
 // modules/core.format.ixx
 // Stable formatting facade over the dependency-free core formatter.

@@ -1,4 +1,6 @@
 // Epoch Engine AI runtime - SPDX-License-Identifier: LicenseRef-MIT-NoSell
+// Epoch system notes (auto-checked):
+// Epoch AI: preserve model selection, candidate isolation and host verification gates.
 #include "ai.backend_addons_addon_registry.hpp"
 
 #include <algorithm>
@@ -180,7 +182,7 @@ std::expected<AddonResult, core::Error> AddonRegistry::invoke(
         {
             "system",
             addon->system_prompt.empty()
-                ? "You are an optional capability addon for a local KeyMaker Foundation model. Return focused capability output only. Do not claim tool execution."
+                ? "You are an optional capability addon for the operator-selected foundation model. Return focused capability output only. Do not claim tool execution."
                 : addon->system_prompt,
             {},
             {},

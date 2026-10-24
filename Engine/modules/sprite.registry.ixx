@@ -30,6 +30,8 @@
  ***********************************************/
 module;
 
+#include "../include/engine.config.hpp"
+
 #include <atomic>
 #include <iostream>
 #include <mutex>
@@ -157,7 +159,7 @@ namespace epochengine
                 std::string{ name },
                 Entry{ handle, u0, v0, u1, v1, pivotX, pivotY });
 
-#if defined(DEBUG_TEXTURE_RENDERING_VERBOSE)
+#if EPOCH_ENABLE_TEXTURE_DIAGNOSTICS
             logger::infof_loc(
                 "SpriteRegistry",
                 std::source_location::current(),

@@ -43,6 +43,16 @@ import epoch.version;
 namespace epochengine::updater
 {
     export inline constexpr bool SITE_DISTRIBUTION = EPOCH_UPDATE_DISTRIBUTION_SITE != 0;
+    export inline constexpr bool PUBLIC_DISTRIBUTION = distribution::public_edition;
+    export inline constexpr std::string_view EDITION_ID = distribution::edition_id;
+    export inline bool PROJECT_RELEASE_DOWNLOAD_ALLOWED(std::string_view url)
+    {
+        return distribution::release_download_allowed(url);
+    }
+    export inline bool PROJECT_SOURCE_EDITION_MATCHES(std::string_view marker)
+    {
+        return distribution::marker_matches(marker);
+    }
     // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // Installation behavior
     // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -52,7 +62,7 @@ namespace epochengine::updater
 #if defined(EPOCH_BINARY_ONLY_DISTRIBUTION) && EPOCH_BINARY_ONLY_DISTRIBUTION
     export inline constexpr bool AUTHORIZED_SOURCE_DISTRIBUTION_ENABLED = false;
 #else
-    export inline constexpr bool AUTHORIZED_SOURCE_DISTRIBUTION_ENABLED = false;
+    export inline constexpr bool AUTHORIZED_SOURCE_DISTRIBUTION_ENABLED = SITE_DISTRIBUTION;
 #endif
 
     export inline constexpr bool SOURCE_UPDATE_FALLBACK_ENABLED =
@@ -74,10 +84,22 @@ namespace epochengine::updater
 
     export inline const std::string PROJECT_VERSION =
         epochengine::GetEngineVersionString();
+    // A bootstrap shell is an installer, not an installed source runtime.
+    // Its binary still reports the real build version; update admission starts
+    // from no installed source so an equal-version shell can install it.
     export inline const std::string PROJECT_SOURCE_VERSION =
+#if defined(EPOCH_UPDATER_SHELL_BUILD) && EPOCH_UPDATER_SHELL_BUILD == 1
+        "0.0.0";
+#else
         epochengine::GetEngineVersionString();
+#endif
+    // An updater shell has no installed runtime, regardless of its own version.
     export inline const std::string PROJECT_PACKAGED_VERSION =
+#if defined(EPOCH_UPDATER_SHELL_BUILD) && EPOCH_UPDATER_SHELL_BUILD == 1
+        "0.0.0";
+#else
         epochengine::GetPackagedVersionString();
+#endif
 
     export inline constexpr std::string_view WINDOWS_RUNTIME_BINARY_PREFIX =
         "epoch_win10_x64_v";
@@ -185,35 +207,33 @@ namespace epochengine::updater
 
     export inline std::string PROJECT_SOURCE_DEVICE_START_URL()
     {
-        return AUTHORIZED_SOURCE_DISTRIBUTION_ENABLED
-            ? std::string{ EPOCH_SITE_BASE } + "/api/private/epoch-engine/device/start"
-            : std::string{};
+#if EPOCH_EDITION_PUBLIC
+        return {};
+#else
+#endif
     }
 
     export inline std::string PROJECT_SOURCE_DEVICE_TOKEN_URL()
     {
-        return AUTHORIZED_SOURCE_DISTRIBUTION_ENABLED
-            ? std::string{ EPOCH_SITE_BASE } + "/api/private/epoch-engine/device/token"
-            : std::string{};
+#if EPOCH_EDITION_PUBLIC
+        return {};
+#else
+#endif
     }
 
     export inline std::string PROJECT_SOURCE_DEVICE_CHALLENGE_URL()
     {
-        return AUTHORIZED_SOURCE_DISTRIBUTION_ENABLED
-            ? std::string{ EPOCH_SITE_BASE } + "/api/private/epoch-engine/device/challenge"
-            : std::string{};
+#if EPOCH_EDITION_PUBLIC
+        return {};
+#else
+#endif
     }
 
-    export inline constexpr std::string_view PROJECT_PRIVATE_SOURCE_MANIFEST_SCHEMA =
-        "https://epoch.adamrushford.chatgpt.site/schemas/private-source/v1";
-    export inline constexpr std::string_view PROJECT_PRIVATE_SOURCE_WRAP_INFO =
-        "EpochEngine private source DEK wrap v1";
-    export inline constexpr std::string_view PROJECT_PRIVATE_SOURCE_WRAP_AAD_PREFIX =
-        "epoch-source-key-wrap-v1";
 
     export inline std::string PROJECT_REPOSITORY_URL()
     {
-        return {};
+        return PUBLIC_DISTRIBUTION ? "https://github.com/Autodidac/EpochEngine.git"
+            : "https://epoch.adamrushford.chatgpt.site/git/EpochEngine.git";
     }
 
     // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -311,25 +331,36 @@ namespace epochengine::updater
 
     export inline std::string PROJECT_SOURCE_URL()
     {
-        return SOURCE_UPDATE_FALLBACK_ENABLED
-            ? (SITE_DISTRIBUTION
-                ? std::string{EPOCH_SITE_BASE} + "/api/epoch/source-archive/source" + PROJECT_SOURCE_ARCHIVE_EXTENSION()
-                : std::string{GITHUB_BASE} + "Autodidac/EpochEngine/archive/refs/heads/main" + PROJECT_SOURCE_ARCHIVE_EXTENSION())
-            : std::string{};
+        // An empty development URL selects the authenticated archive flow.
+        // Never expose a plaintext fallback for private development source.
+        return SOURCE_UPDATE_FALLBACK_ENABLED && PUBLIC_DISTRIBUTION
+            ? std::string{GITHUB_BASE} + "Autodidac/EpochEngine/releases/latest/download/epoch-source-main"
+                + PROJECT_SOURCE_ARCHIVE_EXTENSION() : std::string{};
     }
 
     export inline std::string PROJECT_SOURCE_CHECKSUM_URL()
     {
         const std::string source_url = PROJECT_SOURCE_URL();
-        return source_url.empty() ? std::string{} : (SITE_DISTRIBUTION
-            ? source_url + ".sha256"
-            : std::string{GITHUB_BASE} + "Autodidac/EpochEngine/releases/latest/download/epoch-source-main" + PROJECT_SOURCE_ARCHIVE_EXTENSION() + ".sha256");
+        return source_url.empty() ? std::string{} : source_url + ".sha256";
     }
 
     export inline std::vector<std::string> PROJECT_SOURCE_FALLBACK_URLS()
     {
         return {};
     }
+
+    export inline bool PROJECT_SOURCE_CHANNEL_ALLOWED(std::string_view source_url,
+        std::string_view version_url)
+    {
+        if (!version_url.empty() && version_url != PROJECT_SOURCE_VERSION_URL()) return false;
+        if (!SOURCE_UPDATE_FALLBACK_ENABLED) return source_url.empty();
+        // Development source always uses authenticated acquisition. Public
+        // source always uses this repository; an empty URL must not start auth.
+        return AUTHORIZED_SOURCE_DISTRIBUTION_ENABLED ? source_url.empty()
+            : PUBLIC_DISTRIBUTION && SOURCE_UPDATE_FALLBACK_ENABLED
+                && source_url == PROJECT_SOURCE_URL();
+    }
+
 
     export inline std::string PROJECT_BINARY_URL()
     {
@@ -340,6 +371,16 @@ namespace epochengine::updater
     {
         return SITE_DISTRIBUTION ? std::string{ EPOCH_SITE_BASE } + "/api/epoch/actions/runs"
             : std::string{GITHUB_API_BASE} + "Autodidac/EpochEngine/actions/runs";
+    }
+
+    export inline bool PROJECT_UPDATE_CHANNEL_ALLOWED(std::string_view version_url,
+        std::string_view binary_url, std::string_view source_url,
+        std::string_view source_version_url, std::string_view build_status_url)
+    {
+        return version_url == PROJECT_PACKAGED_VERSION_URL()
+            && (binary_url.empty() || PROJECT_RELEASE_DOWNLOAD_ALLOWED(binary_url))
+            && PROJECT_SOURCE_CHANNEL_ALLOWED(source_url, source_version_url)
+            && (build_status_url.empty() || build_status_url == PROJECT_ACTION_RUNS_API_URL());
     }
 
     export inline std::string PROJECT_UPDATE_BUILD_JOB_NAME()
@@ -367,9 +408,13 @@ namespace epochengine::updater
             : std::string{GITHUB_API_BASE} + "Autodidac/EpochEngine/releases";
     }
 
+    // Private runtime downloads currently require owner SSO; device source
+    // credentials do not grant binary download scopes.
+    export inline constexpr bool PROJECT_PACKAGED_UPDATES_ENABLED = PUBLIC_DISTRIBUTION;
+
     export inline std::string PROJECT_RELEASE_INTEGRITY_URL()
     {
-        return SITE_DISTRIBUTION ? std::string{ EPOCH_SITE_BASE } + "/api/epoch/release-integrity"
+        return SITE_DISTRIBUTION ? std::string{}
             : std::string{GITHUB_BASE} + "Autodidac/EpochEngine/releases/latest/download/epoch-release-integrity.json";
     }
 

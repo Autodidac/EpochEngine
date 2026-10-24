@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MPL-2.0
 #include <algorithm>
 #include <array>
 #include <cstddef>
@@ -54,6 +55,32 @@ namespace
             TextControlInput{ .command = TextControlCommand::cut_selection });
         EPOCHGUI_CHECK(result.clipboard_text == "Epoch");
         EPOCHGUI_CHECK(state.text == "hello ");
+        return 0;
+    }
+
+    int undo_redo_history()
+    {
+        TextControlState state{.text="hello", .anchor=5, .caret=5};
+        TextControlOptions options{};
+        auto apply = [&](TextControlCommand command, std::string_view text = {})
+        {
+            return update_text_control(state, options, {.command=command, .text=text});
+        };
+        EPOCHGUI_CHECK(apply(TextControlCommand::insert_text, " world").text_changed);
+        EPOCHGUI_CHECK(state.text == "hello world");
+        EPOCHGUI_CHECK(apply(TextControlCommand::undo).text_changed);
+        EPOCHGUI_CHECK(state.text == "hello" && state.caret == 5u);
+        EPOCHGUI_CHECK(apply(TextControlCommand::redo).text_changed);
+        EPOCHGUI_CHECK(state.text == "hello world");
+        EPOCHGUI_CHECK(apply(TextControlCommand::undo).text_changed);
+        EPOCHGUI_CHECK(apply(TextControlCommand::insert_text, "!").text_changed);
+        EPOCHGUI_CHECK(state.text == "hello!");
+        EPOCHGUI_CHECK(!apply(TextControlCommand::redo).text_changed);
+        EPOCHGUI_CHECK(state.text == "hello!");
+        // Limit history memory even under repeated paste bursts.
+        for (int n = 0; n < 160; ++n)
+            (void)apply(TextControlCommand::insert_text, "x");
+        EPOCHGUI_CHECK(state.undo_history.size() <= 96u);
         return 0;
     }
 
@@ -515,6 +542,47 @@ namespace
         }).valid);
         return 0;
     }
+    int constrained_side_dock_layout()
+    {
+        for (const float width : {0.0f, 160.0f, 320.0f, 640.0f, 1280.0f})
+        {
+            // Deliberately adversarial saved widths: both panels cannot
+            // independently consume 70% of the editor's client area.
+            const auto result = make_side_dock_layout({
+                .viewport_width = width,
+                .requested_left_fraction = 0.70f,
+                .requested_right_fraction = 0.70f
+            });
+            EPOCHGUI_CHECK(result.valid);
+            EPOCHGUI_CHECK(result.left_width >= 0.0f && result.right_width >= 0.0f);
+            EPOCHGUI_CHECK(result.center_width >= 0.0f);
+            EPOCHGUI_CHECK(approximately(
+                result.left_width + result.right_width + result.center_width
+                + result.left_splitter_width + result.right_splitter_width, width));
+            EPOCHGUI_CHECK(result.center_width >= (width > 0.0f ?
+                (std::min)(180.0f, (width - result.left_splitter_width
+                - result.right_splitter_width) * 0.45f) - 0.001f : 0.0f));
+        }
+        const auto onlyLeft = make_side_dock_layout({
+            .viewport_width = 800.0f,
+            .requested_left_fraction = 0.45f,
+            .right_visible = false
+        });
+        EPOCHGUI_CHECK(onlyLeft.valid && onlyLeft.right_width == 0.0f
+            && onlyLeft.right_splitter_width == 0.0f);
+        const auto onlyRight = make_side_dock_layout({
+            .viewport_width = 800.0f,
+            .requested_right_fraction = 0.45f,
+            .left_visible = false
+        });
+        EPOCHGUI_CHECK(onlyRight.valid && onlyRight.left_width == 0.0f
+            && onlyRight.left_splitter_width == 0.0f);
+        EPOCHGUI_CHECK(!make_side_dock_layout({
+            .viewport_width = (std::numeric_limits<float>::quiet_NaN)()
+        }).valid);
+        return 0;
+    }
+
     int responsive_chrome_layout()
     {
         const std::array<ChromeBarItemOptions, 7> leftItems{{
@@ -615,6 +683,33 @@ namespace
             + wide.center.occupied_width * 0.5f;
         EPOCHGUI_CHECK(approximately(wideCenter, 800.0f));
 
+        const auto menusOnly = make_chrome_bar_layout({
+            .bounds = {{0.0f, 0.0f}, {620.0f, 32.0f}},
+            .left_items = leftItems
+        });
+        EPOCHGUI_CHECK(menusOnly.valid && !menusOnly.left.overflowed);
+        EPOCHGUI_CHECK(menusOnly.density == ChromeDensity::full);
+        EPOCHGUI_CHECK(menusOnly.left.visible_indices.size() == leftItems.size());
+        EPOCHGUI_CHECK(chrome_is_bounded(menusOnly));
+        const std::array<ChromeBarItemOptions, 1> updateItem{{
+            {178.0f, 132.0f, 0u, true, true}
+        }};
+        for (const float width : {800.0f, 420.0f})
+        {
+            const auto edgeActions = make_chrome_bar_layout({
+                .bounds = {{0.0f, 0.0f}, {width, 32.0f}},
+                .left_items = leftItems,
+                .right_items = updateItem
+            });
+            EPOCHGUI_CHECK(edgeActions.valid && edgeActions.right.is_visible(0u));
+            EPOCHGUI_CHECK(chrome_is_bounded(edgeActions));
+            if (width == 800.0f)
+            {
+                EPOCHGUI_CHECK(edgeActions.density == ChromeDensity::full);
+                EPOCHGUI_CHECK(!edgeActions.left.overflowed);
+            }
+        }
+
         const ChromeBarLayout medium = layout_for(960.0f);
         EPOCHGUI_CHECK(medium.valid);
         EPOCHGUI_CHECK(medium.density != ChromeDensity::full);
@@ -666,6 +761,8 @@ int main()
 {
     if (const int result = replacement_and_clipboard(); result != 0)
         return result;
+    if (const int result = undo_redo_history(); result != 0)
+        return result;
     if (const int result = utf8_and_limits(); result != 0)
         return result;
     if (const int result = navigation_and_selection(); result != 0)
@@ -679,6 +776,8 @@ int main()
     if (const int result = segmented_control_geometry(); result != 0)
         return result;
     if (const int result = visual_control_geometry(); result != 0)
+        return result;
+    if (const int result = constrained_side_dock_layout(); result != 0)
         return result;
     if (const int result = responsive_chrome_layout(); result != 0)
         return result;

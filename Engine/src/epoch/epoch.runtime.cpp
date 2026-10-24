@@ -28,11 +28,13 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
+// Epoch system notes (auto-checked):
+// Epoch STL: honor core.stl_types.hpp types/operators; fix callers, not core overloads.
 module;
 
 #include "../../include/epoch.runtime_legacy.hpp"
 #include "../../include/epoch.app_api.h"
-#include "epoch.api_types.hpp"
+#include "core.abi_types.hpp"
 #include "../../include/core.stl_types.hpp"
 
 #include <algorithm>
@@ -133,9 +135,9 @@ namespace runtime
 
         struct RuntimePlatformGuard
         {
-            std::unique_ptr<epochengine::platform::IWindowSystem> window_system{};
+            std::unique_ptr<epochengine::platform::window_adapter::IWindowSystem> window_system{};
             std::unique_ptr<epochengine::platform::IGraphicsContext> graphics_context{};
-            epochengine::platform::WindowHandle window_handle{};
+            epochengine::platform::window_adapter::WindowHandle window_handle{};
 
             ~RuntimePlatformGuard() noexcept
             {
@@ -197,7 +199,7 @@ namespace runtime
 
             RuntimePlatformGuard platform_guard{};
 
-            auto window_system_result = epochengine::platform::create_window_system();
+            auto window_system_result = epochengine::platform::window_adapter::create_window_system();
             if (!window_system_result)
             {
                 const auto& err = window_system_result.error();
@@ -206,7 +208,7 @@ namespace runtime
             }
             platform_guard.window_system = std::move(*window_system_result);
 
-            epochengine::platform::WindowDesc window_desc{};
+            epochengine::platform::window_adapter::WindowDesc window_desc{};
             auto window_result = platform_guard.window_system->create_window(window_desc);
             if (!window_result)
             {
@@ -283,14 +285,14 @@ namespace runtime
                 fc.tick();
                 systems_registry.update(fc.dt_seconds());
 
-                platform_guard.window_system->pump_events([&](const epochengine::platform::WindowEvent& event)
+                platform_guard.window_system->pump_events([&](const epochengine::platform::window_adapter::WindowEvent& event)
                     {
                         switch (event.type)
                         {
-                        case epochengine::platform::WindowEventType::close:
+                        case epochengine::platform::window_adapter::WindowEventType::close:
                             window_close_requested = true;
                             break;
-                        case epochengine::platform::WindowEventType::resized:
+                        case epochengine::platform::window_adapter::WindowEventType::resized:
                             platform_guard.graphics_context->resize_surface(event.handle, event.width, event.height);
                             break;
                         default:

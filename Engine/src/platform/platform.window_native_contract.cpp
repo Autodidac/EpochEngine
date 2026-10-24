@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-MIT-NoSell
 // Explicit native, non-renderer contract. Never part of automatic CTest.
+// Epoch system notes (auto-checked):
+// Epoch STL: honor core.stl_types.hpp types/operators; fix callers, not core overloads.
+// Epoch Platform: keep native code isolated behind platform-specific interfaces.
 #include "core.stl_types.hpp"
 
 #include <array>
@@ -34,7 +37,7 @@ namespace
             "Epoch.NativeWindowContract", { label.data(), label.size() });
     }
 
-    HWND native(platform::WindowHandle handle) noexcept
+    HWND native(platform::window_adapter::WindowHandle handle) noexcept
     {
         return reinterpret_cast<HWND>(handle.value);
     }
@@ -49,17 +52,17 @@ namespace
 
     struct Events
     {
-        platform::WindowHandle expected{};
+        platform::window_adapter::WindowHandle expected{};
         unsigned close_count{};
         unsigned resize_count{};
         std::int32_t width{};
         std::int32_t height{};
 
-        void consume(const platform::WindowEvent& event) noexcept
+        void consume(const platform::window_adapter::WindowEvent& event) noexcept
         {
             if (event.handle.value != expected.value) return;
-            if (event.type == platform::WindowEventType::close) ++close_count;
-            if (event.type == platform::WindowEventType::resized)
+            if (event.type == platform::window_adapter::WindowEventType::close) ++close_count;
+            if (event.type == platform::window_adapter::WindowEventType::resized)
             {
                 ++resize_count;
                 width = event.width;
@@ -78,12 +81,12 @@ int main(int argc, char** argv)
         return 2;
     }
 
-    auto created_system = platform::create_window_system();
+    auto created_system = platform::window_adapter::create_window_system();
     check(created_system.has_value() && *created_system != nullptr, "Native Win32 factory created.");
     if (!created_system || !*created_system) return 1;
     auto system = std::move(*created_system);
 
-    platform::WindowDesc desc{};
+    platform::window_adapter::WindowDesc desc{};
     desc.visible = false;
     desc.title = "Epoch Software";
     auto created = system->create_window(desc);
@@ -99,7 +102,7 @@ int main(int argc, char** argv)
     check(title_is(hwnd, L"Epoch Renamed \u03A9 Window"), "UTF-8 title changes round-trip through native window text.");
 
     Events events{ .expected = handle };
-    const auto observe = [&](const platform::WindowEvent& event) noexcept { events.consume(event); };
+    const auto observe = [&](const platform::window_adapter::WindowEvent& event) noexcept { events.consume(event); };
     system->pump_events(observe);
     events.resize_count = 0;
     const bool positioned = ::SetWindowPos(hwnd, nullptr, 0, 0, 640, 420,
@@ -119,10 +122,10 @@ int main(int argc, char** argv)
     Events callback_events{ .expected = handle };
     unsigned callback_resizes{};
     bool callback_resize_succeeded = false;
-    const auto resize_once = [&](const platform::WindowEvent& event) noexcept
+    const auto resize_once = [&](const platform::window_adapter::WindowEvent& event) noexcept
     {
         callback_events.consume(event);
-        if (event.handle.value == handle.value && event.type == platform::WindowEventType::resized
+        if (event.handle.value == handle.value && event.type == platform::window_adapter::WindowEventType::resized
             && callback_resizes == 0)
         {
             ++callback_resizes;
@@ -159,7 +162,7 @@ int main(int argc, char** argv)
     check(cancelled.has_value() && cancelled->valid(), "Window created for callback destruction regression.");
     if (!cancelled || !cancelled->valid()) return 1;
     const HWND cancelled_hwnd = native(*cancelled);
-    const auto ignore = [](const platform::WindowEvent&) noexcept {};
+    const auto ignore = [](const platform::window_adapter::WindowEvent&) noexcept {};
     system->pump_events(ignore);
     const bool cancellation_first_resize = ::SetWindowPos(cancelled_hwnd, nullptr, 0, 0, 620, 400,
         SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE) != FALSE;
@@ -167,9 +170,9 @@ int main(int argc, char** argv)
         SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE) != FALSE;
     unsigned callbacks_before_release{};
     bool cancellation_nested_resize = false;
-    const auto destroy_during_callback = [&](const platform::WindowEvent& event) noexcept
+    const auto destroy_during_callback = [&](const platform::window_adapter::WindowEvent& event) noexcept
     {
-        if (event.handle.value != cancelled->value || event.type != platform::WindowEventType::resized) return;
+        if (event.handle.value != cancelled->value || event.type != platform::window_adapter::WindowEventType::resized) return;
         if (++callbacks_before_release != 1) return;
         // Queue another synchronous notification, then cancel this window.
         cancellation_nested_resize = ::SetWindowPos(cancelled_hwnd, nullptr, 0, 0, 660, 440,
@@ -184,7 +187,7 @@ int main(int argc, char** argv)
 
     // More than one outstanding window covers destructor reentrancy: each
     // DestroyWindow synchronously removes its own entry through WM_DESTROY.
-    platform::WindowDesc default_desc{};
+    platform::window_adapter::WindowDesc default_desc{};
     default_desc.visible = false;
     auto first = system->create_window(default_desc);
     check(first.has_value() && first->valid(), "Native factory can create again after explicit release.");
@@ -201,7 +204,7 @@ int main(int argc, char** argv)
     check(::IsWindow(first_hwnd) == FALSE && ::IsWindow(second_hwnd) == FALSE,
         "Window-system destruction retires every owned handle without invalidating its traversal.");
 
-    auto recreated_system = platform::create_window_system();
+    auto recreated_system = platform::window_adapter::create_window_system();
     check(recreated_system.has_value() && *recreated_system != nullptr,
         "Native window system can be reconstructed after complete teardown.");
     if (!recreated_system || !*recreated_system) return 1;

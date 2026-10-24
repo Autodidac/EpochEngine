@@ -28,6 +28,8 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
+// Epoch system notes (auto-checked):
+// EpochGUI: use consistent draw/hit-test geometry and preserve child input ownership.
 module;
 
 #include "../../include/core.format_text.hpp"
@@ -41,6 +43,7 @@ module;
 #include <fstream>
 #include <iostream>
 #include <mutex>
+#include <memory>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -117,38 +120,48 @@ namespace epochengine::font
 
         raw_texture.name = name;
 
+        // One full glyph sheet is at most 1024x1024. The existing 13 GUI ink
+        // variants need at most 4 pages, including their padding/cropping.
+        // Keep each texture 2048x2048 and the RGBA page budget bounded at 64 MiB;
+        // do not resize an atlas or invalidate already issued glyph handles.
         static std::mutex atlas_mutex;
-        const std::string atlas_name = "font_atlas";
-        if (!atlasmanager::get_registrar(atlas_name))
-        {
-            atlasmanager::create_atlas({
-                .name = atlas_name,
-                .width = 2048,
-                .height = 2048,
-                .generate_mipmaps = false
-                });
-        }
-
-        auto* registrar = atlasmanager::get_registrar(atlas_name);
-        if (!registrar)
-        {
-            logger::error("FontRenderer", epochengine::format_text("Missing registrar for atlas '{}'", atlas_name));
-            return false;
-        }
-
-        TextureAtlas& atlas = registrar->atlas;
-
+        TextureAtlas* selected_atlas{};
         std::optional<AtlasEntry> maybe_entry;
         {
             std::lock_guard<std::mutex> lock(atlas_mutex);
-            maybe_entry = atlas.add_entry(name, raw_texture);
+            for (std::size_t page = 0u; page < kFontAtlasMaximumPages; ++page)
+            {
+                const std::string atlas_name = page == 0u
+                    ? "font_atlas" : "font_atlas_" + std::to_string(page);
+                auto* registrar = atlasmanager::get_registrar(atlas_name);
+                if (!registrar)
+                {
+                    if (!atlasmanager::create_atlas({
+                        .name = atlas_name,
+                        .width = kFontAtlasPageExtent,
+                        .height = kFontAtlasPageExtent,
+                        .generate_mipmaps = false
+                    }))
+                        continue;
+                    registrar = atlasmanager::get_registrar(atlas_name);
+                }
+                if (!registrar || !registrar->atlas.can_fit(raw_texture.width, raw_texture.height))
+                    continue;
+                maybe_entry = registrar->atlas.add_entry(name, raw_texture);
+                if (maybe_entry)
+                {
+                    selected_atlas = &registrar->atlas;
+                    break;
+                }
+            }
         }
-
-        if (!maybe_entry)
+        if (!selected_atlas || !maybe_entry)
         {
-            logger::error("FontRenderer", epochengine::format_text("Failed to pack font '{}' into shared atlas", name));
+            logger::error("FontRenderer", epochengine::format_text(
+                "Font '{}' could not enter the bounded 4-page font atlas (2048x2048 per page).", name));
             return false;
         }
+        TextureAtlas& atlas = *selected_atlas;
 
         const AtlasEntry& atlas_entry = *maybe_entry;
 
@@ -215,6 +228,50 @@ namespace epochengine::font
 
         loaded_fonts_.emplace(name, std::move(asset));
         return true;
+    }
+
+    bool font_atlas_capacity_contract()
+    {
+        // Exercise the real packer and its non-mutating admission query using
+        // tiny CPU-only pages. No registrar, uploader or render context exists.
+        std::array<std::unique_ptr<TextureAtlas>, kFontAtlasMaximumPages> pages{};
+        for (std::size_t page = 0u; page < pages.size(); ++page)
+            pages[page] = TextureAtlas::create({
+                .name = "font_capacity_contract_" + std::to_string(page),
+                .width = 8u, .height = 8u, .generate_mipmaps = false,
+                .index = static_cast<int>(page)
+            });
+        Texture sheet{};
+        sheet.width = 4u;
+        sheet.height = 4u;
+        sheet.channels = 4;
+        sheet.pixels.assign(4u * 4u * 4u, 255u);
+        for (std::size_t index = 0u; index < 4u * kFontAtlasMaximumPages; ++index)
+        {
+            bool admitted{};
+            for (auto& page : pages)
+            {
+                const auto version = page->version;
+                const auto count = page->entry_count();
+                const bool fits = page->can_fit(sheet.width, sheet.height);
+                if (page->can_fit(sheet.width, sheet.height) != fits
+                    || page->version != version || page->entry_count() != count)
+                    return false;
+                if (!fits) continue;
+                if (!page->add_entry("font_sheet_" + std::to_string(index), sheet))
+                    return false;
+                admitted = true;
+                break;
+            }
+            if (!admitted) return false;
+        }
+        for (std::size_t index = 0u; index < pages.size(); ++index)
+            if (pages[index]->can_fit(4u, 4u) || pages[index]->can_fit(0u, 1u)
+                || pages[index]->can_fit(9u, 1u) || pages[index]->can_fit(1u, 1u)
+                || pages[index]->get_index() != static_cast<int>(index)
+                || pages[index]->entry_count() != 4u)
+                return false;
+        return kFontAtlasMaximumPages == 4u && kFontAtlasPageExtent == 2048u;
     }
 
     const FontAsset* FontRenderer::get_font(const std::string& name) const noexcept

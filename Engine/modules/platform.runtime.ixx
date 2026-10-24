@@ -28,6 +28,9 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
+// Epoch system notes (auto-checked):
+// Epoch STL: honor core.stl_types.hpp types/operators; fix callers, not core overloads.
+// Epoch Platform: keep native code isolated behind platform-specific interfaces.
 module;
 
 #include "../include/core.stl_types.hpp"
@@ -60,56 +63,19 @@ export namespace epochengine::platform
 
     [[nodiscard]] inline Capabilities probe_capabilities(const IGraphicsContext* context) noexcept
     {
-        Capabilities caps{};
-        caps.device_name = "epoch-runtime";
-
+        auto caps = context ? context->capabilities() : Capabilities{};
+        // Preserve queried device data. Identity alone never enables features.
         if (!context)
         {
             caps.api_name = "none";
             return caps;
         }
-
         switch (context->backend())
         {
-        case GraphicsBackend::vulkan:
-            caps.api_name = "vulkan";
-            caps.descriptor_indexing = true;
-            caps.bindless_textures = true;
-            caps.indirect_draw = true;
-            caps.multi_draw_indirect = true;
-            caps.subgroup_ops = true;
-            caps.async_compute = true;
-            caps.sparse_resources = true;
-            caps.max_sampled_images = 8192;
-            caps.max_samplers = 4096;
-            break;
-        case GraphicsBackend::d3d12:
-            caps.api_name = "d3d12";
-            caps.descriptor_indexing = true;
-            caps.bindless_textures = true;
-            caps.indirect_draw = true;
-            caps.multi_draw_indirect = true;
-            caps.subgroup_ops = true;
-            caps.async_compute = true;
-            caps.max_sampled_images = 8192;
-            caps.max_samplers = 4096;
-            break;
-        case GraphicsBackend::opengl:
-            caps.api_name = "opengl";
-            caps.indirect_draw = true;
-            caps.multi_draw_indirect = true;
-            caps.max_sampled_images = 2048;
-            caps.max_samplers = 1024;
-            break;
-        case GraphicsBackend::null_backend:
-        default:
-            caps.api_name = "null";
-            caps.indirect_draw = false;
-            caps.max_sampled_images = 512;
-            caps.max_samplers = 256;
-            caps.max_storage_buffers = 64;
-            caps.max_uniform_buffers = 64;
-            break;
+        case GraphicsBackend::vulkan: caps.api_name = "vulkan"; break;
+        case GraphicsBackend::d3d12: caps.api_name = "d3d12"; break;
+        case GraphicsBackend::opengl: caps.api_name = "opengl"; break;
+        default: caps.api_name = "null"; break;
         }
 
         return caps;

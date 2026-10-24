@@ -28,6 +28,9 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
+// Epoch system notes (auto-checked):
+// Epoch Context: window/context state, dispatch and input ownership remain scoped.
+// Epoch Core: preserve engine-defined primitives, APIs and module contracts.
 module;
 
 // aengine.context.cpp  (module implementation unit for core.context)

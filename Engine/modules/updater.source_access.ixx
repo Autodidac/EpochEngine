@@ -46,6 +46,7 @@ export namespace epochengine::updater
     };
 
     SourceAccessStatus private_source_access_status();
+    bool open_private_source_verification_page();
     void cancel_private_source_access() noexcept;
     bool private_source_access_enabled() noexcept;
     bool private_source_device_registered() noexcept;

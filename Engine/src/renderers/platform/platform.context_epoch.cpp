@@ -28,6 +28,9 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
+// Epoch system notes (auto-checked):
+// Epoch STL: honor core.stl_types.hpp types/operators; fix callers, not core overloads.
+// Epoch Platform: keep native code isolated behind platform-specific interfaces.
 module;
 
 #include "../include/core.stl_types.hpp"
@@ -48,7 +51,7 @@ namespace epochengine::platform
             {
             }
 
-            [[nodiscard]] core::error::result<void> create_surface(WindowHandle handle) noexcept override
+            [[nodiscard]] core::error::result<void> create_surface(window_adapter::WindowHandle handle) noexcept override
             {
                 if (!handle.valid())
                     return epochengine::unexpected(core::error::invalid_argument("invalid window handle for surface creation"));
@@ -57,7 +60,7 @@ namespace epochengine::platform
                 return {}; // ok
             }
 
-            void resize_surface(WindowHandle handle, std::int32_t, std::int32_t) noexcept override
+            void resize_surface(window_adapter::WindowHandle handle, std::int32_t, std::int32_t) noexcept override
             {
                 if (!handle.valid())
                     return;

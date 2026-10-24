@@ -28,9 +28,12 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
+// Epoch system notes (auto-checked):
+// Epoch Context: window/context state, dispatch and input ownership remain scoped.
 module;
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cstdint>
 #include <filesystem>
@@ -1030,8 +1033,11 @@ export namespace epochengine::opengltextures
         return epochengine::openglquad::ensure_quad_pipeline(glState);
     }
 
-    inline void clear_gpu_atlases() noexcept
+    inline void clear_gpu_atlases(
+        const epochengine::openglcontext::PlatformGL::PlatformGLContext& context) noexcept
     {
+        const void* const retiringKey = platform_context_key(context);
+        if (!retiringKey) return;
         BackendData* oglData = nullptr;
         {
             std::shared_lock<std::shared_mutex> lock{ core::g_backendsMutex };
@@ -1052,12 +1058,22 @@ export namespace epochengine::opengltextures
                 atlases.clear();
             };
 
-            deleteAtlasMap(oglData->gpu_atlases);
-            oglData->native_textures.clear();
-            for (auto& [_, atlasMap] : oglData->context_gpu_atlases)
-                deleteAtlasMap(atlasMap);
-            oglData->gpu_atlases.clear();
-            oglData->context_gpu_atlases.clear();
+            // A context may retire while sibling renderers remain live. Its
+            // shared GL namespace does not grant ownership of their textures.
+            if (auto it = oglData->context_gpu_atlases.find(retiringKey);
+                it != oglData->context_gpu_atlases.end())
+            {
+                deleteAtlasMap(it->second);
+                oglData->context_gpu_atlases.erase(it);
+            }
+            if (platform_context_key(detail::to_platform_context(oglData->glState)) == retiringKey)
+                deleteAtlasMap(oglData->gpu_atlases);
+            for (auto it = oglData->native_textures.begin(); it != oglData->native_textures.end();)
+            {
+                if (it->first.context_key != retiringKey) { ++it; continue; }
+                if (it->second.texture) glDeleteTextures(1, &it->second.texture);
+                it = oglData->native_textures.erase(it);
+            }
         }
 
         s_generation.fetch_add(1, std::memory_order_relaxed);
@@ -1115,6 +1131,53 @@ export namespace epochengine::opengltextures
         bool sampling_configured{};
     };
 
+    struct SpriteVertex final
+    {
+        float x{}, y{}, u{}, v{};
+    };
+    inline constexpr std::size_t sprite_stream_capacity = 512u;
+
+    inline void release_sprite_stream(
+        epochengine::openglstate::OpenGL4State& state, bool nativeCurrent) noexcept
+    {
+        if (nativeCurrent)
+        {
+            if (state.spriteStreamVao) glDeleteVertexArrays(1, &state.spriteStreamVao);
+            if (state.spriteStreamVbo) glDeleteBuffers(1, &state.spriteStreamVbo);
+        }
+        state.spriteStreamVao = state.spriteStreamVbo = 0;
+        state.spriteStreamUnavailable = false;
+    }
+
+    [[nodiscard]] inline bool ensure_sprite_stream(
+        epochengine::openglstate::OpenGL4State& state) noexcept
+    {
+        if (state.spriteStreamUnavailable) return false;
+        if (state.spriteStreamVao && state.spriteStreamVbo) return true;
+        if (!glGenVertexArrays || !glGenBuffers || !glBindVertexArray
+            || !glBindBuffer || !glBufferData || !glBufferSubData || !glDrawArrays)
+        {
+            state.spriteStreamUnavailable = true;
+            return false;
+        }
+        glGenVertexArrays(1, &state.spriteStreamVao);
+        glGenBuffers(1, &state.spriteStreamVbo);
+        if (!state.spriteStreamVao || !state.spriteStreamVbo)
+        {
+            release_sprite_stream(state, true);
+            state.spriteStreamUnavailable = true;
+            return false;
+        }
+        glBindVertexArray(state.spriteStreamVao);
+        glBindBuffer(GL_ARRAY_BUFFER, state.spriteStreamVbo);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(SpriteVertex), nullptr);
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(SpriteVertex),
+            reinterpret_cast<const void*>(2u * sizeof(float)));
+        return true;
+    }
+
     struct SpriteBatchState final
     {
         const core::Context* owner{};
@@ -1126,10 +1189,53 @@ export namespace epochengine::opengltextures
         int framebuffer_height{};
         GLuint bound_texture{};
         std::vector<SpriteBatchTexture> textures{};
+        std::array<SpriteVertex, sprite_stream_capacity * 6u> vertices{};
+        std::size_t vertex_count{};
+        std::uint64_t sprites{}, submissions{};
+        bool streaming{};
         bool active{};
     };
 
     inline thread_local SpriteBatchState sprite_batch_state{};
+
+    inline void flush_sprite_batch() noexcept
+    {
+        auto& batch = sprite_batch_state;
+        if (!batch.vertex_count) return;
+        auto& pipe = *batch.gl_state;
+        glUseProgram(pipe.shader);
+        glBindVertexArray(pipe.spriteStreamVao);
+        glBindBuffer(GL_ARRAY_BUFFER, pipe.spriteStreamVbo);
+        // Orphan the bounded store: never overwrite bytes used by an earlier
+        // draw, including another run in this frame. No fence/spin is added.
+        glBufferData(GL_ARRAY_BUFFER, sizeof(batch.vertices), nullptr, GL_STREAM_DRAW);
+        glBufferSubData(GL_ARRAY_BUFFER, 0,
+            static_cast<GLsizeiptr>(batch.vertex_count * sizeof(SpriteVertex)),
+            batch.vertices.data());
+        glBindTexture(GL_TEXTURE_2D, batch.bound_texture);
+        if (pipe.uUVRegionLoc >= 0) glUniform4f(pipe.uUVRegionLoc, 0, 0, 1, 1);
+        if (pipe.uTransformLoc >= 0) glUniform4f(pipe.uTransformLoc, 0, 0, 1, 1);
+        glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(batch.vertex_count));
+        ++batch.submissions;
+        batch.vertex_count = 0;
+    }
+
+    inline void append_streamed_sprite(const AtlasRegion& region,
+        float x, float y, float width, float height) noexcept
+    {
+        auto& batch = sprite_batch_state;
+        if (batch.vertex_count == batch.vertices.size()) flush_sprite_batch();
+        const float left = x * 2.0f / batch.framebuffer_width - 1.0f;
+        const float right = (x + width) * 2.0f / batch.framebuffer_width - 1.0f;
+        const float top = 1.0f - y * 2.0f / batch.framebuffer_height;
+        const float bottom = 1.0f - (y + height) * 2.0f / batch.framebuffer_height;
+        const SpriteVertex a{left, bottom, region.u1, 1.0f - region.v1};
+        const SpriteVertex b{right, bottom, region.u2, 1.0f - region.v1};
+        const SpriteVertex c{right, top, region.u2, 1.0f - region.v2};
+        const SpriteVertex d{left, top, region.u1, 1.0f - region.v2};
+        for (const auto vertex : {a, b, c, c, d, a})
+            batch.vertices[batch.vertex_count++] = vertex;
+    }
 
     inline void submit_resolved_sprite(
         const AtlasRegion& region,
@@ -1217,6 +1323,9 @@ export namespace epochengine::opengltextures
         batch.framebuffer_height = framebufferHeight;
         batch.bound_texture = 0;
         batch.textures.clear();
+        batch.vertex_count = 0;
+        batch.sprites = batch.submissions = 0;
+        batch.streaming = ensure_sprite_stream(glState);
 
         auto& pipe = epochengine::openglquad::quad_pipeline_state();
         glViewport(0, 0, framebufferWidth, framebufferHeight);
@@ -1238,7 +1347,11 @@ export namespace epochengine::opengltextures
         if (!batch.active)
             return;
 
+        flush_sprite_batch();
+        batch.gl_state->guiSpritesSubmitted += batch.sprites;
+        batch.gl_state->guiDrawCallsSubmitted += batch.submissions;
         glBindVertexArray(0);
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
         glBindTexture(GL_TEXTURE_2D, 0);
         glDisable(GL_BLEND);
         batch.owner = nullptr;
@@ -1283,6 +1396,9 @@ export namespace epochengine::opengltextures
             });
         if (texture == batch.textures.end())
         {
+            // A changed atlas may update an existing texture. Submit older
+            // vertices before upload, so their content/order stays immediate.
+            flush_sprite_batch();
             ensure_uploaded_for_context(
                 *batch.backend,
                 *batch.gl_state,
@@ -1314,11 +1430,15 @@ export namespace epochengine::opengltextures
 
         if (batch.bound_texture != texture->texture)
         {
+            flush_sprite_batch();
             glBindTexture(GL_TEXTURE_2D, texture->texture);
             batch.bound_texture = texture->texture;
         }
         if (!texture->sampling_configured)
         {
+            // Upload may have changed the native binding even when an updated
+            // atlas retained the same GLuint as the preceding run.
+            glBindTexture(GL_TEXTURE_2D, texture->texture);
             glTexParameteri(
                 GL_TEXTURE_2D,
                 GL_TEXTURE_MIN_FILTER,
@@ -1337,14 +1457,15 @@ export namespace epochengine::opengltextures
                 GL_CLAMP_TO_EDGE);
             texture->sampling_configured = true;
         }
-        submit_resolved_sprite(
-            region,
-            x,
-            y,
-            width,
-            height,
-            batch.framebuffer_width,
-            batch.framebuffer_height);
+        ++batch.sprites;
+        if (batch.streaming)
+            append_streamed_sprite(region, x, y, width, height);
+        else
+        {
+            submit_resolved_sprite(region, x, y, width, height,
+                batch.framebuffer_width, batch.framebuffer_height);
+            ++batch.submissions;
+        }
     }
 
 

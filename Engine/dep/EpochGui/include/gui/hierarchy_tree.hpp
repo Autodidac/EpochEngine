@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-MIT-NoSell
+// SPDX-License-Identifier: MPL-2.0
 #pragma once
 
 #include <compare>

@@ -219,11 +219,12 @@
             editor.updateSourceCancelRequested = false;
             editor.updateOperationStartedAt = {};
 
-            if (editor.lastUpdateCheck.update_available || editor.lastUpdateCheck.force_required)
-                editor.updateState = EditorUpdateState::Available;
-            else
-                editor.updateState = EditorUpdateState::Idle;
-
+            const auto presentation = editor_update_modal::discovery_presentation(
+                editor.updateCheckPassive, editor.showUpdateConfirmModal,
+                result.operation_failed, result.update_available || result.force_required);
+            editor.updateState = presentation.failed ? EditorUpdateState::Failed
+                : presentation.available ? EditorUpdateState::Available : EditorUpdateState::Idle;
+            editor.showUpdateConfirmModal = presentation.modalVisible;
             editor.updateStatus = describe_update_result(editor.lastUpdateCheck);
         }
 
@@ -492,28 +493,24 @@
 
         [[nodiscard]] bool editor_private_source_access_pending(const EditorState& editor)
         {
-            if (!editor.updateCheckPending)
-                return false;
+#if EPOCH_EDITION_PUBLIC
+            (void)editor;
+            return false;
+#else
+#endif
+        }
 
-            switch (updater::private_source_access_status().phase)
-            {
-            case updater::SourceAccessPhase::Starting:
-            case updater::SourceAccessPhase::AwaitingApproval:
-            case updater::SourceAccessPhase::ExchangingToken:
-            case updater::SourceAccessPhase::FetchingManifest:
-            case updater::SourceAccessPhase::Downloading:
-            case updater::SourceAccessPhase::Decrypting:
-                return true;
-            default:
-                return false;
-            }
+        [[nodiscard]] bool editor_private_source_approval_pending(const EditorState& editor)
+        {
+#if EPOCH_EDITION_PUBLIC
+            (void)editor;
+            return false;
+#else
+#endif
         }
 
         [[nodiscard]] float editor_update_progress_value(const EditorState& editor)
         {
-            if (editor_private_source_access_pending(editor))
-                return updater::private_source_access_status().progress;
-
             if (editor.updateState == EditorUpdateState::SourceWorkerRunning
                 || (editor.updateSourceInstallPending && updater::source_update_worker_active()))
             {
@@ -537,15 +534,6 @@
 
         [[nodiscard]] std::string editor_update_running_status(const EditorState& editor)
         {
-            if (editor_private_source_access_pending(editor))
-            {
-                const updater::SourceAccessStatus sourceAccess =
-                    updater::private_source_access_status();
-                if (!sourceAccess.message.empty())
-                    return sourceAccess.message;
-                return "Authorizing encrypted private source access.";
-            }
-
             if (editor.updateProjectSourceDownloadPending)
                 return "Downloading project source code into the project source cache. This does not update or restart the runtime.";
 
@@ -651,6 +639,15 @@
 
         void start_editor_update_check(EditorState& editor, const bool passive = false)
         {
+            // An explicit request may join a startup check already in flight.
+            // Preserve that operator intent until the same result is consumed.
+            if (!passive)
+            {
+                editor.updateCheckPassive = false;
+                editor.showUpdateConfirmModal = true;
+            }
+            if (passive && editor_update_retry_waiting(editor))
+                return;
             if (guard_editor_update_retry_wait(editor))
                 return;
 
@@ -660,6 +657,7 @@
                 return;
             }
 
+            editor.updateCheckPassive = passive;
             if (editor.updateState != EditorUpdateState::RestartReady
                 && editor.updateState != EditorUpdateState::SourceWorkerRunning
                 && apply_cached_editor_update_discovery(editor))
@@ -669,6 +667,9 @@
                 return;
             }
 
+            if (passive && updater::source_update_recent_cancel_seconds_remaining(
+                    kEditorUpdateCancelRetryCooldownSeconds) > 0)
+                return;
             if (guard_editor_recent_source_cancel(editor))
                 return;
 
@@ -1077,28 +1078,7 @@
                     return;
                 }
 
-                if (editor.lastUpdateCheck.operation_failed)
-                {
-                    editor.updateState = EditorUpdateState::Failed;
-                    editor.updateSourceCancelRequested = false;
-                    editor.updateStatus = describe_update_result(editor.lastUpdateCheck);
-                    editor.showUpdateConfirmModal = true;
-                    push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
-                    return;
-                }
-
-                if (editor.lastUpdateCheck.update_available || editor.lastUpdateCheck.force_required)
-                {
-                    editor.updateState = EditorUpdateState::Available;
-                    editor.updateSourceCancelRequested = false;
-                    editor.updateStatus = describe_update_result(editor.lastUpdateCheck);
-                    push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
-                    return;
-                }
-
-                editor.updateState = EditorUpdateState::Idle;
-                editor.updateSourceCancelRequested = false;
-                editor.updateStatus = describe_update_result(editor.lastUpdateCheck);
+                apply_editor_update_discovery(editor, completedUpdateCheck);
                 push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
             }
             catch (...)
@@ -1112,6 +1092,8 @@
                 clear_editor_update_restart_countdown(editor);
                 editor.updateState = EditorUpdateState::Failed;
                 editor.updateStatus = "Update check failed; see updater logs for details.";
+                editor.showUpdateConfirmModal = editor_update_modal::discovery_presentation(
+                    editor.updateCheckPassive, editor.showUpdateConfirmModal, true, false).modalVisible;
                 push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
             }
         }
@@ -1302,14 +1284,3 @@
             push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
         }
 
-        void request_editor_private_source_access_cancel(EditorState& editor)
-        {
-            if (editor.updateSourceCancelRequested)
-                return;
-
-            updater::cancel_private_source_access();
-            editor.updateSourceCancelRequested = true;
-            editor.updateStatus =
-                "Private source authorization cancellation requested. Temporary encrypted and decrypted archives will be removed.";
-            push_editor_log(editor, std::string{ "[update] " } + editor.updateStatus);
-        }

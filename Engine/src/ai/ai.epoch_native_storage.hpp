@@ -1,4 +1,7 @@
+// Epoch system notes (auto-checked):
+// Epoch AI: preserve model selection, candidate isolation and host verification gates.
 #pragma once
+#include "../../include/epoch.edition.hpp"
 // Epoch-owned locations for the embedded C++ agent runtime. No EngCoder
 // application-data directory is created or required.
 #include <cstdlib>
@@ -19,7 +22,11 @@ struct Paths final {
 
 [[nodiscard]] inline Paths under_epoch_root(const std::filesystem::path& epoch_root) {
     if (epoch_root.empty()) throw std::runtime_error("Epoch application-data root is empty");
-    const auto data = epoch_root / "AI" / "native";
+#if EPOCH_EDITION_PUBLIC
+    // Never import development conversations, approvals, workspace or memory.
+    // Existing external weights remain selectable through explicit model paths.
+    const auto data = epoch_root / "AI" / "public" / "native";
+#endif
     return {data, data / "workspace", data / "model-cache", data / "models",
             data / "learning", data / "web"};
 }
@@ -59,10 +66,10 @@ inline void initialize(const Paths& paths) {
                              paths.model_root, paths.learning_root, paths.web_root}) {
         std::error_code ec;
         if (!std::filesystem::create_directories(path, ec) && ec)
-            throw std::runtime_error("Cannot initialize Epoch AI directory " + path.string() + ": " + ec.message());
+            throw std::runtime_error("Cannot initialize local model directory " + path.string() + ": " + ec.message());
         ec.clear();
         if (!std::filesystem::is_directory(path, ec) || ec)
-            throw std::runtime_error("Epoch AI path is not a directory: " + path.string());
+            throw std::runtime_error("Local model path is not a directory: " + path.string());
     }
 }
 } // namespace epochengine::ai::native_storage

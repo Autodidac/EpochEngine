@@ -1,3 +1,6 @@
+// Epoch system notes (auto-checked):
+// Epoch Render: preserve backend boundaries and resource lifetime contracts.
+// Epoch Core: preserve engine-defined primitives, APIs and module contracts.
 import render.context_frame;
 
 #include <climits>

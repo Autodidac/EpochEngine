@@ -1,4 +1,6 @@
 // Epoch Engine AI runtime - SPDX-License-Identifier: LicenseRef-MIT-NoSell
+// Epoch system notes (auto-checked):
+// Epoch AI: preserve model selection, candidate isolation and host verification gates.
 #include "ai.backend_model_qwen_flash_runtime.hpp"
 
 #include "ai.backend_process_process.hpp"
@@ -637,6 +639,34 @@ RuntimeModelProfile QwenFlashRuntime::resolve_profile(
     const HardwareSnapshot& hardware,
     const RuntimeCapabilities& capabilities) const {
     RuntimeModelProfile resolved = profile;
+    if (resolved.estimated_bytes == 0u)
+    {
+        // Imported local models often have no estimate. Reuse the existing
+        // complete-shard inspection rather than treating the first shard as
+        // the whole model or leaving a small model on the unknown-size cap.
+        const auto cache = cache_status(profile);
+        if (cache.value("installed", false))
+            resolved.estimated_bytes = cache.value("cached_bytes", std::uint64_t{});
+    }
+
+    const auto automatic_gpu_layers = [&] {
+        const auto requested = static_cast<std::uint32_t>(
+            std::stoul(effective_gpu_layers(resolved)));
+        // An explicit per-model layer count is the operator's standalone
+        // placement request. Windows/driver shared-memory placement is not a
+        // dedicated-VRAM promise. Keep automatic fitting and cohort limits for
+        // auto profiles and multi-model loads, without silently lowering an
+        // explicitly restored standalone Flash configuration.
+        if (resolved.gpu_layers != "auto" && !resolved.gpu_layers.empty()
+            && !resolved.multimodel_memory_saver)
+            return std::to_string(requested);
+        const auto board_gib = static_cast<double>(hardware.vram_mib) / 1024.0;
+        const auto configured_gib = std::max(0.0, config_.vram_budget_gib);
+        const auto pool = epochengine::ai::native_runtime::gpu_budget::weight_budget_bytes(
+            std::min(board_gib, configured_gib), 1u);
+        return std::to_string(epochengine::ai::native_runtime::gpu_budget::weight_limited_layers(
+            resolved.estimated_bytes, pool, resolved.gpu_layer_count_hint, requested));
+    };
 
     const auto quant = lower(profile.quant);
     const bool q2_layout = quant.find("q2") != std::string::npos;
@@ -665,13 +695,13 @@ RuntimeModelProfile QwenFlashRuntime::resolve_profile(
         // Reproduce the proven standalone QwenFlashRuntime policy. Keep model
         // identity/context choices, but do not add new memory-policy switches
         // that were not present in the working QFR launch.
-        resolved.threads = 12;
-        resolved.batch_threads = 12;
+        resolved.threads = std::min(12U, std::max(1U, hardware.logical_threads));
+        resolved.batch_threads = resolved.threads;
         resolved.batch_size = 1024;
         resolved.ubatch_size = 256;
         // Epoch AI's GPU percentage is an explicit layer-offload target, not
         // a decorative profile value. Honor it even in Recommended mode.
-        resolved.gpu_layers = effective_gpu_layers(resolved);
+        resolved.gpu_layers = automatic_gpu_layers();
         resolved.flash_attention = true;
         resolved.kv_type_k = "q4_0";
         resolved.kv_type_v = "q4_0";
@@ -686,19 +716,27 @@ RuntimeModelProfile QwenFlashRuntime::resolve_profile(
         resolved.pinned_host_mib = 12288;
         resolved.early_router = false;
         qualify_expert_cache();
+        if (resolved.multimodel_memory_saver) {
+            resolved.expert_cache_mib = 0;
+            resolved.pinned_host_mib = 0;
+            resolved.early_router = false;
+            resolved.kv_offload = false;
+            resolved.kv_gpu_layers = 0;
+            resolved.speculative_enabled = false;
+        }
         return resolved;
     }
 
     if (profile.runtime_policy == "automatic") {
         const auto logical = std::max(1U, hardware.logical_threads);
-        resolved.threads = std::clamp(logical / 2U, 4U, 16U);
+        resolved.threads = std::clamp(logical / 2U, 1U, 16U);
         resolved.batch_threads = resolved.threads;
         const bool roomy = hardware.ram_gib >= 48.0 && hardware.vram_mib >= 12U * 1024U;
         resolved.batch_size = roomy ? 1024U : 512U;
         resolved.ubatch_size = roomy ? 256U : 128U;
         // Automatic mode owns batching/cache choices, but the user GPU target
         // remains a cap on model-layer residency.
-        resolved.gpu_layers = effective_gpu_layers(resolved);
+        resolved.gpu_layers = automatic_gpu_layers();
         resolved.flash_attention = true;
         resolved.kv_type_k = "q4_0";
         resolved.kv_type_v = "q4_0";
@@ -720,6 +758,14 @@ RuntimeModelProfile QwenFlashRuntime::resolve_profile(
         resolved.context_shift = false;
         resolved.reasoning_preserve = false;
         qualify_expert_cache();
+        if (resolved.multimodel_memory_saver) {
+            resolved.expert_cache_mib = 0;
+            resolved.pinned_host_mib = 0;
+            resolved.early_router = false;
+            resolved.kv_offload = false;
+            resolved.kv_gpu_layers = 0;
+            resolved.speculative_enabled = false;
+        }
         return resolved;
     }
 
@@ -728,6 +774,14 @@ RuntimeModelProfile QwenFlashRuntime::resolve_profile(
     // remains an exact llama.cpp override.
     resolved.gpu_layers = effective_gpu_layers(resolved);
     qualify_expert_cache();
+    if (resolved.multimodel_memory_saver) {
+        resolved.expert_cache_mib = 0;
+        resolved.pinned_host_mib = 0;
+        resolved.early_router = false;
+        resolved.kv_offload = false;
+        resolved.kv_gpu_layers = 0;
+        resolved.speculative_enabled = false;
+    }
     return resolved;
 }
 
@@ -779,6 +833,16 @@ std::vector<std::string> QwenFlashRuntime::build_arguments(
 
     add("--host", "127.0.0.1");
     add("--port", std::to_string(config_.qwen_flash_port));
+    // -m bypasses llama-server's HF sidecar auto-download. Bind the unique
+    // cached projector from the same model/snapshot explicitly instead.
+    const auto modelPath = profile.source == ModelSourceKind::local_gguf
+        ? profile.local_path : cached_model_path(profile);
+    if (const auto projector = matching_cached_vision_projector(modelPath); !projector.empty())
+    {
+        add("--mmproj", projector.string());
+        // Keep image encoding out of the coding model's GPU weight budget.
+        args.emplace_back("--no-mmproj-offload");
+    }
     add("-np", std::to_string(std::max<std::uint32_t>(1, profile.parallel_slots)));
     add("-c", std::to_string(profile.context_tokens));
 
@@ -820,7 +884,7 @@ std::vector<std::string> QwenFlashRuntime::build_arguments(
 
     // Recommended intentionally mirrors the original proven QFR command. The
     // extra switches below are available in Automatic/Manual mode only.
-    if (profile.runtime_policy != "recommended") {
+    if (profile.runtime_policy != "recommended" || profile.multimodel_memory_saver) {
         args.emplace_back(profile.kv_offload ? "--kv-offload" : "--no-kv-offload");
         add("--cache-ram", std::to_string(profile.prompt_cache_mib));
         args.emplace_back(profile.context_shift ? "--context-shift" : "--no-context-shift");
@@ -892,6 +956,14 @@ std::expected<void, core::Error> QwenFlashRuntime::wait_until_ready(
         client.set_connection_timeout(0, 250000);
         client.set_read_timeout(0, 500000);
         if (auto result = client.Get("/health"); result && result->status >= 200 && result->status < 300) {
+            active_image_input_.store(-1, std::memory_order_release);
+            if (auto properties = client.Get("/props"); properties && properties->status == 200
+                && properties->body.size() <= 65536u)
+            {
+                const auto parsed = nlohmann::json::parse(properties->body, nullptr, false);
+                if (const auto vision = runtime_image_input_capability(parsed))
+                    active_image_input_.store(*vision ? 1 : 0, std::memory_order_release);
+            }
             return {};
         }
 
@@ -1037,7 +1109,7 @@ std::expected<std::string, core::Error> QwenFlashRuntime::ensure_started(
                 "Cached Qwen model looks incomplete or truncated: " +
                     std::to_string(cached / (1024ULL * 1024ULL * 1024ULL)) + " GiB present, about " +
                     std::to_string(expected / (1024ULL * 1024ULL * 1024ULL)) +
-                    " GiB expected. Finish copying/downloading every GGUF shard before loading; Epoch AI will not treat filenames alone as a complete model.",
+                    " GiB expected. Finish copying/downloading every GGUF shard before loading; Local Models will not treat filenames alone as a complete model.",
             });
         }
     }
@@ -1046,7 +1118,7 @@ std::expected<std::string, core::Error> QwenFlashRuntime::ensure_started(
     if (server.empty()) {
         return fail_startup(core::Error{
             core::make_error_code(core::Errc::model_unavailable),
-            "Qwen Flash llama-server backend was not found. Build/stage the Epoch AI qwen-flash runtime or set ENGCODER_QWEN_FLASH_SERVER.",
+            "Qwen Flash llama-server backend was not found. Build/stage the local qwen-flash runtime or set ENGCODER_QWEN_FLASH_SERVER.",
         });
     }
 
@@ -1110,6 +1182,7 @@ std::expected<std::string, core::Error> QwenFlashRuntime::ensure_started(
         active_context_tokens_ = candidate.context_tokens;
         active_parallel_slots_ = std::max<std::uint32_t>(1, candidate.parallel_slots);
         active_safety_fallback_ = safety_fallback;
+        active_image_input_.store(-1, std::memory_order_release);
         startup_note_.clear();
         set_last_error({});
         worker_exited_.store(false, std::memory_order_release);
@@ -1176,7 +1249,7 @@ std::expected<std::string, core::Error> QwenFlashRuntime::ensure_started(
 
         running_.store(true, std::memory_order_release);
         if (safety_fallback) {
-            startup_note_ = "Requested runtime policy could not initialize; Epoch AI recovered with its hardware-aware safety profile (" +
+            startup_note_ = "Requested runtime policy could not initialize; Local Models recovered with its hardware-aware safety profile (" +
                 std::to_string(candidate.context_tokens) + " context / " +
                 std::to_string(candidate.parallel_slots) + " slot).";
         } else if (candidate.runtime_policy == "automatic") {
@@ -1327,7 +1400,7 @@ std::expected<std::string, core::Error> QwenFlashRuntime::ensure_started(
         "Qwen Flash startup failed for the requested policy and every recovery profile.\n"
         "Requested policy: " + first_error.message;
     if (capabilities.recipe == "external-or-qfr-baseline") {
-        combined += "\nBackend note: Epoch AI is using the legacy standalone QwenFlashRuntime backend, not a verified Epoch AI Qwen Runtime Backend. If the model cache is complete, install/update the Epoch AI runtime backend and retry.";
+        combined += "\nBackend note: Local Models is using the legacy standalone QwenFlashRuntime backend, not a verified local Qwen runtime backend. If the model cache is complete, install/update the local runtime backend and retry.";
     }
     for (const auto& [label, error] : recovery_errors) {
         combined += "\n" + label + ": " + error.message;
@@ -1346,6 +1419,7 @@ void QwenFlashRuntime::stop() {
         worker_.join();
     }
     running_.store(false, std::memory_order_release);
+    active_image_input_.store(-1, std::memory_order_release);
     worker_exited_.store(true, std::memory_order_release);
     active_model_id_.clear();
     active_context_tokens_ = 0;
@@ -1570,7 +1644,7 @@ nlohmann::json QwenFlashRuntime::describe() const {
     if (!server.empty()) {
         const auto runtime_root = state_root_ / "runtimes" / "qwen-flash";
         if (path_is_within(server, runtime_root)) {
-            runtime_owner = "Epoch AI";
+            runtime_owner = "Local Models";
         } else if (!config_.qwen_flash_server.empty()) {
             runtime_owner = "configured-custom";
         } else if (path_is_within(server, config_.workspace)) {
@@ -1592,6 +1666,8 @@ nlohmann::json QwenFlashRuntime::describe() const {
         {"active_model", active_model_id_.empty() ? nlohmann::json(nullptr) : nlohmann::json(active_model_id_)},
         {"active_context_tokens", active_context_tokens_ == 0 ? nlohmann::json(nullptr) : nlohmann::json(active_context_tokens_)},
         {"active_parallel_slots", active_parallel_slots_ == 0 ? nlohmann::json(nullptr) : nlohmann::json(active_parallel_slots_)},
+        {"image_input", active_image_input_.load(std::memory_order_acquire) < 0
+            ? nlohmann::json(nullptr) : nlohmann::json(active_image_input_.load(std::memory_order_acquire) == 1)},
         {"safety_fallback", active_safety_fallback_},
         {"startup_note", startup_note_.empty() ? nlohmann::json(nullptr) : nlohmann::json(startup_note_)},
         {"last_command", last_command_.empty() ? nlohmann::json(nullptr) : nlohmann::json(last_command_)},
