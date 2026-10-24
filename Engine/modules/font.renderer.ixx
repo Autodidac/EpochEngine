@@ -43,6 +43,7 @@
 module;
 
 #include <string>
+#include <cstddef>
 #include <unordered_map>
 #include <cstdint>
 #include <vector>
@@ -58,6 +59,9 @@ import texture.core;
 
 namespace epochengine::font
 {
+    export inline constexpr std::size_t kFontAtlasMaximumPages = 4u;
+    export inline constexpr std::uint32_t kFontAtlasPageExtent = 2048u;
+    export [[nodiscard]] bool font_atlas_capacity_contract();
     export struct Vec2
     {
         float x{};

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MPL-2.0
 module;
 
 #include <algorithm>
@@ -17,9 +18,9 @@ export namespace epochengine::gui_lib
 {
     inline constexpr std::string_view library_name = "EpochGui";
     inline constexpr int version_major = 0;
-    inline constexpr int version_minor = 89;
-    inline constexpr int version_revision = 32;
-    inline constexpr std::string_view version_string = "0.89.32";
+    inline constexpr int version_minor = 90;
+    inline constexpr int version_revision = 0;
+    inline constexpr std::string_view version_string = "0.90.0";
 
     enum class SemanticTone : std::uint8_t
     {
@@ -98,6 +99,19 @@ export namespace epochengine::gui_lib
         case SemanticTone::neutral:
         default: return {{0x24, 0x29, 0x31}, {0x7A, 0x82, 0x8C}};
         }
+    }
+
+    // Shared EpochGUI visual metrics for desktop chat surfaces. Application-
+    // specific model routing and message contents remain outside this module.
+    namespace chat_surface
+    {
+        inline constexpr float message_gap = 20.0f;
+        inline constexpr float message_inset_x = 19.0f;
+        inline constexpr float message_inset_y = 15.0f;
+        inline constexpr float run_header_height = 30.0f;
+        inline constexpr float run_details_padding = 12.0f;
+        inline constexpr float composer_radius = 20.0f;
+        inline constexpr float user_bubble_radius = 15.0f;
     }
 
     struct Vec2
@@ -198,6 +212,27 @@ export namespace epochengine::gui_lib
         FloatingWindowState& state,
         const FloatingWindowOptions& options,
         const FloatingWindowInput& input) noexcept;
+
+    // Vertical scrollbar geometry shared by scroll areas and text/chat views.
+    struct ScrollbarLayoutOptions
+    {
+        Rect track{};
+        float content_extent{};
+        float scroll_offset{};
+        float minimum_thumb_extent{ 18.0f };
+    };
+
+    struct ScrollbarLayout
+    {
+        Rect track{};
+        Rect thumb{};
+        float maximum_scroll_offset{};
+        float scroll_offset{};
+    };
+
+    [[nodiscard]] ScrollbarLayout make_scrollbar_layout(const ScrollbarLayoutOptions& options) noexcept;
+    [[nodiscard]] float scrollbar_grab_offset(const ScrollbarLayout& layout, float pointer_y, bool thumb_hovered) noexcept;
+    [[nodiscard]] float scrollbar_offset_from_pointer(const ScrollbarLayout& layout, float pointer_y, float grab_offset) noexcept;
 
     enum class SplitterAxis : std::uint8_t
     {
@@ -619,6 +654,72 @@ export namespace epochengine::gui_lib
         return result;
     }
 
+    // Resolve docked side panes together, rather than clamping both widths
+    // independently. At narrow client sizes the side panels yield space to the
+    // central work area, and no panel may extend beyond the client rectangle.
+    struct SideDockLayoutOptions
+    {
+        float viewport_width{};
+        float requested_left_fraction{0.28f};
+        float requested_right_fraction{0.28f};
+        float splitter_width{10.0f};
+        float minimum_center_width{180.0f};
+        bool left_visible{true};
+        bool right_visible{true};
+    };
+
+    struct SideDockLayout
+    {
+        float left_width{};
+        float right_width{};
+        float left_splitter_width{};
+        float right_splitter_width{};
+        float center_width{};
+        bool valid{};
+    };
+
+    [[nodiscard]] inline SideDockLayout make_side_dock_layout(
+        const SideDockLayoutOptions& options) noexcept
+    {
+        SideDockLayout result{};
+        if (!std::isfinite(options.viewport_width)
+            || !std::isfinite(options.requested_left_fraction)
+            || !std::isfinite(options.requested_right_fraction)
+            || !std::isfinite(options.splitter_width)
+            || !std::isfinite(options.minimum_center_width)
+            || options.viewport_width < 0.0f)
+            return result;
+
+        const float width = options.viewport_width;
+        const float splitter = (std::min)(
+            (std::max)(0.0f, options.splitter_width), width / 6.0f);
+        result.left_splitter_width = options.left_visible ? splitter : 0.0f;
+        result.right_splitter_width = options.right_visible ? splitter : 0.0f;
+        const float available = (std::max)(0.0f,
+            width - result.left_splitter_width - result.right_splitter_width);
+        // At extremely narrow sizes retain a central area in proportion to
+        // the viewport, rather than applying desktop-size pixel minima.
+        const float centralReserve = (std::min)(available,
+            (std::min)((std::max)(0.0f, options.minimum_center_width),
+                available * 0.45f));
+        const float maximumSides = available - centralReserve;
+        const float leftWanted = options.left_visible
+            ? width * std::clamp(options.requested_left_fraction, 0.0f, 0.85f)
+            : 0.0f;
+        const float rightWanted = options.right_visible
+            ? width * std::clamp(options.requested_right_fraction, 0.0f, 0.85f)
+            : 0.0f;
+        const float totalWanted = leftWanted + rightWanted;
+        const float scale = totalWanted > maximumSides && totalWanted > 0.0f
+            ? maximumSides / totalWanted : 1.0f;
+        result.left_width = leftWanted * scale;
+        result.right_width = rightWanted * scale;
+        result.center_width = (std::max)(0.0f,
+            available - result.left_width - result.right_width);
+        result.valid = true;
+        return result;
+    }
+
     inline constexpr float default_bottom_dock_column_fraction = 0.50f;
 
     [[nodiscard]] inline float normalize_bottom_dock_column_fraction(float value) noexcept
@@ -724,6 +825,7 @@ export namespace epochengine::gui_lib
         float zone_gap{ 12.0f };
         float overflow_width{ 82.0f };
         float horizontal_padding{ 12.0f };
+        float center_shift_x{};
     };
 
     struct ChromeBarLayout
@@ -1092,19 +1194,27 @@ export namespace epochengine::gui_lib
         const PlannedZone centerPlan = plan_zone(
             options.center_items,
             centerBudget);
-        const float centerX = contentLeft
-            + (std::max)(
-                0.0f,
-                (contentWidth - centerPlan.total_width) * 0.5f);
-        const float leftBudget = options.center_items.empty()
-            ? contentWidth * 0.55f
-            : (std::max)(0.0f, centerX - zoneGap - contentLeft);
+        // Keep center actions near the middle, but allow the editor to shift
+        // Update right without compressing the File/Tools/Tasks menus early.
+        const float centeredX = contentLeft + (std::max)(
+            0.0f, (contentWidth - centerPlan.total_width) * 0.5f);
+        const float centerX = (std::clamp)(
+            centeredX + options.center_shift_x, contentLeft,
+            contentLeft + (std::max)(0.0f, contentWidth - centerPlan.total_width));
         const float rightStart = centerX + centerPlan.total_width;
+        const float edgeGap = hasLeft && hasRight ? zoneGap : 0.0f;
+        // Without a centered command there is no midpoint to protect. Give
+        // the right controls their measured demand, leaving the rest to menus.
+        // A fixed percentage wastes space and overflows fully fitting labels.
         const float rightBudget = options.center_items.empty()
-            ? (std::max)(0.0f, contentWidth - leftBudget - zoneGap)
+            ? (std::min)(plan_zone(options.right_items, contentWidth).total_width,
+                (std::max)(0.0f, contentWidth - leftReserve - edgeGap))
             : (std::max)(
                 0.0f,
                 contentRight - rightStart - zoneGap);
+        const float leftBudget = options.center_items.empty()
+            ? (std::max)(0.0f, contentWidth - rightBudget - edgeGap)
+            : (std::max)(0.0f, centerX - zoneGap - contentLeft);
         const PlannedZone leftPlan = plan_zone(
             options.left_items,
             leftBudget);
@@ -2673,6 +2783,38 @@ export namespace epochengine::gui_lib
         const DockableWindowOptions& options,
         const DockableWindowInput& input) noexcept;
 
+    struct TextVisualLine final
+    {
+        std::size_t first{};
+        std::size_t past_last{};
+    };
+
+    // Font ownership stays with the consumer; byte boundaries and wrap-space
+    // classification must match that consumer's drawable UTF-8 glyph policy.
+    struct TextGlyphMetrics
+    {
+        std::size_t byte_count{1u};
+        float advance{};
+        bool wrap_space{};
+    };
+    using TextGlyphMeasure = TextGlyphMetrics (*)(std::string_view, std::size_t, const void*);
+    struct TextLayoutMetrics
+    {
+        TextGlyphMeasure measure{};
+        const void* context{};
+        float minimum_width{1.0f};
+    };
+    [[nodiscard]] std::vector<TextVisualLine> text_visual_lines(std::string_view text,
+        float wrap_width, bool multiline, const TextLayoutMetrics& metrics);
+    [[nodiscard]] std::size_t text_visual_line_for_index(std::span<const TextVisualLine> lines,
+        std::size_t index) noexcept;
+    // Supplied line ranges are clamped to text; reversed ranges become empty.
+    // NaN coordinates select the first row/start; infinite Y selects an endpoint.
+    // Non-finite line advance uses one pixel. Metrics only receive in-range indices.
+    [[nodiscard]] std::size_t text_index_from_point(std::string_view text,
+        std::span<const TextVisualLine> lines, Vec2 local_point, float line_advance,
+        bool multiline, const TextLayoutMetrics& metrics) noexcept;
+
     inline constexpr std::size_t invalid_text_index = (std::numeric_limits<std::size_t>::max)();
 
     enum class TextControlCommand : std::uint8_t
@@ -2695,7 +2837,9 @@ export namespace epochengine::gui_lib
         insert_text,
         copy_selection,
         cut_selection,
-        paste_text
+        paste_text,
+        undo,
+        redo
     };
 
     struct TextSelectionRange
@@ -2721,6 +2865,13 @@ export namespace epochengine::gui_lib
         std::size_t column{};
     };
 
+    struct TextControlSnapshot
+    {
+        std::string text{};
+        std::size_t anchor{};
+        std::size_t caret{};
+    };
+
     struct TextControlState
     {
         std::string text{};
@@ -2730,6 +2881,9 @@ export namespace epochengine::gui_lib
         Vec2 scroll{};
         bool focused{};
         bool changed_this_frame{};
+        // Owned by EpochGUI: editor-specific clients need no private undo stack.
+        std::vector<TextControlSnapshot> undo_history{};
+        std::vector<TextControlSnapshot> redo_history{};
     };
 
     struct TextControlOptions

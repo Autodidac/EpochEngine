@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MPL-2.0
 #include <cmath>
 
 import epoch.gui.input;
@@ -106,6 +107,23 @@ int main()
     {
         return 9;
     }
+
+    // A model popup rendered after editor panels must own input even when an
+    // underlying text field or button occupies the same screen coordinates.
+    modal.require_owner_scope();
+    if (modal.pointer_allowed({ 120.0f, 100.0f })
+        || modal.owner_input_allowed()
+        || !modal.keyboard_captured())
+        return 12;
+    modal.enter_owner_scope();
+    if (!modal.pointer_allowed({ 120.0f, 100.0f })
+        || modal.pointer_allowed({ 20.0f, 20.0f })
+        || !modal.owner_input_allowed())
+        return 13;
+    modal.leave_owner_scope();
+    if (modal.pointer_allowed({ 120.0f, 100.0f })
+        || modal.owner_input_allowed())
+        return 14;
 
     modal.block_until_clear();
     if (modal.mode() != input::ModalInputMode::blocked_until_clear

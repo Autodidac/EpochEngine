@@ -5,6 +5,8 @@
  * Provided "AS IS", without warranty of any kind.
  * See LICENSE for full terms.
  ***********************************************/
+// Epoch system notes (auto-checked):
+// Epoch Render: preserve backend boundaries and resource lifetime contracts.
 module;
 
 #include <algorithm>

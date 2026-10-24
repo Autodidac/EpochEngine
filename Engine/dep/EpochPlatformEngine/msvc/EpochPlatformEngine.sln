@@ -1,0 +1,81 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "EpochPlatformEngineStatic", "EpochPlatformEngineStatic.vcxproj", "{C4599864-383D-41AD-B418-88493559285F}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "EpochPlatformEngineShared", "EpochPlatformEngineShared.vcxproj", "{DD838F31-F025-459D-BFCC-686CD577795F}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "EpochPlatformEntrypointConsoleStatic", "EpochPlatformEntrypointConsoleStatic.vcxproj", "{445014B2-0A8C-4A9E-B079-688043CA5FAC}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "EpochPlatformEntrypointConsoleShared", "EpochPlatformEntrypointConsoleShared.vcxproj", "{5DBC137B-5E89-417D-AC5A-76E30D199F67}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "EpochPlatformEntrypointWindowedStatic", "EpochPlatformEntrypointWindowedStatic.vcxproj", "{BC80EAE1-4A6B-46F0-A434-8812E74DDAF2}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "EpochPlatformEntrypointWindowedShared", "EpochPlatformEntrypointWindowedShared.vcxproj", "{FE30F511-E420-4C27-B822-C209C3CAC3D0}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "EpochPlatformExampleStatic", "EpochPlatformExampleStatic.vcxproj", "{4D3815EC-6FB6-4F5C-871F-F47BD0A308DE}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "EpochPlatformExampleShared", "EpochPlatformExampleShared.vcxproj", "{54E47069-B9E2-4690-AA82-AE635364D871}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "EpochPlatformReleaseExampleStatic", "EpochPlatformReleaseExampleStatic.vcxproj", "{A2CEB71B-90F4-4A18-BA09-6E5822CE1D61}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "EpochPlatformReleaseExampleShared", "EpochPlatformReleaseExampleShared.vcxproj", "{C8F6D155-285B-4AA5-8E23-B6DAB7FBDF2A}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "EpochPlatformEngineTests", "EpochPlatformEngineTests.vcxproj", "{9BC2C540-4869-4666-AE08-BB8E7E8FFF62}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{C4599864-383D-41AD-B418-88493559285F}.Debug|x64.ActiveCfg = Debug|x64
+		{C4599864-383D-41AD-B418-88493559285F}.Debug|x64.Build.0 = Debug|x64
+		{C4599864-383D-41AD-B418-88493559285F}.Release|x64.ActiveCfg = Release|x64
+		{C4599864-383D-41AD-B418-88493559285F}.Release|x64.Build.0 = Release|x64
+		{DD838F31-F025-459D-BFCC-686CD577795F}.Debug|x64.ActiveCfg = Debug|x64
+		{DD838F31-F025-459D-BFCC-686CD577795F}.Debug|x64.Build.0 = Debug|x64
+		{DD838F31-F025-459D-BFCC-686CD577795F}.Release|x64.ActiveCfg = Release|x64
+		{DD838F31-F025-459D-BFCC-686CD577795F}.Release|x64.Build.0 = Release|x64
+		{445014B2-0A8C-4A9E-B079-688043CA5FAC}.Debug|x64.ActiveCfg = Debug|x64
+		{445014B2-0A8C-4A9E-B079-688043CA5FAC}.Debug|x64.Build.0 = Debug|x64
+		{445014B2-0A8C-4A9E-B079-688043CA5FAC}.Release|x64.ActiveCfg = Release|x64
+		{445014B2-0A8C-4A9E-B079-688043CA5FAC}.Release|x64.Build.0 = Release|x64
+		{5DBC137B-5E89-417D-AC5A-76E30D199F67}.Debug|x64.ActiveCfg = Debug|x64
+		{5DBC137B-5E89-417D-AC5A-76E30D199F67}.Debug|x64.Build.0 = Debug|x64
+		{5DBC137B-5E89-417D-AC5A-76E30D199F67}.Release|x64.ActiveCfg = Release|x64
+		{5DBC137B-5E89-417D-AC5A-76E30D199F67}.Release|x64.Build.0 = Release|x64
+		{BC80EAE1-4A6B-46F0-A434-8812E74DDAF2}.Debug|x64.ActiveCfg = Debug|x64
+		{BC80EAE1-4A6B-46F0-A434-8812E74DDAF2}.Debug|x64.Build.0 = Debug|x64
+		{BC80EAE1-4A6B-46F0-A434-8812E74DDAF2}.Release|x64.ActiveCfg = Release|x64
+		{BC80EAE1-4A6B-46F0-A434-8812E74DDAF2}.Release|x64.Build.0 = Release|x64
+		{FE30F511-E420-4C27-B822-C209C3CAC3D0}.Debug|x64.ActiveCfg = Debug|x64
+		{FE30F511-E420-4C27-B822-C209C3CAC3D0}.Debug|x64.Build.0 = Debug|x64
+		{FE30F511-E420-4C27-B822-C209C3CAC3D0}.Release|x64.ActiveCfg = Release|x64
+		{FE30F511-E420-4C27-B822-C209C3CAC3D0}.Release|x64.Build.0 = Release|x64
+		{4D3815EC-6FB6-4F5C-871F-F47BD0A308DE}.Debug|x64.ActiveCfg = Debug|x64
+		{4D3815EC-6FB6-4F5C-871F-F47BD0A308DE}.Debug|x64.Build.0 = Debug|x64
+		{4D3815EC-6FB6-4F5C-871F-F47BD0A308DE}.Release|x64.ActiveCfg = Release|x64
+		{4D3815EC-6FB6-4F5C-871F-F47BD0A308DE}.Release|x64.Build.0 = Release|x64
+		{54E47069-B9E2-4690-AA82-AE635364D871}.Debug|x64.ActiveCfg = Debug|x64
+		{54E47069-B9E2-4690-AA82-AE635364D871}.Debug|x64.Build.0 = Debug|x64
+		{54E47069-B9E2-4690-AA82-AE635364D871}.Release|x64.ActiveCfg = Release|x64
+		{54E47069-B9E2-4690-AA82-AE635364D871}.Release|x64.Build.0 = Release|x64
+		{A2CEB71B-90F4-4A18-BA09-6E5822CE1D61}.Debug|x64.ActiveCfg = Debug|x64
+		{A2CEB71B-90F4-4A18-BA09-6E5822CE1D61}.Debug|x64.Build.0 = Debug|x64
+		{A2CEB71B-90F4-4A18-BA09-6E5822CE1D61}.Release|x64.ActiveCfg = Release|x64
+		{A2CEB71B-90F4-4A18-BA09-6E5822CE1D61}.Release|x64.Build.0 = Release|x64
+		{C8F6D155-285B-4AA5-8E23-B6DAB7FBDF2A}.Debug|x64.ActiveCfg = Debug|x64
+		{C8F6D155-285B-4AA5-8E23-B6DAB7FBDF2A}.Debug|x64.Build.0 = Debug|x64
+		{C8F6D155-285B-4AA5-8E23-B6DAB7FBDF2A}.Release|x64.ActiveCfg = Release|x64
+		{C8F6D155-285B-4AA5-8E23-B6DAB7FBDF2A}.Release|x64.Build.0 = Release|x64
+		{9BC2C540-4869-4666-AE08-BB8E7E8FFF62}.Debug|x64.ActiveCfg = Debug|x64
+		{9BC2C540-4869-4666-AE08-BB8E7E8FFF62}.Debug|x64.Build.0 = Debug|x64
+		{9BC2C540-4869-4666-AE08-BB8E7E8FFF62}.Release|x64.ActiveCfg = Release|x64
+		{9BC2C540-4869-4666-AE08-BB8E7E8FFF62}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

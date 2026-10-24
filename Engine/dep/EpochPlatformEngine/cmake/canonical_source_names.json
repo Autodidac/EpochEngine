@@ -1,0 +1,23 @@
+{
+  "reason": "Existing published canonical native API/source paths; new adapter files follow owner.subject naming.",
+  "files": [
+    "examples/basic_app.cpp",
+    "examples/release_app.cpp",
+    "include/epochplatformengine/application.hpp",
+    "include/epochplatformengine/driver.hpp",
+    "include/epochplatformengine/epoch_platform_engine.hpp",
+    "include/epochplatformengine/export.hpp",
+    "include/epochplatformengine/runtime.hpp",
+    "include/epochplatformengine/types.hpp",
+    "src/application.cpp",
+    "src/drivers/headless_driver.cpp",
+    "src/drivers/win32_driver.cpp",
+    "src/drivers/x11_driver.cpp",
+    "src/entrypoint/entrypoint.cpp",
+    "src/runtime.cpp",
+    "src/runtime_host.cpp",
+    "src/runtime_internal.hpp",
+    "src/types.cpp",
+    "tests/platform_tests.cpp"
+  ]
+}

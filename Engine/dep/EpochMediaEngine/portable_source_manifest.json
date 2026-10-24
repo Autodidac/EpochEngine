@@ -1,0 +1,20 @@
+{
+  "schema": "epoch.portable_source_parity.v1",
+  "repository": "Autodidac/EpochMediaEngine",
+  "upstream_revision": "47ae75acf1e2ff04af9852f7c80a28d26ef145f0",
+  "scope": [
+    "modules",
+    "tests"
+  ],
+  "full_tree_mirror": false,
+  "files": [
+    {
+      "path": "modules/media.timeline_preview.ixx",
+      "sha256": "feee5cfd141a93ec5c3efba83f5812ef5ca8cb12707cdc4495984a122f4083e0"
+    },
+    {
+      "path": "tests/media.timeline_preview_contract.cpp",
+      "sha256": "d4b21131ad75e8cfc313ad39b9815114bae611aa46d07aeea695baa79780c76f"
+    }
+  ]
+}

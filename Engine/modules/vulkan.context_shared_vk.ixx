@@ -359,6 +359,7 @@ namespace epochengine::vulkancontext
 
         void createCommandBuffers();
         void createSyncObjects();
+        void createPresentSyncObjects();
 
         void recreateSwapChain();
         void cleanupSwapChain();

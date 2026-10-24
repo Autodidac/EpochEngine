@@ -404,8 +404,9 @@ namespace epochengine::package_catalog
             WinHttpHandle connection{ WinHttpConnect(
                 session.value, L"epoch.adamrushford.chatgpt.site",
                 INTERNET_DEFAULT_HTTPS_PORT, 0u) };
+            const std::wstring requestPath{ endpoint_path.begin(), endpoint_path.end() };
             WinHttpHandle request{ connection.value ? WinHttpOpenRequest(
-                connection.value, L"GET", L"/api/epoch/packages/catalog",
+                connection.value, L"GET", requestPath.c_str(),
                 nullptr, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES,
                 WINHTTP_FLAG_SECURE) : nullptr };
             if (!connection.value || !request.value)

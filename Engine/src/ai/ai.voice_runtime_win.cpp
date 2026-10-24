@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-MIT-NoSell
 // Windows speech backend. Platform headers stay in this owned implementation.
+// Epoch system notes (auto-checked):
+// Epoch AI: preserve model selection, candidate isolation and host verification gates.
 #include "ai.voice_runtime.hpp"
 #include <atomic>
 #include <chrono>
@@ -29,12 +31,23 @@ struct Service final {
     std::uint64_t sequence{};
     std::jthread discovery{},capture{},playback{};
     std::atomic_bool discovering{},capturing{},playing{};
-    ~Service(){discovery.request_stop();capture.request_stop();playback.request_stop();
-        if(discovery.joinable())discovery.join();if(capture.joinable())capture.join();if(playback.joinable())playback.join();}
+    ~Service()
+    {
+        discovery.request_stop();
+        capture.request_stop();
+        playback.request_stop();
+        if (discovery.joinable()) discovery.join();
+        if (capture.joinable()) capture.join();
+        if (playback.joinable()) playback.join();
+    }
 };
 Service& service(){static Service value;return value;}
-void status(Service& s,std::string text){std::scoped_lock lock{s.mutex};s.state.status=std::move(text);}
 #ifdef _WIN32
+void status(Service& s, std::string text)
+{
+    std::scoped_lock lock{s.mutex};
+    s.state.status = std::move(text);
+}
 using Microsoft::WRL::ComPtr;
 struct Apartment final {
     HRESULT result{CoInitializeEx(nullptr,COINIT_MULTITHREADED)};
@@ -78,7 +91,7 @@ void probe(){
         const bool recognition=!stop.stop_requested()&&SUCCEEDED(apartment.result)&&tokens(SPCAT_RECOGNIZERS)&&tokens(SPCAT_AUDIOIN);
         const bool speech=!stop.stop_requested()&&SUCCEEDED(apartment.result)&&tokens(SPCAT_VOICES);
         {std::scoped_lock lock{s.mutex};s.state.probed=true;s.state.available=recognition;s.state.speech_available=speech;
-            s.state.status=recognition?"Windows speech is available. Dictate starts a visible microphone session.":"Windows speech recognition or a microphone is unavailable; install a speech language and enable the input device.";}
+            s.state.status=recognition?"Windows speech recognition is ready. Dictation is editable and may need correction.":"No working Windows SAPI recognizer and microphone were detected. Check speech language and the default microphone.";}
 #else
         (void)stop;{std::scoped_lock lock{s.mutex};s.state.probed=true;s.state.status="No native speech provider is connected on this platform";}
 #endif
@@ -115,7 +128,7 @@ bool start(std::uint64_t owner){
         while(!stop.stop_requested()){
             const bool pause=s.playing.load();
             if(pause!=speechPaused){(void)grammar->SetDictationState(pause?SPRS_INACTIVE:SPRS_ACTIVE);speechPaused=pause;}
-            if(WaitForSingleObject(context->GetNotifyEventHandle(),100u)!=WAIT_OBJECT_0)continue;
+            if(WaitForSingleObject(context->GetNotifyEventHandle(),40u)!=WAIT_OBJECT_0)continue;
             SPEVENT event{};ULONG fetched{};
             while(SUCCEEDED(context->GetEvents(1u,&event,&fetched))&&fetched!=0u){
                 if(event.eEventId==SPEI_RECOGNITION&&event.lParam&&!stop.stop_requested()&&!speechPaused){
@@ -161,6 +174,9 @@ bool speak(std::uint64_t owner,std::string text){
 }
 std::vector<Transcript> transcripts_since(std::uint64_t sequence,std::uint64_t owner){
     auto& s=service();std::scoped_lock lock{s.mutex};std::vector<Transcript> values;
-    for(const auto& entry:s.transcripts)if(entry.sequence>sequence&&entry.owner==owner)values.push_back(entry);return values;
+    for (const auto& entry : s.transcripts)
+        if (entry.sequence > sequence && entry.owner == owner)
+            values.push_back(entry);
+    return values;
 }
 }

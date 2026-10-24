@@ -288,6 +288,7 @@ namespace epochengine::vulkancontext
 
         images.resize(imageCountOut);
         swapChainImages = std::move(images);
+        createPresentSyncObjects();
 
         swapChainImageFormat = surfaceFormat.format;
         swapChainExtent = extent;
@@ -369,6 +370,7 @@ namespace epochengine::vulkancontext
         renderPass.reset();
 
         swapChainImageViews.clear();
+        renderFinishedSemaphores.clear();
         swapChain.reset();
 
         descriptorPool.reset();
@@ -400,6 +402,13 @@ namespace epochengine::vulkancontext
             return;
         }
 
+        logger::get("Epoch.Vulkan").logf(
+            logger::LogLevel::INFO,
+            std::source_location::current(),
+            "Recreating swapchain: framebuffer={}x{} previous={}x{} present_mode_change={}.",
+            get_framebuffer_width(), get_framebuffer_height(),
+            swapChainExtent.width, swapChainExtent.height,
+            presentModeRecreatePending);
         (void)device->waitIdle();
 
         cleanupSwapChain();

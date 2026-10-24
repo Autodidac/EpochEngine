@@ -1,0 +1,14 @@
+EpochMediaEngine
+Copyright (c) 2026 Adam Rushford and the respective contributors.
+Canonical origin: https://github.com/Autodidac/EpochMediaEngine
+EpochEngine project: https://github.com/Autodidac/EpochEngine
+
+First-party source is available under the Mozilla Public License, version 2.0.
+See LICENSE for the unmodified terms. Preserve existing author, copyright,
+license and provenance notices. Third-party material retains its own licenses.
+This notice does not revoke permissions already granted for historical copies.
+
+Make factual origin credit easy for developers to find, alongside comparable
+library/tool credits where those are provided. No specific README or About-screen
+placement is requested. Discoverable credit and credited upstream improvements
+are community requests, not additional MPL copyright conditions. See README.

@@ -19,6 +19,7 @@ option(EPOCH_CI_HEADLESS_ONLY "Configure only the portable hosted-CI smoke targe
 option(EPOCH_SOFTWARE_BASE_ONLY "Configure the editor-free CLI/native-window software base without engine or renderer targets." OFF)
 option(EPOCH_BUILD_STATIC_RUNTIME "Build Epoch as a reusable static runtime for generated child applications." OFF)
 option(EPOCH_BUILD_AI_TRANSPORT_CONTRACT "Expose the opt-in console model HTTP transport probe (never runs automatically)." OFF)
+option(EPOCH_ENABLE_TEXTURE_DIAGNOSTICS "Emit verbose atlas and sprite lifecycle diagnostics (no renderer behavior change)." OFF)
 option(EPOCH_ENABLE_AUTHORING_PLATFORM "Gate the shared Epoch authoring-document and editor foundation as implementation units land." ON)
 option(EPOCH_ENABLE_TEXTURE_EDITOR "Gate texture painting, compositing, and texture-node authoring implementation units." ON)
 option(EPOCH_ENABLE_TILEMAP_EDITOR "Gate tile palette, sparse map authoring, and map compilation implementation units." ON)
@@ -192,6 +193,16 @@ function(epoch_print_build_summary)
     message(STATUS "  Active backends: ${_epoch_active_backends}")
 endfunction()
 
+if(EPOCH_CONFIGURES_MODULE_TARGETS)
+    set(EPOCH_PLATFORM_BUILD_STATIC ON)
+    set(EPOCH_PLATFORM_BUILD_SHARED OFF)
+    set(EPOCH_PLATFORM_BUILD_MODULES ON)
+    set(EPOCH_PLATFORM_BUILD_EXAMPLES OFF)
+    set(EPOCH_PLATFORM_BUILD_TESTS OFF)
+    add_subdirectory(dep/EpochPlatformEngine)
+    epoch_apply_cxx_dialect(EpochPlatformModuleStatic)
+endif()
+
 set(EPOCH_CI_HEADLESS_SOURCES
     examples/HeadlessCI/headless_smoke.cpp
 )
@@ -201,30 +212,20 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND NOT WIN32 AND EPOCH_CI_HEADLESS_ONLY
     set(EPOCH_CI_HEADLESS_USES_MODULE_LOG OFF)
 endif()
 
-if(EPOCH_CI_HEADLESS_USES_MODULE_LOG)
-    list(APPEND EPOCH_CI_HEADLESS_SOURCES
-        src/core/core.log.cpp
-        src/core/core.time.cpp
-    )
-else()
+if(NOT EPOCH_CI_HEADLESS_USES_MODULE_LOG)
     list(APPEND EPOCH_CI_HEADLESS_SOURCES
         src/core/core.log_headless.cpp
     )
 endif()
 
 add_executable(epoch_ci_headless ${EPOCH_CI_HEADLESS_SOURCES})
+    if(EPOCH_CONFIGURES_MODULE_TARGETS)
+        target_link_libraries(epoch_ci_headless PUBLIC Epoch::PlatformEngine)
+    endif()
 
 if(EPOCH_CI_HEADLESS_USES_MODULE_LOG)
     set_target_properties(epoch_ci_headless PROPERTIES
         CXX_SCAN_FOR_MODULES ON
-    )
-
-    target_sources(epoch_ci_headless PRIVATE
-        FILE_SET epoch_ci_headless_modules TYPE CXX_MODULES
-            BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/modules
-            FILES
-                ${CMAKE_CURRENT_SOURCE_DIR}/modules/core.log.ixx
-                ${CMAKE_CURRENT_SOURCE_DIR}/modules/core.time.ixx
     )
 else()
     set_target_properties(epoch_ci_headless PROPERTIES
@@ -258,6 +259,17 @@ add_custom_target(epoch_headless_explicit_root_contract
 
 include(CTest)
 if(BUILD_TESTING)
+    include("${CMAKE_CURRENT_SOURCE_DIR}/../Tools/CMake/repository_tests.cmake")
+    # Production native process ownership without model/renderer dependencies.
+    
+    
+    
+    
+    
+    
+    
+    
+
     add_test(
         NAME epoch_ci_headless
         COMMAND epoch_ci_headless ${CMAKE_CURRENT_SOURCE_DIR}/..
@@ -306,19 +318,18 @@ if(BUILD_TESTING)
 
         # CPU-only scheduler proof belongs in the lightweight component lane too.
         add_executable(epoch_editor_task_scheduler_contract
-            src/core/core.log.cpp
-            src/core/core.time.cpp
+
             src/editor/systems/editor.task_scheduler_contract.cpp
         )
+        target_link_libraries(epoch_editor_task_scheduler_contract PUBLIC Epoch::PlatformEngine)
         target_sources(epoch_editor_task_scheduler_contract PRIVATE
             FILE_SET epoch_editor_task_scheduler_modules TYPE CXX_MODULES
                 BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/modules
                 FILES
-                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/core.log.ixx
-                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/core.time.ixx
+
                     ${CMAKE_CURRENT_SOURCE_DIR}/modules/core.logger.ixx
                     ${CMAKE_CURRENT_SOURCE_DIR}/modules/core.mpmc_bounded_queue.ixx
-                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/platform.engine.ixx
+
                     ${CMAKE_CURRENT_SOURCE_DIR}/modules/systems.registry.ixx
                     ${CMAKE_CURRENT_SOURCE_DIR}/modules/systems.task.ixx
                     ${CMAKE_CURRENT_SOURCE_DIR}/modules/taskgraph.dotsystem.ixx
@@ -341,16 +352,17 @@ if(BUILD_TESTING)
         # CPU-only mainline neuromorphic graph/camera/renderer-invalidation proof.
         # No GUI, GPU, native window, or runtime launch is involved.
         add_executable(epoch_neuromorphic_contract
-            src/core/core.time.cpp
+
             src/simulation/simulation.neuromorphic_contract.cpp
         )
+        target_link_libraries(epoch_neuromorphic_contract PUBLIC Epoch::PlatformEngine)
         target_sources(epoch_neuromorphic_contract PRIVATE
             FILE_SET epoch_neuromorphic_modules TYPE CXX_MODULES
                 BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/modules
                 FILES
                     ${CMAKE_CURRENT_SOURCE_DIR}/modules/authoring.document.ixx
                     ${CMAKE_CURRENT_SOURCE_DIR}/modules/authoring.task_graph.ixx
-                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/core.time.ixx
+
                     ${CMAKE_CURRENT_SOURCE_DIR}/modules/scene.snapshot.ixx
                     ${CMAKE_CURRENT_SOURCE_DIR}/modules/timeline.system.ixx
                     ${CMAKE_CURRENT_SOURCE_DIR}/modules/simulation.neuromorphic.ixx
@@ -383,8 +395,7 @@ if(BUILD_TESTING)
             set(BUILD_TESTING "${_epoch_gui_contract_build_testing}")
             target_link_libraries(epoch_gui_bottom_dock_contract PRIVATE EpochGui)
         else()
-            # Full-engine builds define this owned GUI target below. Do not
-            # introduce the standalone library's epoch_gui alias before it.
+            # Full-engine builds consume the dependency's epoch_gui alias below.
             target_link_libraries(epoch_gui_bottom_dock_contract PRIVATE epoch_gui)
         endif()
         epoch_apply_cxx_dialect(epoch_gui_bottom_dock_contract)
@@ -443,39 +454,22 @@ if(BUILD_TESTING)
             COMMAND epoch_platform_child_process_contract
         )
 
-        add_executable(epoch_editor_candidate_artifact_contract
-            src/editor/ai/editor.candidate_artifact_contract.cpp)
-        target_sources(epoch_editor_candidate_artifact_contract PRIVATE
-            FILE_SET candidate_artifact_modules TYPE CXX_MODULES
-                BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/modules
-                FILES
-                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/platform.child_process.ixx
-                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/editor.candidate_artifact.ixx
-        )
-        epoch_apply_cxx_dialect(epoch_editor_candidate_artifact_contract)
-        epoch_apply_warnings(epoch_editor_candidate_artifact_contract)
-        epoch_apply_sanitizers(epoch_editor_candidate_artifact_contract)
-        add_test(NAME epoch_editor_candidate_artifact_contract
-            COMMAND epoch_editor_candidate_artifact_contract)
+        
+        
+        
+        
+        
+        
+        
 
         # Filesystem transactions/materialization use synthetic fixtures only;
         # keep this regression available without configuring renderer targets.
-        add_executable(epoch_ai_development_executor_contract
-            src/ai/ai.development_executor.cpp
-            src/ai/ai.development_executor_contract.cpp)
-        target_sources(epoch_ai_development_executor_contract PRIVATE
-            FILE_SET epoch_ai_development_executor_modules TYPE CXX_MODULES
-                BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/modules
-                FILES
-                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/core.sha256.ixx
-                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/platform.filesystem.ixx
-                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/ai.development_guard.ixx
-                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/ai.development_executor.ixx)
-        epoch_apply_cxx_dialect(epoch_ai_development_executor_contract)
-        epoch_apply_warnings(epoch_ai_development_executor_contract)
-        epoch_apply_sanitizers(epoch_ai_development_executor_contract)
-        add_test(NAME epoch_ai_development_executor_contract
-            COMMAND epoch_ai_development_executor_contract)
+        
+        
+        
+        
+        
+        
     endif()
 endif()
 
@@ -486,38 +480,10 @@ endif()
 if(EPOCH_CONFIGURES_MODULE_TARGETS)
     # This target deliberately does not link epoch, epoch_gui, the legacy entry,
     # renderer adapters, editor/project services, updater, AI, or child processes.
-    add_library(epoch_software_base STATIC
-        src/epoch/epoch.software_application.cpp
-        src/platform/platform.window.cpp
-        src/core/core.log.cpp
-        src/core/core.time.cpp
-    )
+    # Compatibility target; PlatformEngine is the sole lifecycle/module owner.
+    add_library(epoch_software_base INTERFACE)
     add_library(Epoch::SoftwareBase ALIAS epoch_software_base)
-    target_sources(epoch_software_base PUBLIC
-        FILE_SET software_base_modules TYPE CXX_MODULES
-            BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/modules
-            FILES
-                ${CMAKE_CURRENT_SOURCE_DIR}/modules/core.error.ixx
-                ${CMAKE_CURRENT_SOURCE_DIR}/modules/core.log.ixx
-                ${CMAKE_CURRENT_SOURCE_DIR}/modules/core.time.ixx
-                ${CMAKE_CURRENT_SOURCE_DIR}/modules/context.type.ixx
-                ${CMAKE_CURRENT_SOURCE_DIR}/modules/context.admission.ixx
-                ${CMAKE_CURRENT_SOURCE_DIR}/modules/platform.window.ixx
-    )
-    target_include_directories(epoch_software_base PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
-    )
-    target_include_directories(epoch_software_base PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/src
-    )
-    if(WIN32)
-        target_link_libraries(epoch_software_base PRIVATE user32)
-    endif()
-    find_package(Threads REQUIRED)
-    target_link_libraries(epoch_software_base PRIVATE Threads::Threads)
-    epoch_apply_cxx_dialect(epoch_software_base)
-    epoch_apply_warnings(epoch_software_base)
-    epoch_apply_sanitizers(epoch_software_base)
+    target_link_libraries(epoch_software_base INTERFACE Epoch::PlatformEngine)
 
     add_executable(epoch_software_app examples/SoftwareBase/epoch.software_main.cpp)
     target_link_libraries(epoch_software_app PRIVATE Epoch::SoftwareBase)
@@ -553,13 +519,7 @@ if(EPOCH_CONFIGURES_MODULE_TARGETS)
 
         add_executable(epoch_context_admission_contract
             src/renderers/core/context.admission_contract.cpp)
-        target_sources(epoch_context_admission_contract PRIVATE
-            FILE_SET context_admission_modules TYPE CXX_MODULES
-                BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/modules
-                FILES
-                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/context.type.ixx
-                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/context.admission.ixx
-        )
+        target_link_libraries(epoch_context_admission_contract PRIVATE Epoch::PlatformEngine)
         epoch_apply_cxx_dialect(epoch_context_admission_contract)
         epoch_apply_warnings(epoch_context_admission_contract)
         epoch_apply_sanitizers(epoch_context_admission_contract)
@@ -575,13 +535,12 @@ if(EPOCH_BUILD_AI_TRANSPORT_CONTRACT)
     add_executable(epoch_ai_transport_contract EXCLUDE_FROM_ALL
         examples/AiTransportContract/ai.transport_contract.cpp
         src/ai/ai.engine.cpp
-        src/ai/ai.development_proposal_codec.cpp
         src/ai/ai.model_install.cpp
         src/ai/ai.project_profile.cpp
-        src/core/core.log.cpp
-        src/core/core.time.cpp
+
         src/platform/core.path.cpp
     )
+    target_link_libraries(epoch_ai_transport_contract PUBLIC Epoch::PlatformEngine)
     target_sources(epoch_ai_transport_contract PRIVATE
         FILE_SET epoch_ai_transport_modules TYPE CXX_MODULES
             BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/modules
@@ -592,15 +551,14 @@ if(EPOCH_BUILD_AI_TRANSPORT_CONTRACT)
                 ${CMAKE_CURRENT_SOURCE_DIR}/modules/ai.voice_session.ixx
                 ${CMAKE_CURRENT_SOURCE_DIR}/modules/ai.mcp.ixx
                 ${CMAKE_CURRENT_SOURCE_DIR}/modules/ai.eval.ixx
-                ${CMAKE_CURRENT_SOURCE_DIR}/modules/ai.development_proposal_codec.ixx
                 ${CMAKE_CURRENT_SOURCE_DIR}/modules/ai.model_install.ixx
                 ${CMAKE_CURRENT_SOURCE_DIR}/modules/ai.project_profile.ixx
-                ${CMAKE_CURRENT_SOURCE_DIR}/modules/core.log.ixx
-                ${CMAKE_CURRENT_SOURCE_DIR}/modules/core.time.ixx
+
                 ${CMAKE_CURRENT_SOURCE_DIR}/modules/core.path.ixx
                 ${CMAKE_CURRENT_SOURCE_DIR}/modules/core.sha256.ixx
                 ${CMAKE_CURRENT_SOURCE_DIR}/modules/platform.filesystem.ixx
     )
+
     target_include_directories(epoch_ai_transport_contract PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/include
@@ -624,29 +582,15 @@ if(EPOCH_BUILD_AI_TRANSPORT_CONTRACT)
     # default-build dependency: a model request requires explicit CLI --run.
 endif()
 
+if(BUILD_TESTING AND EPOCH_CONFIGURES_MODULE_TARGETS)
+    
+    
 
-if(BUILD_TESTING)
-    add_executable(epoch_ai_source_discovery_contract
-        src/ai/ai.source_index.cpp
-        src/ai/ai.source_workspace.cpp
-        src/ai/ai.source_discovery_contract.cpp
-    )
-    target_sources(epoch_ai_source_discovery_contract PRIVATE
-        FILE_SET epoch_ai_source_discovery_modules TYPE CXX_MODULES
-            BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/modules
-            FILES
-                ${CMAKE_CURRENT_SOURCE_DIR}/modules/ai.source_index.ixx
-                ${CMAKE_CURRENT_SOURCE_DIR}/modules/ai.source_workspace.ixx
-                ${CMAKE_CURRENT_SOURCE_DIR}/modules/ai.source_discovery_contract.ixx
-    )
-    target_compile_definitions(epoch_ai_source_discovery_contract PRIVATE
-        EPOCH_AI_SOURCE_DISCOVERY_CONTRACT_MAIN=1
-    )
-    epoch_apply_cxx_dialect(epoch_ai_source_discovery_contract)
-    epoch_apply_warnings(epoch_ai_source_discovery_contract)
-    epoch_apply_sanitizers(epoch_ai_source_discovery_contract)
-    add_test(NAME epoch_ai_source_discovery_contract
-        COMMAND epoch_ai_source_discovery_contract)
+    
+    
+    
+    
+    
 endif()
 
 if(EPOCH_SOFTWARE_BASE_ONLY)
@@ -665,42 +609,18 @@ if(EPOCH_CI_HEADLESS_ONLY)
     return()
 endif()
 
-add_library(epoch_gui STATIC
-    dep/EpochGui/src/epochgui/dock_layout.cpp
-    dep/EpochGui/src/epochgui/hierarchy_tree.cpp
-    dep/EpochGui/src/epochgui/input.cpp
-    dep/EpochGui/src/epochgui/image.cpp
-    dep/EpochGui/src/epochgui/rounded_rect.cpp
-    dep/EpochGui/src/epochgui/node_graph_workspace.cpp
-    dep/EpochGui/src/epochgui/system_workspace.cpp
-    dep/EpochGui/src/epochgui/dockable_window.cpp
-    dep/EpochGui/src/epochgui/floating_window.cpp
-    dep/EpochGui/src/epochgui/panel_host.cpp
-    dep/EpochGui/src/epochgui/popup_layout.cpp
-    dep/EpochGui/src/epochgui/text_control.cpp
-    dep/EpochGui/src/epochgui/text_editor.cpp
-    dep/EpochGui/src/epochgui/tile_workspace.cpp
-)
-
-target_sources(epoch_gui PUBLIC
-    FILE_SET epoch_gui_modules TYPE CXX_MODULES
-        BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/dep/EpochGui/modules
-        FILES
-            ${CMAKE_CURRENT_SOURCE_DIR}/dep/EpochGui/modules/epoch.gui.ixx
-            ${CMAKE_CURRENT_SOURCE_DIR}/dep/EpochGui/modules/epoch.gui.input.ixx
-            ${CMAKE_CURRENT_SOURCE_DIR}/dep/EpochGui/modules/epoch.gui.image.ixx
-            ${CMAKE_CURRENT_SOURCE_DIR}/dep/EpochGui/modules/epoch.gui.tile_workspace.ixx
-            ${CMAKE_CURRENT_SOURCE_DIR}/dep/EpochGui/modules/epoch.gui.rounded_rect.ixx
-)
-
-target_include_directories(epoch_gui PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
-    ${CMAKE_CURRENT_SOURCE_DIR}/dep/EpochGui/include
-)
-
-epoch_apply_cxx_dialect(epoch_gui)
-epoch_apply_warnings(epoch_gui)
-epoch_apply_sanitizers(epoch_gui)
+# EpochGui owns its complete portable source/module graph. Keep the historical
+# epoch_gui link name through the dependency's alias, without a second source list.
+set(_epoch_gui_parent_build_testing "${BUILD_TESTING}")
+set(BUILD_TESTING OFF)
+set(EPOCHGUI_ENABLE_ROUNDED_RECT ON)
+add_subdirectory(dep/EpochGui)
+add_subdirectory(dep/EpochAudioEngine)
+add_subdirectory(dep/EpochMediaEngine)
+set(BUILD_TESTING "${_epoch_gui_parent_build_testing}")
+epoch_apply_cxx_dialect(EpochGui)
+epoch_apply_warnings(EpochGui)
+epoch_apply_sanitizers(EpochGui)
 
 set(EPOCH_VERSION_OVERRIDE_MAJOR "" CACHE STRING "Override engine version major for packaging builds")
 set(EPOCH_VERSION_OVERRIDE_MINOR "" CACHE STRING "Override engine version minor for packaging builds")
@@ -725,62 +645,49 @@ set(EPOCH_SOURCES
     src/epoch/epoch.build_validation_contract.cpp
     src/editor/editor.code_workspace.cpp
     src/editor/editor.code_workspace_contract.cpp
-    src/ai/ai.development_executor.cpp
-    src/ai/ai.iteration_loop.cpp
-    src/ai/ai.iteration_loop_contract.cpp
-    src/ai/ai.iteration_session.cpp
-    src/ai/ai.source_index.cpp
-    src/ai/ai.source_workspace.cpp
-    src/ai/ai.source_discovery_contract.cpp
-    src/ai/ai.iteration_session_contract.cpp
+    
+    
+    
+    
     src/ai/ai.project_profile.cpp
     src/ai/ai.project_profile_contract.cpp
     src/ai/ai.model_install.cpp
     src/ai/ai.model_install_contract.cpp
-    src/ai/ai.curated_context_bundle.cpp
-    src/ai/ai.curated_context_bundle_contract.cpp
-    src/ai/ai.iteration_campaign.cpp
-    src/ai/ai.iteration_campaign_contract.cpp
-    src/ai/ai.iteration_campaign_queue.cpp
-    src/ai/ai.iteration_campaign_queue_contract.cpp
-    src/ai/ai.iteration_campaign_scheduler.cpp
-    src/ai/ai.iteration_campaign_scheduler_contract.cpp
-    src/ai/ai.iteration_supervisor_control.cpp
-    src/ai/ai.iteration_supervisor_control_contract.cpp
-    src/ai/ai.mcp_supervisor_adapter.cpp
-    src/ai/ai.mcp_supervisor_adapter_checkpoint.cpp
-    src/ai/ai.mcp_supervisor_adapter_contract.cpp
-    src/ai/ai.mcp_campaign.cpp
-    src/ai/ai.mcp_campaign_contract.cpp
-    src/ai/ai.mcp_child_host.cpp
-    src/ai/ai.mcp_child_host_contract.cpp
-    src/ai/ai.self_iteration_orchestrator.cpp
-    src/ai/ai.self_iteration_orchestrator_contract.cpp
-    src/ai/ai.mcp_orchestrator_bridge.cpp
-    src/ai/ai.mcp_orchestrator_bridge_contract.cpp
-    src/ai/ai.source_patch_bundle.cpp
-    src/ai/ai.source_patch_bundle_contract.cpp
-    src/ai/ai.source_patch_proposal.cpp
-    src/ai/ai.source_patch_proposal_contract.cpp
-    src/ai/ai.source_patch_stager.cpp
-    src/ai/ai.source_patch_stager_contract.cpp
-    src/ai/ai.iteration_patch_adapter.cpp
-    src/ai/ai.iteration_patch_adapter_contract.cpp
-    src/ai/ai.iteration_validation_adapter.cpp
-    src/ai/ai.iteration_validation_adapter_contract.cpp
-    src/ai/ai.development_proposal_codec.cpp
-    src/ai/ai.development_proposal_codec_contract.cpp
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     src/ai/ai.mcp_stdio.cpp
     src/ai/ai.mcp_stdio_contract.cpp
     src/extensions/extension.catalog_contract.cpp
     src/packages/package.catalog.cpp
-    src/audio/audio.device.cpp
-    src/audio/audio.device_contract.cpp
-    src/audio/audio.manager.cpp
-    src/audio/audio.mixer.cpp
-    src/audio/audio.mixer_contract.cpp
-    src/audio/audio.playback_runtime.cpp
-    src/audio/audio.playback_runtime_contract.cpp
     src/input/input.controller.cpp
     src/input/input.controller_sdl.cpp
     src/input/input.controller_contract.cpp
@@ -839,9 +746,9 @@ set(EPOCH_SOURCES
     src/editor/editor.project_input_settings.cpp
     src/editor/editor.project_input_settings_contract.cpp
     src/editor/editor.tilemap_workspace.cpp
-    src/editor/ai/editor.ai_development_controller.cpp
-    src/editor/ai/editor.ai_development_panel.cpp
-    src/editor/ai/editor.ai_development_controller_contract.cpp
+    
+    
+    
     src/editor/systems/editor.systems_workspace.cpp
     src/editor/systems/editor.systems_panel.cpp
     src/editor/systems/editor.systems_workspace_contract.cpp
@@ -871,8 +778,8 @@ set(EPOCH_SOURCES
     src/project/project.tilemap_source.cpp
     src/project/project.input_profile.cpp
     src/project/project.input_profile_contract.cpp
-    src/project/project.ai_self_iteration.cpp
-    src/project/project.ai_self_iteration_session.cpp
+    
+    
     src/project/project.input_controller.cpp
     src/project/project.input_controller_contract.cpp
     src/project/project.actor2d_runtime.cpp
@@ -893,26 +800,131 @@ set(EPOCH_SOURCES
     src/assets/texture/asset.texture_artifact.cpp
     src/assets/texture/asset.texture_import.cpp
     src/core/core.assert.cpp
-    src/core/core.env.cpp
     src/core/core.error.cpp
     src/core/core.id.cpp
-    src/core/core.log.cpp
+
     src/core/core.math.cpp
     src/platform/core.path.cpp
     src/core/core.string.cpp
-    src/core/core.time.cpp
+
     src/ai/ai.engine.cpp
     src/epoch/epoch.engine.cpp
     src/epoch/epoch.headers.cpp
     src/renderers/platform/platform.context_epoch.cpp
     src/platform/platform.child_process.cpp
-    src/platform/platform.window.cpp
+
     src/platform/platform.work_admission.cpp
     src/render/render.graph_epoch.cpp
     src/epoch/epoch.systems.cpp
     src/epoch/epoch.main.cpp
     src/epoch/epoch.runtime.cpp
 )
+
+# Feature-owned textual implementation parts remain in their existing owning
+# translation units. Listing them keeps IDE ownership visible without compiling
+# a second copy or changing module/state linkage.
+# Feature-owned private implementations retain their module/library state.
+set(EPOCH_EDITOR_IMPLEMENTATION_PARTS
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    src/editor/application/editor.application_asset_audio.inl
+    src/editor/application/editor.application_asset_browsing.inl
+    src/editor/application/editor.application_assistant_authoring.inl
+    src/editor/application/editor.application_code_workspaces.inl
+    src/editor/application/editor.application_context_lifecycle.inl
+    src/editor/application/editor.application_context_session.inl
+    src/editor/application/editor.application_context_snapshot.inl
+    src/editor/application/editor.application_contracts.inl
+    src/editor/application/editor.application_detached_panels.inl
+    src/editor/application/editor.application_document_editing.inl
+    src/editor/application/editor.application_gui_authoring.inl
+    src/editor/application/editor.application_layout_persistence.inl
+    src/editor/application/editor.application_models_attachments.inl
+    src/editor/application/editor.application_packages_creation.inl
+    src/editor/application/editor.application_pane_routing.inl
+    src/editor/application/editor.application_project_documents.inl
+    src/editor/application/editor.application_project_runtime.inl
+    src/editor/application/editor.application_runtime_diagnostics.inl
+    src/editor/application/editor.application_runtime_source.inl
+    src/editor/application/editor.application_scene_preview.inl
+    src/editor/application/editor.application_scene_selection.inl
+    src/editor/application/editor.application_scene_transactions.inl
+    src/editor/application/editor.application_scripting_renderers.inl
+    src/editor/application/editor.application_state.inl
+    src/editor/application/editor.application_texture_authoring.inl
+    src/editor/application/editor.application_work_admission.inl
+    src/editor/application/editor.frame_assistant_chat.inl
+    src/editor/application/editor.frame_assistant_conversation.inl
+    src/editor/application/editor.frame_assistant_entry.inl
+    src/editor/application/editor.frame_assistant_planning.inl
+    src/editor/application/editor.frame_bootstrap.inl
+    src/editor/application/editor.frame_bottom_docks.inl
+    src/editor/application/editor.frame_command_menus.inl
+    src/editor/application/editor.frame_consent_settings.inl
+    src/editor/application/editor.frame_finish.inl
+    src/editor/application/editor.frame_inspector.inl
+    src/editor/application/editor.frame_model_manager.inl
+    src/editor/application/editor.frame_outliner.inl
+    src/editor/application/editor.frame_packages_about.inl
+    src/editor/application/editor.frame_project_runtime.inl
+    src/editor/application/editor.frame_source_dispatch.inl
+    src/editor/application/editor.frame_toolbar_dock_targets.inl
+    src/editor/application/editor.frame_viewport.inl
+    src/editor/application/editor.frame_workspace_docking.inl
+    src/epochgui/controls/gui.assistant_console.inl
+    src/epochgui/controls/gui.buttons_images.inl
+    src/epochgui/controls/gui.context_roles.inl
+    src/epochgui/controls/gui.frame_lifecycle.inl
+    src/epochgui/controls/gui.navigation_chrome.inl
+    src/epochgui/controls/gui.node_surface_controls.inl
+    src/epochgui/controls/gui.scroll_controls.inl
+    src/epochgui/controls/gui.text_controls.inl
+    src/epochgui/controls/gui.window_controls.inl
+)
+set_source_files_properties(${EPOCH_EDITOR_IMPLEMENTATION_PARTS}
+    PROPERTIES HEADER_FILE_ONLY TRUE)
+list(APPEND EPOCH_SOURCES ${EPOCH_EDITOR_IMPLEMENTATION_PARTS})
+
+set(EPOCH_DOMAIN_IMPLEMENTATION_PARTS
+    src/authoring/texture/implementation/authoring.texture_binary_codec.inl
+    src/authoring/texture/implementation/authoring.texture_residency.inl
+    src/editor/implementation/editor.scene_commands.inl
+    src/editor/implementation/editor.project_registry.inl
+    src/editor/implementation/editor.project_shell_generation.inl
+    src/epoch/implementation/epoch.contracts_renderer.inl
+    src/epoch/implementation/epoch.contracts_engine.inl
+    src/epoch/implementation/epoch.contracts_project.inl
+    src/epoch/implementation/epoch.session_editor_launcher.inl
+    src/epoch/implementation/epoch.project_play_scene.inl
+    src/epoch/implementation/epoch.session_runtime.inl
+    src/ai/implementation/ai.connection_preferences.inl
+    src/ai/implementation/ai.model_http_transport.inl
+    src/ai/implementation/ai.model_protocol.inl
+    src/ai/implementation/ai.runtime_process.inl
+    src/ai/implementation/ai.model_management.inl
+    src/ai/implementation/ai.transport_contracts.inl
+    src/updater/implementation/updater.release_integrity.inl
+    src/updater/implementation/updater.toolchain_bootstrap.inl
+    src/updater/implementation/updater.source_worker.inl
+    src/renderers/host/implementation/host.window_interaction.inl
+    src/renderers/host/implementation/host.render_loop.inl
+    src/renderers/host/implementation/host.native_dispatch.inl
+)
+set_source_files_properties(${EPOCH_DOMAIN_IMPLEMENTATION_PARTS}
+    PROPERTIES HEADER_FILE_ONLY TRUE)
+list(APPEND EPOCH_SOURCES ${EPOCH_DOMAIN_IMPLEMENTATION_PARTS})
 
 if(WIN32)
     list(APPEND EPOCH_SOURCES
@@ -937,7 +949,6 @@ if(EPOCH_ENABLE_AUTHORING_PLATFORM AND EPOCH_ENABLE_TILEMAP_EDITOR)
     )
 endif()
 
-
 # Epoch owns its native AI task/model runtime; no separate frontend server.
 option(EPOCH_ENABLE_NATIVE_AI "Compile native Epoch AI agent and Qwen Flash runtime" ON)
 if(EPOCH_ENABLE_NATIVE_AI)
@@ -948,7 +959,6 @@ if(EPOCH_ENABLE_NATIVE_AI)
     add_library(epoch_ai_native STATIC
         "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_core_config.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_core_error.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_core_event_bus.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_core_ids.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_core_file_replace_windows.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_core_file_replace_posix.cpp"
@@ -956,29 +966,16 @@ if(EPOCH_ENABLE_NATIVE_AI)
         "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_model_runtime_model.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_model_qwen_flash_runtime.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_model_native_model_manager.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_model_internal_model_host.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_model_multiplex_provider.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_models_model_registry.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_residency_model_residency_manager.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_addons_addon_registry.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_controller_architect_controller.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_controller_task_intent.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_learning_learning_service.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_memory_episode_store.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_training_training_service.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_decision_decision_engine.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_workspace_workspace.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_workspace_checkpoint_store.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_process_process.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_process_process_windows.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_process_process_posix.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_tools_tool_registry.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_tools_builtin_tools.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_persistence_session_store.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_agent_context_manager.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_agent_handoff_contract.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_agent_agent_runtime.cpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_agent_task_scheduler.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native/ai.backend_runtime_runtime_host.cpp"
     )
     target_compile_features(epoch_ai_native PUBLIC cxx_std_23)
@@ -1001,6 +998,7 @@ endif()
 
 if(EPOCH_BUILD_STATIC_RUNTIME)
     add_library(epoch STATIC ${EPOCH_SOURCES})
+    target_link_libraries(epoch PUBLIC Epoch::PlatformEngine)
     target_compile_definitions(epoch PRIVATE
         ENGINE_STATICLIB=1
         EPOCH_MAIN_IN_MAIN_CPP=1)
@@ -1009,6 +1007,7 @@ if(EPOCH_BUILD_STATIC_RUNTIME)
         POSITION_INDEPENDENT_CODE ON)
 else()
     add_executable(epoch ${EPOCH_SOURCES})
+    target_link_libraries(epoch PUBLIC Epoch::PlatformEngine)
     if(WIN32)
         target_sources(epoch PRIVATE resource/epoch.manifest)
     endif()
@@ -1027,7 +1026,7 @@ else()
 endif()
 
 if(MSVC)
-    set_target_properties(epoch epoch_ci_headless epoch_gui PROPERTIES
+    set_target_properties(epoch epoch_ci_headless EpochGui PROPERTIES
         VS_GLOBAL_VcpkgApplocalDeps "false"
         VS_GLOBAL_VcpkgAutoBootstrap "false"
     )
@@ -1179,20 +1178,11 @@ endif()
 
 add_executable(epoch_renderer_smoke EXCLUDE_FROM_ALL
     src/renderers/render.smoke_harness.cpp
-    src/core/core.log.cpp
-    src/core/core.time.cpp
-)
 
-target_sources(epoch_renderer_smoke PRIVATE
-    FILE_SET epoch_renderer_smoke_modules TYPE CXX_MODULES
-        BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/modules
-        FILES
-            ${CMAKE_CURRENT_SOURCE_DIR}/modules/core.log.ixx
-            ${CMAKE_CURRENT_SOURCE_DIR}/modules/core.time.ixx
 )
+target_link_libraries(epoch_renderer_smoke PUBLIC Epoch::PlatformEngine)
 
 epoch_apply_version_overrides(epoch_renderer_smoke)
-
 
 set(EPOCH_MODULE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/modules)
 
@@ -1220,7 +1210,8 @@ target_include_directories(epoch PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/stb
 )
 
-target_link_libraries(epoch PRIVATE epoch_gui)
+target_link_libraries(epoch PRIVATE epoch_gui Epoch::AudioEngine Epoch::MediaEngine)
+
 if(EPOCH_ENABLE_NATIVE_AI)
     target_link_libraries(epoch PRIVATE epoch_ai_native)
     target_include_directories(epoch PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native")
@@ -1247,18 +1238,8 @@ set(EPOCH_VULKAN_ASSET_DIR ${CMAKE_CURRENT_BINARY_DIR}/assets/vulkan)
 set(EPOCH_VULKAN_SHADER_DIR ${EPOCH_VULKAN_ASSET_DIR}/shaders)
 set(EPOCH_FONT_ASSET_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts)
 set(EPOCH_FONT_ASSET_DIR ${CMAKE_CURRENT_BINARY_DIR}/assets/fonts)
-set(EPOCH_LOCAL_MCP_ASSET_SOURCE
-    ${CMAKE_CURRENT_SOURCE_DIR}/assets/ai/epoch.local_mcp_iteration.ps1)
-set(EPOCH_LOCAL_MCP_ASSET_DIR ${CMAKE_CURRENT_BINARY_DIR}/assets/ai)
-
 file(MAKE_DIRECTORY ${EPOCH_VULKAN_SHADER_DIR})
 file(MAKE_DIRECTORY ${EPOCH_FONT_ASSET_DIR})
-file(MAKE_DIRECTORY ${EPOCH_LOCAL_MCP_ASSET_DIR})
-configure_file(
-    ${EPOCH_LOCAL_MCP_ASSET_SOURCE}
-    ${EPOCH_LOCAL_MCP_ASSET_DIR}/epoch.local_mcp_iteration.ps1
-    COPYONLY
-)
 configure_file(
     ${CMAKE_CURRENT_SOURCE_DIR}/assets/vulkan/texture.ppm
     ${EPOCH_VULKAN_ASSET_DIR}/texture.ppm
@@ -1828,67 +1809,19 @@ if(BUILD_TESTING)
         COMMAND epoch_input_controller_contract
     )
 
-    add_executable(epoch_audio_mixer_contract
-        src/audio/audio.manager.cpp
-        src/audio/audio.mixer.cpp
-        src/audio/audio.mixer_contract.cpp
-    )
-    target_sources(epoch_audio_mixer_contract PRIVATE
-        FILE_SET epoch_audio_mixer_modules TYPE CXX_MODULES
-            BASE_DIRS ${EPOCH_MODULE_DIR}
-            FILES
-                ${EPOCH_MODULE_DIR}/audio.types.ixx
-                ${EPOCH_MODULE_DIR}/audio.manager.ixx
-                ${EPOCH_MODULE_DIR}/audio.mixer.ixx
-    )
-    target_include_directories(epoch_audio_mixer_contract PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
-        ${CMAKE_CURRENT_SOURCE_DIR}/src
-    )
-    target_compile_definitions(epoch_audio_mixer_contract PRIVATE
-        EPOCH_AUDIO_MIXER_CONTRACT_MAIN=1
-    )
+    add_executable(epoch_audio_mixer_contract dep/EpochAudioEngine/tests/audio.mixer_consumer.cpp)
+    target_link_libraries(epoch_audio_mixer_contract PRIVATE Epoch::AudioEngine)
     epoch_apply_cxx_dialect(epoch_audio_mixer_contract)
     epoch_apply_warnings(epoch_audio_mixer_contract)
     epoch_apply_sanitizers(epoch_audio_mixer_contract)
-    add_test(
-        NAME epoch_audio_mixer_contract
-        COMMAND epoch_audio_mixer_contract
-    )
+    add_test(NAME epoch_audio_mixer_contract COMMAND epoch_audio_mixer_contract)
 
-    add_executable(epoch_audio_playback_runtime_contract
-        src/audio/audio.manager.cpp
-        src/audio/audio.mixer.cpp
-        src/audio/audio.device.cpp
-        src/audio/audio.playback_runtime.cpp
-        src/audio/audio.playback_runtime_contract.cpp
-    )
-    target_sources(epoch_audio_playback_runtime_contract PRIVATE
-        FILE_SET epoch_audio_playback_runtime_modules TYPE CXX_MODULES
-            BASE_DIRS ${EPOCH_MODULE_DIR}
-            FILES
-                ${EPOCH_MODULE_DIR}/audio.types.ixx
-                ${EPOCH_MODULE_DIR}/audio.manager.ixx
-                ${EPOCH_MODULE_DIR}/audio.mixer.ixx
-                ${EPOCH_MODULE_DIR}/audio.device.ixx
-                ${EPOCH_MODULE_DIR}/audio.playback_runtime.ixx
-    )
-    target_include_directories(epoch_audio_playback_runtime_contract PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
-        ${CMAKE_CURRENT_SOURCE_DIR}/src
-    )
-    target_compile_definitions(epoch_audio_playback_runtime_contract PRIVATE
-        EPOCH_AUDIO_PLAYBACK_RUNTIME_CONTRACT_MAIN=1
-    )
+    add_executable(epoch_audio_playback_runtime_contract dep/EpochAudioEngine/tests/audio.playback_runtime_consumer.cpp)
+    target_link_libraries(epoch_audio_playback_runtime_contract PRIVATE Epoch::AudioEngine)
     epoch_apply_cxx_dialect(epoch_audio_playback_runtime_contract)
     epoch_apply_warnings(epoch_audio_playback_runtime_contract)
     epoch_apply_sanitizers(epoch_audio_playback_runtime_contract)
-    add_test(
-        NAME epoch_audio_playback_runtime_contract
-        COMMAND epoch_audio_playback_runtime_contract
-    )
+    add_test(NAME epoch_audio_playback_runtime_contract COMMAND epoch_audio_playback_runtime_contract)
 
     add_executable(epoch_audio_import_contract
         src/assets/audio/asset.audio_import.cpp
@@ -1898,9 +1831,6 @@ if(BUILD_TESTING)
         FILE_SET epoch_audio_import_modules TYPE CXX_MODULES
             BASE_DIRS ${EPOCH_MODULE_DIR}
             FILES
-                ${EPOCH_MODULE_DIR}/audio.types.ixx
-                ${EPOCH_MODULE_DIR}/audio.manager.ixx
-                ${EPOCH_MODULE_DIR}/audio.mixer.ixx
                 ${EPOCH_MODULE_DIR}/asset.audio_import.ixx
     )
     target_include_directories(epoch_audio_import_contract PRIVATE
@@ -1911,6 +1841,7 @@ if(BUILD_TESTING)
     target_compile_definitions(epoch_audio_import_contract PRIVATE
         EPOCH_AUDIO_IMPORT_CONTRACT_MAIN=1
     )
+    target_link_libraries(epoch_audio_import_contract PRIVATE Epoch::AudioEngine)
     epoch_apply_cxx_dialect(epoch_audio_import_contract)
     epoch_apply_warnings(epoch_audio_import_contract)
     epoch_apply_sanitizers(epoch_audio_import_contract)
@@ -1920,10 +1851,6 @@ if(BUILD_TESTING)
     )
 
     add_executable(epoch_project_audio_profile_contract
-        src/audio/audio.manager.cpp
-        src/audio/audio.mixer.cpp
-        src/audio/audio.device.cpp
-        src/audio/audio.playback_runtime.cpp
         src/assets/audio/asset.audio_import.cpp
         src/project/project.audio_profile.cpp
         src/project/project.audio_profile_contract.cpp
@@ -1935,11 +1862,6 @@ if(BUILD_TESTING)
                 ${EPOCH_MODULE_DIR}/core.sha256.ixx
                 ${EPOCH_MODULE_DIR}/platform.filesystem.ixx
                 ${EPOCH_MODULE_DIR}/project.asset_registry.ixx
-                ${EPOCH_MODULE_DIR}/audio.types.ixx
-                ${EPOCH_MODULE_DIR}/audio.manager.ixx
-                ${EPOCH_MODULE_DIR}/audio.mixer.ixx
-                ${EPOCH_MODULE_DIR}/audio.device.ixx
-                ${EPOCH_MODULE_DIR}/audio.playback_runtime.ixx
                 ${EPOCH_MODULE_DIR}/asset.audio_import.ixx
                 ${EPOCH_MODULE_DIR}/project.audio_profile.ixx
     )
@@ -1951,6 +1873,7 @@ if(BUILD_TESTING)
     target_compile_definitions(epoch_project_audio_profile_contract PRIVATE
         EPOCH_PROJECT_AUDIO_PROFILE_CONTRACT_MAIN=1
     )
+    target_link_libraries(epoch_project_audio_profile_contract PRIVATE Epoch::AudioEngine)
     epoch_apply_cxx_dialect(epoch_project_audio_profile_contract)
     epoch_apply_warnings(epoch_project_audio_profile_contract)
     epoch_apply_sanitizers(epoch_project_audio_profile_contract)
@@ -1958,30 +1881,12 @@ if(BUILD_TESTING)
         NAME epoch_project_audio_profile_contract
         COMMAND epoch_project_audio_profile_contract
     )
-    add_executable(epoch_audio_device_contract
-        src/audio/audio.device.cpp
-        src/audio/audio.device_contract.cpp
-    )
-    target_sources(epoch_audio_device_contract PRIVATE
-        FILE_SET epoch_audio_device_modules TYPE CXX_MODULES
-            BASE_DIRS ${EPOCH_MODULE_DIR}
-            FILES ${EPOCH_MODULE_DIR}/audio.device.ixx
-    )
-    target_include_directories(epoch_audio_device_contract PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
-        ${CMAKE_CURRENT_SOURCE_DIR}/src
-    )
-    target_compile_definitions(epoch_audio_device_contract PRIVATE
-        EPOCH_AUDIO_DEVICE_CONTRACT_MAIN=1
-    )
+    add_executable(epoch_audio_device_contract dep/EpochAudioEngine/tests/audio.device_consumer.cpp)
+    target_link_libraries(epoch_audio_device_contract PRIVATE Epoch::AudioEngine)
     epoch_apply_cxx_dialect(epoch_audio_device_contract)
     epoch_apply_warnings(epoch_audio_device_contract)
     epoch_apply_sanitizers(epoch_audio_device_contract)
-    add_test(
-        NAME epoch_audio_device_contract
-        COMMAND epoch_audio_device_contract
-    )
+    add_test(NAME epoch_audio_device_contract COMMAND epoch_audio_device_contract)
     add_executable(epoch_scene_surface_alignment_contract
         src/scene/scene.surface_alignment_contract.cpp
     )
@@ -2001,24 +1906,11 @@ if(BUILD_TESTING)
         COMMAND epoch_scene_surface_alignment_contract
     )
 
-   add_executable(epoch_media_timeline_preview_contract
-       src/media/media.timeline_preview_contract.cpp
-   )
-    target_sources(epoch_media_timeline_preview_contract PRIVATE
-        FILE_SET epoch_media_timeline_preview_modules TYPE CXX_MODULES
-            BASE_DIRS ${EPOCH_MODULE_DIR}
-            FILES ${EPOCH_MODULE_DIR}/media.timeline_preview.ixx
-    )
-    target_compile_definitions(epoch_media_timeline_preview_contract PRIVATE
-        EPOCH_MEDIA_TIMELINE_PREVIEW_CONTRACT_MAIN=1
-    )
+    add_executable(epoch_media_timeline_preview_contract dep/EpochMediaEngine/tests/media.timeline_preview_contract.cpp)
+    target_link_libraries(epoch_media_timeline_preview_contract PRIVATE Epoch::MediaEngine)
+    target_compile_definitions(epoch_media_timeline_preview_contract PRIVATE EPOCH_MEDIA_TIMELINE_PREVIEW_CONTRACT_MAIN=1)
     epoch_apply_cxx_dialect(epoch_media_timeline_preview_contract)
-    epoch_apply_warnings(epoch_media_timeline_preview_contract)
-    epoch_apply_sanitizers(epoch_media_timeline_preview_contract)
-   add_test(
-       NAME epoch_media_timeline_preview_contract
-       COMMAND epoch_media_timeline_preview_contract
-   )
+    add_test(NAME epoch_media_timeline_preview_contract COMMAND epoch_media_timeline_preview_contract)
     add_executable(epoch_forest_preview_mesh_contract
         src/forest/forest.preview_mesh_contract.cpp
     )
@@ -2149,14 +2041,18 @@ if(BUILD_TESTING)
         COMMAND epoch_project_sprite_animation_contract
     )
     add_executable(epoch_project_input_profile_contract
+
         src/project/project.asset_registry.cpp
         src/project/project.input_profile.cpp
         src/project/project.input_profile_contract.cpp
     )
+    target_link_libraries(epoch_project_input_profile_contract PUBLIC Epoch::PlatformEngine)
     target_sources(epoch_project_input_profile_contract PRIVATE
         FILE_SET epoch_project_input_profile_modules TYPE CXX_MODULES
             BASE_DIRS ${EPOCH_MODULE_DIR}
             FILES
+
+                ${EPOCH_MODULE_DIR}/core.logger.ixx
                 ${EPOCH_MODULE_DIR}/platform.filesystem.ixx
                 ${EPOCH_MODULE_DIR}/project.asset_registry.ixx
                 ${EPOCH_MODULE_DIR}/project.input_profile.ixx
@@ -2496,27 +2392,13 @@ if(BUILD_TESTING)
         COMMAND epoch_render_context_frame_contract
     )
 
-    add_executable(epoch_ai_iteration_campaign_queue_contract
-        src/ai/ai.iteration_campaign_queue.cpp
-        src/ai/ai.iteration_campaign_queue_contract.cpp
-    )
-    target_sources(epoch_ai_iteration_campaign_queue_contract PRIVATE
-        FILE_SET epoch_ai_iteration_campaign_queue_modules TYPE CXX_MODULES
-            BASE_DIRS ${EPOCH_MODULE_DIR}
-            FILES
-                ${EPOCH_MODULE_DIR}/core.sha256.ixx
-                ${EPOCH_MODULE_DIR}/ai.iteration_campaign_queue.ixx
-    )
-    target_compile_definitions(epoch_ai_iteration_campaign_queue_contract PRIVATE
-        EPOCH_AI_ITERATION_CAMPAIGN_QUEUE_CONTRACT_MAIN=1
-    )
-    epoch_apply_cxx_dialect(epoch_ai_iteration_campaign_queue_contract)
-    epoch_apply_warnings(epoch_ai_iteration_campaign_queue_contract)
-    epoch_apply_sanitizers(epoch_ai_iteration_campaign_queue_contract)
-    add_test(
-        NAME epoch_ai_iteration_campaign_queue_contract
-        COMMAND epoch_ai_iteration_campaign_queue_contract
-    )
+    
+    
+    
+    
+    
+    
+    
 
     add_executable(epoch_ai_mcp_stdio_contract
         src/ai/ai.mcp_stdio.cpp
@@ -2540,181 +2422,48 @@ if(BUILD_TESTING)
         COMMAND epoch_ai_mcp_stdio_contract
     )
 
-    add_executable(epoch_ai_iteration_campaign_scheduler_contract
-        src/ai/ai.iteration_loop.cpp
-        src/ai/ai.iteration_session.cpp
-        src/ai/ai.project_profile.cpp
-        src/ai/ai.iteration_campaign.cpp
-        src/ai/ai.iteration_campaign_queue.cpp
-        src/ai/ai.mcp_stdio.cpp
-        src/ai/ai.mcp_campaign.cpp
-        src/ai/ai.self_iteration_orchestrator.cpp
-        src/ai/ai.mcp_orchestrator_bridge.cpp
-        src/ai/ai.iteration_campaign_scheduler.cpp
-        src/ai/ai.iteration_campaign_scheduler_contract.cpp
-    )
-    target_sources(epoch_ai_iteration_campaign_scheduler_contract PRIVATE
-        FILE_SET epoch_ai_iteration_campaign_scheduler_modules TYPE CXX_MODULES
-            BASE_DIRS ${EPOCH_MODULE_DIR}
-            FILES
-                ${EPOCH_MODULE_DIR}/core.sha256.ixx
-                ${EPOCH_MODULE_DIR}/platform.filesystem.ixx
-                ${EPOCH_MODULE_DIR}/ai.iteration_loop.ixx
-                ${EPOCH_MODULE_DIR}/ai.iteration_session.ixx
-                ${EPOCH_MODULE_DIR}/ai.project_profile.ixx
-                ${EPOCH_MODULE_DIR}/ai.iteration_campaign_queue.ixx
-                ${EPOCH_MODULE_DIR}/ai.iteration_campaign.ixx
-                ${EPOCH_MODULE_DIR}/ai.mcp.ixx
-                ${EPOCH_MODULE_DIR}/ai.mcp_stdio.ixx
-                ${EPOCH_MODULE_DIR}/ai.mcp_campaign.ixx
-                ${EPOCH_MODULE_DIR}/ai.mcp_child_host.ixx
-                ${EPOCH_MODULE_DIR}/ai.self_iteration_orchestrator.ixx
-                ${EPOCH_MODULE_DIR}/ai.mcp_orchestrator_bridge.ixx
-                ${EPOCH_MODULE_DIR}/ai.iteration_campaign_scheduler.ixx
-    )
-    target_compile_definitions(epoch_ai_iteration_campaign_scheduler_contract PRIVATE
-        EPOCH_AI_ITERATION_CAMPAIGN_SCHEDULER_CONTRACT_MAIN=1
-    )
-    epoch_apply_cxx_dialect(epoch_ai_iteration_campaign_scheduler_contract)
-    epoch_apply_warnings(epoch_ai_iteration_campaign_scheduler_contract)
-    epoch_apply_sanitizers(epoch_ai_iteration_campaign_scheduler_contract)
-    add_test(
-        NAME epoch_ai_iteration_campaign_scheduler_contract
-        COMMAND epoch_ai_iteration_campaign_scheduler_contract
-    )
+    
+    
 
-    add_executable(epoch_ai_iteration_supervisor_control_contract
-        src/ai/ai.iteration_loop.cpp
-        src/ai/ai.iteration_session.cpp
-        src/ai/ai.project_profile.cpp
-        src/ai/ai.iteration_campaign.cpp
-        src/ai/ai.iteration_campaign_queue.cpp
-        src/ai/ai.mcp_stdio.cpp
-        src/ai/ai.mcp_campaign.cpp
-        src/ai/ai.self_iteration_orchestrator.cpp
-        src/ai/ai.mcp_orchestrator_bridge.cpp
-        src/ai/ai.iteration_campaign_scheduler.cpp
-        src/ai/ai.iteration_supervisor_control.cpp
-        src/ai/ai.iteration_supervisor_control_contract.cpp
-    )
-    target_sources(epoch_ai_iteration_supervisor_control_contract PRIVATE
-        FILE_SET epoch_ai_iteration_supervisor_control_modules TYPE CXX_MODULES
-            BASE_DIRS ${EPOCH_MODULE_DIR}
-            FILES
-                ${EPOCH_MODULE_DIR}/core.sha256.ixx
-                ${EPOCH_MODULE_DIR}/platform.filesystem.ixx
-                ${EPOCH_MODULE_DIR}/ai.iteration_loop.ixx
-                ${EPOCH_MODULE_DIR}/ai.iteration_session.ixx
-                ${EPOCH_MODULE_DIR}/ai.project_profile.ixx
-                ${EPOCH_MODULE_DIR}/ai.iteration_campaign_queue.ixx
-                ${EPOCH_MODULE_DIR}/ai.iteration_campaign.ixx
-                ${EPOCH_MODULE_DIR}/ai.mcp.ixx
-                ${EPOCH_MODULE_DIR}/ai.mcp_stdio.ixx
-                ${EPOCH_MODULE_DIR}/ai.mcp_campaign.ixx
-                ${EPOCH_MODULE_DIR}/ai.mcp_child_host.ixx
-                ${EPOCH_MODULE_DIR}/ai.self_iteration_orchestrator.ixx
-                ${EPOCH_MODULE_DIR}/ai.mcp_orchestrator_bridge.ixx
-                ${EPOCH_MODULE_DIR}/ai.iteration_campaign_scheduler.ixx
-                ${EPOCH_MODULE_DIR}/ai.iteration_supervisor_control.ixx
-    )
-    target_compile_definitions(epoch_ai_iteration_supervisor_control_contract PRIVATE
-        EPOCH_AI_ITERATION_SUPERVISOR_CONTROL_CONTRACT_MAIN=1
-    )
-    epoch_apply_cxx_dialect(epoch_ai_iteration_supervisor_control_contract)
-    epoch_apply_warnings(epoch_ai_iteration_supervisor_control_contract)
-    epoch_apply_sanitizers(epoch_ai_iteration_supervisor_control_contract)
-    add_test(
-        NAME epoch_ai_iteration_supervisor_control_contract
-        COMMAND epoch_ai_iteration_supervisor_control_contract
-    )
+    
+    
+    
+    
+    
 
-    add_executable(epoch_ai_curated_context_bundle_contract
-        src/ai/ai.curated_context_bundle.cpp
-        src/ai/ai.curated_context_bundle_contract.cpp
-    )
-    target_sources(epoch_ai_curated_context_bundle_contract PRIVATE
-        FILE_SET epoch_ai_curated_context_bundle_modules TYPE CXX_MODULES
-            BASE_DIRS ${EPOCH_MODULE_DIR}
-            FILES
-                ${EPOCH_MODULE_DIR}/core.sha256.ixx
-                ${EPOCH_MODULE_DIR}/ai.project_profile.ixx
-                ${EPOCH_MODULE_DIR}/ai.curated_context_bundle.ixx
-    )
-    target_compile_definitions(epoch_ai_curated_context_bundle_contract PRIVATE
-        EPOCH_AI_CURATED_CONTEXT_BUNDLE_CONTRACT_MAIN=1
-    )
-    epoch_apply_cxx_dialect(epoch_ai_curated_context_bundle_contract)
-    epoch_apply_warnings(epoch_ai_curated_context_bundle_contract)
-    epoch_apply_sanitizers(epoch_ai_curated_context_bundle_contract)
-    add_test(
-        NAME epoch_ai_curated_context_bundle_contract
-        COMMAND epoch_ai_curated_context_bundle_contract
-    )
+    
+    
 
-    add_executable(epoch_ai_source_patch_proposal_contract
-        src/ai/ai.source_patch_proposal.cpp
-        src/ai/ai.source_patch_proposal_contract.cpp
-    )
-    target_sources(epoch_ai_source_patch_proposal_contract PRIVATE
-        FILE_SET epoch_ai_source_patch_proposal_modules TYPE CXX_MODULES
-            BASE_DIRS ${EPOCH_MODULE_DIR}
-            FILES
-                ${EPOCH_MODULE_DIR}/core.sha256.ixx
-                ${EPOCH_MODULE_DIR}/ai.source_patch_proposal.ixx
-    )
-    target_compile_definitions(epoch_ai_source_patch_proposal_contract PRIVATE
-        EPOCH_AI_SOURCE_PATCH_PROPOSAL_CONTRACT_MAIN=1
-    )
-    epoch_apply_cxx_dialect(epoch_ai_source_patch_proposal_contract)
-    epoch_apply_warnings(epoch_ai_source_patch_proposal_contract)
-    epoch_apply_sanitizers(epoch_ai_source_patch_proposal_contract)
-    add_test(
-        NAME epoch_ai_source_patch_proposal_contract
-        COMMAND epoch_ai_source_patch_proposal_contract
-    )
+    
+    
+    
+    
+    
 
-    add_executable(epoch_ai_source_patch_stager_contract
-        src/epoch/epoch.build_validation.cpp
-        src/ai/ai.curated_context_bundle.cpp
-        src/ai/ai.source_patch_proposal.cpp
-        src/ai/ai.source_patch_stager.cpp
-        src/ai/ai.source_patch_stager_contract.cpp
-    )
-    target_sources(epoch_ai_source_patch_stager_contract PRIVATE
-        FILE_SET epoch_ai_source_patch_stager_modules TYPE CXX_MODULES
-            BASE_DIRS ${EPOCH_MODULE_DIR}
-            FILES
-                ${EPOCH_MODULE_DIR}/core.sha256.ixx
-                ${EPOCH_MODULE_DIR}/platform.filesystem.ixx
-                ${EPOCH_MODULE_DIR}/ai.iteration_loop.ixx
-                ${EPOCH_MODULE_DIR}/ai.iteration_session.ixx
-                ${EPOCH_MODULE_DIR}/ai.project_profile.ixx
-                ${EPOCH_MODULE_DIR}/ai.curated_context_bundle.ixx
-                ${EPOCH_MODULE_DIR}/ai.iteration_campaign_queue.ixx
-                ${EPOCH_MODULE_DIR}/ai.iteration_campaign.ixx
-                ${EPOCH_MODULE_DIR}/ai.mcp.ixx
-                ${EPOCH_MODULE_DIR}/ai.mcp_stdio.ixx
-                ${EPOCH_MODULE_DIR}/ai.mcp_campaign.ixx
-                ${EPOCH_MODULE_DIR}/ai.mcp_child_host.ixx
-                ${EPOCH_MODULE_DIR}/ai.self_iteration_orchestrator.ixx
-                ${EPOCH_MODULE_DIR}/ai.mcp_orchestrator_bridge.ixx
-                ${EPOCH_MODULE_DIR}/ai.iteration_campaign_scheduler.ixx
-                ${EPOCH_MODULE_DIR}/ai.iteration_supervisor_control.ixx
-                ${EPOCH_MODULE_DIR}/ai.source_patch_bundle.ixx
-                ${EPOCH_MODULE_DIR}/ai.source_patch_proposal.ixx
-                ${EPOCH_MODULE_DIR}/epoch.build_validation.ixx
-                ${EPOCH_MODULE_DIR}/ai.source_patch_stager.ixx
-    )
-    target_compile_definitions(epoch_ai_source_patch_stager_contract PRIVATE
-        EPOCH_AI_SOURCE_PATCH_STAGER_CONTRACT_MAIN=1
-    )
-    epoch_apply_cxx_dialect(epoch_ai_source_patch_stager_contract)
-    epoch_apply_warnings(epoch_ai_source_patch_stager_contract)
-    epoch_apply_sanitizers(epoch_ai_source_patch_stager_contract)
-    add_test(
-        NAME epoch_ai_source_patch_stager_contract
-        COMMAND epoch_ai_source_patch_stager_contract
-    )
+    
+    
+    
+    
+    
+    
+    
+
+    
+    
+    
+    
+    
+    
+    
+
+    
+    
+
+    
+    
+    
+    
+    
 
     add_executable(epoch_ai_voice_session_contract
         src/ai/ai.voice_session_contract.cpp
@@ -2731,98 +2480,46 @@ if(BUILD_TESTING)
         NAME epoch_ai_voice_session_contract
         COMMAND epoch_ai_voice_session_contract
     )
-    add_executable(epoch_ai_development_guard_contract
-        src/ai/ai.development_guard_contract.cpp
-    )
-    target_sources(epoch_ai_development_guard_contract PRIVATE
-        FILE_SET epoch_ai_development_guard_modules TYPE CXX_MODULES
-            BASE_DIRS ${EPOCH_MODULE_DIR}
-            FILES
-                ${EPOCH_MODULE_DIR}/core.sha256.ixx
-                ${EPOCH_MODULE_DIR}/ai.development_guard.ixx
-    )
-    epoch_apply_cxx_dialect(epoch_ai_development_guard_contract)
-    epoch_apply_warnings(epoch_ai_development_guard_contract)
-    epoch_apply_sanitizers(epoch_ai_development_guard_contract)
-    add_test(
-        NAME epoch_ai_development_guard_contract
-        COMMAND epoch_ai_development_guard_contract
-    )
+    
+    
+    
+    
+    
+    
 
+    
+    
+    
 
-    add_executable(epoch_ai_development_proposal_codec_contract
-        src/core/core.log.cpp
-        src/core/core.time.cpp
-        src/ai/ai.development_proposal_codec.cpp
-        src/ai/ai.development_proposal_codec_contract.cpp
-    )
-    target_sources(epoch_ai_development_proposal_codec_contract PRIVATE
-        FILE_SET epoch_ai_development_proposal_codec_modules TYPE CXX_MODULES
-            BASE_DIRS ${EPOCH_MODULE_DIR}
-            FILES
-                ${EPOCH_MODULE_DIR}/core.log.ixx
-                ${EPOCH_MODULE_DIR}/core.time.ixx
-                ${EPOCH_MODULE_DIR}/core.logger.ixx
-                ${EPOCH_MODULE_DIR}/ai.development_proposal_codec.ixx
-    )
-    target_include_directories(epoch_ai_development_proposal_codec_contract PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
-    )
-    target_compile_definitions(epoch_ai_development_proposal_codec_contract PRIVATE
-        EPOCH_AI_DEVELOPMENT_PROPOSAL_CODEC_CONTRACT_MAIN=1
-    )
-    epoch_apply_cxx_dialect(epoch_ai_development_proposal_codec_contract)
-    epoch_apply_warnings(epoch_ai_development_proposal_codec_contract)
-    epoch_apply_sanitizers(epoch_ai_development_proposal_codec_contract)
-    add_test(
-        NAME epoch_ai_development_proposal_codec_contract
-        COMMAND epoch_ai_development_proposal_codec_contract
-    )
+    
+    
+    
+    
+    
+    
 
-    add_executable(epoch_editor_ai_development_controller_contract
-        src/ai/ai.development_executor.cpp
-        src/ai/ai.development_proposal_codec.cpp
-        src/editor/ai/editor.ai_development_controller.cpp
-        src/editor/ai/editor.ai_development_controller_contract.cpp
-    )
-    target_sources(epoch_editor_ai_development_controller_contract PRIVATE
-        FILE_SET epoch_editor_ai_development_controller_modules TYPE CXX_MODULES
-            BASE_DIRS ${EPOCH_MODULE_DIR}
-            FILES
-                ${EPOCH_MODULE_DIR}/core.sha256.ixx
-                ${EPOCH_MODULE_DIR}/platform.filesystem.ixx
-                ${EPOCH_MODULE_DIR}/ai.development_guard.ixx
-                ${EPOCH_MODULE_DIR}/ai.development_executor.ixx
-                ${EPOCH_MODULE_DIR}/ai.development_proposal_codec.ixx
-                ${EPOCH_MODULE_DIR}/editor.ai_development_controller.ixx
-    )
-    target_include_directories(epoch_editor_ai_development_controller_contract PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
-    )
-    target_compile_definitions(epoch_editor_ai_development_controller_contract PRIVATE
-        EPOCH_EDITOR_AI_DEVELOPMENT_CONTROLLER_CONTRACT_MAIN=1
-    )
-    epoch_apply_cxx_dialect(epoch_editor_ai_development_controller_contract)
-    epoch_apply_warnings(epoch_editor_ai_development_controller_contract)
-    epoch_apply_sanitizers(epoch_editor_ai_development_controller_contract)
-    add_test(
-        NAME epoch_editor_ai_development_controller_contract
-        COMMAND epoch_editor_ai_development_controller_contract
-    )
+    
+    
+
+    
+    
+    
+    
+    
+    
 
     add_executable(epoch_script_compiler_contract
-        src/core/core.log.cpp
-        src/core/core.time.cpp
+
         src/platform/core.path.cpp
         src/platform/platform.child_process.cpp
         src/scripts/scripting.compiler_contract.cpp
     )
+    target_link_libraries(epoch_script_compiler_contract PUBLIC Epoch::PlatformEngine)
     target_sources(epoch_script_compiler_contract PRIVATE
         FILE_SET epoch_script_compiler_modules TYPE CXX_MODULES
             BASE_DIRS ${EPOCH_MODULE_DIR}
             FILES
-                ${EPOCH_MODULE_DIR}/core.log.ixx
-                ${EPOCH_MODULE_DIR}/core.time.ixx
+
                 ${EPOCH_MODULE_DIR}/core.logger.ixx
                 ${EPOCH_MODULE_DIR}/core.path.ixx
                 ${EPOCH_MODULE_DIR}/platform.filesystem.ixx
@@ -2976,7 +2673,6 @@ if(BUILD_TESTING)
         COMMAND epoch_editor_authoring_history_contract
     )
 
-
     if(EPOCH_ENABLE_AUTHORING_PLATFORM AND EPOCH_ENABLE_NODE_EDITOR)
         add_executable(epoch_authoring_task_graph_contract
             src/authoring/task_graph/authoring.task_graph_contract.cpp
@@ -3014,6 +2710,7 @@ if(BUILD_TESTING)
 endif()
 
 target_compile_definitions(epoch PRIVATE
+    EPOCH_ENABLE_TEXTURE_DIAGNOSTICS=$<BOOL:${EPOCH_ENABLE_TEXTURE_DIAGNOSTICS}>
     $<$<BOOL:${EPOCH_UPDATER_SHELL_BUILD}>:EPOCH_UPDATER_SHELL_BUILD=1>
     EPOCH_BINARY_ONLY_DISTRIBUTION=$<BOOL:${EPOCH_BINARY_ONLY_DISTRIBUTION}>
     EPOCH_ENABLE_AUTHORING_PLATFORM=$<BOOL:${EPOCH_ENABLE_AUTHORING_PLATFORM}>

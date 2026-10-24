@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup Label="EpochDiagnostics">
+    <EpochTextureDiagnostics Condition="'$(EpochTextureDiagnostics)' == ''">false</EpochTextureDiagnostics>
+    <EpochTextureDiagnosticsDefine>0</EpochTextureDiagnosticsDefine>
+    <EpochTextureDiagnosticsDefine Condition="'$(EpochTextureDiagnostics)' == 'true' Or '$(EpochTextureDiagnostics)' == '1'">1</EpochTextureDiagnosticsDefine>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <PreprocessorDefinitions>EPOCH_ENABLE_TEXTURE_DIAGNOSTICS=$(EpochTextureDiagnosticsDefine);%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <Target Name="EpochValidateTextureDiagnostics" BeforeTargets="PrepareForBuild">
+    <Error Condition="'$(EpochTextureDiagnostics)' != 'false' And '$(EpochTextureDiagnostics)' != 'true' And '$(EpochTextureDiagnostics)' != '0' And '$(EpochTextureDiagnostics)' != '1'"
+           Text="EpochTextureDiagnostics must be false, true, 0 or 1." />
+  </Target>
+</Project>

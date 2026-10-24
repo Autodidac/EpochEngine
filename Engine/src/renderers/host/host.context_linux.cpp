@@ -28,12 +28,15 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
+// Epoch system notes (auto-checked):
+// Epoch Context: window/context state, dispatch and input ownership remain scoped.
 // context.multiplexer.linux.cpp
 module;
 
 // Feature flags (defines EPOCH_USING_*)
 #include <include/engine.config.hpp> // for EPOCH_USING Macros
 #include "host.log_policy.hpp"
+#include "host.frame_rate_sample.hpp"
 
 #if defined(__linux__)
 
@@ -67,6 +70,7 @@ module;
 #include <string>
 #include <string_view>
 #include <thread>
+#include <cmath>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -88,6 +92,7 @@ import telemetry.engine;
 import systems.registry;
 import perf.tier;
 import platform.budgets;
+import platform.window;
 import render.context_frame;
 import render.event_debug;
 
@@ -290,8 +295,9 @@ namespace
         std::wstring BuildWindowTitle(ContextType type, int index, bool parented)
         {
             const std::wstring_view base = BackendDisplayName(type);
-            std::wstring title{ base.begin(), base.end() };
-            title += parented ? L" Dock " : L" Window ";
+            (void)parented;
+            std::wstring title{base};
+            title += L" ";
             title += std::to_wstring(static_cast<long long>(index) + 1);
             return title;
         }
@@ -299,58 +305,21 @@ namespace
         struct NativeTitleFpsState
         {
             std::wstring baseTitle{};
-            std::uint64_t frameCount = 0;
+            epochengine::renderhost::frame_rate::Sample frameRate{};
             double fps = 0.0;
-            std::wstring renderStatus{};
-            std::chrono::steady_clock::time_point lastSample{};
         };
 
         std::mutex g_nativeTitleFpsMutex;
         std::unordered_map<const WindowData*, NativeTitleFpsState> g_nativeTitleFps;
 
         [[nodiscard]] std::wstring make_native_fps_title(
-            std::wstring_view base, double fps, std::wstring_view renderStatus = {})
+            std::wstring_view base, double fps)
         {
             std::wstring title{ base };
             title += L" | ";
             title += std::to_wstring(static_cast<long long>(fps + 0.5));
-            title += L" FPS";
-            if (!renderStatus.empty())
-            {
-                title += L" | ";
-                title += renderStatus;
-            }
+            title += L" FPS avg";
             return title;
-        }
-
-        [[nodiscard]] std::wstring native_render_rate_status(const WindowData& window)
-        {
-            if (window.type != ContextType::OpenGL)
-                return {};
-            const auto snapshot = epochengine::render_event_debug::snapshot();
-            if (snapshot.benchmark_enabled
-                && snapshot.selective.samples > 0u
-                && snapshot.full_baseline.samples > 0u)
-            {
-                return L"A/B S "
-                    + std::to_wstring(static_cast<long long>(
-                        epochengine::render_event_debug::render_fps(snapshot.selective) + 0.5))
-                    + L" / F "
-                    + std::to_wstring(static_cast<long long>(
-                        epochengine::render_event_debug::render_fps(snapshot.full_baseline) + 0.5))
-                    + L" render FPS";
-            }
-            const auto& timing = epochengine::render_event_debug::timing_for_path(
-                snapshot, snapshot.path);
-            if (timing.samples == 0u)
-                return {};
-            std::wstring status = epochengine::text::widen_utf16(
-                epochengine::render_event_debug::path_name(snapshot.path));
-            status += L" ";
-            status += std::to_wstring(static_cast<long long>(
-                epochengine::render_event_debug::render_fps(timing) + 0.5));
-            status += L" render FPS";
-            return status;
         }
 
         void record_native_title_frame(Display* display, ::Window xwin, WindowData& window)
@@ -369,24 +338,16 @@ namespace
                     state.baseTitle = window.titleWide.empty()
                         ? L"Epoch Context"
                         : window.titleWide;
-                    state.lastSample = now;
                 }
 
-                ++state.frameCount;
-
-                const auto elapsed = now - state.lastSample;
-                if (elapsed < std::chrono::seconds(1))
+                const double seconds = std::chrono::duration<double>(now.time_since_epoch()).count();
+                if (!state.frameRate.observe(
+                        window.successfulFrameGeneration.load(std::memory_order_acquire),
+                        seconds, &window))
                     return;
-
-                const double seconds = std::chrono::duration<double>(elapsed).count();
-                state.fps = seconds > 0.0
-                    ? static_cast<double>(state.frameCount) / seconds
-                    : 0.0;
-                state.frameCount = 0;
-                state.lastSample = now;
-                state.renderStatus = native_render_rate_status(window);
+                state.fps = state.frameRate.average_rate();
                 title = make_native_fps_title(
-                    state.baseTitle, state.fps, state.renderStatus);
+                    state.baseTitle, state.fps);
             }
 
             const auto narrow = epochengine::text::narrow_utf8(title);
@@ -600,7 +561,7 @@ namespace
         global_display = display;
 
         const DesktopWorkArea workArea = desktop_work_area(display, screen);
-        if (singleWindow && parented && !cli::updater_shell_requested
+        if (singleWindow && !cli::updater_shell_requested
             && !cli::window_width_overridden
             && !cli::window_height_overridden)
         {
@@ -1941,7 +1902,7 @@ namespace
             epochengine::rendercontext::WindowState> windowLogGate{};
         epochengine::perf::frame_pacing_plan lastLoggedFramePlan{};
         bool hasLoggedFramePlan = false;
-        const auto resolveCoreFramePolicy = []() noexcept
+        const auto resolveCoreFramePolicy = [&win]() noexcept
         {
             const bool standaloneProject =
                 !cli::parented_mode
@@ -1953,11 +1914,13 @@ namespace
                 : requestedHz > 0.0
                 ? epochengine::perf::frame_pacing_mode::target_hz
                 : epochengine::perf::frame_pacing_mode::uncapped;
-            return epochengine::perf::select_frame_pacing_policy(
+            const auto startup = epochengine::perf::select_frame_pacing_policy(
                 requestedMode,
                 requestedHz,
                 cli::frame_limit_explicit,
                 standaloneProject);
+            return epochengine::perf::with_frame_pacing_override(
+                startup, win.editorFramePacingOverride);
         };
         const auto resolveFrameWindowState = [&]() noexcept
         {
@@ -2021,6 +1984,13 @@ namespace
                     desiredPlan,
                     nativeResult);
             coreFrameLimiter.set_plan(framePlan);
+            win.editorFramePacingHz.store(framePlan.effective_hz, std::memory_order_relaxed);
+            win.uncappedFrameSubmission.store(
+                framePlan.requested_mode == epochengine::perf::frame_pacing_mode::uncapped
+                    && framePlan.effective_mode == epochengine::perf::frame_pacing_mode::uncapped
+                    && framePlan.activity == epochengine::perf::frame_activity::foreground
+                    && !framePlan.native_pacing_active,
+                std::memory_order_relaxed);
             if (!ctx->apply_frame_pacing || nativeResult.configured)
                 activeDesiredFramePlan = desiredPlan;
             activeCoreFramePlan = framePlan;
@@ -2098,6 +2068,7 @@ namespace
             }
 
             record_native_title_frame(localDisplay, xwin, win);
+            // The selected limiter owns pacing, including genuinely uncapped.
             coreFrameLimiter.wait_for_next_frame();
         }
 

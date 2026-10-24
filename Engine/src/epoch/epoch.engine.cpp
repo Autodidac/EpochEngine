@@ -28,6 +28,8 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
+// Epoch system notes (auto-checked):
+// Epoch STL: honor core.stl_types.hpp types/operators; fix callers, not core overloads.
 module;
 
 #include "../../include/core.stl_types.hpp"
@@ -78,7 +80,7 @@ namespace epochengine
         _budgets = cfg.budgets;
 
         // Create window system
-        auto wsys = platform::create_window_system();
+        auto wsys = platform::window_adapter::create_window_system();
         if (!wsys)
         {
             const auto& err = wsys.error();
@@ -132,14 +134,14 @@ namespace epochengine
         if (!_initialized || !_windows)
             return;
 
-        _windows->pump_events([this](const platform::WindowEvent& e)
+        _windows->pump_events([this](const platform::window_adapter::WindowEvent& e)
             {
                 _events.emit(e);
 
-                if (e.type == platform::WindowEventType::resized && _gfx)
+                if (e.type == platform::window_adapter::WindowEventType::resized && _gfx)
                     _gfx->resize_surface(e.handle, e.width, e.height);
 
-                if (e.type == platform::WindowEventType::close && _windows)
+                if (e.type == platform::window_adapter::WindowEventType::close && _windows)
                     _windows->request_close(e.handle);
             });
     }

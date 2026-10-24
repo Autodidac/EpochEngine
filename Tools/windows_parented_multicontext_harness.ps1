@@ -818,7 +818,9 @@ function Get-ContentSampleProbe([string]$ImagePath, $ParentRect, $WindowRecord) 
 }
 
 $root = (Resolve-Path '.').Path
-$runtimeDir = Join-Path $root ("x64\{0}" -f $Configuration)
+. (Join-Path $root 'Tools\build\epoch_package_layout.ps1')
+$edition = Get-EpochSourceEdition -RepoRoot $root
+$runtimeDir = Join-Path $root ("build\bin\windows\{0}\x64\{1}" -f $edition.Directory, $Configuration)
 $exe = Join-Path $runtimeDir 'EpochEditor.exe'
 if (-not (Test-Path $exe)) {
     throw "Missing runtime at $exe"
@@ -1100,7 +1102,7 @@ Start-Sleep -Milliseconds 2200
     if ([string]::IsNullOrWhiteSpace($OutputPath)) {
         $stamp = Get-Date -Format 'yyyyMMdd_HHmmss'
         $suffix = if ($Mode -eq 'Single') { "_$Backend" } else { '' }
-        $OutputPath = Join-Path $root ("x64\{0}\logs\multicontext_harness_{1}{2}_{3}.json" -f $Configuration.ToLowerInvariant(), $Mode.ToLowerInvariant(), $suffix, $stamp)
+        $OutputPath = Join-Path $runtimeDir ("logs\multicontext_harness_{0}{1}_{2}.json" -f $Mode.ToLowerInvariant(), $suffix, $stamp)
     }
 
     $startupScreenshotPath = ''

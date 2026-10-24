@@ -28,6 +28,9 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
+// Epoch system notes (auto-checked):
+// Epoch Context: window/context state, dispatch and input ownership remain scoped.
+// Epoch Core: preserve engine-defined primitives, APIs and module contracts.
 module;
 
 #include <algorithm>
@@ -406,7 +409,7 @@ namespace epochengine::core
                 return true;
             if (windowData)
             {
-                if (matches(windowData->hwndChild)
+                if (matches(windowData->getChildHandle())
                     || matches(windowData->host_hwnd)
                     || matches(windowData->hwnd))
                 {
@@ -423,11 +426,35 @@ namespace epochengine::core
             const HWND foreground = ::GetForegroundWindow();
             DWORD foregroundProcessId{};
             const DWORD foregroundThread = ::GetWindowThreadProcessId(foreground, &foregroundProcessId);
-            if (!foreground
-                || foregroundThread == 0
-                || foregroundProcessId != ::GetCurrentProcessId())
-            {
+            if (!foreground || foregroundThread == 0)
                 return false;
+
+            const DWORD thisProcessId = ::GetCurrentProcessId();
+            if (foregroundProcessId != thisProcessId)
+            {
+                // A verified candidate editor may be reparented into a host
+                // process's window. Its top-level foreground window belongs to
+                // the HOST, but the focused child and its input queue belong to
+                // THIS process. Only accept that exact cross-process parentage
+                // and a child actually holding keyboard focus; do not grant
+                // input merely because the cursor is hovering over the child.
+                HWND owned = hwnd;
+                if ((!owned || ::IsWindow(owned) == FALSE) && windowData)
+                {
+                    const HWND child = windowData->getChildHandle();
+                    owned = child ? child : windowData->host_hwnd;
+                }
+                DWORD ownerProcessId{};
+                const DWORD ownerThread = owned
+                    ? ::GetWindowThreadProcessId(owned, &ownerProcessId) : 0u;
+                if (ownerThread == 0 || ownerProcessId != thisProcessId
+                    || ::IsChild(foreground, owned) == FALSE)
+                    return false;
+
+                GUITHREADINFO childInfo{};
+                childInfo.cbSize = sizeof(childInfo);
+                return ::GetGUIThreadInfo(ownerThread, &childInfo) != FALSE
+                    && owns_input_window_safe(childInfo.hwndFocus);
             }
 
             GUITHREADINFO guiInfo{};
@@ -439,8 +466,30 @@ namespace epochengine::core
             // Focus can temporarily report only the top-level foreground host
             // while a child backend is transitioning. Accept that host only when
             // it belongs to this context; never accept another Epoch viewport.
-            return owns_input_window_safe(focused)
-                || (!focused && owns_input_window_safe(foreground));
+            if (owns_input_window_safe(focused)
+                || (!focused && owns_input_window_safe(foreground)))
+                return true;
+            // A detached child queue may own focus while the parent reports
+            // none. Explicit sibling focus must still reject stale owner state.
+            if (guiInfo.hwndFocus && guiInfo.hwndFocus != foreground)
+                return false;
+            HWND owned = hwnd;
+            if ((!owned || ::IsWindow(owned) == FALSE) && windowData)
+            {
+                const HWND child = windowData->getChildHandle();
+                owned = child ? child : windowData->host_hwnd;
+            }
+            DWORD ownerProcessId{};
+            const DWORD ownerThread = owned
+                ? ::GetWindowThreadProcessId(owned, &ownerProcessId) : 0u;
+            if (!ownerThread || ownerProcessId != thisProcessId
+                || ::GetAncestor(owned, GA_ROOT) != foreground
+                || ::IsChild(foreground, owned) == FALSE)
+                return false;
+            GUITHREADINFO ownerInfo{};
+            ownerInfo.cbSize = sizeof(ownerInfo);
+            return ::GetGUIThreadInfo(ownerThread, &ownerInfo) != FALSE
+                && owns_input_window_safe(ownerInfo.hwndFocus);
 #else
             return true;
 #endif
@@ -466,7 +515,23 @@ namespace epochengine::core
                 return false;
             GUITHREADINFO guiInfo{};
             guiInfo.cbSize = sizeof(guiInfo);
-            const DWORD thread = ::GetWindowThreadProcessId(::GetForegroundWindow(), nullptr);
+            const HWND foreground = ::GetForegroundWindow();
+            DWORD foregroundPid{};
+            DWORD thread = ::GetWindowThreadProcessId(foreground, &foregroundPid);
+            if (foregroundPid != ::GetCurrentProcessId()
+                || (hwnd && ::GetAncestor(hwnd, GA_ROOT) == foreground
+                    && ::IsChild(foreground, hwnd) != FALSE))
+            {
+                // Captured drags belong to the admitted child's owner queue,
+                // including same-process children with detached input queues.
+                HWND owned = hwnd;
+                if ((!owned || ::IsWindow(owned) == FALSE) && windowData)
+                {
+                    const HWND child = windowData->getChildHandle();
+                    owned = child ? child : windowData->host_hwnd;
+                }
+                thread = owned ? ::GetWindowThreadProcessId(owned, nullptr) : 0u;
+            }
             if (!thread || !::GetGUIThreadInfo(thread, &guiInfo))
                 return false;
             // Captured drags may leave the client area, but covered/inactive

@@ -1,10 +1,14 @@
 // Epoch Engine AI runtime - SPDX-License-Identifier: LicenseRef-MIT-NoSell
+// Epoch system notes (auto-checked):
+// Epoch AI: preserve model selection, candidate isolation and host verification gates.
 #pragma once
 
 #include <chrono>
 #include <expected>
 #include <filesystem>
 #include <mutex>
+#include <map>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -33,13 +37,18 @@ public:
 
     [[nodiscard]] std::vector<RuntimeModelProfile> models() const;
     [[nodiscard]] std::optional<RuntimeModelProfile> find(std::string_view id_or_uri) const;
+    [[nodiscard]] std::expected<nlohmann::json, core::Error> set_gpu_offload(
+        std::string_view id_or_uri, std::uint32_t percent);
+    [[nodiscard]] std::expected<nlohmann::json, core::Error> update_tuning(
+        std::string_view id_or_uri, const nlohmann::json& changes);
     [[nodiscard]] std::expected<nlohmann::json, core::Error> register_model(const nlohmann::json& spec);
     [[nodiscard]] std::expected<nlohmann::json, core::Error> install(std::string_view id_or_uri);
     [[nodiscard]] std::expected<nlohmann::json, core::Error> provision_runtime();
     [[nodiscard]] std::expected<nlohmann::json, core::Error> remove(std::string_view id_or_uri, bool delete_cache);
     [[nodiscard]] std::expected<nlohmann::json, core::Error> clear_transient_cache(std::string_view id_or_uri);
     [[nodiscard]] std::expected<nlohmann::json, core::Error> delete_downloaded_weights(std::string_view id_or_uri);
-    [[nodiscard]] std::expected<std::string, core::Error> prepare(std::string_view id_or_uri, std::chrono::steady_clock::time_point deadline = std::chrono::steady_clock::time_point::max(), std::stop_token stop = {});
+    [[nodiscard]] std::expected<std::string, core::Error> prepare(std::string_view id_or_uri, std::chrono::steady_clock::time_point deadline = std::chrono::steady_clock::time_point::max(), std::stop_token stop = {},
+        std::optional<std::uint32_t> gpu_offload_cap_percent = std::nullopt);
     [[nodiscard]] std::expected<std::string, core::Error> prepare_with_local_override(
         std::string_view id_or_uri,
         const std::filesystem::path& local_path_override,
@@ -47,6 +56,10 @@ public:
         std::stop_token stop = {});
     [[nodiscard]] std::optional<std::string> active_model_uri() const;
     void stop_active();
+    void stop_model(std::string_view id_or_uri);
+    void prefer_model(std::string_view id_or_uri);
+    [[nodiscard]] bool model_loaded(std::string_view id_or_uri) const;
+    [[nodiscard]] nlohmann::json model_runtime_status(std::string_view id_or_uri) const;
     void cancel_installation();
 
     [[nodiscard]] nlohmann::json describe() const;
@@ -71,7 +84,17 @@ private:
     std::jthread runtime_worker_;
     nlohmann::json install_state_ = nlohmann::json{{"state", "idle"}};
     nlohmann::json runtime_install_state_ = nlohmann::json{{"state", "idle"}};
-    QwenFlashRuntime qwen_flash_;
+    // Each resident model owns a process, an immutable configuration and a
+    // unique loopback port. The shared_ptr keeps a slot alive while loading or
+    // stopping even if the registry is refreshed concurrently.
+    struct RuntimeSlot;
+    [[nodiscard]] std::shared_ptr<RuntimeSlot> slot_for(const RuntimeModelProfile& profile);
+    [[nodiscard]] std::shared_ptr<RuntimeSlot> find_slot(std::string_view id_or_uri) const;
+    mutable std::mutex slots_mutex_;
+    std::map<std::string, std::shared_ptr<RuntimeSlot>> slots_;
+    std::string last_active_id_;
+    QwenFlashRuntime qwen_flash_; // non-resident cache/runtime-tool utilities
+
 };
 
 [[nodiscard]] bool is_native_runtime_model(std::string_view model) noexcept;

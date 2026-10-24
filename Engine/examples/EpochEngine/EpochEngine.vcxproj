@@ -1,6 +1,10 @@
-<?xml version="1.0" encoding="utf-8"?>
-<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<?xml version='1.0' encoding='utf-8'?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" DefaultTargets="Build">
   <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
     <ProjectConfiguration Include="Debug|Win32">
       <Configuration>Debug</Configuration>
       <Platform>Win32</Platform>
@@ -15,10 +19,6 @@
     </ProjectConfiguration>
     <ProjectConfiguration Include="Debug|x64">
       <Configuration>Debug</Configuration>
-      <Platform>x64</Platform>
-    </ProjectConfiguration>
-    <ProjectConfiguration Include="Release|x64">
-      <Configuration>Release</Configuration>
       <Platform>x64</Platform>
     </ProjectConfiguration>
     <ProjectConfiguration Include="ReleaseWithDebugInfo|x64">
@@ -61,6 +61,8 @@
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <Import Project="..\..\..\Tools\MSVC\EpochDiagnostics.props" />
+  <Import Project="..\..\..\Tools\MSVC\EpochOutputLayout.props" />
   <ImportGroup Label="ExtensionSettings">
   </ImportGroup>
   <ImportGroup Label="Shared">
@@ -102,10 +104,8 @@
     <EpochExtraDefines>EPOCH_OVERRIDE_MACOS_PACKAGED_VERSION_MAJOR=$(EpochMacosPackagedVersionOverrideMajor);EPOCH_OVERRIDE_MACOS_PACKAGED_VERSION_MINOR=$(EpochMacosPackagedVersionOverrideMinor);EPOCH_OVERRIDE_MACOS_PACKAGED_VERSION_REVISION=$(EpochMacosPackagedVersionOverrideRevision);$(EpochExtraDefines)</EpochExtraDefines>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <IntDir>$(SolutionDir)\Debug\$(Platform)\$(ProjectName)\$(Configuration)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="('$(Configuration)|$(Platform)'=='Release|x64' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|x64')">
-    <IntDir>$(SolutionDir)\Release\$(Platform)\$(ProjectName)\$(Configuration)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Label="Vcpkg">
     <VcpkgEnableManifest>true</VcpkgEnableManifest>
@@ -358,7 +358,10 @@
       <FileType>Document</FileType>
     </ClCompile>
   </ItemGroup>
-  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ItemGroup><ProjectReference Include="..\..\dep\EpochPlatformEngine\EpochPlatformEngine.vcxproj"><Project>{DFA26C91-27C8-4F23-A7BF-1CCB74811899}</Project><ReferenceOutputAssembly>false</ReferenceOutputAssembly></ProjectReference></ItemGroup>
+<ItemGroup><ProjectReference Include="..\..\dep\EpochAudioEngine\EpochAudioEngine.vcxproj"><Project>{6E9692A5-DBF3-53A6-A986-F7D54195BA55}</Project><ReferenceOutputAssembly>false</ReferenceOutputAssembly></ProjectReference></ItemGroup>
+<ItemGroup><ProjectReference Include="..\..\dep\EpochMediaEngine\EpochMediaEngine.vcxproj"><Project>{C4FD64B9-B958-543A-86A1-FC447091E9EA}</Project><ReferenceOutputAssembly>false</ReferenceOutputAssembly></ProjectReference></ItemGroup>
+<Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <Target Name="EpochRestoreVcpkgBeforeModuleScan" BeforeTargets="SetModuleDependencies" DependsOnTargets="VcpkgInstallManifestDependencies" Condition="'$(VcpkgEnabled)'=='true' And '$(VcpkgEnableManifest)'=='true' And '$(VcpkgManifestInstall)'=='true'" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

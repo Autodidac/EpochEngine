@@ -1,3 +1,5 @@
+// Epoch system notes (auto-checked):
+// Epoch Context: window/context state, dispatch and input ownership remain scoped.
 module;
 
 #include "core.format_text.hpp"

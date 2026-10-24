@@ -1,30 +1,23 @@
 // Epoch Engine AI runtime - SPDX-License-Identifier: LicenseRef-MIT-NoSell
+// Epoch system notes (auto-checked):
+// Epoch AI: preserve model selection, candidate isolation and host verification gates.
 #include "ai.backend_runtime_runtime_host.hpp"
 #include "ai.backend_host_request.hpp"
 
-#include "ai.backend_agent_agent_runtime.hpp"
-#include "ai.backend_agent_task_scheduler.hpp"
 #include "ai.backend_core_ids.hpp"
 #include "ai.backend_addons_addon_registry.hpp"
 #include "ai.backend_controller_architect_controller.hpp"
-#include "ai.backend_decision_decision_engine.hpp"
-#include "ai.backend_learning_learning_service.hpp"
-#include "ai.backend_model_internal_model_host.hpp"
 #include "ai.backend_model_multiplex_provider.hpp"
 #include "ai.backend_model_native_model_manager.hpp"
 #include "ai.backend_models_model_registry.hpp"
 #include "ai.backend_residency_model_residency_manager.hpp"
 #include "ai.backend_training_training_service.hpp"
-#include "ai.backend_persistence_session_store.hpp"
-#include "ai.backend_tools_builtin_tools.hpp"
-#include "ai.backend_tools_tool_registry.hpp"
-#include "ai.backend_workspace_checkpoint_store.hpp"
-#include "ai.backend_workspace_workspace.hpp"
 
 #include <filesystem>
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cctype>
 #include <random>
 #include <sstream>
 #include <thread>
@@ -33,63 +26,32 @@
 namespace epoch_ai::runtime {
 namespace {
 
-[[nodiscard]] RunTerminal terminal_from_event(std::string_view type) {
-    if (type == "task.completed") return RunTerminal::completed;
-    if (type == "task.cancelled") return RunTerminal::cancelled;
-    if (type == "task.awaiting_approval") return RunTerminal::awaiting_approval;
-    return RunTerminal::failed;
-}
 
 
 } // namespace
 
+
+#if EPOCH_EDITION_PUBLIC
 struct RuntimeHost::Impl {
     explicit Impl(core::Config initial_config)
         : config(std::move(initial_config)),
-          workspace(config.workspace),
-          state_root(config.data_root),
-          checkpoints(workspace, state_root, config.checkpoint_file_limit),
-          store(state_root / "engcoder.db"),
-          decisions(decision::DeterministicDecisionEngine{}, decision::WeightedDecisionEngine{}),
-          models(config, state_root),
-          residency(config.vram_budget_gib),
-          internal_host(config, state_root),
-          native_models(config, state_root),
-          model(config, internal_host, native_models),
-          addons(config, model, models),
-          controller(config, model, addons, models, residency),
-          learning(state_root),
-          training(config, state_root, models, residency),
-          tools(decisions),
-          runtime(config, model, addons, controller, models, residency, training, learning, tools, store, events),
-          scheduler(runtime, 1) {
-        // Registry-backed controller/addon resolution allows a newly initialized
-        // internal generation to become usable without restarting Epoch AI.
+          models(config, config.data_root), residency(config.vram_budget_gib),
+          native_models(config, config.data_root), model(config, native_models),
+          addons(config, model, models), controller(config, model, addons, models, residency),
+          training(config, config.data_root, models, residency) {
         models.refresh();
         residency.sync(models);
-        tools::register_builtin_tools(tools, workspace, checkpoints, store, model.external(), addons, config);
     }
-
     core::Config config;
-    workspace::Workspace workspace;
-    std::filesystem::path state_root;
-    workspace::CheckpointStore checkpoints;
-    persistence::SessionStore store;
-    decision::CompositeDecisionEngine decisions;
     models::ModelRegistry models;
     residency::ModelResidencyManager residency;
-    model::InternalModelHost internal_host;
     model::NativeModelManager native_models;
     model::MultiplexProvider model;
     addons::AddonRegistry addons;
     controller::ArchitectController controller;
-    learning::LearningService learning;
     training::TrainingService training;
-    tools::ToolRegistry tools;
-    core::EventBus events;
-    agent::AgentRuntime runtime;
-    agent::TaskScheduler scheduler;
 };
+#endif
 
 RuntimeHost::RuntimeHost(core::Config config)
     : impl_(std::make_unique<Impl>(std::move(config))) {}
@@ -132,10 +94,11 @@ json RuntimeHost::architecture() const {
         {"model_registry", impl_->models.describe()},
         {"residency", impl_->residency.describe()},
         {"training", impl_->training.status()},
-        {"role_models",[&]{json roles={{"controller",impl_->models.controller_model()},{"foundation",effective_foundation}};
+        {"role_models",[&]{json roles={{"controller",impl_->models.controller_model()},{"foundation",effective_foundation},
+            {"simple",impl_->models.role_model("simple")},
+            {"implementation",impl_->models.role_model("implementation")},
+            {"reviewer",impl_->models.role_model("reviewer")}};
             for(const auto& entry:impl_->config.addons)roles[entry.id]=impl_->addons.model_for(entry.id);return roles;}()},
-        {"learning", impl_->learning.describe()},
-        {"internal_host", impl_->internal_host.describe()},
         {"native_models", impl_->native_models.describe()},
         {"tool_policy", "deterministic C++ policy remains authoritative"},
     };
@@ -144,6 +107,7 @@ json RuntimeHost::architecture() const {
 json RuntimeHost::native_model_library() const {
     auto library=impl_->native_models.describe();
     library["preferred_model"]=impl_->models.selected_foundation_model();
+    library["performance"]=impl_->model.performance();
     return library;
 }
 
@@ -153,6 +117,16 @@ std::expected<json, core::Error> RuntimeHost::register_native_model(const json& 
     impl_->models.refresh();
     impl_->residency.sync(impl_->models);
     return *result;
+}
+
+std::expected<json, core::Error> RuntimeHost::set_native_gpu_offload(
+    std::string_view id_or_uri, std::uint32_t percent) {
+    return impl_->native_models.set_gpu_offload(id_or_uri, percent);
+}
+
+std::expected<json, core::Error> RuntimeHost::set_native_model_tuning(
+    std::string_view id_or_uri, const json& changes) {
+    return impl_->native_models.update_tuning(id_or_uri, changes);
 }
 
 std::expected<json, core::Error> RuntimeHost::provision_native_runtime() {
@@ -166,10 +140,11 @@ std::expected<json, core::Error> RuntimeHost::install_native_model(std::string_v
 std::expected<json, core::Error> RuntimeHost::load_native_model(
     std::string_view id_or_uri,
     std::string_view local_path_override,
-    std::stop_token cancellation) {
+    std::stop_token cancellation,
+    std::optional<std::uint32_t> gpu_offload_cap_percent) {
     const auto deadline=std::chrono::steady_clock::now()+std::chrono::minutes{30};
     auto endpoint = local_path_override.empty()
-        ? impl_->native_models.prepare(id_or_uri,deadline,cancellation)
+        ? impl_->native_models.prepare(id_or_uri,deadline,cancellation,gpu_offload_cap_percent)
         : impl_->native_models.prepare_with_local_override(id_or_uri, std::filesystem::path{local_path_override},deadline,cancellation);
     if (!endpoint) return std::unexpected(endpoint.error());
     const auto configured_foundation = impl_->models.foundation_model();
@@ -186,6 +161,9 @@ std::expected<json, core::Error> RuntimeHost::load_native_model(
 
 void RuntimeHost::unload_native_model() {
     impl_->native_models.stop_active();
+}
+void RuntimeHost::unload_native_model(std::string_view id_or_uri) {
+    impl_->native_models.stop_model(id_or_uri);
 }
 void RuntimeHost::cancel_native_installation() { impl_->native_models.cancel_installation(); }
 
@@ -216,6 +194,7 @@ std::expected<json, core::Error> RuntimeHost::set_foundation_model(std::string_v
             "Foundation model is not available: " + std::string{provider_model},
         });
     }
+    impl_->native_models.prefer_model(provider_model);
     return json{
         {"foundation_model", impl_->models.foundation_model()},
         {"registry", impl_->models.describe()},
@@ -227,30 +206,14 @@ std::string RuntimeHost::foundation_model() const {
 }
 
 json RuntimeHost::training_status() const { return impl_->training.status(); }
-std::expected<json, core::Error> RuntimeHost::prepare_training(std::string_view profile, std::stop_token cancellation) {
-    const auto environment = impl_->training.doctor(cancellation);
-    if (!environment) return std::unexpected(environment.error());
-    return impl_->training.initialize(profile, false,cancellation);
-}
-std::expected<json, core::Error> RuntimeHost::start_training(
-    std::string_view scope, std::uint32_t steps, bool require_cuda) {
-    constexpr std::string_view scopes[]{"architect-controller", "keymaker-foundation",
-        "cpp23-core", "cpp23-debugging", "documentation", "planning", "tool-use", "reranking", "english-conversation"};
-    if (steps == 0u || steps > 1'000'000u || std::ranges::find(scopes, scope) == std::end(scopes))
-        return std::unexpected(core::Error{core::make_error_code(core::Errc::invalid_argument), "Invalid training scope or step count"});
-    // Only an explicit training action enables weight updates. Ordinary chat
-    // and source iteration do not enable or launch training.
-    impl_->training.enable_explicit_training();
-    const auto started = impl_->training.start({std::string{scope}, steps, 50u, require_cuda});
-    if (!started) return std::unexpected(started.error());
-    return impl_->training.status();
-}
-void RuntimeHost::cancel_training() { impl_->training.cancel(); }
-void RuntimeHost::pause_training(bool paused) { impl_->training.set_paused(paused); }
-std::vector<json> RuntimeHost::tool_catalog() const { return impl_->tools.model_definitions(); }
 std::expected<json,core::Error> RuntimeHost::assign_model_role(std::string_view role,std::string_view model) {
     if(role=="foundation")return set_foundation_model(model);
-    if((role!="controller" && impl_->addons.find(role)==nullptr)||!impl_->models.set_role_model(role,model))
+    // System 1 roles are persisted in the same model registry as the addon roles.
+    // A role selects an existing registered model; it does not load weights or
+    // confer tool authority to the selected responder/reviewer.
+    if ((role != "controller" && role != "simple" && role != "implementation" &&
+         role != "reviewer" && role != "escalation" &&
+         impl_->addons.find(role) == nullptr) || !impl_->models.set_role_model(role, model))
         return std::unexpected(core::Error{core::make_error_code(core::Errc::invalid_argument),"Choose a registered model and a supported role"});
     return architecture();
 }
@@ -263,89 +226,48 @@ std::expected<model::ModelResponse, core::Error> RuntimeHost::complete_host_requ
         explicit InferenceLease(training::TrainingService& value) : service(value) { service.begin_inference(); }
         ~InferenceLease() { service.end_inference(); }
     } lease{impl_->training};
-    return model::complete_host_request(impl_->model, body, foundation_model(), stop, deadline, callback);
+    std::string chosen = foundation_model();
+    // Source work uses the explicit resident implementation assignment or the
+    // operator-selected resident model. Do not insert another generation or
+    // silently switch models for review; Epoch owns independent validation.
+    const auto stage = body.value("epoch_host_stage", std::string{});
+    // Stage caps are enforced before model admission, not merely after routing.
+    // Otherwise max_tokens=32768 disqualifies a resident 27B model with a
+    // smaller active context and silently switches the coding pass to Flash.
+    json boundedBody = body;
+    // The Model Manager's test prompt must exercise the requested resident
+    // model, not the foundation/router. Only this privileged internal stage
+    // accepts a model override; regular host requests retain role routing.
+    if (stage == "model_benchmark") {
+        const auto requested = body.value("model", std::string{});
+        if (!model::is_native_runtime_model(requested)
+            || !impl_->native_models.model_loaded(requested))
+            return std::unexpected(core::Error{
+                core::make_error_code(core::Errc::model_unavailable),
+                "Benchmark target is not a resident native model"});
+        chosen = impl_->model.resolve_model_hint(requested);
+    }
+    const bool contains_images = boundedBody.contains("messages") && boundedBody.at("messages").is_array()
+        && std::ranges::any_of(boundedBody.at("messages"), [](const json& message) {
+            return message.is_object() && message.contains("content") && message.at("content").is_array()
+                && std::ranges::any_of(message.at("content"), [](const json& part) {
+                    return part.is_object() && part.value("type", std::string{}) == "image_url";
+                });
+        });
+    if (contains_images) {
+        const auto runtime = impl_->native_models.model_runtime_status(chosen);
+        if (!runtime.is_object() || !runtime.contains("image_input")
+            || !runtime.at("image_input").is_boolean() || !runtime.at("image_input").get<bool>())
+            return std::unexpected(core::Error{
+                core::make_error_code(core::Errc::model_unavailable),
+                "The selected native runtime has no confirmed image input. Configure a matching vision loader "
+                "or select a vision-capable Local API connection. No model request was sent."});
+    }
+    auto result = model::complete_host_request(impl_->model, boundedBody, chosen, stop, deadline, callback);
+    if (result && result->model.empty()) result->model = chosen;
+    return result;
 }
 
-std::expected<RunOutcome, core::Error> RuntimeHost::run_task(
-    std::string_view project_id,
-    std::string_view session_id,
-    std::string_view message,
-    std::stop_token stop,
-    EventSink on_event) {
-    agent::TaskRequest request{
-        .project_id = std::string{project_id},
-        .session_id = std::string{session_id},
-        .task_id = core::make_id("task"),
-        .user_message = std::string{message},
-        .foundation_model = {},
-        .controller_model = {},
-        .forced_addon = {},
-        .addon_models = json::object(),
-        .session_instructions = {},
-        .temperature = 0.15,
-        .max_tokens = -1,
-        .include_history = true,
-        .max_history_turns = 0,
-        .auto_route = true,
-    };
-
-    std::string terminal_type;
-    json terminal_data = json::object();
-    const auto subscription = impl_->events.subscribe([&](const core::Event& event) {
-        if (event.task_id != request.task_id) {
-            return;
-        }
-        if (on_event) {
-            on_event(event);
-        }
-        if (event.type == "task.completed" || event.type == "task.failed" ||
-            event.type == "task.cancelled" || event.type == "task.awaiting_approval") {
-            terminal_type = event.type;
-            terminal_data = event.data;
-        }
-    });
-
-    struct SubscriptionGuard {
-        core::EventBus& bus;
-        std::uint64_t id{};
-        ~SubscriptionGuard() { bus.unsubscribe(id); }
-    } guard{impl_->events, subscription};
-
-    const auto result = impl_->runtime.run(request, stop);
-    if (!result) {
-        if (terminal_type.empty()) {
-            terminal_type = result.error().code == core::make_error_code(core::Errc::cancelled)
-                ? "task.cancelled"
-                : result.error().code == core::make_error_code(core::Errc::approval_required)
-                    ? "task.awaiting_approval"
-                    : "task.failed";
-            terminal_data = json{{"error", result.error().message}, {"code", result.error().code.value()}};
-        }
-
-        return RunOutcome{
-            .project_id = request.project_id,
-            .session_id = request.session_id,
-            .task_id = request.task_id,
-            .terminal = terminal_from_event(terminal_type),
-            .final_text = {},
-            .terminal_data = std::move(terminal_data),
-        };
-    }
-
-    if (terminal_type.empty()) {
-        terminal_type = "task.completed";
-        terminal_data = json{{"result", result->final_text}};
-    }
-
-    return RunOutcome{
-        .project_id = request.project_id,
-        .session_id = request.session_id,
-        .task_id = request.task_id,
-        .terminal = terminal_from_event(terminal_type),
-        .final_text = terminal_data.value("result", result->final_text),
-        .terminal_data = std::move(terminal_data),
-    };
-}
 
 std::string RuntimeHost::decision_mode() const {
     return "deterministic policy + local Architect controller";

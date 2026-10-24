@@ -15,7 +15,9 @@ export namespace epochengine::package_catalog
 {
     inline constexpr std::string_view schema = "epoch-package-catalog/v1";
     inline constexpr std::string_view endpoint =
-        "https://epoch.adamrushford.chatgpt.site/api/epoch/packages/catalog";
+        "https://epoch.adamrushford.chatgpt.site/api/epoch/project-resources/catalog";
+    inline constexpr std::string_view endpoint_path =
+        "/api/epoch/project-resources/catalog";
 
     enum class Scope : std::uint8_t { engine, project, user };
     enum class Availability : std::uint8_t { available, descriptor_only };

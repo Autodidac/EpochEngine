@@ -28,6 +28,8 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
+// Epoch system notes (auto-checked):
+// Epoch Core: preserve engine-defined primitives, APIs and module contracts.
 module;
 
 #include <algorithm>
@@ -42,6 +44,7 @@ module;
 #include <unordered_set>
 
 #include <include/engine.config.hpp>
+#include <include/updater.distribution.hpp>
 
 export module core.commandline;
 
@@ -50,6 +53,7 @@ import epoch.version;
 import core.logger;
 import core.path;
 import platform.engine;
+import perf.tier;
 
 inline constexpr int DEFAULT_WINDOW_WIDTH = 1280;
 inline constexpr int DEFAULT_WINDOW_HEIGHT = 800;
@@ -238,14 +242,7 @@ namespace epochengine::core::cli
                 return true;
             }
 
-            std::string text(value);
-            char* end = nullptr;
-            const double parsed = std::strtod(text.c_str(), &end);
-            if (end == text.c_str() || parsed < 0.0)
-                return false;
-
-            out_fps = parsed;
-            return true;
+            return perf::parse_frame_limit_value(value, out_fps);
         }
 
         [[nodiscard]] constexpr bool default_parented_mode() noexcept
@@ -261,6 +258,7 @@ namespace epochengine::core::cli
     export inline int  menu_columns = 4;
     export inline bool trace_menu_button0_rect = true;
     export inline bool trace_raylib_design_metrics = false;
+    export inline bool trace_sdl_input = false;
     export inline bool run_menu_loop = false;
     export inline bool capture_requested = false;
     export inline bool smoke_requested = false;
@@ -455,7 +453,9 @@ namespace epochengine::core::cli
         detail::log_info(
             std::string{ epochengine::GetEngineName() }
             + " v"
-            + std::string{ epochengine::GetEngineVersion() });
+            + std::string{ epochengine::GetEngineVersion() }
+            + " edition="
+            + std::string{ epochengine::updater::distribution::edition_id });
     }
 
     export inline ParseResult parse(const int argc, char* argv[])
@@ -465,6 +465,7 @@ namespace epochengine::core::cli
         ParseResult result{};
         trace_menu_button0_rect = false;
         trace_raylib_design_metrics = false;
+        trace_sdl_input = false;
         run_menu_loop = false;
         capture_requested = false;
         smoke_requested = false;
@@ -560,6 +561,7 @@ namespace epochengine::core::cli
                     "  --height <value>           Set window height\n"
                     "  --menu-columns <n>         Cap the menu grid at n columns (default 4)\n"
                     "  --trace-menu-button0       Log GUI bounds for menu button index 0\n"
+                    "  --trace-sdl-input          Log bounded SDL native input timing (no payloads)\n"
                     "  --trace-raylib-design      Log framebuffer vs design canvas dimensions\n"
                     "  --editor                   Start the editor interface\n"
                     "  --editor-project-self-test <id>\n"
@@ -579,7 +581,8 @@ namespace epochengine::core::cli
                     "                             Backends: auto, opengl, directx/d3d11, vulkan, raylib, sdl, sfml, software\n"
                     "  --backend <backend|auto>   Alias for --renderer\n"
                     "  --frame-limit <fps|vsync|unlimited>\n"
-                    "                             Select shared/native pacing; common values: 60, 120, vsync, unlimited\n"
+                    "                             Unlimited has no frame-rate ceiling; OpenGL bounds unfinished GPU work.\n"
+                    "                             Presets: 30, 60, 120, 0 (unlimited); custom nonnegative FPS or vsync\n"
                     "  --scene <name>             Optional scene hint for smoke tooling\n"
                     "  --capture                  Optional capture hint for smoke tooling\n"
                     "  --smoke                    Run bounded smoke flow where supported\n"
@@ -629,6 +632,10 @@ namespace epochengine::core::cli
             else if (key == "--trace-menu-button0"sv)
             {
                 trace_menu_button0_rect = true;
+            }
+            else if (key == "--trace-sdl-input"sv)
+            {
+                trace_sdl_input = true;
             }
             else if (key == "--trace-raylib-design"sv)
             {

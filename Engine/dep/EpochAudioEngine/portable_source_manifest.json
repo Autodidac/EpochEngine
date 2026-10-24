@@ -1,0 +1,82 @@
+{
+  "schema": "epoch.portable_source_parity.v1",
+  "repository": "Autodidac/EpochAudioEngine",
+  "upstream_revision": "980ebd3304f7e5cfc97e48c1e093ea1fc2107760",
+  "scope": [
+    "modules",
+    "src",
+    "tests",
+    "examples"
+  ],
+  "full_tree_mirror": false,
+  "files": [
+    {
+      "path": "modules/audio.device.ixx",
+      "sha256": "2bc62058d7bedd654d853307f109c410f3da73e655e4435eac719884764269a8"
+    },
+    {
+      "path": "modules/audio.manager.ixx",
+      "sha256": "177d08996b75bfa2a03667bec4ed4b2410901765bdd181a39ba605322999c4a7"
+    },
+    {
+      "path": "modules/audio.mixer.ixx",
+      "sha256": "7fd5d75e02d1626220510bbd7e247ad434949c0383b326669b677dca9d416fe3"
+    },
+    {
+      "path": "modules/audio.playback_runtime.ixx",
+      "sha256": "bf7218841bbec08fff004c982103a580a516068d004868a019cee845d4839451"
+    },
+    {
+      "path": "modules/audio.types.ixx",
+      "sha256": "1751ee814c1f2fcaba44afd31dbaed8a0973303fbda9aeb509bfcc4188467d25"
+    },
+    {
+      "path": "src/audio.device.cpp",
+      "sha256": "649e90e269666478e8deceb37832a9d731a28987c9ab492713d194954ebb8fc9"
+    },
+    {
+      "path": "src/audio.device_contract.cpp",
+      "sha256": "914766c7f9133c535d181d571942eb818200025d5c00f492f76fe9af95ece9ae"
+    },
+    {
+      "path": "src/audio.manager.cpp",
+      "sha256": "14e7d484e1c6857ace9da98251decd4b183ec3bd3312fa71db8719b6d58afed1"
+    },
+    {
+      "path": "src/audio.mixer.cpp",
+      "sha256": "bd221a476033d5446c78bbcf18cbbf327bcf1fc7c741bd6db7a1cc0a618ad0b9"
+    },
+    {
+      "path": "src/audio.mixer_contract.cpp",
+      "sha256": "9e3dfeed165435e51e0e489fe498db47880637d4fa0843d2b530b5ae0cb9222e"
+    },
+    {
+      "path": "src/audio.playback_runtime.cpp",
+      "sha256": "23381d3f68d5b3f45b1446d05a79a5f3a464433b72d86ab6562a92c1e206a863"
+    },
+    {
+      "path": "src/audio.playback_runtime_contract.cpp",
+      "sha256": "c4bbef145ac93fde62713eb2cb127f6a5e2e96f05b804dc89fa5737e95f770bd"
+    },
+    {
+      "path": "tests/audio.device_consumer.cpp",
+      "sha256": "56389168f92fd495ee4aad73b261a06380fd9c72149515f074970ef431092752"
+    },
+    {
+      "path": "tests/audio.mixer_consumer.cpp",
+      "sha256": "26488e5aa11608d7b10f7cf3b17e5a8d4c4315dbe3141b5283dcb95a5d418efd"
+    },
+    {
+      "path": "tests/audio.playback_runtime_consumer.cpp",
+      "sha256": "b57dc0b23af3694b4a04d91a36df4aba959e49e9ca17894b56409244b92b2867"
+    },
+    {
+      "path": "tests/audio.wav_contract.py",
+      "sha256": "d6d501a1b3b759345ed2a1c5e72ebba7f4b0fc77562f9f247dd80ddb91b7c92e"
+    },
+    {
+      "path": "examples/audio.render_wav_demo.cpp",
+      "sha256": "5afe73d947f6317690f3d8eb54428ff81e11018fc00a20b5adaf6e1a7352516e"
+    }
+  ]
+}

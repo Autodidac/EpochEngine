@@ -10,6 +10,8 @@
  *                                              *
  *   See LICENSE file for full terms.           *
  ************************************************/
+// Epoch system notes (auto-checked):
+// Epoch Platform: keep native code isolated behind platform-specific interfaces.
 module;
 
 #include <algorithm>
@@ -17,6 +19,11 @@ module;
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <fstream>
+#include <vector>
+#include <utility>
+#include <cstring>
+#include "../src/platform/platform.image_codec_win.hpp"
 #include <limits>
 #include <span>
 #include <string>
@@ -32,6 +39,7 @@ module;
 #endif
 #include <Windows.h>
 #include <commdlg.h>
+#include <shellapi.h>
 #else
 #include <cerrno>
 #include <fcntl.h>
@@ -42,6 +50,111 @@ export module platform.filesystem;
 
 export namespace epochengine::platform::filesystem
 {
+    struct ImageThumbnail final
+    {
+        std::vector<std::uint8_t> rgba{};
+        std::uint32_t width{}, height{};
+    };
+
+    [[nodiscard]] inline ImageThumbnail image_thumbnail(std::string_view encoded) noexcept
+    {
+#if defined(_WIN32)
+        try {
+            auto decoded = platform_image_codec::decode_thumbnail(encoded);
+            return {std::move(decoded.rgba), decoded.width, decoded.height};
+        } catch (...) { return {}; }
+#else
+        return {};
+#endif
+    }
+
+    struct ClipboardReadResult final
+    {
+        std::vector<std::filesystem::path> files{};
+        std::filesystem::path image{};
+        std::string diagnostic{};
+        bool recognized{};
+    };
+
+    // Read only on an explicit Paste action. No clipboard polling or model access.
+    [[nodiscard]] inline ClipboardReadResult read_clipboard_attachment(
+        const std::filesystem::path& imageDestination) noexcept
+    {
+#if defined(_WIN32)
+        try
+        {
+            if (!::OpenClipboard(nullptr)) return {{}, {}, "Clipboard is busy. Try again.", true};
+            struct ClipboardLease { bool open{true}; ~ClipboardLease(){if(open)::CloseClipboard();} } lease;
+            ClipboardReadResult result{};
+            if (::IsClipboardFormatAvailable(CF_HDROP))
+            {
+                result.recognized = true;
+                const auto drop = static_cast<HDROP>(::GetClipboardData(CF_HDROP));
+                const auto count = drop ? ::DragQueryFileW(drop, 0xffffffffu, nullptr, 0) : 0u;
+                if (count == 0u || count > 16u) return {{}, {}, "Paste up to 16 files at a time.", true};
+                for (UINT index = 0u; index < count; ++index)
+                {
+                    const auto length = ::DragQueryFileW(drop, index, nullptr, 0);
+                    if (length == 0u || length > 32767u) return {{}, {}, "Clipboard file path is invalid.", true};
+                    std::wstring path(length + 1u, L'\0');
+                    if (::DragQueryFileW(drop, index, path.data(), length + 1u) != length)
+                        return {{}, {}, "Could not read the clipboard file list.", true};
+                    path.resize(length); result.files.emplace_back(path);
+                }
+                return result;
+            }
+            constexpr std::size_t limit = 4u * 1024u * 1024u;
+            const UINT pngFormat = ::RegisterClipboardFormatW(L"PNG");
+            if (pngFormat && ::IsClipboardFormatAvailable(pngFormat))
+            {
+                result.recognized = true;
+                const HANDLE data = ::GetClipboardData(pngFormat);
+                const SIZE_T size = data ? ::GlobalSize(data) : 0u;
+                if (size < 24u || size > limit) return {{}, {}, "Clipboard PNG exceeds the 4 MiB image limit.", true};
+                const auto* bytes = static_cast<const unsigned char*>(::GlobalLock(data));
+                if (!bytes) return {{}, {}, "Could not read clipboard PNG.", true};
+                const bool valid = std::memcmp(bytes, "\x89PNG\r\n\x1a\n", 8u) == 0;
+                std::vector<unsigned char> image;
+                if (valid) image.assign(bytes, bytes + size);
+                ::GlobalUnlock(data);
+                if (!valid) return {{}, {}, "Clipboard image is not a valid PNG envelope.", true};
+                ::CloseClipboard(); lease.open = false;
+                std::error_code ec; std::filesystem::create_directories(imageDestination.parent_path(), ec);
+                if (ec) return {{}, {}, "Cannot create the local attachment folder.", true};
+                std::ofstream out{imageDestination, std::ios::binary | std::ios::out | std::ios::noreplace};
+                out.write(reinterpret_cast<const char*>(image.data()), static_cast<std::streamsize>(image.size()));
+                out.close();
+                if (!out) return {{}, {}, "Cannot save the clipboard attachment.", true};
+                return {{}, imageDestination, "Image attached from clipboard.", true};
+            }
+            if (::IsClipboardFormatAvailable(CF_BITMAP) || ::IsClipboardFormatAvailable(CF_DIB)
+                || ::IsClipboardFormatAvailable(CF_DIBV5))
+            {
+                result.recognized = true;
+                const auto source = static_cast<HBITMAP>(::GetClipboardData(CF_BITMAP));
+                BITMAP info{};
+                if (!source || !::GetObjectW(source, sizeof(info), &info) || info.bmWidth <= 0
+                    || info.bmHeight <= 0 || info.bmWidth > 8192 || info.bmHeight > 8192
+                    || static_cast<std::uint64_t>(info.bmWidth) * info.bmHeight > 32'000'000u)
+                    return {{}, {}, "Clipboard image dimensions are invalid or too large.", true};
+                const auto bitmap = static_cast<HBITMAP>(::CopyImage(source, IMAGE_BITMAP, 0, 0, LR_CREATEDIBSECTION));
+                ::CloseClipboard(); lease.open = false;
+                if (!bitmap) return {{}, {}, "Could not copy clipboard image pixels.", true};
+                struct BitmapLease { HBITMAP bitmap; ~BitmapLease(){::DeleteObject(bitmap);} } pixels{bitmap};
+                const auto encoded = platform_image_codec::encode_png(bitmap, info.bmWidth, info.bmHeight,
+                    imageDestination, 2048.0, 2048.0);
+                if (!encoded.succeeded) return {{}, {}, encoded.message, true};
+                return {{}, imageDestination, "Image attached from clipboard (up to 2048 px).", true};
+            }
+            return result;
+        }
+        catch (...) { return {{}, {}, "Clipboard attachment could not be read.", true}; }
+#else
+        (void)imageDestination;
+        return {};
+#endif
+    }
+
     struct OpenFileDialogResult final
     {
         bool accepted{};
@@ -361,6 +474,36 @@ export namespace epochengine::platform::filesystem
         if (!complete)
             (void)::unlink(destination.c_str());
         return complete;
+#endif
+    }
+
+    // Publish an already flushed temporary file without replacing a destination
+    // created since admission. Windows hard-link creation can be denied even
+    // when ordinary owned-file creation/rename is permitted.
+    [[nodiscard]] inline bool atomic_publish_new_same_filesystem(
+        const std::filesystem::path& source,
+        const std::filesystem::path& destination,
+        std::error_code& error) noexcept
+    {
+        error.clear();
+#if defined(_WIN32)
+        if (::MoveFileExW(source.c_str(), destination.c_str(),
+                MOVEFILE_WRITE_THROUGH) != FALSE)
+            return true;
+        error = std::error_code(static_cast<int>(::GetLastError()),
+            std::system_category());
+        return false;
+#else
+        // link is atomic and refuses an existing destination, unlike rename.
+        if (::link(source.c_str(), destination.c_str()) != 0)
+        {
+            error = std::error_code(errno, std::generic_category());
+            return false;
+        }
+        // Publication succeeded. Cleanup failure must not report a failed
+        // publication after the destination has already become visible.
+        (void)::unlink(source.c_str());
+        return true;
 #endif
     }
 

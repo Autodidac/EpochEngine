@@ -2,6 +2,8 @@
  * Epoch Engine
  * SPDX-License-Identifier: LicenseRef-MIT-NoSell
  ************************************************/
+// Epoch system notes (auto-checked):
+// Epoch Core: preserve engine-defined primitives, APIs and module contracts.
 module;
 
 #include <array>

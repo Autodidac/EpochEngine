@@ -1,8 +1,62 @@
-<?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<?xml version='1.0' encoding='utf-8'?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
   <ItemGroup>
     <Filter Include="Build Metadata">
       <UniqueIdentifier>{4dc0f894-18c6-a016-ae5a-a0a382cb213c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Implementation Files">
+      <UniqueIdentifier>{d3968c30-37ac-870c-a8c2-a074c43c3de4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Implementation Files\ai">
+      <UniqueIdentifier>{84421528-5322-bdaa-d5d8-9c0f42c38c87}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Implementation Files\ai\implementation">
+      <UniqueIdentifier>{c659c028-dfcd-2ecd-1114-4f4c1494442d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Implementation Files\authoring">
+      <UniqueIdentifier>{8063479a-524e-61a4-3d75-d9178af3646a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Implementation Files\authoring\texture">
+      <UniqueIdentifier>{37e65662-b034-76aa-8e8c-e7f0ec4e4ea6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Implementation Files\authoring\texture\implementation">
+      <UniqueIdentifier>{b03fe8f5-59b6-0f9c-3069-60bec90455d2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Implementation Files\editor">
+      <UniqueIdentifier>{df3c4cf2-34c9-db3f-251a-879ebf84eb92}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Implementation Files\editor\application">
+      <UniqueIdentifier>{666d5a2c-b4d4-5ecc-6584-186f998b8b8a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Implementation Files\editor\implementation">
+      <UniqueIdentifier>{d2f2b2b7-3c51-a164-e4f2-56bced9a9428}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Implementation Files\epoch">
+      <UniqueIdentifier>{3a4b3f37-59bd-3479-67fe-f7502986f183}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Implementation Files\epoch\implementation">
+      <UniqueIdentifier>{8f065a2f-f2cf-48da-cd35-75f0a30119aa}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Implementation Files\epochgui">
+      <UniqueIdentifier>{be160727-dd05-b8ce-7641-e1d615428681}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Implementation Files\epochgui\controls">
+      <UniqueIdentifier>{b8c30355-7d89-8c30-0a54-03d81d054111}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Implementation Files\renderers">
+      <UniqueIdentifier>{d70934a3-c937-7319-7455-ada634302aec}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Implementation Files\renderers\host">
+      <UniqueIdentifier>{28c2c260-e42a-ce50-d4b5-efaf47defb2f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Implementation Files\renderers\host\implementation">
+      <UniqueIdentifier>{23bcab57-68b4-6633-716a-88b826a5d95b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Implementation Files\updater">
+      <UniqueIdentifier>{f692a16c-c2e5-2d23-36ed-31a8c0d86bae}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Implementation Files\updater\implementation">
+      <UniqueIdentifier>{af27a023-ea6f-e0eb-2108-4a600c956e59}</UniqueIdentifier>
     </Filter>
     <Filter Include="Internal Headers">
       <UniqueIdentifier>{e238aad4-ea24-bedd-e6fa-0d9a1ae12335}</UniqueIdentifier>
@@ -10,11 +64,14 @@
     <Filter Include="Internal Headers\ai">
       <UniqueIdentifier>{4c529d4f-4d2d-e234-dac6-61aa08ebdf1e}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Internal Headers\build">
-      <UniqueIdentifier>{62257285-20fe-3671-0a90-1d69fe00b37f}</UniqueIdentifier>
+    <Filter Include="Internal Headers\ai\native">
+      <UniqueIdentifier>{f0bb8a22-3e2f-e57b-2a77-2acf00ffd5d9}</UniqueIdentifier>
     </Filter>
     <Filter Include="Internal Headers\editor">
       <UniqueIdentifier>{9c3782c5-8cde-53fd-1bb5-09532cdc9dbc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Internal Headers\editor\ai">
+      <UniqueIdentifier>{3e4720df-c688-7815-67a7-a9541b6801a0}</UniqueIdentifier>
     </Filter>
     <Filter Include="Internal Headers\epoch">
       <UniqueIdentifier>{f8689ccf-9bb2-4842-b521-9266440b88aa}</UniqueIdentifier>
@@ -33,6 +90,9 @@
     </Filter>
     <Filter Include="Internal Headers\renderers\directx">
       <UniqueIdentifier>{f3051840-b855-7f96-3311-d8b5dc84c1df}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Internal Headers\renderers\host">
+      <UniqueIdentifier>{b6012b0f-840d-18e1-adad-8a9dbe30c826}</UniqueIdentifier>
     </Filter>
     <Filter Include="Internal Headers\renderers\opengl">
       <UniqueIdentifier>{497f2b78-81f5-4624-f5c9-c3e2c2cc4628}</UniqueIdentifier>
@@ -127,9 +187,6 @@
     <Filter Include="Module Files\launcher">
       <UniqueIdentifier>{19ac6e98-d5aa-f9df-430d-4b6dd2cefa66}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Module Files\media">
-      <UniqueIdentifier>{7c5b949b-40d3-1df2-4574-4141a9e0467a}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Module Files\network">
       <UniqueIdentifier>{ac0f5c24-20b2-935c-430d-04b90bbc7120}</UniqueIdentifier>
     </Filter>
@@ -141,9 +198,6 @@
     </Filter>
     <Filter Include="Module Files\package">
       <UniqueIdentifier>{8f59a5e5-bf9c-a607-6c19-b0616b2198e2}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Module Files\perf">
-      <UniqueIdentifier>{54e0691b-62f3-8d2e-d107-eaaca5c0b754}</UniqueIdentifier>
     </Filter>
     <Filter Include="Module Files\physics">
       <UniqueIdentifier>{e08017fb-4d66-c7ab-b94a-4c43f5f4d8b9}</UniqueIdentifier>
@@ -226,9 +280,6 @@
     <Filter Include="Public Headers">
       <UniqueIdentifier>{bf8ab015-dec6-395e-1166-56b0da73b148}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Public Headers\ai">
-      <UniqueIdentifier>{1c4bc83c-59db-4a00-1408-5bbf47bf8fc4}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Public Headers\core">
       <UniqueIdentifier>{73157c93-a0c8-9675-81b2-91ef9ac7a078}</UniqueIdentifier>
     </Filter>
@@ -298,9 +349,6 @@
     <Filter Include="Source Files\editor">
       <UniqueIdentifier>{2b30d10e-234f-3192-535b-72f3cbeea516}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Source Files\editor\ai">
-      <UniqueIdentifier>{047cd323-0c41-7581-d104-94f52b03c33e}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Source Files\editor\systems">
       <UniqueIdentifier>{e8bcda15-20b5-555c-d826-ad6f7629bc79}</UniqueIdentifier>
     </Filter>
@@ -318,9 +366,6 @@
     </Filter>
     <Filter Include="Source Files\input">
       <UniqueIdentifier>{c74a6158-62f3-3235-a301-185fafb4c3f2}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Source Files\media">
-      <UniqueIdentifier>{c1c3d73c-31dd-b758-d406-805ace267bdf}</UniqueIdentifier>
     </Filter>
     <Filter Include="Source Files\packages">
       <UniqueIdentifier>{14809c2e-cf9d-5648-b985-9cc29ad0f507}</UniqueIdentifier>
@@ -411,9 +456,6 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)include\epoch.engine.hpp">
       <Filter>Public Headers\epoch</Filter>
     </ClInclude>
-    <ClInclude Include="$(MSBuildThisFileDirectory)include\epoch.config.hpp">
-      <Filter>Public Headers\epoch</Filter>
-    </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)include\scripting.epoch_api.h">
       <Filter>Public Headers\scripting</Filter>
     </ClInclude>
@@ -432,6 +474,9 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\opengl\opengl.context_detail.hpp">
       <Filter>Internal Headers\renderers\opengl</Filter>
     </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\opengl\opengl.frame_admission.hpp">
+      <Filter>Internal Headers\renderers\opengl</Filter>
+    </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\opengl\opengl.frame_capture.hpp">
       <Filter>Internal Headers\renderers\opengl</Filter>
     </ClInclude>
@@ -441,14 +486,8 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\vulkan\vulkan.context_shared.hpp">
       <Filter>Internal Headers\renderers\vulkan</Filter>
     </ClInclude>
-    <ClInclude Include="$(MSBuildThisFileDirectory)src\build\build.cpp_feature_probe.hpp">
-      <Filter>Internal Headers\build</Filter>
-    </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)src\updater\updater.device_identity.hpp">
       <Filter>Internal Headers\updater</Filter>
-    </ClInclude>
-    <ClInclude Include="$(MSBuildThisFileDirectory)src\epoch\epoch.api_types.hpp">
-      <Filter>Internal Headers\epoch</Filter>
     </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)src\epoch\epoch.common.hpp">
       <Filter>Internal Headers\epoch</Filter>
@@ -495,14 +534,47 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\editor.update_modal_layout.hpp">
       <Filter>Internal Headers\editor</Filter>
     </ClInclude>
-    <ClInclude Include="$(MSBuildThisFileDirectory)include\ai\ai.self_iteration_analytics.hpp">
-      <Filter>Public Headers\ai</Filter>
+    <ClInclude Include="$(MSBuildThisFileDirectory)include\epoch.build_layout.hpp">
+      <Filter>Public Headers\epoch</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)include\epoch.edition.hpp">
+      <Filter>Public Headers\epoch</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)include\core.utf8.hpp">
+      <Filter>Public Headers\core</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\ai\editor.ai_file_scope.hpp">
+      <Filter>Internal Headers\editor\ai</Filter>
     </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)include\updater.distribution.hpp">
       <Filter>Public Headers\updater</Filter>
     </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)include\updater.runtime_identity.hpp">
+      <Filter>Public Headers\updater</Filter>
+    </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai.native_runtime.hpp">
       <Filter>Internal Headers\ai</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_model_profile_import.hpp">
+      <Filter>Internal Headers\ai\native</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai.voice_runtime.hpp">
+      <Filter>Internal Headers\ai</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai.thinking_policy.hpp">
+      <Filter>Internal Headers\ai</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\host\host.frame_rate_sample.hpp">
+      <Filter>Internal Headers\renderers\host</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\platform\platform.image_codec_win.hpp">
+      <Filter>Internal Headers\platform</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\platform\platform.file_drop_win.hpp">
+      <Filter>Internal Headers\platform</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_model_tool_arguments.hpp">
+      <Filter>Internal Headers\ai\native</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -520,12 +592,6 @@
     </None>
     <None Include="$(MSBuildThisFileDirectory)src\scripts\script.oscillate_selected_entity.cpp">
       <Filter>Source Files\scripts</Filter>
-    </None>
-    <None Include="$(MSBuildThisFileDirectory)resource\WinResource.aps">
-      <Filter>Resource Files</Filter>
-    </None>
-    <None Include="$(MSBuildThisFileDirectory)..\Changes\roadmap.md">
-      <Filter>Build Metadata</Filter>
     </None>
     <None Include="$(MSBuildThisFileDirectory)src\editor\editor.update_modal_view.inl">
       <Filter>Source Files\editor</Filter>
@@ -721,12 +787,6 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\context.multiplexer.ixx">
       <Filter>Module Files\context</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\context.type.ixx">
-      <Filter>Module Files\context</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\context.admission.ixx">
-      <Filter>Module Files\context</Filter>
-    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\noop.context.ixx">
       <Filter>Module Files\noop</Filter>
     </ClCompile>
@@ -809,9 +869,6 @@
       <Filter>Module Files\platform</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.framework.ixx">
-      <Filter>Module Files\platform</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.engine.ixx">
       <Filter>Module Files\platform</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\gui.engine.ixx">
@@ -937,9 +994,6 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\timeline.system.ixx">
       <Filter>Module Files\timeline</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\media.timeline_preview.ixx">
-      <Filter>Module Files\media</Filter>
-    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\event.movement.ixx">
       <Filter>Module Files\event</Filter>
     </ClCompile>
@@ -1038,12 +1092,6 @@
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.engine.ixx">
       <Filter>Module Files\epoch</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\perf.select.ixx">
-      <Filter>Module Files\perf</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\perf.tier.ixx">
-      <Filter>Module Files\perf</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\systems.registry.ixx">
       <Filter>Module Files\systems</Filter>
@@ -1225,13 +1273,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.assert.ixx">
       <Filter>Module Files\core</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.error.ixx">
-      <Filter>Module Files\core</Filter>
-    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.id.ixx">
-      <Filter>Module Files\core</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.time.ixx">
       <Filter>Module Files\core</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.string.ixx">
@@ -1243,28 +1285,13 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.math.ixx">
       <Filter>Module Files\core</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.log.ixx">
-      <Filter>Module Files\core</Filter>
-    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.format.ixx">
-      <Filter>Module Files\core</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.env.ixx">
       <Filter>Module Files\core</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\diagnostics.engine.ixx">
       <Filter>Module Files\diagnostics</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.window.ixx">
-      <Filter>Module Files\platform</Filter>
-    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.context.ixx">
-      <Filter>Module Files\platform</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.capabilities.ixx">
-      <Filter>Module Files\platform</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.budgets.ixx">
       <Filter>Module Files\platform</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.filesystem.ixx">
@@ -1303,25 +1330,16 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\core\core.assert.cpp">
       <Filter>Source Files\core</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\core\core.env.cpp">
-      <Filter>Source Files\core</Filter>
-    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\core\core.error.cpp">
       <Filter>Source Files\core</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\core\core.id.cpp">
       <Filter>Source Files\core</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\core\core.log.cpp">
-      <Filter>Source Files\core</Filter>
-    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\core\core.math.cpp">
       <Filter>Source Files\core</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\core\core.string.cpp">
-      <Filter>Source Files\core</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\core\core.time.cpp">
       <Filter>Source Files\core</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.application.cpp">
@@ -1389,9 +1407,6 @@
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\render\render.portal_contract.cpp">
       <Filter>Source Files\render</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\platform\platform.window.cpp">
-      <Filter>Source Files\platform</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\platform\platform.context_epoch.cpp">
       <Filter>Source Files\renderers\platform</Filter>
@@ -1531,70 +1546,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.build_validation.ixx">
       <Filter>Module Files\epoch</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.development_guard.ixx">
-      <Filter>Module Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.development_executor.ixx">
-      <Filter>Module Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.iteration_loop.ixx">
-      <Filter>Module Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.iteration_session.ixx">
-      <Filter>Module Files\ai</Filter>
-    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.project_profile.ixx">
-      <Filter>Module Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.curated_context_bundle.ixx">
-      <Filter>Module Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.iteration_campaign.ixx">
-      <Filter>Module Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.iteration_campaign_queue.ixx">
-      <Filter>Module Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.iteration_campaign_scheduler.ixx">
-      <Filter>Module Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.iteration_supervisor_control.ixx">
-      <Filter>Module Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.mcp_supervisor_protocol.ixx">
-      <Filter>Module Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.mcp_supervisor_adapter.ixx">
-      <Filter>Module Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.mcp_campaign.ixx">
-      <Filter>Module Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.mcp_child_host.ixx">
-      <Filter>Module Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.self_iteration_orchestrator.ixx">
-      <Filter>Module Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.mcp_orchestrator_bridge.ixx">
-      <Filter>Module Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.source_patch_bundle.ixx">
-      <Filter>Module Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.source_patch_proposal.ixx">
-      <Filter>Module Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.source_patch_stager.ixx">
-      <Filter>Module Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.iteration_patch_adapter.ixx">
-      <Filter>Module Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.iteration_validation_adapter.ixx">
-      <Filter>Module Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.development_proposal_codec.ixx">
       <Filter>Module Files\ai</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch\epoch.build_validation.cpp">
@@ -1602,21 +1554,6 @@
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch\epoch.build_validation_contract.cpp">
       <Filter>Source Files\epoch</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.development_executor.cpp">
-      <Filter>Source Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_loop.cpp">
-      <Filter>Source Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_loop_contract.cpp">
-      <Filter>Source Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_session.cpp">
-      <Filter>Source Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_session_contract.cpp">
-      <Filter>Source Files\ai</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.project_profile.cpp">
       <Filter>Source Files\ai</Filter>
@@ -1630,119 +1567,11 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.model_install_contract.cpp">
       <Filter>Source Files\ai</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.curated_context_bundle.cpp">
-      <Filter>Source Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.curated_context_bundle_contract.cpp">
-      <Filter>Source Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_campaign.cpp">
-      <Filter>Source Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_campaign_contract.cpp">
-      <Filter>Source Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_campaign_queue.cpp">
-      <Filter>Source Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_campaign_queue_contract.cpp">
-      <Filter>Source Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_campaign_scheduler.cpp">
-      <Filter>Source Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_campaign_scheduler_contract.cpp">
-      <Filter>Source Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_supervisor_control.cpp">
-      <Filter>Source Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_supervisor_control_contract.cpp">
-      <Filter>Source Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.mcp_supervisor_adapter.cpp">
-      <Filter>Source Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.mcp_supervisor_adapter_checkpoint.cpp">
-      <Filter>Source Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.mcp_supervisor_adapter_contract.cpp">
-      <Filter>Source Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.mcp_campaign.cpp">
-      <Filter>Source Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.mcp_campaign_contract.cpp">
-      <Filter>Source Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.mcp_child_host.cpp">
-      <Filter>Source Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.mcp_child_host_contract.cpp">
-      <Filter>Source Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.self_iteration_orchestrator.cpp">
-      <Filter>Source Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.self_iteration_orchestrator_contract.cpp">
-      <Filter>Source Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.mcp_orchestrator_bridge.cpp">
-      <Filter>Source Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.mcp_orchestrator_bridge_contract.cpp">
-      <Filter>Source Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.source_patch_bundle.cpp">
-      <Filter>Source Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.source_patch_bundle_contract.cpp">
-      <Filter>Source Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.source_patch_proposal.cpp">
-      <Filter>Source Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.source_patch_proposal_contract.cpp">
-      <Filter>Source Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.source_patch_stager.cpp">
-      <Filter>Source Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.source_patch_stager_contract.cpp">
-      <Filter>Source Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_patch_adapter.cpp">
-      <Filter>Source Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_patch_adapter_contract.cpp">
-      <Filter>Source Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_validation_adapter.cpp">
-      <Filter>Source Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_validation_adapter_contract.cpp">
-      <Filter>Source Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.development_proposal_codec.cpp">
-      <Filter>Source Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.development_proposal_codec_contract.cpp">
-      <Filter>Source Files\ai</Filter>
-    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.mcp_stdio.cpp">
       <Filter>Source Files\ai</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.mcp_stdio_contract.cpp">
       <Filter>Source Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.ai_development_controller.ixx">
-      <Filter>Module Files\editor</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.ai_development_panel.ixx">
-      <Filter>Module Files\editor</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.candidate_artifact.ixx">
-      <Filter>Module Files\editor</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.systems_workspace.ixx">
       <Filter>Module Files\editor</Filter>
@@ -1761,15 +1590,6 @@
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.code_workspace.ixx">
       <Filter>Module Files\editor</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\ai\editor.ai_development_controller.cpp">
-      <Filter>Source Files\editor\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\ai\editor.ai_development_panel.cpp">
-      <Filter>Source Files\editor\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\ai\editor.ai_development_controller_contract.cpp">
-      <Filter>Source Files\editor\ai</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\authoring\gui\authoring.gui_document_codec.cpp">
       <Filter>Source Files\authoring\gui</Filter>
@@ -1843,9 +1663,6 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_core_error.cpp">
       <Filter>Source Files\ai\native</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_core_event_bus.cpp">
-      <Filter>Source Files\ai\native</Filter>
-    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_core_ids.cpp">
       <Filter>Source Files\ai\native</Filter>
     </ClCompile>
@@ -1867,9 +1684,6 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_model_native_model_manager.cpp">
       <Filter>Source Files\ai\native</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_model_internal_model_host.cpp">
-      <Filter>Source Files\ai\native</Filter>
-    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_model_multiplex_provider.cpp">
       <Filter>Source Files\ai\native</Filter>
     </ClCompile>
@@ -1888,22 +1702,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_controller_task_intent.cpp">
       <Filter>Source Files\ai\native</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_learning_learning_service.cpp">
-      <Filter>Source Files\ai\native</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_memory_episode_store.cpp">
-      <Filter>Source Files\ai\native</Filter>
-    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_training_training_service.cpp">
-      <Filter>Source Files\ai\native</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_decision_decision_engine.cpp">
-      <Filter>Source Files\ai\native</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_workspace_workspace.cpp">
-      <Filter>Source Files\ai\native</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_workspace_checkpoint_store.cpp">
       <Filter>Source Files\ai\native</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_process_process.cpp">
@@ -1915,40 +1714,12 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_process_process_posix.cpp">
       <Filter>Source Files\ai\native</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_tools_tool_registry.cpp">
-      <Filter>Source Files\ai\native</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_tools_builtin_tools.cpp">
-      <Filter>Source Files\ai\native</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_persistence_session_store.cpp">
-      <Filter>Source Files\ai\native</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_agent_context_manager.cpp">
-      <Filter>Source Files\ai\native</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_agent_handoff_contract.cpp">
-      <Filter>Source Files\ai\native</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_agent_agent_runtime.cpp">
-      <Filter>Source Files\ai\native</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_agent_task_scheduler.cpp">
-      <Filter>Source Files\ai\native</Filter>
-    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_runtime_runtime_host.cpp">
       <Filter>Source Files\ai\native</Filter>
     </ClCompile>
-  </ItemGroup>
-  <ItemGroup>
-    <Image Include="$(MSBuildThisFileDirectory)resource\icon.ico">
-      <Filter>Resource Files</Filter>
-    </Image>
-  </ItemGroup>
-  <ItemGroup>
-    <ResourceCompile Include="$(MSBuildThisFileDirectory)resource\WinResource.rc">
-      <Filter>Resource Files</Filter>
-    </ResourceCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.voice_runtime_win.cpp">
+      <Filter>Source Files\ai</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\capability.profile.ixx">
@@ -2023,12 +1794,6 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.input_profile.ixx">
       <Filter>Module Files\project</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.ai_self_iteration.ixx">
-      <Filter>Module Files\project</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.ai_self_iteration_session.ixx">
-      <Filter>Module Files\project</Filter>
-    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.input_controller.ixx">
       <Filter>Module Files\project</Filter>
     </ClCompile>
@@ -2068,22 +1833,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\water.system.ixx">
       <Filter>Module Files\water</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\audio.types.ixx">
-      <Filter>Module Files\audio</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\audio.manager.ixx">
-      <Filter>Module Files\audio</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\audio.mixer.ixx">
-      <Filter>Module Files\audio</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\audio.device.ixx">
-      <Filter>Module Files\audio</Filter>
-    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\audio.device_sdl.ixx">
-      <Filter>Module Files\audio</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\audio.playback_runtime.ixx">
       <Filter>Module Files\audio</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\asset.audio_import.ixx">
@@ -2098,28 +1848,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\physics.solver2d.ixx">
       <Filter>Module Files\physics</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\audio\audio.manager.cpp">
-      <Filter>Source Files\audio</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\audio\audio.mixer.cpp">
-      <Filter>Source Files\audio</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\audio\audio.mixer_contract.cpp">
-      <Filter>Source Files\audio</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\audio\audio.device.cpp">
-      <Filter>Source Files\audio</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\audio\audio.device_contract.cpp">
-      <Filter>Source Files\audio</Filter>
-    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\audio\audio.device_sdl.cpp">
-      <Filter>Source Files\audio</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\audio\audio.playback_runtime.cpp">
-      <Filter>Source Files\audio</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\audio\audio.playback_runtime_contract.cpp">
       <Filter>Source Files\audio</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\input\input.controller.cpp">
@@ -2192,12 +1921,6 @@
       <Filter>Source Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.input_profile_contract.cpp">
-      <Filter>Source Files\project</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.ai_self_iteration.cpp">
-      <Filter>Source Files\project</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.ai_self_iteration_session.cpp">
       <Filter>Source Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.input_controller.cpp">
@@ -2274,9 +1997,6 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <None Include="$(MSBuildThisFileDirectory)src\media\media.timeline_preview_contract.cpp">
-      <Filter>Source Files\media</Filter>
-    </None>
     <None Include="$(MSBuildThisFileDirectory)src\forest\forest.preview_mesh_contract.cpp">
       <Filter>Source Files\forest</Filter>
     </None>
@@ -2309,23 +2029,237 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.event_debug.ixx">
       <Filter>Module Files\render</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.source_index.ixx">
-      <Filter>Module Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.source_workspace.ixx">
-      <Filter>Module Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.source_discovery_contract.ixx">
-      <Filter>Module Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.source_index.cpp">
-      <Filter>Source Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.source_workspace.cpp">
-      <Filter>Source Files\ai</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.source_discovery_contract.cpp">
-      <Filter>Source Files\ai</Filter>
-    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.application_asset_audio.inl">
+      <Filter>Implementation Files\editor\application</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.application_asset_browsing.inl">
+      <Filter>Implementation Files\editor\application</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.application_assistant_authoring.inl">
+      <Filter>Implementation Files\editor\application</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.application_code_workspaces.inl">
+      <Filter>Implementation Files\editor\application</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.application_context_lifecycle.inl">
+      <Filter>Implementation Files\editor\application</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.application_context_session.inl">
+      <Filter>Implementation Files\editor\application</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.application_context_snapshot.inl">
+      <Filter>Implementation Files\editor\application</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.application_contracts.inl">
+      <Filter>Implementation Files\editor\application</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.application_detached_panels.inl">
+      <Filter>Implementation Files\editor\application</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.application_document_editing.inl">
+      <Filter>Implementation Files\editor\application</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.application_gui_authoring.inl">
+      <Filter>Implementation Files\editor\application</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.application_layout_persistence.inl">
+      <Filter>Implementation Files\editor\application</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.application_models_attachments.inl">
+      <Filter>Implementation Files\editor\application</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.application_packages_creation.inl">
+      <Filter>Implementation Files\editor\application</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.application_pane_routing.inl">
+      <Filter>Implementation Files\editor\application</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.application_project_documents.inl">
+      <Filter>Implementation Files\editor\application</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.application_project_runtime.inl">
+      <Filter>Implementation Files\editor\application</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.application_runtime_diagnostics.inl">
+      <Filter>Implementation Files\editor\application</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.application_runtime_source.inl">
+      <Filter>Implementation Files\editor\application</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.application_scene_preview.inl">
+      <Filter>Implementation Files\editor\application</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.application_scene_selection.inl">
+      <Filter>Implementation Files\editor\application</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.application_scene_transactions.inl">
+      <Filter>Implementation Files\editor\application</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.application_scripting_renderers.inl">
+      <Filter>Implementation Files\editor\application</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.application_state.inl">
+      <Filter>Implementation Files\editor\application</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.application_texture_authoring.inl">
+      <Filter>Implementation Files\editor\application</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.application_work_admission.inl">
+      <Filter>Implementation Files\editor\application</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.frame_assistant_chat.inl">
+      <Filter>Implementation Files\editor\application</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.frame_assistant_conversation.inl">
+      <Filter>Implementation Files\editor\application</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.frame_assistant_entry.inl">
+      <Filter>Implementation Files\editor\application</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.frame_assistant_planning.inl">
+      <Filter>Implementation Files\editor\application</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.frame_bootstrap.inl">
+      <Filter>Implementation Files\editor\application</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.frame_bottom_docks.inl">
+      <Filter>Implementation Files\editor\application</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.frame_command_menus.inl">
+      <Filter>Implementation Files\editor\application</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.frame_consent_settings.inl">
+      <Filter>Implementation Files\editor\application</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.frame_finish.inl">
+      <Filter>Implementation Files\editor\application</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.frame_inspector.inl">
+      <Filter>Implementation Files\editor\application</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.frame_model_manager.inl">
+      <Filter>Implementation Files\editor\application</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.frame_outliner.inl">
+      <Filter>Implementation Files\editor\application</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.frame_packages_about.inl">
+      <Filter>Implementation Files\editor\application</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.frame_project_runtime.inl">
+      <Filter>Implementation Files\editor\application</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.frame_source_dispatch.inl">
+      <Filter>Implementation Files\editor\application</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.frame_toolbar_dock_targets.inl">
+      <Filter>Implementation Files\editor\application</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.frame_viewport.inl">
+      <Filter>Implementation Files\editor\application</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.frame_workspace_docking.inl">
+      <Filter>Implementation Files\editor\application</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\epochgui\controls\gui.assistant_console.inl">
+      <Filter>Implementation Files\epochgui\controls</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\epochgui\controls\gui.buttons_images.inl">
+      <Filter>Implementation Files\epochgui\controls</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\epochgui\controls\gui.context_roles.inl">
+      <Filter>Implementation Files\epochgui\controls</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\epochgui\controls\gui.frame_lifecycle.inl">
+      <Filter>Implementation Files\epochgui\controls</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\epochgui\controls\gui.navigation_chrome.inl">
+      <Filter>Implementation Files\epochgui\controls</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\epochgui\controls\gui.node_surface_controls.inl">
+      <Filter>Implementation Files\epochgui\controls</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\epochgui\controls\gui.scroll_controls.inl">
+      <Filter>Implementation Files\epochgui\controls</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\epochgui\controls\gui.text_controls.inl">
+      <Filter>Implementation Files\epochgui\controls</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\epochgui\controls\gui.window_controls.inl">
+      <Filter>Implementation Files\epochgui\controls</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\authoring\texture\implementation\authoring.texture_binary_codec.inl">
+      <Filter>Implementation Files\authoring\texture\implementation</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\authoring\texture\implementation\authoring.texture_residency.inl">
+      <Filter>Implementation Files\authoring\texture\implementation</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\implementation\editor.scene_commands.inl">
+      <Filter>Implementation Files\editor\implementation</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\implementation\editor.project_registry.inl">
+      <Filter>Implementation Files\editor\implementation</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\implementation\editor.project_shell_generation.inl">
+      <Filter>Implementation Files\editor\implementation</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\epoch\implementation\epoch.contracts_renderer.inl">
+      <Filter>Implementation Files\epoch\implementation</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\epoch\implementation\epoch.contracts_engine.inl">
+      <Filter>Implementation Files\epoch\implementation</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\epoch\implementation\epoch.contracts_project.inl">
+      <Filter>Implementation Files\epoch\implementation</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\epoch\implementation\epoch.session_editor_launcher.inl">
+      <Filter>Implementation Files\epoch\implementation</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\epoch\implementation\epoch.project_play_scene.inl">
+      <Filter>Implementation Files\epoch\implementation</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\epoch\implementation\epoch.session_runtime.inl">
+      <Filter>Implementation Files\epoch\implementation</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\implementation\ai.connection_preferences.inl">
+      <Filter>Implementation Files\ai\implementation</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\implementation\ai.model_http_transport.inl">
+      <Filter>Implementation Files\ai\implementation</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\implementation\ai.model_protocol.inl">
+      <Filter>Implementation Files\ai\implementation</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\implementation\ai.runtime_process.inl">
+      <Filter>Implementation Files\ai\implementation</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\implementation\ai.model_management.inl">
+      <Filter>Implementation Files\ai\implementation</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\implementation\ai.transport_contracts.inl">
+      <Filter>Implementation Files\ai\implementation</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\updater\implementation\updater.release_integrity.inl">
+      <Filter>Implementation Files\updater\implementation</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\updater\implementation\updater.toolchain_bootstrap.inl">
+      <Filter>Implementation Files\updater\implementation</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\updater\implementation\updater.source_worker.inl">
+      <Filter>Implementation Files\updater\implementation</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\host\implementation\host.window_interaction.inl">
+      <Filter>Implementation Files\renderers\host\implementation</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\host\implementation\host.render_loop.inl">
+      <Filter>Implementation Files\renderers\host\implementation</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\host\implementation\host.native_dispatch.inl">
+      <Filter>Implementation Files\renderers\host\implementation</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

@@ -28,6 +28,8 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
+// Epoch system notes (auto-checked):
+// Epoch STL: honor core.stl_types.hpp types/operators; fix callers, not core overloads.
 module;
 
 #include "../include/core.stl_types.hpp"
@@ -49,8 +51,8 @@ export namespace epochengine
 {
     struct EngineConfig
     {
-        platform::WindowDesc window{};
-        platform::ContextDesc gfx{};
+        platform::window_adapter::WindowDesc window{};
+        platform::GraphicsContextDesc gfx{};
         Budgets budgets{};
     };
 
@@ -64,9 +66,9 @@ export namespace epochengine
         void update(double dt_seconds) noexcept;
         void shutdown() noexcept;
 
-        [[nodiscard]] platform::IWindowSystem* windows() noexcept { return _windows.get(); }
+        [[nodiscard]] platform::window_adapter::IWindowSystem* windows() noexcept { return _windows.get(); }
         [[nodiscard]] platform::IGraphicsContext* graphics() noexcept { return _gfx.get(); }
-        [[nodiscard]] platform::WindowHandle primary_window() const noexcept { return _primary; }
+        [[nodiscard]] platform::window_adapter::WindowHandle primary_window() const noexcept { return _primary; }
         [[nodiscard]] const platform::RuntimeFrameProfile& runtime_profile() const noexcept { return _runtime_profile; }
 
         [[nodiscard]] Capabilities& capabilities() noexcept { return _caps; }
@@ -91,9 +93,9 @@ export namespace epochengine
         Capabilities _caps{};
         platform::RuntimeFrameProfile _runtime_profile{};
 
-        std::unique_ptr<platform::IWindowSystem> _windows{};
+        std::unique_ptr<platform::window_adapter::IWindowSystem> _windows{};
         std::unique_ptr<platform::IGraphicsContext> _gfx{};
-        platform::WindowHandle _primary{};
+        platform::window_adapter::WindowHandle _primary{};
 
         events::bus _events{};
         ecs::world _world{ ecs::world_desc{ .max_entities = 64 * 1024, .allow_growth = false } };

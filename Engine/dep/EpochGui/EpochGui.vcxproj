@@ -1,6 +1,10 @@
-<?xml version="1.0" encoding="utf-8"?>
-<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<?xml version='1.0' encoding='utf-8'?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" DefaultTargets="Build">
   <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
     <ProjectConfiguration Include="Debug|Win32">
       <Configuration>Debug</Configuration>
       <Platform>Win32</Platform>
@@ -13,11 +17,7 @@
       <Configuration>Debug</Configuration>
       <Platform>x64</Platform>
     </ProjectConfiguration>
-    <ProjectConfiguration Include="Release|x64">
-      <Configuration>Release</Configuration>
-      <Platform>x64</Platform>
-    </ProjectConfiguration>
-  </ItemGroup>
+</ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
@@ -80,9 +80,12 @@
   </PropertyGroup>
   <PropertyGroup>
     <TargetName>EpochGui</TargetName>
-    <OutDir Condition="'$(SolutionPath)'!='' and '$(SolutionPath)'!='*Undefined*'">$(SolutionDir)$(Platform)\$(Configuration)\</OutDir>
-    <OutDir Condition="'$(SolutionPath)'=='' or '$(SolutionPath)'=='*Undefined*'">$(ProjectDir)build\msvc\$(Platform)\$(Configuration)\</OutDir>
   </PropertyGroup>
+  <PropertyGroup Condition="!Exists('$(MSBuildThisFileDirectory)..\..\..\Tools\MSVC\EpochOutputLayout.props')">
+    <OutDir>$(ProjectDir)build\bin\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(ProjectDir)build\obj\$(Platform)\$(Configuration)\</IntDir>
+  </PropertyGroup>
+  <Import Project="..\..\..\Tools\MSVC\EpochOutputLayout.props" Condition="Exists('$(MSBuildThisFileDirectory)..\..\..\Tools\MSVC\EpochOutputLayout.props')" />
   <PropertyGroup Label="EpochGuiSourceRoot">
     <EpochGuiSourceRoot Condition="'$(EpochGuiSourceRoot)'=='' and Exists('$(ProjectDir)include\gui\floating_window.hpp')">$(ProjectDir)</EpochGuiSourceRoot>
     <EpochGuiSourceRoot Condition="'$(EpochGuiSourceRoot)'=='' and Exists('$(ProjectDir)..\..\include\gui\floating_window.hpp')">$(ProjectDir)..\..\</EpochGuiSourceRoot>
@@ -91,12 +94,8 @@
     <EpochGuiModuleRoot Condition="'$(EpochGuiModuleRoot)'=='' and Exists('$(ProjectDir)modules\epoch.gui.ixx')">$(ProjectDir)</EpochGuiModuleRoot>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <IntDir Condition="'$(SolutionPath)'!='' and '$(SolutionPath)'!='*Undefined*'">$(SolutionDir)\Debug\$(Platform)\$(ProjectName)\$(Configuration)\</IntDir>
-    <IntDir Condition="'$(SolutionPath)'=='' or '$(SolutionPath)'=='*Undefined*'">$(ProjectDir)build\msvc-int\$(Platform)\$(ProjectName)\$(Configuration)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <IntDir Condition="'$(SolutionPath)'!='' and '$(SolutionPath)'!='*Undefined*'">$(SolutionDir)\Release\$(Platform)\$(ProjectName)\$(Configuration)\</IntDir>
-    <IntDir Condition="'$(SolutionPath)'=='' or '$(SolutionPath)'=='*Undefined*'">$(ProjectDir)build\msvc-int\$(Platform)\$(ProjectName)\$(Configuration)\</IntDir>
   </PropertyGroup>
   <Target Name="ValidateEpochGuiSourceRoot" BeforeTargets="PrepareForBuild">
     <Error Condition="'$(EpochGuiSourceRoot)'==''" Text="EpochGui could not find include\gui and src\epochgui. Keep this project in Engine\dep\EpochGui, place include and src beside the project in a standalone mirror, or pass /p:EpochGuiSourceRoot=&lt;path-with-trailing-slash&gt;." />
@@ -179,6 +178,8 @@
     <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\node_graph_workspace.cpp" />
     <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\panel_host.cpp" />
     <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\popup_layout.cpp" />
+    <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\gui.scrollbar_layout.cpp" />
+    <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\gui.text_layout.cpp" />
     <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\text_control.cpp" />
     <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\text_editor.cpp" />
     <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\tile_workspace.cpp" />

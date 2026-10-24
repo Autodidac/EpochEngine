@@ -1,0 +1,302 @@
+{
+  "schema": "epoch.portable_source_parity.v1",
+  "repository": "Autodidac/EpochPlatformEngine",
+  "upstream_revision": "7190bf71ef3e8ecde4113efcda5804ce41fc023d",
+  "scope": [
+    "include",
+    "modules",
+    "src",
+    "tests",
+    "examples",
+    "cmake",
+    "msvc",
+    "scripts"
+  ],
+  "full_tree_mirror": false,
+  "files": [
+    {
+      "path": "include/build.cpp_feature_probe.hpp",
+      "sha256": "fa67a05ee0e8153b5e93b4bd19bc4c5549362eecdc76490d0053aa6caf724fa7"
+    },
+    {
+      "path": "include/core.abi_types.hpp",
+      "sha256": "dbe82a3e25ea3f28659a4d597894c9d59c42910ef3d250c7fe6fb725501a2847"
+    },
+    {
+      "path": "include/core.log_compact.hpp",
+      "sha256": "9a458940174a450a9f6cf8c037a3721085198cb380728cd6960373e4fb52338e"
+    },
+    {
+      "path": "include/core.stl_types.hpp",
+      "sha256": "91bc37f379e9edb032288e6b0a636a1edbb2f049763a8a1519cadecf6699b86e"
+    },
+    {
+      "path": "include/core.utf8.hpp",
+      "sha256": "cd4bb316551a969c1eadb2996c8761a7c7d44e1f18bff9fbc97b55ee808fd237"
+    },
+    {
+      "path": "include/epoch.app_api.h",
+      "sha256": "5d7a1eda817cbaa56795bdde6f799d9933906e4e0de3e468d5c45836bf56d0d4"
+    },
+    {
+      "path": "include/epoch.software_application.hpp",
+      "sha256": "961931df374054e291ced97d111da1b4c1cace986abee34348394de67a1760aa"
+    },
+    {
+      "path": "include/epochplatformengine/application.hpp",
+      "sha256": "3519fed52bf9e9822e97184d4d7acf6f49f9e20d17c1b747293e6d62883ff770"
+    },
+    {
+      "path": "include/epochplatformengine/driver.hpp",
+      "sha256": "58c07d5f088477738631d8d2ab6bf56cb0e577a9133050ea72d762a4dd28597b"
+    },
+    {
+      "path": "include/epochplatformengine/epoch_platform_engine.hpp",
+      "sha256": "ac7ab1147ceb45597343f7f79dd86627f88de8ebd02e3acfd5ac235dbc146a52"
+    },
+    {
+      "path": "include/epochplatformengine/export.hpp",
+      "sha256": "114be22d453802121e77a4e46721a92372efe1e627820351a8b1bdcbf470f788"
+    },
+    {
+      "path": "include/epochplatformengine/runtime.hpp",
+      "sha256": "d8284518f09397ce651c8b52ab56ad597b88dbcef30915a623ddf8af1df464d9"
+    },
+    {
+      "path": "include/epochplatformengine/types.hpp",
+      "sha256": "584c9c1954db3127867f1008b41e519eb085c954b43d41e11a9b78ecfa4671b8"
+    },
+    {
+      "path": "modules/context.admission.ixx",
+      "sha256": "b49e6dd79a7fd99066efb550279dfb7b984767aa9454cec9edba718da8e3de4b"
+    },
+    {
+      "path": "modules/context.type.ixx",
+      "sha256": "4109e5c68b3c465608766a90e33390fb1102a6319ad66f40ceb7a271b9407371"
+    },
+    {
+      "path": "modules/core.env.ixx",
+      "sha256": "94baa14be6ed2515373a53955fe2520b0451de8d02b2cb35c4f916ec21a83328"
+    },
+    {
+      "path": "modules/core.error.ixx",
+      "sha256": "90610acba24bd2aaf4be8089c302dbc0e7c658f609aadbf36f97abb618ec9f46"
+    },
+    {
+      "path": "modules/core.log.ixx",
+      "sha256": "b538bfa487041b055c4f306564dc8555b0d02cf378e19cf1d9567f10c70604fd"
+    },
+    {
+      "path": "modules/core.time.ixx",
+      "sha256": "1c3e3dfa3a429cd3b1f6c4c35cd70db33ebe3e5cb44d7ca6b3040970f4efc843"
+    },
+    {
+      "path": "modules/perf.select.ixx",
+      "sha256": "d2d01e6302fe2927f30dd1c1a07ac9e1192e37d3ab534a8db757ca0b83d421b3"
+    },
+    {
+      "path": "modules/perf.tier.ixx",
+      "sha256": "cad9370d1694880b39d1bff39b9ebcdf16df8e4e0a1e5ad47f2a1004f254aa1d"
+    },
+    {
+      "path": "modules/platform.application.ixx",
+      "sha256": "175cef55a850f24f11aeaa2c6946ae66e3af79a827a603dd9dc61e6941b3853d"
+    },
+    {
+      "path": "modules/platform.budgets.ixx",
+      "sha256": "9a6e350f4efa4050ba13ba6edd0014a86e0f84ed7e90c31999eef7b2bdcc1a62"
+    },
+    {
+      "path": "modules/platform.capabilities.ixx",
+      "sha256": "44337cce80892f6d62549dc19f5d3c75e2c92862cc71f9d8e6e243d9768f7a9f"
+    },
+    {
+      "path": "modules/platform.engine.ixx",
+      "sha256": "a6edc5bf789f7de2845d251379653a1a13fa08917ea12faaa389c006537d2f4e"
+    },
+    {
+      "path": "modules/platform.native.ixx",
+      "sha256": "40a6d60c224ba6cffe07b48711bc9b42bc3c5ce896986a7babdd25c349cc51fd"
+    },
+    {
+      "path": "modules/platform.window.ixx",
+      "sha256": "a3e3c02fc02fb23f468ceb20c4f2c88f477bb2936024304bd21cac05a35cca32"
+    },
+    {
+      "path": "modules/platform.window_attachment.ixx",
+      "sha256": "a3aff35a61ca9fd5d87ac3c766bc0a7b5cba832f58a3d695dee2e49e2ecb618b"
+    },
+    {
+      "path": "src/application.cpp",
+      "sha256": "ff11704ea6188ae7b6a1385aa2b2a0052219de2339ca3e02adbc49dc99c8161e"
+    },
+    {
+      "path": "src/core/core.env.cpp",
+      "sha256": "1c3536b563345c5e2539615c31bcb6a3d774d58481b14b5bd255b89d90c768f0"
+    },
+    {
+      "path": "src/core/core.log.cpp",
+      "sha256": "b5b2d1e87273958411183c969bfff2b68efda7cc70c2c407336675d2c4debbca"
+    },
+    {
+      "path": "src/core/core.time.cpp",
+      "sha256": "63b0b5da5ef7b0951f71866d89e9d67b4b941aa57b91a2d92aab76632d63d5b6"
+    },
+    {
+      "path": "src/drivers/cocoa_driver.mm",
+      "sha256": "14a30412b27bcbc8c4ed9acd9dae67871fe9f5bfcdf0b8dd5715017760ee50b9"
+    },
+    {
+      "path": "src/drivers/headless_driver.cpp",
+      "sha256": "39dcaf7564fce009ab713eb157fcff01fca4963db6c716356dc32288dde5de15"
+    },
+    {
+      "path": "src/drivers/win32_driver.cpp",
+      "sha256": "9afcb4a8301ddf31426accb2c77d809e3e016e4a139db21c96b3f939f00f9fe8"
+    },
+    {
+      "path": "src/drivers/x11_driver.cpp",
+      "sha256": "b95f91ee114b988b3507de1fb98fbcdbdae09f5136550cc632791e54ade059bb"
+    },
+    {
+      "path": "src/entrypoint/entrypoint.cpp",
+      "sha256": "c44a6efefc567a730be5e6d6da325eb3cca2bfdaa1290bb8e50b57c403c09dc2"
+    },
+    {
+      "path": "src/epoch/epoch.software_application.cpp",
+      "sha256": "2e1c3f2c826352606745ff962f4784cdc708ad26d5470435a50a12e710eab1ad"
+    },
+    {
+      "path": "src/epoch/epoch.software_application_internal.hpp",
+      "sha256": "e97f688140836ee2b0afd02eb5705394dc3e1464523c76edc0eab934085231ec"
+    },
+    {
+      "path": "src/platform/platform.entry.cpp",
+      "sha256": "b4b38a7fafd94d8b382d288eb00bf8777dc8bda54c75e9546d7ba1fcab937e38"
+    },
+    {
+      "path": "src/platform/platform.window.cpp",
+      "sha256": "de01fc190dc2fbe1dee3cd9475b0ae4b9d774076d237aa7694761a2df74eed8d"
+    },
+    {
+      "path": "src/platform/platform.window_attachment.cpp",
+      "sha256": "6ca86ff921511e72e8c563b4dcecdc9958691b203244bb5b23c92c4516239c38"
+    },
+    {
+      "path": "src/runtime.cpp",
+      "sha256": "340eb7e35b93f3ba3d8f5ff73c2dd48ba0983962724ebc6b06938e3174e02d66"
+    },
+    {
+      "path": "src/runtime_host.cpp",
+      "sha256": "894ae59fbc8f7e9965a144640c0f077465f3c00866ba3df36f8f6a0d5c180897"
+    },
+    {
+      "path": "src/runtime_internal.hpp",
+      "sha256": "ed4209205e0991d482d0f83d521f2be028abf56ce2d5bde2353aa4089fd882f6"
+    },
+    {
+      "path": "src/types.cpp",
+      "sha256": "24dd51d2ddff26301a33698c908f9cba5efaed209aafd5a9a55f55fbdc085fd1"
+    },
+    {
+      "path": "tests/perf.tier_contract.cpp",
+      "sha256": "5a87b277bc688b563b73df68e582e537f025c72e465375892a46dd93600aa730"
+    },
+    {
+      "path": "tests/platform.entry_contract.cpp",
+      "sha256": "5468b7e11b50f50bab74a33d05b9e19e891eb4df44dcdff89305c167d0eff8ca"
+    },
+    {
+      "path": "tests/platform.module_contract.cpp",
+      "sha256": "52b356e3be37a1289e873c1cc830f18b6a799fbbc1817d281d45b4dec32a03ff"
+    },
+    {
+      "path": "tests/platform.native_input_contract.cpp",
+      "sha256": "e5f54323c7ad5fc6df91a41785be9ef1d197f6dd9afb19479a1c39ada0e47956"
+    },
+    {
+      "path": "tests/platform.policy_contract.cpp",
+      "sha256": "d53631e9d90754800f917b72626a1d4289af9cab562a4e077ad83b193f4c080d"
+    },
+    {
+      "path": "tests/platform_tests.cpp",
+      "sha256": "3a82bc925d040c450711e272b090108c0e333819c6ed653fee4a2c05cfa7bda5"
+    },
+    {
+      "path": "examples/basic_app.cpp",
+      "sha256": "54bd21ecb4aa5772ef43ddf90eb1680365c5ecb90515a67ea304474d39280ece"
+    },
+    {
+      "path": "examples/release_app.cpp",
+      "sha256": "3d61463024ed76af928155401d49cd7d066fba48962ee68428eae23061e8031e"
+    },
+    {
+      "path": "cmake/canonical_source_names.json",
+      "sha256": "17436f2962efe23086a3dd6ec49e2b02f6541373cdffa7ecae58a4dcea346caa"
+    },
+    {
+      "path": "cmake/EpochPlatformApplication.cmake",
+      "sha256": "ea3679fc3115d9481a344b2bf7a4361e2671a3441874fda545b1d182bd1e18dc"
+    },
+    {
+      "path": "cmake/EpochPlatformEngineConfig.cmake.in",
+      "sha256": "50f90e82f4910c6f75be2ba25792ae53092ca1a723cf8912c42bb1c39038d1f1"
+    },
+    {
+      "path": "msvc/EpochPlatformEngine.sln",
+      "sha256": "199686bb2c8dbf1fe68b4563893d6ec49f143ed8ad92d42a238ca0e4b1f53711"
+    },
+    {
+      "path": "msvc/EpochPlatformEngineShared.vcxproj",
+      "sha256": "8e99de9444165e6c244f163d07397d4f9e114c1730816f760c72f741374befb7"
+    },
+    {
+      "path": "msvc/EpochPlatformEngineStatic.vcxproj",
+      "sha256": "f2b20e21db4410269f144d918bb88b97a42aa3f001fe3d5a90fcd7ca6175eafa"
+    },
+    {
+      "path": "msvc/EpochPlatformEngineTests.vcxproj",
+      "sha256": "94f5a4b77dc4d27cb5b00b378078717385a27559af3d331e378c9fb41225d7b0"
+    },
+    {
+      "path": "msvc/EpochPlatformEntrypointConsoleShared.vcxproj",
+      "sha256": "df2f30e0ab4b0790d04393ba5c255cb31e0b314926b958cc6106f369fbadd6b8"
+    },
+    {
+      "path": "msvc/EpochPlatformEntrypointConsoleStatic.vcxproj",
+      "sha256": "a32aa6fffcd6c0f5b1ad9d499a4229888c227bdb31ddb3793e2238d9b7f723cd"
+    },
+    {
+      "path": "msvc/EpochPlatformEntrypointWindowedShared.vcxproj",
+      "sha256": "a0d75563ae7f32f57606318549cf8e810a0efd14a63b6c9bee64c7e2e68181f0"
+    },
+    {
+      "path": "msvc/EpochPlatformEntrypointWindowedStatic.vcxproj",
+      "sha256": "d9ed3b27e5e80afd724ad90939a8357fbcd595d2cbe5ce3c172ff0c655b02dd6"
+    },
+    {
+      "path": "msvc/EpochPlatformExampleShared.vcxproj",
+      "sha256": "32cb720b12ea16a83093ef440bf466be112081957f164e8cc5068f5bb2b53ac7"
+    },
+    {
+      "path": "msvc/EpochPlatformExampleStatic.vcxproj",
+      "sha256": "2172be26c4b016d1645dc1eec66e59eab1c3cf8cf4715e99f0d684229d784ad9"
+    },
+    {
+      "path": "msvc/EpochPlatformReleaseExampleShared.vcxproj",
+      "sha256": "8c0b685c1599f645bd5a5287f1c3a6580dbc5f41365d4c4dc2bc5e8c9d52b694"
+    },
+    {
+      "path": "msvc/EpochPlatformReleaseExampleStatic.vcxproj",
+      "sha256": "3ad8a0cf78ea92dc9fda4d188efa273dc777e97f07aad3b70f26fbb39320d17f"
+    },
+    {
+      "path": "scripts/build_msvc.bat",
+      "sha256": "0f1103f466e7ab3bfe403a7ae210b86c1dd3d0cfdf8ed7e451184c604cf9bf8d"
+    },
+    {
+      "path": "scripts/build_posix.sh",
+      "sha256": "fc642aab1dbd8120dc44815717f65db424c45bb72d72b126048edfa4b25799ff"
+    }
+  ]
+}

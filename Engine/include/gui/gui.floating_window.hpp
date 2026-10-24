@@ -1,3 +1,5 @@
+// Epoch system notes (auto-checked):
+// EpochGUI: use consistent draw/hit-test geometry and preserve child input ownership.
 #pragma once
 
 #include <cstdint>

@@ -211,7 +211,7 @@ namespace epochengine::vulkancontext
         barrier.subresourceRange.baseArrayLayer = 0;
         barrier.subresourceRange.layerCount = 1;
 
-        vk::PipelineStageFlags sourceStage{};
+        vk::PipelineStageFlags flagStage{};
         vk::PipelineStageFlags destinationStage{};
 
         if (oldLayout == vk::ImageLayout::eUndefined &&
@@ -219,7 +219,7 @@ namespace epochengine::vulkancontext
         {
             barrier.srcAccessMask = {};
             barrier.dstAccessMask = vk::AccessFlagBits::eTransferWrite;
-            sourceStage = vk::PipelineStageFlagBits::eTopOfPipe;
+            flagStage = vk::PipelineStageFlagBits::eTopOfPipe;
             destinationStage = vk::PipelineStageFlagBits::eTransfer;
         }
         else if (oldLayout == vk::ImageLayout::eTransferDstOptimal &&
@@ -227,7 +227,7 @@ namespace epochengine::vulkancontext
         {
             barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
             barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
-            sourceStage = vk::PipelineStageFlagBits::eTransfer;
+            flagStage = vk::PipelineStageFlagBits::eTransfer;
             destinationStage = vk::PipelineStageFlagBits::eFragmentShader;
         }
         else
@@ -236,7 +236,7 @@ namespace epochengine::vulkancontext
         }
 
         commandBuffer->pipelineBarrier(
-            sourceStage,
+            flagStage,
             destinationStage,
             {},
             0, nullptr,

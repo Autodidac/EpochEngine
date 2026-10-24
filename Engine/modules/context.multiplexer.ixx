@@ -28,6 +28,8 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
+// Epoch system notes (auto-checked):
+// Epoch Context: window/context state, dispatch and input ownership remain scoped.
 // context.multiplexer.ixx
 module;
 
@@ -202,11 +204,12 @@ namespace epochengine::core
             std::uintptr_t native_window,
             std::uint64_t process_id,
             std::string_view route) const noexcept;
-        void RemoveExternalProcessWindow(std::uintptr_t native_window);
+        void RemoveExternalProcessWindow(std::uintptr_t native_window, bool retiring = false);
 
         void RemoveWindow(HWND hwnd);
         void CleanupFinishedWindows();
         void ArrangeDockedWindowsGrid();
+        void ReorderDockedWindow(HWND hwnd, POINT screenPoint);
         void HandleResize(HWND hwnd, int width, int height);
         void StartRenderThreads();
         bool OpenDetachedContextWindow(const DetachedContextWindowRequest& request);
@@ -220,6 +223,8 @@ namespace epochengine::core
         [[nodiscard]] bool IsContextRetired(const Context* context) const noexcept;
 
         HWND GetParentWindow() const { return parent; }
+        HWND ResolveHoveredContext(HWND receiver);
+        bool CloseHoveredContext(HWND receiver);
         const std::vector<std::unique_ptr<WindowData>>& GetWindows() const { return windows; }
 
         using RenderCommand = std::function<void()>;
@@ -231,6 +236,7 @@ namespace epochengine::core
 
         static LRESULT CALLBACK ParentProc(HWND, UINT, WPARAM, LPARAM);
         static LRESULT CALLBACK ChildProc(HWND, UINT, WPARAM, LPARAM);
+        // Consumes HDROP ownership exactly once; callers must not DragFinish it.
         void HandleDropFiles(HWND, HDROP);
         static void AttachBackendInputAdapter(HWND hwnd) noexcept;
 
@@ -301,7 +307,7 @@ namespace epochengine::core
             RoutedPanelDockTarget) { return false; }
         [[nodiscard]] bool IsExternalProcessWindowAttached(
             std::uintptr_t, std::uint64_t, std::string_view) const noexcept { return false; }
-        void RemoveExternalProcessWindow(std::uintptr_t) {}
+        void RemoveExternalProcessWindow(std::uintptr_t, bool = false) {}
 
         void RemoveWindow(HWND hwnd);
         void CleanupFinishedWindows() {}
@@ -394,7 +400,7 @@ namespace epochengine::core
             RoutedPanelDockTarget) { return false; }
         [[nodiscard]] bool IsExternalProcessWindowAttached(
             std::uintptr_t, std::uint64_t, std::string_view) const noexcept { return false; }
-        void RemoveExternalProcessWindow(std::uintptr_t) {}
+        void RemoveExternalProcessWindow(std::uintptr_t, bool = false) {}
         void RemoveWindow(HWND) {}
         void CleanupFinishedWindows() {}
         void ArrangeDockedWindowsGrid() {}
