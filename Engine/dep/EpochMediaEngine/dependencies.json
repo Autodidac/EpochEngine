@@ -13,13 +13,13 @@
       "repository": "Autodidac/EpochGui_Demo",
       "root_argument": "EPOCHGUI_DEMO_ROOT",
       "base_revision": "eaf26a37b8bed4756294c17b141c7b35be69653b",
-      "selection": "published reviewed source 0.6.0; ten Windows build/CPU composition lanes passed",
-      "revision": "a01214e3666ef7fc657c270d9cbd208de50064bc"
+      "selection": "published 0.6.0 DPI/navigation repair; native full-composition acceptance passed, hosted checks pending",
+      "revision": "88df682f14e91f8d7e4779ffe15e86619906cb5b"
     }
   ],
   "release_ready": false,
   "source_revisions": {
     "Gui": "f83b2f15385598b8efbb028a6f391ca637e07634",
-    "Gui_Demo": "a01214e3666ef7fc657c270d9cbd208de50064bc"
+    "Gui_Demo": "88df682f14e91f8d7e4779ffe15e86619906cb5b"
   }
 }
