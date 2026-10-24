@@ -33,8 +33,8 @@
       "mode": "engine_owned_platform",
       "note": "Published standalone C++23 source; portable implementation, module, consumer and build-support scopes are SHA-256 verified against the pinned revision. Engine integration metadata is not a full-tree mirror. No complete native renderer adoption or physical playback/decoder claim.",
       "repository": "Autodidac/EpochPlatformEngine",
-      "upstream_revision": "46a50542c111eb32ff6b24d6f6c2a30f19bfae6c",
-      "upstream_tree": "6f6356e90636f038e17a75c109736ebc58c981c6",
+      "upstream_revision": "7190bf71ef3e8ecde4113efcda5804ce41fc023d",
+      "upstream_tree": "539e3787eaa93ef4ddeb3da4c3e25049804463cc",
       "portable_source_manifest": "Engine/dep/EpochPlatformEngine/portable_source_manifest.json"
     },
     {

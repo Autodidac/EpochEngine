@@ -20,6 +20,9 @@ namespace {
     using namespace epochengine::platform;
     Runtime* shutdown_runtime{};
     std::atomic_bool shutdown_observed{};
+    std::atomic_bool application_alive{}, late_shutdown{};
+    bool lifetime_probe{};
+    int application_mode{}, stop_calls{}, destroy_calls{};
     class ShutdownProbeDriver final : public IPlatformDriver {
         std::unique_ptr<IPlatformDriver> inner = create_headless_driver();
     public:
@@ -30,6 +33,7 @@ namespace {
         void shutdown() noexcept override {
             // Driver-thread teardown may still read its owning runtime registry.
             (void)shutdown_runtime->context_count();
+            if (lifetime_probe && !application_alive.load()) late_shutdown.store(true);
             inner->shutdown();
             shutdown_observed.store(true);
         }
@@ -43,6 +47,45 @@ namespace {
         Status reparent(ContextId id, NativeWindowHandle parent, WindowMode mode) noexcept override { return inner->reparent(id, parent, mode); }
         void request_close(ContextId id) noexcept override { inner->request_close(id); }
     };
+    class LifetimeApplication final : public IApplication {
+    public:
+        Status on_start(Runtime& runtime, const ApplicationLaunchInfo&) override {
+            shutdown_runtime = &runtime;
+            auto registered = runtime.register_driver(DriverKind::headless, +[]() -> std::unique_ptr<IPlatformDriver> { return std::make_unique<ShutdownProbeDriver>(); });
+            if (!registered) return registered;
+            ContextDesc desc{};
+            desc.driver = DriverKind::headless;
+            desc.thread_policy = ThreadPolicy::dedicated_driver_thread;
+            desc.window.visible = false;
+            auto context = runtime.create_context(desc);
+            if (!context) return std::unexpected(context.error());
+            if (application_mode == 1) return std::unexpected(Error{ErrorCode::initialization_failed, "intentional start failure"});
+            if (application_mode == 2) throw 42;
+            return {};
+        }
+        bool on_frame(Runtime&, std::chrono::nanoseconds) override { return false; }
+        void on_stop(Runtime&) noexcept override { ++stop_calls; }
+    };
+    void test_application_outlives_runtime() {
+        lifetime_probe = true;
+        bool any_late = false;
+        for (application_mode = 0; application_mode != 3; ++application_mode) {
+            shutdown_observed = false; late_shutdown = false;
+            stop_calls = 0; destroy_calls = 0;
+            ApplicationFactory factory{
+                .create = +[](const ApplicationLaunchInfo&) noexcept -> IApplication* { application_alive = true; return new LifetimeApplication; },
+                .destroy = +[](IApplication* app) noexcept { application_alive = false; ++destroy_calls; delete app; }
+            };
+            const int result = run_application(factory, {});
+            const int expected = application_mode == 0 ? 0 : application_mode == 1 ? 4 : 5;
+            if (result != expected || destroy_calls != 1 || stop_calls != (application_mode == 0 ? 1 : 0)) fail("application exit/on_stop semantics changed");
+            if (!shutdown_observed.load()) fail("application driver shutdown skipped");
+            if (late_shutdown.load()) { std::cerr << "late driver shutdown path=" << application_mode << '\n'; any_late = true; }
+        }
+        lifetime_probe = false;
+        shutdown_runtime = nullptr;
+        if (any_late) fail("application destroyed before runtime driver shutdown");
+    }
     void test_driver_join_releases_registry() {
         std::jthread watchdog([](std::stop_token stop) {
             const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
@@ -70,6 +113,7 @@ namespace {
 int main()
 {
     test_driver_join_releases_registry();
+    test_application_outlives_runtime();
     using namespace epochengine::platform;
 
     Runtime runtime(RuntimeDesc{
