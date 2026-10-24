@@ -46,7 +46,7 @@ namespace epochengine::platform
         class NullGraphicsContext final : public IGraphicsContext
         {
         public:
-            explicit NullGraphicsContext(ContextDesc desc) noexcept
+            explicit NullGraphicsContext(GraphicsContextDesc desc) noexcept
                 : desc_(std::move(desc))
             {
             }
@@ -77,12 +77,12 @@ namespace epochengine::platform
             }
 
         private:
-            ContextDesc desc_{};
+            GraphicsContextDesc desc_{};
             bool has_surface_ = false;
         };
     }
 
-    core::error::result<std::unique_ptr<IGraphicsContext>> create_graphics_context(const ContextDesc& desc) noexcept
+    core::error::result<std::unique_ptr<IGraphicsContext>> create_graphics_context(const GraphicsContextDesc& desc) noexcept
     {
         switch (desc.backend)
         {

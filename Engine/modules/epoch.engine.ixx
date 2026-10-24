@@ -52,7 +52,7 @@ export namespace epochengine
     struct EngineConfig
     {
         platform::window_adapter::WindowDesc window{};
-        platform::ContextDesc gfx{};
+        platform::GraphicsContextDesc gfx{};
         Budgets budgets{};
     };
 

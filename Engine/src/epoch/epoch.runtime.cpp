@@ -218,7 +218,7 @@ namespace runtime
             }
             platform_guard.window_handle = *window_result;
 
-            epochengine::platform::ContextDesc context_desc{};
+            epochengine::platform::GraphicsContextDesc context_desc{};
             auto context_result = epochengine::platform::create_graphics_context(context_desc);
             if (!context_result)
             {
