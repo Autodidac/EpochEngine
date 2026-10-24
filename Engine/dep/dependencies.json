@@ -33,8 +33,8 @@
       "mode": "engine_owned_platform",
       "note": "Published standalone C++23 source; portable implementation, module, consumer and build-support scopes are SHA-256 verified against the pinned revision. Engine integration metadata is not a full-tree mirror. No complete native renderer adoption or physical playback/decoder claim.",
       "repository": "Autodidac/EpochPlatformEngine",
-      "upstream_revision": "871d408437ae65116581aaf4e50e21d9b6b65181",
-      "upstream_tree": "4e55ff6a4c136e59559327758195b91e8224513d",
+      "upstream_revision": "46a50542c111eb32ff6b24d6f6c2a30f19bfae6c",
+      "upstream_tree": "6f6356e90636f038e17a75c109736ebc58c981c6",
       "portable_source_manifest": "Engine/dep/EpochPlatformEngine/portable_source_manifest.json"
     },
     {
@@ -53,8 +53,8 @@
       "mode": "engine_owned_media",
       "repository": "Autodidac/EpochMediaEngine",
       "note": "Published standalone C++23 source; portable implementation, module, consumer and build-support scopes are SHA-256 verified against the pinned revision. Engine integration metadata is not a full-tree mirror. No complete native renderer adoption or physical playback/decoder claim.",
-      "upstream_revision": "0159a826dd1df13f310f704ddf61abccf883a45e",
-      "upstream_tree": "74bc055d93584a656d0ff1f1bd5136c7addf3450",
+      "upstream_revision": "47ae75acf1e2ff04af9852f7c80a28d26ef145f0",
+      "upstream_tree": "76d15ec4add289f6e98c48cf454fec46f7d1db51",
       "portable_source_manifest": "Engine/dep/EpochMediaEngine/portable_source_manifest.json"
     }
   ]

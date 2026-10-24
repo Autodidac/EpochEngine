@@ -318,8 +318,17 @@ namespace epochengine::platform
                 }
             }
         }
-        std::unique_lock lock(registry_mutex);
-        contexts.clear();
-        hosts.clear();
+        // Driver threads can still finish frame/event work that reads the registry.
+        // Transfer ownership under the lock, but stop/join outside it.
+        decltype(hosts) retiring_hosts;
+        {
+            std::unique_lock lock(registry_mutex);
+            retiring_hosts.swap(hosts);
+        }
+        retiring_hosts.clear();
+        {
+            std::unique_lock lock(registry_mutex);
+            contexts.clear();
+        }
     }
 }
