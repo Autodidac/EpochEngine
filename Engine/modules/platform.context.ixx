@@ -56,7 +56,7 @@ export namespace epochengine::platform
         opengl,
     };
 
-    struct ContextDesc
+    struct GraphicsContextDesc
     {
         GraphicsBackend backend = GraphicsBackend::null_backend;
         bool enable_validation = false;
@@ -76,5 +76,5 @@ export namespace epochengine::platform
         [[nodiscard]] virtual Capabilities capabilities() const noexcept { return {}; }
     };
 
-    [[nodiscard]] core::error::result<std::unique_ptr<IGraphicsContext>> create_graphics_context(const ContextDesc& desc) noexcept;
+    [[nodiscard]] core::error::result<std::unique_ptr<IGraphicsContext>> create_graphics_context(const GraphicsContextDesc& desc) noexcept;
 } // namespace epochengine::platform
