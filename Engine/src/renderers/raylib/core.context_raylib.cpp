@@ -357,22 +357,18 @@ namespace epochengine::core::detail
             epochengine::perf::frame_pacing_capabilities_for(
                 epochengine::perf::frame_pacing_backend::raylib);
         ctx->apply_frame_pacing = [](
-            const epochengine::perf::frame_pacing_mode mode,
-            const double hz)
+            const epochengine::perf::frame_pacing_mode,
+            const double)
         {
-            const bool wantsTarget =
-                mode == epochengine::perf::frame_pacing_mode::target_hz;
-            const int target = wantsTarget
-                ? static_cast<int>((std::clamp)(hz, 1.0, 1000.0) + 0.5)
-                : 0;
-            epochengine::raylib_api::set_target_fps(target);
+            // SUPPORT_CUSTOM_FRAME_CONTROL omits Raylib's native frame wait.
+            // Clear its inert target and leave the requested deadline with
+            // the host; claiming an active native wait would disable it.
+            epochengine::raylib_api::set_target_fps(0);
             return epochengine::perf::native_frame_pacing_result{
                 true,
-                wantsTarget,
-                wantsTarget
-                    ? epochengine::perf::frame_pacing_mode::target_hz
-                    : epochengine::perf::frame_pacing_mode::uncapped,
-                wantsTarget ? static_cast<double>(target) : 0.0};
+                false,
+                epochengine::perf::frame_pacing_mode::uncapped,
+                0.0};
         };
         ctx->draw_sprite = epochengine::raylibrenderer::draw_sprite;
         ctx->add_texture = &default_add_texture;

@@ -2,6 +2,8 @@
  * Epoch Engine
  * SPDX-License-Identifier: LicenseRef-MIT-NoSell
  ************************************************/
+// Epoch system notes (auto-checked):
+// Epoch Editor: keep editor state and source changes within their owning workflows.
 module;
 
 #include <array>

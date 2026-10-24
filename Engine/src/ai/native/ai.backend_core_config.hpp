@@ -1,5 +1,8 @@
 // Epoch Engine AI runtime - SPDX-License-Identifier: LicenseRef-MIT-NoSell
+// Epoch system notes (auto-checked):
+// Epoch AI: preserve model selection, candidate isolation and host verification gates.
 #pragma once
+#include "../../../include/epoch.edition.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -31,7 +34,7 @@ struct Config {
     std::string lm_studio_url = "http://127.0.0.1:1234";
     std::string model = "auto"; // KeyMaker Foundation model / fallback provider model.
     std::string controller_model; // Optional external provider model for Architect decisions.
-    bool controller_enabled = true;
+    bool controller_enabled = false; // Deterministic low-latency routing unless explicitly opted in.
     double controller_min_confidence = 0.55;
     std::string router_model; // compatibility input for older addon-router configuration.
     std::vector<AddonConfig> addons;
@@ -63,7 +66,7 @@ struct Config {
     std::uint32_t qwen_flash_batch_size = 1024;
     std::uint32_t qwen_flash_ubatch_size = 256;
     std::string qwen_flash_runtime_policy = "recommended";
-    std::uint32_t qwen_flash_gpu_offload_percent = 50;
+    std::uint32_t qwen_flash_gpu_offload_percent = 100;
     std::uint32_t qwen_flash_gpu_layer_count_hint = 48;
     std::string qwen_flash_gpu_layers = "auto";
     bool qwen_flash_flash_attention = true;
@@ -87,12 +90,9 @@ struct Config {
     std::string desktop_session_token; // Ephemeral token used only by the embedded Desktop/Web surface.
     std::filesystem::path model_root;
     std::filesystem::path learning_root;
-    std::filesystem::path training_backend;
     std::string python_executable = "python";
     double vram_budget_gib = 13.5;
     std::uint32_t max_resident_addons = 3;
-    bool training_enabled = true;
-    bool training_preempt_for_inference = true;
     std::size_t max_active_context_chars = 240'000;
     std::size_t max_tool_output_chars = 96'000;
     std::size_t checkpoint_file_limit = 16 * 1024 * 1024;

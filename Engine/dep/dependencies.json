@@ -5,9 +5,12 @@
       "name": "EpochGui",
       "path": "Engine/dep/EpochGui",
       "repository": "Autodidac/EpochGui",
-      "revision": "c52e91293749a7a34959bfc042c582c3ac182504",
-      "tree": "4f8fd154151cace2ecaea4aa69532daf4fff73bb",
-      "mode": "exact_mirror"
+      "tree": "c7c0ddd948cf42b9b646b17473be3d0f51c00e34",
+      "mode": "engine_owned_gui_fork",
+      "upstream_revision": "a990d4202ccb21a1b745aa999012a96fdc986d5e",
+      "upstream_tree": "41a1bae07239262e3063f629ca34793f9def5038",
+      "note": "Portable implementation/header/module/test files exactly match the accepted upstream source revision and are SHA-256 checked by portable_source_manifest.json. Build integration and documentation differ, so this entry deliberately does not claim a full-tree portable mirror.",
+      "portable_source_manifest": "Engine/dep/EpochGui/portable_source_manifest.json"
     },
     {
       "name": "EpochEngineExtensions",
@@ -23,6 +26,36 @@
       "path": "Engine/dep/EpochPackageDescriptors",
       "mode": "engine_owned_descriptors",
       "note": "No standalone repository; model descriptor metadata only, never weights or automatic execution."
+    },
+    {
+      "name": "EpochPlatformEngine",
+      "path": "Engine/dep/EpochPlatformEngine",
+      "mode": "engine_owned_platform",
+      "note": "Published standalone C++23 source; portable implementation, module, consumer and build-support scopes are SHA-256 verified against the pinned revision. Engine integration metadata is not a full-tree mirror. No complete native renderer adoption or physical playback/decoder claim.",
+      "repository": "Autodidac/EpochPlatformEngine",
+      "upstream_revision": "871d408437ae65116581aaf4e50e21d9b6b65181",
+      "upstream_tree": "4e55ff6a4c136e59559327758195b91e8224513d",
+      "portable_source_manifest": "Engine/dep/EpochPlatformEngine/portable_source_manifest.json"
+    },
+    {
+      "name": "EpochAudioEngine",
+      "path": "Engine/dep/EpochAudioEngine",
+      "mode": "engine_owned_audio",
+      "repository": "Autodidac/EpochAudioEngine",
+      "note": "Published standalone C++23 source; portable implementation, module, consumer and build-support scopes are SHA-256 verified against the pinned revision. Engine integration metadata is not a full-tree mirror. No complete native renderer adoption or physical playback/decoder claim.",
+      "upstream_revision": "980ebd3304f7e5cfc97e48c1e093ea1fc2107760",
+      "upstream_tree": "eeb7fcac57edf0e7cff8c7de02fee9d98dd71555",
+      "portable_source_manifest": "Engine/dep/EpochAudioEngine/portable_source_manifest.json"
+    },
+    {
+      "name": "EpochMediaEngine",
+      "path": "Engine/dep/EpochMediaEngine",
+      "mode": "engine_owned_media",
+      "repository": "Autodidac/EpochMediaEngine",
+      "note": "Published standalone C++23 source; portable implementation, module, consumer and build-support scopes are SHA-256 verified against the pinned revision. Engine integration metadata is not a full-tree mirror. No complete native renderer adoption or physical playback/decoder claim.",
+      "upstream_revision": "da2f57d7e1d2289e36b81dd4e2facef10f1d837f",
+      "upstream_tree": "eb37814a024c223c62984029d68be3ac393e464e",
+      "portable_source_manifest": "Engine/dep/EpochMediaEngine/portable_source_manifest.json"
     }
   ]
 }

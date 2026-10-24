@@ -1,10 +1,14 @@
 // Epoch Engine AI runtime - SPDX-License-Identifier: LicenseRef-MIT-NoSell
+// Epoch system notes (auto-checked):
+// Epoch AI: preserve model selection, candidate isolation and host verification gates.
 #pragma once
+#include "../../../include/epoch.edition.hpp"
 
 #include <cstdint>
 #include <expected>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <stop_token>
 #include <string>
 #include <string_view>
@@ -15,29 +19,11 @@
 
 #include "ai.backend_core_config.hpp"
 #include "ai.backend_core_error.hpp"
-#include "ai.backend_core_event.hpp"
 #include "ai.backend_model_model_provider.hpp"
 
 namespace epoch_ai::runtime {
 
 using json = nlohmann::json;
-using EventSink = std::function<void(const core::Event&)>;
-
-enum class RunTerminal {
-    completed,
-    failed,
-    cancelled,
-    awaiting_approval,
-};
-
-struct RunOutcome {
-    std::string project_id;
-    std::string session_id;
-    std::string task_id;
-    RunTerminal terminal{RunTerminal::completed};
-    std::string final_text;
-    json terminal_data = json::object();
-};
 
 class RuntimeHost {
 public:
@@ -52,13 +38,19 @@ public:
     [[nodiscard]] json architecture() const;
     [[nodiscard]] json native_model_library() const;
     [[nodiscard]] std::expected<json, core::Error> register_native_model(const json& spec);
+    [[nodiscard]] std::expected<json, core::Error> set_native_gpu_offload(
+        std::string_view id_or_uri, std::uint32_t percent);
+    [[nodiscard]] std::expected<json, core::Error> set_native_model_tuning(
+        std::string_view id_or_uri, const json& changes);
     [[nodiscard]] std::expected<json, core::Error> provision_native_runtime();
     [[nodiscard]] std::expected<json, core::Error> install_native_model(std::string_view id_or_uri);
     [[nodiscard]] std::expected<json, core::Error> load_native_model(
         std::string_view id_or_uri,
         std::string_view local_path_override = {},
-        std::stop_token cancellation = {});
+        std::stop_token cancellation = {},
+        std::optional<std::uint32_t> gpu_offload_cap_percent = std::nullopt);
     void unload_native_model();
+    void unload_native_model(std::string_view id_or_uri);
     void cancel_native_installation();
     [[nodiscard]] std::expected<json, core::Error> remove_native_model(std::string_view id_or_uri, bool delete_cache);
     [[nodiscard]] std::expected<json, core::Error> clear_native_model_cache(std::string_view id_or_uri);
@@ -69,21 +61,9 @@ public:
         const json& body, std::stop_token stop,
         std::chrono::steady_clock::time_point deadline, const model::StreamCallback& callback);
 
-    [[nodiscard]] std::expected<RunOutcome, core::Error> run_task(
-        std::string_view project_id,
-        std::string_view session_id,
-        std::string_view message,
-        std::stop_token stop = {},
-        EventSink on_event = {});
 
     [[nodiscard]] std::string decision_mode() const;
     [[nodiscard]] json training_status() const;
-    [[nodiscard]] std::expected<json, core::Error> prepare_training(std::string_view profile, std::stop_token cancellation = {});
-    [[nodiscard]] std::expected<json, core::Error> start_training(
-        std::string_view scope, std::uint32_t steps, bool require_cuda);
-    void cancel_training();
-    void pause_training(bool paused);
-    [[nodiscard]] std::vector<json> tool_catalog() const;
     [[nodiscard]] std::expected<json, core::Error> assign_model_role(std::string_view role,std::string_view model);
 
 private:

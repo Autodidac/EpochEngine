@@ -42,16 +42,20 @@
 #endif
 
 // ------------------------------------------------------------
-// Debug / inspection toggles (unchanged)
+// Diagnostic policy (numeric 0/1; independent of renderer selection)
 // ------------------------------------------------------------
-// #define RUN_CODE_INSPECTOR
-// #define DEBUG_INPUT
-// #define DEBUG_INPUT_OS
-// #define DEBUG_MOUSE_MOVEMENT
-// #define DEBUG_MOUSE_COORDS
-// #define DEBUG_TEXTURE_RENDERING_VERBOSE
-// #define DEBUG_TEXTURE_RENDERING_VERY_VERBOSE
-// #define DEBUG_WINDOW_VERBOSE
+// Keep the former texture flag's presence semantics for old integrations.
+// An explicitly supplied canonical value always wins, including numeric zero.
+#ifndef EPOCH_ENABLE_TEXTURE_DIAGNOSTICS
+#   if defined(DEBUG_TEXTURE_RENDERING_VERBOSE)
+#       define EPOCH_ENABLE_TEXTURE_DIAGNOSTICS 1
+#   else
+#       define EPOCH_ENABLE_TEXTURE_DIAGNOSTICS 0
+#   endif
+#endif
+#if EPOCH_ENABLE_TEXTURE_DIAGNOSTICS != 0 && EPOCH_ENABLE_TEXTURE_DIAGNOSTICS != 1
+#   error EPOCH_ENABLE_TEXTURE_DIAGNOSTICS must be 0 or 1
+#endif
 
 #ifndef EPOCH_ENABLE_AUTHORING_PLATFORM
 #   define EPOCH_ENABLE_AUTHORING_PLATFORM 1
@@ -107,9 +111,6 @@
 #ifndef EPOCH_ENABLE_RAYLIB_CONFIRMATION_LOGS
 #   define EPOCH_ENABLE_RAYLIB_CONFIRMATION_LOGS EPOCH_ENABLE_BACKEND_CONFIRMATION_LOGS
 #endif
-#ifndef EPOCH_ENABLE_DIRECTX_CONFIRMATION_LOGS
-#   define EPOCH_ENABLE_DIRECTX_CONFIRMATION_LOGS EPOCH_ENABLE_BACKEND_CONFIRMATION_LOGS
-#endif
 #ifndef EPOCH_ENABLE_SOFTWARE_RENDERER_CONFIRMATION_LOGS
 #   define EPOCH_ENABLE_SOFTWARE_RENDERER_CONFIRMATION_LOGS EPOCH_ENABLE_BACKEND_CONFIRMATION_LOGS
 #endif
@@ -125,6 +126,9 @@
 #endif
 #ifndef EPOCH_SLOW_FRAME_LOG_THROTTLE_MS
 #   define EPOCH_SLOW_FRAME_LOG_THROTTLE_MS 5000
+#endif
+#if EPOCH_SLOW_FRAME_LOG_STARTUP_GRACE_MS < 0 || EPOCH_SLOW_FRAME_LOG_THROTTLE_MS < 0
+#   error Slow-frame diagnostic intervals must be nonnegative milliseconds
 #endif
 #ifndef EPOCH_VULKAN_RUNTIME_DIAGNOSTICS
 #   define EPOCH_VULKAN_RUNTIME_DIAGNOSTICS 0

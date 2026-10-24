@@ -74,6 +74,20 @@ namespace epochengine::vulkancontext
             }
             return out;
         }
+
+        [[nodiscard]] inline glm::mat4 previewgrid_to_vulkan_projection(
+            const epochengine::previewgrid::Mat4& source) noexcept
+        {
+            glm::mat4 out = previewgrid_to_glm(source);
+            // Shared preview projections use OpenGL clip coordinates. Convert
+            // the entire Y and Z rows, including orthographic translations.
+            for (int column = 0; column < 4; ++column)
+            {
+                out[column][1] = -out[column][1];
+                out[column][2] = 0.5f * (out[column][2] + out[column][3]);
+            }
+            return out;
+        }
     }
 
     void Application::createDescriptorPool()
@@ -336,8 +350,7 @@ namespace epochengine::vulkancontext
                 previewCamera.up);
 
             ubo.view = previewgrid_to_glm(previewView);
-            ubo.proj = previewgrid_to_glm(previewProj);
-            ubo.proj[1][1] *= -1.0f; // Vulkan clip space
+            ubo.proj = previewgrid_to_vulkan_projection(previewProj);
         }
         else
         {

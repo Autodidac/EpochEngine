@@ -1,6 +1,10 @@
-<?xml version="1.0" encoding="utf-8"?>
-<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<?xml version='1.0' encoding='utf-8'?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" DefaultTargets="Build">
   <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
     <ProjectConfiguration Include="BuildAll|x64">
       <Configuration>BuildAll</Configuration>
       <Platform>x64</Platform>
@@ -21,10 +25,6 @@
       <Configuration>Debug</Configuration>
       <Platform>x64</Platform>
     </ProjectConfiguration>
-    <ProjectConfiguration Include="Release|x64">
-      <Configuration>Release</Configuration>
-      <Platform>x64</Platform>
-    </ProjectConfiguration>
     <ProjectConfiguration Include="ReleaseWithDebugInfo|x64">
       <Configuration>ReleaseWithDebugInfo</Configuration>
       <Platform>x64</Platform>
@@ -41,9 +41,11 @@
   <ItemGroup Condition="'$(Configuration)'!='BuildAll'">
     <ProjectReference Include="..\EpochEngine\EpochEngine.vcxproj">
       <Project>{bba639b7-2b54-4e38-90ac-667fc3303475}</Project>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
     <ProjectReference Include="..\..\dep\EpochGui\EpochGui.vcxproj">
       <Project>{7b41a9b2-4b7e-4b5d-9b39-68d2408bca90}</Project>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
     </ProjectReference>
   </ItemGroup>
   <PropertyGroup Label="Globals">
@@ -86,6 +88,8 @@
     <VcpkgEnabled>false</VcpkgEnabled>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <Import Project="..\..\..\Tools\MSVC\EpochDiagnostics.props" />
+  <Import Project="..\..\..\Tools\MSVC\EpochOutputLayout.props" />
   <ImportGroup Label="ExtensionSettings">
   </ImportGroup>
   <ImportGroup Label="Shared" />
@@ -134,10 +138,8 @@
     <EpochExtraDefines>EPOCH_OVERRIDE_MACOS_PACKAGED_VERSION_MAJOR=$(EpochMacosPackagedVersionOverrideMajor);EPOCH_OVERRIDE_MACOS_PACKAGED_VERSION_MINOR=$(EpochMacosPackagedVersionOverrideMinor);EPOCH_OVERRIDE_MACOS_PACKAGED_VERSION_REVISION=$(EpochMacosPackagedVersionOverrideRevision);$(EpochExtraDefines)</EpochExtraDefines>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <IntDir>$(SolutionDir)\Debug\$(Platform)\$(ProjectName)\$(Configuration)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="('$(Configuration)|$(Platform)'=='Release|x64' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|x64')">
-    <IntDir>$(SolutionDir)\Release\$(Platform)\$(ProjectName)\$(Configuration)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Label="Vcpkg">
     <VcpkgEnabled Condition="'$(Configuration)'!='BuildAll'">true</VcpkgEnabled>
@@ -184,7 +186,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>$(SolutionDir)$(Platform)\$(Configuration)\;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(OutDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="('$(Configuration)|$(Platform)'=='Release|Win32' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|Win32')">
@@ -204,7 +206,7 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>$(SolutionDir)$(Platform)\$(Configuration)\;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(OutDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -227,8 +229,8 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>$(SolutionDir)$(Platform)\$(Configuration)\;$(EpochVcpkgInstallRoot)debug\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>sfml-graphics-d.lib;sfml-window-d.lib;sfml-system-d.lib;raylib.lib;sqlite3.lib;libcurl-d.lib;ws2_32.lib;crypt32.lib;wldap32.lib;libcrypto.lib;setupapi.lib;cfgmgr32.lib;version.lib;imm32.lib;winmm.lib;ole32.lib;oleaut32.lib;uuid.lib;advapi32.lib;user32.lib;gdi32.lib;shell32.lib;comdlg32.lib;EpochEngine.lib;EpochGui.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(OutDir);$(EpochVcpkgInstallRoot)debug\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>sfml-graphics-d.lib;sfml-window-d.lib;sfml-system-d.lib;raylib.lib;sqlite3.lib;libcurl-d.lib;ws2_32.lib;crypt32.lib;wldap32.lib;libcrypto.lib;setupapi.lib;cfgmgr32.lib;version.lib;imm32.lib;winmm.lib;ole32.lib;oleaut32.lib;uuid.lib;advapi32.lib;user32.lib;gdi32.lib;shell32.lib;comdlg32.lib;$(OutDir)EpochEngine.lib;$(OutDir)EpochGui.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <EntryPointSymbol>mainCRTStartup</EntryPointSymbol>
       <NoEntryPoint>false</NoEntryPoint>
     </Link>
@@ -258,13 +260,16 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>$(SolutionDir)$(Platform)\$(Configuration)\;$(EpochVcpkgInstallRoot)lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>sfml-graphics.lib;sfml-window.lib;sfml-system.lib;raylib.lib;sqlite3.lib;libcurl.lib;ws2_32.lib;crypt32.lib;wldap32.lib;libcrypto.lib;setupapi.lib;cfgmgr32.lib;version.lib;imm32.lib;winmm.lib;sapi.lib;ole32.lib;oleaut32.lib;uuid.lib;advapi32.lib;user32.lib;gdi32.lib;shell32.lib;comdlg32.lib;EpochEngine.lib;EpochGui.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(OutDir);$(EpochVcpkgInstallRoot)lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>sfml-graphics.lib;sfml-window.lib;sfml-system.lib;raylib.lib;sqlite3.lib;libcurl.lib;ws2_32.lib;crypt32.lib;wldap32.lib;libcrypto.lib;setupapi.lib;cfgmgr32.lib;version.lib;imm32.lib;winmm.lib;sapi.lib;ole32.lib;oleaut32.lib;uuid.lib;advapi32.lib;user32.lib;gdi32.lib;shell32.lib;comdlg32.lib;$(OutDir)EpochEngine.lib;$(OutDir)EpochGui.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <EntryPointSymbol>mainCRTStartup</EntryPointSymbol>
       <NoEntryPoint>false</NoEntryPoint>
     </Link>
   </ItemDefinitionGroup>
-  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ItemGroup><ProjectReference Include="..\..\dep\EpochPlatformEngine\EpochPlatformEngine.vcxproj"><Project>{DFA26C91-27C8-4F23-A7BF-1CCB74811899}</Project><ReferenceOutputAssembly>false</ReferenceOutputAssembly></ProjectReference></ItemGroup>
+<ItemGroup><ProjectReference Include="..\..\dep\EpochAudioEngine\EpochAudioEngine.vcxproj"><Project>{6E9692A5-DBF3-53A6-A986-F7D54195BA55}</Project><ReferenceOutputAssembly>false</ReferenceOutputAssembly></ProjectReference></ItemGroup>
+<ItemGroup><ProjectReference Include="..\..\dep\EpochMediaEngine\EpochMediaEngine.vcxproj"><Project>{C4FD64B9-B958-543A-86A1-FC447091E9EA}</Project><ReferenceOutputAssembly>false</ReferenceOutputAssembly></ProjectReference></ItemGroup>
+<Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <Target Name="EpochRecordHostCompilerDependencies" AfterTargets="Build" Condition="'$(Configuration)'!='BuildAll' And '$(VcpkgInstalledDir)'!=''">
     <WriteLinesToFile File="$(OutDir)epoch.host_dependencies.txt" Lines="epoch.host_dependencies.v1;source=$(SolutionDir);installed=$(VcpkgInstalledDir)" Overwrite="true" Encoding="UTF-8" />
   </Target>
@@ -280,11 +285,8 @@
     </ItemGroup>
     <Copy SourceFiles="@(EpochReleaseVcpkgRuntimeDlls)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" Condition="'@(EpochReleaseVcpkgRuntimeDlls)'!=''" />
   </Target>
-  <Target Name="EpochCopyLocalMcpBridge" AfterTargets="Build" Condition="'$(Platform)'=='x64'">
-    <MakeDir Directories="$(OutDir)assets\ai" />
-    <Copy SourceFiles="$(SolutionDir)Engine\assets\ai\epoch.local_mcp_iteration.ps1" DestinationFolder="$(OutDir)assets\ai" SkipUnchangedFiles="true" />
-  </Target>
   <Import Project="..\..\..\Tools\MSVC\EpochBuildAll.targets" Condition="'$(Configuration)'=='BuildAll'" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
+<ItemDefinitionGroup><Link><AdditionalDependencies>comctl32.lib;%(AdditionalDependencies)</AdditionalDependencies></Link></ItemDefinitionGroup>
 </Project>

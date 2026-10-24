@@ -53,3 +53,9 @@ CMakeLists.txt text eol=lf
 *.ps1 text eol=crlf
 *.bat text eol=crlf
 *.cmd text eol=crlf
+
+# PNM raster bytes may contain no NUL; never apply text EOL conversion.
+*.ppm binary
+*.pgm binary
+*.pbm binary
+*.pnm binary

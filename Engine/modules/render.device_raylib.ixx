@@ -28,10 +28,11 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
+// Epoch system notes (auto-checked):
+// Epoch Render: preserve backend boundaries and resource lifetime contracts.
 module;
 
 #include "../include/engine.config.hpp"
-#include "../include/epoch.config.hpp"
 #include "../src/epoch/epoch.common.hpp"
 #include <algorithm>
 #include <cstring>

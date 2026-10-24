@@ -1,4 +1,6 @@
 // Epoch Engine AI runtime - SPDX-License-Identifier: LicenseRef-MIT-NoSell
+// Epoch system notes (auto-checked):
+// Epoch AI: preserve model selection, candidate isolation and host verification gates.
 #include "ai.backend_model_runtime_model.hpp"
 
 #include <algorithm>
@@ -43,8 +45,7 @@ std::uint32_t effective_context_tokens(const RuntimeModelProfile& profile) noexc
 
 std::string effective_gpu_layers(const RuntimeModelProfile& profile) {
     const auto layer_hint = std::max<std::uint32_t>(1U, profile.gpu_layer_count_hint);
-    const auto ceiling = static_cast<std::uint32_t>(
-        (static_cast<std::uint64_t>(layer_hint) * gpu_offload_legacy_ceiling_percent + 50ULL) / 100ULL);
+    const auto ceiling = std::min(layer_hint, gpu_offload_maximum_layers);
     if (!profile.gpu_layers.empty() && profile.gpu_layers != "auto") {
         if (profile.gpu_layers == "all") return std::to_string(ceiling);
         std::uint32_t requested = 0;
@@ -61,8 +62,8 @@ std::string effective_gpu_layers(const RuntimeModelProfile& profile) {
     const auto layers = std::max<std::uint32_t>(
         1U,
         static_cast<std::uint32_t>(
-            (static_cast<std::uint64_t>(layer_hint) * gpu_offload_legacy_ceiling_percent *
-                std::min(profile.gpu_offload_percent, 100U) + 5000ULL) / 10000ULL));
+            (static_cast<std::uint64_t>(ceiling) *
+                std::min(profile.gpu_offload_percent, 100U) + 50ULL) / 100ULL));
     return std::to_string(std::min(layers, ceiling));
 }
 

@@ -5,6 +5,8 @@
  * SPDX-License-Identifier: LicenseRef-MIT-NoSell
  *                                             *
  ***********************************************/
+// Epoch system notes (auto-checked):
+// Epoch Render: preserve backend boundaries and resource lifetime contracts.
 
 module;
 

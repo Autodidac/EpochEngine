@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-MIT-NoSell
-#include "epoch.software_application_internal.hpp"
+// Epoch system notes (auto-checked):
+// Epoch STL: honor core.stl_types.hpp types/operators; fix callers, not core overloads.
+#include "../../dep/EpochPlatformEngine/src/epoch/epoch.software_application_internal.hpp"
 
 #include <cstdint>
 #include <memory>
@@ -7,6 +9,7 @@
 #include <vector>
 
 import core.log;
+import core.env;
 
 namespace
 {
@@ -16,6 +19,9 @@ namespace
 
     struct State
     {
+        unsigned startup_calls{};
+        software::StartupReport startup{};
+        bool throw_startup{};
         unsigned factories{};
         unsigned systems_destroyed{};
         unsigned windows_created{};
@@ -49,59 +55,59 @@ namespace
 
     State* factory_state{};
 
-    class ContractWindowSystem final : public platform::IWindowSystem
+    class ContractWindowSystem final : public platform::window_adapter::IWindowSystem
     {
     public:
         explicit ContractWindowSystem(State& state) : state_(state) {}
         ~ContractWindowSystem() noexcept override { ++state_.systems_destroyed; }
 
-        error::result<platform::WindowHandle> create_window(const platform::WindowDesc&) noexcept override
+        error::result<platform::window_adapter::WindowHandle> create_window(const platform::window_adapter::WindowDesc&) noexcept override
         {
             if (state_.create_failure)
                 return epochengine::unexpected(error::failed("contract create failure"));
-            if (state_.invalid_handle) return platform::WindowHandle{};
+            if (state_.invalid_handle) return platform::window_adapter::WindowHandle{};
             state_.window_alive = true;
             ++state_.windows_created;
-            return platform::WindowHandle{ 17 };
+            return platform::window_adapter::WindowHandle{ 17 };
         }
 
-        void destroy_window(platform::WindowHandle handle) noexcept override
+        void destroy_window(platform::window_adapter::WindowHandle handle) noexcept override
         {
             state_.ordering_ok = state_.ordering_ok && state_.window_alive && handle.value == 17;
             state_.window_alive = false;
             ++state_.windows_destroyed;
         }
 
-        void pump_events(const epochengine::function_ref<void(const platform::WindowEvent&)>& handler) noexcept override
+        void pump_events(const epochengine::function_ref<void(const platform::window_adapter::WindowEvent&)>& handler) noexcept override
         {
             ++state_.pumps;
             // An unrelated window's close must never terminate this application.
-            handler({ platform::WindowEventType::close, { 999 }, 0, 0 });
+            handler({ platform::window_adapter::WindowEventType::close, { 999 }, 0, 0 });
             if (state_.pumps == 1)
-                handler({ platform::WindowEventType::resized, { 17 }, 800, 600 });
+                handler({ platform::window_adapter::WindowEventType::resized, { 17 }, 800, 600 });
             if (state_.close_on_second_pump && state_.pumps == 2)
-                handler({ platform::WindowEventType::close, { 17 }, 0, 0 });
+                handler({ platform::window_adapter::WindowEventType::close, { 17 }, 0, 0 });
         }
 
-        void request_close(platform::WindowHandle) noexcept override {}
-        void set_title(platform::WindowHandle, epochengine::string_view) noexcept override {}
-        platform::WindowHandle primary_window() const noexcept override
+        void request_close(platform::window_adapter::WindowHandle) noexcept override {}
+        void set_title(platform::window_adapter::WindowHandle, epochengine::string_view) noexcept override {}
+        platform::window_adapter::WindowHandle primary_window() const noexcept override
         {
             return state_.lose_primary && state_.pumps != 0
-                ? platform::WindowHandle{} : platform::WindowHandle{ 17 };
+                ? platform::window_adapter::WindowHandle{} : platform::window_adapter::WindowHandle{ 17 };
         }
 
     private:
         State& state_;
     };
 
-    error::result<std::unique_ptr<platform::IWindowSystem>> factory() noexcept
+    error::result<std::unique_ptr<platform::window_adapter::IWindowSystem>> factory() noexcept
     {
         ++factory_state->factories;
         if (factory_state->factory_failure)
             return epochengine::unexpected(error::failed("contract factory failure"));
         if (factory_state->null_system)
-            return std::unique_ptr<platform::IWindowSystem>{};
+            return std::unique_ptr<platform::window_adapter::IWindowSystem>{};
         return std::make_unique<ContractWindowSystem>(*factory_state);
     }
 
@@ -109,6 +115,7 @@ namespace
     {
         auto& state = *static_cast<State*>(user);
         ++state.init_calls;
+        state.ordering_ok = state.ordering_ok && state.startup_calls == 1;
         state.ordering_ok = state.ordering_ok && (!state.window_profile
             || (state.window_alive && state.events.size() == 1
                 && state.events.front() == software::WindowEventKind::created));
@@ -169,11 +176,22 @@ namespace
             initialize, tick, should_quit, shutdown };
     }
 
+    void startup(void* user, const software::StartupReport& report)
+    {
+        auto& state = *static_cast<State*>(user);
+        ++state.startup_calls;
+        state.startup = report;
+        state.ordering_ok = state.ordering_ok && state.init_calls == 0 && state.factories == 0;
+        if (state.throw_startup) throw 6;
+    }
+
     software::LaunchOptions options(State& state, bool window = false)
     {
         software::LaunchOptions request{};
         request.profile = window ? software::Profile::platform_window : software::Profile::cli;
         request.maximum_ticks = 3;
+        request.startup_user = &state;
+        request.on_startup = startup;
         request.window.on_event = observe;
         request.window.observer_user = &state;
         state.window_profile = window;
@@ -200,6 +218,34 @@ namespace
 int main()
 {
     using software::ExitReason;
+    {
+        State state{};
+        state.throw_startup = true;
+        const auto report = run(state, true);
+        check(report.reason == ExitReason::callback_failed && report.startup_selected
+            && state.startup_calls == 1 && state.init_calls == 0 && state.shutdown_calls == 0
+            && state.factories == 0, "Startup observer failure runs no application callbacks or native factory");
+    }
+    {
+        const auto previous = epochengine::core::env::get("EPOCH_TIER");
+        epochengine::core::env::unset("EPOCH_TIER");
+        State fallback{};
+        const auto first = run(fallback);
+        check(first.succeeded() && first.startup_selected && fallback.startup_calls == 1
+            && fallback.ordering_ok && !first.startup.capabilities_observed
+            && first.startup.selection_reason == "conservative unprobed fallback"
+            && first.startup.selected_tier == fallback.startup.selected_tier
+            && !first.startup.platform_key.empty(), "Selection snapshot is published before init and retained without GPU evidence");
+        epochengine::core::env::set("EPOCH_TIER", "uncapped");
+        State uncapped{};
+        const auto second = run(uncapped);
+        check(second.succeeded() && second.startup.selected_tier == "uncapped"
+            && second.startup.suggested_target_fps == 0.0
+            && second.startup.selection_reason == "EPOCH_TIER override" && second.ticks == 3,
+            "Explicit uncapped selection is published without installing a hidden timer");
+        if (previous) epochengine::core::env::set("EPOCH_TIER", *previous);
+        else epochengine::core::env::unset("EPOCH_TIER");
+    }
     {
         State state{};
         const auto report = run(state, false, false);
@@ -295,7 +341,8 @@ int main()
         State state{};
         const auto report = run(state, true, false);
         check(report.reason == ExitReason::unsupported_platform
-            && !report.profile_preflight_passed && state.factories == 0 && state.init_calls == 0,
+            && !report.profile_preflight_passed && state.factories == 0 && state.init_calls == 0
+            && state.startup_calls == 0 && !report.startup_selected,
             "Unsupported platform refuses before any null/native factory call");
     }
     {

@@ -1,3 +1,5 @@
+// Epoch system notes (auto-checked):
+// EpochGUI: use consistent draw/hit-test geometry and preserve child input ownership.
 #pragma once
 
 #include "gui.floating_window.hpp"
@@ -7,6 +9,7 @@
 #include <limits>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace epochengine::gui_lib
 {
@@ -32,7 +35,9 @@ namespace epochengine::gui_lib
         insert_text,
         copy_selection,
         cut_selection,
-        paste_text
+        paste_text,
+        undo,
+        redo
     };
 
     struct TextSelectionRange
@@ -58,6 +63,13 @@ namespace epochengine::gui_lib
         std::size_t column{};
     };
 
+    struct TextControlSnapshot
+    {
+        std::string text{};
+        std::size_t anchor{};
+        std::size_t caret{};
+    };
+
     struct TextControlState
     {
         std::string text{};
@@ -67,6 +79,8 @@ namespace epochengine::gui_lib
         Vec2 scroll{};
         bool focused{};
         bool changed_this_frame{};
+        std::vector<TextControlSnapshot> undo_history{};
+        std::vector<TextControlSnapshot> redo_history{};
     };
 
     struct TextControlOptions

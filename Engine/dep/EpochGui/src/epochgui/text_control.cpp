@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MPL-2.0
 module;
 
 #include <algorithm>
@@ -8,6 +9,7 @@ module;
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 module epoch.gui;
 
@@ -390,6 +392,29 @@ namespace epochengine::gui_lib
         if (clipboard_requested && !before_selection.empty())
             clipboard = state.text.substr(before_selection.first, before_selection.size());
         bool text_changed = false;
+        // Capture state before mutations. Bounded count and bytes cap history
+        // even for large pasted prompts; the same undo engine serves all text widgets.
+        constexpr std::size_t max_history_entries = 96u;
+        constexpr std::size_t max_history_bytes = 2u * 1024u * 1024u;
+        const auto push_history = [&](std::vector<TextControlSnapshot>& history,
+            TextControlSnapshot entry)
+        {
+            history.push_back(std::move(entry));
+            std::size_t bytes = 0u;
+            for (const auto& item : history) bytes += item.text.size();
+            while (history.size() > max_history_entries || bytes > max_history_bytes)
+            {
+                bytes -= history.front().text.size();
+                history.erase(history.begin());
+            }
+        };
+        const bool mutating = input.command == TextControlCommand::insert_text
+            || input.command == TextControlCommand::paste_text
+            || input.command == TextControlCommand::cut_selection
+            || input.command == TextControlCommand::erase_backward
+            || input.command == TextControlCommand::erase_forward;
+        TextControlSnapshot previous{};
+        if (mutating) previous = {state.text, state.anchor, state.caret};
 
         if (input.blur_requested)
             state.focused = false;
@@ -485,6 +510,28 @@ namespace epochengine::gui_lib
         case TextControlCommand::paste_text:
             text_changed = replace_selection(state, options, input.text);
             break;
+        case TextControlCommand::undo:
+        case TextControlCommand::redo:
+            if (!options.read_only)
+            {
+                auto& source = input.command == TextControlCommand::undo
+                    ? state.undo_history : state.redo_history;
+                auto& destination = input.command == TextControlCommand::undo
+                    ? state.redo_history : state.undo_history;
+                if (!source.empty())
+                {
+                    push_history(destination, {state.text, state.anchor, state.caret});
+                    auto restored = std::move(source.back());
+                    source.pop_back();
+                    state.text = std::move(restored.text);
+                    state.anchor = restored.anchor;
+                    state.caret = restored.caret;
+                    state.preferred_column = invalid_text_index;
+                    normalize(state);
+                    text_changed = true;
+                }
+            }
+            break;
         case TextControlCommand::copy_selection:
             break;
         case TextControlCommand::cut_selection:
@@ -496,6 +543,11 @@ namespace epochengine::gui_lib
             break;
         }
 
+        if (text_changed && mutating)
+        {
+            push_history(state.undo_history, std::move(previous));
+            state.redo_history.clear();
+        }
         update_scroll(state, options, input.metrics, input.scroll_delta);
         const TextSelectionRange after_selection = selection(state);
 

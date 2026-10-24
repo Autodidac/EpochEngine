@@ -1,4 +1,6 @@
 // Epoch Engine AI runtime - SPDX-License-Identifier: LicenseRef-MIT-NoSell
+// Epoch system notes (auto-checked):
+// Epoch AI: preserve model selection, candidate isolation and host verification gates.
 #if defined(__linux__) && !defined(_GNU_SOURCE)
 #define _GNU_SOURCE
 #endif
@@ -7,6 +9,8 @@
 #ifndef _WIN32
 
 #include <spawn.h>
+#include <poll.h>
+#include <sys/ioctl.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -47,16 +51,28 @@ void append_tail(std::string& output, const char* data, std::size_t size, std::s
     output.append(data, size);
 }
 
-void read_fd(int fd, std::string& output, std::size_t limit) {
+void read_fd(int fd, std::string& output, std::size_t limit, std::stop_token stop) {
     char buffer[4096];
     for (;;) {
-        const auto count = ::read(fd, buffer, sizeof(buffer));
-        if (count == 0) return;
-        if (count < 0) {
-            if (errno == EINTR) continue;
-            return;
-        }
-        append_tail(output, buffer, static_cast<std::size_t>(count), limit);
+        const bool retiring = stop.stop_requested();
+        int available = 0;
+        if (retiring && (::ioctl(fd, FIONREAD, &available) != 0 || available <= 0)) return;
+        auto remaining = retiring ? static_cast<std::size_t>(available) : sizeof(buffer);
+        pollfd descriptor{fd, POLLIN, 0};
+        const auto ready = ::poll(&descriptor, 1, retiring ? 0 : 50);
+        if (ready < 0) { if (errno == EINTR) continue; return; }
+        if (ready == 0) { if (retiring) return; continue; }
+        do {
+            const auto count = ::read(fd, buffer, (std::min)(remaining, sizeof(buffer)));
+            if (count == 0) return;
+            if (count < 0) {
+                if (errno == EINTR) continue;
+                return;
+            }
+            append_tail(output, buffer, static_cast<std::size_t>(count), limit);
+            remaining -= static_cast<std::size_t>(count);
+        } while (retiring && remaining > 0);
+        if (retiring) return;
     }
 }
 
@@ -189,11 +205,11 @@ std::expected<Result, core::Error> run_posix(const Request& request, std::stop_t
     }
 
     Result result;
-    std::jthread stdout_reader([&] {
-        read_fd(stdout_pipe[0], result.stdout_text, request.max_output_bytes);
+    std::jthread stdout_reader([&](std::stop_token token) {
+        read_fd(stdout_pipe[0], result.stdout_text, request.max_output_bytes, token);
     });
-    std::jthread stderr_reader([&] {
-        read_fd(stderr_pipe[0], result.stderr_text, request.max_output_bytes);
+    std::jthread stderr_reader([&](std::stop_token token) {
+        read_fd(stderr_pipe[0], result.stderr_text, request.max_output_bytes, token);
     });
 
     const auto deadline = std::chrono::steady_clock::now() + request.timeout;
@@ -236,6 +252,11 @@ std::expected<Result, core::Error> run_posix(const Request& request, std::stop_t
         std::this_thread::sleep_for(std::chrono::milliseconds(25));
     }
 
+    // The request owns its process group through retirement, including a
+    // successful direct child whose descendants still hold the output pipes.
+    (void)::kill(-pid, SIGKILL);
+    stdout_reader.request_stop();
+    stderr_reader.request_stop();
     if (stdout_reader.joinable()) { stdout_reader.join(); }
     if (stderr_reader.joinable()) { stderr_reader.join(); }
     close_fd(stdout_pipe[0]);

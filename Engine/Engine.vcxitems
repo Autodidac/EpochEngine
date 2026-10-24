@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version='1.0' encoding='utf-8'?>
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup Label="Globals">
     <MSBuildAllProjects Condition="'$(MSBuildVersion)' == '' Or '$(MSBuildVersion)' &lt; '16.0'">$(MSBuildAllProjects);$(MSBuildThisFileFullPath)</MSBuildAllProjects>
@@ -12,7 +12,7 @@
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
-      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories);$(MSBuildThisFileDirectory);$(MSBuildThisFileDirectory)src\ai\native</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories);$(MSBuildThisFileDirectory);$(MSBuildThisFileDirectory)src\ai\native;$(MSBuildThisFileDirectory)dep\EpochPlatformEngine\include</AdditionalIncludeDirectories>
       <ForcedIncludeFiles>compare;%(ForcedIncludeFiles)</ForcedIncludeFiles>
     </ClCompile>
     <Link>
@@ -23,14 +23,95 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.application_asset_audio.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.application_asset_browsing.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.application_assistant_authoring.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.application_code_workspaces.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.application_context_lifecycle.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.application_context_session.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.application_context_snapshot.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.application_contracts.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.application_detached_panels.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.application_document_editing.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.application_gui_authoring.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.application_layout_persistence.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.application_models_attachments.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.application_packages_creation.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.application_pane_routing.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.application_project_documents.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.application_project_runtime.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.application_runtime_diagnostics.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.application_runtime_source.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.application_scene_preview.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.application_scene_selection.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.application_scene_transactions.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.application_scripting_renderers.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.application_state.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.application_texture_authoring.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.application_work_admission.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.frame_assistant_chat.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.frame_assistant_conversation.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.frame_assistant_entry.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.frame_assistant_planning.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.frame_bootstrap.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.frame_bottom_docks.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.frame_command_menus.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.frame_consent_settings.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.frame_finish.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.frame_inspector.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.frame_model_manager.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.frame_outliner.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.frame_packages_about.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.frame_project_runtime.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.frame_source_dispatch.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.frame_toolbar_dock_targets.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.frame_viewport.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.frame_workspace_docking.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\epochgui\controls\gui.assistant_console.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\epochgui\controls\gui.buttons_images.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\epochgui\controls\gui.context_roles.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\epochgui\controls\gui.frame_lifecycle.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\epochgui\controls\gui.navigation_chrome.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\epochgui\controls\gui.node_surface_controls.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\epochgui\controls\gui.scroll_controls.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\epochgui\controls\gui.text_controls.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\epochgui\controls\gui.window_controls.inl" />
     <ProjectCapability Include="SourceItemsFromImports" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\authoring\texture\implementation\authoring.texture_binary_codec.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\authoring\texture\implementation\authoring.texture_residency.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\implementation\editor.scene_commands.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\implementation\editor.project_registry.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\implementation\editor.project_shell_generation.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\epoch\implementation\epoch.contracts_renderer.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\epoch\implementation\epoch.contracts_engine.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\epoch\implementation\epoch.contracts_project.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\epoch\implementation\epoch.session_editor_launcher.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\epoch\implementation\epoch.project_play_scene.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\epoch\implementation\epoch.session_runtime.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\implementation\ai.connection_preferences.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\implementation\ai.model_http_transport.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\implementation\ai.model_protocol.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\implementation\ai.runtime_process.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\implementation\ai.model_management.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\implementation\ai.transport_contracts.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\updater\implementation\updater.release_integrity.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\updater\implementation\updater.toolchain_bootstrap.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\updater\implementation\updater.source_worker.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\host\implementation\host.window_interaction.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\host\implementation\host.render_loop.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\host\implementation\host.native_dispatch.inl" />
     <ClInclude Include="$(MSBuildThisFileDirectory)include\engine.config.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)include\updater.distribution.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)include\updater.runtime_identity.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)include\epoch.build_layout.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)include\epoch.edition.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)include\core.utf8.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\ai\editor.ai_file_scope.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\host\host.frame_rate_sample.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)include\epoch.engine.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)include\epoch.app_api.h" />
-    <ClInclude Include="$(MSBuildThisFileDirectory)include\epoch.config.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)include\epoch.runtime_legacy.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)include\scripting.epoch_api.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)include\gui\gui.dockable_window.hpp" />
@@ -42,20 +123,19 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)include\gui\gui.version.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)include\core.stl_types.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)include\core.format_text.hpp" />
-    <ClInclude Include="$(MSBuildThisFileDirectory)include\ai\ai.self_iteration_analytics.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)modules\sfml.compat.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)resource\pch.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)resource\resource.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai.model.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai.native_runtime.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_model_profile_import.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai.thinking_policy.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai.voice_runtime.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai.service.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai.response.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\vulkan\vulkan.context_shared.hpp" />
-    <ClInclude Include="$(MSBuildThisFileDirectory)src\build\build.cpp_feature_probe.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\updater\updater.device_identity.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\editor.update_modal_layout.hpp" />
-    <ClInclude Include="$(MSBuildThisFileDirectory)src\epoch\epoch.api_types.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\epoch\epoch.common.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\platform\platform.framework.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\platform\platform.child_isolation.hpp" />
@@ -63,6 +143,7 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)src\render\context.passive_scoring.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\core\core.context_backends.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\directx\directx.context_detail.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\opengl\opengl.frame_admission.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\opengl\opengl.frame_capture.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\opengl\opengl.context_detail.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\opengl\opengl.scene_preview.hpp" />
@@ -70,12 +151,6 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\opengl\opengl.context_process_impl.hpp" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="$(MSBuildThisFileDirectory)..\Changes\roadmap.md">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="('$(Configuration)|$(Platform)'=='Release|Win32' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|Win32')">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="('$(Configuration)|$(Platform)'=='Release|x64' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|x64')">true</ExcludedFromBuild>
-    </None>
     <None Include="$(MSBuildThisFileDirectory)assets\vulkan\shaders\frag.spv">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="('$(Configuration)|$(Platform)'=='Release|Win32' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|Win32')">true</ExcludedFromBuild>
@@ -88,7 +163,6 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="('$(Configuration)|$(Platform)'=='Release|x64' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|x64')">true</ExcludedFromBuild>
     </None>
-    <None Include="$(MSBuildThisFileDirectory)resource\WinResource.aps" />
     <None Include="$(MSBuildThisFileDirectory)src\editor\editor.update_modal_view.inl" />
     <None Include="$(MSBuildThisFileDirectory)src\editor\editor.update_runtime.inl" />
     <None Include="$(MSBuildThisFileDirectory)src\scripts\script.rotate_all_entities.cpp">
@@ -168,7 +242,6 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\gui.menu.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\saveload.system.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\timeline.system.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\media.timeline_preview.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\telemetry.engine.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\scripting.system.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\utility.allocator.ixx" />
@@ -192,12 +265,9 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ecs.legacy_components.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\input.engine.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\input.controller.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.engine.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\context.commandqueue.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\context.control.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\context.multiplexer.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\context.type.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\context.admission.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\context.window.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\directx.context.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\raylib.context.ixx">
@@ -310,15 +380,11 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.context_texture.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\vulkan.triangle.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.assert.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.env.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.error.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.format.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.id.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.log.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.math.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.path.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.string.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.time.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.runtime.ixx" />
 
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.session.ixx" />
@@ -332,16 +398,11 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ecs.world.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.engine.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\events.bus.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\perf.select.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\perf.tier.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.budgets.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.filesystem.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.child_process.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.work_admission.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.capabilities.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.context.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.runtime.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.window.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\package.registry.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\package.catalog.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\extension.catalog.ixx" />
@@ -358,8 +419,6 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.tilemap_pipeline.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.tilemap_runtime.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.input_profile.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.ai_self_iteration.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.ai_self_iteration_session.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.input_controller.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.actor2d_runtime.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.gameplay2d_runtime.ixx" />
@@ -370,12 +429,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.tilemap_source.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\forest.factory.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\forest.preview_mesh.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\audio.types.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\audio.manager.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\audio.mixer.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\audio.device.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\audio.device_sdl.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\audio.playback_runtime.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\asset.audio_import.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.audio_profile.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\physics.manager.ixx" />
@@ -437,7 +491,8 @@
       <ExcludedFromBuild Condition="('$(Configuration)|$(Platform)'=='Release|x64' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|x64')">false</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.application.cpp">
-      <AdditionalOptions>/bigobj /Zm2000 /Od /Ob0 /GL- %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/bigobj /Zm2000 /Ob0 /GL- %(AdditionalOptions)</AdditionalOptions>
+      <Optimization>Disabled</Optimization>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ExcludedFromBuild>
       <ExcludedFromBuild Condition="('$(Configuration)|$(Platform)'=='Release|Win32' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|Win32')">false</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
@@ -557,13 +612,16 @@
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\updater\updater.device_identity.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\updater\updater.source_access.cpp">
-      <AdditionalOptions>/bigobj /Zm2000 /Od /Ob0 /GL- %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/bigobj /Zm2000 /Ob0 /GL- %(AdditionalOptions)</AdditionalOptions>
+      <Optimization>Disabled</Optimization>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\updater\updater.system.cpp">
-      <AdditionalOptions>/bigobj /Zm2000 /Od /Ob0 /GL- %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/bigobj /Zm2000 /Ob0 /GL- %(AdditionalOptions)</AdditionalOptions>
+      <Optimization>Disabled</Optimization>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\updater\updater.source_worker_win.cpp">
-      <AdditionalOptions>/bigobj /Zm2000 /Od /Ob0 /GL- %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/bigobj /Zm2000 /Ob0 /GL- %(AdditionalOptions)</AdditionalOptions>
+      <Optimization>Disabled</Optimization>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\src\epochgui\image.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\src\epochgui\hierarchy_tree.cpp" />
@@ -575,20 +633,16 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\platform\utility.filewatch.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\epochgui\font.renderer.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\core\core.assert.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\core\core.env.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\core\core.error.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\core\core.id.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\core\core.log.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\core\core.math.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\platform\core.path.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\core\core.string.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\core\core.time.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.engine.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.native_runtime.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.voice_runtime_win.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_core_config.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_core_error.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_core_event_bus.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_core_ids.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_core_file_replace_windows.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_core_file_replace_posix.cpp" />
@@ -596,29 +650,16 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_model_runtime_model.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_model_qwen_flash_runtime.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_model_native_model_manager.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_model_internal_model_host.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_model_multiplex_provider.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_models_model_registry.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_residency_model_residency_manager.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_addons_addon_registry.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_controller_architect_controller.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_controller_task_intent.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_learning_learning_service.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_memory_episode_store.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_training_training_service.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_decision_decision_engine.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_workspace_workspace.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_workspace_checkpoint_store.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_process_process.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_process_process_windows.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_process_process_posix.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_tools_tool_registry.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_tools_builtin_tools.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_persistence_session_store.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_agent_context_manager.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_agent_handoff_contract.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_agent_agent_runtime.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_agent_task_scheduler.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_runtime_runtime_host.cpp" />
 
     <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch\epoch.engine.cpp" />
@@ -629,16 +670,8 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\extensions\extension.catalog_contract.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\packages\package.catalog.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\render\render.portal_contract.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\platform\platform.window.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\render\render.graph_epoch.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\audio\audio.manager.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\audio\audio.mixer.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\audio\audio.mixer_contract.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\audio\audio.device.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\audio\audio.device_contract.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\audio\audio.device_sdl.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\audio\audio.playback_runtime.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\audio\audio.playback_runtime_contract.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\input\input.controller.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\input\input.controller_sdl.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\input\input.controller_contract.cpp" />
@@ -668,8 +701,6 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.tilemap_runtime_contract.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.input_profile.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.input_profile_contract.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.ai_self_iteration.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.ai_self_iteration_session.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.input_controller.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.input_controller_contract.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.actor2d_runtime.cpp" />
@@ -725,78 +756,13 @@
 
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.sha256.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.build_validation.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.development_guard.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.development_executor.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.iteration_loop.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.iteration_session.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.source_index.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.source_workspace.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.source_discovery_contract.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.project_profile.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.curated_context_bundle.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.iteration_campaign.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.iteration_campaign_queue.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.iteration_campaign_scheduler.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.iteration_supervisor_control.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.mcp_supervisor_protocol.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.mcp_supervisor_adapter.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.mcp_campaign.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.mcp_child_host.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.self_iteration_orchestrator.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.mcp_orchestrator_bridge.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.source_patch_bundle.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.source_patch_proposal.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.source_patch_stager.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.iteration_patch_adapter.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.iteration_validation_adapter.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.development_proposal_codec.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch\epoch.build_validation.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch\epoch.build_validation_contract.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.development_executor.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_loop.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_loop_contract.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_session.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.source_index.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.source_workspace.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.source_discovery_contract.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_session_contract.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.project_profile.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.project_profile_contract.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.model_install.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.model_install_contract.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.curated_context_bundle.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.curated_context_bundle_contract.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_campaign.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_campaign_contract.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_campaign_queue.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_campaign_queue_contract.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_campaign_scheduler.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_campaign_scheduler_contract.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_supervisor_control.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_supervisor_control_contract.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.mcp_supervisor_adapter.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.mcp_supervisor_adapter_checkpoint.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.mcp_supervisor_adapter_contract.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.mcp_campaign.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.mcp_campaign_contract.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.mcp_child_host.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.mcp_child_host_contract.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.self_iteration_orchestrator.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.self_iteration_orchestrator_contract.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.mcp_orchestrator_bridge.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.mcp_orchestrator_bridge_contract.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.source_patch_bundle.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.source_patch_bundle_contract.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.source_patch_proposal.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.source_patch_proposal_contract.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.source_patch_stager.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.source_patch_stager_contract.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_patch_adapter.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_patch_adapter_contract.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_validation_adapter.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.iteration_validation_adapter_contract.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.development_proposal_codec.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.development_proposal_codec_contract.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.mcp_stdio.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.mcp_stdio_contract.cpp" />
 
@@ -809,9 +775,6 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\authoring\gui\authoring.gui_compiler.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\authoring\gui\authoring.gui_compiler_contract.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\authoring\task_graph\authoring.task_graph_contract.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.ai_development_controller.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.ai_development_panel.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.candidate_artifact.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.systems_workspace.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.task_scheduler.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.systems_panel.ixx" />
@@ -825,18 +788,11 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.code_workspace_contract.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.project_input_settings.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.project_input_settings_contract.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\ai\editor.ai_development_controller.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\ai\editor.ai_development_panel.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\ai\editor.ai_development_controller_contract.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\systems\editor.systems_workspace.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\systems\editor.systems_panel.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\systems\editor.systems_workspace_contract.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <Image Include="$(MSBuildThisFileDirectory)resource\icon.ico" />
-  </ItemGroup>
-  <ItemGroup>
-   <None Include="$(MSBuildThisFileDirectory)src\media\media.timeline_preview_contract.cpp" />
     <None Include="$(MSBuildThisFileDirectory)src\forest\forest.preview_mesh_contract.cpp" />
     <None Include="$(MSBuildThisFileDirectory)src\editor\editor.workspace_layout_contract.cpp" />
     <None Include="$(MSBuildThisFileDirectory)src\editor\editor.workspace_commands_contract.cpp" />
@@ -847,6 +803,8 @@
     <None Include="$(MSBuildThisFileDirectory)src\simulation\simulation.neuromorphic_contract.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ResourceCompile Include="$(MSBuildThisFileDirectory)resource\WinResource.rc" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\platform\platform.image_codec_win.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\platform\platform.file_drop_win.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_model_tool_arguments.hpp" />
   </ItemGroup>
 </Project>

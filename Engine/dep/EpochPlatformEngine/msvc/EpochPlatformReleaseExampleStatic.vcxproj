@@ -1,0 +1,67 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" DefaultTargets="Build">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64"><Configuration>Debug</Configuration><Platform>x64</Platform></ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64"><Configuration>Release</Configuration><Platform>x64</Platform></ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{A2CEB71B-90F4-4A18-BA09-6E5822CE1D61}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <RootNamespace>EpochPlatformReleaseExampleStatic</RootNamespace>
+    <ProjectName>EpochPlatformReleaseExampleStatic</ProjectName>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings" />
+  <ImportGroup Label="Shared" />
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <OutDir>$(ProjectDir)..\out\msvc\$(Configuration)\</OutDir>
+    <IntDir>$(ProjectDir)..\out\msvc\obj\$(ProjectName)\$(Configuration)\</IntDir>
+    <TargetName>EpochPlatformReleaseExampleStatic</TargetName>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile><PreprocessorDefinitions>EPOCH_PLATFORM_ENGINE_STATIC=1;%(PreprocessorDefinitions)</PreprocessorDefinitions></ClCompile>
+    <Link><AdditionalDependencies>user32.lib;shell32.lib;%(AdditionalDependencies)</AdditionalDependencies><SubSystem>Windows</SubSystem></Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClInclude Include="..\include\epochplatformengine\application.hpp" />
+    <ClInclude Include="..\include\epochplatformengine\driver.hpp" />
+    <ClInclude Include="..\include\epochplatformengine\epoch_platform_engine.hpp" />
+    <ClInclude Include="..\include\epochplatformengine\export.hpp" />
+    <ClInclude Include="..\include\epochplatformengine\runtime.hpp" />
+    <ClInclude Include="..\include\epochplatformengine\types.hpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\examples\release_app.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="EpochPlatformEntrypointWindowedStatic.vcxproj">
+      <Project>{BC80EAE1-4A6B-46F0-A434-8812E74DDAF2}</Project>
+      <LinkLibraryDependencies>true</LinkLibraryDependencies>
+    </ProjectReference>
+    <ProjectReference Include="EpochPlatformEngineStatic.vcxproj">
+      <Project>{C4599864-383D-41AD-B418-88493559285F}</Project>
+      <LinkLibraryDependencies>true</LinkLibraryDependencies>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets" />
+</Project>

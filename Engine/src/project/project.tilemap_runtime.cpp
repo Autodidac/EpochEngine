@@ -17,6 +17,8 @@ module;
 module project.tilemap_runtime;
 
 import asset.texture_artifact;
+import project.asset_registry;
+import project.tilemap_library;
 
 #if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
 import authoring.tilemap;
@@ -127,7 +129,15 @@ namespace epochengine::project_tilemap_runtime
                     {
                         return reject(
                             RuntimeCode::map_publication_failure,
-                            "compiled tile map was not published");
+                            "compiled tile map was not published: pipeline="
+                                + std::string{project_tilemaps::pipeline_code_name(
+                                    publication.code)}
+                                + " library="
+                                + std::string{project_tilemaps::library_code_name(
+                                    publication.library_code)}
+                                + " registry="
+                                + std::string{project_assets::registry_code_name(
+                                    publication.registry_code)});
                     }
                     libraryChanged = publication.library_code
                         == decltype(publication.library_code)::ready;

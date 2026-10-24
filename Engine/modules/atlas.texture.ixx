@@ -34,12 +34,15 @@
 
 module;
 
+#include "../include/engine.config.hpp"
+
 #include <string>
 #include <vector>
 #include <cstdint>
 #include <optional>
 #include <iostream>
 #include <algorithm>
+#include <bit>
 #include <mutex>
 #include <shared_mutex>
 #include <unordered_map>
@@ -185,7 +188,7 @@ export namespace epochengine
             );
 
             occupancy.clear();
-            occupancy.assign(height, std::vector<bool>(width, false));
+            occupancy.assign(height, std::vector<u64>((static_cast<size_t>(width) + 63u) / 64u, 0u));
 
             {
                 std::unique_lock lock(entriesMutex);
@@ -235,7 +238,7 @@ export namespace epochengine
             atlas->pixel_data.resize(
                 static_cast<size_t>(atlas->width) * atlas->height * 4, 0);
             atlas->occupancy.assign(
-                atlas->height, std::vector<bool>(atlas->width, false));
+                atlas->height, std::vector<u64>((static_cast<size_t>(atlas->width) + 63u) / 64u, 0u));
 
             return atlas;
         }
@@ -245,6 +248,7 @@ export namespace epochengine
         [[nodiscard]] AtlasPixelSnapshot snapshot_pixels() const;
 
         std::optional<AtlasEntry> add_entry(const std::string& id, const Texture& tex);
+        [[nodiscard]] bool can_fit(u32 w, u32 h) const;
         std::optional<AtlasEntry> replace_entry_pixels(const std::string& id, const Texture& tex);
         std::optional<AtlasEntry> add_slice_entry(const std::string& id, int x, int y, int w, int h);
         std::optional<AtlasRegion> get_region(const std::string& id) const;
@@ -262,16 +266,23 @@ export namespace epochengine
         // shared-read perf back later, switch to a snapshot/RCU-style structure.
         mutable std::recursive_mutex entriesMutex;
         std::unordered_map<std::string, AtlasRegion> lookup;
-        std::vector<std::vector<bool>> occupancy;
+        std::vector<std::vector<u64>> occupancy;
 
         std::optional<std::pair<u32, u32>> try_pack(u32 w, u32 h);
-        bool can_place(u32 x, u32 y, u32 w, u32 h) const;
+        std::optional<std::pair<u32, u32>> find_position(u32 w, u32 h) const;
+        std::optional<u32> first_collision(u32 x, u32 y, u32 w, u32 h) const;
         void mark_used(u32 x, u32 y, u32 w, u32 h);
     };
 }
 
 namespace epochengine
 {
+    inline bool TextureAtlas::can_fit(u32 w, u32 h) const
+    {
+        std::unique_lock<std::recursive_mutex> lock(entriesMutex);
+        return find_position(w, h).has_value();
+    }
+
     inline std::optional<AtlasEntry> TextureAtlas::add_entry(const std::string& id, const Texture& tex)
     {
         if (tex.width == 0 || tex.height == 0 || tex.pixels.empty()) {
@@ -317,7 +328,7 @@ namespace epochengine
         entries.push_back(entry);
         lookup.emplace(id, region);
         ++version;
-#if defined(DEBUG_TEXTURE_RENDERING_VERBOSE)
+#if EPOCH_ENABLE_TEXTURE_DIAGNOSTICS
         logger::infof_loc("Epoch.Atlas", std::source_location::current(), "Added '{}' at ({}, {}) EntryIndex={}", id, x, y, entryIndex);
 #endif
         return entry;
@@ -436,7 +447,7 @@ namespace epochengine
         lookup.emplace(id, region);
         ++version;
 
-#if defined(DEBUG_TEXTURE_RENDERING_VERBOSE)
+#if EPOCH_ENABLE_TEXTURE_DIAGNOSTICS
         logger::infof_loc(
             "Epoch.Atlas",
             std::source_location::current(),
@@ -499,38 +510,56 @@ namespace epochengine
         ++version;
     }
 
-    inline std::optional<std::pair<u32, u32>> TextureAtlas::try_pack(u32 w, u32 h)
+    inline std::optional<std::pair<u32, u32>> TextureAtlas::find_position(u32 w, u32 h) const
     {
-        for (u32 y = 0; y + h <= height; ++y) {
-            for (u32 x = 0; x + w <= width; ++x) {
-                if (can_place(x, y, w, h)) {
-                    mark_used(x, y, w, h);
-                    return { std::pair{ x, y } };
-                }
+        if (w == 0u || h == 0u || w > width || h > height)
+            return std::nullopt;
+        for (u32 y = 0u; y <= height - h; ++y) {
+            for (u32 x = 0u; x <= width - w;) {
+                const auto collision = first_collision(x, y, w, h);
+                if (!collision) return std::pair{ x, y };
+                // Every origin through this occupied column still overlaps it.
+                // Skipping only these impossible origins preserves row-major first fit.
+                x = *collision + 1u;
             }
         }
-
         return std::nullopt;
     }
 
-    inline bool TextureAtlas::can_place(u32 x, u32 y, u32 w, u32 h) const
+    inline std::optional<std::pair<u32, u32>> TextureAtlas::try_pack(u32 w, u32 h)
     {
-        for (u32 dy = 0; dy < h; ++dy) {
-            for (u32 dx = 0; dx < w; ++dx) {
-                if (occupancy[y + dy][x + dx]) {
-                    return false;
-                }
+        const auto position = find_position(w, h);
+        if (position) mark_used(position->first, position->second, w, h);
+        return position;
+    }
+
+    inline std::optional<u32> TextureAtlas::first_collision(u32 x, u32 y, u32 w, u32 h) const
+    {
+        const u32 firstWord = x / 64u;
+        const u32 lastWord = (x + w - 1u) / 64u;
+        for (u32 row = y; row < y + h; ++row) {
+            for (u32 word = firstWord; word <= lastWord; ++word) {
+                const u64 left = word == firstWord ? (~u64{0} << (x % 64u)) : ~u64{0};
+                const u32 endBit = (x + w - 1u) % 64u;
+                const u64 right = word == lastWord ? (~u64{0} >> (63u - endBit)) : ~u64{0};
+                const u64 occupied = occupancy[row][word] & left & right;
+                if (occupied != 0u)
+                    return word * 64u + 63u - static_cast<u32>(std::countl_zero(occupied));
             }
         }
-
-        return true;
+        return std::nullopt;
     }
 
     inline void TextureAtlas::mark_used(u32 x, u32 y, u32 w, u32 h)
     {
-        for (u32 dy = 0; dy < h; ++dy) {
-            for (u32 dx = 0; dx < w; ++dx) {
-                occupancy[y + dy][x + dx] = true;
+        const u32 firstWord = x / 64u;
+        const u32 lastWord = (x + w - 1u) / 64u;
+        for (u32 row = y; row < y + h; ++row) {
+            for (u32 word = firstWord; word <= lastWord; ++word) {
+                const u64 left = word == firstWord ? (~u64{0} << (x % 64u)) : ~u64{0};
+                const u32 endBit = (x + w - 1u) % 64u;
+                const u64 right = word == lastWord ? (~u64{0} >> (63u - endBit)) : ~u64{0};
+                occupancy[row][word] |= left & right;
             }
         }
     }

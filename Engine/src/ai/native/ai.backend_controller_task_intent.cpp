@@ -1,4 +1,6 @@
 // Epoch Engine AI runtime - SPDX-License-Identifier: LicenseRef-MIT-NoSell
+// Epoch system notes (auto-checked):
+// Epoch AI: preserve model selection, candidate isolation and host verification gates.
 #include "ai.backend_controller_task_intent.hpp"
 
 #include <algorithm>
@@ -90,14 +92,20 @@ bool requires_foundation_reasoning(std::string_view text) {
         "medical", "diagnos", "legal", "finance", "financial", "tax", "mortgage",
         "investment", "insurance", "interest rate", "privacy", "malware",
         "cybersecurity", "security audit", "sandbox escape"})) return true;
+    // C++23 is a language name, not the arithmetic expression C + +23.
+    // Normalize this token before examining numeric operators; expressions
+    // elsewhere in the request must still take the quantitative route.
+    std::string arithmetic_text = lower;
+    for (std::size_t pos = 0; (pos = arithmetic_text.find("c++", pos)) != std::string::npos;)
+        arithmetic_text.replace(pos, 3, "cpp");
     // Treat TeX arithmetic and mathematical operators paired with numerals as
     // quantitative even when a user supplies only symbolic notation.
-    const bool has_digit = std::ranges::any_of(lower, [](unsigned char c) {
+    const bool has_digit = std::ranges::any_of(arithmetic_text, [](unsigned char c) {
         return std::isdigit(c) != 0;
     });
     if (!has_digit) return false;
     if (contains_any(lower, {"\\(", "\\[", "\\frac", "\\equiv", "\\pmod", "\\leftarrow"})) return true;
-    return std::ranges::any_of(lower, [](unsigned char c) {
+    return std::ranges::any_of(arithmetic_text, [](unsigned char c) {
         return c == '=' || c == '+' || c == '*' || c == '/' || c == '^' || c == '%';
     });
 }
@@ -121,6 +129,56 @@ bool warrants_specialist_handoff(std::string_view text) {
         "build and test", "implement and test", "plan and implement"})) return true;
     return lower.size() > 420 &&
         contains_any(lower, {"implement", "debug", "design", "review", "fix", "plan"});
+}
+
+std::string_view to_string(ResponseTier tier) noexcept {
+    switch (tier) {
+    case ResponseTier::small: return "small";
+    case ResponseTier::middle: return "middle";
+    case ResponseTier::foundation: return "foundation";
+    }
+    return "foundation";
+}
+
+ResponseTier route_response(std::string_view text, bool small_ready,
+    bool middle_ready, bool auto_route) {
+    if (!auto_route || requires_foundation_reasoning(text)) return ResponseTier::foundation;
+    const auto intent = classify_task(text);
+    if (intent == TaskIntent::coding) return ResponseTier::foundation;
+    // Only the deterministic, explicitly simple policy can send a final
+    // response to the smallest model, and it must already be resident.
+    if (intent == TaskIntent::simple)
+        return small_ready ? ResponseTier::small : ResponseTier::foundation;
+    if (!middle_ready || text.size() > 1200 || warrants_specialist_handoff(text))
+        return ResponseTier::foundation;
+    const auto lower = lowercase(text);
+    // Moderate requests must be bounded, informational and tool-free. Words
+    // indicating external lookup, files, agency or consequential work escalate.
+    if (contains_any(lower, {"search", "look up", "lookup", "browse", "latest", "today",
+        "current ", "real-time", "check online", "check the", "read ", "open ",
+        "file", "folder", "repository", "repo", "source", "build", "execute",
+        "run ", "install", "download", "create", "generate a file", "edit ",
+        "change ", "modify ", "delete", "fix ", "implement", "patch", "test ",
+        "diagnos", "medical", "health", "medicine", "legal", "security",
+        "privacy", "finance", "financial", "investment", "trading", "tax ",
+        "politic", "election", "calculate", "compute", "math", "logic",
+        "analyze", "analyse", "compare", "research", "investigate", "verify",
+        "exact ", "prove", "proof", "data", "statistics", "code", "script", "design "}))
+        return ResponseTier::foundation;
+    // Plain-language explanations, outlines, brainstorming and reformulations
+    // can go to an already resident middle model, without tool permissions.
+    constexpr std::string_view starters[]{
+        "explain ", "describe ", "outline ", "summarize ", "give me an overview",
+        "give an overview", "give me a summary", "what are ", "how does ",
+        "how do ", "why does ", "why do ", "rewrite ", "rephrase ",
+        "brainstorm ", "suggest ", "list ", "tell me about ", "give me ideas",
+        "can you explain ", "could you explain "};
+    const auto first = lower.find_first_not_of(" \t\n\r");
+    if (first == std::string::npos) return ResponseTier::foundation;
+    const auto trimmed = std::string_view{lower}.substr(first);
+    return std::ranges::any_of(starters, [&](std::string_view prefix) {
+        return trimmed.starts_with(prefix);
+    }) ? ResponseTier::middle : ResponseTier::foundation;
 }
 
 PredictiveRouteShadow::Features PredictiveRouteShadow::features(std::string_view text) {

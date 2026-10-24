@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-MIT-NoSell
+// Epoch system notes (auto-checked):
+// Epoch Platform: keep native code isolated behind platform-specific interfaces.
 module;
 
 #include <array>

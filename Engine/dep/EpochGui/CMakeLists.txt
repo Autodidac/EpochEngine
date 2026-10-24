@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 4.4)
 
 set(CMAKE_CXX_SCAN_FOR_MODULES ON)
 
-project(EpochGui VERSION 0.89.32 LANGUAGES CXX)
+project(EpochGui VERSION 0.90.0 LANGUAGES CXX)
 
 option(EPOCHGUI_ENABLE_ROUNDED_RECT "Build the optional EpochGui rounded-rectangle geometry module." OFF)
 
@@ -60,6 +60,7 @@ set(EPOCHGUI_PUBLIC_HEADERS
     "${EPOCHGUI_SOURCE_ROOT}/include/gui/text_control.hpp"
     "${EPOCHGUI_SOURCE_ROOT}/include/gui/text_editor.hpp"
     "${EPOCHGUI_SOURCE_ROOT}/include/gui/version.hpp"
+    "${EPOCHGUI_SOURCE_ROOT}/include/gui/rounded_corner_raster.hpp"
 )
 
 set(EPOCHGUI_SOURCES
@@ -72,6 +73,8 @@ set(EPOCHGUI_SOURCES
     "${EPOCHGUI_SOURCE_ROOT}/src/epochgui/node_graph_workspace.cpp"
     "${EPOCHGUI_SOURCE_ROOT}/src/epochgui/panel_host.cpp"
     "${EPOCHGUI_SOURCE_ROOT}/src/epochgui/popup_layout.cpp"
+    "${EPOCHGUI_SOURCE_ROOT}/src/epochgui/gui.scrollbar_layout.cpp"
+    "${EPOCHGUI_SOURCE_ROOT}/src/epochgui/gui.text_layout.cpp"
     "${EPOCHGUI_SOURCE_ROOT}/src/epochgui/system_workspace.cpp"
     "${EPOCHGUI_SOURCE_ROOT}/src/epochgui/text_control.cpp"
     "${EPOCHGUI_SOURCE_ROOT}/src/epochgui/text_editor.cpp"
@@ -130,6 +133,37 @@ source_group(TREE "${EPOCHGUI_MODULE_ROOT}/modules" PREFIX "Module Files" FILES 
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(EpochGuiPortableHelpersTests tests/gui.portable_helpers_tests.cpp)
+    target_link_libraries(EpochGuiPortableHelpersTests PRIVATE EpochGui)
+    add_test(NAME EpochGui.PortableHelpers COMMAND EpochGuiPortableHelpersTests)
+    add_executable(EpochGuiTextLayoutTests tests/gui.text_layout_tests.cpp)
+    target_link_libraries(EpochGuiTextLayoutTests PRIVATE EpochGui)
+    target_compile_features(EpochGuiTextLayoutTests PRIVATE cxx_std_23)
+    add_test(NAME EpochGui.TextLayout COMMAND EpochGuiTextLayoutTests)
+
+    add_executable(EpochGuiScrollbarLayoutTests tests/gui.scrollbar_layout_tests.cpp)
+    target_link_libraries(EpochGuiScrollbarLayoutTests PRIVATE EpochGui)
+    target_compile_features(EpochGuiScrollbarLayoutTests PRIVATE cxx_std_23)
+    add_test(NAME EpochGui.ScrollbarLayout COMMAND EpochGuiScrollbarLayoutTests)
+
+    add_executable(EpochGuiRoundedCornerRasterTests
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/rounded_corner_raster_tests.cpp"
+    )
+    target_compile_features(EpochGuiRoundedCornerRasterTests PRIVATE cxx_std_23)
+    target_include_directories(EpochGuiRoundedCornerRasterTests PRIVATE
+        "${EPOCHGUI_SOURCE_ROOT}/include"
+    )
+    add_test(NAME EpochGui.RoundedCornerRaster COMMAND EpochGuiRoundedCornerRasterTests)
+
+    add_executable(EpochGuiCircleRasterTests
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/circle_raster_tests.cpp"
+    )
+    target_compile_features(EpochGuiCircleRasterTests PRIVATE cxx_std_23)
+    target_include_directories(EpochGuiCircleRasterTests PRIVATE
+        "${EPOCHGUI_SOURCE_ROOT}/include"
+    )
+    add_test(NAME EpochGui.CircleRaster COMMAND EpochGuiCircleRasterTests)
+
     add_executable(EpochGuiDockLayoutTests
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/dock_layout_tests.cpp"
     )
@@ -154,6 +188,14 @@ if(BUILD_TESTING)
         CXX_EXTENSIONS OFF
     )
     add_test(NAME EpochGui.TextControl COMMAND EpochGuiTextControlTests)
+
+    add_executable(EpochGuiPopupLayoutTests
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/popup_layout_tests.cpp"
+    )
+    target_link_libraries(EpochGuiPopupLayoutTests PRIVATE EpochGui)
+    target_compile_definitions(EpochGuiPopupLayoutTests PRIVATE EPOCHGUI_TEST_MODULE_IMPORT=1)
+    target_compile_features(EpochGuiPopupLayoutTests PRIVATE cxx_std_23)
+    add_test(NAME EpochGui.PopupLayout COMMAND EpochGuiPopupLayoutTests)
 
     add_executable(EpochGuiFontTests
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/font_tests.cpp"

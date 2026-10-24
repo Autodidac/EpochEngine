@@ -28,6 +28,8 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
+// Epoch system notes (auto-checked):
+// Epoch Context: window/context state, dispatch and input ownership remain scoped.
 module;
 
 #include <atomic>
@@ -84,6 +86,7 @@ export module context.window;
 //import aframework;                    // if this imports SFML headers, NOMINMAX is already set
 import context.type;
 import context.commandqueue;
+import perf.tier;
 
 namespace epochengine::core
 {
@@ -161,12 +164,21 @@ namespace epochengine::core
         std::atomic<BackendLifecycleState> backendLifecycle{ BackendLifecycleState::pending };
         bool isFloating = false;
         std::atomic_uint8_t dockTargetPreference = 0u;
+        // Layout order only; registry/lifecycle iteration remains unchanged.
+        std::atomic<int> dockGridOrder{ -1 };
         std::atomic_bool routedRedockRequested = false;
         std::atomic_uint8_t routedDockTarget = 0u;
         std::atomic_uint32_t routedDockTabInsertion = 0xffffffffu;
         std::atomic_bool retirementQueued = false;
         std::atomic_bool firstPresentComplete = false;
         std::atomic_uint64_t successfulFrameGeneration{ 0 };
+        // Observational UI telemetry; never drives queue or frame ordering.
+        std::atomic<double> editorThrottleHz{ 0.0 };
+        std::atomic<double> editorFramePacingHz{ 0.0 };
+        // Context-local user policy; independent of immutable CLI startup defaults.
+        perf::frame_pacing_override editorFramePacingOverride{};
+        // Resolved native mode for backend work admission; never an FPS ceiling.
+        std::atomic_bool uncappedFrameSubmission{ false };
         std::atomic_bool editorSessionRestoreAckQueued{ false };
         std::atomic_uint64_t editorSessionRestoreAckGeneration{ 0 };
         std::atomic_uint64_t resizeGeneration{ 0 };

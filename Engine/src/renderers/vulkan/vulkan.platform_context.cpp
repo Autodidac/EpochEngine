@@ -314,7 +314,7 @@ namespace epochengine::vulkancontext
                 guiState->guiDraws.clear();
             }
             queue.drain();
-            std::this_thread::sleep_for(std::chrono::milliseconds(16));
+            // The owning host loop applies the minimized-window frame limit.
             return true;
         }
         if (auto* guiState = find_gui_state(ctx.get()))
@@ -405,8 +405,14 @@ namespace epochengine::vulkancontext
     void Application::set_framebuffer_size(int width, int height)
     {
         std::scoped_lock lock(framebufferStateMutex);
-        framebufferWidth = (std::max)(1, width);
-        framebufferHeight = (std::max)(1, height);
+        const int requestedWidth = (std::max)(1, width);
+        const int requestedHeight = (std::max)(1, height);
+        // Repeated same-size notifications are not swapchain resize events.
+        // Retain an already pending real resize or present-mode change.
+        if (framebufferWidth == requestedWidth && framebufferHeight == requestedHeight)
+            return;
+        framebufferWidth = requestedWidth;
+        framebufferHeight = requestedHeight;
         framebufferResized = true;
     }
 

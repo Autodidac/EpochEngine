@@ -1,0 +1,21 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
+<ItemGroup>
+<Filter Include="modules" />
+<Filter Include="src" />
+</ItemGroup>
+<ItemGroup>
+<ClCompile Include="modules\audio.types.ixx"><Filter>modules</Filter></ClCompile>
+<ClCompile Include="modules\audio.manager.ixx"><Filter>modules</Filter></ClCompile>
+<ClCompile Include="modules\audio.mixer.ixx"><Filter>modules</Filter></ClCompile>
+<ClCompile Include="modules\audio.device.ixx"><Filter>modules</Filter></ClCompile>
+<ClCompile Include="modules\audio.playback_runtime.ixx"><Filter>modules</Filter></ClCompile>
+<ClCompile Include="src\audio.manager.cpp"><Filter>src</Filter></ClCompile>
+<ClCompile Include="src\audio.mixer.cpp"><Filter>src</Filter></ClCompile>
+<ClCompile Include="src\audio.mixer_contract.cpp"><Filter>src</Filter></ClCompile>
+<ClCompile Include="src\audio.device.cpp"><Filter>src</Filter></ClCompile>
+<ClCompile Include="src\audio.device_contract.cpp"><Filter>src</Filter></ClCompile>
+<ClCompile Include="src\audio.playback_runtime.cpp"><Filter>src</Filter></ClCompile>
+<ClCompile Include="src\audio.playback_runtime_contract.cpp"><Filter>src</Filter></ClCompile>
+</ItemGroup>
+</Project>

@@ -1,4 +1,6 @@
 // Epoch Engine AI runtime - SPDX-License-Identifier: LicenseRef-MIT-NoSell
+// Epoch system notes (auto-checked):
+// Epoch AI: preserve model selection, candidate isolation and host verification gates.
 #pragma once
 #include <chrono>
 #include <expected>
@@ -29,6 +31,7 @@ struct Message {
     std::string content;
     json tool_calls = json::array();
     std::string tool_call_id;
+    json content_parts = nullptr; // Explicit host text/image parts; never silently flattened.
 };
 
 struct ToolCall {
@@ -48,6 +51,9 @@ struct ModelRequest {
     double temperature = 0.15;
     int max_tokens = -1;
     std::optional<bool> parallel_tool_calls;
+    // Optional Qwen chat-template control. The caller must establish server
+    // support; leave unset for generic OpenAI-compatible providers.
+    std::optional<bool> enable_thinking;
     std::string model;
     std::stop_token stop;
     std::chrono::steady_clock::time_point deadline = std::chrono::steady_clock::time_point::max();
@@ -90,6 +96,14 @@ struct ProviderCapabilities {
 class IModelProvider {
 public:
     virtual ~IModelProvider() = default;
+    // Inference success is not task success. This hook records agent-level
+    // outcomes separately; final human/build verification is a distinct field.
+    virtual void report_task_outcome(std::string_view, bool) {}
+    // Missing measurements must not be interpreted as zero latency. Providers
+    // may return averages only after several observations for the same class.
+    [[nodiscard]] virtual std::optional<double> observed_latency_ms(
+        std::string_view, std::string_view) const { return std::nullopt; }
+    [[nodiscard]] virtual bool is_model_resident(std::string_view) const { return false; }
     [[nodiscard]] virtual std::expected<ModelResponse, core::Error> complete(const ModelRequest&) = 0;
     [[nodiscard]] virtual std::expected<ModelResponse, core::Error> complete_stream(const ModelRequest& request, const StreamCallback& callback) {
         auto response = complete(request);

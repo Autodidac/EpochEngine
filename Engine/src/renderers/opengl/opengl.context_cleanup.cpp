@@ -23,6 +23,8 @@
  *   See LICENSE file for full terms.           *
  *                                              *
  ***********************************************/
+// Epoch system notes (auto-checked):
+// Epoch Context: window/context state, dispatch and input ownership remain scoped.
 module;
 
 #include <algorithm>
@@ -34,6 +36,7 @@ module;
 #include <fstream>
 #include <iostream>
 #include <mutex>
+#include <source_location>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -107,6 +110,7 @@ module;
 #   include <GL/glxext.h>
 #endif
 
+#include "opengl.frame_admission.hpp"
 #include <chrono>
 #endif
 
@@ -176,6 +180,34 @@ namespace epochengine::openglcontext
 
         auto& backend = opengltextures::get_opengl_backend();
         auto& glState = backend.glState;
+        const auto releaseAdmission = [&](const PlatformGL::PlatformGLContext& native,
+                                          bool nativeCurrent)
+        {
+            bool hadFences{};
+            bool released = true;
+            {
+                std::lock_guard<std::mutex> lock(backend.gpuMutex);
+                const auto found = backend.context_gl_states.find(
+                    opengltextures::platform_context_key(native));
+                if (found == backend.context_gl_states.end() || !found->second)
+                    return;
+                opengltextures::release_sprite_stream(*found->second, nativeCurrent);
+                auto& admission = found->second->frameAdmission;
+                hadFences = std::ranges::any_of(admission.fences,
+                    [](const auto fence) { return fence != nullptr; });
+                if (nativeCurrent)
+                    released = frame_admission::release(admission);
+                else
+                    admission = {};
+            }
+            if (hadFences && (!nativeCurrent || !released))
+            {
+                logger::get("OpenGL").log(
+                    logger::LogLevel::WARN,
+                    "GPU admission context is no longer current; discarded only its CPU fence handles. Native context teardown owns remaining driver resources.",
+                    std::source_location::current());
+            }
+        };
 
 #if defined(_WIN32)
         {
@@ -189,10 +221,12 @@ namespace epochengine::openglcontext
             if (cleanupHwnd && (::IsWindow(cleanupHwnd) == FALSE))
                 canActivateCleanup = false;
 
-            if (canActivateCleanup && cleanupGuard.set(cleanupContext))
+            const bool nativeCurrent = canActivateCleanup && cleanupGuard.set(cleanupContext);
+            releaseAdmission(cleanupContext, nativeCurrent);
+            if (nativeCurrent)
             {
                 openglpreview::destroy_scene_preview_pipeline(glState);
-                opengltextures::clear_gpu_atlases();
+                opengltextures::clear_gpu_atlases(cleanupContext);
             }
         }
         PlatformGL::clear_current();
@@ -215,10 +249,12 @@ namespace epochengine::openglcontext
             auto cleanupContext = ctx ? contextdetail::context_to_platform_context(ctx.get()) : PlatformGL::PlatformGLContext{};
             if (!cleanupContext.valid())
                 cleanupContext = contextdetail::state_to_platform_context(glState);
-            if (cleanupContext.valid() && cleanupGuard.set(cleanupContext))
+            const bool nativeCurrent = cleanupContext.valid() && cleanupGuard.set(cleanupContext);
+            releaseAdmission(cleanupContext, nativeCurrent);
+            if (nativeCurrent)
             {
                 openglpreview::destroy_scene_preview_pipeline(glState);
-                opengltextures::clear_gpu_atlases();
+                opengltextures::clear_gpu_atlases(cleanupContext);
             }
         }
         PlatformGL::clear_current();

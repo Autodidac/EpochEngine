@@ -79,6 +79,7 @@ namespace epochengine::core
 {
     void ParseCommandLine(int argc, char** argv);
     void RunEngine();
+    void RunEditorInterface();
 }
 
 namespace epochengine::project
@@ -103,6 +104,9 @@ namespace epochengine::project
         std::string_view sprite_animation_path{};
         std::string_view audio_profile_path{};
         std::string_view gui_path{};
+        // Tool workspaces are authoring documents, not playable game scenes.
+        // The generated project profile, not the document, selects this gate.
+        bool scene_requires_runtime{true};
         void (*progress_sink)(const char*) noexcept{};
     };
 

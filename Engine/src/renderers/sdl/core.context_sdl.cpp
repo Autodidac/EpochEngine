@@ -1,8 +1,11 @@
+// Epoch system notes (auto-checked):
+// Epoch Context: window/context state, dispatch and input ownership remain scoped.
 module;
 
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <chrono>
 #include <cstdint>
 #include <cstring>
 #include <limits>
@@ -1163,18 +1166,10 @@ namespace
                 logicalHeight,
                 framebufferWidth,
                 framebufferHeight);
-        if (s_window && dimensions.valid())
-        {
-            const float displayScale = SDL_GetWindowDisplayScale(s_window);
-            const auto displayScaledDimensions =
-                epochengine::sdlcontext::state::
-                    make_display_scaled_presentation_dimensions(
-                        framebufferWidth,
-                        framebufferHeight,
-                        displayScale);
-            if (displayScaledDimensions.valid())
-                dimensions = displayScaledDimensions;
-        }
+        // Window coordinates and drawable pixels are authoritative. Dividing
+        // drawable pixels by the monitor's display scale invents a different
+        // GUI coordinate space from the other contexts (and scales twice when
+        // the native window already supplies its logical extent).
         auto& state = epochengine::sdlcontext::state::get_sdl_state();
         state.surfaceLifecycle.observe_drawable_extent(
             framebufferWidth,
@@ -1329,6 +1324,45 @@ namespace
     }
 
 #if defined(_WIN32)
+    // Owner-thread aggregate only. No event payloads, extra polling or queue changes.
+    struct SdlInputEvidence
+    {
+        unsigned reports{}, inputs{}, buttons{}, keys{}, moves{}, dispatched{};
+        std::uint32_t began{}, lastPump{}, maxAge{}, maxPumpGap{};
+        double maxLockWaitUs{};
+        bool started{}, hasPump{};
+        bool enabled() const noexcept
+        {
+            return epochengine::core::cli::trace_sdl_input && reports < 60u;
+        }
+        void pump(std::uint32_t now) noexcept
+        {
+            if (hasPump)
+                maxPumpGap = (std::max)(maxPumpGap, std::uint32_t(now - lastPump));
+            lastPump = now;
+            hasPump = true;
+        }
+        void input(UINT message, std::uint32_t posted, std::uint32_t now) noexcept
+        {
+            const bool mouseMove = message == WM_MOUSEMOVE;
+            const bool button = message == WM_LBUTTONDOWN || message == WM_LBUTTONUP
+                || message == WM_RBUTTONDOWN || message == WM_RBUTTONUP
+                || message == WM_MOUSEWHEEL;
+            const bool key = message == WM_KEYDOWN || message == WM_KEYUP
+                || message == WM_SYSKEYDOWN || message == WM_SYSKEYUP
+                || message == WM_CHAR || message == WM_SYSCHAR;
+            if (!mouseMove && !button && !key)
+                return;
+            if (!started) { started = true; began = now; }
+            ++inputs;
+            moves += mouseMove;
+            buttons += button;
+            keys += key;
+            maxAge = (std::max)(maxAge, std::uint32_t(now - posted));
+        }
+    };
+    SdlInputEvidence s_inputEvidence{};
+
     bool pump_hosted_window_messages(
         const std::shared_ptr<epochengine::core::Context>& ctx) noexcept
     {
@@ -1341,6 +1375,9 @@ namespace
 
         // SDL creates the hosted child on this backend thread. Service only that
         // child without draining SDL's process-global peer event queue.
+        const bool traceInput = s_inputEvidence.enabled();
+        if (traceInput)
+            s_inputEvidence.pump(::GetTickCount());
         MSG message{};
         while (::PeekMessageW(&message, s_childWindow, 0, 0, PM_REMOVE))
         {
@@ -1350,8 +1387,32 @@ namespace
                 return false;
             }
 
+            const auto before = s_inputEvidence.inputs;
+            if (traceInput)
+                s_inputEvidence.input(message.message, message.time, ::GetTickCount());
             ::TranslateMessage(&message);
             ::DispatchMessageW(&message);
+            if (traceInput && s_inputEvidence.inputs != before)
+                ++s_inputEvidence.dispatched;
+        }
+        const auto now = traceInput ? ::GetTickCount() : 0u;
+        if (traceInput && s_inputEvidence.started
+            && std::uint32_t(now - s_inputEvidence.began) >= 1000u)
+        {
+            const auto& e = s_inputEvidence;
+            epochengine::logger::info("SDLInput", "native input timing: received="
+                + std::to_string(e.inputs) + " dispatched=" + std::to_string(e.dispatched)
+                + " moves=" + std::to_string(e.moves) + " buttons_wheel=" + std::to_string(e.buttons)
+                + " keys_text=" + std::to_string(e.keys) + " max_age_ms=" + std::to_string(e.maxAge)
+                + " max_pump_gap_ms=" + std::to_string(e.maxPumpGap)
+                + " max_runtime_lock_wait_us=" + std::to_string(e.maxLockWaitUs)
+                + "; dispatch is not GUI consumption; OS mouse moves may coalesce");
+            const auto reports = e.reports + 1u;
+            s_inputEvidence = {};
+            s_inputEvidence.reports = reports;
+            s_inputEvidence.started = true;
+            s_inputEvidence.began = now;
+            s_inputEvidence.pump(now);
         }
         return true;
     }
@@ -1359,6 +1420,9 @@ namespace
 
     void sdl_initialize_adapter()
     {
+#if defined(_WIN32)
+        s_inputEvidence = {};
+#endif
         auto ctx = epochengine::core::get_current_render_context();
         if (!ctx)
             return;
@@ -1575,6 +1639,10 @@ namespace
         ctx->native_drawable = nullptr;
         ctx->hglrc = nullptr;
         ctx->native_gl_context = nullptr;
+        // Admit input only after both the context and WindowData publish the
+        // SDL surface identity. Hosted children already use DockableProc;
+        // the shared admission guard prevents duplicate native callbacks.
+        epochengine::core::MultiContextManager::AttachBackendInputAdapter(s_childWindow);
         if (s_dockParent && ::IsWindow(s_dockParent) != FALSE)
             ::PostMessageW(s_dockParent, WM_SIZE, 0, 0);
  #endif
@@ -1625,8 +1693,19 @@ namespace
         std::shared_ptr<epochengine::core::Context> ctx,
         epochengine::core::CommandQueue& queue)
     {
+#if defined(_WIN32)
+        const bool traceInput = s_inputEvidence.enabled() && !s_pollStandaloneEvents;
+        const auto lockStarted = traceInput ? std::chrono::steady_clock::now()
+            : std::chrono::steady_clock::time_point{};
+#endif
         std::scoped_lock runtimeGuard{
             epochengine::sdlcontext::state::runtime_api_mutex()};
+#if defined(_WIN32)
+        if (traceInput)
+            s_inputEvidence.maxLockWaitUs = (std::max)(s_inputEvidence.maxLockWaitUs,
+                std::chrono::duration<double, std::micro>(
+                    std::chrono::steady_clock::now() - lockStarted).count());
+#endif
 
         if (!ctx || !s_running || !s_window || !s_renderer)
             return false;

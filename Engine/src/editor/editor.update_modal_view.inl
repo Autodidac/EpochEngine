@@ -50,8 +50,9 @@
             const bool showPrimaryButton =
                 !updateRunning
                 && (flags.checkFailed || flags.installableUpdate || restartReady || sourceWorkerRunning);
+            bool sourceActionsEnabled = updater::SOURCE_PROJECT_DOWNLOAD_ENABLED;
             const bool showAdvancedSourceButton =
-                updater::private_source_access_enabled() && !updateRunning && !restartReady;
+                sourceActionsEnabled && !updateRunning && !restartReady;
             const editor_update_modal::ActionStrip actionStrip =
                 editor_update_modal::update_action_strip(flags, contentWidth);
             const float actionStripHeight = actionStrip.height;
@@ -112,17 +113,15 @@
             if (cursorY + 22.0f <= contentBottom)
             {
                 const float progressWidth = (std::max)(1.0f, (std::min)(contentWidth, 560.0f));
-                const std::string progressLabel = sourceAuthorizationRunning
-                    ? "Source authorization"
-                    : sourceWorkerRunning
+                const std::string progressLabel =
+                    sourceWorkerRunning
                     ? "Source rebuild"
                     : editor.updateProjectSourceDownloadPending ? "Project source"
                     : updateRunning ? "Update"
                     : restartReady ? "Update staged"
                     : flags.checkFailed ? "Update check" : "Update ready";
-                const std::string progressStatus = sourceAuthorizationRunning
-                    ? "approval / encrypted transfer"
-                    : sourceWorkerRunning
+                const std::string progressStatus =
+                    sourceWorkerRunning
                     ? (!sourceCancelRequested && !sourceCancelAvailable)
                         ? epochengine::format_text(
                             "{} - cancel update available in {}s",
@@ -157,14 +156,7 @@
                 if (showCancelButton)
                 {
                     gui::set_cursor({ contentX, stackedButtonY });
-                    if (sourceAuthorizationRunning)
-                    {
-                        if (gui::button("Cancel Source Access", { contentWidth, buttonHeight }))
-                        {
-                            request_editor_private_source_access_cancel(editor);
-                        }
-                    }
-                    else if (sourceWorkerRunning)
+                    if (sourceWorkerRunning)
                     {
                         if (gui::button("Cancel Update", { contentWidth, buttonHeight }))
                         {
@@ -225,14 +217,7 @@
             else
             {
                 gui::set_cursor({ contentX, buttonY });
-                if (showCancelButton && sourceAuthorizationRunning)
-                {
-                    if (gui::button("Cancel Source Access", { cancelButtonWidth, buttonHeight }))
-                    {
-                        request_editor_private_source_access_cancel(editor);
-                    }
-                }
-                else if (showCancelButton && sourceWorkerRunning)
+                if (showCancelButton && sourceWorkerRunning)
                 {
                     if (gui::button("Cancel Update", { cancelButtonWidth, buttonHeight }))
                     {
@@ -309,24 +294,14 @@
                 editor_update_modal::source_action_strip(contentWidth);
             const float sourceActionStripHeight = sourceActionStrip.height;
             const bool sourceActionStripStacked = sourceActionStrip.stacked;
-            const std::string pairDeviceLabel =
-                updater::private_source_device_registered()
-                    ? "Re-pair This Device"
-                    : "Pair This Device";
-            const auto armDevicePairing = [&]() {
-                updater::reset_private_source_device_registration();
-                editor.updateStatus =
-                    "Device pairing is armed. Choose Build / Update From Source "
-                    "or Download Source Project to begin explicit browser enrollment.";
-                push_editor_log(
-                    editor,
-                    "[command] Source-device pairing armed; waiting for an explicit "
-                    "source action.");
-            };
             const float actionBaseY = modalPos.y + modalSize.y - sourceActionStripHeight - editor_update_modal::kButtonBottomPad;
             const float contentBottom = (std::max)(modalPos.y + 64.0f, actionBaseY - editor_update_modal::kButtonTopPad);
             gui::begin_modal_window(gui::ModalWindowOptions{
-                .title = "Authorized Source Options",
+                .title =
+#if EPOCH_EDITION_PUBLIC
+                    "Source Options",
+#else
+#endif
                 .position = modalPos,
                 .size = modalSize,
                 .viewport_size = { w, h },
@@ -356,12 +331,6 @@
                 }
                 actionY += buttonHeight + buttonStackGap;
                 gui::set_cursor({ actionX, actionY });
-                if (gui::button(pairDeviceLabel, { contentWidth, buttonHeight }))
-                {
-                    armDevicePairing();
-                }
-                actionY += buttonHeight + buttonStackGap;
-                gui::set_cursor({ actionX, actionY });
                 if (gui::button("Build / Update From Source", { contentWidth, buttonHeight }))
                 {
                     editor.showSourceUpdateConfirmModal = false;
@@ -387,12 +356,8 @@
                     editor.showSourceUpdateConfirmModal = false;
                     editor.showUpdateConfirmModal = true;
                 }
-                gui::set_cursor({ actionX + 104.0f + buttonGap, actionY });
-                if (gui::button(pairDeviceLabel, { 168.0f, buttonHeight }))
-                {
-                    armDevicePairing();
-                }
-                gui::set_cursor({ actionX + 104.0f + 168.0f + 2.0f * buttonGap, actionY });
+                float sourceButtonX = actionX + 104.0f + buttonGap;
+                gui::set_cursor({ sourceButtonX, actionY });
                 if (gui::button("Build / Update From Source", { 208.0f, buttonHeight }))
                 {
                     editor.showSourceUpdateConfirmModal = false;
@@ -400,7 +365,8 @@
                     push_editor_log(editor, "[command] Authorized source build confirmed.");
                     start_editor_source_update_install(editor);
                 }
-                gui::set_cursor({ actionX + 104.0f + 168.0f + 208.0f + 3.0f * buttonGap, actionY });
+                sourceButtonX += 208.0f + buttonGap;
+                gui::set_cursor({ sourceButtonX, actionY });
                 if (gui::button("Download Source Project", { 220.0f, buttonHeight }))
                 {
                     editor.showSourceUpdateConfirmModal = false;
@@ -434,9 +400,6 @@
                 start_editor_project_source_code_download(editor);
                 break;
             case EditorAutomationCommand::AssetsInteractionProof:
-            case EditorAutomationCommand::CandidateLabSmokeChoose:
-            case EditorAutomationCommand::CandidateLabSmokeKeep:
-            case EditorAutomationCommand::SelfCodingLocalSmoke:
                 break;
             case EditorAutomationCommand::None:
                 break;

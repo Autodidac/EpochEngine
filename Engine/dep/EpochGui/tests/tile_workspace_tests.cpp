@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MPL-2.0
 #include <string_view>
 
 import epoch.gui.tile_workspace;
