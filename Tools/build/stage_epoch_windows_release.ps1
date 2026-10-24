@@ -200,14 +200,13 @@ if ((Test-Path -LiteralPath (Join-Path $verifyRoot 'logs')) -or (Test-Path -Lite
 Remove-EpochPackageItem -LiteralPath $verifyRoot -PackageRoot $packageRoot -Recurse
 
 $hash = Get-FileHash -Algorithm SHA256 -LiteralPath $zip
-('{0}  {1}' -f $hash.Hash.ToLowerInvariant(), (Split-Path -Leaf $hash.Path)) |
-    Set-Content -LiteralPath $checksumFile -Encoding ascii
+$checksumLine = ('{0}  {1}' -f $hash.Hash.ToLowerInvariant(), (Split-Path -Leaf $hash.Path)) + "`n"
+[System.IO.File]::WriteAllText($checksumFile, $checksumLine, [System.Text.Encoding]::ASCII)
 
 Get-Item -LiteralPath $zip | Select-Object FullName, Length
 Get-Content -LiteralPath $checksumFile
-('{0}  {1}' -f $hash.Hash.ToLowerInvariant(), (Split-Path -Leaf $hash.Path)) |
-    Set-Content -LiteralPath ($zip + '.sha256') -Encoding ascii
-[ordered]@{
+[System.IO.File]::WriteAllText(($zip + '.sha256'), $checksumLine, [System.Text.Encoding]::ASCII)
+$validation = [ordered]@{
     schema = 'epoch.release_validation.v1'
     platform = 'windows-x64'
     edition = $edition.Id
@@ -217,5 +216,7 @@ Get-Content -LiteralPath $checksumFile
     sha256 = $hash.Hash.ToLowerInvariant()
     executable_sha256 = (Get-FileHash -LiteralPath (Join-Path $stage 'EpochEditor.exe')).Hash.ToLowerInvariant()
     checks = [ordered]@{ version = $true; edition = $true; engine_contracts = $true; flat_archive = $true; notices = $true; clean_payload = $true }
-} | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath ($zip + '.build-validation.json') -Encoding utf8
+}
+[System.IO.File]::WriteAllText(($zip + '.build-validation.json'),
+    (($validation | ConvertTo-Json -Depth 4) + "`n"), [System.Text.UTF8Encoding]::new($false))
 Write-Host "package_inventory.result=pass artifact=$stageName.zip sha256=$($hash.Hash.ToLowerInvariant())"
