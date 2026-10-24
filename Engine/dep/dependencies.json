@@ -53,8 +53,8 @@
       "mode": "engine_owned_media",
       "repository": "Autodidac/EpochMediaEngine",
       "note": "Published standalone C++23 source; portable implementation, module, consumer and build-support scopes are SHA-256 verified against the pinned revision. Engine integration metadata is not a full-tree mirror. No complete native renderer adoption or physical playback/decoder claim.",
-      "upstream_revision": "da2f57d7e1d2289e36b81dd4e2facef10f1d837f",
-      "upstream_tree": "eb37814a024c223c62984029d68be3ac393e464e",
+      "upstream_revision": "0159a826dd1df13f310f704ddf61abccf883a45e",
+      "upstream_tree": "74bc055d93584a656d0ff1f1bd5136c7addf3450",
       "portable_source_manifest": "Engine/dep/EpochMediaEngine/portable_source_manifest.json"
     }
   ]

@@ -61,7 +61,7 @@ $stageName = "epoch_win10_x64_v$Version"
 $stage = Join-Path $OutputRoot $stageName
 $zip = Join-Path $OutputRoot "$stageName.zip"
 $checksumFile = Join-Path $OutputRoot "v$Version`_checksums.txt"
-$verifyLogs = Join-Path $OutputRoot "verify_$stageName`_logs"
+$verifyLogs = Join-Path $OutputRoot ("verify_$stageName`_logs/" + [guid]::NewGuid().ToString('N'))
 foreach ($target in @($stage, $zip, $verifyLogs, (Join-Path $OutputRoot "verify_$stageName"))) {
     $resolvedTarget = [System.IO.Path]::GetFullPath($target)
     if (-not $resolvedTarget.StartsWith($OutputRoot + '\', [System.StringComparison]::OrdinalIgnoreCase)) {
@@ -115,11 +115,8 @@ Copy-Item -LiteralPath (Join-Path $repo 'LICENSE') -Destination $stage -Force
 Copy-Item -LiteralPath $assets -Destination (Join-Path $stage 'assets') -Recurse -Force
 & $noticeScript -RepoRoot $repo -VcpkgInstalledRoot $vcpkgInstalled -Destination $stage
 
-$versionOut = Join-Path $OutputRoot "epoch_release_v$Version`_windows_version_stdout.txt"
-$versionErr = Join-Path $OutputRoot "epoch_release_v$Version`_windows_version_stderr.txt"
-Remove-EpochPackageItem -LiteralPath $versionOut -PackageRoot $packageRoot
-Remove-EpochPackageItem -LiteralPath $versionErr -PackageRoot $packageRoot
-Remove-EpochPackageItem -LiteralPath $verifyLogs -PackageRoot $packageRoot -Recurse
+$versionOut = Join-Path $verifyLogs 'version_stdout.txt'
+$versionErr = Join-Path $verifyLogs 'version_stderr.txt'
 New-Item -ItemType Directory -Path $verifyLogs -Force | Out-Null
 $previousLogDir = $env:EPOCH_LOG_DIR
 $env:EPOCH_LOG_DIR = $verifyLogs
@@ -158,12 +155,23 @@ if ($versionText -notmatch ('(?:^|\s)edition=' + [regex]::Escape($edition.Id) + 
 }
 Write-EpochRuntimeDistribution -Stage $stage -Edition $edition.Id -Version $Version
 
-Remove-EpochPackageItem -LiteralPath $verifyLogs -PackageRoot $packageRoot -Recurse
 $contractData = Join-Path $verifyLogs 'engine-contracts'
 New-Item -ItemType Directory -Path $contractData -Force | Out-Null
-$contractProcess = Start-Process -FilePath (Join-Path $stage 'EpochEditor.exe') `
-    -ArgumentList @('--engine-contract-self-test', '--candidate-data-root', $contractData) `
-    -WorkingDirectory $stage -WindowStyle Hidden -Wait -PassThru
+$contractScratch = Join-Path $verifyLogs 'scratch'
+New-Item -ItemType Directory -Path $contractScratch -Force | Out-Null
+$previousTemp = $env:TEMP
+$previousTmp = $env:TMP
+try {
+    $env:TEMP = $contractScratch
+    $env:TMP = $contractScratch
+    $contractProcess = Start-Process -FilePath (Join-Path $stage 'EpochEditor.exe') `
+        -ArgumentList @('--engine-contract-self-test', '--candidate-data-root', $contractData) `
+        -WorkingDirectory $stage -WindowStyle Hidden -Wait -PassThru
+}
+finally {
+    $env:TEMP = $previousTemp
+    $env:TMP = $previousTmp
+}
 if ($contractProcess.ExitCode -ne 0 -or
     -not (Get-ChildItem -LiteralPath $contractData -Recurse -File -Filter '*.log' |
         Select-String -SimpleMatch 'engine_contract_self_test.result=pass')) {

@@ -4,6 +4,8 @@ param(
     [string]$BinaryRoot = '',
     [string]$VcpkgInstalledRoot = '',
     [string]$OutputRoot = '',
+    [string]$WslDistribution = '',
+    [switch]$SoftwareOpenGLSmoke,
     [switch]$SkipRuntimeSmoke
 )
 
@@ -42,7 +44,12 @@ function Invoke-LinuxScript {
         & bash -c $normalized
     }
     else {
-    & wsl.exe bash -lc "printf '%s' '$encoded' | base64 --decode | bash"
+        if ([string]::IsNullOrWhiteSpace($WslDistribution)) {
+            & wsl.exe bash -lc "printf '%s' '$encoded' | base64 --decode | bash"
+        }
+        else {
+            & wsl.exe --distribution $WslDistribution --exec bash -lc "printf '%s' '$encoded' | base64 --decode | bash"
+        }
     }
     if ($LASTEXITCODE -ne 0) {
         throw "$Label failed with exit code $LASTEXITCODE."
@@ -102,7 +109,7 @@ $tarball = Join-Path $resolvedOutput "$stageName.tar.gz"
 $checksum = Join-Path $resolvedOutput "v$Version`_checksums.txt"
 $windowsZipName = "epoch_win10_x64_v$Version.zip"
 $windowsZip = Join-Path $resolvedOutput $windowsZipName
-$verifyLogs = Join-Path $resolvedOutput "verify_$stageName`_logs"
+$verifyLogs = Join-Path $resolvedOutput ("verify_$stageName`_logs/" + [guid]::NewGuid().ToString('N'))
 foreach ($target in @($stage, $tarball, $verifyLogs)) {
     $resolvedTarget = [System.IO.Path]::GetFullPath($target)
     if (-not $resolvedTarget.StartsWith($resolvedOutput + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)) {
@@ -113,7 +120,6 @@ foreach ($target in @($stage, $tarball, $verifyLogs)) {
 Remove-EpochPackageItem -LiteralPath $stage -PackageRoot $packageRoot -Recurse
 Remove-EpochPackageItem -LiteralPath $tarball -PackageRoot $packageRoot
 New-Item -ItemType Directory -Path $stage -Force | Out-Null
-Remove-EpochPackageItem -LiteralPath $verifyLogs -PackageRoot $packageRoot -Recurse
 New-Item -ItemType Directory -Path $verifyLogs -Force | Out-Null
 
 Copy-Item -LiteralPath $binary -Destination (Join-Path $stage 'epoch') -Force
@@ -138,6 +144,8 @@ $verifyLogsWsl = To-LinuxPath $verifyLogs
 
 $validationScript = @'
 set -euo pipefail
+mkdir -p '__LOGS__/scratch'
+export TMPDIR='__LOGS__/scratch'
 chmod 755 '__STAGE__/epoch'
 test -f '__STAGE__/assets/fonts/Roboto-Regular.ttf'
 cd '__STAGE__'
@@ -193,6 +201,9 @@ $validationScript = $validationScript.Replace('__EDITION__', $edition.Id)
 $runtimeSmoke = if ($SkipRuntimeSmoke) {
     "printf '%s\n' 'Linux packaged runtime smoke explicitly skipped; package remains build/contract proven only.'"
 }
+elseif ($SoftwareOpenGLSmoke) {
+    "EPOCH_LOG_DIR='__LOGS__' LIBGL_ALWAYS_SOFTWARE=1 timeout --signal=INT --kill-after=3s 30s xvfb-run -a --server-args='-screen 0 1280x720x24 -nolisten tcp' ./epoch --editor --renderer opengl --smoke"
+}
 else {
     "EPOCH_LOG_DIR='__LOGS__' timeout --signal=INT --kill-after=3s 30s ./epoch --editor --renderer opengl --smoke"
 }
@@ -205,7 +216,6 @@ Invoke-LinuxScript -Script $validationScript -Label 'Linux staged-package valida
 # their environment override is consumed. Public packages never carry them.
 Remove-EpochPackageItem -LiteralPath (Join-Path $stage 'logs') -PackageRoot $packageRoot -Recurse
 Remove-EpochPackageItem -LiteralPath (Join-Path $stage 'cache') -PackageRoot $packageRoot -Recurse
-Remove-EpochPackageItem -LiteralPath $verifyLogs -PackageRoot $packageRoot -Recurse
 
 Write-EpochRuntimeDistribution -Stage $stage -Edition $edition.Id -Version $Version
 
@@ -241,7 +251,7 @@ $validation = [ordered]@{
     shared_libraries = 'pass'
     archive_inventory = 'pass'
     runtime_smoke = $(if ($SkipRuntimeSmoke) { 'not_run' } else { 'pass' })
-    runtime_renderer = $(if ($SkipRuntimeSmoke) { 'not_run' } elseif ($env:LIBGL_ALWAYS_SOFTWARE -eq '1') { 'software_opengl' } else { 'opengl' })
+    runtime_renderer = $(if ($SkipRuntimeSmoke) { 'not_run' } elseif ($SoftwareOpenGLSmoke -or $env:LIBGL_ALWAYS_SOFTWARE -eq '1') { 'software_opengl' } else { 'opengl' })
     hardware_parity = $false
 }
 [IO.File]::WriteAllText("$tarball.sha256", "$hash  $stageName.tar.gz`n", [Text.Encoding]::ASCII)

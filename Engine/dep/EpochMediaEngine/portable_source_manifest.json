@@ -1,7 +1,7 @@
 {
   "schema": "epoch.portable_source_parity.v1",
   "repository": "Autodidac/EpochMediaEngine",
-  "upstream_revision": "da2f57d7e1d2289e36b81dd4e2facef10f1d837f",
+  "upstream_revision": "0159a826dd1df13f310f704ddf61abccf883a45e",
   "scope": [
     "modules",
     "tests"
