@@ -14,6 +14,7 @@ module opengl.context;
 
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
 import core.context;
+import context.type;
 import core.commandline;
 import opengl.textures;
 
