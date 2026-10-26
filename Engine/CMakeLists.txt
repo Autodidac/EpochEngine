@@ -16,6 +16,7 @@ option(EPOCH_STRICT_WARNINGS "Enable stricter compiler warnings for Epoch target
 option(EPOCH_WARNINGS_AS_ERRORS "Treat warnings as errors when strict warnings are enabled." OFF)
 option(EPOCH_ENABLE_SANITIZERS "Enable supported sanitizer flags for compatible compilers." OFF)
 option(EPOCH_CI_HEADLESS_ONLY "Configure only the portable hosted-CI smoke target." OFF)
+option(EPOCH_ENABLE_GRAPHICS_TESTS "Opt into bounded Linux software graphics Editor startup tests under Xvfb." OFF)
 option(EPOCH_SOFTWARE_BASE_ONLY "Configure the editor-free CLI/native-window software base without engine or renderer targets." OFF)
 option(EPOCH_BUILD_STATIC_RUNTIME "Build Epoch as a reusable static runtime for generated child applications." OFF)
 option(EPOCH_BUILD_AI_TRANSPORT_CONTRACT "Expose the opt-in console model HTTP transport probe (never runs automatically)." OFF)
@@ -2695,6 +2696,19 @@ if(BUILD_TESTING)
             COMMAND epoch_authoring_task_graph_contract
         )
     endif()
+    # Engine distribution choices are tested without the Editor or renderers.
+    add_executable(epoch_updater_platform_policy_contract
+        "${CMAKE_CURRENT_SOURCE_DIR}/../Tests/updater/updater.platform_policy_contract.cpp")
+    target_sources(epoch_updater_platform_policy_contract PRIVATE
+        FILE_SET updater_platform_policy_modules TYPE CXX_MODULES
+            BASE_DIRS ${EPOCH_MODULE_DIR}
+            FILES "${EPOCH_MODULE_DIR}/updater.platform_policy.ixx")
+    target_link_libraries(epoch_updater_platform_policy_contract PRIVATE Epoch::PlatformEngine)
+    epoch_apply_cxx_dialect(epoch_updater_platform_policy_contract)
+    epoch_apply_warnings(epoch_updater_platform_policy_contract)
+    epoch_apply_sanitizers(epoch_updater_platform_policy_contract)
+    add_test(NAME epoch_updater_platform_policy_contract COMMAND epoch_updater_platform_policy_contract)
+    set_tests_properties(epoch_updater_platform_policy_contract PROPERTIES TIMEOUT 20)
     add_test(
         NAME epoch_engine_contract
         COMMAND $<TARGET_FILE:epoch> --engine-contract-self-test
@@ -2706,6 +2720,51 @@ if(BUILD_TESTING)
         set_property(TEST epoch_engine_contract PROPERTY
             ENVIRONMENT "DISPLAY=;WAYLAND_DISPLAY="
         )
+    endif()
+    if(EPOCH_ENABLE_GRAPHICS_TESTS AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        find_package(Python3 3.10 COMPONENTS Interpreter REQUIRED)
+        find_program(EPOCH_XVFB_RUN_EXECUTABLE NAMES xvfb-run REQUIRED)
+        # Runtime proof must use the built executable with its matching assets.
+        # This copy is opt-in only; normal builds never launch graphics tests.
+        add_custom_command(TARGET epoch POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${CMAKE_CURRENT_SOURCE_DIR}/assets"
+                "$<TARGET_FILE_DIR:epoch>/assets"
+            VERBATIM
+        )
+        foreach(_epoch_linux_renderer IN ITEMS opengl sdl sfml raylib vulkan software)
+            string(TOUPPER "${_epoch_linux_renderer}" _epoch_renderer_option)
+            if(_epoch_linux_renderer STREQUAL "software")
+                set(_epoch_renderer_option SOFTWARE_RENDERER)
+            endif()
+            if(NOT EPOCH_${_epoch_renderer_option}_ACTIVE)
+                continue()
+            endif()
+            set(_epoch_renderer_flags)
+            set(_epoch_renderer_label software_cpu)
+            if(_epoch_linux_renderer STREQUAL "vulkan")
+                set(_epoch_renderer_flags --software-vulkan)
+                set(_epoch_renderer_label software_vulkan)
+            elseif(NOT _epoch_linux_renderer STREQUAL "software")
+                set(_epoch_renderer_flags --software-opengl)
+                set(_epoch_renderer_label software_opengl)
+            endif()
+            add_test(NAME epoch_linux_${_epoch_linux_renderer}_smoke
+                COMMAND "${EPOCH_XVFB_RUN_EXECUTABLE}" -a
+                    "--server-args=-screen 0 1280x720x24 -nolisten tcp"
+                    "${Python3_EXECUTABLE}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/../Tools/build/run_linux_graphics_smoke.py"
+                    --binary "$<TARGET_FILE:epoch>"
+                    --output-root "${CMAKE_CURRENT_SOURCE_DIR}/../build/validation/linux-graphics"
+                    --renderer "${_epoch_linux_renderer}"
+                    ${_epoch_renderer_flags} --timeout-seconds 30
+            )
+            set_tests_properties(epoch_linux_${_epoch_linux_renderer}_smoke PROPERTIES
+                WORKING_DIRECTORY "$<TARGET_FILE_DIR:epoch>"
+                TIMEOUT 45 RUN_SERIAL TRUE
+                LABELS "graphics;linux;${_epoch_renderer_label}"
+            )
+        endforeach()
     endif()
 endif()
 

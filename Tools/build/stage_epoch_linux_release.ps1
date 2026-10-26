@@ -141,6 +141,7 @@ $binaryRootWsl = To-LinuxPath $binaryRoot
 $outWsl = To-LinuxPath $resolvedOutput
 $tarWsl = To-LinuxPath $tarball
 $verifyLogsWsl = To-LinuxPath $verifyLogs
+$graphicsRunnerWsl = To-LinuxPath (Join-Path $repo 'Tools/build/run_linux_graphics_smoke.py')
 
 $validationScript = @'
 set -euo pipefail
@@ -202,10 +203,10 @@ $runtimeSmoke = if ($SkipRuntimeSmoke) {
     "printf '%s\n' 'Linux packaged runtime smoke explicitly skipped; package remains build/contract proven only.'"
 }
 elseif ($SoftwareOpenGLSmoke) {
-    "EPOCH_LOG_DIR='__LOGS__' LIBGL_ALWAYS_SOFTWARE=1 timeout --signal=INT --kill-after=3s 30s xvfb-run -a --server-args='-screen 0 1280x720x24 -nolisten tcp' ./epoch --editor --renderer opengl --smoke"
+    "xvfb-run -a --server-args='-screen 0 1280x720x24 -nolisten tcp' python3 '$graphicsRunnerWsl' --binary '$stageWsl/epoch' --output-root '__LOGS__/graphics' --software-opengl"
 }
 else {
-    "EPOCH_LOG_DIR='__LOGS__' timeout --signal=INT --kill-after=3s 30s ./epoch --editor --renderer opengl --smoke"
+    "python3 '$graphicsRunnerWsl' --binary '$stageWsl/epoch' --output-root '__LOGS__/graphics'" + $(if ($env:LIBGL_ALWAYS_SOFTWARE -eq '1') { ' --software-opengl' } else { '' })
 }
 $runtimeSmoke = $runtimeSmoke.Replace('__LOGS__', $verifyLogsWsl)
 $validationScript = $validationScript.Replace('__RUNTIME_SMOKE__', $runtimeSmoke)
@@ -213,9 +214,8 @@ $validationScript = $validationScript.Replace('__RUNTIME_SMOKE__', $runtimeSmoke
 Invoke-LinuxScript -Script $validationScript -Label 'Linux staged-package validation'
 
 # Validation paths can still create executable-local runtime artifacts before
-# their environment override is consumed. Public packages never carry them.
-Remove-EpochPackageItem -LiteralPath (Join-Path $stage 'logs') -PackageRoot $packageRoot -Recurse
-Remove-EpochPackageItem -LiteralPath (Join-Path $stage 'cache') -PackageRoot $packageRoot -Recurse
+# their environment override is consumed. Preserve them outside the payload.
+Move-EpochPackageValidationEvidence -Stage $stage -VerifyLogs $verifyLogs -PackageRoot $packageRoot
 
 Write-EpochRuntimeDistribution -Stage $stage -Edition $edition.Id -Version $Version
 

@@ -38,6 +38,7 @@ module;
 export module updater.config;
 
 import platform.engine;
+import updater.platform_policy;
 import epoch.version;
 
 namespace epochengine::updater
@@ -249,12 +250,12 @@ namespace epochengine::updater
 
     export inline std::string PROJECT_SOURCE_ARCHIVE_EXTENSION()
     {
-        return std::string{ epochengine::platform::policy::source_snapshot_archive_extension() };
+        return std::string{ epochengine::updater::platform_policy::source_snapshot_archive_extension() };
     }
 
     export inline std::string PROJECT_SOURCE_ARCHIVE_LABEL()
     {
-        return std::string{ epochengine::platform::policy::source_snapshot_archive_label() };
+        return std::string{ epochengine::updater::platform_policy::source_snapshot_archive_label() };
     }
 
     export inline std::string PACKAGED_BINARY_ASSET_PREFIX()
