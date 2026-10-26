@@ -7,8 +7,8 @@
       "repository": "Autodidac/EpochGui",
       "tree": "c7c0ddd948cf42b9b646b17473be3d0f51c00e34",
       "mode": "engine_owned_gui_fork",
-      "upstream_revision": "a990d4202ccb21a1b745aa999012a96fdc986d5e",
-      "upstream_tree": "41a1bae07239262e3063f629ca34793f9def5038",
+      "upstream_revision": "7d5d5514a1443c0ef340a626fa163569858ca362",
+      "upstream_tree": "002f95890c448b9f9a85a382fc72cfc0ba7ea711",
       "note": "Portable implementation/header/module/test files exactly match the accepted upstream source revision and are SHA-256 checked by portable_source_manifest.json. Build integration and documentation differ, so this entry deliberately does not claim a full-tree portable mirror.",
       "portable_source_manifest": "Engine/dep/EpochGui/portable_source_manifest.json"
     },

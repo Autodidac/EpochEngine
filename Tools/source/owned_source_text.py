@@ -10,6 +10,19 @@ import re
 _INCLUDE = re.compile(r'^\s*#\s*include\s+"([^"\r\n]+\.inl)"[^\r\n]*(?:\r?\n|$)')
 
 
+def definition(source, signature):
+    """Extract a balanced source body for the existing CPU contract consumers."""
+    index = source.index(signature)
+    opening = source.index('{', index)
+    level, cursor = 1, opening + 1
+    while level and cursor < len(source):
+        level += (source[cursor] == '{') - (source[cursor] == '}')
+        cursor += 1
+    if level:
+        raise ValueError(f'Unclosed source definition: {signature}')
+    return source[index:cursor]
+
+
 def read_owned_source(path, *, encoding='utf-8', errors=None,
                       maximum_files=512, maximum_bytes=16 * 1024 * 1024):
     """Expand quoted implementation includes within the main owner's source tree.

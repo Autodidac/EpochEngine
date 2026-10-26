@@ -146,7 +146,8 @@ namespace epochengine::editor_project_textures
             const fs::path& source)
         {
             const std::string extension = lowercase_extension(source);
-            return extension == ".ppm"
+            return extension == ".png"
+                || extension == ".ppm"
                 || extension == ".bmp"
                 || extension == ".tga";
         }

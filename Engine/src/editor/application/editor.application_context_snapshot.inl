@@ -1,5 +1,11 @@
 // Epoch feature implementation; included by editor.core application owner only.
 // SPDX-License-Identifier: LicenseRef-MIT-NoSell
+    struct EditorPlantLabPreview final
+    {
+        forest::ForestAssetDocument document{};
+        forest::CompiledForestAsset compiled{};
+    };
+
     EditorContextSnapshot editor_capture_context_snapshot(const core::Context* ctx)
     {
         EditorContextSnapshot snapshot{};
@@ -14,6 +20,11 @@
 
         const EditorState& editor = it->second;
         snapshot.valid = true;
+        if (editor.plantLabDocumentInitialized && editor.plantLabCompiled.valid
+            && editor.plantLabCompiled.sourceRevision == editor.plantLabDocument.revision
+            && editor.plantLabCompiled.sourceContentHash == editor.plantLabDocument.contentHash)
+            snapshot.plant_lab_preview = std::make_shared<const EditorPlantLabPreview>(
+                EditorPlantLabPreview{editor.plantLabDocument, editor.plantLabCompiled});
         snapshot.project_id = editor.projectId;
         snapshot.project_name = editor.projectName;
         snapshot.project_root = editor.projectRoot;
@@ -82,6 +93,7 @@
         snapshot.workspace_tab = snapshot_workspace_tab(editor.workspaceTab);
         snapshot.dock_status_tab = snapshot_workspace_tab(editor.dockStatusTab);
         snapshot.main_surface = static_cast<std::uint8_t>(editor.mainSurface);
+        snapshot.game2d_gui_workspace = editor.game2DGuiWorkspace;
         snapshot.bottom_grid_split = gui_lib::normalize_bottom_dock_column_fraction(editor.bottomGridSplit);
         snapshot.outliner_split = snapshot_layout_split(editor.outlinerSplit, 0.20f);
         snapshot.inspector_split = snapshot_layout_split(editor.inspectorSplit, 0.33f);
@@ -128,6 +140,33 @@
         snapshot.systems_task_pan = editor.systems.taskPan;
         snapshot.camera = previewgrid::capture_camera_rig_snapshot(ctx);
         return snapshot;
+    }
+
+    bool editor_restore_plant_lab_preview(
+        const std::shared_ptr<core::Context>& ctx,
+        const EditorContextSnapshot& snapshot)
+    {
+        if (!ctx || !snapshot.valid || !snapshot.plant_lab_preview)
+            return false;
+        const auto& preview = *snapshot.plant_lab_preview;
+        if (!preview.compiled.valid
+            || preview.compiled.sourceRevision != preview.document.revision
+            || preview.compiled.sourceContentHash != preview.document.contentHash)
+            return false;
+        // Called only for the newly-created application context. Never apply
+        // the source project's full snapshot or change its current application.
+        editor_load_application(ctx, EditorApplicationKind::PlantLab);
+        auto& editor = editor_state_for(ctx);
+        if (editor.applicationKind != EditorApplicationKind::PlantLab)
+            return false;
+        editor.plantLabDocument = preview.document;
+        editor.plantLabCompiled = preview.compiled;
+        editor.plantLabCompiledRevision = preview.document.revision;
+        editor.plantLabCompiledContentHash = preview.document.contentHash;
+        editor.plantLabDocumentInitialized = true;
+        ensure_plant_lab_preview_entities(editor);
+        push_editor_log(editor, "[plant] Opened the selected compiled plant in a separate Plant Lab application.");
+        return true;
     }
 
     bool editor_restore_context_snapshot(core::Context* ctx, const EditorContextSnapshot& snapshot)
@@ -296,8 +335,13 @@
         editor.workspaceTab = snapshot_workspace_tab(snapshot.workspace_tab);
         editor.dockStatusTab = snapshot_workspace_tab(snapshot.dock_status_tab);
         editor.mainSurface = snapshot_main_surface(snapshot.main_surface);
+        editor.game2DGuiWorkspace = snapshot.game2d_gui_workspace
+            || editor_application_owns_dedicated_gui_workspace(editor.applicationKind);
         if (!editor_application_supports_surface(application, editor.mainSurface))
             editor.mainSurface = application.default_surface;
+        // A native-context restore retains the user's selected/closed panes.
+        // Companions are activated on the next explicit workspace selection.
+        editor.workspaceCompanionsPending = false;
         editor.bottomGridSplit = gui_lib::normalize_bottom_dock_column_fraction(snapshot.bottom_grid_split);
         editor.outlinerSplit = snapshot_layout_split(snapshot.outliner_split, 0.20f);
         editor.inspectorSplit = snapshot_layout_split(snapshot.inspector_split, 0.33f);

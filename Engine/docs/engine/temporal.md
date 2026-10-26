@@ -330,6 +330,13 @@ external side effects.
 
 ## Execution And Resource Fabric
 
+The [connected voxel/SDF world](voxels.md) uses these time/revision contracts for
+durable edits, derived representations and stale-job rejection. World streaming
+and AI model lifecycle share admission budgets while retaining separate owners.
+Unload/reload cannot lose edits or reinterpret unavailable regions as empty.
+These rules apply to universal software consumers as well as games; an empty
+application or camera-only consumer need not instantiate the world or any bot.
+
 The capability plan selects an implementation after observation. A demand-driven
 execution graph may span:
 

@@ -220,7 +220,11 @@
                 if (!editorSnapshot.valid)
                     return fail_restore("replacement editor state snapshot was invalid");
 
-                if (!epochengine::editor_restore_context_snapshot(targetCtx.get(), editorSnapshot))
+                const bool plantLabApplication = guiRoute == "application.plant_lab";
+                const bool restored = plantLabApplication
+                    ? epochengine::editor_restore_plant_lab_preview(targetCtx, editorSnapshot)
+                    : epochengine::editor_restore_context_snapshot(targetCtx.get(), editorSnapshot);
+                if (!restored)
                     return fail_restore("replacement editor state restore failed");
 
                 unload_active_scene(targetSession);
@@ -236,8 +240,10 @@
                     {
                         epochengine::editor_set_context_selection_status(
                             sourceContext,
-                            std::string{ "Detached " } + std::string{ guiRoute }
-                                + " panel cloned editor state; source editor remains active.");
+                            plantLabApplication
+                                ? std::string{"Opened Plant Lab preview; source editor/project remains active."}
+                                : std::string{ "Detached " } + std::string{ guiRoute }
+                                    + " panel cloned editor state; source editor remains active.");
                     }
                     pendingEditorSwitchSnapshots.erase(pendingIt);
                     return PendingEditorRestoreStatus::restored;
@@ -1172,6 +1178,9 @@
                             }
 
                             pendingRestoreStatus = restore_pending_editor_switch_snapshot(ctx, session, win->guiRoute);
+                            if (pendingRestoreStatus == PendingEditorRestoreStatus::restored
+                                && win->guiRoute == "application.plant_lab")
+                                win->guiRoute.clear(); // Full application, not a detached tool pane.
                             if (pendingRestoreStatus == PendingEditorRestoreStatus::restored)
                             {
                                 session.shared_camera_bootstrap_applied = true;
@@ -1372,7 +1381,8 @@
                                 if (opened)
                                 {
                                     stash_editor_switch_snapshot(requestedType, ctx, route);
-                                    epochengine::editor_mark_context_panel_detached(route, true);
+                                    if (route != "application.plant_lab")
+                                        epochengine::editor_mark_context_panel_detached(route, true);
                                 }
                                 const std::string logLine = opened
                                     ? std::string{ routeMeta.open_success }
@@ -1493,6 +1503,17 @@
                                 epoch_editor_perf::FrameStage::gui_begin);
                             gui::begin_frame(ctx, dt, mouse_pos, mouse_left_down);
                             const auto editor_frame = epochengine::editor_run(ctx);
+                            for (const auto& route : editor_frame.companion_pane_activations)
+                            {
+                                if (route.empty()) continue;
+                                if (!mgr.OpenDetachedContextWindow(
+                                        epochengine::core::DetachedContextWindowRequest{
+                                            .gui_route = route,
+                                            .activate_existing_only = true}))
+                                    logger::get(kEditorLog).logf(logger::LogLevel::WARN,
+                                        std::source_location::current(),
+                                        "Companion pane activation is unavailable for route '{}'; no window was created.", route);
+                            }
                             epoch_editor_perf::current_frame_watch().mark(
                                 epoch_editor_perf::FrameStage::host_after_editor);
 
@@ -1740,7 +1761,8 @@
                                 if (opened)
                                 {
                                     stash_editor_switch_snapshot(requestedType, ctx, route);
-                                    epochengine::editor_mark_context_panel_detached(route, true);
+                                    if (route != "application.plant_lab")
+                                        epochengine::editor_mark_context_panel_detached(route, true);
                                 }
                                 const std::string logLine = opened
                                     ? std::string{ routeMeta.open_success }

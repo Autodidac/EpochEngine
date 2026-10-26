@@ -30,6 +30,17 @@ existing translation unit and appear under **Implementation Files** in MSVC.
 They improve physical ownership; they do not by themselves establish a separate
 library, repository or independently validated platform target.
 
+Prefer real module implementation units or owned `.cpp` files for new behavior.
+Do not split a large function into more textual includes just to pass the line
+limit. Existing fragments are migration debt where they depend on surrounding
+local variables, anonymous types or declaration order. Extract a cohesive typed
+boundary first, then compile its implementation independently and remove the old
+fragment in the same validated change. Templates, genuine global-module-fragment
+requirements and the current physically private edition extraction may retain
+textual inclusion where a reviewed alternative is not yet available. Preserve
+the private/public source boundary during that extraction; renaming `.inl` to
+`.cpp` while still including it does not complete the work.
+
 Every first-party C++ filename has exactly one ownership separator:
 
 ```text

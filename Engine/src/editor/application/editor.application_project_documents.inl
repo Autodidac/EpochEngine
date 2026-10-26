@@ -37,6 +37,8 @@
                 application.kind == EditorApplicationKind::GuiEditor
                     ? OutlinerToolTab::Gui
                     : OutlinerToolTab::World;
+            state.game2DGuiWorkspace = application.kind == EditorApplicationKind::GuiEditor;
+            state.workspaceCompanionsPending = true;
             state.projectCameraMode = application_camera_mode(application.camera_policy);
             state.viewportCameraMode = application_camera_mode(application.camera_policy);
             state.showOutliner = application.panes.outliner;
@@ -91,6 +93,10 @@
             state.plantLabCompiledRevision = 0u;
             state.plantLabCompiledContentHash = 0u;
             state.plantLabDocumentInitialized = false;
+            state.forestPreviewEntities.clear();
+            state.forestPreviewRevision = 0u;
+            state.forestPreviewContentHash = 0u;
+            state.forestProjectCamera.reset();
             state.aiAuthoringPlan = {};
             state.aiProjectScriptDraft.clear();
             state.aiProjectScriptRequested = false;
@@ -1565,6 +1571,7 @@
             {
                 select_editor_entity(state, *entityIndex);
                 state.outlinerToolTab = OutlinerToolTab::Gui;
+                state.game2DGuiWorkspace = true;
                 state.guiAuthoringSection = 1u;
                 state.inspectorToolTab = InspectorToolTab::Properties;
             }
@@ -1845,14 +1852,15 @@
             if (state.mainSurface == EditorMainSurface::Scene)
                 return ActiveEditDocument::scene;
             if (state.mainSurface == EditorMainSurface::Game2D
-                && state.outlinerToolTab == OutlinerToolTab::Gui)
+                && state.game2DGuiWorkspace)
                 return ActiveEditDocument::gui;
 #if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
             if (state.mainSurface == EditorMainSurface::Game2D
-                && state.outlinerToolTab == OutlinerToolTab::TileMap)
+                && !state.game2DGuiWorkspace)
                 return ActiveEditDocument::tilemap;
 #endif
-            if (state.mainSurface == EditorMainSurface::PlantLab)
+            if (state.mainSurface == EditorMainSurface::PlantLab
+                || state.mainSurface == EditorMainSurface::ForestFactory)
                 return ActiveEditDocument::plant_lab;
             return ActiveEditDocument::none;
         }

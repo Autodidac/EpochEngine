@@ -184,6 +184,17 @@
                                 clear_before_ui_frame(ctx);
                                 gui::begin_frame(ctx, dt, mouse_pos, mouse_left_down);
                                 const auto editor_frame = epochengine::editor_run(ctx);
+                                for (const auto& route : editor_frame.companion_pane_activations)
+                                {
+                                    if (route.empty()) continue;
+                                    if (!mgr.OpenDetachedContextWindow(
+                                            epochengine::core::DetachedContextWindowRequest{
+                                                .gui_route = route,
+                                                .activate_existing_only = true}))
+                                        logger::get(kEditorLog).logf(logger::LogLevel::WARN,
+                                            std::source_location::current(),
+                                            "Companion pane activation is unavailable for route '{}'; no window was created.", route);
+                                }
 
                                 switch (editor_frame.command)
                                 {

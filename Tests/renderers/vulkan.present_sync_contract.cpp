@@ -16,6 +16,7 @@ inline int next=100,allocations{},failAt=-1,waits{},resets{},submits{},presents{
 inline int signal{},presentWait{},submittedFence{},waitedFence{},acquireSemaphore{};
 inline unsigned image=2;
 inline bool invalidReuse{},idle{};
+inline bool invalidDescriptorFree{};
 inline std::unordered_set<int> live,pending;
 inline std::unordered_map<unsigned,int> imageWait;
 struct Delete {void operator()(int* p)const {if(p){live.erase(*p);delete p;}}};
@@ -63,6 +64,11 @@ struct Queue {
  }
 };
 struct Resource {void reset(){};void clear(){};};
+struct DescriptorPoolResource {bool live=true;void reset(){live=false;}};
+struct DescriptorSetsResource {
+ DescriptorPoolResource* pool;bool live=true;
+ void clear(){if(live&&!pool->live)mock::invalidDescriptorFree=true;live=false;}
+};
 struct Application {
  static constexpr unsigned kMaxFramesInFlight=2;
  Device backing;Device* device=&backing;Queue graphicsQueue,presentQueue;
@@ -73,7 +79,9 @@ struct Application {
  std::unordered_map<int,int> guiContexts;
  Resource framebuffers,depthImageView,depthImage,depthImageMemory,arcadeScreenPipeline,
  solidGraphicsPipeline,graphicsPipeline,pipelineLayout,renderPass,swapChainImageViews,
- descriptorPool,descriptorSets,uniformBuffers,uniformBuffersMemory,uniformBuffersMapped;
+ uniformBuffers,uniformBuffersMemory,uniformBuffersMapped;
+ DescriptorPoolResource descriptorPool;
+ DescriptorSetsResource descriptorSets{&descriptorPool};
  Application(){for(int i=0;i<2;++i){imageAvailableSemaphores.push_back(std::make_unique<int>(10+i));
  inFlightFences.push_back(std::make_unique<int>(20+i));}for(int i=0;i<3;++i)commandBuffers.push_back(std::make_unique<int>(30+i));}
  void assert_thread_affinity(){} bool consume_framebuffer_resize_intent(){return std::exchange(resize,false);}
@@ -85,7 +93,7 @@ struct Application {
  // Fake swapchain/device boundary; production cleanup and allocator run unchanged.
  void recreateSwapChain(){++mock::recreates;mock::idle=true;mock::pending.clear();
  cleanupSwapChain();swapChain=std::make_unique<int>(43);swapChainImages.resize(nextImageCount);
- createPresentSyncObjects();}
+ createPresentSyncObjects();descriptorPool.live=true;descriptorSets.live=true;}
 };
 ALLOCATOR
 CLEANUP
@@ -111,6 +119,7 @@ int main(){
  mock::acquireResult=vk::Result::eErrorOutOfDateKHR;mock::image=99;app.drawFrame();
  CHECK(mock::submits==oldSubmits&&mock::resets==oldResets&&app.currentFrame==oldFrame);
  CHECK(mock::recreates==1&&mock::idle&&app.renderFinishedSemaphores.size()==2&&mock::live.size()==2);
+ CHECK(!mock::invalidDescriptorFree);
  for(int old:oldPool)CHECK(!mock::live.contains(old));
  mock::acquireResult=vk::Result::eSuccess;mock::image=1;app.drawFrame();
  CHECK(mock::signal==*app.renderFinishedSemaphores[1]&&!mock::invalidReuse);

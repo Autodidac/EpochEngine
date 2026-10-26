@@ -1,5 +1,59 @@
 // Epoch feature implementation; included by editor.core application owner only.
 // SPDX-License-Identifier: LicenseRef-MIT-NoSell
+        const auto activate_workspace_companions = [&](EditorMainSurface surface)
+        {
+            // Only the final explicit view choice in this frame owns activation.
+            for (auto& pending : result.companion_pane_activations)
+                pending.clear();
+            std::string_view primary{};
+            switch (surface)
+            {
+            case EditorMainSurface::Scene:
+            case EditorMainSurface::ForestFactory:
+            case EditorMainSurface::PlantLab:
+                primary = "pane.world_outliner";
+                break;
+            case EditorMainSurface::Game2D:
+                primary = editor.game2DGuiWorkspace
+                    ? "pane.gui_hierarchy" : "pane.tile_map";
+                break;
+            case EditorMainSurface::Assets:
+                primary = "pane.asset_browser";
+                break;
+            default: return;
+            }
+            const auto activate = [&](std::string_view route)
+            {
+                const auto pane = editor_tool_pane_from_route(route);
+                if (!pane || !pane_supported(*pane)) return;
+                set_pane_shown(route, true);
+                // Keep detached panes and their existing dock destinations.
+                // Selecting a workspace never resets the user's dock layout.
+                if (!pane_route_is_detached(route))
+                    set_active_pane(pane_dock_region(route), route);
+                else
+                {
+                    for (auto& pending : result.companion_pane_activations)
+                    {
+                        if (pending.empty())
+                        {
+                            pending.assign(route);
+                            break;
+                        }
+                    }
+                }
+            };
+            activate("pane.properties");
+            // If both companions share a custom group, the primary wins.
+            activate(primary);
+        };
+
+        if (editor.workspaceCompanionsPending)
+        {
+            editor.workspaceCompanionsPending = false;
+            activate_workspace_companions(editor.mainSurface);
+        }
+
         auto apply_editor_surface = [&](EditorMainSurface surface, std::string_view source)
         {
             if (!editor_application_supports_surface(application, surface))
@@ -23,6 +77,14 @@
             }
 
             const bool changedSurface = editor.mainSurface != surface;
+            if (changedSurface && editor.mainSurface == EditorMainSurface::ForestFactory
+                && editor.forestProjectCamera && ctx)
+            {
+                (void)previewgrid::restore_camera_rig_snapshot(ctx.get(), *editor.forestProjectCamera);
+                editor.forestProjectCamera.reset();
+            }
+            if (changedSurface && surface == EditorMainSurface::ForestFactory && ctx)
+                editor.forestProjectCamera = previewgrid::capture_camera_rig_snapshot(ctx.get());
             editor.mainSurface = surface;
             if (changedSurface)
                 editor.surfaceSettleFrames = 1;
@@ -43,7 +105,10 @@
                 break;
             case EditorMainSurface::Game2D:
                 editor.workspaceTab = EditorWorkspaceTab::Project;
-                editor.outlinerToolTab = OutlinerToolTab::TileMap;
+                editor.game2DGuiWorkspace = editor.game2DGuiWorkspace
+                    || editor_application_owns_dedicated_gui_workspace(editor.applicationKind);
+                editor.outlinerToolTab = editor.game2DGuiWorkspace
+                    ? OutlinerToolTab::Gui : OutlinerToolTab::TileMap;
                 editor.previewMode = core::ScenePreviewMode::Editor;
                 editor.viewportCameraMode = previewgrid::CameraMode::Canvas2D;
                 if (ctx)
@@ -51,7 +116,9 @@
                     epochengine::previewgrid::set_camera_mode(ctx.get(), epochengine::previewgrid::CameraMode::Canvas2D);
                     epochengine::previewgrid::reset_camera(ctx.get());
                 }
-                push_editor_log(editor, "[editor] 2D / UI opened in Tile Map mode with the locked Canvas2D camera.");
+                push_editor_log(editor, editor.game2DGuiWorkspace
+                    ? "[editor] 2D / UI opened in GUI Overlay mode."
+                    : "[editor] 2D / UI opened in Tile Map mode with the locked Canvas2D camera.");
                 break;
             case EditorMainSurface::Assets:
                 editor.workspaceTab = EditorWorkspaceTab::Assets;
@@ -67,10 +134,13 @@
                 editor.previewMode = core::ScenePreviewMode::Editor;
                 editor.viewportCameraMode = previewgrid::CameraMode::Editor;
                 if (ctx)
+                {
                     epochengine::previewgrid::set_camera_mode(ctx.get(), epochengine::previewgrid::CameraMode::Editor);
+                    focus_forest_factory_preview(ctx.get(), editor);
+                }
                 push_editor_log(
                     editor,
-                    "[forest] Forest Factory placement opened for adding Plant Lab output to the active 3D scene.");
+                    "[forest] Plant preview opened. Edit the plant, then Add to Scene; the project scene is unchanged.");
                 break;
             case EditorMainSurface::PlantLab:
                 editor.workspaceTab = EditorWorkspaceTab::Assets;
@@ -106,7 +176,10 @@
             default:
                 break;
             }
-            // Surface switches do not mutate user-owned pane visibility.
+            // This route runs for a requested view transition, never as a
+            // per-frame visibility rule. The user may close/select panes again.
+            activate_workspace_companions(surface);
+            // Companion activation leaves dock geometry and destinations intact.
         };
 
         if (editor.aiAuthoringSurfaceRestoreQueued)

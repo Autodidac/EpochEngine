@@ -6,6 +6,13 @@ Epoch v0.90.21 introduced the first production renderer integration for event-dr
 
 ## Runtime model
 
+October25 connected architecture target: share semantic damage/revision decisions
+across software, GUI, cameras, world regions and permitted bot actions, then let
+each renderer own reconstruction/presentation. See [voxel/world integration](voxels.md#central-event-rendering-and-system-one).
+System One coordinates work through existing task/admission services; it is not
+required for rendering and may not suppress real invalidation. This is planned
+cross-backend integration, not a claim that every backend now has partial reuse.
+
 The editor scene already owns camera revisions and scene-geometry revisions. v0.90.21 separated the raw scene-content revision from the combined camera/geometry revision and records object-marker change frames when the marker population is stable.
 
 For a localized object mutation:

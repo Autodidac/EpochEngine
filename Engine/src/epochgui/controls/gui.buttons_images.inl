@@ -288,7 +288,7 @@
             draw_sprite(palette.titleBar, position.x + 4.0f, position.y,
                 (std::max)(0.0f, width - 8.0f), 1.0f);
 
-        const auto& muted = g_frame.activeTheme == ThemeVariant::DefaultLight
+        const auto& muted = active_palette_is_light()
             ? g_resources.halfTextLightFont : g_resources.halfTextFont;
         const auto* previousFont = g_temporaryTextFont;
         if (!options.enabled && muted.asset)

@@ -19,9 +19,10 @@ import json
 from pathlib import Path, PurePosixPath
 import re
 import subprocess
+from urllib.parse import urlsplit
 
 WORKFLOW = '.github/workflows/epoch-public.yml'
-WORKFLOW_SHA256 = '6600dccb2e1caf12b9c2b11a343fabbda4cf7d7710dabc99ac5a647e726b9bc5'
+WORKFLOW_SHA256 = 'a144c98d2e5c652a45a244e22e6cb6ba3897040078ad5aa5fcc31b30f57738e8'
 MANIFEST = 'source-projection.json'
 CPP = {'.c','.cc','.cpp','.cxx','.h','.hh','.hpp','.hxx','.ixx','.cppm','.mpp','.inl','.inc','.ipp','.tpp','.cu','.cuh'}
 SOURCE_HASH_ALGORITHM = 'sha256-git-text-lf-v1'
@@ -68,7 +69,7 @@ PRIVATE_STEMS = ('ai.development_', 'ai.iteration_', 'ai.source_', 'ai.self_iter
 PRIVATE_STEMS += ('editor.ai_approved_patch', 'editor.ai_engine_mission',
                   'editor.ai_reference_images')
 REVIEWED_SHARED = {'Engine/src/editor/ai/editor.ai_session_diagnostics.hpp': 'fb102f6ef8b39d0e8155dbdc564a7432a41d7f2f6322d976c85bcfd542e2953f', 'Engine/src/editor/ai/editor.ai_source_intent.hpp': '01001dab803008aadd19be834f4eb1e6f92a2a0748a9fbf475d2a46ae1eb71fa', 'AGENTS.md': 'a9e6a23513ee770be38d12db2baf2faf7fd28bf483bae4e80e6ba04093f16924'}
-PRIVATE_API = re.compile(r'\b(?:editor_ai_development_panel|editor_ai_development_controller|aiDevelopmentPanel|aiSourceArtifacts|AiSourceTaskResult|editor_ai_approved_patch|editor_ai_engine_mission|engine_mission_requested|engine_mission_file|engine_mission_model|engine_mission_error|set_source_mission_model|source_mission_setup_stop_source|epoch_engine_mission_model|source_mission_model|ApprovedPatchHandoff|prepare_approved_patch_handoff|invalidate_approved_patch_handoff|epoch_propose_source_patch|epoch_select_source_context|EPOCH_SOURCE_PROPOSAL_V1|EPOCH_SOURCE_CONTEXT_REQUEST_V1|source_iteration|source_self_review|project_ai_iteration|project_ai_iteration_session|EditorProjectSelfIterationProvision|projectSelfIterationDefault|ProjectSelfIterationChoice|self_iteration_provision|includeSelfIteration|project_self_iteration_choices|project_self_iteration_label|self_iteration_orchestrator|source_patch_stager|source_patch_proposal|source_patch_bundle|curated_context_bundle|development_proposal_codec|candidate_artifacts(?=\s*::)|push_ai_development_log(?=\s*\()|log_ai_candidate_event(?=\s*\())\b')
+PRIVATE_API = re.compile(r'\b(?:editor_ai_development_panel|editor_ai_development_controller|aiDevelopmentPanel|aiSourceArtifacts|AiSourceTaskResult|editor_ai_approved_patch|editor_ai_engine_mission|engine_mission_requested|engine_mission_file|engine_mission_model|engine_mission_candidate|engine_mission_error|set_source_mission_model|source_mission_setup_stop_source|epoch_engine_mission_model|source_mission_model|ApprovedPatchHandoff|prepare_approved_patch_handoff|invalidate_approved_patch_handoff|epoch_propose_source_patch|epoch_select_source_context|EPOCH_SOURCE_PROPOSAL_V1|EPOCH_SOURCE_CONTEXT_REQUEST_V1|source_iteration|source_self_review|project_ai_iteration|project_ai_iteration_session|EditorProjectSelfIterationProvision|projectSelfIterationDefault|ProjectSelfIterationChoice|self_iteration_provision|includeSelfIteration|project_self_iteration_choices|project_self_iteration_label|self_iteration_orchestrator|source_patch_stager|source_patch_proposal|source_patch_bundle|curated_context_bundle|development_proposal_codec|candidate_artifacts(?=\s*::)|push_ai_development_log(?=\s*\()|log_ai_candidate_event(?=\s*\())\b')
 PRIVATE_AUTH = re.compile(r'/api/private/epoch-engine/device/|EpochEngine\.SourceDeviceAuth\.v1|epoch-source-key-wrap-v1|EpochEngine private source DEK wrap v1')
 PRIVATE_NATIVE_CODING_API = re.compile(
     r'\b(?:AgentRuntime|ToolRegistry|InternalModelHost|register_builtin_tools|training_backend)\b|'
@@ -84,6 +85,8 @@ PRIVATE_SOURCE_PROVENANCE = re.compile(
     rb'/(?:home|Users)/[^/\s<>`"\']+/|'
     rb'\.codex[\\/]+worktrees[\\/]+[a-z0-9]{2,}[\\/]|'
     rb'\bai[\\/]+s[0-9][a-z0-9]{8,}(?:[\\/]|[\s`"\']|$)')
+HTTPS_REFERENCE = re.compile(rb'(?i)\bhttps://[^\s<>`"\'\\]+')
+HTTPS_HOST = re.compile(r'[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?\Z')
 
 
 def private_source_provenance(name: str, data: bytes):
@@ -91,7 +94,35 @@ def private_source_provenance(name: str, data: bytes):
     # reproducibility/privacy concern; this gate refuses source-text evidence.
     path = PurePosixPath(name)
     if path.suffix.lower() in HASH_TEXT_SUFFIXES or path.name.lower() in HASH_TEXT_NAMES:
-        return PRIVATE_SOURCE_PROVENANCE.search(data)
+        remote_paths = []
+        for reference in HTTPS_REFERENCE.finditer(data):
+            try:
+                value = reference.group().decode('ascii')
+                url = urlsplit(value)
+                # Credentials must never gain an exception by looking like a
+                # documentation URL, including empty or percent-encoded users.
+                if '@' in url.netloc:
+                    return reference
+                host = url.hostname or ''
+                if (not HTTPS_HOST.fullmatch(host)
+                        or '.' not in host or host.lower().endswith('.localhost')
+                        or (url.port is not None and not 1 <= url.port <= 65535)):
+                    continue
+                start = reference.start() + len('https://') + len(url.netloc)
+                remote_paths.append((start, start + len(url.path)))
+            except (UnicodeDecodeError, ValueError):
+                continue
+        for match in PRIVATE_SOURCE_PROVENANCE.finditer(data):
+            # /users/platforms in an HTTPS documentation path is not a local
+            # home directory. Keep drive paths, candidate/worktree identities,
+            # file URLs, and local paths in URL queries/fragments blocked.
+            unix_home = match.group().lower().startswith((b'/users/', b'/home/'))
+            if data[max(0, match.start() - 7):match.start()].lower() == b'file://':
+                return match
+            if unix_home and any(start <= match.start() and match.end() <= end
+                                 for start, end in remote_paths):
+                continue
+            return match
     return None
 
 

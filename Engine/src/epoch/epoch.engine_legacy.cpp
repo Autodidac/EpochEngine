@@ -178,6 +178,7 @@ import scene.surface_alignment;
 import scene.tier0;
 import terrain.foundation;
 import voxel.field;
+import voxel.sdf;
 import voxel.storage;
 import water.system;
 import saveload.system;
@@ -352,19 +353,24 @@ namespace epochengine::core
 #endif
 
 #if defined(__linux__)
-        cfg.raylib_count = 0;
-        cfg.sdl_count = 0;
-        cfg.sfml_count = 0;
-        cfg.vulkan_count = 0;
-        cfg.opengl_count = 0;
-        cfg.directx_count = 0;
-        cfg.software_count = 0;
         cfg.parented = false;
+        // Default Linux startup is one context. An explicit backend request
+        // must retain its parsed counts instead of silently opening OpenGL.
+        if (!cli::backend_selection_explicit)
+        {
+            cfg.raylib_count = 0;
+            cfg.sdl_count = 0;
+            cfg.sfml_count = 0;
+            cfg.vulkan_count = 0;
+            cfg.opengl_count = 0;
+            cfg.directx_count = 0;
+            cfg.software_count = 0;
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
-        cfg.opengl_count = 1;
+            cfg.opengl_count = 1;
 #elif defined(EPOCH_USING_SOFTWARE_RENDERER) && (EPOCH_USING_SOFTWARE_RENDERER == 1)
-        cfg.software_count = 1;
+            cfg.software_count = 1;
 #endif
+        }
 #endif
 
         const bool defaultAutoBackendGrid =
@@ -1577,6 +1583,14 @@ namespace epochengine::core
 
         [[nodiscard]] DetachedPanelRouteMetadata detached_panel_route_metadata(std::string_view route) noexcept
         {
+            if (route == "application.plant_lab")
+                return DetachedPanelRouteMetadata{
+                    .title = "Plant Lab",
+                    .width = 1280,
+                    .height = 800,
+                    .open_success = "Plant Lab application window requested.",
+                    .open_failure = "Plant Lab application window could not be opened."
+                };
             const bool outlinerTool =
                 route == "pane.world_outliner"
                 || route == "pane.asset_browser"

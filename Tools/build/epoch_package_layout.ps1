@@ -78,3 +78,42 @@ function Write-EpochRuntimeDistribution {
     [System.IO.File]::WriteAllText((Join-Path $Stage 'epoch-distribution.json'),
         ($identity | ConvertTo-Json -Compress), [System.Text.UTF8Encoding]::new($false))
 }
+
+function Move-EpochPackageValidationEvidence {
+    param(
+        [Parameter(Mandatory = $true)][string]$Stage,
+        [Parameter(Mandatory = $true)][string]$VerifyLogs,
+        [Parameter(Mandatory = $true)][string]$PackageRoot
+    )
+    $stageRoot = Assert-EpochPackagePath -LiteralPath $Stage -PackageRoot $PackageRoot
+    $evidenceRoot = Assert-EpochPackagePath -LiteralPath $VerifyLogs -PackageRoot $PackageRoot
+    if ($evidenceRoot -eq $stageRoot -or
+        $evidenceRoot.StartsWith($stageRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Validation evidence must be outside the staged runtime.'
+    }
+    # Validate the complete move set before moving anything. Keep unexpected
+    # content in place so the archive inventory continues to reject it.
+    $moves = @()
+    foreach ($relative in @('logs', 'cache', 'build/logs', 'build/cache')) {
+        $source = Assert-EpochPackagePath -LiteralPath (Join-Path $stageRoot $relative) -PackageRoot $PackageRoot
+        if (-not (Test-Path -LiteralPath $source)) { continue }
+        if (-not (Test-Path -LiteralPath $source -PathType Container)) { throw "Expected runtime evidence directory: $source" }
+        foreach ($child in Get-ChildItem -LiteralPath $source -Force -Recurse) {
+            if ($child.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+                throw "Runtime evidence contains a reparse point: $($child.FullName)"
+            }
+        }
+        $destination = Assert-EpochPackagePath -LiteralPath (Join-Path $evidenceRoot ('runtime/' + $relative)) -PackageRoot $PackageRoot
+        if (Test-Path -LiteralPath $destination) { throw "Evidence destination already exists: $destination" }
+        $moves += [pscustomobject]@{ Source = $source; Destination = $destination }
+    }
+    foreach ($move in $moves) {
+        New-Item -ItemType Directory -Path (Split-Path $move.Destination -Parent) -Force | Out-Null
+        Move-Item -LiteralPath $move.Source -Destination $move.Destination -ErrorAction Stop
+    }
+    $runtimeBuild = Join-Path $stageRoot 'build'
+    if ((Test-Path -LiteralPath $runtimeBuild -PathType Container) -and
+        -not (Get-ChildItem -LiteralPath $runtimeBuild -Force | Select-Object -First 1)) {
+        Remove-Item -LiteralPath $runtimeBuild -ErrorAction Stop
+    }
+}

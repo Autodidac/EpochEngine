@@ -19,8 +19,8 @@ export namespace epochengine::gui_lib
     inline constexpr std::string_view library_name = "EpochGui";
     inline constexpr int version_major = 0;
     inline constexpr int version_minor = 90;
-    inline constexpr int version_revision = 0;
-    inline constexpr std::string_view version_string = "0.90.0";
+    inline constexpr int version_revision = 1;
+    inline constexpr std::string_view version_string = "0.90.1";
 
     enum class SemanticTone : std::uint8_t
     {

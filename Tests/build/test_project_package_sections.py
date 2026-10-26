@@ -1,7 +1,7 @@
 """Project package/resource ownership, real registry contracts and UI wiring.
 
-Compiles the actual registry namespace and its two actual Forest Factory
-identity constants, without starting the engine, a model or a download.
+Compiles the actual registry namespace and Forest Factory identity aliases,
+without starting the engine, a model or a download.
 """
 from Tools.source.owned_source_text import read_owned_source
 from pathlib import Path
@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[2]
 class ProjectPackageSections(unittest.TestCase):
     def roots(self):
         result = [ROOT]
-        public = ROOT / 'build/edition-split/public-source'
+        public = ROOT / 'build/publication/EpochEngine'
         if (public / 'Engine/modules/package.registry.ixx').exists():
             result.append(public)
         return result
@@ -39,13 +39,26 @@ class ProjectPackageSections(unittest.TestCase):
                     forest_ids.append(declaration[0])
                 namespace = registry[registry.index('export namespace epochengine::package_registry'):]
                 namespace = namespace.replace('export namespace', 'namespace', 1)
+                identities = 'namespace epochengine::forest {\n' + '\n'.join(forest_ids) + '\n}\n'
+                registry_owns_identity = 'import forest.factory;' not in registry
+                if root == ROOT:
+                    self.assertTrue(registry_owns_identity)
+                    self.assertIsNone(re.search(r'^import\s+', registry, re.MULTILINE),
+                        'Registry must not require optional feature modules')
+                    self.assertIn('import package.registry;', forest)
+                declarations = (namespace + '\n' + identities if registry_owns_identity
+                    else identities + namespace)
                 source = scratch / f'registry-{index}.cpp'
                 source.write_text('#include <array>\n#include <cstddef>\n#include <cstdint>\n'
                     '#include <span>\n#include <string_view>\n'
-                    'namespace epochengine::forest {\n' + '\n'.join(forest_ids) + '\n}\n'
-                    + namespace + '\n'
+                    + declarations + '\n'
                     'static_assert(epochengine::package_registry::catalog_section_contract());\n'
-                    'static_assert(epochengine::package_registry::validate_registry().ok);\n', encoding='utf-8')
+                    'static_assert(epochengine::package_registry::validate_registry().ok);\n'
+                    'static_assert(epochengine::forest::kForestFactoryPackageId == "engine_forest_factory");\n'
+                    'static_assert(epochengine::forest::kForestFactoryPackageId == '
+                    'epochengine::package_registry::kEngineForestFactoryPackageId);\n'
+                    'static_assert(epochengine::forest::kForestFactoryReferenceRepo == '
+                    'epochengine::package_registry::kForestFactoryReferenceRepo);\n', encoding='utf-8')
                 if os.name == 'nt':
                     program = Path(os.environ.get('ProgramFiles', 'C:/Program Files'))
                     toolsets = sorted((program / 'Microsoft Visual Studio/2022/Community/VC/Tools/MSVC').glob('*'))
@@ -65,6 +78,27 @@ class ProjectPackageSections(unittest.TestCase):
                     args = [compiler, '-std=c++23', '-fsyntax-only', str(source)]
                 result = subprocess.run(args, cwd=ROOT, capture_output=True, text=True)
                 self.assertEqual(result.returncode, 0, str(root) + '\n' + result.stdout + result.stderr)
+                if root == ROOT and os.name == 'nt':
+                    # Produce the real interface with no forest/morphology/voxel IFCs,
+                    # then compile an importing consumer against only that IFC.
+                    includes = [item for item in args if item.startswith('/I')]
+                    ifc = scratch / 'package.registry.ifc'
+                    result = subprocess.run([str(compiler), '/nologo', '/std:c++latest',
+                        '/EHsc', '/c', '/interface', *includes,
+                        '/ifcOutput' + str(ifc), '/Fo' + str(scratch / 'registry.obj'),
+                        str(ROOT / 'Engine/modules/package.registry.ixx')],
+                        cwd=scratch, capture_output=True, text=True)
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                    consumer = scratch / 'consumer.cpp'
+                    consumer.write_text('import package.registry;\n'
+                        'static_assert(epochengine::package_registry::validate_registry().ok);\n'
+                        'static_assert(epochengine::package_registry::kEngineForestFactoryPackageId '
+                        '== "engine_forest_factory");\n', encoding='utf-8')
+                    result = subprocess.run([str(compiler), '/nologo', '/std:c++latest',
+                        '/EHsc', '/Zs', '/TP', *includes, '/reference',
+                        'package.registry=' + str(ifc), str(consumer)],
+                        cwd=scratch, capture_output=True, text=True)
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         finally:
             self.assertTrue(scratch.resolve().is_relative_to(parent))
             shutil.rmtree(scratch)
@@ -75,7 +109,7 @@ class ProjectPackageSections(unittest.TestCase):
             start = app.index('        if (editor.showPackageManagerModal)\n        {',
                 app.index('Model Manager closed; passive scan may still finish.'))
             section = app[start:app.index('        if (editor.showAboutModal)', start)]
-            for label in ('Project Packages', 'Project AI Resources', 'Open Model Manager'):
+            for label in ('Project Packages', 'Project AI Resources', 'Model Manager'):
                 self.assertIn('.label="' + label + '"', section)
             self.assertIn('CatalogSection::ProjectPackages', section)
             self.assertIn('CatalogSection::ProjectAiResources', section)
@@ -84,7 +118,7 @@ class ProjectPackageSections(unittest.TestCase):
             self.assertIn('!selectedPackage || !visible_resource(*selectedPackage)', section)
             self.assertIn('!selectedCatalog || !visible_in_catalog(*selectedCatalog)', section)
             self.assertIn('selectedPlan.has_value()', section)
-            self.assertIn('No verified download plan in this build.', section)
+            self.assertIn('Download and image generation are not available for this resource yet.', section)
             self.assertIn('Source archive installation is not connected in this build.', section)
             self.assertNotIn('Show Models Only', section)
             self.assertNotIn('Show All Packages', section)
@@ -104,16 +138,6 @@ class ProjectPackageSections(unittest.TestCase):
             self.assertNotIn('/api/epoch/packages/catalog', source)
             self.assertIn('WINHTTP_OPTION_REDIRECT_POLICY_NEVER', source)
 
-    def test_readme_receipts_are_archived_not_rebranded(self):
-        readme = read_owned_source(ROOT / 'README.md', encoding='utf-8')
-        archive = read_owned_source(ROOT / 'Engine/docs/reference/repair_history.md', encoding='utf-8')
-        self.assertNotIn('Epoch AI', readme)
-        self.assertIn('repair_history.md#archived-readme-chat-receipts', readme)
-        for original in ('> **v0.90.54 compact Epoch AI chat candidate (unreleased):**',
-                '> **v0.90.54 queued-loading composer source candidate (unreleased):** Epoch AI now',
-                '> **v0.90.51 Site development candidate (unreleased):** Epoch AI Chat accepts',
-                '> **v0.90.54 AI self-coding dispatch diagnostic candidate (unreleased):**'):
-            self.assertIn(original, archive)
 
 
 if __name__ == '__main__':

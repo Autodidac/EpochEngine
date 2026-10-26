@@ -68,6 +68,7 @@ export namespace epochengine::gui_lib::input
         std::array<DigitalState, static_cast<std::size_t>(Key::count)> keys{};
         ModifierState modifiers{};
         std::uint64_t sequence{};
+        std::uint64_t input_source{}; // Opaque host window/view identity; zero is the default.
 
         [[nodiscard]] const DigitalState& pointer(PointerButton button) const noexcept;
         [[nodiscard]] const DigitalState& key(Key key_code) const noexcept;
@@ -80,6 +81,13 @@ export namespace epochengine::gui_lib::input
 
         void reset() noexcept;
         void finish_frame() noexcept;
+        // Opt in to bounded ordered handoff. The default frame() snapshot contract is unchanged.
+        // next_event_frame() preserves button/key/modifier order; adjacent moves may coalesce.
+        // An overflow cancels pending input; the consumer must cancel its active gestures too.
+        static constexpr std::size_t maximum_pending_events = 256;
+        void enable_ordered_events(bool enabled = true) noexcept;
+        [[nodiscard]] bool next_event_frame(InputFrame& output) noexcept;
+        [[nodiscard]] bool events_overflowed() const noexcept;
         void set_pointer_position(Vec2 position) noexcept;
         void add_wheel_delta(Vec2 delta) noexcept;
         void set_pointer_button(
@@ -88,11 +96,34 @@ export namespace epochengine::gui_lib::input
             std::uint8_t click_count = 1) noexcept;
         void set_key(Key key_code, bool down, bool repeated = false) noexcept;
         void set_modifiers(ModifierState modifiers) noexcept;
+        void set_input_source(std::uint64_t source) noexcept;
 
         [[nodiscard]] const InputFrame& frame() const noexcept;
 
     private:
+        enum class EventKind : std::uint8_t { move, button, wheel, key, modifiers, source };
+        struct PendingEvent
+        {
+            EventKind kind{};
+            Vec2 vector{};
+            PointerButton button{};
+            Key key{};
+            ModifierState modifiers{};
+            std::uint64_t source{};
+            bool down{};
+            bool repeated{};
+            std::uint8_t click_count{};
+        };
+        static void clear_transients(InputFrame& frame) noexcept;
+        static void apply_event(InputFrame& frame, const PendingEvent& event) noexcept;
+        [[nodiscard]] bool record_event(const PendingEvent& event) noexcept;
         InputFrame frame_{};
+        InputFrame replay_frame_{};
+        std::array<PendingEvent, maximum_pending_events> events_{};
+        std::size_t event_head_{};
+        std::size_t event_count_{};
+        bool ordered_events_{};
+        bool events_overflowed_{};
     };
 
     enum class ModalInputMode : std::uint8_t

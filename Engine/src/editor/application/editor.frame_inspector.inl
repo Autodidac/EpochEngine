@@ -571,7 +571,7 @@
                 }
             }
             if (editor.mainSurface == EditorMainSurface::Game2D
-                && editor.outlinerToolTab == OutlinerToolTab::Gui)
+                && editor.game2DGuiWorkspace)
             {
                 auto* document = synchronize_gui_document(editor);
                 const auto mapped =

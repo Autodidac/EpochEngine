@@ -316,6 +316,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\simulation.sand.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\scene.core.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\updater.config.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\updater.platform_policy.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.version.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\engine.version.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\scene.document.ixx" />
@@ -435,6 +436,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\physics.manager.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\physics.solver2d.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\voxel.field.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\voxel.sdf.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\voxel.storage.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\water.system.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.canvas2d.ixx" />
@@ -471,7 +473,10 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\systems.registry.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.runtime.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\vulkan\vulkan.dispatch_storage.cpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\assets\image.decode.hpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\assets\image.stb.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\assets\assets.streaming.cpp" />
+    <None Include="$(MSBuildThisFileDirectory)src\assets\assets.streaming_contract.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\vulkan\vulkan.context_texture.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="('$(Configuration)|$(Platform)'=='Release|Win32' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|Win32')">true</ExcludedFromBuild>

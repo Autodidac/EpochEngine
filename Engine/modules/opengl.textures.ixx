@@ -276,7 +276,7 @@ export namespace epochengine::opengltextures
         const core::Context* ctx)
     {
         const void* key = platform_context_key(platformCtx);
-        if (!key)
+        if (!key || key == platform_context_key(detail::to_platform_context(backend.glState)))
         {
             bind_platform_state(backend.glState, platformCtx, ctx);
             return backend.glState;
@@ -975,10 +975,18 @@ export namespace epochengine::opengltextures
             return;
         }
 
-        auto platformCtx = detail::to_platform_context(oglData->glState);
+        // Upload only on the thread that already owns a current context.
+        // A queued CPU-side atlas update can wait for lazy draw admission;
+        // the last initialized window is never permission to steal its WGL/GLX
+        // context from a sibling render thread.
+        const auto platformCtx = epochengine::openglcontext::PlatformGL::get_current();
+        if (!platformCtx.valid()) return;
+        auto currentCtx = core::get_current_render_context();
+        if (currentCtx && currentCtx->type != core::ContextType::OpenGL) return;
+        auto& state = state_for_platform_context(*oglData, platformCtx, currentCtx.get());
         static_cast<void>(upload_atlas_to_gpu_for_context(
             *oglData,
-            oglData->glState,
+            state,
             platformCtx,
             atlas));
     }
@@ -998,10 +1006,15 @@ export namespace epochengine::opengltextures
             return;
         }
 
+        const auto platformCtx = epochengine::openglcontext::PlatformGL::get_current();
+        if (!platformCtx.valid()) return;
+        auto currentCtx = core::get_current_render_context();
+        if (currentCtx && currentCtx->type != core::ContextType::OpenGL) return;
         {
             std::lock_guard<std::mutex> gpuLock(oglData->gpuMutex);
-            auto it = oglData->gpu_atlases.find(&atlas);
-            if (it != oglData->gpu_atlases.end()) {
+            auto& atlases = atlas_map_for_platform_context(*oglData, platformCtx);
+            auto it = atlases.find(&atlas);
+            if (it != atlases.end()) {
                 if (it->second.version == atlas.version && it->second.textureHandle != 0)
                     return;
             }

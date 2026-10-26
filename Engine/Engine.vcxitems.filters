@@ -67,6 +67,9 @@
     <Filter Include="Internal Headers\ai\native">
       <UniqueIdentifier>{f0bb8a22-3e2f-e57b-2a77-2acf00ffd5d9}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Internal Headers\assets">
+      <UniqueIdentifier>{e01ea3c3-f802-f569-3858-3ab74039af03}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Internal Headers\editor">
       <UniqueIdentifier>{9c3782c5-8cde-53fd-1bb5-09532cdc9dbc}</UniqueIdentifier>
     </Filter>
@@ -826,6 +829,9 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\updater.config.ixx">
       <Filter>Module Files\updater</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\updater.platform_policy.ixx">
+      <Filter>Module Files\updater</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\engine.updater.ixx">
       <Filter>Module Files\engine</Filter>
     </ClCompile>
@@ -1387,6 +1393,9 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\epochgui\font.renderer.cpp">
       <Filter>Source Files\epochgui</Filter>
     </ClCompile>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\assets\image.decode.hpp">
+      <Filter>Internal Headers\assets</Filter>
+    </ClInclude>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\assets\image.stb.cpp">
       <Filter>Source Files\assets</Filter>
     </ClCompile>

@@ -35,6 +35,7 @@ module;
 
 #include <array>
 #include <cstddef>
+#include <array>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
@@ -115,6 +116,9 @@ namespace epochengine
         std::string command_argument{};
         core::ContextType requested_context_type{ core::ContextType::None };
         bool close_current_context_after_command{ false };
+        // Explicit workspace transitions may reveal two already-open native
+        // companion panes without replacing this frame's actual command.
+        std::array<std::string, 2> companion_pane_activations{};
     };
 
     // Renderer backend replacement is a lifecycle operation, not a work-mode
@@ -444,9 +448,14 @@ namespace epochengine
         std::uint32_t tab_order{};
     };
 
+    // Immutable Plant Lab handoff stays opaque to window/runtime consumers.
+    // The Editor owns document/compiled-asset types and validates their pairing.
+    export struct EditorPlantLabPreview;
+
     export struct EditorContextSnapshot
     {
         bool valid{ false };
+        std::shared_ptr<const EditorPlantLabPreview> plant_lab_preview{};
         std::string project_id{};
         std::string project_name{};
         std::string project_root{};
@@ -498,6 +507,7 @@ namespace epochengine
         EditorWorkspaceTab workspace_tab{ EditorWorkspaceTab::Output };
         EditorWorkspaceTab dock_status_tab{ EditorWorkspaceTab::Output };
         std::uint8_t main_surface{ 0 };
+        bool game2d_gui_workspace{};
         float bottom_grid_split{ 0.50f };
         float outliner_split{ 0.20f };
         float inspector_split{ 0.22f };
@@ -651,6 +661,9 @@ namespace epochengine
     export void editor_consume_time_step_request(const core::Context* ctx);
     export [[nodiscard]] EditorContextSnapshot editor_capture_context_snapshot(const core::Context* ctx);
     export bool editor_restore_context_snapshot(core::Context* ctx, const EditorContextSnapshot& snapshot);
+    export bool editor_restore_plant_lab_preview(
+        const std::shared_ptr<core::Context>& ctx,
+        const EditorContextSnapshot& snapshot);
 
     export void cleanup_chat_context(const core::Context* ctx);
     export void shutdown_chat_system();

@@ -123,16 +123,17 @@ namespace epochengine::editor_update_modal
     [[nodiscard]] constexpr PackageManagerBodyLayout measure_package_manager_body(
         const float bodyTop,
         const float contentBottom,
-        const float lineHeight) noexcept
+        const float lineHeight,
+        const float requestedFooterHeight = 76.0f) noexcept
     {
-        constexpr float kFooterHeight = 76.0f;
+        const float footerHeight = (std::max)(0.0f, requestedFooterHeight);
         constexpr float kMinimumPanelHeight = 48.0f;
         constexpr float kMaximumListHeight = 620.0f;
         constexpr float kMaximumDetailHeight = 360.0f;
         constexpr float kSectionSpacing = 12.0f;
 
         PackageManagerBodyLayout layout{};
-        layout.footerTop = (std::max)(bodyTop, contentBottom - kFooterHeight);
+        layout.footerTop = (std::max)(bodyTop, contentBottom - footerHeight);
         const float panelBudget = (std::max)(
             0.0f,
             layout.footerTop - bodyTop - (std::max)(0.0f, lineHeight)

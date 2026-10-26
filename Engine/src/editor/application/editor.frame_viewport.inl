@@ -3,7 +3,7 @@
 
         bool guiDocumentWorkspace =
             editor.mainSurface == EditorMainSurface::Game2D
-            && (editor.outlinerToolTab == OutlinerToolTab::Gui
+            && (editor.game2DGuiWorkspace
                 || editor_application_owns_dedicated_gui_workspace(
                     editor.applicationKind));
         bool active_center_uses_scene =
@@ -44,11 +44,8 @@
                 editor.outlinerToolTab = guiDocumentWorkspace
                     ? OutlinerToolTab::Gui
                     : OutlinerToolTab::TileMap;
-                const std::string_view route = guiDocumentWorkspace
-                    ? "pane.gui_hierarchy"
-                    : "pane.tile_map";
-                set_pane_shown(route, true);
-                set_active_pane(pane_dock_region(route), route);
+                editor.game2DGuiWorkspace = guiDocumentWorkspace;
+                activate_workspace_companions(EditorMainSurface::Game2D);
                 push_editor_log(
                     editor,
                     guiDocumentWorkspace
@@ -71,6 +68,63 @@
         }
         if (active_center_uses_scene)
         {
+            if (editor.mainSurface == EditorMainSurface::ForestFactory)
+            {
+                const bool ready = ensure_forest_factory_preview(editor);
+                gui::label("Plant Preview");
+                gui::wrapped_label("Adjust the plant here. Add to Scene places a copy in your project.",
+                    (std::max)(80.0f, viewport_size.x - 16.0f));
+                const std::array<gui::InlineButtonSpec, 6> edits{{
+                    {"Height -", 94.0f, ready}, {"Height +", 94.0f, ready},
+                    {"Branches -", 106.0f, ready}, {"Branches +", 106.0f, ready},
+                    {"Length -", 94.0f, ready}, {"Length +", 94.0f, ready}}};
+                if (const auto clicked = gui::inline_button_row(edits, 28.0f, 6.0f))
+                {
+                    using Property = forest::ForestProfileProperty;
+                    const auto& profile = editor.plantLabDocument.profile;
+                    const auto property = *clicked < 2u ? Property::TargetHeightMeters
+                        : *clicked < 4u ? Property::BranchLevels : Property::BranchLengthMeters;
+                    const float value = *clicked < 2u ? profile.config.targetHeightMeters
+                        : *clicked < 4u ? static_cast<float>(profile.branch.levels)
+                        : profile.branch.branchLengthMeters;
+                    const float step = *clicked < 2u ? 0.25f : *clicked < 4u ? 1.0f : 0.1f;
+                    if (forest::apply_forest_profile_edit(editor.plantLabDocument,
+                            property, value + (*clicked % 2u == 0u ? -step : step)))
+                        (void)ensure_forest_factory_preview(editor);
+                }
+                const std::array<gui::InlineButtonSpec, 5> actions{{
+                    {"Undo", 76.0f, ready}, {"Redo", 76.0f, ready},
+                    {"Add to Scene", 132.0f, ready && has_open_project(editor)},
+                    {"Back to Scene", 134.0f}, {"Advanced Plant Lab", 172.0f, ready}}};
+                if (const auto clicked = gui::inline_button_row(actions, 28.0f, 6.0f))
+                {
+                    if (*clicked < 2u)
+                    {
+                        const bool changed = *clicked == 0u
+                            ? forest::undo_forest_profile_edit(editor.plantLabDocument)
+                            : forest::redo_forest_profile_edit(editor.plantLabDocument);
+                        if (changed) (void)ensure_forest_factory_preview(editor);
+                    }
+                    else if (*clicked == 2u)
+                    {
+                        if (place_forest_factory_asset(editor) > 0u)
+                        {
+                            (void)save_editor_scene_snapshot(editor);
+                            apply_editor_surface(EditorMainSurface::Scene, "Add Plant to Scene");
+                            handle_scene_tool(editor, ctx.get(), "focus_selection");
+                        }
+                    }
+                    else if (*clicked == 3u)
+                        apply_editor_surface(EditorMainSurface::Scene, "Plant Preview");
+                    else
+                    {
+                        result.command = EditorCommand::OpenContextWindow;
+                        result.command_argument = "application.plant_lab";
+                        result.requested_context_type = ctx->type;
+                    }
+                }
+                gui::wrapped_label(editor.plantLabStatus, (std::max)(80.0f, viewport_size.x - 16.0f));
+            }
             const std::string_view sceneTitle = main_surface_title(editor.mainSurface);
             const gui::Vec2 scene_pos = gui::cursor_position();
             const float sceneAvailableWidth = (std::max)(48.0f, viewport_pos.x + viewport_size.x - scene_pos.x);
@@ -83,7 +137,7 @@
             const float timelineStripRequiredHeight = timelineStripBodyOffset
                 + timeline_compact_controls_height((std::max)(1.0f, sceneAvailableWidth - 16.0f)) + 6.0f;
             constexpr float sceneMinHeightWithTimeline = 100.0f;
-            const bool showSceneTimeline = sceneAvailableHeight >=
+            const bool showSceneTimeline = editor.mainSurface != EditorMainSurface::ForestFactory && sceneAvailableHeight >=
                 timelineStripRequiredHeight + sceneMinHeightWithTimeline;
             const float timelineStripGap = 0.0f;
             const float timelineStripHeight = showSceneTimeline
@@ -102,7 +156,7 @@
             const float runModeWidth = (std::min)(172.0f,
                 (std::max)(100.0f, scene_size.x * 0.20f));
             const bool showSceneRun = application.allow_project_run
-                && has_open_project(editor);
+                && has_open_project(editor) && editor.mainSurface != EditorMainSurface::ForestFactory;
             if (showSceneRun)
             {
                 gui::set_cursor({scene_pos.x + 96.0f, scene_pos.y + 2.0f});
@@ -194,7 +248,11 @@
             }
             gui::set_cursor({ scene_pos.x + scene_size.x - focusButtonWidth - 8.0f, scene_pos.y + 2.0f });
             if (gui::button("Focus", { focusButtonWidth, 20.0f }))
-                handle_scene_tool(editor, ctx.get(), "focus_selection");
+            {
+                if (editor.mainSurface == EditorMainSurface::ForestFactory)
+                    focus_forest_factory_preview(ctx.get(), editor);
+                else handle_scene_tool(editor, ctx.get(), "focus_selection");
+            }
             ctx->set_scene_preview_mode(editor.previewMode);
             const int viewportX = (std::max)(0, static_cast<int>(std::floor(result.scene_viewport.position.x)));
             const int viewportY = (std::max)(0, static_cast<int>(std::floor(result.scene_viewport.position.y)));
@@ -228,11 +286,16 @@
                 }
             }
 #endif
-            if (ctx->action_pressed_safe(input::Action::FrameSelection))
+            if (ctx->action_pressed_safe(input::Action::FrameSelection)
+                && editor.mainSurface != EditorMainSurface::ForestFactory)
                 handle_scene_tool(editor, ctx.get(), "focus_selection");
-            update_scene_object_interaction(ctx, editor, result);
-            draw_scene_marquee_overlay(editor);
-            publish_editor_canvas2d_scene(ctx.get(), editor);
+            if (editor.mainSurface != EditorMainSurface::ForestFactory)
+            {
+                update_scene_object_interaction(ctx, editor, result);
+                draw_scene_marquee_overlay(editor);
+                publish_editor_canvas2d_scene(ctx.get(), editor);
+            }
+            else (void)canvas2d::scene_content::retire(ctx.get());
             publish_editor_preview_markers(ctx.get(), editor);
 
             if (showSceneTimeline)
@@ -299,7 +362,7 @@
                 }
             }
             const gui::Vec2 centerScrollStart = gui::cursor_position();
-            const float centerWidth = (std::max)(180.0f, centerSurfaceSize.x - 12.0f);
+            const float centerWidth = (std::max)(1.0f, centerSurfaceSize.x - 12.0f);
             const float centerScrollHeight = (std::max)(
                 1.0f,
                 viewport_pos.y + viewport_size.y - centerScrollStart.y - 14.0f);
@@ -318,7 +381,7 @@
                     && editor.assetWorkspaceSection == 2u);
             (void)gui::begin_scroll_area(gui::ScrollAreaOptions{
                 .id = centerScrollId,
-                .size = { (std::max)(80.0f, centerSurfaceSize.x), centerScrollHeight },
+                .size = { (std::max)(1.0f, centerSurfaceSize.x), centerScrollHeight },
                 .draw_background = false,
                 .show_scrollbar = !centerHasNestedSourceEditor,
                 .capture_wheel = !centerHasNestedSourceEditor
@@ -1815,116 +1878,6 @@
                 }
                 break;
             }
-            case EditorMainSurface::ForestFactory:
-            {
-                const auto forestPackage = std::find_if(
-                    epochengine::package_registry::kKnownPackages.begin(),
-                    epochengine::package_registry::kKnownPackages.end(),
-                    [](const epochengine::package_registry::PackageDescriptor& package) {
-                        return package.id == epochengine::package_registry::kEngineForestFactoryPackageId;
-                    });
-                const bool plantAssetReady =
-                    ensure_plant_lab_compiled_asset(editor);
-                const auto& plantAsset = editor.plantLabCompiled;
-                const std::filesystem::path manifestPath =
-                    resolve_editor_path(std::filesystem::path{ editor.projectRoot })
-                    / "assets" / "packages" / "engine_forest_factory.package.json";
-                const bool manifestReady = std::filesystem::exists(manifestPath);
-                const std::size_t placedAssets = static_cast<std::size_t>(std::count_if(
-                    editor.entities.begin(),
-                    editor.entities.end(),
-                    [](const EditorEntity& entity)
-                    {
-                        return entity.type == "ForestTrunk"
-                            && entity.name.rfind("ForestAsset_", 0u) == 0u;
-                    }));
-
-                gui::label("Forest Factory");
-                if (!has_open_project(editor))
-                    gui::wrapped_label("Open a project before placing assets. Plant Lab preview remains separate from the project scene.", centerWidth);
-                gui::wrapped_label(
-                    "Browse custom trees and forest configurations authored in Plant Lab, then place or configure them in the active project scene. Placed objects remain available to selection, Focus, save, and Run/Build.",
-                    centerWidth);
-                gui::property_row("[forest] Source designer", "Plant Lab", 148.0f);
-                gui::property_row("[forest] Placed assets", std::to_string(placedAssets), 148.0f);
-                gui::property_row("[forest] Package", forestPackage != epochengine::package_registry::kKnownPackages.end() ? std::string(forestPackage->displayName) : std::string("(missing registry entry)"), 148.0f);
-                gui::property_row("[forest] Manifest", manifestReady ? display_project_path(manifestPath) : std::string("not staged"), 148.0f);
-                gui::property_row(
-                    "[forest] Plant asset",
-                    plantAssetReady
-                        ? editor.plantLabDocument.name
-                        : std::string("compile unavailable"),
-                    148.0f);
-                gui::property_row(
-                    "[forest] Source revision",
-                    plantAssetReady
-                        ? std::to_string(plantAsset.sourceRevision)
-                        : std::string("n/a"),
-                    148.0f);
-                gui::property_row(
-                    "[forest] Content",
-                    plantAssetReady
-                        ? epochengine::format_text(
-                            "{:016x}", plantAsset.sourceContentHash)
-                        : std::string("n/a"),
-                    148.0f);
-                gui::property_row(
-                    "[forest] Preview",
-                    plantAssetReady
-                        ? epochengine::format_text(
-                            "{} segments | {} leaves",
-                            plantAsset.preview.segmentCount,
-                            plantAsset.preview.leafCount)
-                        : editor.plantLabStatus,
-                    148.0f);
-                gui::property_row(
-                    "[forest] Voxel LOD",
-                    plantAssetReady
-                        ? epochengine::format_text(
-                            "{} levels | {} active cells",
-                            plantAsset.voxelLods.levels.size(),
-                            plantAsset.voxelOccupancy.activeCells)
-                        : std::string("unavailable"),
-                    148.0f);
-
-
-                std::array<gui::InlineButtonSpec, 3> placementActions{ {
-                    { "Place Plant", 132.0f },
-                    { "View In 3D", 132.0f },
-                    { "Focus Placed", 142.0f }
-                } };
-                if (auto clicked = gui::inline_button_row(placementActions, 30.0f, 8.0f))
-                {
-                    if (*clicked == 0)
-                    {
-                        if (place_forest_factory_asset(editor) > 0u)
-                            (void)save_editor_scene_snapshot(editor);
-                    }
-                    else
-                    {
-                        apply_editor_surface(EditorMainSurface::Scene, "Forest Factory");
-                        if (*clicked == 2)
-                            handle_scene_tool(editor, ctx.get(), "focus_selection");
-                    }
-                }
-                if (gui::button("Open Package Manager", { 220.0f, 30.0f }))
-                {
-                    editor.showPackageManagerModal = true;
-                    editor.selectedPackageId = std::string(epochengine::package_registry::kEngineForestFactoryPackageId);
-                    editor.packageInstallStatus = manifestReady
-                        ? "Forest Factory project package is already staged."
-                        : "Select Install to stage the Forest Factory project package.";
-                    push_editor_log(editor, "[forest] Package Manager opened for Forest Factory.");
-                }
-                if (gui::button("Stage Forest Factory Package", { 240.0f, 30.0f }))
-                {
-                    if (forestPackage != epochengine::package_registry::kKnownPackages.end())
-                        (void)stage_forest_factory_package_opt_in(editor, *forestPackage);
-                    else
-                        editor.packageInstallStatus = "Forest Factory package registry entry is missing.";
-                }
-                break;
-            }
             case EditorMainSurface::PlantLab:
             {
                 const auto forestPackage = std::find_if(
@@ -2803,9 +2756,8 @@
                         gui::cursor_position();
                     const gui::Vec2 documentSize{
                         centerWidth,
-                        (std::max)(
-                            360.0f,
-                            centerScrollHeight - 54.0f)};
+                        (std::max)(1.0f, centerScrollStart.y + centerScrollHeight
+                            - documentPosition.y - 4.0f)};
                     render_gui_document_canvas(
                         editor,
                         documentPosition,
@@ -2853,9 +2805,8 @@
                         gui::cursor_position();
                     const gui::Vec2 documentSize{
                         centerWidth,
-                        (std::max)(
-                            360.0f,
-                            centerScrollHeight - 82.0f)};
+                        (std::max)(1.0f, centerScrollStart.y + centerScrollHeight
+                            - documentPosition.y - 4.0f)};
                     if (editor.guiDocumentTab < 2u)
                     {
                         render_gui_document_canvas(

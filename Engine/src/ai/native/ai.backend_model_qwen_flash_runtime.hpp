@@ -104,6 +104,7 @@ private:
     std::string last_command_;
     nlohmann::json last_hardware_ = nlohmann::json::object();
     nlohmann::json last_effective_profile_ = nlohmann::json::object();
+    mutable GgufLayerMetadataCache layer_metadata_cache_;
     std::string last_error_;
 };
 
