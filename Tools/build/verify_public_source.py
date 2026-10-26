@@ -21,7 +21,7 @@ import re
 import subprocess
 
 WORKFLOW = '.github/workflows/epoch-public.yml'
-WORKFLOW_SHA256 = '6600dccb2e1caf12b9c2b11a343fabbda4cf7d7710dabc99ac5a647e726b9bc5'
+WORKFLOW_SHA256 = 'a144c98d2e5c652a45a244e22e6cb6ba3897040078ad5aa5fcc31b30f57738e8'
 MANIFEST = 'source-projection.json'
 CPP = {'.c','.cc','.cpp','.cxx','.h','.hh','.hpp','.hxx','.ixx','.cppm','.mpp','.inl','.inc','.ipp','.tpp','.cu','.cuh'}
 SOURCE_HASH_ALGORITHM = 'sha256-git-text-lf-v1'

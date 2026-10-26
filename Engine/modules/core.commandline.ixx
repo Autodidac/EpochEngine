@@ -53,6 +53,7 @@ import epoch.version;
 import core.logger;
 import core.path;
 import platform.engine;
+import updater.platform_policy;
 import perf.tier;
 
 inline constexpr int DEFAULT_WINDOW_WIDTH = 1280;
@@ -104,7 +105,7 @@ namespace epochengine::core::cli
 
         [[nodiscard]] inline std::string_view default_updater_shell_backend() noexcept
         {
-            return epochengine::platform::policy::updater_shell_backend_name();
+            return epochengine::updater::platform_policy::updater_shell_backend_name();
         }
 
         [[nodiscard]] inline std::string standalone_only_window_message(const std::string_view action)

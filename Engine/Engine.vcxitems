@@ -316,6 +316,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\simulation.sand.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\scene.core.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\updater.config.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\updater.platform_policy.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.version.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\engine.version.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\scene.document.ixx" />

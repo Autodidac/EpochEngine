@@ -826,6 +826,9 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\updater.config.ixx">
       <Filter>Module Files\updater</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\updater.platform_policy.ixx">
+      <Filter>Module Files\updater</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\engine.updater.ixx">
       <Filter>Module Files\engine</Filter>
     </ClCompile>

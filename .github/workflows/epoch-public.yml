@@ -33,6 +33,8 @@ jobs:
           python-version: '3.12'
       - name: Verify public edition and source content
         run: python Tools/build/verify_public_source.py
+      - name: Check graphics test failure handling
+        run: python -m unittest discover -s Tests/build -p test_linux_graphics_smoke.py -v
       - name: Install build tools
         shell: pwsh
         run: |
@@ -65,18 +67,21 @@ jobs:
           & "$root/bootstrap-vcpkg.bat" -disableMetrics
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           "EPOCH_VCPKG_ROOT=$root" | Add-Content -Path $env:GITHUB_ENV
-      - name: Build actual Debug engine and CPU target
+      - name: Build actual Debug engine and component tests
         shell: pwsh
         run: |
           cmake --preset windows-msvc-debug "-DVCPKG_INSTALLED_DIR=$PWD/Engine/vcpkg_installed" -DBUILD_TESTING=ON
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          cmake --build --preset windows-msvc-debug --target epoch epoch_ci_headless --parallel 2
+          cmake --build --preset windows-msvc-debug --parallel 2
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Run build-safe contracts only
+      - name: Run compiled component and engine contracts
         shell: pwsh
         run: |
           $env:PATH = "$PWD/Engine/vcpkg_installed/x64-windows/debug/bin;$PWD/Engine/vcpkg_installed/x64-windows/bin;$env:PATH"
-          ctest --preset windows-msvc-debug --output-on-failure -R '^(epoch_engine_contract|epoch_ci_headless)$'
+          $env:TEMP = "$PWD/build/public-ci/test-scratch"
+          New-Item -ItemType Directory -Force -Path $env:TEMP | Out-Null
+          $env:TMP = $env:TEMP
+          ctest --preset windows-msvc-debug --output-on-failure --no-tests=error --timeout 180
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
   linux:
@@ -95,13 +100,15 @@ jobs:
           python-version: '3.12'
       - name: Verify public edition and source content
         run: python Tools/build/verify_public_source.py
+      - name: Check graphics test failure handling
+        run: python -m unittest discover -s Tests/build -p test_linux_graphics_smoke.py -v
       - name: Install native build prerequisites
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential curl git unzip xz-utils pkg-config autoconf autoconf-archive automake libtool \
             libasound2-dev libdbus-1-dev libibus-1.0-dev libegl1-mesa-dev libgl1-mesa-dev libvulkan-dev \
             libudev-dev libx11-dev libxcursor-dev libxext-dev libxft-dev libxinerama-dev libxi-dev libxrandr-dev \
-            libxrender-dev libxtst-dev libwayland-dev libxkbcommon-dev wayland-protocols xvfb xauth libgl1-mesa-dri mesa-utils
+            libxrender-dev libxtst-dev libwayland-dev libxkbcommon-dev wayland-protocols xvfb xauth libgl1-mesa-dri mesa-utils mesa-vulkan-drivers
       - name: Prepare manifest-pinned dependencies
         run: |
           set -euo pipefail
@@ -118,16 +125,25 @@ jobs:
         run: |
           set -euo pipefail
           bash Engine/build.sh --bootstrap-current-toolchain --tool-cache-root "$GITHUB_WORKSPACE/build/public-ci/tools" \
-            --vcpkg-root "$EPOCH_VCPKG_ROOT" clang Release -- -DBUILD_TESTING=ON
-      - name: Run build-safe contracts only
+            --vcpkg-root "$EPOCH_VCPKG_ROOT" clang Release -- -DBUILD_TESTING=ON -DEPOCH_ENABLE_GRAPHICS_TESTS=ON -DEPOCH_REQUIRE_OPTIONAL_DEPENDENCIES=ON
+      - name: Run compiled component and engine contracts
         run: |
           set -euo pipefail
           build_dir="$GITHUB_WORKSPACE/build/cmake/linux/public/Clang-Release"
           cache="$build_dir/CMakeCache.txt"
           cmake_bin="$(sed -n 's/^CMAKE_COMMAND:INTERNAL=//p' "$cache")"
           test -x "$cmake_bin"
+          export TMPDIR="$GITHUB_WORKSPACE/build/public-ci/test-scratch"
+          mkdir -p "$TMPDIR"
           "$(dirname "$cmake_bin")/ctest" --test-dir "$build_dir" --output-on-failure \
-            -R '^(epoch_engine_contract|epoch_ci_headless)$'
+            -LE graphics --no-tests=error --timeout 180
+      - name: Render Linux Editor across compiled backends (Mesa CPU)
+        run: |
+          set -euo pipefail
+          build_dir="$GITHUB_WORKSPACE/build/cmake/linux/public/Clang-Release"
+          cmake_bin="$(sed -n 's/^CMAKE_COMMAND:INTERNAL=//p' "$build_dir/CMakeCache.txt")"
+          "$(dirname "$cmake_bin")/ctest" --test-dir "$build_dir" --output-on-failure \
+            -L graphics --no-tests=error
       - name: Stage and audit software OpenGL Linux runtime
         id: package
         run: |
