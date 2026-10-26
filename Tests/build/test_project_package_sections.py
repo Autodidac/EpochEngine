@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[2]
 class ProjectPackageSections(unittest.TestCase):
     def roots(self):
         result = [ROOT]
-        public = ROOT / 'build/edition-split/public-source'
+        public = ROOT / 'build/publication/EpochEngine'
         if (public / 'Engine/modules/package.registry.ixx').exists():
             result.append(public)
         return result
@@ -109,7 +109,7 @@ class ProjectPackageSections(unittest.TestCase):
             start = app.index('        if (editor.showPackageManagerModal)\n        {',
                 app.index('Model Manager closed; passive scan may still finish.'))
             section = app[start:app.index('        if (editor.showAboutModal)', start)]
-            for label in ('Project Packages', 'Project AI Resources', 'Open Model Manager'):
+            for label in ('Project Packages', 'Project AI Resources', 'Model Manager'):
                 self.assertIn('.label="' + label + '"', section)
             self.assertIn('CatalogSection::ProjectPackages', section)
             self.assertIn('CatalogSection::ProjectAiResources', section)
@@ -118,7 +118,7 @@ class ProjectPackageSections(unittest.TestCase):
             self.assertIn('!selectedPackage || !visible_resource(*selectedPackage)', section)
             self.assertIn('!selectedCatalog || !visible_in_catalog(*selectedCatalog)', section)
             self.assertIn('selectedPlan.has_value()', section)
-            self.assertIn('No verified download plan in this build.', section)
+            self.assertIn('Download and image generation are not available for this resource yet.', section)
             self.assertIn('Source archive installation is not connected in this build.', section)
             self.assertNotIn('Show Models Only', section)
             self.assertNotIn('Show All Packages', section)
