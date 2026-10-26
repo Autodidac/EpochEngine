@@ -6,15 +6,217 @@
 #include <cstdint>
 #include <array>
 #include <filesystem>
+#include <fstream>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include "../ai.native_multimodel_gpu_budget.hpp"
 
 #include <nlohmann/json.hpp>
 
 namespace epoch_ai::model {
+
+[[nodiscard]] inline bool is_vision_projector_filename(std::string_view name)
+{
+    std::string lower{name};
+    for (auto& ch : lower) if (ch >= 'A' && ch <= 'Z') ch += 'a' - 'A';
+    return lower.find("mmproj") != std::string::npos;
+}
+
+namespace gguf_metadata_detail {
+
+// Shared bounded prefix reader. Neither a prefix nor a file timestamp proves
+// tensor integrity or runtime compatibility; the native loader owns those.
+class Reader final
+{
+public:
+    explicit Reader(const std::filesystem::path& path)
+    {
+        std::ifstream input{path, std::ios::binary};
+        if (!input) return;
+        input.read(reinterpret_cast<char*>(bytes_.data()), bytes_.size());
+        size_ = static_cast<std::size_t>(input.gcount());
+    }
+
+    [[nodiscard]] std::optional<std::uint64_t> fields()
+    {
+        if (size_ < 24u || std::string_view{
+                reinterpret_cast<const char*>(bytes_.data()), 4u} != "GGUF") return {};
+        offset_ = 4u;
+        const auto version = number(4u), tensors = number(8u), count = number(8u);
+        if (!version || (*version != 2u && *version != 3u) || !tensors
+            || !count || *count > 4096u) return {};
+        return count;
+    }
+
+    [[nodiscard]] std::optional<std::uint64_t> number(std::size_t width)
+    {
+        if (width > 8u || offset_ > size_ || width > size_ - offset_) return {};
+        std::uint64_t value{};
+        for (std::size_t i{}; i < width; ++i) value |= std::uint64_t{bytes_[offset_++]} << (8u * i);
+        return value;
+    }
+
+    [[nodiscard]] std::optional<std::string_view> text()
+    {
+        const auto length = number(8u);
+        if (!length || *length > size_ - offset_) return {};
+        const auto value = std::string_view{reinterpret_cast<const char*>(bytes_.data() + offset_), static_cast<std::size_t>(*length)};
+        offset_ += static_cast<std::size_t>(*length);
+        return value;
+    }
+
+    [[nodiscard]] bool skip(std::uint64_t type, unsigned depth = 0u)
+    {
+        if (depth > 4u) return false;
+        constexpr std::array widths{1u, 1u, 2u, 2u, 4u, 4u, 4u, 1u, 0u, 0u, 8u, 8u, 8u};
+        if (type >= widths.size()) return false;
+        if (widths[type]) return number(widths[type]).has_value();
+        if (type == 8u) return text().has_value();
+        const auto element = number(4u), count = number(8u);
+        if (!element || !count || *count > 4096u) return false;
+        for (std::uint64_t i{}; i < *count; ++i) if (!skip(*element, depth + 1u)) return false;
+        return true;
+    }
+
+private:
+    std::array<unsigned char, 65'536u> bytes_{};
+    std::size_t size_{};
+    std::size_t offset_{};
+};
+} // namespace gguf_metadata_detail
+
+// Inspect only bounded GGUF metadata, never tensor data. A suggestive filename
+// is insufficient; the serving runtime must still confirm actual image input.
+[[nodiscard]] inline bool has_vision_projector_metadata(const std::filesystem::path& path)
+{
+    gguf_metadata_detail::Reader input{path};
+    const auto fields = input.fields();
+    if (!fields) return false;
+    bool clip{}, vision{};
+    for (std::uint64_t i{}; i < *fields; ++i) {
+        const auto key = input.text(); const auto type = input.number(4u);
+        if (!key || !type) return false;
+        if (*key == "general.architecture") {
+            if (*type != 8u) return false;
+            const auto value = input.text(); if (!value || *value != "clip") return false;
+            clip = true;
+        } else if (*key == "clip.has_vision_encoder") {
+            if (*type != 7u) return false;
+            const auto value = input.number(1u); if (!value || *value != 1u) return false;
+            vision = true;
+        } else if (!input.skip(*type)) return false;
+        if (clip && vision) return true;
+    }
+    return false;
+}
+
+struct GgufLayerMetadata final
+{
+    std::string architecture;
+    std::uint32_t block_count{};
+    std::optional<std::uint32_t> prediction_blocks;
+
+    // Pinned llama runtime: n_layer_all includes prediction blocks; -ngl also
+    // counts the output layer. This is not the main forward-pass layer count.
+    [[nodiscard]] std::uint32_t offload_capacity() const noexcept
+    {
+        return block_count + 1u;
+    }
+};
+
+[[nodiscard]] inline std::optional<GgufLayerMetadata> local_gguf_layer_metadata(
+    const std::filesystem::path& path)
+{
+    gguf_metadata_detail::Reader input{path};
+    const auto fields = input.fields();
+    if (!fields) return {};
+    GgufLayerMetadata result;
+    bool blocks{};
+    for (std::uint64_t i{}; i < *fields; ++i)
+    {
+        const auto key = input.text(); const auto type = input.number(4u);
+        if (!key || !type) return {};
+        if (*key == "general.architecture")
+        {
+            if (*type != 8u || !result.architecture.empty()) return {};
+            const auto value = input.text();
+            if (!value || value->empty() || value->size() > 64u) return {};
+            for (const char c : *value)
+                if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_')) return {};
+            result.architecture = *value;
+        }
+        else if (!result.architecture.empty()
+            && (*key == result.architecture + ".block_count"
+                || *key == result.architecture + ".nextn_predict_layers"))
+        {
+            if (*type != 4u) return {};
+            const auto value = input.number(4u);
+            if (!value) return {};
+            if (*key == result.architecture + ".block_count")
+            {
+                if (blocks || *value == 0u || *value >=
+                    epochengine::ai::native_runtime::gpu_budget::maximum_gpu_layers) return {};
+                result.block_count = static_cast<std::uint32_t>(*value);
+                blocks = true;
+            }
+            else
+            {
+                if (result.prediction_blocks) return {};
+                result.prediction_blocks = static_cast<std::uint32_t>(*value);
+            }
+        }
+        // Tokenizer arrays can exceed this prefix. Layer-placement fields are
+        // conventionally before them; never scan tensor data or trust a guess
+        // when the required fields have not been found in this bounded prefix.
+        else if (key->starts_with("tokenizer.") && blocks)
+            break;
+        else if (!input.skip(*type)) return {};
+    }
+    if (!blocks || result.architecture.empty()
+        || result.prediction_blocks.value_or(0u) > result.block_count) return {};
+    return result;
+}
+
+// One metadata entry owned by the serving runtime. Cached successes and failures
+// are invalidated when path, file size or write time changes; no persistent
+// profile is rewritten. Runtime loading still validates the actual GGUF.
+class GgufLayerMetadataCache final
+{
+public:
+    [[nodiscard]] std::optional<GgufLayerMetadata> get(const std::filesystem::path& path)
+    {
+        std::scoped_lock lock{mutex_};
+        std::error_code error;
+        const auto bytes = std::filesystem::file_size(path, error);
+        if (error) { entry_.reset(); return {}; }
+        const auto stamp = std::filesystem::last_write_time(path, error);
+        if (error) { entry_.reset(); return {}; }
+        if (entry_ && entry_->path == path && entry_->bytes == bytes && entry_->stamp == stamp)
+            return entry_->metadata;
+        auto metadata = local_gguf_layer_metadata(path);
+        const auto afterBytes = std::filesystem::file_size(path, error);
+        if (error || afterBytes != bytes) { entry_.reset(); return {}; }
+        const auto afterStamp = std::filesystem::last_write_time(path, error);
+        if (error || afterStamp != stamp) { entry_.reset(); return {}; }
+        entry_ = Entry{path, bytes, stamp, std::move(metadata)};
+        return entry_->metadata;
+    }
+
+private:
+    struct Entry final
+    {
+        std::filesystem::path path;
+        std::uintmax_t bytes;
+        std::filesystem::file_time_type stamp;
+        std::optional<GgufLayerMetadata> metadata;
+    };
+    std::mutex mutex_;
+    std::optional<Entry> entry_;
+};
 
 // Use only a unique, already-installed sidecar beside this model or inside
 // its exact Hugging Face snapshot. Never download or guess from another repo.
@@ -35,11 +237,22 @@ namespace epoch_ai::model {
         for (std::filesystem::directory_iterator it{directory, ec}, end;
             !ec && it != end && visited++ < 128u; it.increment(ec))
         {
-            const auto name = it->path().filename().string();
-            if (!name.starts_with("mmproj") || !name.ends_with(".gguf")) continue;
+            auto name = it->path().filename().string();
+            for (auto& ch : name) if (ch >= 'A' && ch <= 'Z') ch += 'a' - 'A';
+            if (!is_vision_projector_filename(name) || !name.ends_with(".gguf")) continue;
+            const auto marker = name.find("mmproj");
+            if (marker != 0u) {
+                auto prefix = name.substr(0u, marker);
+                while (!prefix.empty() && (prefix.back() == '.' || prefix.back() == '-' || prefix.back() == '_')) prefix.pop_back();
+                auto modelName = model.filename().string();
+                for (auto& ch : modelName) if (ch >= 'A' && ch <= 'Z') ch += 'a' - 'A';
+                if (prefix.empty() || !modelName.starts_with(prefix) || modelName.size() <= prefix.size()
+                    || (modelName[prefix.size()] != '.' && modelName[prefix.size()] != '-' && modelName[prefix.size()] != '_')) continue;
+            }
             if (!it->is_regular_file(ec) || ec) return {};
             const auto bytes = it->file_size(ec);
             if (ec || bytes == 0u) return {};
+            if (!has_vision_projector_metadata(it->path())) continue;
             if (!found.empty() && found != it->path()) return {};
             found = it->path();
         }

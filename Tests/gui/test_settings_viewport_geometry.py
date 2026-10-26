@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from Tests.build.test_opengl_sprite_stream import definition
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -23,10 +24,26 @@ class SettingsViewportGeometry(unittest.TestCase):
         self.assertIn("(std::min)(1000.0f, w * 0.90f)", manager)
         self.assertEqual(bootstrap.count("fit_modal_size({ (std::min)(1000.0f, w * 0.90f), h * 0.90f }, { 500.0f, 480.0f })"), 2)
         self.assertIn(".alignment = gui::InlineButtonAlignment::Center", manager)
+        authoring = (ROOT / "Engine/src/editor/application/editor.application_gui_authoring.inl").read_text(encoding="utf-8")
+        canvas = definition(authoring, "        [[nodiscard]] GuiDocumentCanvasFrame compute_gui_document_canvas(")
         code = r"""
 #include <algorithm>
 #include <cmath>
+#include <array>
+#include <optional>
+#include <variant>
 namespace gui { struct Vec2 {float x,y;}; }
+namespace authoring::gui {
+using WidgetHandle=int;
+struct CanvasContent {float virtual_width=1280,virtual_height=720;};
+struct Widget {struct {std::variant<CanvasContent> content;} descriptor;};
+struct GuiDocument {
+std::array<int,1> roots()const{return {1};}
+std::optional<Widget> widget(int)const{return Widget{};}
+};
+}
+struct GuiDocumentCanvasFrame {authoring::gui::GuiDocument* document;int root;gui::Vec2 position,size;float scale;};
+#define CANVAS_GEOMETRY
 #define CHECK(x) do { if (!(x)) return __LINE__; } while(false)
 int check(float w,float h,float inset) {
 """ + helpers + modal + r"""
@@ -57,12 +74,22 @@ CHECK(managerContentX>=modelModalPos.x&&managerContentX+managerWidth<=modelModal
 return 0;
 }
 int main() {
+authoring::gui::GuiDocument document;
+for(auto size : {gui::Vec2{1,1},gui::Vec2{34,24},gui::Vec2{120,80},gui::Vec2{400,160},gui::Vec2{1920,1080}}) {
+const auto canvas=compute_gui_document_canvas(document,{17,31},size);
+CHECK(canvas.scale>0&&std::isfinite(canvas.scale));
+CHECK(canvas.position.x>=17&&canvas.position.y>=31);
+CHECK(canvas.position.x+canvas.size.x<=17+size.x+0.001f);
+CHECK(canvas.position.y+canvas.size.y<=31+size.y+0.001f);
+CHECK(std::abs(canvas.size.x/canvas.size.y-1280.0f/720.0f)<0.001f);
+}
 for(float width : {256.0f,416.0f,700.0f,1080.0f,2130.0f,3840.0f}) if(int result=column_check(width)) return result;
 for(auto viewport : {gui::Vec2{1920,1080},gui::Vec2{960,540},gui::Vec2{600,360},gui::Vec2{480,270},gui::Vec2{320,220}})
   for(float inset : {36.0f,42.0f,54.0f}) if(int result=check(viewport.x,viewport.y,inset)) return result;
 return 0;
 }
 """
+        code = code.replace('#define CANVAS_GEOMETRY', canvas)
         self.assertIn("begin_modal_background_capture(editorSettingsModalPos, editorSettingsModalSize)", bootstrap)
         self.assertIn(".position = modalPos", settings)
         self.assertIn(".size = modalSize", settings)

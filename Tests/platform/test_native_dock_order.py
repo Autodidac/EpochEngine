@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 class NativeDockOrder(unittest.TestCase):
     def test_actual_order_cancel_and_drag_route(self):
-        from Tests.ai.test_epoch_90146_embedded_preview_input import definition
+        from Tools.source.owned_source_text import definition
         host=(ROOT/'Engine/src/renderers/host/host.context_win.cpp').read_text(encoding='utf-8')
         interaction=(ROOT/'Engine/src/renderers/host/implementation/host.window_interaction.inl').read_text(encoding='utf-8')
         order=definition(host,'static int native_dock_order(')

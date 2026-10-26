@@ -20,6 +20,7 @@
         {
             return surface == EditorMainSurface::Scene
                 || surface == EditorMainSurface::Game2D
+                || surface == EditorMainSurface::ForestFactory
                 || surface == EditorMainSurface::PlantLab;
         }
 

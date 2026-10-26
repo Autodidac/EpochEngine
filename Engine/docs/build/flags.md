@@ -67,6 +67,33 @@ Updater module interfaces are declarations-only. `updater.source_access` owns it
 
 ## Entry points
 
+### Static linking and recovery checkpoints
+
+Keep a reproducible, accepted source checkpoint while modularization continues.
+Retain its dependency pins, build configuration and validation receipts together;
+a branch name alone does not capture uncommitted source or installed toolchains.
+The local Public checkout now retains `codex/known-good-public-0.90.183` at
+`821984475db4524c46761de440f109bacdbfaffe`, the published Public checkpoint.
+This preserves that release's known limitations; it does not accept today's
+uncommitted repairs. Do not advance `multicontext-base-stable` automatically.
+Development checkpoints must remain private and include the private dependency.
+
+`EPOCH_BUILD_STATIC_RUNTIME` links the Engine runtime into a consumer. Platform
+also exposes a static target. Neither option promises an executable with no DLL
+dependencies: current MSVC projects use the dynamic Microsoft C runtime, and
+selected backends, model workers and operating-system graphics services have
+their own linkage requirements. Static libraries and C++ modules are compatible;
+extracting a dependency does not require turning it into a DLL.
+
+Track a separate static-dependency consumer validation lane: consistent runtime
+library settings across all linked targets, admitted static dependency variants,
+final executable dependency inspection, and actual launch on the target machine.
+Do not change the working Editor's linkage globally to claim this lane passes.
+Console support requires the platform's SDK, supported APIs and packaging tests;
+desktop static-link success is not console certification. Official references
+checked October26,2026: [Microsoft Xbox triplet requirements](https://github.com/MicrosoftDocs/vcpkg-docs/blob/main/vcpkg/users/platforms/xbox.md)
+and [Nintendo platform access](https://developer.nintendo.com/register).
+
 All supported entry points consume the same CMake target graph. Visual Studio,
 CMake presets, VS Code/Codium, native Linux command lines, and WSL-hosted Linux
 builds differ in generator/toolchain selection, not in source ownership or

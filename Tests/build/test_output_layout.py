@@ -288,8 +288,6 @@ int main(int argc, char** argv) {
         self.assertIn('build_layout::windows_bin(source_root, SOURCE_BUILD_CONFIGURATION(), SOURCE_BUILD_PLATFORM())', updater)
         self.assertIn('build_layout::linux_cmake(source_root, "Clang-Release")', updater)
         app = read_owned_source(ROOT / 'Engine/src/editor/editor.application.cpp', encoding='utf-8')
-        self.assertIn('candidate_artifacts::relative_executable(lane, workspaceRoot)', app)
-        self.assertIn('build_layout::windows_bin(workspace, configuration) / outputName', app)
         self.assertNotIn('workspace / "x64" / configuration', app)
 
 

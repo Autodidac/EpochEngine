@@ -88,6 +88,7 @@
                 selectedCatalog = nullptr;
                 selectedPackage = &package;
                 editor.selectedPackageId = std::string(package.id);
+                editor.packageTechnicalDetailsOpen = false;
                 editor.packageInstallStatus = std::string("Selected ") + std::string(package.displayName) + ".";
                 editor.packageInstallProgress = package_installed(package) ? 1.0f : 0.0f;
             };
@@ -97,6 +98,7 @@
                 selectedCatalog = &entry;
                 selectedPackage = package_registry::find(entry.id);
                 editor.selectedPackageId = entry.id;
+                editor.packageTechnicalDetailsOpen = false;
                 editor.packageInstallStatus = "Selected " + entry.display_name + ".";
                 editor.packageInstallProgress = selectedPackage
                     && package_installed(*selectedPackage) ? 1.0f : 0.0f;
@@ -191,6 +193,10 @@
             const float packageContentTop = gui::cursor_position().y;
             const float packageContentBottom = packageContentTop + (std::max)(
                 0.0f, modalSize.y - gui::titled_window_total_height(0.0f));
+            const gui::InlineButtonRowOptions packageActionLayout{
+                .sizing = gui::InlineButtonSizing::FitContent,
+                .alignment = gui::InlineButtonAlignment::Center,
+                .wrap = true, .available_width = contentWidth};
             const std::array packageTabs{
                 gui::TabButtonSpec{.id="package-manager.addons", .label="Project Packages",
                     .width=152.0f, .active=!editor.packageCatalogModelsOnly},
@@ -206,11 +212,11 @@
                 : "Software add-ons and dependencies for the active project.",
                 contentWidth);
             const std::array managerActions{
-                gui::InlineButtonSpec{.label="Open Model Manager", .width=180.0f},
-                gui::InlineButtonSpec{.label=editor.packageCatalogPending ? "Refreshing..." : "Refresh Project Catalog",
-                    .width=192.0f, .enabled=!editor.packageCatalogPending}
+                gui::InlineButtonSpec{.label="Model Manager", .width=0.0f},
+                gui::InlineButtonSpec{.label=editor.packageCatalogPending ? "Refreshing..." : "Refresh Catalog",
+                    .width=0.0f, .enabled=!editor.packageCatalogPending}
             };
-            if (const auto action = gui::inline_button_row(managerActions, 28.0f, 6.0f))
+            if (const auto action = gui::inline_button_row(managerActions, 28.0f, 6.0f, packageActionLayout))
             {
                 if (*action == 0u)
                 {
@@ -222,7 +228,9 @@
             }
             gui::wrapped_label(projectAiResources
                 ? "Chat/coding weights, inference runtimes and provider connections belong in Model Manager. Project resources below never start a model."
-                : editor.packageCatalogStatus, contentWidth);
+                : editor.packageCatalogPending ? "Refreshing the package list..."
+                    : catalogEntries.empty() ? "The package list is unavailable. Choose Refresh Catalog to try again."
+                        : "Choose a package below to see what it adds and whether it can be installed.", contentWidth);
             gui::label(projectAiResources ? "Find an image resource" : "Find a project package");
             (void)gui::edit_box(editor.packageCatalogSearch, {contentWidth,28.0f},128u,false);
             const auto matches_search = [&](std::string_view id, std::string_view name, std::string_view summary)
@@ -268,48 +276,21 @@
             const auto visibleCount = projectAiResources
                 ? std::count_if(resources.begin(), resources.end(), visible_resource)
                 : std::count_if(catalogEntries.begin(), catalogEntries.end(), visible_in_catalog);
-            gui::label(projectAiResources ? "Project image resources" : "Project packages");
-            const auto packageBodyLayout = editor_update_modal::measure_package_manager_body(
-                gui::cursor_position().y, packageContentBottom, gui::line_height());
-            (void)gui::begin_scroll_area(gui::ScrollAreaOptions{
-                .id = projectAiResources ? "package-manager-ai-resource-list" : "package-manager-package-list",
-                .size = { contentWidth, packageBodyLayout.listHeight },
-                .content_height = (std::max)(packageBodyLayout.listHeight, static_cast<float>(visibleCount) * 72.0f + 12.0f),
-                .draw_background = true, .show_scrollbar = true
-            });
-            if (visibleCount == 0)
-                gui::wrapped_label(projectAiResources ? "No project image resources match this search."
-                    : "No project packages match this search; refresh the catalog if it is unavailable.", contentWidth - 24.0f);
+            const float packageListTextWidth = (std::max)(1.0f, contentWidth - 24.0f);
+            const auto packageListRowHeight = [&](std::string_view summary)
+            {
+                return 28.0f + gui::measure_wrapped_label_height(summary, packageListTextWidth) + 12.0f;
+            };
+            float packageListContentHeight = 12.0f;
             if (projectAiResources)
-            {
                 for (const auto& resource : resources)
-                {
-                    if (!visible_resource(resource)) continue;
-                    const auto row = gui::cursor_position();
-                    if (gui::text_link(resource.displayName, {contentWidth - 24.0f, 28.0f},
-                            selectedPackage && selectedPackage->id == resource.id))
-                        select_package(resource);
-                    gui::wrapped_label(package_registry::project_resource_purpose(resource.id), contentWidth - 24.0f);
-                    gui::set_cursor(row);
-                    gui::advance_cursor({0.0f, 72.0f});
-                }
-            }
-            else
-            {
+                    if (visible_resource(resource))
+                        packageListContentHeight += packageListRowHeight(
+                            package_registry::project_resource_purpose(resource.id));
+            if (!projectAiResources)
                 for (const auto& entry : catalogEntries)
-                {
-                    if (!visible_in_catalog(entry)) continue;
-                    const auto row = gui::cursor_position();
-                    if (gui::text_link(entry.display_name, {contentWidth - 24.0f, 28.0f},
-                            selectedCatalog && selectedCatalog->id == entry.id))
-                        select_catalog_entry(entry);
-                    gui::wrapped_label(entry.summary, contentWidth - 24.0f);
-                    gui::set_cursor(row);
-                    gui::advance_cursor({0.0f, 72.0f});
-                }
-            }
-            gui::end_scroll_area();
-
+                    if (visible_in_catalog(entry))
+                        packageListContentHeight += packageListRowHeight(entry.summary);
             const bool selectedResource = projectAiResources && selectedPackage;
             const auto selectedPlan = selectedResource ? ai::model_install::plan_for(selectedPackage->id)
                 : std::optional<ai::model_install::InstallPlan>{};
@@ -327,42 +308,20 @@
                 : (editor.projectRoot.empty() ? "Open a project before adding project files."
                     : display_project_path(projectRoot / "assets" / "packages"));
             const std::string requirement = selectedResource
-                ? (selectedPlan ? "Pinned download plan available; transfer requires your action."
-                    : "No verified download plan in this build. Image generation is not connected by this descriptor.")
-                : (sourceInstallUnavailable ? "Source archive installation is not connected in this build."
-                    : (!selectedCatalog ? "No package selected."
-                        : (!selectedPackage ? "This catalog entry has no admitted integration in this build."
+                ? (selectedPlan ? (editor.projectRoot.empty()
+                        ? "Open a project before downloading this project resource."
+                        : "Download available. The download starts only when you choose it.")
+                    : "Download and image generation are not available for this resource yet.")
+                : (sourceInstallUnavailable ? "Installation is not available in this build yet."
+                    : (!selectedCatalog ? "Choose a package."
+                        : (!selectedPackage ? "This package is listed but cannot be added yet."
                             : (selectedCatalog->availability == package_catalog::Availability::descriptor_only
-                                ? "Project integration is descriptor-only; no automatic installation."
+                                ? "This package is listed for reference. Installation is not available yet."
                                 : (selectedPackage->requiresExplicitNetworkApproval
-                                    ? "Network execution requires explicit human approval."
-                                    : "Project opt-in is available.")))));
-            if (packageBodyLayout.showDetails)
-            {
-                gui::label(selectedResource ? "Selected image resource" : "Selected project package");
-                (void)gui::begin_scroll_area(gui::ScrollAreaOptions{
-                    .id = "package-manager-detail-scroll",
-                    .size = {contentWidth, packageBodyLayout.detailHeight},
-                    .content_height = 240.0f, .draw_background = true, .show_scrollbar = true
-                });
-                gui::property_row("Selected", selectedName, 100.0f);
-                gui::wrapped_label(purpose, contentWidth - 24.0f);
-                gui::wrapped_label("Destination: " + destination, contentWidth - 24.0f);
-                gui::wrapped_label(requirement, contentWidth - 24.0f);
-                if (selectedCatalog)
-                {
-                    gui::property_row("Source", selectedCatalog->source_url, 100.0f);
-                    gui::property_row("Revision", selectedCatalog->immutable_revision, 100.0f);
-                    gui::property_row("License", selectedCatalog->license_url, 100.0f);
-                }
-                else if (selectedPackage)
-                    gui::property_row("Source", selectedPackage->externalSourceRepo, 100.0f);
-                gui::end_scroll_area();
-            }
-            gui::set_cursor({modalPos.x + 28.0f, packageBodyLayout.footerTop});
-            // Requirements remain visible before any action, even when the
-            // compressed modal cannot fit the optional details pane.
-            gui::wrapped_label(selectedName + ": " + requirement, contentWidth);
+                                    ? "This package needs permission before it can run a network service."
+                                    : (selectedInstalled ? "Added to this project."
+                                        : editor.projectRoot.empty() ? "Open a project before adding this package."
+                                            : "Ready to add to the open project."))))));
             const bool canInstall = !editor.projectRoot.empty() && selectedPackage
                 && (selectedResource ? selectedPlan.has_value()
                     : (selectedCatalog && selectedCatalog->availability == package_catalog::Availability::available
@@ -370,10 +329,96 @@
             const std::array packageActions{
                 gui::InlineButtonSpec{.label=selectedInstalled ? "Remove Project Reference"
                     : (selectedResource ? "Download Project Resource" : "Add to Project"),
-                    .width=200.0f, .enabled=canInstall},
-                gui::InlineButtonSpec{.label="Close", .width=100.0f}
+                    .width=0.0f, .enabled=canInstall},
+                gui::InlineButtonSpec{.label="Close", .width=0.0f}
             };
-            if (const auto action = gui::inline_button_row(packageActions, 30.0f, 6.0f))
+            const float packageFooterHeight = gui::measure_wrapped_label_height(requirement, contentWidth)
+                + gui::inline_button_row_height(packageActions, 30.0f, 6.0f, packageActionLayout)
+                + 12.0f + (editor.packageModelInstall ? 68.0f : 0.0f);
+            gui::label(projectAiResources ? "Project image resources" : "Project packages");
+            const auto packageBodyLayout = editor_update_modal::measure_package_manager_body(
+                gui::cursor_position().y, packageContentBottom, gui::line_height(), packageFooterHeight);
+            (void)gui::begin_scroll_area(gui::ScrollAreaOptions{
+                .id = projectAiResources ? "package-manager-ai-resource-list" : "package-manager-package-list",
+                .size = { contentWidth, packageBodyLayout.listHeight },
+                .content_height = (std::max)(packageBodyLayout.listHeight, packageListContentHeight),
+                .draw_background = true, .show_scrollbar = true
+            });
+            if (visibleCount == 0)
+                gui::wrapped_label(projectAiResources ? "No project image resources match this search."
+                    : "No project packages match this search; refresh the catalog if it is unavailable.", contentWidth - 24.0f);
+            if (projectAiResources)
+            {
+                for (const auto& resource : resources)
+                {
+                    if (!visible_resource(resource)) continue;
+                    const auto row = gui::cursor_position();
+                    if (gui::text_link(resource.displayName, {contentWidth - 24.0f, 28.0f},
+                            selectedPackage && selectedPackage->id == resource.id))
+                        select_package(resource);
+                    gui::wrapped_label(package_registry::project_resource_purpose(resource.id), contentWidth - 24.0f);
+                    gui::set_cursor(row);
+                    gui::advance_cursor({0.0f, packageListRowHeight(
+                        package_registry::project_resource_purpose(resource.id))});
+                }
+            }
+            else
+            {
+                for (const auto& entry : catalogEntries)
+                {
+                    if (!visible_in_catalog(entry)) continue;
+                    const auto row = gui::cursor_position();
+                    if (gui::text_link(entry.display_name, {contentWidth - 24.0f, 28.0f},
+                            selectedCatalog && selectedCatalog->id == entry.id))
+                        select_catalog_entry(entry);
+                    gui::wrapped_label(entry.summary, contentWidth - 24.0f);
+                    gui::set_cursor(row);
+                    gui::advance_cursor({0.0f, packageListRowHeight(entry.summary)});
+                }
+            }
+            gui::end_scroll_area();
+
+            if (packageBodyLayout.showDetails)
+            {
+                gui::label(selectedResource ? "Selected image resource" : "Selected project package");
+                (void)gui::begin_scroll_area(gui::ScrollAreaOptions{
+                    .id = "package-manager-detail-scroll",
+                    .size = {contentWidth, packageBodyLayout.detailHeight},
+                    .content_height = 0.0f, .draw_background = true, .show_scrollbar = true
+                });
+                gui::wrapped_label(selectedName, contentWidth - 24.0f);
+                gui::wrapped_label(purpose, contentWidth - 24.0f);
+                gui::wrapped_label(requirement, contentWidth - 24.0f);
+                if (gui::inline_button_row(std::array{
+                        gui::InlineButtonSpec{.label=editor.packageTechnicalDetailsOpen
+                            ? "Hide Technical Details" : "Technical Details", .width=0.0f}},
+                        28.0f, 6.0f, packageActionLayout))
+                    editor.packageTechnicalDetailsOpen = !editor.packageTechnicalDetailsOpen;
+                if (editor.packageTechnicalDetailsOpen)
+                {
+                    std::vector<std::string> details{
+                        "Catalog: " + editor.packageCatalogStatus,
+                        "Destination: " + destination};
+                    if (selectedCatalog)
+                    {
+                        details.push_back("Source: " + selectedCatalog->source_url);
+                        details.push_back("Revision: " + selectedCatalog->immutable_revision);
+                        details.push_back("License: " + selectedCatalog->license_url);
+                    }
+                    else if (selectedPackage)
+                        details.push_back("Source: " + std::string(selectedPackage->externalSourceRepo));
+                    (void)gui::scroll_text_panel(gui::ScrollTextPanelOptions{
+                        .id="package-manager-technical-details", .size={contentWidth - 24.0f,150.0f},
+                        .lines=details, .max_line_chars=4096u, .selectable=true,
+                        .stick_to_bottom=false, .wrap_lines=true});
+                }
+                gui::end_scroll_area();
+            }
+            gui::set_cursor({modalPos.x + 28.0f, packageBodyLayout.footerTop});
+            // Requirements remain visible before any action, even when the
+            // compressed modal cannot fit the optional details pane.
+            gui::wrapped_label(requirement, contentWidth);
+            if (const auto action = gui::inline_button_row(packageActions, 30.0f, 6.0f, packageActionLayout))
             {
                 if (*action == 1u)
                     editor.showPackageManagerModal = false;

@@ -530,6 +530,7 @@
                 // assistant reply is separate and must not be copied again into
                 // the Worked disclosure, where it otherwise appears twice.
                 end_host_activity(failed);
+                hostActivityRequested = false;
                 append_line("Assistant: " + summary);
                 sourceOutcomeEmitted = true;
                 sourceTaskOpen = false;
@@ -2221,6 +2222,10 @@
             std::uint64_t plantLabCompiledRevision{};
             std::uint64_t plantLabCompiledContentHash{};
             bool plantLabDocumentInitialized{};
+            std::vector<EditorEntity> forestPreviewEntities{};
+            std::uint64_t forestPreviewRevision{};
+            std::uint64_t forestPreviewContentHash{};
+            std::optional<previewgrid::CameraRigSnapshot> forestProjectCamera{};
             std::string plantLabStatus{
                 "Plant Lab document is ready to initialize."};
             std::string plantLabAssetStatus{
@@ -2351,6 +2356,10 @@
             bool layoutPreferencesSaveErrorLogged{ false };
             EditorLayoutDrag layoutDrag{ EditorLayoutDrag::None };
             OutlinerToolTab outlinerToolTab{ OutlinerToolTab::World };
+            // The document workspace is independent of whichever tool pane
+            // happened to render last (including detached/custom dock groups).
+            bool game2DGuiWorkspace{};
+            bool workspaceCompanionsPending{};
             InspectorToolTab inspectorToolTab{ InspectorToolTab::Properties };
             bool paneTitleDragActive{ false };
             std::string paneTitleDragRoute{};
@@ -2406,6 +2415,7 @@
             bool showVoiceConsentModal{ false };
             std::string selectedPackageId{};
             bool packageCatalogModelsOnly{};
+            bool packageTechnicalDetailsOpen{};
             std::string packageCatalogSearch{};
             std::string packageInstallStatus{ "The Site package catalog has not loaded." };
             float packageInstallProgress{ 0.0f };

@@ -16,7 +16,10 @@ def audit(archive):
         raise ValueError("Invalid Linux runtime archive name")
     version = match[1]
     with archive.open('rb') as source:
-        digest = hashlib.file_digest(source, 'sha256').hexdigest()
+        hasher = hashlib.sha256()
+        for block in iter(lambda: source.read(1024 * 1024), b''):
+            hasher.update(block)
+        digest = hasher.hexdigest()
     expected = digest + '  ' + archive.name
     if Path(str(archive)+'.sha256').read_text(encoding='ascii').strip() != expected:
         raise ValueError("Archive checksum mismatch")

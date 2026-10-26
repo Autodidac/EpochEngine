@@ -1,5 +1,12 @@
 # Forest Factory Portal And Plant Lab Contract
 
+## October26 optional integration and generated textures
+
+Forest Factory and Plant Lab retain their distinct authoring/placement roles, but their feature implementation is an optional add-on. An ordinary Engine consumer does not require forests, terrain, planets or AI. Terrain providers are interchangeable only through compatible declared capabilities; required dependencies, optional integrations and alternatives must remain distinct. Forest placement must work with an admitted surface provider without forcing a planetary or voxel stack. Preserve existing authoring documents and placements during extraction.
+
+Engine-owned optional text-to-2D generation supplies tree/foliage textures as the first concrete image-generation use case before 3D model generation. Forest Factory consumes approved texture assets through the existing material/asset pipeline; it does not own a second model manager. Manual/imported textures work without models. Generation and its runtime validation are still unimplemented acceptance work.
+
+
 Plant Lab and Forest Factory are separate editor experiences.
 
 - **Plant Lab** is a dedicated launcher editor for authoring custom trees,

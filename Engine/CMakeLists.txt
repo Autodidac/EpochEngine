@@ -302,6 +302,30 @@ if(BUILD_TESTING)
         COMMAND epoch_texture_artifact_contract
     )
     if(EPOCH_CONFIGURES_MODULE_TARGETS)
+        # CPU resource loading uses the canonical importer; execution is supplied
+        # by the existing scheduler rather than a second worker pool.
+        add_executable(epoch_texture_streaming_contract
+            src/assets/assets.streaming.cpp
+            src/assets/assets.streaming_contract.cpp
+            src/assets/image.stb.cpp
+            src/assets/texture/asset.texture_artifact.cpp
+            src/assets/texture/asset.texture_import.cpp)
+        target_sources(epoch_texture_streaming_contract PRIVATE
+            FILE_SET epoch_texture_streaming_modules TYPE CXX_MODULES
+                BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/modules
+                FILES
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/assets.streaming.ixx
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/project.asset_registry.ixx
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/asset.texture_import.ixx
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/asset.texture_artifact.ixx)
+        epoch_apply_cxx_dialect(epoch_texture_streaming_contract)
+        epoch_apply_warnings(epoch_texture_streaming_contract)
+        epoch_apply_sanitizers(epoch_texture_streaming_contract)
+        add_test(NAME epoch_texture_streaming_contract
+            COMMAND epoch_texture_streaming_contract
+                ${CMAKE_CURRENT_BINARY_DIR}/texture-streaming-contract-data)
+        set_tests_properties(epoch_texture_streaming_contract PROPERTIES TIMEOUT 30)
+
         # Pure resource/cooldown admission; synthetic observations, no runtime
         # launch, sleeps, model requests, or renderer initialization.
         add_executable(epoch_platform_work_admission_contract
@@ -799,7 +823,9 @@ set(EPOCH_SOURCES
     src/project/project.contracts.cpp
     src/project/project.lifecycle_contract.cpp
     src/assets/texture/asset.texture_artifact.cpp
+    src/assets/image.stb.cpp
     src/assets/texture/asset.texture_import.cpp
+    src/assets/assets.streaming.cpp
     src/core/core.assert.cpp
     src/core/core.error.cpp
     src/core/core.id.cpp
@@ -1600,7 +1626,6 @@ if(EPOCH_VULKAN_ACTIVE)
 
     if(EPOCH_VULKAN_ACTIVE)
         target_sources(epoch PRIVATE
-            src/assets/image.stb.cpp
             src/renderers/vulkan/vulkan.platform_context.cpp
             src/renderers/vulkan/vulkan.dispatch_storage.cpp
         )
@@ -1912,6 +1937,24 @@ if(BUILD_TESTING)
     target_compile_definitions(epoch_media_timeline_preview_contract PRIVATE EPOCH_MEDIA_TIMELINE_PREVIEW_CONTRACT_MAIN=1)
     epoch_apply_cxx_dialect(epoch_media_timeline_preview_contract)
     add_test(NAME epoch_media_timeline_preview_contract COMMAND epoch_media_timeline_preview_contract)
+    add_executable(epoch_voxel_sdf_contract
+        src/voxel/voxel.sdf_contract.cpp
+    )
+    target_sources(epoch_voxel_sdf_contract PRIVATE
+        FILE_SET epoch_voxel_sdf_modules TYPE CXX_MODULES
+            BASE_DIRS ${EPOCH_MODULE_DIR}
+            FILES
+                ${EPOCH_MODULE_DIR}/voxel.field.ixx
+                ${EPOCH_MODULE_DIR}/voxel.sdf.ixx
+    )
+    target_compile_definitions(epoch_voxel_sdf_contract PRIVATE
+        EPOCH_VOXEL_SDF_CONTRACT_MAIN=1
+    )
+    epoch_apply_cxx_dialect(epoch_voxel_sdf_contract)
+    epoch_apply_warnings(epoch_voxel_sdf_contract)
+    epoch_apply_sanitizers(epoch_voxel_sdf_contract)
+    add_test(NAME epoch_voxel_sdf_contract COMMAND epoch_voxel_sdf_contract)
+
     add_executable(epoch_forest_preview_mesh_contract
         src/forest/forest.preview_mesh_contract.cpp
     )

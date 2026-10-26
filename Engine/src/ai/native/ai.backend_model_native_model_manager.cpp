@@ -247,7 +247,7 @@ namespace {
         });
         return value;
     }();
-    if (filename_lower.starts_with("mmproj-") || filename_lower == "mmproj.gguf") {
+    if (is_vision_projector_filename(filename_lower)) {
         return std::unexpected(
             "The selected file is an mmproj vision projector, not the Qwen model. "
             "Choose the first model shard ending in -00001-of-0000N.gguf.");

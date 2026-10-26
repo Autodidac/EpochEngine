@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 class SignedDiscovery(unittest.TestCase):
     def test_actual_public_and_development_admission(self):
-        from Tests.ai.test_epoch_90146_embedded_preview_input import definition
+        from Tools.source.owned_source_text import definition
         source=(ROOT/'Engine/src/updater/implementation/updater.release_integrity.inl').read_text(encoding='utf-8')
         parser=source[:source.index('        [[nodiscard]] inline std::optional<std::vector<unsigned char>>')]
         admission=definition(source,'[[nodiscard]] inline std::optional<std::string> verified_release_integrity_payload(')

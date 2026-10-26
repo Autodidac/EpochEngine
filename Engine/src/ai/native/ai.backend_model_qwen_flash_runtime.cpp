@@ -639,6 +639,16 @@ RuntimeModelProfile QwenFlashRuntime::resolve_profile(
     const HardwareSnapshot& hardware,
     const RuntimeCapabilities& capabilities) const {
     RuntimeModelProfile resolved = profile;
+    if (profile.source == ModelSourceKind::local_gguf
+        && (profile.gpu_layers.empty() || profile.gpu_layers == "auto")
+        && profile.runtime_policy != "manual")
+    {
+        // Imported profiles used the shared 48-layer hint even for a 65-block
+        // GGUF. Qualify automatic placement from bounded model metadata, using
+        // this runtime's block+output -ngl scale; preserve exact manual choices.
+        if (const auto metadata = layer_metadata_cache_.get(profile.local_path))
+            resolved.gpu_layer_count_hint = metadata->offload_capacity();
+    }
     if (resolved.estimated_bytes == 0u)
     {
         // Imported local models often have no estimate. Reuse the existing

@@ -81,87 +81,172 @@ namespace epochengine::gui_lib::input
         return keys[key_index(key_code)];
     }
 
+    void InputTracker::clear_transients(InputFrame& frame) noexcept
+    {
+        frame.pointer_delta = {};
+        frame.wheel_delta = {};
+        for (auto& state : frame.pointer_buttons)
+        {
+            state.pressed = state.released = state.repeated = false;
+            state.click_count = 0;
+        }
+        for (auto& state : frame.keys)
+        {
+            state.pressed = state.released = state.repeated = false;
+            state.click_count = 0;
+        }
+    }
+
     void InputTracker::reset() noexcept
     {
         frame_ = {};
+        replay_frame_ = {};
+        event_head_ = event_count_ = 0;
+        events_overflowed_ = false;
     }
 
     void InputTracker::finish_frame() noexcept
     {
-        frame_.pointer_delta = {};
-        frame_.wheel_delta = {};
-
-        for (DigitalState& state : frame_.pointer_buttons)
-        {
-            state.pressed = false;
-            state.released = false;
-            state.repeated = false;
-            state.click_count = 0;
-        }
-
-        for (DigitalState& state : frame_.keys)
-        {
-            state.pressed = false;
-            state.released = false;
-            state.repeated = false;
-            state.click_count = 0;
-        }
-
+        clear_transients(frame_);
+        event_head_ = event_count_ = 0;
+        events_overflowed_ = false;
         ++frame_.sequence;
+    }
+
+    void InputTracker::enable_ordered_events(bool enabled) noexcept
+    {
+        reset();
+        ordered_events_ = enabled;
+    }
+
+    bool InputTracker::events_overflowed() const noexcept { return events_overflowed_; }
+
+    bool InputTracker::record_event(const PendingEvent& event) noexcept
+    {
+        if (!ordered_events_) return true;
+        if (events_overflowed_) return false;
+        if (event_count_ == 0)
+        {
+            replay_frame_ = frame_;
+            clear_transients(replay_frame_);
+        }
+        if (event.kind == EventKind::move && event_count_ > 0)
+        {
+            auto& previous = events_[(event_head_ + event_count_ - 1) % maximum_pending_events];
+            if (previous.kind == EventKind::move) { previous = event; return true; }
+        }
+        if (event_count_ == maximum_pending_events)
+        {
+            // Discard pending events and clear held input. The consumer cancels its gesture; no release/click is invented.
+            const auto sequence = frame_.sequence;
+            frame_ = {};
+            frame_.sequence = sequence;
+            event_head_ = event_count_ = 0;
+            events_overflowed_ = true;
+            return false;
+        }
+        events_[(event_head_ + event_count_) % maximum_pending_events] = event;
+        ++event_count_;
+        return true;
+    }
+
+    void InputTracker::apply_event(InputFrame& frame, const PendingEvent& event) noexcept
+    {
+        switch (event.kind)
+        {
+        case EventKind::move:
+            frame.pointer_delta.x += event.vector.x - frame.pointer_position.x;
+            frame.pointer_delta.y += event.vector.y - frame.pointer_position.y;
+            frame.pointer_position = event.vector;
+            break;
+        case EventKind::wheel:
+            frame.wheel_delta.x += event.vector.x;
+            frame.wheel_delta.y += event.vector.y;
+            break;
+        case EventKind::button:
+        {
+            auto& state = frame.pointer_buttons[pointer_index(event.button)];
+            if (event.down != state.down)
+            {
+                state.pressed = state.pressed || event.down;
+                state.released = state.released || !event.down;
+                state.down = event.down;
+            }
+            if (event.down) state.click_count = (std::max)(state.click_count, event.click_count);
+            break;
+        }
+        case EventKind::key:
+        {
+            auto& state = frame.keys[key_index(event.key)];
+            if (event.down != state.down)
+            {
+                state.pressed = state.pressed || event.down;
+                state.released = state.released || !event.down;
+                state.down = event.down;
+            }
+            state.repeated = state.repeated || (event.down && event.repeated);
+            break;
+        }
+        case EventKind::modifiers: frame.modifiers = event.modifiers; break;
+        case EventKind::source: frame.input_source = event.source; break;
+        }
+    }
+
+    bool InputTracker::next_event_frame(InputFrame& output) noexcept
+    {
+        if (!ordered_events_ || events_overflowed_ || event_count_ == 0) return false;
+        clear_transients(replay_frame_);
+        apply_event(replay_frame_, events_[event_head_]);
+        event_head_ = (event_head_ + 1) % maximum_pending_events;
+        --event_count_;
+        output = replay_frame_;
+        if (event_count_ == 0) clear_transients(frame_);
+        return true;
     }
 
     void InputTracker::set_pointer_position(Vec2 position) noexcept
     {
         position.x = finite_or(position.x, frame_.pointer_position.x);
         position.y = finite_or(position.y, frame_.pointer_position.y);
-        frame_.pointer_delta.x += position.x - frame_.pointer_position.x;
-        frame_.pointer_delta.y += position.y - frame_.pointer_position.y;
-        frame_.pointer_position = position;
+        const PendingEvent event{.kind = EventKind::move, .vector = position};
+        if (record_event(event)) apply_event(frame_, event);
     }
 
     void InputTracker::add_wheel_delta(Vec2 delta) noexcept
     {
-        frame_.wheel_delta.x += finite_or(delta.x, 0.0f);
-        frame_.wheel_delta.y += finite_or(delta.y, 0.0f);
+        const PendingEvent event{.kind = EventKind::wheel,
+            .vector = {finite_or(delta.x, 0.0f), finite_or(delta.y, 0.0f)}};
+        if (record_event(event)) apply_event(frame_, event);
     }
 
-    void InputTracker::set_pointer_button(
-        PointerButton button,
-        bool down,
-        std::uint8_t click_count) noexcept
+    void InputTracker::set_pointer_button(PointerButton button, bool down, std::uint8_t click_count) noexcept
     {
-        DigitalState& state = frame_.pointer_buttons[pointer_index(button)];
-        if (down != state.down)
-        {
-            state.pressed = down;
-            state.released = !down;
-            state.down = down;
-        }
-        if (down)
-            state.click_count = (std::max)(state.click_count, click_count);
+        if (static_cast<std::size_t>(button) >= frame_.pointer_buttons.size()) return;
+        const PendingEvent event{.kind = EventKind::button, .button = button, .down = down, .click_count = click_count};
+        if (record_event(event)) apply_event(frame_, event);
     }
 
     void InputTracker::set_key(Key key_code, bool down, bool repeated) noexcept
     {
-        DigitalState& state = frame_.keys[key_index(key_code)];
-        if (down != state.down)
-        {
-            state.pressed = down;
-            state.released = !down;
-            state.down = down;
-        }
-        state.repeated = repeated;
+        if (static_cast<std::size_t>(key_code) >= frame_.keys.size()) return;
+        const PendingEvent event{.kind = EventKind::key, .key = key_code, .down = down, .repeated = repeated};
+        if (record_event(event)) apply_event(frame_, event);
     }
 
     void InputTracker::set_modifiers(ModifierState modifiers) noexcept
     {
-        frame_.modifiers = modifiers;
+        const PendingEvent event{.kind = EventKind::modifiers, .modifiers = modifiers};
+        if (record_event(event)) apply_event(frame_, event);
     }
 
-    const InputFrame& InputTracker::frame() const noexcept
+    void InputTracker::set_input_source(std::uint64_t source) noexcept
     {
-        return frame_;
+        if (frame_.input_source == source) return;
+        const PendingEvent event{.kind = EventKind::source, .source = source};
+        if (record_event(event)) apply_event(frame_, event);
     }
+
+    const InputFrame& InputTracker::frame() const noexcept { return frame_; }
 
     void ModalInputArbiter::begin(Rect bounds) noexcept
     {

@@ -93,3 +93,17 @@ Validate identical prompt/output lengths, prompt latency and measured decode
 tokens separately. Full GPU KV tuning, precise GGUF layer/KV metadata sizing and
 same-prompt hardware benchmarks remain acceptance work.
 
+
+## Model Manager redesign — October26 operator references
+
+Use the supplied LM Studio and Bionic screenshots as layout references, not as backend capability evidence or instructions to copy their system prompt. Keep one Model Manager with a readable model library and selected-model details; allow resizing and independent scrolling, with compact, consistently aligned action buttons. Preserve explicit local/provider/Codex selection and show the destination before Send.
+
+Group settings into Info, Load and Inference. Within them use clear sections: Context and performance; Generation; Reasoning; Memory; Speculative decoding; Advanced. Include short help descriptions and units. Distinguish saved defaults from live settings; explain when reload is required and never reload during an active task. Show model identity, quantization/file size, supported versus actually loaded context, image/projector status, resource estimates and measured usage. Do not use project-package models as if they were host Assistant installations.
+
+Automatic hardware settings is the intended simple default, with manual overrides available. Auto must compute within known model limits, usable RAM/VRAM after renderer and other residents, KV/cache/intermediate costs, task needs and response reserve. Show the resolved settings and reason. Do not equate largest context, highest GPU percentage or most threads with fastest performance. Current runtime automatic policy does NOT yet automatically size context: saved context remains explicit (normally81920). Adding an Auto label without implementing/admitting that policy is not acceptance. Never silently shrink an active coding session or its admitted source.
+
+Existing controls to retain and make readable: GPU automatic fit/exact layers, context/slots/reserve/compaction, decode and batch CPU threads, logical/physical batch sizes, Flash Attention, K/V cache formats and placement, prompt/expert/host memory budgets and compatible draft-model settings. Add requested generation/reasoning/memory controls only through verified backend options and profile persistence: temperature, optional response limit, stop strings, supported thinking/budget, seed, sampling/penalties, mmap/keep-resident,20-minute idle timeout, cache checkpoints, RoPE overrides and speculative decoding. Unsupported items must be unavailable with a reason, not cosmetic switches. Show experimental status only where justified. Advanced argument overrides must not defeat process ownership, paths, approval or network boundaries.
+
+Context overflow must preserve task/source integrity: visible compaction/checkpoint or a reported limit, never silently discard code from the middle merely because a reference UI offers that mode. Keep model-specific settings separate from conversation/system instructions and prevent prompt text from granting tool or own-source permissions.
+
+Acceptance: normal/compressed windows, keyboard/focus/scroll, selectable readable values, draft cancel/save/reload, saved/live differences, Auto/manual transitions, unsupported options, insufficient memory, idle expiry and a real27B image/file request with correct image receipt. Screenshots alone and CPU fixtures do not establish native GUI acceptance.

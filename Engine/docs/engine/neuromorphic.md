@@ -15,8 +15,8 @@ when fixed-step, frame-step, or batch execution is objectively better.
 ### Current ownership and evidence (October 7, 2026)
 
 This contract covers reusable software, editor and game consumers; it is not a
-second roadmap. `Changes/roadmap.md` orders unfinished delivery and the active
-pass keeps model-built sandbox succession first.
+second roadmap. `Changes/roadmap.md` orders unfinished delivery and the
+[active pass](../../../Changes/active_pass.md) owns the current bounded scope.
 
 | System | Actual implementation/integration | Remaining acceptance |
 | --- | --- | --- |
@@ -30,6 +30,46 @@ The current graph has no hidden learning/weight updates. Event-camera output is
 `visual_only`; timeline causes use `exact_cause`. Raster damage and validated
 host/source evidence remain authoritative. High cached-render throughput is
 not high presentation FPS, model throughput or proof of a whole-engine speedup.
+
+### DAVID alignment and camera/render research (October 25)
+
+This is a planned continuation, not a new learned implementation. Naming and
+micromodel responsibilities live in [AI architecture](ai_plan.md#david-roles-and-shippable-micromodels--planned):
+DAVID is the framework, ARCHITECT 1 routes work, ELA is a non-LLM predictive
+learner, ADAM owns neuromorphic cognition research, NEO/engcoder is the planned
+English/coding micromodel and optional acting consumer, and KEYMAKER is supervised
+training/evaluation. “JEV-like” has no resolved model/paper identity yet; no external
+architecture or weights are assumed. NEO speech I/O requires separate ASR/TTS proof.
+
+Keep three distinct camera/render stages:
+
+1. **Existing sampled event camera:** `Engine/modules/render.neuromorphic_camera.ixx`
+   converts supplied luminance observations into bounded events. This is not proof
+   of an event-native sensor, free framebuffer capture or a perception model.
+2. **Planned perception/prediction:** a bounded project consumer may use event
+   windows with explicit timestamp/coordinate/units, truth class, queue/drop limits,
+   reset/replay policy and licensed data. Compare against nonlearned baselines;
+   measure observation/readback cost, accuracy, latency, RAM/VRAM and event storms.
+   Do not continuously read back a framebuffer while claiming cost-free event input.
+3. **Existing conservative invalidation; planned learned policy:**
+   `Engine/modules/render.neuromorphic_invalidation.ixx` may promote partial work
+   to full redraw. A future model cannot suppress authoritative damage or replace
+   rasterization/presentation. Test sparse/dense motion, camera changes, occlusion,
+   lighting, resize/reset and temporal replay with the existing same-cache A/B lane.
+   Pixel/depth correctness and synchronized total cost precede any speed claim.
+
+Use [shared loading/admission](ai_plan.md#shared-model-loading-and-unloading-plan)
+for learned model components; no second scheduler or assumed always-resident brain.
+An ordinary event graph need not load a neural model. Active coding/generation,
+renderer resources and optional inference compete under the same measured budget.
+Training needs explicit consent, licensed data/provenance, held-out evaluation and
+rollback; neither rendering nor inference grants automatic learning authority.
+
+Prerequisites remain current reliability/software-base acceptance and a real
+consumer specification. First research acceptance is one bounded replayable
+consumer with measured value over the existing deterministic baseline, not a
+whole-engine neuromorphic rewrite. Preserve playable 2D, renderer parity and
+[Dark Iterations](dark_iterations.md) in their roadmap order.
 
 ### Measured next design steps
 

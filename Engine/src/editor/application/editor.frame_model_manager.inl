@@ -35,6 +35,13 @@
             const float managerControlWidth = (std::min)(managerWidth, 720.0f);
             const float managerContentX = modelModalPos.x + (std::min)(29.0f, modelModalSize.x * 0.5f);
             gui::set_cursor({managerContentX, gui::cursor_position().y});
+            // Status text uses the full readable width instead of clipping
+            // model names or technical labels into a narrow fixed column.
+            const auto modelInfo = [&](std::string_view name, std::string_view value,
+                                       float = 0.0f)
+            {
+                gui::wrapped_label(std::string{name} + ": " + std::string{value}, managerWidth);
+            };
             const gui::InlineButtonRowOptions managerActionLayout{
                 .sizing = gui::InlineButtonSizing::FitContent,
                 .alignment = gui::InlineButtonAlignment::Center,
@@ -116,7 +123,8 @@
                 .placeholder = "Manage AI system",
                 .selected = managerSections[managerSectionIndex],
                 .options = managerSections,
-                .size = {managerControlWidth, 30.0f},
+                .size = {managerWidth, 30.0f},
+                        .fit_content=true, .alignment=gui::InlineButtonAlignment::Center,
                 .max_visible_options = 5u});
             if (sectionChoice.changed && sectionChoice.selected_index) {
                 editor.aiModelManagerSection = static_cast<int>(*sectionChoice.selected_index);
@@ -131,7 +139,8 @@
                 .selected = managerTabs[static_cast<std::size_t>(
                     std::clamp(editor.aiModelManagerTab, 0, 2))],
                 .options = managerTabs,
-                .size = {managerControlWidth, 30.0f},
+                .size = {managerWidth, 30.0f},
+                        .fit_content=true, .alignment=gui::InlineButtonAlignment::Center,
                 .max_visible_options = 3u});
             if (managerTabChoice.changed && managerTabChoice.selected_index)
                 editor.aiModelManagerTab = static_cast<int>(*managerTabChoice.selected_index);
@@ -171,7 +180,7 @@
                 nativeState.busy ? 0u : 1u);
             const gui::InlineButtonRowOptions managerFooterLayout{
                 .sizing = gui::InlineButtonSizing::FitContent,
-                .alignment = gui::InlineButtonAlignment::End,
+                .alignment = gui::InlineButtonAlignment::Center,
                 .wrap = true,
                 .available_width = managerWidth};
             const float managerFooterHeight = gui::inline_button_row_height(
@@ -203,14 +212,14 @@
             }
             else if (editor.aiModelManagerTab == 0)
             {
-                gui::property_row("Model status", nativeState.phase, 150.0f);
+                modelInfo("Model status", nativeState.phase, 150.0f);
                 const auto residentCount=std::ranges::count_if(nativeState.models,
                     [](const auto& entry) { return entry.active; });
-                gui::property_row("Resident models",
+                modelInfo("Resident models",
                     epochengine::format_text("{} / 3", residentCount), 150.0f);
-                gui::property_row("Foundation model", nativeState.loaded
+                modelInfo("Foundation model", nativeState.loaded
                     ? nativeState.model : std::string("None"), 150.0f);
-                gui::property_row("Epoch selected", nativeState.selected
+                modelInfo("New messages use", nativeState.selected
                     ? "Local Models" : "Not active for new requests", 150.0f);
                 if (!nativeState.inventory_error.empty())
                     gui::wrapped_label(nativeState.inventory_error, managerWidth);
@@ -254,8 +263,7 @@
                 labels.reserve(modelDisplayOrder.size());
                 for (const auto index : modelDisplayOrder) {
                     const auto& model = nativeState.models[index];
-                    labels.push_back(model.label.empty() || model.label == model.id
-                        ? model.id : model.label + " [" + model.id + "]");
+                    labels.push_back(model.label.empty() ? model.id : model.label);
                 }
                 std::vector<std::string_view> labelViews{};
                 for (const auto& label : labels) labelViews.push_back(label);
@@ -271,15 +279,16 @@
                     }
                 gui::wrapped_label("GPU placement is saved per model. Automatic fit adapts to available VRAM; Exact layers keeps your requested count. "
                     "Hardware and resident-model budgets may reduce the loaded count. Reload to apply. External runtimes manage their own offload.",managerWidth);
-                gui::label("Optional model test prompt (96 output tokens maximum)");
+                gui::label("Quick test message (up to 96 reply tokens)");
                 (void)gui::edit_box(editor.aiNativeTestPrompt,{managerWidth,58.0f},512u,true);
-                gui::label("Choose installed or available GGUF model");
+                gui::label("Selected local model");
                 const auto nativeChoice = gui::select_box(gui::SelectBoxOptions{
                     .id = "epoch-model-manager-native-select",
-                    .placeholder = "Choose native model",
+                    .placeholder = "Choose a local model",
                     .selected = selectedLabel,
                     .options = labelViews,
-                    .size = {managerControlWidth, 30.0f},
+                    .size = {managerWidth, 30.0f},
+                        .fit_content=true, .alignment=gui::InlineButtonAlignment::Center,
                     .max_visible_options = 7u,
                     .enabled = !nativeState.busy && !modelRequestActive});
                 if (nativeChoice.changed && nativeChoice.selected_index
@@ -295,13 +304,14 @@
                     const std::string status = model.active ? "Loaded"
                         : nativeState.inventory_preview ? "Registered (cache unchecked)"
                         : model.installed ? "Cached" : "Available to install";
-                    gui::property_row(label, status, 230.0f);
-                    // Keep inventory readable. Detailed tuning and timing belong
-                    // to the selected model, not repeated for every download.
+                    // The picker lists every model. Show readable details only
+                    // for the selected model instead of repeating the inventory.
                     if (model.id != (nativeModelId.empty() ? nativeState.model : nativeModelId))
                         continue;
+                    gui::wrapped_label(label, managerWidth);
+                    modelInfo("State", status);
                     if (model.active)
-                        gui::property_row("  Live context",
+                        modelInfo("  Live context",
                             model.loaded_context_tokens != 0u
                                 ? std::to_string(model.loaded_context_tokens)
                                     + " tokens (runtime-reported)"
@@ -312,8 +322,8 @@
                     const bool automaticPlacement = model.tuning.gpu_layers == "auto";
                     if (automaticPlacement)
                     {
-                    const std::string gpuSliderLabel = "Automatic GPU target: "
-                        + std::to_string(draftIt->second) + "%  -  " + label;
+                    const std::string gpuSliderLabel = "GPU offload target: "
+                        + std::to_string(draftIt->second) + "%";
                     const auto gpuChoice = gui::slider(gui::SliderOptions{
                         .id="epoch-native-gpu-"+model.id,
                         .label=gpuSliderLabel,
@@ -325,20 +335,20 @@
                     if (gpuChoice.changed)
                         draftIt->second=static_cast<unsigned>(std::clamp(
                             std::lround(gpuChoice.value),0L,100L));
-                    gui::property_row("  Saved GPU target",
+                    modelInfo("  Saved GPU target",
                         std::to_string(model.gpu_offload_percent) +
                         "% target (reload to apply; hardware/resident budgets may cap)",150.0f);
                     }
                     else
-                        gui::property_row("  Saved GPU target", model.tuning.gpu_layers
+                        modelInfo("  Saved GPU target", model.tuning.gpu_layers
                             + " requested layers (Exact layers; reload to apply)", 150.0f);
                     if (!model.effective_gpu_layers.empty())
-                        gui::property_row("  Profile GPU layers",model.effective_gpu_layers +
+                        modelInfo("  Profile GPU layers",model.effective_gpu_layers +
                             " requested layers before multi-model VRAM cap",150.0f);
                     // InlineButtonSpec stores string_view: keep these backing
                     // labels alive through inline_button_row (no temporaries).
-                    const std::string saveLabel="Save GPU - "+model.id;
-                    const std::string testLabel="Test - "+model.id;
+                    const std::string saveLabel="Save GPU Target";
+                    const std::string testLabel="Run Quick Test";
                     const std::array perModelActions{
                         gui::InlineButtonSpec{.label=saveLabel,.width=0.0f,
                             .enabled=!modelRequestActive &&
@@ -359,26 +369,26 @@
                             : "Model operation rejected: wait for the current operation and retry.";
                     }
                     if (model.requests > 0) {
-                        gui::property_row("  Inference", epochengine::format_text(
+                        modelInfo("  Inference", epochengine::format_text(
                             "{} / {} successful; avg {:.0f} ms",
                             model.inference_ok, model.requests, model.avg_request_ms), 145.0f);
-                        gui::property_row("  Output rate", model.tps_known
+                        modelInfo("  Output rate", model.tps_known
                             ? epochengine::format_text("{:.1f} t/s (reported tokens)", model.reported_tps)
                             : std::string{"t/s unavailable (no token usage)"}, 145.0f);
                         if (model.first_token_known)
-                            gui::property_row("  First token", epochengine::format_text(
+                            modelInfo("  First token", epochengine::format_text(
                                 "{:.0f} ms average", model.avg_first_token_ms), 145.0f);
                         if (model.simple_baseline_available)
-                            gui::property_row("  Simple latency delta", epochengine::format_text(
+                            modelInfo("  Simple latency delta", epochengine::format_text(
                                 "{:+.0f} ms per call vs foundation (observed; not A/B)",
                                 model.simple_latency_difference_ms), 145.0f);
                         if (model.agent_completed || model.agent_failed)
-                            gui::property_row("  Agent outcomes", epochengine::format_text(
+                            modelInfo("  Agent outcomes", epochengine::format_text(
                                 "{} completed / {} failed (not build-verified)",
                                 model.agent_completed, model.agent_failed), 145.0f);
                     }
                     if (model.expected_bytes)
-                        gui::property_row("  Downloaded",
+                        modelInfo("  Downloaded",
                             epochengine::format_text("{} / {} MiB",
                                 model.cached_bytes / (1024u * 1024u),
                                 model.expected_bytes / (1024u * 1024u)), 145.0f);
@@ -392,23 +402,22 @@
                     [&](const auto& model) { return model.id == selectedNativeId; });
                 if (selectedNativeIt != nativeState.models.end())
                 {
-                    gui::property_row("Image input", !selectedNativeIt->active ? "Not loaded"
+                    modelInfo("Image input", !selectedNativeIt->active ? "Not loaded"
                         : !selectedNativeIt->image_input_known ? "Unconfirmed"
                         : selectedNativeIt->image_input_supported ? "Ready" : "Unavailable in loaded runtime", 150.0f);
                     if (selectedNativeIt->active && !selectedNativeIt->image_input_supported)
                         gui::wrapped_label("Image attachments need a loaded vision projector or a vision-capable Local API connection. "
                             "A Qwen model name alone does not enable images; text coding can continue.", managerWidth);
-                    gui::section_heading("Performance settings — selected model");
-                    gui::wrapped_label("Total task time includes prompt processing, generation, builds and checks. "
-                        "Compare the same prompt and output length; model size alone does not predict t/s.", managerWidth);
-                    gui::property_row("Saved policy", selectedNativeIt->tuning.runtime_policy, 150.0f);
+                    gui::section_heading("Selected model settings");
+                    gui::wrapped_label("Save changes, then reload the model when it is idle to apply them.", managerWidth);
+                    modelInfo("Saved policy", selectedNativeIt->tuning.runtime_policy, 150.0f);
                     if (selectedNativeIt->loaded_tuning_known)
                     {
                         const auto& active = selectedNativeIt->loaded_tuning;
-                        gui::property_row("Active GPU / CPU", epochengine::format_text(
+                        modelInfo("Active GPU / CPU", epochengine::format_text(
                             "{} layers / {} decode threads / {} batch threads",
                             selectedNativeIt->loaded_gpu_layers, active.threads, active.batch_threads), 150.0f);
-                        gui::property_row("Active KV / batching", epochengine::format_text(
+                        modelInfo("Active KV / batching", epochengine::format_text(
                             "K {} / V {} / {} KV GPU layers / batch {} / micro {}",
                             active.kv_type_k, active.kv_type_v, active.kv_gpu_layers,
                             active.batch_size, active.ubatch_size), 150.0f);
@@ -418,8 +427,8 @@
                                 + selectedNativeIt->loaded_gpu_layers
                                 + ". Saved settings are unchanged; inspect VRAM, resident models and context before raising limits.", managerWidth);
                     }
-                    else gui::property_row("Active tuning", "Not reported until model is loaded", 150.0f);
-                    gui::property_row("Saved context / slots", epochengine::format_text("{} / {} (reload to apply)",
+                    else modelInfo("Active tuning", "Not reported until model is loaded", 150.0f);
+                    modelInfo("Saved context / slots", epochengine::format_text("{} / {} (reload to apply)",
                         selectedNativeIt->tuning.context_tokens, selectedNativeIt->tuning.parallel_slots), 150.0f);
                     const std::array presetActions{
                         gui::InlineButtonSpec{.label="Save hardware defaults", .width=0.0f,
@@ -453,14 +462,16 @@
                         const bool canEdit = !modelRequestActive && !nativeState.busy;
                         gui::wrapped_label(
                             "Changes save to this model's profile only; unload/reload to apply. "
-                            "Recommended keeps the Qwen baseline; Automatic adapts to hardware. Choose Manual to apply "
-                            "individual scheduler, cache and KV overrides.", managerWidth);
+                            "Recommended uses the saved Qwen baseline. Automatic chooses CPU threads, batches "
+                            "and memory-cache settings for your hardware. Context length stays at your saved value. "
+                            "Manual lets you change those settings yourself.", managerWidth);
                         const std::array<std::string_view,3> policies{
                             "recommended", "automatic", "manual"};
                         const auto policy = gui::select_box(gui::SelectBoxOptions{
                             .id="epoch-native-policy-"+selectedNativeId,
                             .selected=tune.runtime_policy, .options=policies,
-                            .size={managerControlWidth,30.0f}, .enabled=canEdit});
+                            .size={managerWidth,30.0f},
+                        .fit_content=true, .alignment=gui::InlineButtonAlignment::Center, .enabled=canEdit});
                         if (policy.changed && policy.selected_index)
                             tune.runtime_policy = std::string{policies[*policy.selected_index]};
                         // uint32 slider helper: controlled draft values, unique
@@ -479,12 +490,13 @@
                                 std::lround(choice.value), static_cast<long>(lower),
                                 static_cast<long>(upper)));
                         };
-                        gui::label("GPU layers / context");
+                        gui::section_heading("Context and GPU memory");
                         const std::array<std::string_view,2> gpuModes{"Automatic fit", "Exact layers"};
                         const auto gpuMode = gui::select_box(gui::SelectBoxOptions{
                             .id="epoch-native-gpu-placement-"+selectedNativeId,
                             .selected=tune.gpu_layers == "auto" ? gpuModes[0] : gpuModes[1],
-                            .options=gpuModes,.size={managerControlWidth,30.0f},.enabled=canEdit});
+                            .options=gpuModes,.size={managerWidth,30.0f},
+                        .fit_content=true, .alignment=gui::InlineButtonAlignment::Center,.enabled=canEdit});
                         if (gpuMode.changed && gpuMode.selected_index)
                             tune.gpu_layers = *gpuMode.selected_index == 0u ? "auto"
                                 : std::to_string((std::min)(30u, tune.gpu_layer_count_hint));
@@ -508,7 +520,7 @@
                         number("context", "Total context tokens",tune.context_tokens,
                             4096.0f,262144.0f,1024.0f);
                         number("slots", "Parallel slots",tune.parallel_slots,1.0f,4.0f,1.0f);
-                        gui::property_row("Context per slot",std::to_string(
+                        modelInfo("Context per slot",std::to_string(
                             tune.context_tokens/std::max(1u,tune.parallel_slots))+" tokens",170.0f);
                         number("reserve", "Context reserve tokens", tune.context_reserve_tokens,
                             1024.0f,32768.0f,1024.0f);
@@ -539,25 +551,29 @@
                             "Saved settings take effect after an explicit reload; active values above show what is running.", managerWidth);
                         if (tune.runtime_policy == "manual")
                         {
-                        gui::label("CPU / batching");
+                        gui::section_heading("CPU and batching");
                         number("threads", "Inference CPU threads",tune.threads,1.0f,32.0f,1.0f);
                         number("batch-threads", "Batch CPU threads",tune.batch_threads,1.0f,32.0f,1.0f);
                         number("batch", "Batch tokens",tune.batch_size,32.0f,8192.0f,32.0f);
                         number("ubatch", "Microbatch tokens",tune.ubatch_size,16.0f,2048.0f,16.0f);
                         (void)gui::toggle_switch("Flash attention##epoch-native-fa",
                             tune.flash_attention,{managerWidth,28.0f});
-                        gui::label("KV cache / GPU-host placement");
+                        gui::section_heading("Conversation memory (KV cache)");
+                        gui::wrapped_label("This cache stores attention data for the conversation. "
+                            "Longer contexts and more parallel requests need more memory.", managerWidth);
                         const std::array<std::string_view,3> kvOptions{"q4_0", "q8_0", "f16"};
                         const auto kvK=gui::select_box(gui::SelectBoxOptions{
                             .id="epoch-native-kv-k-"+selectedNativeId,
                             .selected=tune.kv_type_k,.options=kvOptions,
-                            .size={managerControlWidth,28.0f},.enabled=canEdit});
+                            .size={managerWidth,28.0f},
+                        .fit_content=true, .alignment=gui::InlineButtonAlignment::Center,.enabled=canEdit});
                         if (kvK.changed && kvK.selected_index)
                             tune.kv_type_k=std::string{kvOptions[*kvK.selected_index]};
                         const auto kvV=gui::select_box(gui::SelectBoxOptions{
                             .id="epoch-native-kv-v-"+selectedNativeId,
                             .selected=tune.kv_type_v,.options=kvOptions,
-                            .size={managerControlWidth,28.0f},.enabled=canEdit});
+                            .size={managerWidth,28.0f},
+                        .fit_content=true, .alignment=gui::InlineButtonAlignment::Center,.enabled=canEdit});
                         if (kvV.changed && kvV.selected_index)
                             tune.kv_type_v=std::string{kvOptions[*kvV.selected_index]};
                         (void)gui::toggle_switch("KV GPU offload##epoch-native-kv",
@@ -566,7 +582,7 @@
                             tune.kv_cpu_pinned,{managerWidth,28.0f});
                         number("kv-gpu-layers", "KV GPU layers",tune.kv_gpu_layers,
                             0.0f,128.0f,1.0f);
-                        gui::label("System RAM / expert and prompt caches");
+                        gui::section_heading("System memory and caches");
                         gui::wrapped_label("Windows shared GPU memory is driver-managed "
                             "system RAM. It cannot be increased like dedicated VRAM using "
                             "a llama GPU-layer slider. Host-pinned cache uses system RAM "
@@ -575,7 +591,8 @@
                         const auto expertMode=gui::select_box(gui::SelectBoxOptions{
                             .id="epoch-native-expert-mode-"+selectedNativeId,
                             .selected=tune.expert_cache_mode,.options=expertModes,
-                            .size={managerControlWidth,28.0f},.enabled=canEdit});
+                            .size={managerWidth,28.0f},
+                        .fit_content=true, .alignment=gui::InlineButtonAlignment::Center,.enabled=canEdit});
                         if (expertMode.changed && expertMode.selected_index)
                             tune.expert_cache_mode=std::string{expertModes[*expertMode.selected_index]};
                         number("expert-cache", "GPU expert cache MiB",tune.expert_cache_mib,
@@ -584,7 +601,7 @@
                             0.0f,32768.0f,256.0f);
                         number("prompt-cache", "Prompt cache RAM MiB",tune.prompt_cache_mib,
                             0.0f,8192.0f,128.0f);
-                        gui::label("Optional MTP / speculative decoding");
+                        gui::section_heading("Speculative decoding");
                         gui::wrapped_label("Requires a dedicated compatible local GGUF "
                             "draft sidecar. No main-model self-draft is allowed.",managerWidth);
                         (void)gui::toggle_switch("Enable MTP##epoch-native-mtp",
@@ -615,21 +632,21 @@
                 }
                 if (!nativeState.benchmark.model_id.empty()) {
                     const auto& test=nativeState.benchmark;
-                    gui::property_row("Latest model test",test.model_id + ": " + test.status,150.0f);
+                    modelInfo("Latest model test",test.model_id + ": " + test.status,150.0f);
                     if (test.completed) {
-                        gui::property_row("  Total latency",
+                        modelInfo("  Total latency",
                             epochengine::format_text("{:.0f} ms",test.elapsed_ms),150.0f);
-                        gui::property_row("  First token",test.first_token_known
+                        modelInfo("  First token",test.first_token_known
                             ? epochengine::format_text("{:.0f} ms",test.first_token_ms)
                             : std::string{"Not reported"},150.0f);
-                        gui::property_row("  Output speed",test.tps_known
+                        modelInfo("  Output speed",test.tps_known
                             ? epochengine::format_text("{:.1f} t/s ({} reported tokens)",
                                 test.output_tps,test.output_tokens)
                             : std::string{"t/s unavailable: no token usage"},150.0f);
                         gui::wrapped_label("Reply: " + test.reply,managerWidth);
                     }
                 }
-                gui::section_heading("Native resident set (up to three)");
+                gui::section_heading("Load a saved model group (up to three models)");
                 gui::wrapped_label("Save your native models once. Epoch will reuse "
                     "residents, load remaining models smallest-to-largest, and pause "
                     "4 seconds between loads. Previously loaded models stay resident "
@@ -653,7 +670,8 @@
                         .placeholder = loadSlotLabels[slot],
                         .selected = selected,
                         .options = options,
-                        .size = {managerControlWidth, 28.0f},
+                        .size = {managerWidth, 28.0f},
+                        .fit_content=true, .alignment=gui::InlineButtonAlignment::Center,
                         .max_visible_options = 6u,
                         .enabled = !modelRequestActive});
                     if (choice.changed && choice.selected_index
@@ -710,11 +728,13 @@
                     return it == nativeState.roles.end() || it->uri.empty()
                         ? std::string{"foundation fallback"} : it->uri;
                 };
-                gui::wrapped_label("Source generation: implementation -> " +
-                    active_route("implementation") + " (otherwise the selected resident model). "
-                    "Automatic chat: difficult work uses foundation; bounded coding needs verified task-family wins. Reviewer: " + active_route("reviewer") +
-                    " (second/third attempt only, maximum 64 KiB prompt). "
-                    "Simple chat: " + active_route("simple"), managerWidth);
+                gui::section_heading("Model assignments");
+                modelInfo("Coding", active_route("implementation"));
+                modelInfo("Review", active_route("reviewer"));
+                modelInfo("Simple chat", active_route("simple"));
+                gui::wrapped_label("Unassigned work uses the current chat model. Automatic routing "
+                    "uses a smaller model for coding only after successful tasks of that kind. "
+                    "Local review starts on the second or third attempt, with at most 64 KiB of input.", managerWidth);
                 gui::wrapped_label(
                     "Saved resident models restore automatically when Epoch Editor opens. "
                     "New models load in size order; existing residents are reused. "
@@ -872,7 +892,7 @@
             else if (editor.aiModelManagerTab == 1)
             {
                 const auto endpoint = epochengine::ai::active_local_api_endpoint();
-                gui::property_row("Endpoint", endpoint.base_url, 125.0f);
+                modelInfo("Endpoint", endpoint.base_url, 125.0f);
                 gui::wrapped_label(
                     "LM Studio, Bionic and compatible harnesses manage their own weights. "
                     "Epoch scans their APIs without requiring a GGUF path, loading weights "
@@ -908,7 +928,8 @@
                         .placeholder = "Choose discovered model",
                         .selected = suggestedViews[editor.aiSelectedSuggestion],
                         .options = suggestedViews,
-                        .size = {managerControlWidth, 30.0f},
+                        .size = {managerWidth, 30.0f},
+                        .fit_content=true, .alignment=gui::InlineButtonAlignment::Center,
                         .max_visible_options = 7u,
                         .enabled = !modelRequestActive && !editor.aiModelInventoryPending});
                     if (choice.changed && choice.selected_index
@@ -940,7 +961,8 @@
                     .placeholder = "Saved endpoints",
                     .selected = endpoint.base_url,
                     .options = endpointViews,
-                    .size = {managerControlWidth, 30.0f},
+                    .size = {managerWidth, 30.0f},
+                        .fit_content=true, .alignment=gui::InlineButtonAlignment::Center,
                     .max_visible_options = 5u,
                     .enabled = !modelRequestActive && !editor.aiModelInventoryPending});
                 if (endpointChoice.changed && endpointChoice.selected_index
@@ -985,7 +1007,8 @@
                     .selected = editor.aiPendingModelSelection.empty()
                         ? selection.model_id : editor.aiPendingModelSelection,
                     .options = modelViews,
-                    .size = {managerControlWidth, 30.0f},
+                    .size = {managerWidth, 30.0f},
+                        .fit_content=true, .alignment=gui::InlineButtonAlignment::Center,
                     .max_visible_options = 7u,
                     .enabled = canEditEndpoint});
                 if (modelChoice.changed && modelChoice.selected_index
@@ -994,11 +1017,11 @@
                     editor.aiPendingModelSelection = models[*modelChoice.selected_index];
                     ++editor.aiChatUserModelSelectionRevision;
                 }
-                gui::property_row("Inventory", editor.aiModelInventoryPending
+                modelInfo("Inventory", editor.aiModelInventoryPending
                     ? "Scanning..." : std::to_string(models.size()) + " models reported", 135.0f);
-                gui::property_row("Selected", selection.model_id.empty()
+                modelInfo("Selected", selection.model_id.empty()
                     ? "None" : selection.model_id, 135.0f);
-                gui::property_row("Ready for next Send", selection.confirmed
+                modelInfo("Ready for next Send", selection.confirmed
                     ? "Selected" : "Not confirmed", 135.0f);
                 if (gui::inline_button_row(std::array{
                         gui::InlineButtonSpec{.label="Use Selected Model",
@@ -1026,9 +1049,9 @@
             else
             {
                 const auto status = epochengine::ai::direct_runtime_status();
-                gui::property_row("Direct runtime", status.message, 135.0f);
-                gui::property_row("Executable", status.executable, 135.0f);
-                gui::property_row("GGUF", status.model, 135.0f);
+                modelInfo("Direct runtime", status.message, 135.0f);
+                modelInfo("Executable", status.executable, 135.0f);
+                modelInfo("GGUF", status.model, 135.0f);
                 gui::wrapped_label("Direct llama.cpp executes an explicitly selected local "
                     "binary and GGUF file; it does not start an API server.", managerWidth);
                 gui::label("llama-cli executable path");

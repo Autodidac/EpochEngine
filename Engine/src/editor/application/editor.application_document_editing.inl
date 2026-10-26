@@ -46,7 +46,7 @@
             {
             case EditorMainSurface::Scene: return Surface::world;
             case EditorMainSurface::Game2D:
-                return state.outlinerToolTab == OutlinerToolTab::Gui
+                return state.game2DGuiWorkspace
                     ? Surface::gui_canvas
                     : Surface::systems;
             case EditorMainSurface::Assets: return Surface::assets;
@@ -327,11 +327,12 @@
             if (state.mainSurface == EditorMainSurface::Scene)
                 return kWorldHistoryBranch;
             if (state.mainSurface == EditorMainSurface::Game2D
-                && state.outlinerToolTab == OutlinerToolTab::Gui)
+                && state.game2DGuiWorkspace)
             {
                 return kGuiHistoryBranch;
             }
-            if (state.mainSurface == EditorMainSurface::PlantLab)
+            if (state.mainSurface == EditorMainSurface::PlantLab
+                || state.mainSurface == EditorMainSurface::ForestFactory)
                 return kPlantHistoryBranch;
             if (state.mainSurface == EditorMainSurface::Assets
                 && state.assetWorkspaceSection == 2u)

@@ -1279,6 +1279,21 @@
             && !outOfRangeVoxel.hit
             && outOfRangeVoxel.steps == 0u);
 
+        {
+            namespace sdf = epochengine::voxel::sdf;
+            sdf::EditVolume volume{sdf::Box{{}, {3.0f, 3.0f, 3.0f}, 1u}};
+            const auto cut = volume.append({
+                sdf::EditKind::subtract, sdf::Sphere{{}, 1.0f, 2u}, 3u});
+            const auto cave = volume.sample({});
+            const auto roof = volume.sample({0.0f, 2.0f, 0.0f});
+            check("voxel.sdf.concave_volume_integration",
+                cut == sdf::AppendStatus::applied
+                && cave.region() == sdf::Region::outside
+                && cave.material() == 3u
+                && roof.region() == sdf::Region::solid
+                && cave.quality() == sdf::DistanceQuality::conservative_csg_bound);
+        }
+
         epochengine::voxel::SparseVoxelField voxelField{{4u, 4u, 4u, 1.0f, 0u}};
         const epochengine::voxel::CellCoord negativeVoxel{-1, 0, 0};
         const bool voxelWrite = voxelField.write(

@@ -46,7 +46,8 @@
                 return false;
 
 #if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
-            if (state.outlinerToolTab == OutlinerToolTab::TileMap
+            if ((state.mainSurface == EditorMainSurface::Game2D
+                    ? !state.game2DGuiWorkspace : state.outlinerToolTab == OutlinerToolTab::TileMap)
                 && (state.tileMapWorkspace
                     || state.mainSurface == EditorMainSurface::Game2D))
             {

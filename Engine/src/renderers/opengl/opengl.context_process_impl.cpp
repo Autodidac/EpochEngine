@@ -64,13 +64,15 @@ namespace epochengine::openglcontext
 #endif
 
         auto& backend = opengltextures::get_opengl_backend();
-        auto& glState = backend.glState;
+        auto desired = contextdetail::context_to_platform_context(ctx.get());
+        auto& glState = desired.valid()
+            ? opengltextures::state_for_platform_context(backend, desired, ctx.get())
+            : backend.glState;
 
         if (!contextdetail::drawable_alive(ctx.get(), glState))
             return false;
 
         PlatformGL::ScopedContext guard;
-        auto desired = contextdetail::context_to_platform_context(ctx.get());
         if (!desired.valid() || !guard.set(desired))
         {
             auto fallback = contextdetail::state_to_platform_context(glState);

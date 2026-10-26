@@ -255,7 +255,13 @@ namespace epochengine::openglcontext
             throw std::runtime_error("[ OpenGL ] - opengl_initialize requires non-null Context");
 
         auto& backend = epochengine::opengltextures::get_opengl_backend();
-        auto& glState = backend.glState;
+        // Hosted contexts already have native identities. Initializing a new
+        // window must not replace a sibling's native handles or GL objects in
+        // the legacy single-window state.
+        const auto providedNativeContext = contextdetail::context_to_platform_context(ctx.get());
+        auto& glState = providedNativeContext.valid()
+            ? opengltextures::state_for_platform_context(backend, providedNativeContext, ctx.get())
+            : backend.glState;
 
 #if defined(_WIN32)
         if (glState.ownsWindow || glState.ownsDc || glState.ownsContext)

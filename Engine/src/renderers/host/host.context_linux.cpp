@@ -109,12 +109,6 @@ import opengl.platform;      // epochengine::openglcontext::PlatformGL::get_proc
 #   if defined(EPOCH_USING_RAYLIB)
 import raylib.context;       // epochengine::raylibcontext::raylib_initialize
 #   endif
-#   if defined(EPOCH_USING_SDL)
-import sdl.context;          // epochengine::sdlcontext::sdl_initialize
-#   endif
-#   if defined(EPOCH_USING_SFML)
-import sfml.context;         // epochengine::sfmlcontext::sfml_initialize
-#   endif
 #   if defined(EPOCH_USING_SOFTWARE_RENDERER)
 import software.context; // epochengine::anativecontext::softrenderer_initialize
 #   endif
@@ -139,6 +133,32 @@ namespace epochengine::core
     MultiContextManager* GetActiveMultiContextManager() noexcept
     {
         return MultiContextManager::s_activeInstance;
+    }
+
+    void QueueX11PointerInput(HWND window, int button, bool pressed,
+        int x, int y, int wheel_delta) noexcept
+    {
+        auto* manager = GetActiveMultiContextManager();
+        Display* display = global_display;
+        if (!display || !manager || !manager->findWindowByHWND(window))
+            return;
+
+        XEvent event{};
+        event.xclient.type = ClientMessage;
+        event.xclient.display = display;
+        event.xclient.window =
+            static_cast<::Window>(reinterpret_cast<std::uintptr_t>(window));
+        event.xclient.message_type = XInternAtom(display, "EPOCH_POINTER_INPUT", False);
+        event.xclient.format = 32;
+        event.xclient.data.l[0] = button;
+        event.xclient.data.l[1] = pressed ? 1 : 0;
+        event.xclient.data.l[2] = x;
+        event.xclient.data.l[3] = y;
+        event.xclient.data.l[4] = wheel_delta;
+        // NoEventMask targets the creator client even though the SDK owns
+        // ButtonPressMask. The SDK cannot receive/re-forward this message.
+        XSendEvent(display, event.xclient.window, False, NoEventMask, &event);
+        XFlush(display);
     }
 
     void RequestActiveParentLayout() noexcept
@@ -662,6 +682,10 @@ namespace
                         KeyPressMask | KeyReleaseMask |
                         ButtonPressMask | ButtonReleaseMask |
                         PointerMotionMask | FocusChangeMask;
+                    // ButtonPressMask is exclusive across X11 clients. These
+                    // SDKs wrap this window through their own display connection.
+                    if (type == ContextType::SDL || type == ContextType::SFML)
+                        swa.event_mask &= ~(ButtonPressMask | ButtonReleaseMask);
 
                     ::Window win = XCreateWindow(
                         display,
@@ -873,45 +897,6 @@ namespace
                     }
 #endif
 
-#if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
-                    if (type == ContextType::SDL)
-                    {
-                        const int width = (std::max)(1, window->width);
-                        const int height = (std::max)(1, window->height);
-                        const std::string title = (i < narrowTitles.size())
-                            ? narrowTitles[i] : std::string("SDL Dock");
-                        auto resizeCopy = window->onResize;
-
-                        window->threadInitialize =
-                            [ctxWeak = std::weak_ptr<Context>(ctx),
-                            width, height, title,
-                            resize = std::move(resizeCopy)](const OpaqueContextHandle& liveCtx) mutable -> bool
-                            {
-                                auto target = liveCtx ? typed_context(liveCtx) : ctxWeak.lock();
-                                if (!target)
-                                {
-                                    epochengine::logger::get(kLogSys).log(
-                                        epochengine::logger::LogLevel::Error,
-                                        "SDL context unavailable during thread initialization",
-                                        std::source_location::current());
-                                    return false;
-                                }
-
-                                if (!epochengine::sdlcontext::sdl_initialize(
-                                    target, nullptr, width, height, std::move(resize), title))
-                                {
-                                    epochengine::logger::get(kLogSys).logf(
-                                        epochengine::logger::LogLevel::Error,
-                                        std::source_location::current(),
-                                        "Failed to initialize SDL context for hwnd={}",
-                                        target->hwnd);
-                                    return false;
-                                }
-
-                                return true;
-                            };
-                    }
-#endif
 
 #if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
                     if (type == ContextType::RayLib)
@@ -953,45 +938,6 @@ namespace
                     }
 #endif
 
-#if defined(EPOCH_USING_SFML)
-                    if (type == ContextType::SFML)
-                    {
-                        const unsigned width = static_cast<unsigned>((std::max)(1, window->width));
-                        const unsigned height = static_cast<unsigned>((std::max)(1, window->height));
-                        const std::string title = (i < narrowTitles.size())
-                            ? narrowTitles[i] : std::string("SFML Dock");
-                        auto resizeCopy = window->onResize;
-
-                        window->threadInitialize =
-                            [ctxWeak = std::weak_ptr<Context>(ctx),
-                            width, height, title,
-                            resize = std::move(resizeCopy)](const OpaqueContextHandle& liveCtx) mutable -> bool
-                            {
-                                auto target = liveCtx ? typed_context(liveCtx) : ctxWeak.lock();
-                                if (!target)
-                                {
-                                    epochengine::logger::get(kLogSys).log(
-                                        epochengine::logger::LogLevel::Error,
-                                        "SFML context unavailable during thread initialization",
-                                        std::source_location::current());
-                                    return false;
-                                }
-
-                                if (!epochengine::sfmlcontext::sfml_initialize(
-                                    target, nullptr, width, height, std::move(resize), title))
-                                {
-                                    epochengine::logger::get(kLogSys).logf(
-                                        epochengine::logger::LogLevel::Error,
-                                        std::source_location::current(),
-                                        "Failed to initialize SFML context for hwnd={}",
-                                        target->hwnd);
-                                    return false;
-                                }
-
-                                return true;
-                            };
-                    }
-#endif
                 }
             };
 
@@ -1132,6 +1078,17 @@ namespace
 
         ::Window xwin = to_xwindow(hwnd);
         Display* localDisplay = display;
+
+        if (type == ContextType::SDL || type == ContextType::SFML)
+        {
+            XWindowAttributes attributes{};
+            if (!XGetWindowAttributes(localDisplay, xwin, &attributes))
+                return;
+            XSelectInput(localDisplay, xwin,
+                attributes.your_event_mask & ~(ButtonPressMask | ButtonReleaseMask));
+            // Finish releasing the exclusive mask before the SDK client binds.
+            XSync(localDisplay, False);
+        }
 
         if (type == ContextType::OpenGL)
         {
@@ -1277,46 +1234,6 @@ namespace
         }
 #endif
 
-#if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
-        if (type == ContextType::SDL)
-        {
-            const int width = (std::max)(1, winPtr->width);
-            const int height = (std::max)(1, winPtr->height);
-            const std::string title = !winPtr->titleNarrow.empty()
-                ? winPtr->titleNarrow
-                : std::string("SDL Dock");
-            auto resizeCopy = winPtr->onResize;
-
-            winPtr->threadInitialize =
-                [ctxWeak = std::weak_ptr<Context>(ctx),
-                width, height, title,
-                resize = std::move(resizeCopy)](const OpaqueContextHandle& liveCtx) mutable -> bool
-                {
-                    auto target = liveCtx ? typed_context(liveCtx) : ctxWeak.lock();
-                    if (!target)
-                    {
-                        epochengine::logger::get(kLogSys).log(
-                            epochengine::logger::LogLevel::Error,
-                            "SDL context unavailable during thread initialization",
-                            std::source_location::current());
-                        return false;
-                    }
-
-                    if (!epochengine::sdlcontext::sdl_initialize(
-                        target, nullptr, width, height, std::move(resize), title))
-                    {
-                        epochengine::logger::get(kLogSys).logf(
-                            epochengine::logger::LogLevel::Error,
-                            std::source_location::current(),
-                            "Failed to initialize SDL context for hwnd={}",
-                            target->hwnd);
-                        return false;
-                    }
-
-                    return true;
-                };
-        }
-#endif
 
 #if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
         if (type == ContextType::RayLib)
@@ -1359,46 +1276,6 @@ namespace
         }
 #endif
 
-#if defined(EPOCH_USING_SFML)
-        if (type == ContextType::SFML)
-        {
-            const unsigned width = static_cast<unsigned>((std::max)(1, winPtr->width));
-            const unsigned height = static_cast<unsigned>((std::max)(1, winPtr->height));
-            const std::string title = !winPtr->titleNarrow.empty()
-                ? winPtr->titleNarrow
-                : std::string("SFML Dock");
-            auto resizeCopy = winPtr->onResize;
-
-            winPtr->threadInitialize =
-                [ctxWeak = std::weak_ptr<Context>(ctx),
-                width, height, title,
-                resize = std::move(resizeCopy)](const OpaqueContextHandle& liveCtx) mutable -> bool
-                {
-                    auto target = liveCtx ? typed_context(liveCtx) : ctxWeak.lock();
-                    if (!target)
-                    {
-                        epochengine::logger::get(kLogSys).log(
-                            epochengine::logger::LogLevel::Error,
-                            "SFML context unavailable during thread initialization",
-                            std::source_location::current());
-                        return false;
-                    }
-
-                    if (!epochengine::sfmlcontext::sfml_initialize(
-                        target, nullptr, width, height, std::move(resize), title))
-                    {
-                        epochengine::logger::get(kLogSys).logf(
-                            epochengine::logger::LogLevel::Error,
-                            std::source_location::current(),
-                            "Failed to initialize SFML context for hwnd={}",
-                            target->hwnd);
-                        return false;
-                    }
-
-                    return true;
-                };
-        }
-#endif
 
         WindowData* raw = winPtr.get();
         {
@@ -1830,14 +1707,8 @@ namespace
 
         const bool skipGenericInit =
             initializedOnThread ||
-#if defined(EPOCH_USING_SFML)
-            (ctx->type == ContextType::SFML) ||
-#endif
 #if defined(EPOCH_USING_RAYLIB) && (EPOCH_USING_RAYLIB == 1)
             (ctx->type == ContextType::RayLib) ||
-#endif
-#if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
-            (ctx->type == ContextType::SDL) ||
 #endif
             false;
 
@@ -2188,6 +2059,49 @@ namespace epochengine::platform
             }
             case ClientMessage:
             {
+                const Atom pointerInput = XInternAtom(display, "EPOCH_POINTER_INPUT", False);
+                if (event.xclient.message_type == pointerInput
+                    && event.xclient.format == 32)
+                {
+                    auto* manager = epochengine::core::GetActiveMultiContextManager();
+                    const HWND window = reinterpret_cast<HWND>(
+                        static_cast<std::uintptr_t>(event.xclient.window));
+                    const auto* owned = manager ? manager->findWindowByHWND(window) : nullptr;
+                    if (!owned || (owned->type != epochengine::core::ContextType::SDL
+                        && owned->type != epochengine::core::ContextType::SFML))
+                        break;
+
+                    const int button = static_cast<int>(event.xclient.data.l[0]);
+                    const bool pressed = event.xclient.data.l[1] != 0;
+                    const int wheelDelta = static_cast<int>(event.xclient.data.l[4]);
+                    if (button != 0 && pressed)
+                    {
+                        ::Window focus{};
+                        int revert{};
+                        XGetInputFocus(display, &focus, &revert);
+                        // A delayed SDK press must not restore held input after
+                        // focus loss. Releases still retire input without focus.
+                        if (focus != event.xclient.window)
+                            break;
+                    }
+                    epochengine::input::mouseX.store(
+                        static_cast<int>(event.xclient.data.l[2]), std::memory_order_relaxed);
+                    epochengine::input::mouseY.store(
+                        static_cast<int>(event.xclient.data.l[3]), std::memory_order_relaxed);
+                    epochengine::input::set_mouse_coords_are_global(false);
+                    if (button == 0)
+                        epochengine::input::mouseWheel.fetch_add(wheelDelta, std::memory_order_relaxed);
+                    else if (const auto mapped = epochengine::core::map_mouse_button(
+                        static_cast<unsigned>(button)))
+                    {
+                        std::unique_lock lock(epochengine::input::g_inputMutex);
+                        const auto index = static_cast<std::size_t>(*mapped);
+                        if (pressed && !epochengine::input::mouseDown.test(index))
+                            epochengine::input::mousePressed.set(index);
+                        epochengine::input::mouseDown.set(index, pressed);
+                    }
+                    break;
+                }
                 const Atom wmDelete = XInternAtom(display, "WM_DELETE_WINDOW", False);
                 if (static_cast<Atom>(event.xclient.data.l[0]) == wmDelete)
                 {

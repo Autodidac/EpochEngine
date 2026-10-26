@@ -388,10 +388,12 @@
             const float virtualHeight = canvas
                 ? (std::max)(1.0f, canvas->virtual_height)
                 : 720.0f;
-            const float availableWidth =
-                (std::max)(80.0f, surfaceSize.x - 40.0f);
-            const float availableHeight =
-                (std::max)(80.0f, surfaceSize.y - 58.0f);
+            const float surfaceWidth = (std::max)(1.0f, surfaceSize.x);
+            const float surfaceHeight = (std::max)(1.0f, surfaceSize.y);
+            const float insetX = (std::min)(20.0f, surfaceWidth * 0.05f);
+            const float insetY = (std::min)(12.0f, surfaceHeight * 0.05f);
+            const float availableWidth = surfaceWidth - 2.0f * insetX;
+            const float availableHeight = surfaceHeight - 2.0f * insetY;
             const float scale = (std::min)(
                 availableWidth / virtualWidth,
                 availableHeight / virtualHeight);
@@ -400,9 +402,8 @@
                 virtualHeight * scale};
             const gui::Vec2 canvasPosition{
                 surfacePosition.x
-                    + (surfaceSize.x - canvasSize.x) * 0.5f,
-                surfacePosition.y + 38.0f
-                    + (availableHeight - canvasSize.y) * 0.5f};
+                    + (surfaceWidth - canvasSize.x) * 0.5f,
+                surfacePosition.y + (surfaceHeight - canvasSize.y) * 0.5f};
             return {
                 &document,
                 rootHandle,

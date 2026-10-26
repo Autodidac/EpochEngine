@@ -45,7 +45,10 @@ class TextureDiagnosticPolicy(unittest.TestCase):
         self.skipTest('No C++ preprocessor is installed')
 
     def edition_roots(self):
-        roots = [(ROOT, 0)]
+        manifest = ROOT / 'source-projection.json'
+        current_edition = int(manifest.is_file() and
+                              json.loads(manifest.read_text(encoding='utf-8')).get('edition') == 'public')
+        roots = [(ROOT, current_edition)]
         public = ROOT / 'build/edition-split/public-source'
         if (public / 'Engine/include/epoch.edition.hpp').exists():
             roots.append((public, 1))

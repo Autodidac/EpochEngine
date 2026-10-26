@@ -3,6 +3,7 @@
 module;
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cmath>
 #include <cstring>
@@ -571,6 +572,26 @@ namespace
         ctx->is_mouse_button_down = [](epochengine::input::MouseButton button) { return epochengine::input::is_mouse_button_down(button); };
     }
 
+#if defined(__linux__)
+    void queue_x11_sfml_button(const std::shared_ptr<epochengine::core::Context>& ctx,
+        int button, bool pressed, int x, int y) noexcept
+    {
+        constexpr std::array x11Buttons{1, 3, 2, 8, 9};
+        if (button >= 0 && static_cast<std::size_t>(button) < x11Buttons.size())
+            epochengine::core::QueueX11PointerInput(ctx->hwnd,
+                x11Buttons[static_cast<std::size_t>(button)], pressed, x, y);
+    }
+
+    void queue_x11_sfml_wheel(const std::shared_ptr<epochengine::core::Context>& ctx,
+        int wheel, float delta, int x, int y) noexcept
+    {
+        if (wheel == 0 && std::isfinite(delta))
+            epochengine::core::QueueX11PointerInput(ctx->hwnd, 0, false, x, y,
+                static_cast<int>(std::lround(
+                    (std::clamp)(static_cast<double>(delta), -32767.0, 32767.0) * 120.0)));
+    }
+#endif
+
     [[nodiscard]] sf::Color to_sfml_color(const epochengine::previewgrid::Vec3& color) noexcept
     {
         const auto clamp_channel = [](float value) noexcept -> std::uint8_t
@@ -1057,6 +1078,18 @@ namespace
             ? ctx->windowData->titleNarrow
             : (ctx->backendName.empty() ? "SFML" : ctx->backendName);
 
+#if defined(__linux__)
+        if (ctx->hwnd)
+        {
+            // Wrap the manager-owned X11 window; keep input and native lifetime
+            // with that owner rather than opening an unmanaged second window.
+            s_window = std::make_unique<sf::RenderWindow>(
+                static_cast<sf::WindowHandle>(
+                    reinterpret_cast<std::uintptr_t>(ctx->hwnd)),
+                sf::ContextSettings{});
+        }
+        else
+#endif
         s_window = epochengine::sfml_compat::make_render_window(
             epochengine::sfml_compat::video_mode(
                 static_cast<unsigned>(s_width),
@@ -1301,6 +1334,17 @@ namespace
 #if EPOCH_SFML_HAS_V3_API
         while (const auto event = s_window->pollEvent())
         {
+#if defined(__linux__)
+            if (const auto* button = event->getIf<sf::Event::MouseButtonPressed>())
+                queue_x11_sfml_button(ctx, static_cast<int>(button->button), true,
+                    button->position.x, button->position.y);
+            else if (const auto* button = event->getIf<sf::Event::MouseButtonReleased>())
+                queue_x11_sfml_button(ctx, static_cast<int>(button->button), false,
+                    button->position.x, button->position.y);
+            else if (const auto* wheel = event->getIf<sf::Event::MouseWheelScrolled>())
+                queue_x11_sfml_wheel(ctx, static_cast<int>(wheel->wheel), wheel->delta,
+                    wheel->position.x, wheel->position.y);
+#endif
             if (event->is<sf::Event::Closed>())
             {
                 request_host_shutdown(ctx);
@@ -1320,6 +1364,17 @@ namespace
         sf::Event event{};
         while (s_window->pollEvent(event))
         {
+#if defined(__linux__)
+            if (event.type == sf::Event::MouseButtonPressed
+                || event.type == sf::Event::MouseButtonReleased)
+                queue_x11_sfml_button(ctx, static_cast<int>(event.mouseButton.button),
+                    event.type == sf::Event::MouseButtonPressed,
+                    event.mouseButton.x, event.mouseButton.y);
+            else if (event.type == sf::Event::MouseWheelScrolled)
+                queue_x11_sfml_wheel(ctx, static_cast<int>(event.mouseWheelScroll.wheel),
+                    event.mouseWheelScroll.delta, event.mouseWheelScroll.x,
+                    event.mouseWheelScroll.y);
+#endif
             if (event.type == sf::Event::Closed)
             {
                 request_host_shutdown(ctx);

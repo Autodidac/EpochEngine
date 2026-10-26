@@ -42,8 +42,6 @@ module;
 
 export module package.registry;
 
-import forest.factory;
-
 export namespace epochengine::package_registry
 {
     enum class PackageKind : std::uint8_t
@@ -162,7 +160,8 @@ export namespace epochengine::package_registry
     inline constexpr std::string_view kEpochGuiCatalogAuthorityId = "epoch-gui";
     inline constexpr std::string_view kEpochEngineExtensionsCatalogAuthorityId =
         "epoch-engine-extensions";
-    inline constexpr std::string_view kForestFactoryReferenceRepo = epochengine::forest::kForestFactoryReferenceRepo;
+    inline constexpr std::string_view kForestFactoryReferenceRepo =
+        "https://github.com/Autodidac/Temporal_Parametric_Graph_Lindenmayer_System_Plant_Lab";
     inline constexpr std::string_view kForestFactoryPackageSourceRepo = kEpochEngineExtensionsRepo;
     inline constexpr std::string_view kEngineArcadePackageId = "engine_arcade";
     inline constexpr std::string_view kEngineArcadeOptionalAssetRepo = kEpochEngineExtensionsRepo;
@@ -176,7 +175,7 @@ export namespace epochengine::package_registry
     inline constexpr std::string_view kEngineArcadeRenderTextureName = "engine_arcade.screen";
     inline constexpr std::uint32_t kEngineArcadeRenderTextureWidth = 512;
     inline constexpr std::uint32_t kEngineArcadeRenderTextureHeight = 512;
-    inline constexpr std::string_view kEngineForestFactoryPackageId = epochengine::forest::kForestFactoryPackageId;
+    inline constexpr std::string_view kEngineForestFactoryPackageId = "engine_forest_factory";
     inline constexpr std::string_view kEngineNetworkRuntimePackageId = "engine_network_runtime";
     inline constexpr std::string_view kEngineAuthoritativeServerPackageId = "engine_authoritative_dedicated_server";
     inline constexpr std::string_view kEngineListenServerPackageId = "engine_client_listen_server";

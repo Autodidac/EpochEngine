@@ -8,12 +8,27 @@
 
         ensure_resources();
 
-        const Vec2 start = g_frame.cursor;
-        const float availableWidth = (std::max)(1.0f, content_available_width(start.x));
+        const Vec2 rowStart = g_frame.cursor;
+        const float availableWidth = (std::max)(1.0f, content_available_width(rowStart.x));
         const float requestedWidth = options.size.x > 0.0f
             ? (std::max)(96.0f, options.size.x)
             : availableWidth;
-        const float width = (std::max)(1.0f, (std::min)(requestedWidth, availableWidth));
+        const float rowWidth = (std::max)(1.0f, (std::min)(requestedWidth, availableWidth));
+        float width = rowWidth;
+        if (options.fit_content)
+        {
+            const auto label = options.selected.empty() ? options.placeholder : options.selected;
+            const float fittedWidth = measure_text_width(label, kFontScale)
+                + (std::max)(measure_text_width("  v", kFontScale),
+                    measure_text_width("  ^", kFontScale))
+                + 2.0f * kContentPadding + 12.0f;
+            width = (std::clamp)(fittedWidth, (std::min)(96.0f, rowWidth), rowWidth);
+        }
+        const float offset = options.alignment == InlineButtonAlignment::Center
+            ? (rowWidth - width) * 0.5f
+            : options.alignment == InlineButtonAlignment::End ? rowWidth - width : 0.0f;
+        const Vec2 start{rowStart.x + offset, rowStart.y};
+        set_cursor(start);
         const float rowHeight = (std::max)(22.0f, options.row_height);
         const float closedHeight = options.size.y > 0.0f
             ? (std::max)(rowHeight, options.size.y)
@@ -62,7 +77,8 @@
             }
             toggledThisFrame = true;
         }
-        const Vec2 afterClosedCursor = g_frame.cursor;
+        const Vec2 afterClosedCursor{rowStart.x, g_frame.cursor.y};
+        set_cursor(afterClosedCursor);
 
         result.opened = state.open;
         if (!state.open || options.options.empty())
@@ -81,6 +97,11 @@
         const float requestedListHeight = static_cast<float>(visibleCount) * optionPitch - 2.0f;
         const float contentHeight = static_cast<float>(options.options.size()) * rowHeight
             + static_cast<float>(options.options.size() - 1u) * 2.0f;
+        float popupWidth = width;
+        if (options.fit_content)
+            for (const auto option : options.options)
+                popupWidth = (std::max)(popupWidth,
+                    measure_text_width(option, kFontScale) + 2.0f * kContentPadding + 22.0f);
         const std::string listId = key + "-list";
         gui_lib::Rect popupViewport{
             {0.0f, 0.0f},
@@ -101,7 +122,7 @@
         const auto placement = gui_lib::place_popup(gui_lib::PopupOptions{
             .owner = {{start.x - popupViewport.position.x, start.y - popupViewport.position.y},
                 {width, closedHeight}},
-            .preferred_size = {width, requestedListHeight},
+            .preferred_size = {popupWidth, requestedListHeight},
             .viewport_size = popupViewport.size,
             .gap = (std::max)(0.0f, afterClosedCursor.y - start.y - closedHeight)},
             {});

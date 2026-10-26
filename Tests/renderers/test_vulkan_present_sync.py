@@ -36,6 +36,17 @@ class VulkanPresentSync(unittest.TestCase):
             executed=subprocess.run([str(binary)],cwd=scratch,capture_output=True,text=True,timeout=10)
             lines=code.splitlines();failure=lines[executed.returncode-1] if 0<executed.returncode<=len(lines) else ''
             self.assertEqual(executed.returncode,0,'Actual Vulkan contract: '+failure)
+            # The former cleanup order must fail this same ownership fixture.
+            # Otherwise a passing semaphore test could hide a destroyed-pool free.
+            previous = code.replace(
+                'descriptorSets.clear();\n        descriptorPool.reset();',
+                'descriptorPool.reset();\n        descriptorSets.clear();', 1)
+            self.assertNotEqual(previous, code)
+            source.write_text(previous, encoding='utf-8')
+            compiled=subprocess.run(args,cwd=scratch,capture_output=True,text=True,timeout=90)
+            self.assertEqual(compiled.returncode,0,compiled.stdout+compiled.stderr)
+            executed=subprocess.run([str(binary)],cwd=scratch,capture_output=True,text=True,timeout=10)
+            self.assertNotEqual(executed.returncode,0,'Destroyed descriptor pool was accepted')
         finally:
             self.assertTrue(scratch.resolve().is_relative_to(parent));shutil.rmtree(scratch)
 

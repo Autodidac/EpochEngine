@@ -26,6 +26,10 @@ namespace epochengine::openglcontext
 
     int opengl_get_width()
     {
+        const auto current = core::get_current_render_context();
+        if (current && current->type == core::ContextType::OpenGL
+            && current->framebufferWidth > 0)
+            return current->framebufferWidth;
         auto& backend = opengltextures::get_opengl_backend();
         if (backend.glState.width > 0)
             return static_cast<int>(backend.glState.width);
@@ -34,6 +38,10 @@ namespace epochengine::openglcontext
 
     int opengl_get_height()
     {
+        const auto current = core::get_current_render_context();
+        if (current && current->type == core::ContextType::OpenGL
+            && current->framebufferHeight > 0)
+            return current->framebufferHeight;
         auto& backend = opengltextures::get_opengl_backend();
         if (backend.glState.height > 0)
             return static_cast<int>(backend.glState.height);

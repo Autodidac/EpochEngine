@@ -232,7 +232,7 @@ namespace epochengine::openglquad
         return p;
     }
 
-    inline void destroy_quad_pipeline(QuadPipelineState& s) noexcept
+    export inline void destroy_quad_pipeline(QuadPipelineState& s) noexcept
     {
         if (s.shader && glIsProgram(s.shader)) glDeleteProgram(s.shader);
         s.shader = 0;

@@ -2,10 +2,18 @@
 
 ## Snapshot
 
-Epoch is a C++23 module-first engine/editor. The operator's source checkpoint is
-`v0.90.146`; published Site Windows/Linux runtime authority remains `v0.90.55`.
-This import publishes source commits only and establishes no new native runtime,
-GPU, inference or candidate-succession proof. Current acceptance lives in
+Epoch is a universal modular environment for AI-enabled software and games. Empty,
+camera-only, CLI, windowed, GUI, game and Editor consumers select services rather
+than inherit the full Editor/world/model stack. Explicit time, events, resource
+admission and lifecycle apply across those profiles. Optional AI and world
+features cooperate through common contracts without being prerequisites for
+ordinary software. Fixed-step, continuous and event-driven work coexist.
+
+Epoch is a C++23 module-first engine/editor. Current source, edition releases and
+exact validation receipts are owned by `Changes/active_pass.md`; do not infer
+today's status from an older version in an architecture snapshot. This October25
+documentation pass establishes no new native runtime, GPU, inference or
+candidate-succession proof. Current acceptance lives in
 `Changes/active_pass.md`; historical snapshots are retained in
 `Engine/docs/reference/pass_history.md`.
 Runtime/editor code lives under `Engine/modules/`, `Engine/src/`, and
@@ -17,6 +25,42 @@ spacetime engine. That target is specified in
 `temporal.md`; it is a phased mission, not a statement that
 event sourcing, immutable world pages, or arbitrary-time reconstruction already
 ship.
+
+## Planned local generation and shared AI resources (October 25)
+
+The connected world design is in [voxels.md](voxels.md): durable volume edits,
+derived render/collision/navigation resources, bounded dynamic loading and shared
+event invalidation. System One requests policy/work through existing schedulers;
+rendering remains valid with every bot/model disabled. The first typed SDF slice
+does not establish the complete streamed world or native terrain presentation.
+
+This is an architecture target, not a shipped pipeline. The canonical
+[text → 2D → 3D plan](../../../Changes/v010-ai-image-to-3d-plan.md) owns exact model
+research, license gaps and M1–M7 acceptance. Keep authoring documents and approved
+project assets separate from generated compiled artifacts and disposable renderer/
+model residency. Generation is ordinary project work, not private self-coding.
+
+```text
+Assistant specification → existing taskgraph/admission → optional local worker
+  → working image/mesh/material artifacts → validation + human review
+  → project-owned import/compiled assets → capability-checked render preview
+```
+
+Existing native runtime/process owners perform real model loading/unloading;
+the residency ledger alone cannot free GPU memory. Extend the existing admission
+service with measured per-device reservations rather than add another scheduler.
+Renderer allocations, Qwen/Flash weights/KV and generation peaks share a budget.
+Active coding waits safely or uses an operator-approved handoff with exact session/
+configuration restoration. [AI architecture](ai_plan.md#shared-model-loading-and-unloading-plan)
+owns that planned transaction and DAVID/ARCHITECT 1/ELA/ADAM/NEO/KEYMAKER roles.
+
+NEO/engcoder is a planned internal and optionally shippable English/coding
+micromodel for game/application AI, with speech I/O separately qualified. It does
+not carry own-engine-source rights or the private self-coding library into Public.
+Event-camera sampling and conservative OpenGL invalidation already have bounded
+code; learned perception/rendering models, automatic eviction and new generation
+adapters remain unproved. Preserve the existing platform/GUI/module boundaries,
+queues, clocks and draw order.
 
 ## Established Baseline
 

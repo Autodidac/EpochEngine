@@ -95,7 +95,11 @@ export namespace epochengine::asset::texture
         ppm_import,
         deterministic_identity,
         malformed_rejection,
-        oversized_rejection
+        oversized_rejection,
+        png_rgba,
+        png_color_space,
+        png_bounds,
+        png_truncated
     };
 
     [[nodiscard]] constexpr std::string_view
@@ -105,6 +109,10 @@ export namespace epochengine::asset::texture
         switch (failure)
         {
         case TextureImportContractFailure::none: return "pass";
+        case TextureImportContractFailure::png_rgba: return "png_rgba";
+        case TextureImportContractFailure::png_color_space: return "png_color_space";
+        case TextureImportContractFailure::png_bounds: return "png_bounds";
+        case TextureImportContractFailure::png_truncated: return "png_truncated";
         case TextureImportContractFailure::temporary_source:
             return "temporary_source";
         case TextureImportContractFailure::ppm_import: return "ppm_import";

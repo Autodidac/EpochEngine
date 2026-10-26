@@ -69,6 +69,7 @@
             state.viewportCameraMode = previewgrid::CameraMode::Editor;
             state.previewMode = core::ScenePreviewMode::Editor;
             state.mainSurface = EditorMainSurface::Scene;
+            state.workspaceCompanionsPending = true;
             state.surfaceSettleFrames = (std::max)(state.surfaceSettleFrames, 2);
             ensure_engine_arcade_preview_entities(state);
             push_editor_log(
@@ -423,6 +424,32 @@
             }
             return entities;
         }
+        [[nodiscard]] bool ensure_forest_factory_preview(EditorState& state)
+        {
+            if (!ensure_plant_lab_compiled_asset(state)) return false;
+            if (state.forestPreviewRevision == state.plantLabCompiled.sourceRevision
+                && state.forestPreviewContentHash == state.plantLabCompiled.sourceContentHash
+                && !state.forestPreviewEntities.empty()) return true;
+            auto desired = project_compiled_forest_entities(
+                state.plantLabCompiled, "ForestPreview", "PlantLabPreview", true);
+            if (desired.empty() || !align_editor_entity_group_to_surface(desired, 0.0f))
+                return false;
+            // Preview residency is deliberately outside the project's entities
+            // and authoring journal. Only Add to Scene performs a transaction.
+            state.forestPreviewEntities = std::move(desired);
+            state.forestPreviewRevision = state.plantLabCompiled.sourceRevision;
+            state.forestPreviewContentHash = state.plantLabCompiled.sourceContentHash;
+            return true;
+        }
+
+        void focus_forest_factory_preview(const core::Context* ctx, EditorState& state)
+        {
+            if (!ctx || !ensure_forest_factory_preview(state)) return;
+            const float height = (std::max)(1.0f,
+                state.plantLabDocument.profile.config.targetHeightMeters * 0.58f);
+            (void)previewgrid::focus_camera(ctx, {0.0f, height * 0.5f, 0.0f}, height);
+        }
+
         void ensure_plant_lab_preview_entities(EditorState& state)
         {
             std::string previousSelection{};
@@ -872,7 +899,7 @@
             {
 #if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
                 editor_tilemaps::RuntimePreviewResult tileMapPreview{};
-                if (state.outlinerToolTab == OutlinerToolTab::TileMap
+                if (!state.game2DGuiWorkspace
                     && state.tileMapWorkspace
                     && state.tileMapWorkspace->has_document())
                 {
@@ -1097,16 +1124,19 @@
             epochengine::previewgrid::set_lighting_frame(ctx, state.sceneLighting.build_frame());
 
             std::vector<epochengine::previewgrid::ObjectMarker> markers{};
-            markers.reserve(state.entities.size());
-            for (std::size_t i = 0; i < state.entities.size(); ++i)
+            const bool forestPreview = state.mainSurface == EditorMainSurface::ForestFactory;
+            if (forestPreview) (void)ensure_forest_factory_preview(state);
+            const auto& previewEntities = forestPreview ? state.forestPreviewEntities : state.entities;
+            markers.reserve(previewEntities.size());
+            for (std::size_t i = 0; i < previewEntities.size(); ++i)
             {
-                const auto& entity = state.entities[i];
+                const auto& entity = previewEntities[i];
                 if (!entity.visible || is_screen_space_gui_entity(entity))
                     continue;
 
                 std::array<float, 3> previewPosition = entity.position;
                 const auto groupMotion = state.scriptCubeOscillators.find(entity.sceneObjectId);
-                const auto* motion = groupMotion != state.scriptCubeOscillators.end()
+                const auto* motion = forestPreview ? nullptr : groupMotion != state.scriptCubeOscillators.end()
                     ? &groupMotion->second
                     : state.scriptOscillator.enabled && entity.sceneObjectId == state.scriptOscillator.entity_id
                         ? &state.scriptOscillator : nullptr;
@@ -1122,7 +1152,7 @@
                         * static_cast<float>(std::sin(phase));
                 }
 
-                const bool selected = editor_entity_selected(
+                const bool selected = !forestPreview && editor_entity_selected(
                     state, entity.sceneObjectId);
                 markers.push_back(epochengine::previewgrid::ObjectMarker{
                     .position{
