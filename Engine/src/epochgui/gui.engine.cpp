@@ -184,6 +184,7 @@ namespace epochengine::gui
                 SpriteHandle consoleBackground{};
                 SpriteHandle titleBar{};
                 SpriteHandle modalScrim{};
+                bool isLight{};
             };
 
             struct SemanticSpritePair
@@ -705,6 +706,11 @@ namespace epochengine::gui
             return complete_palette(*candidate) ? *candidate : g_resources.defaultDark;
         }
 
+        [[nodiscard]] static bool active_palette_is_light() noexcept
+        {
+            return active_palette().isLight;
+        }
+
         static_assert(gui_lib::semantic_tone_count
             == static_cast<std::size_t>(SemanticTone::engine) + 1u);
 
@@ -713,7 +719,7 @@ namespace epochengine::gui
         {
             const auto index = static_cast<std::size_t>(tone);
             const auto safeIndex = index < gui_lib::semantic_tone_count ? index : 0u;
-            return g_frame.activeTheme == ThemeVariant::DefaultLight
+            return active_palette_is_light()
                 ? g_resources.semanticLight[safeIndex]
                 : g_resources.semanticDark[safeIndex];
         }
@@ -743,7 +749,7 @@ namespace epochengine::gui
         {
             if (g_temporaryTextFont && g_temporaryTextFont->asset)
                 return *g_temporaryTextFont;
-            if (g_frame.activeTheme == ThemeVariant::DefaultLight
+            if (active_palette_is_light()
                 && g_resources.darkTextFont.asset)
                 return g_resources.darkTextFont;
             return g_resources.font;
@@ -1873,6 +1879,7 @@ namespace epochengine::gui
                     target.consoleBackground = surface("console_bg", spec.console);
                     target.titleBar = surface("title_bar", spec.title);
                     target.modalScrim = surface("modal_scrim", spec.scrim);
+                    target.isLight = spec.isLight;
 
                     const auto rounded = [&atlas, &spec](
                         SpriteHandle sprite, std::string_view name, theme_detail::Rgb color)
@@ -2446,7 +2453,7 @@ namespace epochengine::gui
                     if (!eq(text[index + i], word[i])) return false;
                 return true;
             };
-            const bool lightTheme = g_frame.activeTheme == ThemeVariant::DefaultLight;
+            const bool lightTheme = active_palette_is_light();
             const auto& info = lightTheme && g_resources.statusInfoLightFont.asset
                 ? g_resources.statusInfoLightFont : g_resources.statusInfoFont;
             const auto& ok = lightTheme && g_resources.statusSuccessLightFont.asset
@@ -2493,6 +2500,8 @@ namespace epochengine::gui
 
         [[nodiscard]] static const font::Glyph* lookup_shadow_glyph(char32_t codepoint) noexcept
         {
+            if (active_palette_is_light() || g_temporaryTextFont)
+                return nullptr;
             return lookup_glyph_from_cache(g_resources.textShadowFont, codepoint);
         }
 
@@ -3205,7 +3214,7 @@ namespace epochengine::gui
                     keywordFont = nullptr;
                     keywordEnd = byteIndex;
                     const char c = text[byteIndex];
-                    const bool light = g_frame.activeTheme == ThemeVariant::DefaultLight;
+                    const bool light = active_palette_is_light();
                     const auto* info = light ? &g_resources.statusInfoLightFont : &g_resources.statusInfoFont;
                     const auto* value = light ? &g_resources.statusSuccessLightFont : &g_resources.statusSuccessFont;
                     if (c == '"' || c == '\'')
@@ -3787,7 +3796,7 @@ namespace epochengine::gui
         g_publishedWindowVariant.store(g_frame.activeTheme, std::memory_order_relaxed);
         if (preference == ThemePreference::ThemeCycle)
             g_cycleWindowDark.store(
-                g_frame.activeTheme != ThemeVariant::DefaultLight,
+                !active_palette_is_light(),
                 std::memory_order_relaxed);
         g_nativeWindowTheme.store(preference, std::memory_order_release);
     }
@@ -3837,7 +3846,7 @@ namespace epochengine::gui
         case ThemePreference::ThemeCycle:
             return g_cycleWindowDark.load(std::memory_order_relaxed);
         default:
-            return true;
+            return !native_window_chrome_palette().isLight;
         }
     }
 

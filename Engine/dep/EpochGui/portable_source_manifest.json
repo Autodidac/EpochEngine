@@ -1,7 +1,7 @@
 {
   "schema": "epoch.portable_source_parity.v1",
   "repository": "Autodidac/EpochGui",
-  "upstream_revision": "a990d4202ccb21a1b745aa999012a96fdc986d5e",
+  "upstream_revision": "7d5d5514a1443c0ef340a626fa163569858ca362",
   "scope": [
     "src",
     "include",
@@ -40,7 +40,7 @@
     },
     {
       "path": "src/epochgui/input.cpp",
-      "sha256": "bfc74330c54e744d258a728c599192be38423cfe30772661ce6fd4df18ca4a5e"
+      "sha256": "f6581c1f8b9c51e6f65231f225a51d11828ad071204d7e8ca9538f1960e56953"
     },
     {
       "path": "src/epochgui/node_graph_workspace.cpp",
@@ -144,7 +144,7 @@
     },
     {
       "path": "include/gui/version.hpp",
-      "sha256": "fba84652c17fe3086b291be88c47dbc7d05c1c025b66274b590f28bb19a813cb"
+      "sha256": "560a3b71934ec543efc1f703a6f3bfe12a6c61d9d0f6dcdceb962b46ae6a9798"
     },
     {
       "path": "modules/epoch.gui.font.ixx",
@@ -156,11 +156,11 @@
     },
     {
       "path": "modules/epoch.gui.input.ixx",
-      "sha256": "3539137c4c830fc53dc18114a22fd36a6b9afffda9042ce1c0aad90d52a43ad8"
+      "sha256": "411d381e33e6d89453b3077458fe7c4ca3fa9788e15398243c43dca111f51f49"
     },
     {
       "path": "modules/epoch.gui.ixx",
-      "sha256": "68c6d354ec1bbaafc19979887d6778454dc7742eefb032ae00265ed299b39623"
+      "sha256": "9bacb7e8027a7f746c2ec717b0688e9959c7b68feddf6e12dc1cacfaca492482"
     },
     {
       "path": "modules/epoch.gui.rounded_rect.ixx",
@@ -212,7 +212,7 @@
     },
     {
       "path": "tests/input_tests.cpp",
-      "sha256": "0ba0a8c63eb6fe7cba0780341b97634faf0065683c823b6f2b4a7a75a363b24b"
+      "sha256": "39515e4e174cbe71ccfc8e22c7169ecc09f034bc05d6927d13929f9e6e9023b6"
     },
     {
       "path": "tests/node_graph_workspace_tests.cpp",

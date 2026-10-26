@@ -48,15 +48,17 @@ export module forest.factory;
 
 import authoring.morphology;
 import voxel.field;
+import package.registry;
 
 export namespace epochengine::forest
 {
-    inline constexpr std::string_view kForestFactoryPackageId = "engine_forest_factory";
+    inline constexpr std::string_view kForestFactoryPackageId =
+        epochengine::package_registry::kEngineForestFactoryPackageId;
     inline constexpr std::string_view kPlantLabWorkspace = "Plant Lab";
     inline constexpr std::string_view kForestFactoryWorkspace = "Forest Factory Placement Portal";
     inline constexpr std::string_view kForestFactoryTechnique = "Temporal graph / parametric L-system";
     inline constexpr std::string_view kForestFactoryReferenceRepo =
-        "https://github.com/Autodidac/Temporal_Parametric_Graph_Lindenmayer_System_Plant_Lab";
+        epochengine::package_registry::kForestFactoryReferenceRepo;
 
     enum class ForestOutputKind : std::uint8_t
     {

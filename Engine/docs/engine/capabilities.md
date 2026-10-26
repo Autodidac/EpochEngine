@@ -41,6 +41,28 @@ ordering. Renderer expansion must preserve the reusable software and2D contracts
 
 ## Physical dependency ownership and evidence
 
+### Implementation style
+
+Prefer a functional core: explicit value inputs and outputs, bounded pure
+transforms, immutable job descriptions and separately validated results. Use
+static composition and compile-time selection where they simplify the actual
+dependency boundary. Terrain sampling, meshing, model-job planning and asset
+validation should be testable without starting a window, worker or model.
+
+Keep side effects in their existing owners: resource lifetime, task execution,
+filesystem/process access, rendering and GUI state. Use OOP and runtime
+polymorphism where heterogeneous implementations or lifecycle contracts require
+them; do not add class hierarchies or wrappers to otherwise simple calculations.
+Security depends on enforced capabilities, validation and process/access policy,
+not on polymorphism alone. Preserve those checks at every effectful boundary.
+
+The terrain preset flow (Classic, Tiled, Hemisphere, Planet, Universe) is a user
+workflow, not a requirement for five classes or one algorithm. Choose the most
+effective compatible geometry and streaming implementation, reuse validated
+source, and measure allocation, time and residency costs before claiming an
+optimization. Build, negative tests, native acceptance and resource measurements
+are the evidence standard; a claim of perfect code is not one.
+
 Reusable platform/application behavior belongs to
 `Engine/dep/EpochPlatformEngine`, consumed as `Epoch::PlatformEngine`. Its module
 identities remain stable: ABI/errors, environment/log/time, native-window and

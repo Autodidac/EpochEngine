@@ -413,6 +413,21 @@ namespace epochengine::core::path
             if (is_epoch_repo_root(probe))
                 return probe;
 
+            // A packaged runtime may live below an unrelated source checkout.
+            // Its distribution marker bounds source discovery; it does not
+            // authenticate an edition or admit a source/update payload. Keep
+            // confirmed source roots first, and never follow a marker symlink.
+            std::error_code markerError;
+            const auto marker = std::filesystem::symlink_status(
+                probe / "epoch-distribution.json", markerError);
+            if (!markerError && std::filesystem::is_regular_file(marker))
+            {
+                std::error_code assetsError;
+                if (std::filesystem::is_directory(probe / "assets", assetsError)
+                    && !assetsError)
+                    return {};
+            }
+
             const path parent = probe.parent_path();
             if (parent == probe)
                 break;

@@ -199,6 +199,14 @@ namespace
             if (!file) return false;
         }
         fs::create_directories(workspace);
+        // A source checkout remains authoritative even if it also contains
+        // runtime assets/identity. This marker alone grants no source access.
+        fs::create_directories(host / "assets");
+        {
+            std::ofstream marker{host / "epoch-distribution.json"};
+            marker << "{\"schema\":\"epoch.distribution.v1\",\"edition\":\"epoch.public\",\"version\":\"0.0.0\"}";
+            if (!marker) return false;
+        }
         if (!make_directory_link(alias, host))
             return false;
 
@@ -224,16 +232,59 @@ namespace
         const auto installed = fixture / "physical-install";
         const auto installAlias = fixture / "InstalledEpoch";
         fs::create_directories(installed / "workspace");
+        fs::create_directories(installed / "assets");
         {
             std::ofstream file{installed / "EpochEditor.exe", std::ios::binary};
             file << "packaged host path fixture";
             if (!file) return false;
         }
+        {
+            std::ofstream marker{installed / "epoch-distribution.json"};
+            marker << "{\"schema\":\"epoch.distribution.v1\",\"edition\":\"epoch.public\",\"version\":\"0.0.0\"}";
+            if (!marker) return false;
+        }
         if (!make_directory_link(installAlias, installed))
             return false;
-        return paths::example_console_workspace_dir(installAlias / "EpochEditor.exe")
-                == fs::canonical(installed / "workspace")
-            && paths::candidate_data_root().empty();
+        // The runtime boundary must prevent traversal into any enclosing
+        // checkout, including the Development checkout hosting this fixture.
+        if (!paths::find_epoch_repo_root(installAlias / "EpochEditor.exe").empty())
+            return false;
+
+        const auto enclosingSource = paths::find_epoch_repo_root(fixture);
+        const auto markerOnly = fixture / "marker-without-assets";
+        fs::create_directories(markerOnly);
+        {
+            std::ofstream marker{markerOnly / "epoch-distribution.json"};
+            marker << "fixture";
+            if (!marker) return false;
+        }
+        if (paths::find_epoch_repo_root(markerOnly) != enclosingSource)
+            return false;
+        const auto directoryMarker = fixture / "directory-marker";
+        fs::create_directories(directoryMarker / "assets");
+        fs::create_directory(directoryMarker / "epoch-distribution.json");
+        if (paths::find_epoch_repo_root(directoryMarker) != enclosingSource)
+            return false;
+#if !defined(_WIN32)
+        const auto linkedMarker = fixture / "linked-marker";
+        fs::create_directories(linkedMarker / "assets");
+        fs::create_symlink(installed / "epoch-distribution.json",
+            linkedMarker / "epoch-distribution.json");
+        if (paths::find_epoch_repo_root(linkedMarker) != enclosingSource)
+            return false;
+#endif
+        const auto installedWorkspace = paths::example_console_workspace_dir(
+            installAlias / "EpochEditor.exe");
+        const auto expectedInstalledWorkspace = fs::canonical(installed / "workspace");
+        if (installedWorkspace != expectedInstalledWorkspace)
+        {
+            std::ofstream diagnostic{fixture / "host-workspace-resolution.txt"};
+            diagnostic << "packaged_host_workspace_mismatch\nexpected="
+                << utf8(expectedInstalledWorkspace) << "\nactual="
+                << utf8(installedWorkspace) << '\n';
+            return false;
+        }
+        return paths::candidate_data_root().empty();
     }
 
     bool run_case(const fs::path& fixture, std::vector<std::string> arguments, unsigned number)

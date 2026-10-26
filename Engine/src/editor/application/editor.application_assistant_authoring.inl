@@ -1700,6 +1700,7 @@
                 editor.aiAuthoringPlanApplied = true;
                 editor.aiAuthoringSurface = EditorMainSurface::Scene;
                 editor.mainSurface = EditorMainSurface::Scene;
+                editor.workspaceCompanionsPending = true;
                 editor.surfaceSettleFrames = (std::max)(
                     editor.surfaceSettleFrames, 2);
                 editor.aiGoalAttemptedMilestoneSignatures.push_back(
@@ -1731,6 +1732,7 @@
                 editor.aiAuthoringSurface = EditorMainSurface::Game2D;
                 editor.mainSurface = EditorMainSurface::Game2D;
                 editor.outlinerToolTab = OutlinerToolTab::Gui;
+                editor.game2DGuiWorkspace = true;
                 editor.viewportCameraMode = previewgrid::CameraMode::Canvas2D;
             }
             else
@@ -1738,6 +1740,7 @@
                 editor.aiAuthoringSurface = EditorMainSurface::Scene;
                 editor.mainSurface = EditorMainSurface::Scene;
             }
+            editor.workspaceCompanionsPending = true;
             editor.aiAuthoringPlanApplied = true;
             editor.surfaceSettleFrames = (std::max)(
                 editor.surfaceSettleFrames, 2);
@@ -1802,6 +1805,7 @@
             working->mainSurface = editor.mainSurface;
             working->aiAuthoringSurface = editor.aiAuthoringSurface;
             working->outlinerToolTab = editor.outlinerToolTab;
+            working->game2DGuiWorkspace = editor.game2DGuiWorkspace;
             working->viewportCameraMode = editor.viewportCameraMode;
             working->guiDocument = editor.guiDocument
                 ? std::make_unique<authoring::gui::GuiDocument>(*editor.guiDocument) : nullptr;
@@ -1867,6 +1871,8 @@
             editor.aiAuthoringPlanApplied = true;
             editor.aiAuthoringSurface = editor.mainSurface = working.mainSurface;
             editor.outlinerToolTab = working.outlinerToolTab;
+            editor.game2DGuiWorkspace = working.game2DGuiWorkspace;
+            editor.workspaceCompanionsPending = true;
             editor.viewportCameraMode = working.viewportCameraMode;
             editor.aiGoalRunning = editor.aiGoalPlanNextQueued = false;
             editor.aiGoalCompletedMilestones = working.aiGoalCompletedMilestones;

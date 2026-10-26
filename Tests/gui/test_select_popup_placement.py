@@ -77,7 +77,9 @@ struct Modal {
     auto bounds()const{return rectangle;}
 };
 struct Frame {Context* ctx{};Modal modalInput;} g_frame;
-struct Options {std::vector<std::string_view> options{"60 FPS","120 FPS","Unlimited"};std::size_t max_visible_options=3;};
+constexpr float kFontScale=1.0f,kContentPadding=4.0f;
+float measure_text_width(std::string_view text,float) {return static_cast<float>(text.size())*8.0f;}
+struct Options {std::vector<std::string_view> options{"60 FPS","120 FPS","Unlimited"};std::size_t max_visible_options=3;bool fit_content{};};
 struct Result {gui_lib::Rect rectangle;float pitch,contentHeight;};
 Result actual_geometry(const Options& options,Vec2 start,float width=250.0f){
     const float rowHeight=28.0f,closedHeight=30.0f;
@@ -116,6 +118,11 @@ COMPACT_BOUNDS
     auto normal=actual_geometry(options,{20.0f,60.0f});
     CHECK(normal.rectangle.position.y==94.0f&&normal.rectangle.size.y==88.0f);
     CHECK(normal.contentHeight==88.0f&&normal.pitch==30.0f);
+    options.fit_content=true;
+    auto fitted=actual_geometry(options,{200.0f,60.0f},96.0f);
+    CHECK(fitted.rectangle.size.x>96.0f);
+    CHECK(fitted.rectangle.size.x>=measure_text_width("Unlimited",1.0f)+2*kContentPadding+22);
+    options.fit_content=false;
     g_frame.modalInput.current=gui_lib::input::ModalInputMode::bounded;
     g_frame.modalInput.rectangle={{100.0f,100.0f},{300.0f,250.0f}};
     auto modal=actual_geometry(options,{120.0f,320.0f});

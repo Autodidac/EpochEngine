@@ -623,6 +623,8 @@ namespace epochengine::core
     {
         if (!running.load(std::memory_order_acquire))
             return false;
+        if (request.activate_existing_only && uiThreadId == 0)
+            return false;
 
         s_activeInstance = this;
         g_activeManager = this;
@@ -707,6 +709,76 @@ namespace epochengine::core
 
         s_activeInstance = this;
         g_activeManager = this;
+
+        if (request.activate_existing_only)
+        {
+            if (request.gui_route.empty()) return false;
+            DWORD foregroundProcess{};
+            ::GetWindowThreadProcessId(::GetForegroundWindow(), &foregroundProcess);
+            // An explicit view change may raise its own companions, but a
+            // delayed/background request must not activate another application.
+            if (foregroundProcess != ::GetCurrentProcessId()) return false;
+            HWND target{}, top{};
+            DWORD targetThread{};
+            bool ownerFocusQueued{};
+            {
+                std::scoped_lock lock(windowsMutex);
+                for (const auto& window : windows)
+                {
+                    if (!window || window->guiRoute != request.gui_route
+                        || !window->running.load(std::memory_order_acquire)
+                        || window->get_should_close()
+                        || window->retirementQueued.load(std::memory_order_acquire))
+                        continue;
+                    target = owner_thread_dock_handle(window.get());
+                    if (!target) return false;
+                    DWORD targetProcess{};
+                    targetThread = ::GetWindowThreadProcessId(target, &targetProcess);
+                    if (targetThread == 0 || targetProcess != ::GetCurrentProcessId()) return false;
+                    top = ::GetAncestor(target, GA_ROOT);
+                    if (!top || ::IsWindow(top) == FALSE) return false;
+                    if (targetThread != ::GetCurrentThreadId())
+                    {
+                        // Native/backend owner work stays bound to its existing
+                        // queue lifetime. Nothing reads WindowData after unlock.
+                        window->ownerThreadCommandQueue.enqueue(
+                            [owner = window.get(), target, route = request.gui_route]()
+                            {
+                                DWORD queuedForegroundProcess{};
+                                ::GetWindowThreadProcessId(::GetForegroundWindow(), &queuedForegroundProcess);
+                                if (owner->guiRoute == route
+                                    && owner->running.load(std::memory_order_acquire)
+                                    && !owner->get_should_close()
+                                    && !owner->retirementQueued.load(std::memory_order_acquire)
+                                    && queuedForegroundProcess == ::GetCurrentProcessId()
+                                    && ::IsWindow(target) != FALSE
+                                    && ::GetWindowThreadProcessId(target, nullptr) == ::GetCurrentThreadId())
+                                    focus_gui_mouse_target(target);
+                            });
+                        ownerFocusQueued = true;
+                    }
+                    break;
+                }
+            }
+            if (!target || !top) return false;
+            // Native activation can synchronously dispatch window handlers.
+            // Never hold the context registry lock across those callbacks.
+            DWORD liveProcess{};
+            ::GetWindowThreadProcessId(::GetForegroundWindow(), &foregroundProcess);
+            if (::IsWindow(target) == FALSE || ::IsWindow(top) == FALSE
+                || foregroundProcess != ::GetCurrentProcessId()
+                || ::GetWindowThreadProcessId(target, &liveProcess) != targetThread
+                || liveProcess != ::GetCurrentProcessId()) return false;
+            if (::IsIconic(top)) ::ShowWindow(top, SW_RESTORE);
+            if (::IsWindow(top) == FALSE) return false;
+            ::BringWindowToTop(top);
+            ::SetForegroundWindow(top);
+            if (!ownerFocusQueued && ::IsWindow(target) != FALSE
+                && ::GetWindowThreadProcessId(target, &liveProcess) == targetThread
+                && liveProcess == ::GetCurrentProcessId())
+                focus_gui_mouse_target(target);
+            return true;
+        }
 
         const int clientW = clamp_positive(request.width);
         const int clientH = clamp_positive(request.height);

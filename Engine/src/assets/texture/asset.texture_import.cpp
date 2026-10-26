@@ -20,6 +20,7 @@ module;
 #include <system_error>
 #include <utility>
 #include <vector>
+#include "../image.decode.hpp"
 
 module asset.texture_import;
 
@@ -468,6 +469,15 @@ namespace epochengine::asset::texture
             std::span<const std::byte> source,
             const TextureImportLimits& limits)
         {
+            if (extension == ".png")
+            {
+                auto decoded = image_codec::decode_png(source, limits.maximum_dimension, limits.maximum_decoded_bytes);
+                const auto status = decoded.status == image_codec::PngStatus::ready ? TextureImportStatus::ready
+                    : decoded.status == image_codec::PngStatus::dimensions_exceeded ? TextureImportStatus::dimensions_exceeded
+                    : decoded.status == image_codec::PngStatus::allocation_failure ? TextureImportStatus::allocation_failure
+                    : TextureImportStatus::malformed_source;
+                return {status, decoded.width, decoded.height, std::move(decoded.rgba)};
+            }
             if (extension == ".ppm")
                 return decode_ppm(source, limits);
             if (extension == ".bmp")
@@ -701,6 +711,54 @@ namespace epochengine::asset::texture
         {
             return TextureImportContractFailure::oversized_rejection;
         }
+        constexpr std::array<unsigned char, 80> pngSource{
+            137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 2, 0, 0, 0, 2, 8, 6, 0, 0, 0, 114, 182, 13, 36, 0, 0, 0, 23, 73, 68, 65, 84, 120, 156, 99, 248, 207, 192, 240, 159, 225, 63, 67, 3, 3, 152, 254, 255, 223, 1, 0, 63, 24, 7, 186, 222, 66, 110, 250, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130
+        };
+        constexpr std::array<unsigned char, 334> inflateBomb{
+            137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 1, 21, 73, 68, 65, 84, 120, 156, 237, 193, 49, 1, 0, 0, 0, 194, 160, 245, 79, 237, 109, 7, 160, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 222, 0, 0, 60, 0, 1, 106, 218, 35, 247, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130
+        };
+        const fs::path png = root.path / "alpha.png";
+        const auto write_png = [&](std::span<const unsigned char> bytes) {
+            std::ofstream output(png, std::ios::binary | std::ios::trunc);
+            output.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+        };
+        write_png(pngSource);
+        const auto alpha = import_texture_file({.source_path = png});
+        if (!alpha || alpha.width != 2 || alpha.height != 2 || alpha.decoded_bytes != 16
+            || alpha.artifact.mips.front().texels != std::vector<std::byte>{
+                std::byte{255}, std::byte{0}, std::byte{0}, std::byte{255},
+                std::byte{0}, std::byte{255}, std::byte{0}, std::byte{128},
+                std::byte{0}, std::byte{0}, std::byte{255}, std::byte{0},
+                std::byte{255}, std::byte{255}, std::byte{255}, std::byte{64}})
+            return TextureImportContractFailure::png_rgba;
+        TextureImportRequest linear{.source_path = png};
+        linear.profile.format = ArtifactFormat::rgba8_unorm;
+        linear.profile.color_space = ColorSpace::linear;
+        const auto raw = import_texture_file(linear);
+        if (!raw || raw.artifact.identity.key == alpha.artifact.identity.key
+            || raw.artifact.mips.front().texels != alpha.artifact.mips.front().texels)
+            return TextureImportContractFailure::png_color_space;
+        TextureImportRequest pngBound{.source_path = png};
+        pngBound.limits.maximum_dimension = 1;
+        if (import_texture_file(pngBound).status != TextureImportStatus::dimensions_exceeded)
+            return TextureImportContractFailure::png_bounds;
+        pngBound.limits.maximum_dimension = 100;
+        pngBound.limits.maximum_decoded_bytes = 15;
+        if (import_texture_file(pngBound).status != TextureImportStatus::dimensions_exceeded)
+            return TextureImportContractFailure::png_bounds;
+        for (std::size_t end = 0; end < pngSource.size(); ++end)
+        {
+            write_png(std::span{pngSource}.first(end));
+            if (import_texture_file({.source_path = png})) return TextureImportContractFailure::png_truncated;
+        }
+        auto corrupt = pngSource;
+        corrupt[29] ^= 1u; // IHDR checksum corruption, with otherwise valid encoded pixels.
+        write_png(corrupt);
+        if (import_texture_file({.source_path = png}).status != TextureImportStatus::malformed_source)
+            return TextureImportContractFailure::png_truncated;
+        write_png(inflateBomb);
+        if (import_texture_file({.source_path = png}).status != TextureImportStatus::allocation_failure)
+            return TextureImportContractFailure::png_bounds;
         return TextureImportContractFailure::none;
     }
 }

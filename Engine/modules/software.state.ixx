@@ -111,7 +111,6 @@ export namespace epochengine::anativecontext
         int lastTelemetryHeight{ 0 };
         std::size_t lastTelemetryBufferLength{ 0 };
         std::int64_t lastTelemetryCommandDepth{ -1 };
-        std::uint32_t smokeFrames{ 0 };
 
         struct MouseState
         {

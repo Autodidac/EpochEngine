@@ -373,8 +373,9 @@ namespace epochengine::vulkancontext
         renderFinishedSemaphores.clear();
         swapChain.reset();
 
-        descriptorPool.reset();
+        // UniqueDescriptorSet frees through its pool; retire the sets first.
         descriptorSets.clear();
+        descriptorPool.reset();
 
         uniformBuffers.clear();
         uniformBuffersMemory.clear();

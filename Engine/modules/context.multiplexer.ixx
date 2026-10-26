@@ -105,6 +105,8 @@ namespace epochengine::core
         int width{ 720 };
         int height{ 440 };
         bool start_docked{ false };
+        // Resolve an existing routed pane only; never create or reparent one.
+        bool activate_existing_only{ false };
     };
 
     export enum class RoutedPanelDockTarget : std::uint8_t
@@ -376,6 +378,10 @@ namespace epochengine::core
     {
     }
     export void HandleX11Configure(::Window window, int width, int height);
+    // SDK-owned button events return through the manager's existing X11 queue.
+    // button uses X11 numbers; zero carries wheel_delta in 1/120-line units.
+    export void QueueX11PointerInput(HWND window, int button, bool pressed,
+        int x, int y, int wheel_delta = 0) noexcept;
     export void RequestActiveParentLayout() noexcept;
 
 #else

@@ -52,7 +52,8 @@ class LinuxPackageDelivery(unittest.TestCase):
             with self.assertRaises(ValueError):audit.audit(archive)
 
     def test_only_reviewed_three_artifact_upload_is_admitted(self):
-        workflow=(ROOT/'Tools/build/public_ci_workflow.yml').read_bytes().replace(b'\r\n',b'\n')
+        template = ROOT/'Tools/build/public_ci_workflow.yml'
+        workflow=(template if template.is_file() else ROOT/guard.WORKFLOW).read_bytes().replace(b'\r\n',b'\n')
         guard.verify_workflow(workflow)
         for old,new in ((b'contents: read',b'contents: write'),
                         (b'epoch_linux_x64_v${{ steps.package.outputs.version }}.tar.gz\n',b'**\n'),

@@ -179,7 +179,11 @@ namespace epochengine::openglcontext
         openglcanvas2d::release_canvas2d_scene_renderer(ctx.get());
 
         auto& backend = opengltextures::get_opengl_backend();
-        auto& glState = backend.glState;
+        const auto retiringContext = ctx ? contextdetail::context_to_platform_context(ctx.get())
+            : PlatformGL::get_current();
+        auto& glState = retiringContext.valid()
+            ? opengltextures::state_for_platform_context(backend, retiringContext, ctx.get())
+            : backend.glState;
         const auto releaseAdmission = [&](const PlatformGL::PlatformGLContext& native,
                                           bool nativeCurrent)
         {
@@ -226,6 +230,7 @@ namespace epochengine::openglcontext
             if (nativeCurrent)
             {
                 openglpreview::destroy_scene_preview_pipeline(glState);
+                openglquad::destroy_quad_pipeline(glState);
                 opengltextures::clear_gpu_atlases(cleanupContext);
             }
         }
@@ -254,6 +259,7 @@ namespace epochengine::openglcontext
             if (nativeCurrent)
             {
                 openglpreview::destroy_scene_preview_pipeline(glState);
+                openglquad::destroy_quad_pipeline(glState);
                 opengltextures::clear_gpu_atlases(cleanupContext);
             }
         }

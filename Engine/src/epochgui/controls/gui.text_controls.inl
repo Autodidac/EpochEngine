@@ -46,7 +46,7 @@
     {
         if (!g_frame.insideWindow || !g_frame.ctx || text.empty()) return;
         ensure_resources();
-        const bool light = g_frame.activeTheme == ThemeVariant::DefaultLight;
+        const bool light = active_palette_is_light();
         const GuiFontCache* tinted = nullptr;
         switch (tone)
         {
@@ -627,7 +627,7 @@
             const std::string_view view{ widget.control.text };
             if (view.empty() && !placeholder.empty())
             {
-                const auto& halfFont = g_frame.activeTheme == ThemeVariant::DefaultLight
+                const auto& halfFont = active_palette_is_light()
                     ? g_resources.halfTextLightFont : g_resources.halfTextFont;
                 const auto* previous = g_temporaryTextFont;
                 if (halfFont.asset) g_temporaryTextFont = &halfFont;

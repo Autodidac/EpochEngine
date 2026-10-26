@@ -1198,6 +1198,8 @@ namespace epochengine::gui
         std::string_view selected{};
         std::span<const std::string_view> options{};
         Vec2 size{};
+        bool fit_content{};
+        InlineButtonAlignment alignment{InlineButtonAlignment::Start};
         float row_height{ 28.0f };
         std::size_t max_visible_options{ 8 };
         bool enabled{true};

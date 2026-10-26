@@ -10,12 +10,16 @@ module;
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <source_location>
 #include <string>
 #include <string_view>
 
 module ai.model_install;
 
 import core.sha256;
+#if !defined(EPOCH_AI_MODEL_INSTALL_CONTRACT_MAIN)
+import core.logger;
+#endif
 
 namespace epochengine::ai::model_install
 {
@@ -27,6 +31,35 @@ namespace epochengine::ai::model_install
 
     namespace
     {
+        [[nodiscard]] bool contract_failure(
+            const std::string_view stage,
+            const PublishResult* result = nullptr,
+            const std::error_code* error = nullptr,
+            const std::source_location location = std::source_location::current())
+        {
+#if !defined(EPOCH_AI_MODEL_INSTALL_CONTRACT_MAIN)
+            std::string message = "Model install contract failed: ";
+            message += stage;
+            if (result)
+            {
+                message += "; code=" + std::to_string(static_cast<unsigned>(result->code));
+                message += "; " + result->diagnostic;
+            }
+            if (error && *error)
+                message += "; filesystem_error=" + std::to_string(error->value())
+                    + "; " + error->message();
+            logger::get("AI.ModelInstall.Contract").log(
+                logger::LogLevel::Error, message, location);
+#else
+            // Keep the standalone CPU contract dependency-light. Its exit
+            // status remains failure; the Engine owns visible logger evidence.
+            (void)stage;
+            (void)result;
+            (void)error;
+            (void)location;
+#endif
+            return false;
+        }
         [[nodiscard]] ArtifactSpec fixture_artifact(
             const std::string_view file,
             const std::string_view bytes)
@@ -85,7 +118,7 @@ namespace epochengine::ai::model_install
             || nemotron->artifacts.front().file != "model.safetensors"
             || nemotron->artifacts.front().bytes != 7'947'142'640ull
             || plan_for("unknown_model"))
-            return false;
+            return contract_failure("compiled plan metadata");
 
         const InstallPlan plan = fixture_plan();
         std::error_code error{};
@@ -95,7 +128,7 @@ namespace epochengine::ai::model_install
                 + std::to_string(std::chrono::steady_clock::now()
                     .time_since_epoch().count()));
         if (error)
-            return false;
+            return contract_failure("temporary fixture root", nullptr, &error);
         struct Cleanup final
         {
             std::filesystem::path root{};
@@ -110,7 +143,7 @@ namespace epochengine::ai::model_install
             good_cache, plan, "publish");
         if (good_stage.empty()
             || !write_fixture(good_stage, "exact fixture weights", "{}\n"))
-            return false;
+            return contract_failure("write good staging fixture");
         const PublishResult published = detail::publish_verified_snapshot_for_plan({
             .plan = plan,
             .models_cache_root = good_cache,
@@ -125,50 +158,52 @@ namespace epochengine::ai::model_install
                         std::istreambuf_iterator<char>{input},
                         std::istreambuf_iterator<char>{}};
                 }()))
-            return false;
+            return contract_failure("publish exact fixture snapshot and receipt", &published);
 
         std::filesystem::remove(published.receipt_path, error);
         if (error)
-            return false;
+            return contract_failure("remove receipt before recovery", nullptr, &error);
         const PublishResult recovered = detail::publish_verified_snapshot_for_plan({
             .plan = plan,
             .models_cache_root = good_cache,
             .staging_root = {}});
         if (!recovered.accepted() || !recovered.recovered
             || recovered.code != Code::recovered_receipt)
-            return false;
+            return contract_failure("recover exact snapshot receipt", &recovered);
 
         std::string extra = deterministic_receipt(plan);
         extra.insert(extra.rfind("\n}"), ",\n  \"unexpected\": true");
         if (receipt_matches(plan, extra))
-            return false;
+            return contract_failure("reject unexpected receipt field");
 
         const std::filesystem::path size_cache = base / "bad-size" / "models";
         const std::filesystem::path size_stage = staging_root(
             size_cache, plan, "size");
         if (!write_fixture(size_stage, "short", "{}\n"))
-            return false;
+            return contract_failure("write wrong-size staging fixture");
         const PublishResult bad_size = detail::publish_verified_snapshot_for_plan({
             .plan = plan,
             .models_cache_root = size_cache,
             .staging_root = size_stage});
         if (bad_size.code != Code::size_mismatch
             || std::filesystem::exists(version_root(size_cache, plan), error))
-            return false;
+            return contract_failure("reject wrong-size fixture without publishing", &bad_size, &error);
 
         const std::filesystem::path hash_cache = base / "bad-hash" / "models";
         const std::filesystem::path hash_stage = staging_root(
             hash_cache, plan, "hash");
         if (!write_fixture(hash_stage, "fixture weights exact", "{}\n"))
-            return false;
+            return contract_failure("write wrong-hash staging fixture");
         const PublishResult bad_hash = detail::publish_verified_snapshot_for_plan({
             .plan = plan,
             .models_cache_root = hash_cache,
             .staging_root = hash_stage});
-        return bad_hash.code == Code::sha256_mismatch
+        const bool rejected = bad_hash.code == Code::sha256_mismatch
             && !std::filesystem::exists(version_root(hash_cache, plan), error)
             && !std::filesystem::exists(
                 version_root(hash_cache, plan) / receipt_filename, error);
+        return rejected || contract_failure(
+            "reject wrong-hash fixture without publishing", &bad_hash, &error);
     }
 }
 

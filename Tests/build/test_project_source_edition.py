@@ -54,7 +54,9 @@ class ProjectSourceEdition(unittest.TestCase):
             'Engine/CMakeLists.txt': b'cmake_minimum_required(VERSION 4.4)\n',
         }
         if public:
-            files[public_gate.WORKFLOW] = (ROOT / 'Tools/build/public_ci_workflow.yml').read_bytes()
+            template = ROOT / 'Tools/build/public_ci_workflow.yml'
+            files[public_gate.WORKFLOW] = (template if template.is_file()
+                                          else ROOT / public_gate.WORKFLOW).read_bytes()
             files['Tools/build/verify_public_source.py'] = (ROOT / 'Tools/build/verify_public_source.py').read_bytes()
         for name, data in files.items():
             path = root / name

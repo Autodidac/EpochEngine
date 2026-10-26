@@ -12,7 +12,7 @@ class GuiVersionHeaders(unittest.TestCase):
         compatibility = (ROOT/'Engine/include/gui/gui.version.hpp').as_posix()
         direct = (ROOT/'Engine/dep/EpochGui/include/gui/version.hpp').as_posix()
         code = '#include "' + compatibility + '"\n#include "' + direct + '"\n' + \
-            'static_assert(epochengine::gui_lib::version_string == "0.90.0");\nint main() {}\n'
+            'static_assert(epochengine::gui_lib::version_string == "0.90.1");\nint main() {}\n'
         if os.name != 'nt': self.skipTest('Installed Windows MSVC CPU lane')
         toolsets=sorted(Path('C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC').glob('*'))
         kitroot=Path('C:/Program Files (x86)/Windows Kits/10');kits=sorted((kitroot/'Include').glob('*'))

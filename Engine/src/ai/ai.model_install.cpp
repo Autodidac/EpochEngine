@@ -236,7 +236,9 @@ namespace epochengine::ai::model_install
             if (!platform::filesystem::exclusive_create_and_write(
                     temporary, std::as_bytes(characters), error))
             {
-                diagnostic = "The model receipt temporary file could not be written durably.";
+                diagnostic = "The model receipt temporary file could not be written durably. "
+                    "Filesystem error " + std::to_string(error.value()) + ": " + error.message()
+                    + "; path characters=" + std::to_string(temporary.native().size()) + ".";
                 return false;
             }
             if (!receipt_matches(plan,
@@ -250,7 +252,8 @@ namespace epochengine::ai::model_install
                     temporary, root / receipt_filename, error))
             {
                 (void)std::filesystem::remove(temporary, error);
-                diagnostic = "The model receipt could not be published atomically.";
+                diagnostic = "The model receipt could not be published atomically. Filesystem error "
+                    + std::to_string(error.value()) + ": " + error.message() + ".";
                 return false;
             }
             return true;

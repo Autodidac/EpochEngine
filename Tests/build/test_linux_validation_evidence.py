@@ -1,12 +1,13 @@
 """Run the production evidence move against real files; no runtime involved."""
 from pathlib import Path
+import os
 import shutil
 import subprocess
 import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
-SHELL = shutil.which('pwsh') or shutil.which('powershell.exe')
+SHELL = shutil.which('pwsh') or (shutil.which('powershell.exe') if os.name == 'nt' else None)
 
 
 @unittest.skipUnless(SHELL, 'PowerShell is required for the production packager')
