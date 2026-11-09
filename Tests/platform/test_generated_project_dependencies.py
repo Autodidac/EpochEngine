@@ -14,6 +14,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from xml.sax.saxutils import quoteattr
 from Tests.support.cpp import msvc_2022_root, msvc_2022_toolsets, windows_sdk_includes
 
 from Tests.platform.test_child_close_router import definition
@@ -306,8 +307,22 @@ assert(repair_generated_windows_dependency_script(current));assert(current==wind
 
     def test_actual_msbuild_evaluation_keeps_base_and_triplet_distinct(self):
         self.assertTrue(self.msbuild.is_file(), "Installed MSVC is missing x64 MSBuild")
+        project = self.output / "DependencyFixture.vcxproj"
+        # Hosted CI bootstraps vcpkg for CMake without installing user-wide
+        # MSBuild integration. Evaluate its real targets inside this fixture.
+        vcpkg_root = os.environ.get("EPOCH_VCPKG_ROOT") or os.environ.get("VCPKG_ROOT")
+        if vcpkg_root:
+            targets = Path(vcpkg_root).resolve() / "scripts/buildsystems/msbuild/vcpkg.targets"
+            self.assertTrue(targets.is_file(), "Configured vcpkg root is missing its MSBuild targets")
+            source = project.read_text(encoding="utf-8")
+            body, closing, trailing = source.rpartition("</Project>")
+            self.assertTrue(closing and not trailing.strip())
+            project = self.output / "DependencyFixtureWithVcpkg.vcxproj"
+            project.write_text(body + f"  <Import Project={quoteattr(str(targets))}"
+                f" Condition=\"'$(_ZVcpkgInstalledDir)'==''\" />\n{closing}{trailing}",
+                encoding="utf-8")
         for configuration in ("Debug", "Release"):
-            result = subprocess.run([str(self.msbuild), str(self.output / "DependencyFixture.vcxproj"), "/nologo", "/nr:false",
+            result = subprocess.run([str(self.msbuild), str(project), "/nologo", "/nr:false",
                 "/p:Platform=x64", f"/p:Configuration={configuration}",
                 "/getProperty:VcpkgInstalledDir,_ZVcpkgInstalledDir,_ZVcpkgCurrentInstalledDir,VcpkgManifestInstall,VcpkgAutoBootstrap,EpochVcpkgInstallRoot,CL_MPCount,UseMultiToolTask"],
                 cwd=self.output, capture_output=True, text=True)
@@ -315,9 +330,9 @@ assert(repair_generated_windows_dependency_script(current));assert(current==wind
             properties = json.loads(result.stdout)["Properties"]
             base, triplet = ROOT / "Artifacts/Dependencies/vcpkg_installed", ROOT / "Artifacts/Dependencies/vcpkg_installed/x64-windows"
             for field in ("VcpkgInstalledDir", "_ZVcpkgInstalledDir"):
-                self.assertEqual(Path(properties[field]), base)
+                self.assertEqual(Path(properties[field]), base, field)
             for field in ("EpochVcpkgInstallRoot", "_ZVcpkgCurrentInstalledDir"):
-                self.assertEqual(Path(properties[field]), triplet)
+                self.assertEqual(Path(properties[field]), triplet, field)
             self.assertEqual(properties["VcpkgManifestInstall"].lower(), "false")
             self.assertEqual(properties["VcpkgAutoBootstrap"].lower(), "false")
             self.assertEqual(properties["CL_MPCount"], "2")

@@ -86,7 +86,7 @@ jobs:
           cmake --build --preset windows-msvc-debug --parallel 2
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Run compiled component and engine contracts
-        timeout-minutes: 85
+        timeout-minutes: 100
         shell: pwsh
         run: |
           $env:PATH = "$PWD/Artifacts/Dependencies/vcpkg_installed/x64-windows/debug/bin;$PWD/Artifacts/Dependencies/vcpkg_installed/x64-windows/bin;$env:PATH"

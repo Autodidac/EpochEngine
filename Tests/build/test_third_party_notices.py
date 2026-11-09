@@ -6,7 +6,7 @@ import os
 import shutil
 import struct
 import subprocess
-import time
+import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -18,9 +18,10 @@ class ThirdPartyNotices(unittest.TestCase):
     def setUp(self):
         if os.name != "nt":
             self.skipTest("Actual Windows PowerShell release helper")
-        self.proof = ROOT / "Artifacts/Reports/notice-packaging-oct28" / str(time.time_ns())
+        parent = ROOT / "Artifacts/Reports/notice-packaging-oct28"
+        parent.mkdir(parents=True, exist_ok=True)
+        self.proof = Path(tempfile.mkdtemp(prefix="notice-", dir=parent))
         self.repo, self.installed, self.output = (self.proof / name for name in ("repository", "installed", "payload"))
-        self.proof.mkdir(parents=True)
         self.assertTrue(self.output.resolve().is_relative_to((ROOT / "Artifacts/Reports").resolve()))
         sources = ["Engine/third_party/glad/LICENSE", "Engine/assets/fonts/OFL.txt"]
         sources += [f"Engine/dep/{name}/{leaf}" for name in LIBRARIES for leaf in ("LICENSE", "NOTICE")]
