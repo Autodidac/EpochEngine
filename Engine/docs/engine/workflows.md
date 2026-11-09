@@ -146,7 +146,9 @@ and reopen checks are still pending in the current pass.
 
 The TripoSR worker centers an image that already has a transparent background,
 keeps its proportions and adds a neutral margin. It does not remove an opaque
-background. Its job record keeps the original reference hash and the prepared
+background. For the optional TripoSR backend, use `Tools/ai/triposr_worker.py`
+from the source package with an admitted local Python runtime and model cache.
+Its job record keeps the original reference hash and the prepared
 image's bounds, size and pixel hash. This preprocessing passes CPU and adapter
 checks; a new native cutout-generation test is still pending. Backend settings
 must name the current exact worker hash; older settings are refused rather than

@@ -19,6 +19,7 @@ CMakeLists.txt linguist-language=CMake
 *.cmd linguist-language=Batchfile
 
 *.sh text eol=lf
+/Tools/ai/triposr_worker.py text eol=lf
 CMakeLists.txt text eol=lf
 *.cmake text eol=lf
 *.h text eol=lf

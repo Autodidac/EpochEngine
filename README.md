@@ -25,7 +25,7 @@ actions before applying them.
 
 ## Current Snapshot
 
-This source checkpoint is **0.91.02**. Download runtime packages and check their
+This source checkpoint is **0.91.03**. Download runtime packages and check their
 validation results in [GitHub Releases](https://github.com/Autodidac/EpochEngine/releases).
 Public releases and source updates use this GitHub repository without account
 pairing. Each edition accepts only its own update channel.

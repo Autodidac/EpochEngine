@@ -2101,6 +2101,8 @@ add_test(NAME planetary_look_direction COMMAND yaw_contract)
                 module_map[name].read_text(encoding="utf-8-sig"), re.M))
         modules = " ".join('"' + module_map[name].as_posix() + '"' for name in sorted(closure))
         bases = " ".join('"' + path.as_posix() + '"' for path in owners)
+        # The dense-mesh budget cases run unoptimized in Windows Debug.
+        wire_timeout = 90 if os.name == "nt" else 30
         (proof / "CMakeLists.txt").write_text(f'''cmake_minimum_required(VERSION 3.30)
 set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT Embedded)
 project(RuntimePreview LANGUAGES CXX)
@@ -2127,7 +2129,8 @@ enable_testing()
 add_test(NAME mesh_wireframe COMMAND wire_contract)
 add_test(NAME runtime_shortcuts COMMAND shortcut_contract)
 add_test(NAME runtime_source_receipt COMMAND source_receipt_contract)
-set_tests_properties(mesh_wireframe runtime_shortcuts runtime_source_receipt PROPERTIES TIMEOUT 30)
+set_tests_properties(mesh_wireframe PROPERTIES TIMEOUT {wire_timeout})
+set_tests_properties(runtime_shortcuts runtime_source_receipt PROPERTIES TIMEOUT 30)
 ''', encoding="utf-8")
         configure = ["cmake", "-S", str(proof), "-B", str(proof / "cmake")]
         configure += ["-G", "Visual Studio 17 2022", "-A", "x64"] if os.name == "nt" else ["-G", "Ninja", "-DCMAKE_BUILD_TYPE=Release"]
