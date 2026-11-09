@@ -56,7 +56,9 @@ jobs:
           $cmakeVersion = @(& (Join-Path $scripts 'cmake.exe') --version)
           if ($LASTEXITCODE -ne 0 -or $cmakeVersion[0] -cne 'cmake version 4.4.0') { throw 'Unexpected CMake version' }
           $ninjaVersion = @(& (Join-Path $scripts 'ninja.exe') --version)
-          if ($LASTEXITCODE -ne 0 -or $ninjaVersion -cne '1.13.2') { throw 'Unexpected Ninja version' }
+          if ($LASTEXITCODE -ne 0 -or $ninjaVersion.Count -ne 1 -or $ninjaVersion[0] -cne '1.13.2.git.kitware.jobserver-pipe-1') {
+            throw "Unexpected Ninja version: $ninjaVersion"
+          }
           $scripts | Add-Content -LiteralPath $env:GITHUB_PATH
       - name: Prepare manifest-pinned dependencies
         shell: pwsh
