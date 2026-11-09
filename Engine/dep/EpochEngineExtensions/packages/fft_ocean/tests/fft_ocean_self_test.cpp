@@ -5,6 +5,7 @@
 #include <array>
 #include <bit>
 #include <cmath>
+#include <cstddef>
 #include <limits>
 #include <utility>
 
@@ -37,6 +38,43 @@ namespace
         }
         return true;
     }
+
+    struct ReferenceSample
+    {
+        std::size_t index;
+        double height, displacementX, displacementZ;
+    };
+
+    // Seed 42, 32 cells and a 96 m tile. Evaluate the seeded spectrum with
+    // a double-precision direct inverse DFT and use periodic central differences
+    // for displacement. Allow 20 micrometres for the production float FFT and libm.
+    constexpr std::array forwardReference{
+        ReferenceSample{0, -0.790465897, 0.005536570, -0.066790065},
+        ReferenceSample{359, -0.769546108, 0.002271441, 0.015803341},
+        ReferenceSample{528, 1.475414521, -0.115994733, 0.000071117},
+        ReferenceSample{1023, -0.921860590, 0.024971787, -0.052269611},
+    };
+    constexpr std::array reverseReference{
+        ReferenceSample{0, 0.068559670, -0.020455576, -0.086995394},
+        ReferenceSample{359, -0.949847563, -0.068194444, -0.102656313},
+        ReferenceSample{528, 0.756610376, -0.118274279, -0.000047045},
+        ReferenceSample{1023, -0.304386893, -0.054455645, -0.106022478},
+    };
+
+    bool matches_reference(std::span<const ocean::OceanSample> samples,
+                           std::span<const ReferenceSample> reference) noexcept
+    {
+        constexpr double tolerance = 0.000020;
+        for (const auto& expected : reference)
+        {
+            const auto& actual = samples[expected.index];
+            if (!(std::abs(actual.heightMeters - expected.height) <= tolerance &&
+                  std::abs(actual.displacementXMeters - expected.displacementX) <= tolerance &&
+                  std::abs(actual.displacementZMeters - expected.displacementZ) <= tolerance))
+                return false;
+        }
+        return true;
+    }
 }
 
 int main()
@@ -54,14 +92,24 @@ int main()
         CHECK(tile.samples().size()==1024u);
         CHECK(tile.evaluate(3.25f));
         const auto first=hash(tile.samples());
-        CHECK(first==17368026875614010600ull); // Physical spectral-density conversion, D/R bytes.
+        CHECK(matches_reference(tile.samples(), forwardReference));
+#if defined(_MSC_VER) && !defined(__clang__)
+        CHECK(first==17368026875614010600ull); // Retained MSVC Debug and Release bytes.
+#endif
         CHECK(tile.evaluate(19.5f)); CHECK(hash(tile.samples())!=first);
         CHECK(tile.evaluate(3.25f)); CHECK(hash(tile.samples())==first);
-        CHECK(tile.evaluate(-3.25f)); CHECK(hash(tile.samples())==688061740171333509ull);
+        CHECK(tile.evaluate(-3.25f));
+        CHECK(matches_reference(tile.samples(), reverseReference));
+        const auto reverse=hash(tile.samples());
+        CHECK(reverse!=first);
+#if defined(_MSC_VER) && !defined(__clang__)
+        CHECK(reverse==688061740171333509ull);
+#endif
         CHECK(tile.evaluate(3.25f)); CHECK(hash(tile.samples())==first);
         CHECK(finite(tile.samples()));
         ocean::OceanTile restarted{settings};
         CHECK(restarted.evaluate(3.25f)); CHECK(hash(restarted.samples())==first);
+        CHECK(restarted.evaluate(-3.25f)); CHECK(hash(restarted.samples())==reverse);
 
         const float nan=std::numeric_limits<float>::quiet_NaN();
         const float infinity=std::numeric_limits<float>::infinity();

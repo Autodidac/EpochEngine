@@ -22,7 +22,7 @@
       "mode": "engine_owned_optional_source",
       "note": "Primary optional package source belongs in this repository and is mirrored to the separate Site project. The locally committed candidate includes the current planetary provider and matches all mirrored source files after line-ending normalization. It is awaiting standalone validation and publication.",
       "version": "0.2.3",
-      "upstream_revision": "f7dac741609f61f295c5696321e1344a5cfef173",
+      "upstream_revision": "976e4dbe20d21952d2bcf42be297a538bf6cb58d",
       "published_upstream_revision": "92d46ff7240abfc561c70e642d2a195f0da23470",
       "publication_status": "local_unpublished_changes"
     },

@@ -2,13 +2,17 @@
 // Real independent C++23 consumer. No renderer, scheduler or model starts.
 #include <algorithm>
 #include <array>
+#include <cstddef>
+#include <cstdint>
 #include <map>
 #include <cmath>
 #include <fstream>
 #include <limits>
+#include <optional>
 #include <stdexcept>
 #include <stop_token>
 #include <tuple>
+#include <utility>
 #include <vector>
 import planet.terrain;
 import planet.streaming;
