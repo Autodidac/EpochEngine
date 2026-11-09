@@ -2,44 +2,86 @@
 
 ## Status
 
-Epoch v0.90.24 mainlines the CPU-only neuromorphic core from the v0.90.16
-experimental branch and connects it to the v0.90.23 event-driven OpenGL scene
-path. The old Neuro Lab/editor benchmark is intentionally not carried into
-main. The runtime is production-wired, bounded, deterministic where required,
-and covered by a CPU-only contract target.
+The bounded CPU neuromorphic core, sampled event camera, adapters and generic
+invalidation network remain implemented with CPU contracts. October30 operator
+direction removes the OpenGL cached/partial renderer integration and its A/B
+benchmark from source. Conventional full-frame rendering is the current policy;
+combined Debug/Release builds/full pure contracts pass, while the actual 120 retry
+still lagged and native responsiveness/image acceptance remains open. The proposed animation
+frame cache is cancelled. See [full-frame policy](event_render.md).
 
 The layer is an event-driven control/perception fabric. It does not replace
 rasterization, the physics solver, the audio device, or the presentation clock
 when fixed-step, frame-step, or batch execution is objectively better.
 
-### Current ownership and evidence (October 7, 2026)
+### Current ownership and evidence (October30, 2026)
 
 This contract covers reusable software, editor and game consumers; it is not a
-second roadmap. `Changes/roadmap.md` orders unfinished delivery and the active
-pass keeps model-built sandbox succession first.
+second roadmap. `Changes/roadmap.md` orders unfinished delivery and the
+[active pass](../../../Changes/active_pass.md) owns the current bounded scope.
 
 | System | Actual implementation/integration | Remaining acceptance |
 | --- | --- | --- |
 | Sparse graph / `simulation.neuromorphic` | CPU bounded signals, weighted activation, leak/refractory gates, metrics and temporal reset; CPU contracts | Workload benchmarks and consumer-specific replay/cost proof |
 | Event camera / `render.neuromorphic_camera` | Sampled luminance-to-event API and CPU fixtures; no production perception consumer found | Native consumer, total observation/event budget, latency/memory and threshold evidence |
 | Timeline/task-graph adapters | Typed conversion and atomic graph compile with CPU fixtures | Actual authored graph/runtime/replay workflow; no continuous world-wide integration claimed |
-| Invalidation / `render.neuromorphic_invalidation` | Persistent network in `opengl.state`, evaluated by `opengl.preview`; only partial-to-full promotion | Native image/cost proof, event storms/reset/resize; other backends' partial caches remain unproved |
+| Invalidation / `render.neuromorphic_invalidation` | Generic bounded network and CPU contracts remain; live OpenGL bridge removed in source | Any future consumer needs explicit scope, correctness, replay/reset and measured cost proof |
 | AI host triage | Deterministic path/identifier scoring in the existing self-coding panel; streaming activity and bounded discovery | Useful model patches, real builds and embedded succession; not learned/spiking agent integration |
 
 The current graph has no hidden learning/weight updates. Event-camera output is
 `visual_only`; timeline causes use `exact_cause`. Raster damage and validated
-host/source evidence remain authoritative. High cached-render throughput is
-not high presentation FPS, model throughput or proof of a whole-engine speedup.
+host/source evidence remain authoritative. Primitive availability does not prove
+higher presentation FPS, model throughput or a whole-engine speedup.
+
+### DAVID alignment and camera/render research (October 25)
+
+This is a planned continuation, not a new learned implementation. Naming and
+micromodel responsibilities live in [AI architecture](ai_plan.md#david-roles-and-shippable-micromodels--planned):
+DAVID is the framework, ARCHITECT 1 routes work, ELA is a non-LLM predictive
+learner, ADAM owns neuromorphic cognition research, NEO/engcoder is the planned
+English/coding micromodel and optional acting consumer, and KEYMAKER is supervised
+training/evaluation. “JEV-like” has no resolved model/paper identity yet; no external
+architecture or weights are assumed. NEO speech I/O requires separate ASR/TTS proof.
+
+Keep three distinct camera/render stages:
+
+1. **Existing sampled event camera:** `Engine/modules/render.neuromorphic_camera.ixx`
+   converts supplied luminance observations into bounded events. This is not proof
+   of an event-native sensor, free framebuffer capture or a perception model.
+2. **Planned perception/prediction:** a bounded project consumer may use event
+   windows with explicit timestamp/coordinate/units, truth class, queue/drop limits,
+   reset/replay policy and licensed data. Compare against nonlearned baselines;
+   measure observation/readback cost, accuracy, latency, RAM/VRAM and event storms.
+   Do not continuously read back a framebuffer while claiming cost-free event input.
+3. **Generic invalidation primitive; future consumer only:**
+   `Engine/modules/render.neuromorphic_invalidation.ixx` retains its conservative
+   promotion contract, but no longer controls the production OpenGL scene path.
+   A future model cannot suppress authoritative changes or replace presentation.
+   Any new renderer policy needs separate operator scope and measured correctness
+   and total cost against conventional rendering; the old A/B lane is removed.
+
+Use [shared loading/admission](ai_plan.md#shared-model-loading-and-unloading-plan)
+for learned model components; no second scheduler or assumed always-resident brain.
+An ordinary event graph need not load a neural model. Active coding/generation,
+renderer resources and optional inference compete under the same measured budget.
+Training needs explicit consent, licensed data/provenance, held-out evaluation and
+rollback; neither rendering nor inference grants automatic learning authority.
+
+Prerequisites remain current reliability/software-base acceptance and a real
+consumer specification. First research acceptance is one bounded replayable
+consumer with measured value over the existing deterministic baseline, not a
+whole-engine neuromorphic rewrite. Preserve playable 2D, renderer parity and
+[Dark Iterations](dark_iterations.md) in their roadmap order.
 
 ### Measured next design steps
 
-1. Keep correctness conservative: previous/current object and light damage,
-   camera/global revisions, depth/occlusion reconstruction and full fallback.
-   Unknown/nonlocal effects cannot be suppressed by activation policy.
-2. Use the existing alternating same-cache benchmark for sparse-to-dense
-   crossover. Account for graph activation, projection, redraw, presentation,
-   queue drops and synchronized GPU timing separately. Benchmark mode itself
-   changes pacing and is not normal-runtime throughput.
+1. Preserve authoritative world/lighting changes, camera/global revisions,
+   temporal reset and conventional full-frame rendering. Unknown/nonlocal effects
+   cannot be suppressed by activation policy.
+2. Establish consumer-specific cost measurements against the conventional path.
+   Account for observation, graph activation, rendering and presentation separately;
+   the removed same-cache benchmark is not an available comparison lane. No
+   performance improvement follows automatically from neuromorphic integration.
 3. Add one explicit bounded perception/simulation consumer only after current
    P0/software-base gates. Preserve consumer-owned clocks, temporal reset and
    event/output limits; do not poll a full image while claiming event-native input.
@@ -129,17 +171,14 @@ state remains the source of runtime topology.
 
 ### `render.neuromorphic_invalidation`
 
-The v0.90.23 cached/partial OpenGL scene path now owns a persistent weighted
-neuromorphic invalidation network in each OpenGL state. Dirty rectangles remain
-the source of truth for correctness. The network receives sparse visual-change
-signals and may conservatively promote a partial redraw to a full redraw when
-activity becomes dense, its activation budget is exhausted, or work is dropped.
-It is never allowed to suppress a real dirty region.
+This generic bounded weighted network can classify sparse/dense change signals
+and conservatively request full work when activity or budget pressure requires it.
+Its CPU contracts remain. The October30 source removal retires the per-OpenGL-state
+network and dirty-rectangle consumer; there is no live selective-renderer bridge.
 
-This is the first direct bridge between the neuromorphic runtime and the real
-3D selective renderer. It intentionally does not cull authoritative NPC or
-animation state yet; simulation LOD must use semantic/causal relevance signals
-rather than infer gameplay truth from pixels.
+Future consumers must preserve authoritative scene/gameplay state and require
+separate admission, replay/reset and measured value. Simulation LOD cannot infer
+gameplay truth from pixels, and the primitive does not authorize partial rendering.
 
 ### Contract coverage
 
@@ -277,12 +316,14 @@ composition, keep the useful event-camera/signal pieces and do not force the
 rest of the engine through this execution model.
 
 
-## Late-September mainline integration boundary
+## Current renderer integration boundary
 
-From v0.90.24 onward the neuromorphic renderer bridge is a **policy layer over authoritative damage**, not a replacement for scene invalidation. Object previous/current bounds, bounded lighting damage, camera/global invalidation, dirty-region/coverage ceilings, and cache revisions decide what may be stale. The weighted graph may only promote work to a more conservative path.
+The former cached/partial OpenGL bridge, damage queues and SELECTIVE/FULL benchmark
+are removed in source by October30 operator direction. Historical receipts do not
+accept the replacement source. Combined Debug/Release integration and native
+full-frame image/responsiveness checks remain pending.
 
-A/B benchmarking introduced in v0.90.28 deliberately compares the selective policy against a forced 100% reconstruction through the same persistent cache and presentation path. The benchmark does not train or mutate the neuromorphic network; it measures the cost consequences of the current policy.
-
-Renderer statistics introduced later distinguish presentation cadence from scene-render throughput. This matters especially for cached frames: a cached scene can require only a small amount of render work even while the editor remains intentionally capped at a much lower presentation FPS.
-
-Lighting invalidation introduced in v0.90.29 remains renderer/scene evidence rather than neural inference. Point/spot influence volumes can seed bounded dirty work directly; ambient/directional changes remain global. Neuromorphic activity may then promote that work, never narrow it.
+Ordinary asset, font and texture residency, immutable GUI draw snapshots, geometry
+and Canvas2D derived raster preparation remain. Central events, time, jobs and
+temporal ownership remain independent of this removal. Generic lighting and
+neuromorphic primitives support future scoped work, not an automatic performance fix.

@@ -196,6 +196,8 @@ export namespace epochengine::project_gui_runtime
         [[nodiscard]] RuntimeCode pointer_release(Float2 point) noexcept;
         [[nodiscard]] RuntimeCode focus(asset::gui::WidgetId widget) noexcept;
         [[nodiscard]] RuntimeCode focus_next(bool reverse = false) noexcept;
+        [[nodiscard]] RuntimeCode activate_focused() noexcept;
+        [[nodiscard]] RuntimeCode clear_focus() noexcept;
         [[nodiscard]] RuntimeCode select_tab(
             asset::gui::WidgetId tabSet,
             asset::gui::WidgetId page) noexcept;

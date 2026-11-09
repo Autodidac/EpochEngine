@@ -57,11 +57,9 @@
             if (lower.starts_with("qwen/")) score += 220;
             if (contains("qwen")) score += 160;
             if (contains("glm")) score += 130;
-            if (contains("bonsai")) score += 90;
             if (contains("a3b")) score += 20;
             if (contains("embedding")) score -= 1'000;
             if (contains("muse") || contains("glimmer")) score -= 700;
-            if (contains("derestricted")) score -= 80;
             return score;
         }
 
@@ -72,6 +70,7 @@
             int bestScore = -100'000;
             for (const auto& model : models)
             {
+                if (ai::model_behavior::classify_text(model).flagged()) continue;
                 const int score = ai_model_suggestion_score(model);
                 if (suggestion.empty() || score > bestScore)
                 {
@@ -305,6 +304,8 @@
             if (state.roles.empty())
                 gui::wrapped_label("No local role catalog has been discovered. Refresh available role models first.", width);
 
+                if (std::ranges::any_of(state.models, [](const auto& model) {return model.behavior.flagged();}))
+                    gui::semantic_block(ai::model_behavior::warning, gui::SemanticTone::warning, width);
                 gui::wrapped_label("Foundation uses your selected provider/model. Controller and specialist roles can select loaded native models independently; non-resident external models retain provider-managed preparation. The resident list in Model Manager shows actual native processes.",width);
                 for (const auto& role:state.roles) if (role.role=="assignment" && role.id!="foundation") {
                     const bool implementation = role.id == "implementation";
@@ -315,7 +316,8 @@
                         // Source implementation choices list actual resident
                         // processes, not downloaded or merely registered weights.
                         if (implementation && !model.active) continue;
-                        names.push_back(model.label.empty()?model.id:model.label);
+                        names.push_back(ai::model_behavior::choice_label(
+                            model.label.empty()?model.id:model.label,model.behavior));
                         uris.push_back(model.uri);
                     }
                     if (!implementation)
@@ -359,9 +361,12 @@
             std::vector<std::string> names{"Keep current resident model"};
             std::vector<std::string> ids{std::string{}};
             for (const auto& model:state.models) if (model.active) {
-                names.push_back(model.label.empty()?model.id:model.label);
+                names.push_back(ai::model_behavior::choice_label(
+                    model.label.empty()?model.id:model.label,model.behavior));
                 ids.push_back(model.id);
             }
+            if (std::ranges::any_of(state.models, [](const auto& model) {return model.active && model.behavior.flagged();}))
+                gui::semantic_block(ai::model_behavior::warning, gui::SemanticTone::warning, width);
             std::vector<std::string_view> views;
             for (const auto& name:names) views.emplace_back(name);
             std::string selectedName=names.front();
@@ -732,7 +737,9 @@
                 const auto discovered=poll_ai_model_inventory(editor);
                 if(editor.aiAutomaticModelSelection&&!editor.aiModelInventoryPending&&!discovered.empty()){
                     if(editor.aiPendingModelSelection.empty())editor.aiPendingModelSelection=suggest_discovered_ai_model(discovered);
-                    if(confirm_pending_ai_model(editor))editor.aiAutomaticModelSelection=false;
+                    if(!editor.aiPendingModelSelection.empty()
+                        && !ai::model_behavior::classify_text(editor.aiPendingModelSelection).flagged()
+                        && confirm_pending_ai_model(editor))editor.aiAutomaticModelSelection=false;
                 }
             }
             if(!expanded){
@@ -798,14 +805,28 @@
             auto models = poll_ai_model_inventory(editor);
             if(editor.aiAutomaticModelSelection&&!editor.aiModelInventoryPending&&!models.empty()){
                 if(editor.aiPendingModelSelection.empty())editor.aiPendingModelSelection=suggest_discovered_ai_model(models);
-                if(confirm_pending_ai_model(editor))editor.aiAutomaticModelSelection=false;
+                if(!editor.aiPendingModelSelection.empty()
+                        && !ai::model_behavior::classify_text(editor.aiPendingModelSelection).flagged()
+                        && confirm_pending_ai_model(editor))editor.aiAutomaticModelSelection=false;
             }
             if(!editor.aiAdvancedSetup){
                 gui::wrapped_label(editor.aiModelInventoryPending?"Discovering models at the selected local endpoint...":epochengine::ai::model_detection_status(),contentWidth);
-                std::vector<std::string_view> names;for(const auto& modelName:models)names.emplace_back(modelName);
-                const auto choice=gui::select_box({.id=selectBoxId,.placeholder="Model",.selected=epochengine::ai::active_model_name(),.options=names,.size={contentWidth,30.0f},.enabled=!editor.aiModelInventoryPending});
+                std::vector<std::string> labels;
+                labels.reserve(models.size());
+                bool variants{};
+                std::string activeLabel = epochengine::ai::active_model_name();
+                for(const auto& modelName:models) {
+                    const auto behavior = ai::model_behavior::classify_text(modelName);
+                    variants = variants || behavior.flagged();
+                    labels.push_back(ai::model_behavior::choice_label(modelName, behavior));
+                    if (modelName == epochengine::ai::active_model_name()) activeLabel = labels.back();
+                }
+                std::vector<std::string_view> names;for(const auto& label:labels)names.emplace_back(label);
+                if (variants) gui::semantic_block(ai::model_behavior::warning, gui::SemanticTone::warning, contentWidth);
+                const auto choice=gui::select_box({.id=selectBoxId,.placeholder="Model",.selected=activeLabel,.options=names,.size={contentWidth,30.0f},.enabled=!editor.aiModelInventoryPending});
                 if(choice.changed&&choice.selected_index){
                     editor.aiPendingModelSelection=models[*choice.selected_index];
+                    editor.aiAutomaticModelSelection=false;
                     ++editor.aiChatUserModelSelectionRevision;
                     (void)confirm_pending_ai_model(editor);
                 }
@@ -1082,22 +1103,34 @@
             for (const auto& retained : {activeModel, editor.aiPendingModelSelection})
                 if (!retained.empty() && !model_inventory_contains(models, retained))
                     models.push_back(retained);
+            std::vector<std::string> modelLabels;
+            modelLabels.reserve(models.size());
+            bool labelledVariants{};
+            for (const auto& modelId : models) {
+                const auto behavior = ai::model_behavior::classify_text(modelId);
+                labelledVariants = labelledVariants || behavior.flagged();
+                modelLabels.push_back(ai::model_behavior::choice_label(modelId, behavior));
+            }
             std::vector<std::string_view> modelViews{};
-            modelViews.reserve(models.size());
-            for (const auto& modelId : models)
-                modelViews.emplace_back(modelId);
+            modelViews.reserve(modelLabels.size());
+            for (const auto& label : modelLabels) modelViews.emplace_back(label);
+            if (labelledVariants)
+                gui::semantic_block(ai::model_behavior::warning, gui::SemanticTone::warning, contentWidth);
 
             const std::string selectedCandidate =
                 editor.aiPendingModelSelection.empty()
                     ? activeModel
                     : editor.aiPendingModelSelection;
+            std::string selectedLabel = selectedCandidate;
+            for (std::size_t index{}; index < models.size(); ++index)
+                if (models[index] == selectedCandidate) selectedLabel = modelLabels[index];
             const auto selectResult =
                 gui::select_box(gui::SelectBoxOptions{
                     .id = selectBoxId,
                     .placeholder = "Choose model",
-                    .selected = selectedCandidate.empty()
+                    .selected = selectedLabel.empty()
                         ? std::string_view{}
-                        : std::string_view{selectedCandidate},
+                        : std::string_view{selectedLabel},
                     .options = modelViews,
                     .size = {contentWidth, 30.0f},
                     .row_height = 30.0f,
@@ -1108,6 +1141,7 @@
             {
                 editor.aiPendingModelSelection =
                     models[*selectResult.selected_index];
+                editor.aiAutomaticModelSelection = false;
                 (void)confirm_pending_ai_model(editor);
             }
 

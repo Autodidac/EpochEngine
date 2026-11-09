@@ -1,5 +1,11 @@
 // Epoch feature implementation; included by editor.core application owner only.
 // SPDX-License-Identifier: LicenseRef-MIT-NoSell
+        [[nodiscard]] bool ai_project_package_request_current(const EditorState& editor) noexcept;
+        void finish_ai_project_package_request(EditorState& editor, std::string status, bool succeeded = false);
+        [[nodiscard]] bool ai_package_generation_awaiting_attachment(const EditorState& editor) noexcept;
+        void continue_ai_project_package_after_attachment(EditorState& editor);
+        [[nodiscard]] bool ai_project_package_generation_current(const EditorState& editor) noexcept;
+
         [[nodiscard]] static SeedObjectSummary summarize_seed_objects(std::span<const EditorSceneSeedEntity> seeds)
         {
             SeedObjectSummary summary{};
@@ -83,28 +89,94 @@
             }
             const std::string requestedProject{projectId};
             const std::string previousProject = editor.projectId;
-            (void)synchronize_gui_document(editor);
-            const std::optional<authoring::gui::GuiDocumentSnapshot>
+            if (project_gui_document_is_active(editor))
+                (void)synchronize_gui_document(editor);
+            const std::optional<authoring::gui::GuiDocument>
                 preservedGuiDocument =
                     editor.guiDocument && editor.guiDocument->valid()
-                    ? std::optional<authoring::gui::GuiDocumentSnapshot>{
-                        editor.guiDocument->snapshot()}
+                    ? std::optional<authoring::gui::GuiDocument>{
+                        *editor.guiDocument}
                     : std::nullopt;
+            // Shell refresh reloads disk state. Retain the authoritative owner,
+            // including semantic history, rather than only its visible vector.
+            const auto preservedSceneDocument = editor.sceneDocument;
+            const auto preservedSceneRevision = editor.sceneDocumentRevision;
+            const auto preservedProjectRoot = editor.projectRoot;
+            const auto preservedScenePath = editor.projectScenePath;
             const auto preservedGuiWidgets =
                 editor.guiDocumentWidgets;
+            const auto preservedGuiTombstones = editor.guiProjectionTombstones;
+            const auto preservedGuiSelectedWidget =
+                gui_widget_identity_matches(editor, editor.guiSelectedWidget,
+                    editor.guiSelectedWidget.widget)
+                ? editor.guiSelectedWidget.widget : authoring::gui::WidgetHandle{};
+            const auto preservedGuiContentWidget =
+                gui_widget_identity_matches(editor, editor.guiContentEditorWidget,
+                    editor.guiContentEditorWidget.widget)
+                ? editor.guiContentEditorWidget.widget : authoring::gui::WidgetHandle{};
+            const auto preservedGuiDocumentTab = editor.guiDocumentTab;
+            const auto preservedGuiCanvasView = editor.guiCanvasView;
+            const auto preservedGuiContentPrimary = editor.guiContentPrimary;
+            const auto preservedGuiContentSecondary = editor.guiContentSecondary;
+            const auto preservedGuiAction = editor.guiActionEditor;
+            const auto preservedGuiTooltip = editor.guiTooltipEditor;
             const std::uint64_t preservedGuiSavedRevision =
                 editor.guiDocumentSavedRevision;
             const std::vector<EditorEntity> preservedEntities = editor.entities;
             const std::size_t preservedSelected = editor.selectedEntity;
+            const auto preservedSelectedId = editor.selectedEntityId;
+            const auto preservedSelectedIds = editor.selectedEntityIds;
             const auto preservedPreviewMode = editor.previewMode;
             const auto preservedWorkspaceTab = editor.workspaceTab;
+            const auto preservedProjectWorkspaceSection = editor.projectWorkspaceSection;
             const auto preservedDockStatusTab = editor.dockStatusTab;
             const auto preservedMainSurface = editor.mainSurface;
+            const auto preservedForestTerrainPainting = editor.forestTerrainPainting;
             const auto preservedCanvas2DProject = editor.canvas2dProject;
             const auto preservedProjectCameraMode = editor.projectCameraMode;
+            const auto preservedViewportCameraMode = editor.viewportCameraMode;
+            const auto preservedGuiWorkspace = editor.game2DGuiWorkspace;
+            const auto preservedOutlinerTab = editor.outlinerToolTab;
+            const auto preservedInspectorTab = editor.inspectorToolTab;
+            const auto preservedCompanionsPending = editor.workspaceCompanionsPending;
+            const auto preservedShowOutliner = editor.showOutliner;
+            const auto preservedShowInspector = editor.showInspector;
+            const auto preservedShowConsole = editor.showConsoleDock;
+            const auto preservedShowAssistant = editor.showAiChat;
+            const auto preservedHelpers = editor.helpersVisible;
+            const auto preservedAiSurface = editor.aiAuthoringSurface;
+            const auto preservedAiSurfaceRestore = editor.aiAuthoringSurfaceRestoreQueued;
             const auto preservedInputProfile = editor.inputProfilePreset;
             const std::string preservedRunBackend = editor.projectRunBackend;
             const double preservedRunFrameLimit = editor.projectRunFrameLimitFps;
+            const auto preservedProjectFrameLimitEdit = editor.projectFrameLimitEdit;
+            const auto preservedPlanetarySettings = editor.planetarySettings;
+            const auto preservedPlanetarySeedDraft = editor.planetarySeedDraft;
+            const auto preservedPlanetaryRadiusDraft = editor.planetaryRadiusDraft;
+            const auto preservedPlanetaryRadiusSynced = editor.planetaryRadiusSynced;
+            const auto preservedPlanetaryRadiusReferenceSynced = editor.planetaryRadiusReferenceSynced;
+            const auto preservedPlanetaryCheckedRoot = editor.planetaryCheckedRoot;
+            const auto preservedPlanetaryAttachment = editor.planetaryAttachment;
+            const auto preservedPlanetaryMeshPolicy = editor.planetaryMeshPolicy;
+            const auto preservedPlanetaryBodySelection = editor.planetaryBodySelection;
+            const auto preservedPlanetaryInitialFramePending = editor.planetaryInitialFramePending
+                && editor.planetaryInitialFrameGeneration
+                    == editor.projectLifecycle.evidence().generations.selected_project.generation;
+            // Refreshing the same project's shell is not a goal cancellation.
+            // Retain progress only for its exact current selection; approvals
+            // and pending model requests deliberately remain reset below.
+            const bool preservedToolGoalCurrent = editor.aiGoalActive && editor.aiGoalRunning
+                && editor.aiGoalTools.enabled && !editor.aiGoalTools.stopped
+                && !editor.aiGoalTools.operation().empty()
+                && !editor.projectId.empty() && !editor.projectRoot.empty()
+                && editor.aiGoalTools.project_id == editor.projectId
+                && editor.aiGoalTools.project_root == editor.projectRoot
+                && editor.aiGoalTools.project_generation
+                    == editor.projectLifecycle.evidence().generations.selected_project.generation;
+            const auto preservedToolGoal = editor.aiGoal;
+            const auto preservedToolSequence = editor.aiGoalTools;
+            const auto preservedToolGoalNextQueued = editor.aiGoalPlanNextQueued;
+            const auto preservedToolGoalReceipt = editor.aiGoalLastMilestoneReceipt;
             const bool isSandbox = requestedProject == "sandbox";
             const auto ensured = editor_ensure_project_shell(requestedProject);
             editor.projectStatus = ensured.summary;
@@ -119,25 +191,74 @@
                     push_editor_log(editor, "[project] " + editor.projectStatus);
                     return;
                 }
-                if (targetProject == previousProject)
+                if (targetProject == previousProject
+                    && editor.projectRoot == preservedProjectRoot
+                    && editor.projectScenePath == preservedScenePath)
                 {
                     editor.previewMode = preservedPreviewMode;
                     editor.workspaceTab = preservedWorkspaceTab;
+                    editor.projectWorkspaceSection = preservedProjectWorkspaceSection;
                     editor.dockStatusTab = preservedDockStatusTab;
                     editor.mainSurface = preservedMainSurface;
+                    editor.forestTerrainPainting = preservedForestTerrainPainting;
                     editor.canvas2dProject = preservedCanvas2DProject;
                     editor.projectCameraMode = preservedProjectCameraMode;
+                    // Saving refreshes project metadata; it is not an explicit
+                    // workspace choice. Do not queue default companion panes or
+                    // replace the user's GUI view with the application's start view.
+                    editor.viewportCameraMode = preservedViewportCameraMode;
+                    editor.game2DGuiWorkspace = preservedGuiWorkspace;
+                    editor.outlinerToolTab = preservedOutlinerTab;
+                    editor.inspectorToolTab = preservedInspectorTab;
+                    editor.workspaceCompanionsPending = preservedCompanionsPending;
+                    editor.showOutliner = preservedShowOutliner;
+                    editor.showInspector = preservedShowInspector;
+                    editor.showConsoleDock = preservedShowConsole;
+                    editor.showAiChat = preservedShowAssistant;
+                    editor.helpersVisible = preservedHelpers;
+                    editor.aiAuthoringSurface = preservedAiSurface;
+                    editor.aiAuthoringSurfaceRestoreQueued = preservedAiSurfaceRestore;
                     editor.inputProfilePreset = preservedInputProfile;
                     editor.projectRunBackend = preservedRunBackend;
                     editor.projectRunFrameLimitFps = preservedRunFrameLimit;
+                    editor.projectFrameLimitEdit = preservedProjectFrameLimitEdit;
+                    editor.planetarySettings = preservedPlanetarySettings;
+                    editor.planetarySeedDraft = preservedPlanetarySeedDraft;
+                    editor.planetaryRadiusDraft = preservedPlanetaryRadiusDraft;
+                    editor.planetaryRadiusSynced = preservedPlanetaryRadiusSynced;
+                    editor.planetaryRadiusReferenceSynced = preservedPlanetaryRadiusReferenceSynced;
+                    editor.planetaryCheckedRoot = preservedPlanetaryCheckedRoot;
+                    editor.planetaryAttachment = preservedPlanetaryAttachment;
+                    editor.planetaryMeshPolicy = preservedPlanetaryMeshPolicy;
+                    editor.planetaryBodySelection = preservedPlanetaryBodySelection;
+                    // Reloading metadata for Save is not another initial open.
+                    // A new orbit request would replace the context-owned view
+                    // and its precise navigation origin on the next frame.
+                    editor.planetaryInitialFramePending = preservedPlanetaryInitialFramePending;
+                    editor.planetaryInitialFrameGeneration = preservedPlanetaryInitialFramePending
+                        ? editor.projectLifecycle.evidence().generations.selected_project.generation : 0u;
+                    if (preservedToolGoalCurrent
+                        && editor.projectLifecycle.evidence().generations.selected_project.generation
+                            == preservedToolSequence.project_generation)
+                    {
+                        editor.aiGoal = preservedToolGoal;
+                        editor.aiGoalDraft = preservedToolGoal;
+                        editor.aiGoalTools = preservedToolSequence;
+                        editor.aiGoalActive = editor.aiGoalRunning = true;
+                        editor.aiGoalCompletedMilestones = preservedToolSequence.stage;
+                        editor.aiGoalPlanNextQueued = preservedToolGoalNextQueued;
+                        editor.aiGoalLastMilestoneReceipt = preservedToolGoalReceipt;
+                    }
                     input::set_active_profile(editor.inputProfilePreset);
 
-                    if (!preservedEntities.empty())
-                    {
-                        editor.entities = preservedEntities;
-                        select_editor_entity(editor, (std::min)(preservedSelected, editor.entities.size() - 1u));
-                        normalize_editor_entity_ids(editor);
-                    }
+                    editor.sceneDocument = preservedSceneDocument;
+                    editor.sceneDocumentRevision = preservedSceneRevision;
+                    editor.entities = preservedEntities;
+                    editor.selectedEntity = preservedSelected;
+                    editor.selectedEntityId = preservedSelectedId;
+                    editor.selectedEntityIds = preservedSelectedIds;
+                    synchronize_editor_selection(editor);
+                    editor.sceneInteractionDirty = editor.sceneLightingDirty = true;
                     if (preservedGuiDocument)
                     {
                         try
@@ -154,12 +275,28 @@
                                     editor.guiDocument->roots().front();
                                 editor.guiDocumentWidgets =
                                     preservedGuiWidgets;
+                                editor.guiProjectionTombstones = preservedGuiTombstones;
                                 editor.guiDocumentSavedRevision =
                                     preservedGuiSavedRevision;
                                 editor.guiDocumentLoadAttempted = true;
                                 editor.guiDocumentSourcePath =
                                     display_project_path(
                                         project_gui_document_path(editor));
+                                editor.guiDocumentTab = preservedGuiDocumentTab;
+                                editor.guiCanvasView = preservedGuiCanvasView;
+                                editor.guiCanvasView.drag = {};
+                                if (editor.guiDocument->widget(preservedGuiSelectedWidget))
+                                    editor.guiSelectedWidget = gui_widget_identity(
+                                        editor, preservedGuiSelectedWidget);
+                                if (editor.guiDocument->widget(preservedGuiContentWidget))
+                                {
+                                    editor.guiContentEditorWidget = gui_widget_identity(
+                                        editor, preservedGuiContentWidget);
+                                    editor.guiContentPrimary = preservedGuiContentPrimary;
+                                    editor.guiContentSecondary = preservedGuiContentSecondary;
+                                    editor.guiActionEditor = preservedGuiAction;
+                                    editor.guiTooltipEditor = preservedGuiTooltip;
+                                }
                             }
                         }
                         catch (...)
@@ -170,7 +307,7 @@
                     }
                 }
                 (void)project_gui_document_layout(editor);
-                if (!save_project_gui_document(editor)
+                if (!save_project_gui_document(editor, false)
                     || !save_editor_scene_snapshot(editor))
                 {
                     editor.projectStatus =
@@ -180,6 +317,7 @@
                         "[project] " + editor.projectStatus);
                     return;
                 }
+                if (!persist_project_run_settings(editor)) return;
                 editor.projectStatus = ensured.summary + " Active project saved.";
                 editor.aiContinuousBuildStatus = isSandbox
                     ? "Sandbox evidence saved; queue a engine development build to stage verifier evidence."
@@ -521,7 +659,8 @@
                     published.diagnostic =
                         "unknown background verification failure";
                 }
-                if (!published.accepted() && !published.artifact.empty())
+                if (!published.accepted() && !published.artifact.empty()
+                    && !editor.packageModelInstall->stagingRoot.empty())
                 {
                     std::error_code removeError{};
                     std::filesystem::remove(
@@ -529,12 +668,39 @@
                             / published.artifact,
                         removeError);
                 }
-                editor.packageInstallStatus = published.accepted()
+                const auto& operation = *editor.packageModelInstall;
+                if (!operation.registrationOfferId.empty())
+                {
+                    namespace catalog = epoch_ai::model::catalog;
+                    const auto* offer = catalog::find(operation.registrationOfferId);
+                    const auto expected = offer && catalog::download_allowed(*offer)
+                        ? ai::model_install::plan_for(offer->package_id) : std::nullopt;
+                    const auto expectedRoot = expected
+                        ? ai::model_install::version_root(operation.cacheRoot, *expected)
+                        : std::filesystem::path{};
+                    const bool exact = expected && *expected == operation.plan
+                        && !expectedRoot.empty() && published.accepted()
+                        && published.installed_root == expectedRoot
+                        && published.receipt_path == expectedRoot / ai::model_install::receipt_filename;
+                    const bool queued = !operation.cancelled && exact
+                        && ai::native_runtime::register_model(operation.registrationOfferId,
+                            display_project_path(expectedRoot / expected->artifacts.front().file), true);
+                    editor.packageInstallStatus = operation.cancelled
+                        ? "Registration cancelled. Cached files were left in place; no registration was queued."
+                        : queued ? "Verified model registration queued with initial 8K context and one slot. No model was loaded or selected."
+                        : "Model registration was not queued: "
+                            + (exact ? std::string{"the native queue is busy; retry when idle."}
+                                : "snapshot verification or identity failed. " + published.diagnostic);
+                    editor.packageInstallProgress = queued ? 1.0f : 0.0f;
+                }
+                else editor.packageInstallStatus = operation.cancelled
+                    ? "Download request cancelled. Verified files may have finished publishing; no model was registered or loaded."
+                    : published.accepted()
                     ? "Model add-on installed and verified. Activation remains a separate explicit action."
                     : "Model install failed during verified publication: "
                         + published.diagnostic;
-                editor.packageInstallProgress =
-                    published.accepted() ? 1.0f : 0.0f;
+                if (operation.registrationOfferId.empty())
+                    editor.packageInstallProgress = !operation.cancelled && published.accepted() ? 1.0f : 0.0f;
                 push_editor_log(
                     editor,
                     std::string{"[package] "}
@@ -589,6 +755,13 @@
                 && observed->exit_code == 0;
             (void)platform::child_process::release(observed->handle);
             install.process = {};
+            if (install.cancelled)
+            {
+                editor.packageInstallStatus = "Model download cancelled; partial bytes remain resumable. No model was loaded.";
+                editor.packageInstallProgress = 0.0f;
+                editor.packageModelInstall.reset();
+                return;
+            }
             if (!exitedCleanly)
             {
                 editor.packageInstallStatus =
@@ -631,7 +804,9 @@
 
         [[nodiscard]] bool start_model_package_install(
             EditorState& editor,
-            const package_registry::PackageDescriptor& package)
+            const package_registry::PackageDescriptor& package,
+            bool forceBackgroundVerification = false,
+            const std::filesystem::path& cacheOverride = {})
         {
             if (editor.packageModelInstall)
             {
@@ -646,13 +821,14 @@
                     "This build has no compiled install plan for the selected model.";
                 return false;
             }
-            const std::filesystem::path cache = model_cache_root_path();
+            const std::filesystem::path cache = cacheOverride.empty()
+                ? model_cache_root_path() : cacheOverride;
             const std::filesystem::path installed =
                 ai::model_install::version_root(cache, *plan);
             std::error_code error{};
             if (std::filesystem::exists(installed, error) && !error)
             {
-                if (model_snapshot_installed(*plan))
+                if (!forceBackgroundVerification && model_snapshot_installed(*plan))
                 {
                     editor.packageInstallStatus =
                         "The exact model add-on is already installed and verified.";
@@ -686,6 +862,1205 @@
                 .totalBytes = model_plan_bytes(*plan)});
             editor.packageInstallProgress = 0.0f;
             return launch_next_model_artifact(editor);
+        }
+
+        [[nodiscard]] bool start_model_offer_install(EditorState& editor, std::string_view offerId)
+        {
+            const auto* offer = epoch_ai::model::catalog::find(offerId);
+            if (!offer || !epoch_ai::model::catalog::download_allowed(*offer))
+            {
+                editor.packageInstallStatus = "This researched model is not offered for installation on this target.";
+                return false;
+            }
+            const auto cache = ai::native_runtime::model_install_cache_root();
+            if (cache.empty())
+            {
+                editor.packageInstallStatus = "Native model downloads are read-only in this runtime. Use the owning Editor.";
+                return false;
+            }
+            package_registry::PackageDescriptor package{};
+            package.id = std::string{offer->package_id};
+            return start_model_package_install(editor, package, true, cache);
+        }
+
+        [[nodiscard]] bool start_model_offer_registration(EditorState& editor, std::string_view offerId)
+        {
+            const auto* offer = epoch_ai::model::catalog::find(offerId);
+            const auto plan = offer && epoch_ai::model::catalog::download_allowed(*offer)
+                ? ai::model_install::plan_for(offer->package_id) : std::nullopt;
+            if (editor.packageModelInstall || !plan || plan->artifacts.size() != 1u
+                || plan->revision != offer->revision || plan->artifacts.front().file != offer->filename
+                || plan->artifacts.front().bytes != offer->bytes || plan->artifacts.front().sha256 != offer->sha256)
+            {
+                editor.packageInstallStatus = "Finish the active transfer or choose an eligible pinned model before registration.";
+                return false;
+            }
+            const auto cache = ai::native_runtime::model_install_cache_root();
+            if (cache.empty())
+            {
+                editor.packageInstallStatus = "Native model registration is read-only in this runtime. Use the owning Editor.";
+                return false;
+            }
+            EditorModelInstallState operation{};
+            operation.plan = *plan;
+            operation.cacheRoot = cache;
+            operation.registrationOfferId = std::string{offerId};
+            try
+            {
+                operation.publishPending.emplace(schedule_editor_task(editor,
+                    "Verify candidate model snapshot before registration",
+                    [cache, plan = *plan] { return ai::model_install::verify_snapshot(cache, plan); }));
+                editor.packageModelInstall.emplace(std::move(operation));
+            }
+            catch (const std::exception& error)
+            {
+                editor.packageInstallStatus = "Model verification could not be queued: " + std::string{error.what()};
+                return false;
+            }
+            editor.packageInstallStatus = "Checking the exact receipt and complete weight SHA-256 in the background; no model will be loaded.";
+            editor.packageInstallProgress = 0.0f;
+            return true;
+        }
+
+        void cancel_model_offer_operation(EditorState& editor)
+        {
+            if (!editor.packageModelInstall) return;
+            editor.packageModelInstall->cancelled = true;
+            if (editor.packageModelInstall->process.valid())
+                (void)platform::child_process::stop(editor.packageModelInstall->process,
+                    platform::child_process::StopMode::graceful);
+            editor.packageInstallStatus = "Cancellation requested. Verification may finish safely; registration will not be queued.";
+        }
+
+        [[nodiscard]] bool package_source_task_busy(const EditorState& editor) noexcept
+        {
+            return editor.packageSourceTask && editor.packageSourceTask->busy();
+        }
+
+        void cancel_package_source_task(EditorState& editor)
+        {
+            editor.packageSourceReviewCurrent = false;
+            if (editor.planetaryFeatureRequest)
+            {
+                editor.planetaryFeatureRequest.reset();
+                if (editor.taskScheduler && editor.planetaryCancellation.valid())
+                    (void)editor.taskScheduler->cancel(editor.planetaryCancellation);
+                editor.planetaryStatus = "Water review cancelled. Requested settings and existing project source are retained; nothing will build.";
+                if (editor.aiPackageRequest) finish_ai_project_package_request(editor, editor.planetaryStatus);
+            }
+            if (editor.aiPackageRequest
+                && editor.aiPackageRequest->phase == EditorState::AiPackageRequest::Phase::review)
+                finish_ai_project_package_request(editor, "Package review cancelled. No terrain build was started.");
+            else if (editor.aiPackageRequest
+                && editor.aiPackageRequest->phase == EditorState::AiPackageRequest::Phase::attaching
+                && !editor.aiPackageRequest->cancelled)
+            {
+                editor.aiPackageRequest->cancelled = true;
+                if (editor.taskScheduler && editor.planetaryCancellation.valid())
+                    (void)editor.taskScheduler->cancel(editor.planetaryCancellation);
+                editor.aiToolStatus = "Cancelling the approved source copy; terrain will not be built.";
+            }
+            if (!package_source_task_busy(editor)) return;
+            editor.packageSourceTask->cancellation.request_stop();
+            editor.packageSourceStatus = "Cancelling the local source operation...";
+        }
+
+        [[nodiscard]] bool package_source_task_current(const EditorState& editor,
+            const EditorPackageSourceTask& task) noexcept
+        {
+            return !task.cancellation.stop_requested()
+                && task.expectedPackageId == editor.packageSourceExpectedId
+                && task.projectGeneration
+                    == editor.projectLifecycle.evidence().generations.selected_project.generation;
+        }
+
+        void poll_package_source_task(EditorState& editor)
+        {
+            if (!editor.packageSourceTask) return;
+            auto& task = *editor.packageSourceTask;
+            try
+            {
+                if (task.cachedInspection && task.cachedInspection->wait_for(0ms) == std::future_status::ready)
+                {
+                    auto cached = task.cachedInspection->get();
+                    task.cachedInspection.reset();
+                    if (package_source_task_current(editor, task) && cached.review_ready()
+                        && cached.inspection.registry_package_id == editor.packageSourceExpectedId)
+                    {
+                        editor.packageSourceFileLines.clear();
+                        const auto path = cached.inspection.manifest_path.generic_u8string();
+                        editor.packageSourcePathDraft.assign(path.begin(), path.end());
+                        for (const auto& file : cached.inspection.files)
+                            editor.packageSourceFileLines.push_back(file.relative_path + " (" + std::to_string(file.bytes) + " bytes)");
+                        editor.packageSourceReview = std::move(cached.inspection);
+                        editor.packageSourceStaged = std::move(cached.staged);
+                        editor.packageSourceReviewCurrent = true;
+                        editor.packageSourceStatus = "Local package verified. Review the files, then add it to your project or create a terrain project. Nothing has been built or run.";
+                    }
+                    else
+                    {
+                        editor.packageSourceReviewCurrent = false;
+                        editor.packageSourceStatus = cached.inspection.review_ready()
+                            ? cached.staged.message : cached.inspection.message;
+                        if (editor.packageSourceReview && editor.packageSourceReview->review_ready()
+                            && editor.packageSourceReview->registry_package_id == editor.packageSourceExpectedId
+                            && editor.packageSourceStaged.source_staged())
+                            editor.packageSourceStatus += " Previous reviewed source is retained; this review did not update it.";
+                        else
+                        {
+                            editor.packageSourceReview.reset();
+                            editor.packageSourceFileLines.clear();
+                            editor.packageSourceStaged = {};
+                        }
+                    }
+                    push_editor_log(editor, "[package] " + editor.packageSourceStatus);
+                }
+                if (task.inspection && task.inspection->wait_for(0ms) == std::future_status::ready)
+                {
+                    auto review = task.inspection->get();
+                    task.inspection.reset();
+                    const auto* descriptor = package_registry::find(review.registry_package_id);
+                    if (!package_source_task_current(editor, task) || (review.review_ready() && (!descriptor
+                        || package_registry::catalog_section(review.registry_package_id) != package_registry::CatalogSection::ProjectPackages
+                        || (!editor.packageSourceExpectedId.empty() && editor.packageSourceExpectedId != review.registry_package_id))))
+                    {
+                        editor.packageSourceStatus = "This manifest does not match the selected project package. Choose its matching manifest or use Local Source for another package.";
+                        editor.packageSourceReview.reset();
+                        editor.packageSourceReviewCurrent = false;
+                    }
+                    else
+                    {
+                        editor.packageSourceStatus = review.review_ready()
+                            ? "Source checked. Review its purpose, license and files before approving a local copy."
+                            : review.message;
+                        editor.packageSourceFileLines.clear();
+                        if (review.review_ready())
+                            for (const auto& file : review.files)
+                                editor.packageSourceFileLines.push_back(file.relative_path + " (" + std::to_string(file.bytes) + " bytes)");
+                        editor.packageSourceReview = std::move(review);
+                        editor.packageSourceReviewCurrent = editor.packageSourceReview->review_ready();
+                    }
+                }
+                if (task.staging && task.staging->wait_for(0ms) == std::future_status::ready)
+                {
+                    auto staged = task.staging->get();
+                    task.staging.reset();
+                    if (!package_source_task_current(editor, task))
+                    {
+                        editor.packageSourceReviewCurrent = false;
+                        editor.packageSourceStatus = "The package, project or source operation changed. Review the source again before approval.";
+                    }
+                    else
+                    {
+                        editor.packageSourceStaged = std::move(staged);
+                        editor.packageSourceStatus = editor.packageSourceStaged.source_staged()
+                            ? "Source staged in the local package cache. It has not been built, run or activated in a project."
+                            : editor.packageSourceStaged.message;
+                    }
+                    push_editor_log(editor, "[package] " + editor.packageSourceStatus);
+                }
+            }
+            catch (...)
+            {
+                editor.packageSourceReviewCurrent = false;
+                task.cancellation.request_stop();
+                task.inspection.reset();
+                task.cachedInspection.reset();
+                task.staging.reset();
+                editor.packageSourceStatus = "The local source operation failed. Its source and existing staged copies were not replaced.";
+                push_editor_log(editor, "[package] " + editor.packageSourceStatus);
+            }
+            if (!task.busy()) editor.packageSourceTask.reset();
+        }
+
+        void open_package_source_review(EditorState& editor, std::string expected_package_id = {})
+        {
+            if (package_source_task_busy(editor)) return;
+            editor.packageSourceReviewCurrent = false;
+            editor.packageSourceView = true;
+            if (editor.packageSourceExpectedId != expected_package_id)
+            {
+                editor.packageSourceReview.reset();
+                editor.packageSourceFileLines.clear();
+                editor.packageSourceStaged = {};
+            }
+            editor.packageSourceExpectedId = std::move(expected_package_id);
+            if (editor.packageSourceExpectedId.empty()) return;
+            auto root = core::path::candidate_data_root();
+            if (root.empty()) root = core::path::executable_dir();
+            if (root.empty())
+            {
+                editor.packageSourceStatus = "The local package cache is unavailable.";
+                return;
+            }
+            editor.packageSourceStatus = "Checking this extension's local package files...";
+            try
+            {
+                editor.packageSourceTask = std::make_unique<EditorPackageSourceTask>();
+                editor.packageSourceTask->expectedPackageId = editor.packageSourceExpectedId;
+                editor.packageSourceTask->projectGeneration = editor.projectLifecycle.evidence().generations.selected_project.generation;
+                const auto cancellation = editor.packageSourceTask->cancellation.get_token();
+                const auto repository = core::path::find_epoch_repo_root(core::path::executable_dir());
+                editor.packageSourceTask->cachedInspection.emplace(std::async(std::launch::async,
+                    [cache = root / "cache" / "packages",
+                        extensions = repository.empty() ? std::filesystem::path{}
+                            : repository / "Engine" / "dep" / "EpochEngineExtensions",
+                        id = editor.packageSourceExpectedId, cancellation] {
+                        return package_source::inspect_available_source(cache, extensions, id, cancellation);
+                    }));
+            }
+            catch (...)
+            {
+                editor.packageSourceTask.reset();
+                editor.packageSourceStatus = "The local package could not be checked. No files were added.";
+            }
+        }
+
+        void start_package_source_inspection(EditorState& editor)
+        {
+            if (package_source_task_busy(editor)) return;
+            editor.packageSourceReviewCurrent = false;
+            editor.packageSourceView = true;
+            if (editor.packageSourcePathDraft.empty())
+            {
+                editor.packageSourceStatus = "Enter the path to a .epoch-package.json manifest first.";
+                return;
+            }
+            editor.packageSourceReview.reset();
+            editor.packageSourceFileLines.clear();
+            editor.packageSourceStaged = {};
+            editor.packageSourceTechnicalDetails = false;
+            editor.packageSourceStatus = "Checking the selected manifest and its source files...";
+            try
+            {
+                const std::filesystem::path manifest{std::u8string{editor.packageSourcePathDraft.begin(), editor.packageSourcePathDraft.end()}};
+                editor.packageSourceTask = std::make_unique<EditorPackageSourceTask>();
+                editor.packageSourceTask->expectedPackageId = editor.packageSourceExpectedId;
+                editor.packageSourceTask->projectGeneration = editor.projectLifecycle.evidence().generations.selected_project.generation;
+                const auto cancellation = editor.packageSourceTask->cancellation.get_token();
+                editor.packageSourceTask->inspection.emplace(std::async(std::launch::async,
+                    [manifest, cancellation] {
+                        return package_source::inspect_local_source(manifest, cancellation);
+                    }));
+            }
+            catch (...)
+            {
+                editor.packageSourceTask.reset();
+                editor.packageSourceStatus = "Could not start the local source check. Check the path and try again. No files were staged.";
+            }
+        }
+
+        void browse_package_source(EditorState& editor)
+        {
+            if (package_source_task_busy(editor)) return;
+            const auto chosen = platform::filesystem::open_file_dialog(
+                L"Review a local add-on source package", L"Epoch package manifest", L"*.epoch-package.json");
+            if (!chosen.accepted)
+            {
+                if (!chosen.cancelled) editor.packageSourceStatus = chosen.diagnostic;
+                return;
+            }
+            const auto utf8 = chosen.path.generic_u8string();
+            editor.packageSourcePathDraft.assign(utf8.begin(), utf8.end());
+            start_package_source_inspection(editor);
+        }
+
+        [[nodiscard]] bool planetary_project_busy(const EditorState& editor) noexcept
+        {
+            return editor.planetaryAttachmentPending.has_value() || editor.planetaryGeneratePending.has_value()
+                || editor.planetaryStreamPending.has_value() || editor.planetaryFeatureReviewPending.has_value()
+                || editor.planetaryFeatureAdmissionPending.has_value() || editor.waterAttachmentPending.has_value();
+        }
+
+        void cancel_planetary_project_task(EditorState& editor)
+        {
+            editor.planetaryFeatureRequest.reset();
+            if (planetary_project_busy(editor) && editor.taskScheduler)
+            {
+                (void)editor.taskScheduler->cancel(editor.planetaryCancellation);
+                editor.planetaryStreamContinue = false;
+                editor.planetaryStreamFailed = true;
+                editor.planetaryStatus = "Cancelling the owned planetary operation...";
+                if (editor.aiPackageRequest)
+                {
+                    editor.aiPackageRequest->cancelled = true;
+                    editor.aiToolStatus = "Cancelling the package/terrain request; no late result will be imported.";
+                }
+            }
+        }
+
+        [[nodiscard]] std::uint64_t planetary_project_key(const EditorState& editor) noexcept
+        {
+            return editor.projectLifecycle.evidence().generations.selected_project.project_key;
+        }
+
+        void start_admitted_planetary_generation(EditorState& editor);
+
+        void save_admitted_planetary_settings(EditorState& editor)
+        {
+            const auto root = resolve_editor_path(std::filesystem::path{editor.projectRoot});
+            const bool saved = project_planetary::save_settings(root, editor.planetarySettings)
+                && project_planetary::load_settings(root) == editor.planetarySettings;
+            if (saved) refresh_editor_planetary_mesh_policy(editor);
+            editor.planetaryStatus = saved
+                ? "Requested planetary settings saved. The displayed mesh may still be from the previous generation. Choose Build & Generate to apply them."
+                : "Could not save the planetary settings. Existing files were retained.";
+        }
+
+        [[nodiscard]] bool planetary_feature_request_current(const EditorState& editor)
+        {
+            if (!editor.planetaryFeatureRequest) return false;
+            const auto& request = *editor.planetaryFeatureRequest;
+            return request.project_root == editor.projectRoot && request.project_key == planetary_project_key(editor)
+                && request.project_generation == editor.projectLifecycle.evidence().generations.selected_project.generation
+                && request.owner_hash == editor.planetaryAttachment.content_hash
+                && request.settings == editor.planetarySettings && !editor.projectBuildPending && !editor.scriptBuildPending;
+        }
+
+        void approve_planetary_water_source(EditorState& editor)
+        {
+            if (planetary_project_busy(editor) || !planetary_feature_request_current(editor)
+                || !editor.planetaryFeatureRequest->reviewed)
+            {
+                editor.packageSourceStatus = "Project, source or settings changed. Choose Save Settings or Build & Generate to review Water again.";
+                return;
+            }
+            const auto reviewed = *editor.planetaryFeatureRequest->reviewed;
+            const auto hash = reviewed.needs_approval() ? reviewed.dependency.inspection.content_hash : std::string{};
+            try
+            {
+                auto submitted = schedule_editor_cancellable_task(editor, "Include reviewed Water source for planetary ocean",
+                    [reviewed, hash](std::stop_token cancellation) {
+                        return package_source::admit_project_feature(reviewed, hash, cancellation);
+                    });
+                editor.planetaryCancellation = submitted.cancellation;
+                editor.planetaryFeatureAdmissionPending.emplace(std::move(submitted.completion));
+                editor.packageSourceReviewCurrent = false;
+                editor.packageSourceStatus = "Including the approved Water source automatically. Cancel remains available; existing source is never replaced.";
+            }
+            catch (...) { editor.packageSourceStatus = "Water source admission could not start. Settings and preview are retained."; }
+        }
+
+        void request_planetary_feature_action(EditorState& editor, bool generate)
+        {
+            if (planetary_project_busy(editor) || package_source_task_busy(editor))
+            { editor.planetaryStatus = "Settings have not been saved: finish or cancel the active terrain/package task, then retry. Your requested settings are retained."; return; }
+            if (editor.projectRoot.empty())
+            { editor.planetaryStatus = "Settings have not been saved: open a project first."; return; }
+            if (!editor.planetarySettings.ocean_surface)
+            {
+                editor.planetaryFeatureRequest.reset();
+                if (generate) start_admitted_planetary_generation(editor);
+                else save_admitted_planetary_settings(editor);
+                return;
+            }
+            if (editor.projectBuildPending || editor.scriptBuildPending)
+            { editor.planetaryStatus = "Finish or cancel the current project/script build before reviewing Water source. Requested settings are retained."; return; }
+            const auto root = resolve_editor_path(std::filesystem::path{editor.projectRoot});
+            auto cacheRoot = core::path::candidate_data_root();
+            if (cacheRoot.empty()) cacheRoot = core::path::executable_dir();
+            const auto repository = core::path::find_epoch_repo_root(core::path::executable_dir());
+            if (cacheRoot.empty()) { editor.planetaryStatus = "Water source cache is unavailable. Settings are retained."; return; }
+            editor.planetaryFeatureRequest = EditorState::PlanetaryFeatureRequest{
+                .project_root=editor.projectRoot, .owner_hash=editor.planetaryAttachment.content_hash,
+                .project_key=planetary_project_key(editor),
+                .project_generation=editor.projectLifecycle.evidence().generations.selected_project.generation,
+                .settings=editor.planetarySettings, .generate=generate};
+            try
+            {
+                auto submitted = schedule_editor_cancellable_task(editor, "Check Water prerequisite for planetary ocean",
+                    [root, cache=cacheRoot/"cache"/"packages", extensions=repository.empty()?std::filesystem::path{}
+                        :repository/"Engine"/"dep"/"EpochEngineExtensions"](std::stop_token cancellation) {
+                        return package_source::review_project_feature(root, "research_planetary_terrain",
+                            package_source::SourceFeature::planetary_ocean, true, cache, extensions, cancellation);
+                    });
+                editor.planetaryCancellation = submitted.cancellation;
+                editor.planetaryFeatureReviewPending.emplace(std::move(submitted.completion));
+                editor.planetaryStatus = "Ocean is On: Water (FFT Ocean) will be included automatically after its source approval. Checking this project's dependencies...";
+            }
+            catch (...) { editor.planetaryFeatureRequest.reset(); editor.planetaryStatus = "Could not check Water source. Nothing was saved or built."; }
+        }
+
+        void poll_planetary_feature_task(EditorState& editor)
+        {
+            if (editor.planetaryFeatureReviewPending && editor.planetaryFeatureReviewPending->wait_for(0ms) == std::future_status::ready)
+            {
+                auto reviewed = editor.planetaryFeatureReviewPending->get();
+                editor.planetaryFeatureReviewPending.reset();
+                if (!planetary_feature_request_current(editor))
+                {
+                    editor.planetaryFeatureRequest.reset();
+                    editor.planetaryStatus = "Water review discarded because the project, source or settings changed. Nothing was saved or built.";
+                    if (editor.aiPackageRequest) finish_ai_project_package_request(editor, editor.planetaryStatus);
+                    return;
+                }
+                if ((!reviewed.needs_approval() && !reviewed.sources_admitted())
+                    || reviewed.owner.content_hash != editor.planetaryFeatureRequest->owner_hash)
+                {
+                    editor.planetaryFeatureRequest.reset();
+                    editor.planetaryStatus = "Water is required with Ocean On: " + reviewed.message + " Choose Ocean Off for a dry planet.";
+                    if (editor.aiPackageRequest) finish_ai_project_package_request(editor, editor.planetaryStatus);
+                    return;
+                }
+                editor.planetaryFeatureRequest->reviewed = reviewed;
+                if (reviewed.sources_admitted()) { approve_planetary_water_source(editor); return; }
+                editor.packageSourceExpectedId = "research_fft_ocean";
+                editor.packageSourceReview = reviewed.dependency.inspection;
+                editor.packageSourceStaged = reviewed.dependency.staged;
+                editor.packageSourceFileLines.clear();
+                for (const auto& file : reviewed.dependency.inspection.files)
+                    editor.packageSourceFileLines.push_back(file.relative_path + " (" + std::to_string(file.bytes) + " bytes)");
+                editor.packageSourceReviewCurrent = true;
+                editor.packageSourceView = true;
+                editor.showPackageManagerModal = true;
+                editor.packageSourceStatus = "Planet with Ocean On requires Water (FFT Ocean). Approve these exact files once; Water will be included automatically before your requested save or build. Cancel keeps the existing project.";
+            }
+            if (editor.planetaryFeatureAdmissionPending && editor.planetaryFeatureAdmissionPending->wait_for(0ms) == std::future_status::ready)
+            {
+                const auto admitted = editor.planetaryFeatureAdmissionPending->get();
+                editor.planetaryFeatureAdmissionPending.reset();
+                if (!planetary_feature_request_current(editor) || !admitted.sources_admitted())
+                {
+                    editor.planetaryFeatureRequest.reset();
+                    editor.planetaryStatus = admitted.sources_admitted()
+                        ? "Approved Water source retained; project or settings changed, so nothing was saved or built."
+                        : "Water admission refused: " + admitted.message;
+                    editor.packageSourceStatus = editor.planetaryStatus;
+                    if (editor.aiPackageRequest) finish_ai_project_package_request(editor, editor.planetaryStatus);
+                    return;
+                }
+                const bool generate = editor.planetaryFeatureRequest->generate;
+                editor.planetaryFeatureRequest.reset();
+                editor.showPackageManagerModal = false;
+                if (generate)
+                {
+                    start_admitted_planetary_generation(editor);
+                    if (editor.aiPackageRequest && !editor.planetaryGeneratePending)
+                        finish_ai_project_package_request(editor, "Water source admitted, but terrain generation could not start: " + editor.planetaryStatus);
+                }
+                else save_admitted_planetary_settings(editor);
+            }
+        }
+
+        void start_reviewed_water_attachment(EditorState& editor)
+        {
+            if (planetary_project_busy(editor) || package_source_task_busy(editor) || editor.projectRoot.empty()
+                || editor.projectBuildPending || editor.scriptBuildPending || !editor.packageSourceReviewCurrent
+                || !editor.packageSourceReview || !editor.packageSourceReview->review_ready()
+                || !editor.packageSourceStaged.source_staged()
+                || editor.packageSourceReview->registry_package_id != "research_fft_ocean") return;
+            if (editor.planetaryFeatureRequest)
+            {
+                const auto& feature = editor.planetaryFeatureRequest->reviewed;
+                if (!feature || !feature->needs_approval()
+                    || feature->dependency.inspection.content_hash != editor.packageSourceReview->content_hash)
+                { editor.packageSourceStatus = "Displayed Water source changed. Review the planetary action again before approval."; return; }
+                approve_planetary_water_source(editor);
+                return;
+            }
+            const auto reviewed = *editor.packageSourceReview;
+            const auto staged = editor.packageSourceStaged;
+            const auto root = resolve_editor_path(std::filesystem::path{editor.projectRoot});
+            editor.planetaryOperationRoot = editor.projectRoot;
+            editor.planetaryOperationProjectKey = planetary_project_key(editor);
+            editor.planetaryOperationProjectGeneration = editor.projectLifecycle.evidence().generations.selected_project.generation;
+            try
+            {
+                auto submitted = schedule_editor_cancellable_task(editor, "Add reviewed Water source to project",
+                    [reviewed, staged, root](std::stop_token cancellation) {
+                        return package_source::attach_project_source(reviewed, staged, reviewed.content_hash, root, cancellation);
+                    });
+                editor.planetaryCancellation = submitted.cancellation;
+                editor.waterAttachmentPending.emplace(std::move(submitted.completion));
+                editor.packageSourceReviewCurrent = false;
+                editor.packageSourceStatus = "Copying the approved Water source. This does not build or run the project.";
+            }
+            catch (...) { editor.packageSourceStatus = "Water source copy could not start. Existing project source is retained."; }
+        }
+
+        void start_planetary_project_attachment(EditorState& editor,bool update_source=false)
+        {
+            if (planetary_project_busy(editor) || editor.projectRoot.empty()
+                || package_source_task_busy(editor) || !editor.packageSourceReviewCurrent
+                || !editor.packageSourceReview || !editor.packageSourceReview->review_ready()
+                || !editor.packageSourceStaged.source_staged()
+                || editor.packageSourceReview->registry_package_id != "research_planetary_terrain") return;
+            const auto reviewed = *editor.packageSourceReview;
+            const auto staged = editor.packageSourceStaged;
+            if(editor.projectBuildPending||editor.scriptBuildPending)
+            {editor.packageSourceStatus="Finish or cancel the current project/script build before changing its source dependency.";return;}
+            const std::string previousSource=update_source?editor.planetaryAttachment.content_hash:std::string{};
+            if(update_source&&(!editor.planetaryAttachment.source_attached()||previousSource==reviewed.content_hash||editor.aiPackageRequest))
+            {editor.packageSourceStatus="Review the current installed version and explicitly choose Update Project Source.";return;}
+            if (editor.aiPackageRequest)
+            {
+#if EPOCH_EDITION_PUBLIC
+                if (!project_ai_scope_allowed(editor.projectRoot))
+                {
+                    finish_ai_project_package_request(editor, "Package attachment refused: this is no longer an admitted application project.");
+                    return;
+                }
+#endif
+                if (!ai_project_package_request_current(editor) || editor.aiPackageRequest->cancelled
+                    || editor.aiPackageRequest->phase != EditorState::AiPackageRequest::Phase::review)
+                {
+                    finish_ai_project_package_request(editor, "The package request changed before source approval. Nothing was copied.");
+                    return;
+                }
+                editor.aiPackageRequest->source_hash = reviewed.content_hash;
+                editor.aiPackageRequest->phase = EditorState::AiPackageRequest::Phase::attaching;
+            }
+            const auto root = resolve_editor_path(std::filesystem::path{editor.projectRoot});
+            editor.planetaryOperationRoot = editor.projectRoot;
+            editor.planetaryOperationProjectKey = planetary_project_key(editor);
+            editor.planetaryOperationProjectGeneration = editor.projectLifecycle.evidence().generations.selected_project.generation;
+            editor.planetaryAttachmentIsInstall = !update_source;
+            editor.planetaryAttachmentIsUpdate = update_source;
+            editor.planetaryCheckedRoot = editor.projectRoot;
+            try
+            {
+                auto submitted = schedule_editor_cancellable_task(editor, update_source?"Update reviewed Planetary Terrain source":"Add Planetary Terrain source to project",
+                    [reviewed, staged, root, previousSource](std::stop_token cancellation) {
+                        return previousSource.empty()?package_source::attach_project_source(reviewed, staged, reviewed.content_hash, root, cancellation)
+                            :package_source::update_project_source(reviewed,staged,reviewed.content_hash,root,previousSource,cancellation);
+                    });
+                editor.planetaryCancellation = submitted.cancellation;
+                editor.planetaryAttachmentPending.emplace(std::move(submitted.completion));
+                editor.planetaryStatus = update_source?"Preparing the reviewed source update; previous source, scenes and settings will be retained..."
+                    :"Copying the approved Planetary Terrain source into this project...";
+                editor.packageSourceStatus = editor.planetaryStatus;
+            }
+            catch (...)
+            {
+                editor.planetaryStatus = "Could not start the project source copy.";
+                if (editor.aiPackageRequest) finish_ai_project_package_request(editor, editor.planetaryStatus);
+            }
+        }
+
+        void create_planetary_example_project(EditorState& editor,
+            const std::shared_ptr<core::Context>& context)
+        {
+            if (package_source_task_busy(editor) || planetary_project_busy(editor)
+                || !editor.packageSourceReviewCurrent
+                || !editor.packageSourceReview || !editor.packageSourceReview->review_ready()
+                || !editor.packageSourceStaged.source_staged()
+                || editor.packageSourceReview->registry_package_id != "research_planetary_terrain") return;
+            const auto reviewed = *editor.packageSourceReview;
+            const auto staged = editor.packageSourceStaged;
+            const auto created = editor_create_project_shell(
+                EditorProjectKind::Game, EditorProjectInputProvision::project_default);
+            editor.packageSourceStatus = created.summary;
+            if (!created.succeeded) return;
+            const auto admitted = editor_admit_project_manifest(created.manifest_path);
+            if (!admitted.succeeded || !editor_open_project(context, admitted.project_id))
+            {
+                editor.packageSourceStatus = "Terrain project created at " + created.root_path
+                    + ", but it could not be opened. " + admitted.summary;
+                return;
+            }
+            editor.packageSourceReview = reviewed;
+            editor.packageSourceStaged = staged;
+            editor.projectCreationOpen = false;
+            editor.mainSurface = EditorMainSurface::Project;
+            start_planetary_project_attachment(editor);
+        }
+
+        [[nodiscard]] std::string planetary_generation_block_reason(const EditorState& editor)
+        {
+            if (editor.projectBuildPending)
+            {
+                const auto& configuration = editor.projectBuildRequestedConfiguration.empty()
+                    ? editor.projectBuildConfiguration : editor.projectBuildRequestedConfiguration;
+                return "Generate is unavailable during the " + configuration
+                    + " project build. Finish it or use Cancel Project Build, then choose Build & Generate again. Requested settings and the current preview are retained.";
+            }
+            if (editor.scriptBuildPending)
+                return "Generate is unavailable during the script build. Finish or cancel it, then choose Build & Generate again. Requested settings and the current preview are retained.";
+            if (planetary_project_busy(editor))
+                return "Terrain work is active. Wait or use its Cancel control, then choose Build & Generate again. Requested settings and the current preview are retained.";
+            if (!editor.planetaryAttachment.source_attached())
+                return "Add and review the Planetary Terrain source in Package Manager before generating. The current preview is retained.";
+            return {};
+        }
+
+        void start_planetary_project_generation(EditorState& editor)
+        {
+            if (const auto blocked = planetary_generation_block_reason(editor); !blocked.empty())
+            { editor.planetaryStatus = blocked; return; }
+            request_planetary_feature_action(editor, true);
+        }
+
+        void start_admitted_planetary_generation(EditorState& editor)
+        {
+            if (const auto blocked = planetary_generation_block_reason(editor); !blocked.empty())
+            {
+                editor.planetaryStatus = blocked;
+                return;
+            }
+            std::uint32_t seed{};
+            const auto parsed = std::from_chars(editor.planetarySeedDraft.data(),
+                editor.planetarySeedDraft.data() + editor.planetarySeedDraft.size(), seed);
+            if (parsed.ec != std::errc{} || parsed.ptr != editor.planetarySeedDraft.data() + editor.planetarySeedDraft.size())
+            {
+                editor.planetaryStatus = "Seed must be a whole number between 0 and 4294967295.";
+                return;
+            }
+            editor.planetarySettings.seed = seed;
+            editor.planetaryStreamFailed = false;
+            editor.planetaryStreamContinue = true;
+            const auto root = resolve_editor_path(std::filesystem::path{editor.projectRoot});
+            const auto source = root / editor.planetaryAttachment.relative_source_root;
+            const auto engine = core::path::find_epoch_repo_root(core::path::executable_dir());
+            if (engine.empty())
+            {
+                editor.planetaryStatus = "Generation needs this edition's admitted Engine source checkout.";
+                return;
+            }
+            const auto settings = editor.planetarySettings;
+            editor.planetaryBuildLog.clear();
+            editor.planetaryLogLines.clear();
+            editor.planetaryBuildSeconds = 0.0;
+            editor.planetaryGenerationSeconds = 0.0;
+            editor.planetaryOperationRoot = editor.projectRoot;
+            editor.planetaryOperationProjectKey = planetary_project_key(editor);
+            editor.planetaryOperationProjectGeneration = editor.projectLifecycle.evidence().generations.selected_project.generation;
+            try
+            {
+                auto submitted = schedule_editor_cancellable_task(editor, "Build and generate planetary terrain",
+                    [root, source, engine, settings](std::stop_token cancellation) {
+                        return project_planetary::generate(root, source, engine, settings, cancellation);
+                    });
+                editor.planetaryCancellation = submitted.cancellation;
+                editor.planetaryGeneratePending.emplace(std::move(submitted.completion));
+                editor.planetaryStatus = "Building the approved planetary generator, then generating terrain...";
+            }
+            catch (...) { editor.planetaryStatus = "Could not start Build & Generate."; }
+        }
+
+        void poll_planetary_project_task(EditorState& editor)
+        {
+            const auto current_operation = [&] {
+                return editor.planetaryOperationRoot == editor.projectRoot
+                    && editor.planetaryOperationProjectKey == planetary_project_key(editor)
+                    && editor.planetaryOperationProjectGeneration == editor.projectLifecycle.evidence().generations.selected_project.generation;
+            };
+            try
+            {
+                poll_planetary_feature_task(editor);
+                if (editor.waterAttachmentPending && editor.waterAttachmentPending->wait_for(0ms) == std::future_status::ready)
+                {
+                    const auto attached = editor.waterAttachmentPending->get();
+                    editor.waterAttachmentPending.reset();
+                    if (current_operation()) editor.packageSourceStatus = attached.message;
+                }
+                if (editor.planetaryAttachmentPending && editor.planetaryAttachmentPending->wait_for(std::chrono::milliseconds(0)) == std::future_status::ready)
+                {
+                    auto attached = editor.planetaryAttachmentPending->get();
+                    editor.planetaryAttachmentPending.reset();
+                    if (current_operation())
+                    {
+                        editor.planetaryAttachment = std::move(attached);
+                        editor.planetaryMeshPolicy.reset();
+                        editor.planetaryStatus = editor.planetaryAttachment.message;
+                        if (editor.planetaryAttachment.source_attached())
+                        {
+                            const auto root = resolve_editor_path(std::filesystem::path{editor.projectRoot});
+                            // Replacing an explicitly reviewed package source must
+                            // not replace this project's unsaved authoring draft.
+                            // Ordinary open/install still restores the disk recipe.
+                            if (!editor.planetaryAttachmentIsUpdate)
+                            {
+                                const auto savedSettings = project_planetary::load_settings(root);
+                                editor.planetarySettings = savedSettings.value_or(project_planetary::Settings{});
+                                if (!savedSettings && editor.planetaryAttachmentIsInstall)
+                                {
+                                    if(const auto detailed=project_planetary::with_detail_preset(
+                                        editor.planetarySettings,project_planetary::DetailPreset::detailed))
+                                        editor.planetarySettings=*detailed;
+                                    editor.planetarySettings.size_reference_body = editor.planetarySettings.body_index;
+                                    editor.planetarySettings.reference_radius_meters = 25000.0;
+                                    editor.planetarySettings.ocean_surface = project_planetary::supports_ocean_surface(editor.planetarySettings);
+                                }
+                                editor.planetarySeedDraft = std::to_string(editor.planetarySettings.seed);
+                            }
+                            if (editor.planetaryAttachmentIsInstall||editor.planetaryAttachmentIsUpdate)
+                            {
+                                if (editor.planetaryAttachmentIsUpdate)
+                                    editor.planetaryStatus=editor.planetaryAttachment.message;
+                                else if (editor.planetarySettings.ocean_surface)
+                                {
+                                    if (!editor.aiPackageRequest || !editor.aiPackageRequest->generate)
+                                        request_planetary_feature_action(editor, false);
+                                }
+                                else if (!project_planetary::save_settings(root, editor.planetarySettings))
+                                    editor.planetaryStatus = "Package source added, but settings could not be saved. Open Project and retry Save Settings or Build & Generate.";
+                                else editor.planetaryStatus = "Planetary Terrain added. Open Project to change settings, then choose Build & Generate.";
+                                editor.packageSourceStatus = editor.planetaryStatus;
+                                editor.mainSurface = EditorMainSurface::Project;
+                                editor.showPackageManagerModal = false;
+                            }
+                            refresh_editor_planetary_mesh_policy(editor);
+                        }
+                        continue_ai_project_package_after_attachment(editor);
+                    }
+                    editor.planetaryAttachmentIsInstall = false;
+                    editor.planetaryAttachmentIsUpdate = false;
+                }
+                if (editor.planetaryGeneratePending && editor.planetaryGeneratePending->wait_for(std::chrono::milliseconds(0)) == std::future_status::ready)
+                {
+                    const auto generated = editor.planetaryGeneratePending->get();
+                    editor.planetaryGeneratePending.reset();
+                    if (current_operation())
+                    {
+                        if (!ai_project_package_generation_current(editor))
+                        {
+                            finish_ai_project_package_request(editor,
+                                "Terrain result retained without import: its request was cancelled, or project/source/settings changed.");
+                            return;
+                        }
+                        editor.planetaryStatus = generated.message;
+                        editor.planetaryBuildLog = generated.build_log;
+                        editor.planetaryBuildSeconds = generated.build_seconds;
+                        editor.planetaryGenerationSeconds = generated.generation_seconds;
+                        editor.planetaryLogLines.clear();
+                        const auto previousMeshPolicy=editor.planetaryMeshPolicy;
+                        if(generated.ok)refresh_editor_planetary_mesh_policy(editor,true);
+                        bool imported{};
+                        if (generated.ok && import_project_mesh(editor, generated.artifact_path, "Planetary Terrain",
+                            editor_planetary_mesh_budget(editor).artifact, generated.mesh_frame))
+                        {
+                            imported = true;
+                            editor.planetaryPreviewFocusPending = true;
+                            editor.planetaryStatus = "Terrain generated. Opening its scene and saving the placement...";
+                        }
+                        else if (generated.ok) {editor.planetaryMeshPolicy=previousMeshPolicy;editor.planetaryStatus = editor.projectStatus;}
+                        push_editor_log(editor, "[planet] " + editor.planetaryStatus);
+                        if (editor.aiPackageRequest)
+                            finish_ai_project_package_request(editor, imported
+                                ? "Terrain generated and imported. The existing Project view owns placement and save confirmation."
+                                : "Terrain request did not import a result: " + editor.planetaryStatus, imported);
+                    }
+                }
+                if (!planetary_project_busy(editor) && editor.planetaryCheckedRoot != editor.projectRoot)
+                {
+                    editor.planetaryCheckedRoot = editor.projectRoot;
+                    editor.planetaryAttachment = {};
+                    editor.planetarySettings = {};
+                    editor.planetaryMeshPolicy.reset();
+                    editor.planetarySeedDraft = "1337";
+                    editor.planetaryStatus = "Add the optional Planetary Terrain package in Package Manager to generate terrain in this project.";
+                    if (!editor.projectRoot.empty())
+                    {
+                        const auto root = resolve_editor_path(std::filesystem::path{editor.projectRoot});
+                        editor.planetaryOperationRoot = editor.projectRoot;
+                        editor.planetaryOperationProjectKey = planetary_project_key(editor);
+            editor.planetaryOperationProjectGeneration = editor.projectLifecycle.evidence().generations.selected_project.generation;
+                        editor.planetaryAttachmentIsInstall = false;
+                        editor.planetaryAttachmentIsUpdate = false;
+                        auto submitted = schedule_editor_cancellable_task(editor, "Check project's Planetary Terrain dependency",
+                            [root](std::stop_token cancellation) {
+                                return package_source::load_project_attachment(root, "research_planetary_terrain", cancellation);
+                            });
+                        editor.planetaryCancellation = submitted.cancellation;
+                        editor.planetaryAttachmentPending.emplace(std::move(submitted.completion));
+                    }
+                }
+            }
+            catch (...)
+            {
+                editor.planetaryAttachmentPending.reset();
+                editor.planetaryAttachmentIsInstall = false;
+                editor.planetaryAttachmentIsUpdate = false;
+                editor.planetaryGeneratePending.reset();
+                editor.planetaryFeatureReviewPending.reset();
+                editor.planetaryFeatureAdmissionPending.reset();
+                editor.waterAttachmentPending.reset();
+                editor.planetaryFeatureRequest.reset();
+                editor.planetaryStatus = "The planetary operation failed. Existing project files and scene remain available.";
+                if (editor.aiPackageRequest) finish_ai_project_package_request(editor, editor.planetaryStatus);
+                push_editor_log(editor, "[planet] " + editor.planetaryStatus);
+            }
+        }
+
+        // Camera-driven residency is disposable render state. It never creates
+        // authoring transactions or changes the persisted fallback mesh.
+        [[nodiscard]] std::optional<double> planetary_preview_sample_time(bool ocean,
+            const epochengine::timeline::TimelineState& timeline) noexcept
+        {
+            if (!ocean || !std::isfinite(timeline.playhead_seconds)
+                || timeline.playhead_seconds < 0.0 || timeline.playhead_seconds >= 1.0e12) return {};
+            // Coalesce existing worker requests; the playhead is the only
+            // animation time. A paused seek retains its exact authored time.
+            return timeline.playing ? std::floor(timeline.playhead_seconds*4.0)/4.0 : timeline.playhead_seconds;
+        }
+
+        [[nodiscard]] bool planetary_preview_time_reusable(const project_planetary::StreamView& current,
+            const project_planetary::StreamView& requested,
+            const epochengine::timeline::TimelineState& timeline, bool requestedPlaying,
+            epochengine::timeline::PlaybackDirection requestedDirection, double requestedRate) noexcept
+        {
+            if (current.simulation_seconds.has_value() != requested.simulation_seconds.has_value()) return false;
+            if (!current.simulation_seconds) return true;
+            const auto now = *current.simulation_seconds, then = *requested.simulation_seconds;
+            if (!std::isfinite(now) || !std::isfinite(then) || timeline.playing != requestedPlaying
+                || timeline.direction != requestedDirection || timeline.playback_rate != requestedRate) return false;
+            if (!timeline.playing) return now == then;
+            // A complete cut remains useful during continuous playback, just
+            // as during flight. Pause, seek and reverse cannot publish old time.
+            return timeline.direction == epochengine::timeline::PlaybackDirection::reverse ? now <= then : now >= then;
+        }
+
+        void pump_planetary_stream(EditorState& editor, const void* context)
+        {
+            const auto tick = editor_steady_tick_ns();
+            const bool covered = editor_project_viewport_input_reserved(editor);
+            if (covered && editor.planetaryStreamPending && editor.taskScheduler)
+                (void)editor.taskScheduler->cancel(editor.planetaryCancellation);
+            const auto entityAt = std::find_if(editor.entities.begin(), editor.entities.end(),
+                [](const EditorEntity& entity) { return entity.category == "Planetary Terrain" && entity.meshAsset && entity.visible; });
+            const auto owners = std::count_if(editor.entities.begin(), editor.entities.end(),
+                [](const EditorEntity& entity) { return entity.category == "Planetary Terrain" && entity.meshAsset && entity.visible; });
+            const auto meshBudget=editor_planetary_mesh_budget(editor);
+            const auto admittedSettings=meshBudget.artifact.maximum_bytes!=0u
+                ?std::optional<project_planetary::Settings>{editor.planetaryMeshPolicy->settings}:std::nullopt;
+            const bool generationMatches=entityAt!=editor.entities.end()
+                &&editor_planetary_stream_identity_matches(editor,*entityAt);
+            const bool enabled = admittedSettings&&generationMatches&&admittedSettings->stream_lod && admittedSettings->mode == "planet"
+                && owners == 1;
+            bool viewValid = enabled;
+            project_planetary::StreamView desiredView;
+            bool changed = true;
+            if (enabled)
+            {
+                desiredView.simulation_seconds = planetary_preview_sample_time(admittedSettings->ocean_surface,editor.timelineState);
+                const auto camera = previewgrid::camera_for(context);
+                // Invert the same Euler basis used by the preview renderer. Translation,
+                // rotation and nonuniform scale stay owned by the existing scene object.
+                const auto eye=previewgrid::camera_world_eye(camera);
+                const std::array<double,3> relative{eye[0]-double(entityAt->position[0]),
+                    eye[1]-double(entityAt->position[1]),eye[2]-double(entityAt->position[2])};
+                const previewgrid::Vec3 rotation{entityAt->rotation[0], entityAt->rotation[1], entityAt->rotation[2]};
+                const std::array bases{previewgrid::rotate_euler_degrees({1,0,0}, rotation),
+                    previewgrid::rotate_euler_degrees({0,1,0}, rotation), previewgrid::rotate_euler_degrees({0,0,1}, rotation)};
+                const auto direction=previewgrid::normalize(previewgrid::subtract(camera.target,camera.eye));
+                std::array<double,3> localForward{},localUp{};
+                auto& view = desiredView;
+                const auto meshScale = scene::mesh_render_scale(entityAt->scale, entityAt->meshAsset);
+                if (!meshScale) viewValid = false;
+                for (std::size_t axis = 0; axis < 3u; ++axis)
+                {
+                    if (!meshScale || !std::isfinite((*meshScale)[axis]) || std::abs((*meshScale)[axis]) < 0.00001f) { viewValid = false; break; }
+                    view.camera[axis] = (relative[0]*bases[axis].x+relative[1]*bases[axis].y
+                        +relative[2]*bases[axis].z)/(*meshScale)[axis];
+                    localForward[axis]=(double(direction.x)*bases[axis].x+double(direction.y)*bases[axis].y
+                        +double(direction.z)*bases[axis].z)/(*meshScale)[axis];
+                    localUp[axis]=(double(camera.up.x)*bases[axis].x+double(camera.up.y)*bases[axis].y
+                        +double(camera.up.z)*bases[axis].z)/(*meshScale)[axis];
+                }
+                const double directionLength=std::hypot(localForward[0],localForward[1],localForward[2]);
+                if(!std::isfinite(directionLength)||directionLength<1e-12)viewValid=false;
+                else {for(auto& component:localForward)component/=directionLength;view.forward=localForward;}
+                view.up=localUp;
+                if(!project_planetary::valid_stream_up(view))viewValid=false;
+                view.viewport_height = editor.planetaryViewportHeight;
+                view.aspect_ratio=std::clamp(double(editor.planetaryViewportWidth)
+                    /double((std::max)(1u,view.viewport_height)),0.1,10.0);
+                view.vertical_fov = camera.fovRadians;
+                changed = editor.planetaryStreamEntity != entityAt->sceneObjectId
+                    || editor.planetaryStreamSettings != *admittedSettings
+                    || view.viewport_height != editor.planetaryStreamView.viewport_height
+                    || std::abs(view.vertical_fov - editor.planetaryStreamView.vertical_fov) > 0.001
+                    || view.forward.has_value()!=editor.planetaryStreamView.forward.has_value()
+                    || view.up.has_value()!=editor.planetaryStreamView.up.has_value()
+                    || std::abs(view.aspect_ratio-editor.planetaryStreamView.aspect_ratio)>0.001;
+                changed = changed || view.simulation_seconds != editor.planetaryStreamView.simulation_seconds
+                    || !planetary_preview_time_reusable(view,editor.planetaryStreamView,editor.timelineState,
+                        editor.planetaryStreamTimelinePlaying,editor.planetaryStreamTimelineDirection,editor.planetaryStreamTimelineRate);
+                if(view.forward&&editor.planetaryStreamView.forward)
+                    for(std::size_t axis=0;axis<3u;++axis)
+                        changed=changed||std::abs((*view.forward)[axis]-(*editor.planetaryStreamView.forward)[axis])>0.01;
+                if(view.up&&editor.planetaryStreamView.up)
+                    for(std::size_t axis=0;axis<3u;++axis)
+                        changed=changed||std::abs((*view.up)[axis]-(*editor.planetaryStreamView.up)[axis])>0.01;
+                const double radius = std::sqrt(view.camera[0]*view.camera[0] + view.camera[1]*view.camera[1]
+                    + view.camera[2]*view.camera[2]);
+                const double epsilon = std::clamp(std::abs(radius - 10.0) * 0.05, 0.00001, 0.025);
+                for (std::size_t axis = 0; axis < 3u; ++axis)
+                    changed = changed || std::abs(view.camera[axis] - editor.planetaryStreamView.camera[axis]) > epsilon;
+            }
+            if (editor.planetaryStreamPending
+                && editor.planetaryStreamPending->wait_for(std::chrono::milliseconds(0)) == std::future_status::ready)
+            {
+                editor.planetaryStreamNextTick = tick + 250'000'000ull;
+                try
+                {
+                    const auto streamed = editor.planetaryStreamPending->get();
+                    editor.planetaryStreamPending.reset();
+                    const bool current = enabled && editor.planetaryOperationRoot == editor.projectRoot
+                        && editor.planetaryOperationProjectKey == planetary_project_key(editor)
+                        && editor.planetaryOperationProjectGeneration == editor.projectLifecycle.evidence().generations.selected_project.generation
+                        && entityAt->sceneObjectId == editor.planetaryStreamEntity
+                        && entityAt->position == editor.planetaryStreamPosition
+                        && entityAt->rotation == editor.planetaryStreamRotation && entityAt->scale == editor.planetaryStreamScale
+                        && *admittedSettings == editor.planetaryStreamSettings
+                        && editor.planetaryMeshPolicy
+                        && editor.planetaryMeshPolicy->source.project_root == editor.planetaryStreamSource.project_root
+                        && editor.planetaryMeshPolicy->source.project_manifest == editor.planetaryStreamSource.project_manifest
+                        && editor.planetaryMeshPolicy->source.content_hash == editor.planetaryStreamSource.content_hash
+                        && editor.planetaryMeshPolicy->generated_mesh == editor.planetaryStreamMesh
+                        && entityAt->meshAsset->artifact_key == editor.planetaryStreamFallbackKey
+                        && viewValid && project_planetary::stream_view_reusable(desiredView,editor.planetaryStreamView)
+                        && planetary_preview_time_reusable(desiredView,editor.planetaryStreamView,editor.timelineState,
+                            editor.planetaryStreamTimelinePlaying,editor.planetaryStreamTimelineDirection,editor.planetaryStreamTimelineRate);
+                    if (current && (streamed.waiting_for_worker||streamed.operation.cancelled))
+                    {
+                        editor.planetaryStreamStatus = streamed.operation.message;
+                        editor.planetaryStreamContinue = true;
+                    }
+                    else if (current && streamed.operation.ok && streamed.request_id == editor.planetaryStreamView.request_id
+                        &&streamed.request_id==editor.planetaryStreamSequence)
+                    {
+                        if (streamed.snapshot_ready && streamed.snapshot)
+                        {
+                            std::uint64_t bytes{}, indices{};
+                            for (const auto& entity : editor.entities)
+                                if (entity.sceneObjectId != entityAt->sceneObjectId && entity.meshSnapshot)
+                                {
+                                    bytes += entity.meshSnapshot->vertices().size() * sizeof(asset::mesh::Vertex)
+                                        + entity.meshSnapshot->indices().size() * sizeof(std::uint32_t) + 64u;
+                                    if (entity.visible) indices += entity.meshSnapshot->indices().size();
+                                }
+                            bytes += streamed.snapshot->vertices().size() * sizeof(asset::mesh::Vertex)
+                                + streamed.snapshot->indices().size() * sizeof(std::uint32_t) + 64u;
+                            indices += streamed.snapshot->indices().size();
+                            const previewgrid::ObjectMarker candidate{
+                                .position{entityAt->position[0],entityAt->position[1],entityAt->position[2]},
+                                .scale{entityAt->scale[0],entityAt->scale[1],entityAt->scale[2]},
+                                .rotationDegrees{entityAt->rotation[0],entityAt->rotation[1],entityAt->rotation[2]},
+                                .primitive=previewgrid::ObjectPreviewPrimitive::IndexedMesh,.mesh=streamed.snapshot};
+                            std::vector<previewgrid::ObjectMarker> candidateFrame{candidate};
+                            if(streamed.patch_snapshot&&streamed.patch_snapshot->metadata.cloud
+                                &&streamed.patch_snapshot->metadata.cloud->artifact
+                                &&!streamed.patch_snapshot->metadata.cloud->density)
+                            {
+                                const auto& cloud=streamed.patch_snapshot->metadata.cloud->artifact;
+                                bytes+=cloud->vertices().size()*sizeof(asset::mesh::Vertex)
+                                    +cloud->indices().size()*sizeof(std::uint32_t)+64u;
+                                indices+=cloud->indices().size();
+                                candidateFrame.push_back({.primitive=previewgrid::ObjectPreviewPrimitive::IndexedMesh,.mesh=cloud});
+                            }
+                            // The worker verified the exact source/recipe before and
+                            // after execution; current above binds that immutable request
+                            // to this project's present generation and mesh policy.
+                            if (editor_planetary_stream_identity_matches(editor,*entityAt)
+                                &&streamed.snapshot->vertices().size()<=meshBudget.artifact.maximum_vertices
+                                &&streamed.snapshot->indices().size()<=meshBudget.artifact.maximum_indices
+                                &&48u+std::uint64_t(streamed.snapshot->vertices().size())*44u
+                                    +std::uint64_t(streamed.snapshot->indices().size())*4u<=meshBudget.artifact.maximum_bytes
+                                &&bytes <= meshBudget.cache_bytes && indices <= meshBudget.frame_indices
+                                &&previewgrid::mesh_frame_admitted(candidateFrame,
+                                    {meshBudget.frame_indices,meshBudget.frame_bytes}))
+                            {
+                                editor.planetaryStreamSnapshot = streamed.snapshot;
+                                editor.planetaryStreamCloud = streamed.patch_snapshot
+                                    ? streamed.patch_snapshot->metadata.cloud : std::nullopt;
+                                editor.planetaryStreamFrame = streamed.operation.mesh_frame;
+                                entityAt->meshSnapshot = streamed.snapshot;
+                                entityAt->meshSnapshotFrame = streamed.operation.mesh_frame;
+                                entityAt->meshLoadAttempted = true;
+                                editor.sceneInteractionDirty = true;
+                            }
+                            else
+                            {
+                                editor.planetaryStreamFailed = true;
+                                editor.planetaryStreamStatus = "Planet LOD paused: the scene geometry or mesh memory budget is full.";
+                            }
+                        }
+                        if (!editor.planetaryStreamFailed) editor.planetaryStreamStatus = streamed.operation.message;
+                        editor.planetaryStreamContinue = streamed.pending != 0u || changed;
+                        // A successful bounded step still has known work. Keep
+                        // one owned job in flight without an extra idle delay;
+                        // contention, cancellation and failures retain backoff.
+                        if (!editor.planetaryStreamFailed && (streamed.pending != 0u || changed))
+                            editor.planetaryStreamNextTick = tick;
+                    }
+                    else if (current && !streamed.operation.ok)
+                    {
+                        editor.planetaryStreamFailed = true;
+                        editor.planetaryStreamStatus = streamed.operation.message;
+                        if (!streamed.operation.build_log.empty()) editor.planetaryBuildLog = streamed.operation.build_log;
+                        push_editor_log(editor, "[planet] " + editor.planetaryStreamStatus);
+                    }
+                    else if (enabled && viewValid && streamed.operation.ok && !streamed.operation.cancelled
+                        && streamed.request_id == editor.planetaryStreamView.request_id
+                        && streamed.request_id == editor.planetaryStreamSequence)
+                    {
+                        // No stale snapshot is published. The old worker has
+                        // retired, so request the current camera without an
+                        // additional contention/failure delay.
+                        editor.planetaryStreamContinue = true;
+                        editor.planetaryStreamNextTick = tick;
+                    }
+                }
+                catch (const editor_tasks::TaskCancelled&)
+                {
+                    editor.planetaryStreamPending.reset();
+                    editor.planetaryStreamContinue = true;
+                    editor.planetaryStreamStatus = "Terrain detail cancelled. The previous mesh is retained.";
+                }
+                catch (...)
+                {
+                    editor.planetaryStreamPending.reset();
+                    editor.planetaryStreamFailed = true;
+                    editor.planetaryStreamStatus = "Planet LOD stopped after a worker failure. The saved terrain remains available.";
+                }
+            }
+            // Poll and retire the previous authoring job above, but never
+            // submit another LOD build behind an owned project viewport.
+            if (covered) return;
+            if(owners==1&&!generationMatches)
+            {
+                if(editor.planetaryStreamPending&&editor.taskScheduler)
+                    (void)editor.taskScheduler->cancel(editor.planetaryCancellation);
+                editor.planetaryStreamContinue=false;
+                const auto progress=editor_planetary_restore_progress(editor);
+                editor.planetaryStreamStatus=progress.empty()
+                    ? "Live LOD paused: the current mesh has no matching generated recipe/coordinate evidence. Choose Build & Generate; the previous mesh is retained."
+                    : std::string{progress};
+                return;
+            }
+            if (!enabled)
+            {
+                if (owners > 1) editor.planetaryStreamStatus = "Camera LOD supports one visible planet. Hide the other planets to resume.";
+                else if (admittedSettings && generationMatches)
+                    editor.planetaryStreamStatus = !admittedSettings->stream_lod
+                        ? "Camera LOD is off in this project's terrain settings."
+                        : admittedSettings->mode == "universe"
+                            ? "System overview. Run the project to explore worlds with camera LOD."
+                            : "This terrain coverage uses its generated overview in the editor.";
+                if (editor.planetaryStreamPending && editor.taskScheduler)
+                    (void)editor.taskScheduler->cancel(editor.planetaryCancellation);
+                if (editor.planetaryStreamEntity)
+                    for (auto& entity : editor.entities)
+                        if (entity.sceneObjectId == editor.planetaryStreamEntity)
+                        { entity.meshSnapshot.reset(); entity.meshSnapshotFrame.reset(); entity.meshLoadAttempted = false; editor.sceneInteractionDirty = true; }
+                editor.planetaryStreamEntity = 0u;
+                editor.planetaryStreamSnapshot.reset(); editor.planetaryStreamCloud.reset();
+                editor.planetaryStreamFrame.reset();
+                return;
+            }
+            if (editor.planetaryStreamSnapshot && !entityAt->meshSnapshot
+                && entityAt->sceneObjectId == editor.planetaryStreamEntity
+                && entityAt->meshAsset->artifact_key == editor.planetaryStreamFallbackKey)
+            {
+                entityAt->meshSnapshot = editor.planetaryStreamSnapshot;
+                entityAt->meshSnapshotFrame = editor.planetaryStreamFrame;
+                entityAt->meshLoadAttempted = true;
+                editor.sceneInteractionDirty = true;
+            }
+            if (planetary_project_busy(editor) || editor.planetaryStreamFailed || tick < editor.planetaryStreamNextTick
+                || editor.projectBuildPending || editor.scriptBuildPending
+                || !(editor.mainSurface==EditorMainSurface::Scene
+                    ||(editor.mainSurface==EditorMainSurface::ForestFactory&&editor.forestTerrainPainting))) return;
+            if (!viewValid) return;
+            // Capture known request identity here. Full filesystem/source hashing
+            // belongs to the existing cancellable worker below, not the frame thread.
+            if(!editor_planetary_stream_identity_matches(editor,*entityAt))
+            {
+                editor.planetaryStreamStatus="Live LOD paused because its generated mesh no longer matches the saved recipe. Generate again; the previous mesh is retained.";
+                return;
+            }
+            if (entityAt->meshAsset->artifact_key != editor.planetaryStreamFallbackKey)
+            { editor.planetaryStreamSnapshot.reset(); editor.planetaryStreamCloud.reset(); editor.planetaryStreamFrame.reset(); changed = true; }
+            if (!changed && !editor.planetaryStreamContinue) return;
+            auto view = desiredView;
+            view.request_id = ++editor.planetaryStreamSequence;
+            editor.planetaryStreamView = view;
+            editor.planetaryStreamTimelinePlaying = editor.timelineState.playing;
+            editor.planetaryStreamTimelineDirection = editor.timelineState.direction;
+            editor.planetaryStreamTimelineRate = editor.timelineState.playback_rate;
+            editor.planetaryStreamSettings = *admittedSettings;
+            editor.planetaryStreamSource = editor.planetaryMeshPolicy->source;
+            editor.planetaryStreamMesh = *editor.planetaryMeshPolicy->generated_mesh;
+            editor.planetaryStreamEntity = entityAt->sceneObjectId;
+            editor.planetaryStreamFallbackKey = entityAt->meshAsset->artifact_key;
+            editor.planetaryStreamPosition = entityAt->position;
+            editor.planetaryStreamRotation = entityAt->rotation;
+            editor.planetaryStreamScale = entityAt->scale;
+            editor.planetaryOperationRoot = editor.projectRoot;
+            editor.planetaryOperationProjectKey = planetary_project_key(editor);
+            editor.planetaryOperationProjectGeneration = editor.projectLifecycle.evidence().generations.selected_project.generation;
+            const auto root = resolve_editor_path(std::filesystem::path{editor.projectRoot});
+            const auto settings = *admittedSettings;
+            try
+            {
+                auto submitted = schedule_editor_cancellable_task(editor, "Stream planetary terrain detail",
+                    [root, settings, view, source=editor.planetaryStreamSource,
+                        mesh=editor.planetaryStreamMesh](std::stop_token cancellation) {
+                        project_planetary::StreamResult result;
+                        if (cancellation.stop_requested()) {
+                            result.operation.cancelled = true;
+                            result.operation.message = "Terrain streaming cancelled before source admission.";
+                            return result;
+                        }
+                        if (!project_planetary::mesh_generation_is_current(root, source, settings, mesh)) {
+                            result.operation.message = "Planet LOD paused: its source or saved recipe changed before the worker started. The previous mesh is retained.";
+                            return result;
+                        }
+                        result = project_planetary::stream_step(root, settings, view, cancellation);
+                        if (result.operation.ok
+                            && !project_planetary::mesh_generation_is_current(root, source, settings, mesh)) {
+                            result.operation.ok = false;
+                            result.snapshot_ready = false;
+                            result.snapshot.reset();
+                            result.operation.message = "Planet LOD paused: its source or saved recipe changed during the worker. This snapshot was refused; the previous mesh is retained.";
+                        }
+                        return result;
+                    });
+                editor.planetaryCancellation = submitted.cancellation;
+                editor.planetaryStreamPending.emplace(std::move(submitted.completion));
+                editor.planetaryStreamNextTick = tick + 500'000'000ull;
+            }
+            catch (...) { editor.planetaryStreamFailed = true; editor.planetaryStreamStatus = "Could not queue planetary terrain detail."; }
+        }
+
+        void approve_and_stage_package_source(EditorState& editor)
+        {
+            if (package_source_task_busy(editor) || !editor.packageSourceReview
+                || !editor.packageSourceReviewCurrent || !editor.packageSourceReview->review_ready()) return;
+            const auto review = *editor.packageSourceReview;
+            if (!package_registry::find(review.registry_package_id)
+                || (!editor.packageSourceExpectedId.empty() && editor.packageSourceExpectedId != review.registry_package_id))
+            {
+                editor.packageSourceStatus = "Package identity changed. Review the correct source manifest first.";
+                return;
+            }
+            auto mutable_root = core::path::candidate_data_root();
+            if (mutable_root.empty()) mutable_root = core::path::executable_dir();
+            if (mutable_root.empty())
+            {
+                editor.packageSourceStatus = "The executable-local cache location could not be resolved. No source was staged.";
+                return;
+            }
+            const auto cache_root = mutable_root / "cache" / "packages";
+            try
+            {
+                editor.packageSourceTask = std::make_unique<EditorPackageSourceTask>();
+                editor.packageSourceTask->expectedPackageId = editor.packageSourceExpectedId;
+                editor.packageSourceTask->projectGeneration = editor.projectLifecycle.evidence().generations.selected_project.generation;
+                const auto cancellation = editor.packageSourceTask->cancellation.get_token();
+                // Approval is captured once and binds these exact reviewed bytes.
+                editor.packageSourceTask->staging.emplace(std::async(std::launch::async,
+                    [review, approved_hash = review.content_hash, cache_root, cancellation] {
+                        return package_source::stage_local_source(review, approved_hash, cache_root, cancellation);
+                    }));
+                editor.packageSourceStatus = "Copying the approved source into the local package cache...";
+            }
+            catch (...)
+            {
+                editor.packageSourceTask.reset();
+                editor.packageSourceStatus = "Could not start source staging. No package was built or activated.";
+            }
         }
 
         void request_site_package_catalog(EditorState& editor, bool force)
@@ -729,6 +2104,16 @@
                 return entry.id == package_registry::kEngineArcadePackageId
                     || package_registry::is_catalog_authority(entry.id);
             });
+            // Canonical labels for exact known IDs do not change catalog
+            // availability, source identity or any download/activation gate.
+            for (auto& entry : snapshot.entries)
+            {
+                if (const auto* package = package_registry::find(entry.id))
+                {
+                    entry.display_name = package->displayName;
+                    entry.summary = package->summary;
+                }
+            }
             editor.packageCatalogEntries = std::move(snapshot.entries);
             editor.packageCatalogRevision = std::move(snapshot.revision);
             editor.packageCatalogStatus = epochengine::format_text(
@@ -751,153 +2136,109 @@
         {
             disabled,
             epoch_local,
-            external_mcp
+            external_mcp,
+            engine_selected
         };
-
-        [[nodiscard]] std::string_view project_ai_provider_name(
-            ProjectAiProviderMode mode) noexcept
-        {
-            switch (mode)
-            {
-            case ProjectAiProviderMode::disabled:
-                return "disabled";
-            case ProjectAiProviderMode::epoch_local:
-                return "epoch_local_qwen38";
-            case ProjectAiProviderMode::external_mcp:
-                return "external_mcp";
-            }
-            return "disabled";
-        }
-
-        [[nodiscard]] std::filesystem::path project_ai_profile_path(
-            const EditorState& editor)
-        {
-            if (editor.projectRoot.empty())
-                return {};
-            return resolve_editor_path(
-                std::filesystem::path{editor.projectRoot})
-                / "Assets" / "AI" / "project_ai.epochai";
-        }
 
         [[nodiscard]] bool write_project_ai_profile(
             EditorState& editor,
             ProjectAiProviderMode mode)
         {
-            const std::filesystem::path profilePath =
-                project_ai_profile_path(editor);
-            if (profilePath.empty())
+            namespace fs = std::filesystem;
+            namespace profile = epochengine::ai::project_profile;
+            const auto fail = [&](std::string message)
             {
-                editor.packageInstallStatus =
-                    "No active project root for an AI provider selection.";
+                editor.packageInstallStatus = "Project AI: " + std::move(message);
                 editor.packageInstallProgress = 0.0f;
                 return false;
-            }
-
-            std::error_code ec;
-            std::filesystem::create_directories(
-                profilePath.parent_path(), ec);
-            if (ec)
+            };
+            if (editor.projectId.empty() || editor.projectRoot.empty())
+                return fail("Open or create a project before changing its AI setting.");
+            if (editor.projectBuildPending || editor.projectRuntimeProcess.valid())
+                return fail("Stop the project build or runtime before changing its AI setting.");
+            const fs::path root = resolve_editor_path(fs::path{editor.projectRoot});
+            const fs::path manifest = root / "project.epoch.json";
+            const auto manifestBefore = read_bounded_package_file(manifest, 1024u * 1024u);
+            const auto identity = editor_inspect_project_manifest_identity(
+                manifest.generic_string(), editor.projectId, root.generic_string());
+            if (!identity.succeeded || manifestBefore.empty())
+                return fail("The active project identity could not be verified.");
+            profile::Provider provider{};
+            switch (mode)
             {
-                editor.packageInstallStatus =
-                    "Could not create the project AI profile directory.";
-                editor.packageInstallProgress = 0.0f;
-                return false;
+            case ProjectAiProviderMode::disabled: provider = profile::Provider::disabled; break;
+            case ProjectAiProviderMode::epoch_local: provider = profile::Provider::epoch_local_qwen38; break;
+            case ProjectAiProviderMode::external_mcp: provider = profile::Provider::external_mcp; break;
+            case ProjectAiProviderMode::engine_selected: provider = profile::Provider::engine_selected; break;
+            default: return fail("This project AI provider is not supported.");
             }
-
-            const bool enabled = mode != ProjectAiProviderMode::disabled;
-            const bool local = mode == ProjectAiProviderMode::epoch_local;
-            const bool external =
-                mode == ProjectAiProviderMode::external_mcp;
-            const std::filesystem::path temporary =
-                profilePath.string() + ".epoch-managed.tmp";
+            const auto encoded = profile::serialize_profile(profile::make_profile(provider));
+            if (!encoded) return fail(encoded.status);
+            std::error_code error;
+            const fs::path canonicalRoot = fs::canonical(root, error);
+            if (error) return fail("The project directory is unavailable.");
+            fs::path directory = canonicalRoot;
+            for (const auto* part : {"Assets", "AI"})
             {
-                std::ofstream out(
-                    temporary, std::ios::binary | std::ios::trunc);
-                if (!out)
+                directory /= part;
+                auto status = fs::symlink_status(directory, error);
+                if (error == std::errc::no_such_file_or_directory) error.clear();
+                if (error || fs::is_symlink(status))
+                    return fail("The project AI directory must be an ordinary project folder.");
+                if (!fs::exists(status))
                 {
-                    editor.packageInstallStatus =
-                        "Could not write the project AI profile.";
-                    editor.packageInstallProgress = 0.0f;
-                    return false;
+                    if (!fs::create_directory(directory, error) || error)
+                        return fail("The project AI directory could not be created.");
                 }
-                out
-                    << "{\n"
-                    << "  \"schema\": \"epoch.project.ai.v1\",\n"
-                    << "  \"provider\": \""
-                    << project_ai_provider_name(mode) << "\",\n"
-                    << "  \"enabled\": "
-                    << (enabled ? "true" : "false") << ",\n"
-                    << "  \"model_binding\": \""
-                    << (local
-                        ? epochengine::ai::kEpochLocalQwen38ModelPackageId
-                        : (external
-                            ? std::string_view{"operator_selected_external"}
-                            : std::string_view{"none"}))
-                    << "\",\n"
-                    << "  \"runtime_binding\": \""
-                    << (local
-                        ? std::string_view{"epoch_shared"}
-                        : (external
-                            ? std::string_view{"external_mcp"}
-                            : std::string_view{"none"}))
-                    << "\",\n"
-                    << "  \"inference_transport\": \""
-                    << (local
-                        ? std::string_view{"llama_cpp_cli_child_process"}
-                        : (external
-                            ? std::string_view{"operator_managed_openai_compatible"}
-                            : std::string_view{"none"}))
-                    << "\",\n"
-                    << "  \"tool_protocol\": \"epoch_mcp_v1\",\n"
-                    << "  \"endpoint_binding\": \""
-                    << (external
-                        ? std::string_view{
-                            "operator_selected_runtime_endpoint"}
-                        : std::string_view{"none"})
-                    << "\",\n"
-                    << "  \"self_iteration\": \""
-                    << (enabled
-                        ? std::string_view{
-                            "operator_approved_project_source_only"}
-                        : std::string_view{"disabled"})
-                    << "\",\n"
-                    << "  \"project_source_write\": "
-                    << (enabled ? "true" : "false") << ",\n"
-                    << "  \"engine_source_write\": false,\n"
-                    << "  \"operator_approval_per_iteration\": true,\n"
-                    << "  \"auto_start\": false,\n"
-                    << "  \"server_or_listener\": false,\n"
-                    << "  \"weights_bundled\": false,\n"
-                    << "  \"external_provider_preserved\": true\n"
-                    << "}\n";
+                else if (!fs::is_directory(status))
+                    return fail("The project AI directory is not a folder.");
+                const auto canonical = fs::canonical(directory, error);
+                const auto relative = error ? fs::path{} : canonical.lexically_relative(canonicalRoot);
+                if (error || relative.empty() || relative.is_absolute()
+                    || *relative.begin() == fs::path{".."})
+                    return fail("The project AI directory is outside the active project.");
+                directory = canonical;
             }
-
-            ec.clear();
-            std::filesystem::rename(temporary, profilePath, ec);
-            if (ec)
+            const fs::path profilePath = directory / "project_ai.epochai";
+            auto status = fs::symlink_status(profilePath, error);
+            if (error == std::errc::no_such_file_or_directory) error.clear();
+            if (error || fs::is_symlink(status)
+                || (fs::exists(status) && !fs::is_regular_file(status)))
+                return fail("The existing project AI profile is not an ordinary file.");
+            const bool existed = fs::exists(status);
+            const auto original = existed ? read_bounded_package_file(profilePath, 32u * 1024u) : std::string{};
+            if (existed && !profile::parse_profile(original))
+                return fail("The existing project AI profile is invalid; it was retained.");
+            const fs::path temporary = directory / ("project_ai.write."
+                + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+            const auto bytes = std::span<const std::byte>{
+                reinterpret_cast<const std::byte*>(encoded.canonical_bytes.data()), encoded.canonical_bytes.size()};
+            if (!platform::filesystem::exclusive_create_and_write(temporary, bytes, error))
+                return fail("The project AI profile could not create its temporary file.");
+            const auto cleanup = [&]
             {
-                ec.clear();
-                std::filesystem::remove(profilePath, ec);
-                ec.clear();
-                std::filesystem::rename(temporary, profilePath, ec);
-            }
-            if (ec)
+                std::error_code ignored;
+                (void)fs::remove(temporary, ignored);
+            };
+            const auto currentStatus = fs::symlink_status(profilePath, error);
+            if (error == std::errc::no_such_file_or_directory) error.clear();
+            if (error || fs::is_symlink(currentStatus) || fs::exists(currentStatus) != existed
+                || (existed && read_bounded_package_file(profilePath, 32u * 1024u) != original)
+                || read_bounded_package_file(manifest, 1024u * 1024u) != manifestBefore
+                || !platform::filesystem::atomic_replace_same_filesystem(temporary, profilePath, error))
             {
-                editor.packageInstallStatus =
-                    "Could not publish the project AI profile atomically.";
-                editor.packageInstallProgress = 0.0f;
-                return false;
+                cleanup();
+                return fail("The profile could not be saved atomically; the previous setting was retained.");
             }
-
-            editor.packageInstallStatus =
-                "Project AI provider set to "
-                + std::string{project_ai_provider_name(mode)}
-                + "; activation remains explicit per iteration.";
-            editor.packageInstallProgress = enabled ? 1.0f : 0.0f;
-            push_editor_log(
-                editor,
-                "[package] Project AI profile: "
-                    + display_project_path(profilePath));
+            editor.packageInstallStatus = provider == profile::Provider::disabled
+                ? "Project AI disabled. No models were stopped or removed."
+                : provider == profile::Provider::engine_selected
+                    ? "Project AI enabled using the engine-selected model. Confirm a model for each session; no weights were copied or loaded."
+                    : provider == profile::Provider::epoch_local_qwen38
+                        ? "Project AI enabled using the installed local Qwen provider. No model was loaded or weights copied."
+                        : "Project AI enabled using the operator-selected external provider. Confirm its model and connection; no connection was started.";
+            editor.packageInstallProgress = provider == profile::Provider::disabled ? 0.0f : 1.0f;
+            push_editor_log(editor, "[package] " + editor.packageInstallStatus);
             return true;
         }
 
@@ -1376,4 +2717,780 @@
                     display_project_path(
                         editor.plantLabPublishedArtifact.storage_path)));
             return true;
+        }
+
+        [[nodiscard]] bool builtin_project_package_ready(std::string_view packageId) noexcept
+        {
+            return packageId == package_registry::kEngineForestFactoryPackageId
+                || packageId == package_registry::kEngineArcadePackageId;
+        }
+
+        void add_builtin_project_package(EditorState& editor,
+            const std::shared_ptr<core::Context>& context,
+            const package_registry::PackageDescriptor& package)
+        {
+            if (!builtin_project_package_ready(package.id)
+                || package_source_task_busy(editor) || planetary_project_busy(editor)) return;
+            if (editor.projectRoot.empty())
+            {
+                const auto created = editor_create_project_shell(
+                    EditorProjectKind::Game, EditorProjectInputProvision::project_default);
+                editor.packageInstallStatus = created.summary;
+                if (!created.succeeded) return;
+                const auto admitted = editor_admit_project_manifest(created.manifest_path);
+                if (!admitted.succeeded || !editor_open_project(context, admitted.project_id))
+                {
+                    editor.packageInstallStatus = "Project created at " + created.root_path
+                        + ", but it could not be opened. " + admitted.summary;
+                    return;
+                }
+            }
+            if (package.id == package_registry::kEngineForestFactoryPackageId)
+            {
+                if (!stage_forest_factory_package_opt_in(editor, package)) return;
+                editor.mainSurface = EditorMainSurface::ForestFactory;
+                editor.workspaceCompanionsPending = true;
+                editor.projectStatus = "Forest Factory added. Edit the plant preview, then choose Add to Scene and Save Project.";
+            }
+            else
+            {
+                const auto staged = editor_stage_engine_arcade_project(editor.projectRoot);
+                editor.packageInstallStatus = staged.summary;
+                if (!staged.succeeded) return;
+                editor.projectStatus = staged.summary;
+            }
+            editor.packageInstallProgress = 1.0f;
+            editor.showPackageManagerModal = false;
+            push_editor_log(editor, "[package] " + editor.packageInstallStatus);
+        }
+
+        [[nodiscard]] bool ai_project_package_request_current(const EditorState& editor) noexcept
+        {
+            return editor.aiPackageRequest && editor.aiPackageRequest->project_id == editor.projectId
+                && editor.aiPackageRequest->project_root == editor.projectRoot
+                && editor.aiPackageRequest->project_key == planetary_project_key(editor)
+                && editor.aiPackageRequest->project_generation
+                    == editor.projectLifecycle.evidence().generations.selected_project.generation;
+        }
+
+        void finish_ai_project_package_request(EditorState& editor, std::string status, bool succeeded)
+        {
+            if (editor.aiGoalTools.enabled && editor.aiGoalTools.waiting
+                && editor.aiGoalTools.operation() == "project.create")
+                editor.aiGoalPackageReceipt = succeeded;
+            editor.aiToolStatus = std::move(status);
+            editor.aiPackageRequest.reset();
+            push_editor_log(editor, "[ai-package] " + editor.aiToolStatus);
+        }
+
+        [[nodiscard]] bool ai_package_generation_awaiting_attachment(const EditorState& editor) noexcept
+        {
+            return ai_project_package_request_current(editor)
+                && editor.aiPackageRequest->generate
+                && editor.aiPackageRequest->phase == EditorState::AiPackageRequest::Phase::review;
+        }
+
+        enum class AiProjectPackageOperation : unsigned char { none, catalog, install, generate };
+        struct AiProjectPackageIntent final
+        {
+            AiProjectPackageOperation operation{AiProjectPackageOperation::none};
+            bool clear_request{};
+        };
+
+        [[nodiscard]] std::string ai_project_package_lower(std::string_view value)
+        {
+            std::string result;result.reserve(value.size());
+            for(const unsigned char ch:value)result.push_back(static_cast<char>(ch>='A'&&ch<='Z'?ch-'A'+'a':ch));
+            return result;
+        }
+        [[nodiscard]] std::string ai_project_package_unquoted(std::string_view value)
+        {
+            std::string result;result.reserve(value.size());char quote{};
+            for(const char ch:value)
+            {
+                if(quote){if(ch==quote)quote=0;result.push_back(' ');}
+                else if(ch=='\''||ch=='"'){quote=ch;result.push_back(' ');}
+                else result.push_back(ch);
+            }
+            return result;
+        }
+        [[nodiscard]] bool ai_project_package_word(std::string_view text,std::string_view word) noexcept
+        {
+            if(word.empty())return false;
+            const auto wordChar=[](char ch){return (ch>='a'&&ch<='z')||(ch>='0'&&ch<='9')||ch=='_';};
+            for(auto at=text.find(word);at!=std::string_view::npos;at=text.find(word,at+1u))
+                if((at==0u||!wordChar(text[at-1u]))&&(at+word.size()==text.size()||!wordChar(text[at+word.size()])))return true;
+            return false;
+        }
+        [[nodiscard]] AiProjectPackageIntent ai_project_package_intent(std::string_view request,bool registered_target=false)
+        {
+            const auto lower=ai_project_package_lower(request);
+            std::string_view command=lower;
+            const auto trim=[](std::string_view value){
+                while(!value.empty()&&(value.front()==' '||value.front()=='\t'||value.front()=='\r'||value.front()=='\n'))value.remove_prefix(1u);
+                return value;
+            };
+            command=trim(command);
+            for(unsigned pass=0;pass<2u;++pass)
+                for(const auto prefix:{"please ","can you ","could you ","would you ","i want you to "})
+                    if(command.starts_with(prefix)){command=trim(command.substr(std::string_view{prefix}.size()));break;}
+            for(const auto phrase:{"list packages","list available packages","list extensions","show package catalog",
+                "show me the package catalog","show available packages","what packages are available","which packages are available"})
+                if(command.starts_with(phrase))return {AiProjectPackageOperation::catalog,true};
+            const auto end=command.find_first_of(" \t\r\n");
+            const auto verb=command.substr(0,end);
+            const auto any=[&](std::initializer_list<std::string_view> words){
+                return std::ranges::any_of(words,[&](auto word){return ai_project_package_word(lower,word);});
+            };
+            const bool package=verb=="install"||(any({"install","add","enable","activate"})
+                &&(registered_target||any({"package","packages","extension","extensions","planetary_terrain","forest_factory","engine_arcade",
+                    "planetary terrain","forest factory","plant lab"})));
+            const bool terrain=any({"generate","create","make"})
+                &&(any({"terrain","planetary"})||(any({"generate"})&&any({"planet","universe"})));
+            const bool leadingPackage=verb=="install"||verb=="add"||verb=="enable"||verb=="activate";
+            const auto operation=package&&leadingPackage?AiProjectPackageOperation::install
+                :terrain?AiProjectPackageOperation::generate:package?AiProjectPackageOperation::install:AiProjectPackageOperation::none;
+            if(operation==AiProjectPackageOperation::none)return {};
+            // Classification recognizes mentions for routing, while semantic
+            // admission constrains only an affirmative, leading operation.
+            // Negated clauses and quoted examples must not turn Save into Add.
+            const bool leading=operation==AiProjectPackageOperation::install
+                ?leadingPackage
+                :verb=="generate"||verb=="create"||verb=="make";
+            auto object=end==std::string_view::npos?std::string_view{}:trim(command.substr(end));
+            const auto unquotedObject=ai_project_package_unquoted(object);
+            object=trim(unquotedObject);
+            for(unsigned pass=0;pass<3u;++pass)
+                for(const auto article:{"a ","an ","the ","new ","optional ","bundled ","registered "})
+                    if(object.starts_with(article)){object=trim(object.substr(std::string_view{article}.size()));break;}
+            const bool projectPackage=object.starts_with("project package")||object.starts_with("project extension");
+            bool otherObject{};
+            if(!projectPackage)
+                for(const auto noun:{"text","label","button","cube","object","note","comment","script","file","document","theme","scene","world","project","words","string","example","message","log","description","title","caption"})
+                    if(object.starts_with(noun)&&(object.size()==std::string_view{noun}.size()
+                        ||object[std::string_view{noun}.size()]==' '))otherObject=true;
+            bool operationObject{};
+            for(const auto word:operation==AiProjectPackageOperation::install
+                ?std::initializer_list<std::string_view>{"package","packages","extension","extensions","planetary_terrain","forest_factory","engine_arcade","planetary terrain","forest factory","plant lab"}
+                :std::initializer_list<std::string_view>{"terrain","planetary","planet","universe"})
+                operationObject=operationObject||ai_project_package_word(object,word);
+            return {operation,leading&&!otherObject&&(operationObject||registered_target||(verb=="install"&&!object.empty()))};
+        }
+
+        [[nodiscard]] const package_registry::PackageDescriptor* ai_project_requested_package(std::string_view request)
+        {
+            const auto lower=ai_project_package_lower(request);
+            const auto end=lower.find_first_of(".;\n");
+            const std::string_view primary{lower.data(),end==std::string::npos?lower.size():end};
+            const package_registry::PackageDescriptor* found{};
+            for(const auto& package:package_registry::known_packages())
+            {
+                if(package_registry::catalog_section(package.id)!=package_registry::CatalogSection::ProjectPackages)continue;
+                bool match=ai_project_package_word(primary,package.id)
+                    ||ai_project_package_word(primary,ai_project_package_lower(package.displayName));
+                for(const auto& binding:package_registry::kSourceManifestBindings)
+                    if(binding.registry_id==package.id&&ai_project_package_word(primary,binding.manifest_id))match=true;
+                if(!match)continue;
+                if(found&&found->id!=package.id)return nullptr;
+                found=&package;
+            }
+            return found;
+        }
+
+        [[nodiscard]] bool ai_project_creation_uses_defaults(std::string_view request)
+        {
+            if (ai::project_lifecycle_request_tool(request) != "project.create") return false;
+            const auto lower = ai_project_package_lower(request);
+            for (const auto refusal : {"without defaults", "without default settings", "no defaults", "not defaults",
+                "do not use defaults", "do not use the defaults", "do not use default settings",
+                "don't use defaults", "don't use the defaults", "don't use default settings",
+                "do not choose for me", "don't choose for me"})
+                if (lower.find(refusal) != std::string::npos) return false;
+            const auto text = ai_project_package_unquoted(lower);
+            for (const auto permission : {"using defaults", "using the defaults", "use defaults", "use the defaults",
+                "with defaults", "with default settings", "using default settings", "use default settings", "choose for me"})
+                if (ai_project_package_word(text, permission)) return true;
+            return false;
+        }
+
+        [[nodiscard]] std::array<ai::McpArgument, 4> ai_project_creation_defaults()
+        {
+            const project_planetary::Settings settings{};
+            std::string detail;
+            constexpr std::array choices{
+                std::pair{project_planetary::DetailPreset::compact, std::string_view{"compact"}},
+                std::pair{project_planetary::DetailPreset::fast, std::string_view{"fast"}},
+                std::pair{project_planetary::DetailPreset::detailed, std::string_view{"balanced"}},
+                std::pair{project_planetary::DetailPreset::fine, std::string_view{"fine"}}};
+            for (const auto& [preset, name] : choices)
+                if (const auto candidate = project_planetary::with_detail_preset(settings, preset);
+                    candidate && *candidate == settings)
+                { detail = name; break; }
+            // An unrepresentable future default remains invalid and needs a
+            // choice; never substitute a different preset behind the user.
+            return {{{"seed", std::to_string(settings.seed)},
+                {"radius_m", std::to_string(settings.reference_radius_meters)},
+                {"detail", std::move(detail)}, {"ocean", settings.ocean_surface ? "on" : "off"}}};
+        }
+
+        [[nodiscard]] std::string_view ai_project_creation_coverage(std::string_view request)
+        {
+            if (ai::project_lifecycle_request_tool(request) != "project.create") return {};
+            const auto text = ai_project_package_unquoted(ai_project_package_lower(request));
+            auto target = ai::project_request_detail::representation_object(text);
+            // Only the affirmative creation target chooses coverage. Examples,
+            // reference descriptions and later save/run instructions do not.
+            const auto end = target.find_first_of(".;\n");
+            target = target.substr(0u, end);
+            for (const auto clause : {" not ", " but ", " then "})
+                if (const auto at = target.find(clause); at != std::string_view::npos)
+                    target = target.substr(0u, at);
+            if (const auto at = target.find("coverage="); at != std::string_view::npos)
+            {
+                const auto value = target.substr(at + 9u);
+                const auto token = value.substr(0u, value.find_first_of(" \t,"));
+                if (token == "none") return "none";
+                if (token == "planet") return "planet";
+                if (token == "universe") return "universe";
+                return {}; // An invalid or alternative-valued choice is not a default.
+            }
+            const bool planet = ai_project_package_word(target,"planet")
+                || ai_project_package_word(target,"planetary");
+            const bool universe = ai_project_package_word(target,"universe");
+            const bool empty = ai_project_package_word(target,"empty")
+                || ai_project_package_word(target,"blank");
+            if (static_cast<unsigned>(planet) + static_cast<unsigned>(universe)
+                + static_cast<unsigned>(empty) != 1u) return {};
+            return planet ? "planet" : universe ? "universe" : "none";
+        }
+
+        [[nodiscard]] std::string_view ai_project_creation_ocean(std::string_view request)
+        {
+            if (ai::project_lifecycle_request_tool(request) != "project.create") return {};
+            auto text = ai_project_package_unquoted(ai_project_package_lower(request));
+            if (const auto at = text.rfind("\nuser clarification:"); at != std::string::npos)
+                text.erase(0u, at + 20u);
+            // Reference descriptions and attached prose are not project settings.
+            for (const auto marker : {"\nattachment", "\nreference", "\nfile content", "\nread prompt.txt"})
+                if (const auto at = text.find(marker); at != std::string::npos) text.resize(at);
+            std::string_view choice;
+            std::size_t begin{};
+            while (begin < text.size())
+            {
+                const auto end = text.find_first_of(".;\n", begin);
+                auto clause = text.substr(begin, end == std::string::npos ? end : end - begin);
+                begin = end == std::string::npos ? text.size() : end + 1u;
+                if (std::ranges::any_of(std::array{"reference", "photo", "image", "example", "attachment"},
+                    [&](auto word) { return ai_project_package_word(clause, word); })) continue;
+                // Consume longer negations before their shorter positive forms.
+                constexpr std::pair<std::string_view, std::string_view> phrases[]{
+                    {"do not disable the ocean","on"}, {"do not disable ocean","on"},
+                    {"do not enable the ocean","off"}, {"do not enable ocean","off"},
+                    {"ocean not enabled","off"}, {"ocean not disabled","on"},
+                    {"ocean=on","on"}, {"ocean=off","off"},
+                    {"ocean enabled","on"}, {"ocean disabled","off"},
+                    {"ocean on","on"}, {"ocean off","off"},
+                    {"enable the ocean","on"}, {"disable the ocean","off"},
+                    {"enable ocean","on"}, {"disable ocean","off"},
+                    {"without an ocean","off"}, {"without ocean","off"},
+                    {"no ocean","off"}, {"with an ocean","on"}, {"with ocean","on"}};
+                for (const auto& [phrase, value] : phrases)
+                    for (auto at = clause.find(phrase); at != std::string::npos; at = clause.find(phrase))
+                    {
+                        const bool boundary = (at == 0u || !ai::project_request_detail::word_character(clause[at - 1u]))
+                            && (at + phrase.size() == clause.size()
+                                || !ai::project_request_detail::word_character(clause[at + phrase.size()]));
+                        if (boundary)
+                        {
+                            if (!choice.empty() && choice != value) return "conflicting";
+                            choice = value;
+                        }
+                        clause.replace(at, phrase.size(), phrase.size(), ' ');
+                    }
+            }
+            return choice;
+        }
+
+        [[nodiscard]] std::string ai_project_creation_question(std::string_view request)
+        {
+            const auto operation = ai::project_lifecycle_request_tool(request);
+            if (operation != "project.create" && operation != "forest.configure") return {};
+            const auto text = ai_project_package_lower(request);
+            const auto has = [&](std::initializer_list<std::string_view> words) {
+                return std::ranges::any_of(words,[&](auto word){return ai_project_package_word(text,word);});
+            };
+            const auto unquoted = ai_project_package_unquoted(text);
+            const auto answerAt = unquoted.rfind("\nuser clarification:");
+            const std::string_view choices = answerAt == std::string::npos ? std::string_view{unquoted}
+                : std::string_view{unquoted}.substr(answerAt + 20u);
+            const auto chosen = [&](std::string_view phrase) { return ai_project_package_word(choices, phrase); };
+            const bool approximation = choices.find("do not") == std::string_view::npos
+                && choices.find("don't") == std::string_view::npos
+                && (chosen("use the approximation") || chosen("use white bark with oak leaves")
+                    || chosen("oak leaves are fine") || chosen("approximation is fine"));
+            if (ai_project_package_word(unquoted, "birch") && !approximation)
+                return "The default Plant Lab tree uses oak leaves. For exact birch, first choose an admitted birch foliage texture through the tree texture action; or explicitly use white bark with oak leaves as an approximation. Which should I use? Nothing has changed.";
+            if (operation == "forest.configure") return {};
+            if (ai_project_creation_ocean(request) == "conflicting")
+                return "Should the new planet have an ocean on or off? The request contains both choices. Nothing was created.";
+            const auto primaryObject = ai::project_request_detail::representation_object(unquoted);
+            const bool desktopScale = ai_project_package_word(primaryObject,"desk")
+                || ai_project_package_word(primaryObject,"tabletop");
+            if (desktopScale && !chosen("procedural world") && !chosen("procedural planet")
+                && !chosen("explorable world") && !chosen("explorable planet"))
+                return "Should this be an explorable procedural planet with Plant Lab trees, or a miniature/generated prop for a desk scene? Please choose the representation and scale before I create anything.";
+            if (has({"named","called","name"}) && text.find("generated name") == std::string::npos
+                && text.find("automatic name") == std::string::npos
+                && text.find("automatically chosen unused name") == std::string::npos
+                && text.find("automatically chosen name") == std::string::npos)
+                return "New Project currently assigns a fresh project name automatically. May I use its generated name, or would you rather create the named project through Project first? Nothing was created.";
+            // Explicit permission to choose defaults is still shown as concrete
+            // settings in the reviewed call. It is not permission to execute.
+            if (ai_project_creation_uses_defaults(request)) return {};
+            const bool planet = has({"planet","planetary","universe"});
+            std::string missing;
+            const auto need = [&](bool present,std::string_view choice) {
+                if (present) return;
+                if (!missing.empty()) missing += "; ";
+                missing += choice;
+            };
+            need(planet || has({"game","tool","software","application"}),"game or software project");
+            need(planet || has({"empty","blank","none"}),"empty project, one planet, or a universe");
+            if (planet)
+            {
+                need(has({"planet","universe"}),"one planet or a universe");
+                need(has({"radius_m","radius","earth","moon","meters","metres","kilometers","kilometres","km"}),"planet size");
+                need(has({"seed","random"}),"fixed or random terrain seed");
+                need(has({"compact","fast","balanced","fine"}),"Compact, Fast, Balanced, or Fine detail");
+                need(has({"ocean","water","dry"}),"ocean on or off");
+            }
+            return missing.empty() ? std::string{}
+                : "Before I create anything, please choose: " + missing
+                    + ". You can answer in normal words or explicitly ask for defaults.";
+        }
+
+        [[nodiscard]] ai::McpValidation validate_ai_project_tool_selection(std::string_view request,const ai::McpToolCall& call)
+        {
+            const auto lifecycle = ai::project_lifecycle_request_tool(request);
+            if (lifecycle == "asset.image.generate")
+                return call.tool==lifecycle ? ai::validate_project_tool_arguments(call)
+                    : ai::McpValidation{ai::McpErrorCode::invalid_argument,"This requests an image or texture. Use the image generator; do not replace it with a tree, terrain, scene object or generated 3D mesh."};
+            if (call.tool=="asset.image.generate")
+                return {ai::McpErrorCode::invalid_argument,"No affirmative image-generation request was made. Nothing was generated."};
+            if (ai::explicit_generated_asset_request(request)
+                && (call.tool == "forest.configure" || call.tool == "forest.material" || call.tool == "forest.paint"
+                    || call.tool == "terrain.generate" || call.tool == "project.create"))
+                return {ai::McpErrorCode::invalid_argument,"This requests a generated prop/model representation. No generated-asset operation is registered in this tool protocol; clarify or use Asset Generation, not procedural terrain or a substituted tree."};
+            if (lifecycle == "forest.configure")
+            {
+                if (call.tool != lifecycle)
+                    return {ai::McpErrorCode::invalid_argument,"Tree design uses the current Plant Lab recipe through forest.configure; it is not a generic generated mesh or terrain action."};
+                if (const auto question = ai_project_creation_question(request); !question.empty())
+                    return {ai::McpErrorCode::invalid_argument,question};
+                return ai::validate_project_tool_arguments(call);
+            }
+            if (lifecycle == "forest.material")
+                return call.tool == lifecycle ? ai::validate_project_tool_arguments(call)
+                    : ai::McpValidation{ai::McpErrorCode::invalid_argument,"A tree texture request uses forest.material with an exact admitted project texture; scalar configuration or painting cannot substitute for it."};
+            if (call.tool == "forest.material")
+                return {ai::McpErrorCode::invalid_argument,"No explicit current-tree texture request was made. Nothing was bound."};
+            if (call.tool == "forest.configure")
+                return {ai::McpErrorCode::invalid_argument,"No explicit current-tree design request was made. Nothing was configured."};
+            if (lifecycle == "forest.paint")
+                return call.tool == lifecycle ? ai::validate_project_tool_arguments(call)
+                    : ai::McpValidation{ai::McpErrorCode::invalid_argument, "Painting a forest requires forest.paint, not regenerating terrain or creating individual objects."};
+            if (call.tool == "forest.paint")
+                return {ai::McpErrorCode::invalid_argument, "Ask explicitly to paint a forest area before proposing this operation."};
+            if (lifecycle == "project.create")
+            {
+                if (call.tool != lifecycle)
+                    return {ai::McpErrorCode::invalid_argument,"Creating a new project requires project.create, not an action on the current project."};
+                if (const auto question = ai_project_creation_question(request); !question.empty())
+                    return {ai::McpErrorCode::invalid_argument,question};
+                const auto* coverage = ai::authoring_plan_detail::argument(call,"coverage");
+                const auto requestedCoverage = ai_project_creation_coverage(request);
+                if (coverage && !requestedCoverage.empty() && coverage->value != requestedCoverage)
+                    return {ai::McpErrorCode::invalid_argument,"The requested project coverage is "
+                        + std::string{requestedCoverage} + "; the proposal must use that one exact value. Nothing was created."};
+                const auto requestedOcean = ai_project_creation_ocean(request);
+                const auto* ocean = ai::authoring_plan_detail::argument(call,"ocean");
+                if (ocean && !requestedOcean.empty() && ocean->value != requestedOcean)
+                    return {ai::McpErrorCode::invalid_argument,"The request requires ocean="
+                        + std::string{requestedOcean} + "; the proposal selected ocean=" + ocean->value
+                        + ". Revise that setting before approval. Nothing was created."};
+                return ai::validate_project_tool_arguments(call);
+            }
+            if (call.tool == "project.create")
+                return {ai::McpErrorCode::invalid_argument,"No affirmative new-project request was made. Nothing was created."};
+            const auto* requestedPackage=ai_project_requested_package(request);
+            const auto intent=ai_project_package_intent(request,
+                ai_project_requested_package(ai_project_package_unquoted(request))!=nullptr);
+            if(!intent.clear_request)return {};
+            const std::string_view expected=intent.operation==AiProjectPackageOperation::catalog?"package.catalog"
+                :intent.operation==AiProjectPackageOperation::install?"package.install":"terrain.generate";
+            if(call.tool!=expected)
+                return {ai::McpErrorCode::invalid_argument,"The proposed "+call.tool+" does not perform the requested "+std::string{expected}
+                    +" operation. Nothing ran and this proposal cannot be approved. Revise the plan or ask one critical clarification."};
+            if(intent.operation==AiProjectPackageOperation::install)
+            {
+                const auto* package=requestedPackage;
+                if(!package)return {ai::McpErrorCode::invalid_argument,"The package request does not identify one registered package. Ask one critical clarification; no package was selected or installed."};
+                const auto* target=ai::authoring_plan_detail::argument(call,"package");
+                if(!target||target->value!=package->id)
+                    return {ai::McpErrorCode::invalid_argument,"The proposed package is different from the requested registered package. Nothing ran and this proposal cannot be approved."};
+            }
+            return ai::validate_project_tool_arguments(call);
+        }
+
+        [[nodiscard]] std::string ai_project_tool_selection_prompt(std::string_view request)
+        {
+            if (ai_project_creation_uses_defaults(request))
+            {
+                std::string text = "\nHOST_PROJECT_CREATION_DEFAULTS_V1\n";
+                for (const auto& field : ai_project_creation_defaults())
+                    text += field.name + "=" + field.value + "\n";
+                text += "The user explicitly chose defaults. These host values fill only omitted generation fields before approval. "
+                    "Keep kind, coverage and every requested override explicit. Invalid explicit values, duplicate or unknown fields remain errors. "
+                    "Nothing executes until the user approves the resolved full CALL.\nEND_HOST_PROJECT_CREATION_DEFAULTS_V1\n";
+                if (const auto coverage = ai_project_creation_coverage(request);
+                    coverage == "planet" || coverage == "universe")
+                {
+                    const auto ocean = ai_project_creation_ocean(request);
+                    text += "\nREQUEST_OPERATION_CONSTRAINT_V1\nThe user requested coverage=" + std::string{coverage}
+                        + ". Use this one literal coverage value, not a list of choices.\n"
+                        "Concrete request-scoped defaults proposal:\nEPOCH_TOOL_PLAN_V1\nTITLE Create new "
+                        + std::string{coverage} + " project\nSUMMARY Request approval for a new game project with the chosen coverage.\n"
+                        "CALL project.create kind=game coverage=" + std::string{coverage}
+                        + (ocean == "on" || ocean == "off" ? " ocean=" + std::string{ocean} : std::string{})
+                        + "\nEND\nThis CALL includes the explicit ocean choice when given and omits the remaining defaultable generation fields. "
+                        "Copy every user-specified seed, radius_m, detail or ocean override into it; Epoch fills only the remaining omitted fields from the host defaults above. "
+                        "Do not copy grammar alternatives or angle brackets. Do not save, build or run yet.\nEND_REQUEST_OPERATION_CONSTRAINT_V1\n";
+                }
+                return text;
+            }
+            const auto* requestedPackage=ai_project_requested_package(request);
+            const auto intent=ai_project_package_intent(request,
+                ai_project_requested_package(ai_project_package_unquoted(request))!=nullptr);
+            if(!intent.clear_request)return {};
+            const std::string_view expected=intent.operation==AiProjectPackageOperation::catalog?"package.catalog"
+                :intent.operation==AiProjectPackageOperation::install?"package.install":"terrain.generate";
+            std::string text="\nREQUEST_OPERATION_CONSTRAINT_V1\nThe requested operation is "+std::string{expected}+".\n";
+            if(intent.operation==AiProjectPackageOperation::install)
+            {
+                if(const auto* package=requestedPackage)
+                    text+="Valid proposal for this registered package:\nEPOCH_TOOL_PLAN_V1\nTITLE Review package addition\n"
+                        "SUMMARY Request approval to add the selected registered project package.\nCALL package.install package="
+                        +std::string{package->id}+"\nEND\n";
+                else text+="The target is missing or ambiguous. Ask for it:\nEPOCH_TOOL_QUESTION_V1\n"
+                    "QUESTION Which registered project package should I add?\nEND\n";
+            }
+            else if(intent.operation==AiProjectPackageOperation::catalog)
+                text+="Valid proposal:\nEPOCH_TOOL_PLAN_V1\nTITLE List project packages\n"
+                    "SUMMARY Inspect the host's registered project packages.\nCALL package.catalog\nEND\n";
+            else text+="CALL syntax: terrain.generate coverage=<requested coverage> seed=<unsigned seed>.\n";
+            text+="Return one proposal or one critical question. The catalog supplies availability; if it is unavailable, ask how to proceed. "
+                "A proposal requests approval; completion requires later host evidence.\nEND_REQUEST_OPERATION_CONSTRAINT_V1\n";
+            return text;
+        }
+
+        [[nodiscard]] ai::ToolPlanParseResult admit_ai_project_tool_reply(std::string_view request,std::string_view reply)
+        {
+            const auto defaults = ai_project_creation_defaults();
+            auto result=ai::parse_tool_plan(reply, ai_project_creation_uses_defaults(request)
+                ? std::span<const ai::McpArgument>{defaults} : std::span<const ai::McpArgument>{});
+            if(result)
+                if(const auto selected=validate_ai_project_tool_selection(request,result.plan.call);!selected)
+                {result.code=ai::ToolPlanCode::invalid_argument;result.message=selected.message;}
+            return result;
+        }
+
+        [[nodiscard]] std::string ai_project_package_catalog(const EditorState& editor, bool modelEvidence = false)
+        {
+            std::string text = modelEvidence ? "REGISTERED_PROJECT_PACKAGES_V1\n" : "Project packages\n";
+            for (const auto& package : package_registry::known_packages())
+            {
+                if (package_registry::catalog_section(package.id) != package_registry::CatalogSection::ProjectPackages)
+                    continue;
+                std::string status, revision = "not verified";
+                if (package_registry::is_network_sensitive(package))
+                    status = "Separate network approval required; unavailable to this tool";
+                else if (builtin_project_package_ready(package.id))
+                {
+                    status = "Ready to add from the bundled engine";
+                    revision = "bundled";
+                }
+                else if (package.id == "research_planetary_terrain")
+                {
+                    if (editor.planetaryCheckedRoot == editor.projectRoot
+                        && editor.planetaryAttachment.source_attached())
+                    {
+                        status = "Source attached; generation available";
+                        revision = editor.planetaryAttachment.content_hash;
+                    }
+                    else if (editor.packageSourceReview && editor.packageSourceReview->review_ready()
+                        && editor.packageSourceStaged.source_staged()
+                        && editor.packageSourceReview->registry_package_id == package.id)
+                    {
+                        status = "Cached source checked; approval required before adding";
+                        revision = editor.packageSourceReview->content_hash;
+                    }
+                    else status = "Needs source review; local source must be verified";
+                }
+                else status = "Reference only; no project installer yet";
+                text += modelEvidence
+                    ? std::string{package.id} + " | " + std::string{package.displayName}
+                        + " | revision=" + revision + " | " + status + "\n"
+                    : std::string{package.displayName} + " — " + status + "\n";
+            }
+            if (modelEvidence)
+                text += "END_REGISTERED_PROJECT_PACKAGES_V1\nOnly these exact IDs are recognized. A descriptor is not installed. No automatic downloads or network services.\n";
+            return text;
+        }
+
+        [[nodiscard]] bool dispatch_ai_project_package_tool(EditorState& editor,
+            const ai::McpToolCall& call, const std::shared_ptr<core::Context>& context,
+            const project_planetary::Settings* requestedSettings = nullptr)
+        {
+            if (const auto arguments = ai::validate_project_tool_arguments(call); !arguments)
+            {
+                editor.aiToolStatus = arguments.message;
+                return false;
+            }
+            if (call.tool == "package.catalog")
+            {
+                editor.aiToolStatus = ai_project_package_catalog(editor);
+                return true;
+            }
+#if EPOCH_EDITION_PUBLIC
+            if (!project_ai_scope_allowed(editor.projectRoot))
+            {
+                editor.aiToolStatus = "Package tools need an ordinary game or application project. Engine source is outside this scope.";
+                return false;
+            }
+#endif
+            if (editor.projectId.empty() || editor.projectRoot.empty())
+            {
+                editor.projectCreationOpen = true;
+                editor.aiToolStatus = "Create or open a project, then request this package operation again. No source was installed or built.";
+                return false;
+            }
+            if (editor.aiPackageRequest || package_source_task_busy(editor) || planetary_project_busy(editor)
+                || editor.projectBuildPending || editor.scriptBuildPending
+                || editor.projectLifecycle.evidence().runtime_active)
+            {
+                editor.aiToolStatus = "Finish or cancel the active project/package operation before approving another.";
+                return false;
+            }
+            const bool generate = call.tool == "terrain.generate";
+            const auto* argument = ai::authoring_plan_detail::argument(call, "package");
+            const std::string packageId = generate ? "research_planetary_terrain"
+                : (argument ? argument->value : std::string{});
+            const auto* package = package_registry::find(packageId);
+            if (!package || package_registry::catalog_section(packageId) != package_registry::CatalogSection::ProjectPackages
+                || package_registry::is_network_sensitive(*package))
+            {
+                editor.aiToolStatus = "The requested package is unknown, is not a project package, or needs separate network approval.";
+                return false;
+            }
+            if (builtin_project_package_ready(packageId) && !generate)
+            {
+                editor.packageInstallProgress = 0.0f;
+                add_builtin_project_package(editor, context, *package);
+                editor.aiToolStatus = editor.packageInstallProgress == 1.0f
+                    ? editor.projectStatus : editor.packageInstallStatus;
+                return editor.packageInstallProgress == 1.0f;
+            }
+            if (packageId != "research_planetary_terrain")
+            {
+                editor.aiToolStatus = "This source library has no project activation route yet. A catalog entry does not mean it is installed.";
+                return false;
+            }
+            EditorState::AiPackageRequest request{};
+            request.project_id = editor.projectId;
+            request.project_root = editor.projectRoot;
+            request.project_key = planetary_project_key(editor);
+            request.project_generation = editor.projectLifecycle.evidence().generations.selected_project.generation;
+            request.generate = generate;
+            if (generate)
+            {
+                if (requestedSettings) request.settings = *requestedSettings;
+                request.settings.mode = ai::authoring_plan_detail::argument(call, "coverage")->value;
+                const auto& seed = ai::authoring_plan_detail::argument(call, "seed")->value;
+                (void)std::from_chars(seed.data(), seed.data() + seed.size(), request.settings.seed);
+                if (!project_planetary::valid_settings(request.settings))
+                {
+                    editor.aiToolStatus = "The requested terrain settings exceed the current provider budget. Nothing was queued.";
+                    return false;
+                }
+            }
+            editor.aiPackageRequest = std::move(request);
+            if (editor.planetaryCheckedRoot == editor.projectRoot && editor.planetaryAttachment.source_attached())
+            {
+                if (!generate)
+                {
+                    finish_ai_project_package_request(editor, "Planetary Terrain source is already attached to this project.");
+                    return true;
+                }
+                editor.aiPackageRequest->source_hash = editor.planetaryAttachment.content_hash;
+                editor.aiPackageRequest->phase = EditorState::AiPackageRequest::Phase::generating;
+                editor.planetarySettings = editor.aiPackageRequest->settings;
+                editor.planetarySeedDraft = std::to_string(editor.planetarySettings.seed);
+                start_planetary_project_generation(editor);
+                if (!editor.planetaryGeneratePending && !editor.planetaryFeatureReviewPending && !editor.planetaryFeatureAdmissionPending)
+                {
+                    finish_ai_project_package_request(editor, "Terrain generation was not queued: " + editor.planetaryStatus);
+                    return false;
+                }
+                editor.aiToolStatus = "The approved terrain request is building with this project's admitted source. Progress and Cancel are in Project.";
+                return true;
+            }
+            editor.selectedPackageId = packageId;
+            editor.packageCatalogModelsOnly = false;
+            editor.showPackageManagerModal = true;
+            open_package_source_review(editor, packageId);
+            editor.aiToolStatus = generate
+                ? "Review the exact Planetary Terrain source, then choose Add & Generate. No source, build or generation is approved by model text alone."
+                : "Review the exact Planetary Terrain source, then choose Add to Project. No source was copied yet.";
+            return true;
+        }
+
+        [[nodiscard]] bool create_ai_project_from_tool(EditorState& editor,
+            const ai::McpToolCall& call, const std::shared_ptr<core::Context>& context)
+        {
+            if (call.tool != "project.create")
+            { editor.aiToolStatus = "This action requires the exact project.create operation."; return false; }
+            if (const auto arguments = ai::validate_project_tool_arguments(call); !arguments)
+            { editor.aiToolStatus = arguments.message; return false; }
+            const auto& kind = ai::authoring_plan_detail::argument(call,"kind")->value;
+            const auto& coverage = ai::authoring_plan_detail::argument(call,"coverage")->value;
+            std::optional<project_planetary::Settings> terrain;
+            if (coverage != "none")
+            {
+                project_planetary::Settings settings;
+                settings.mode = coverage;
+                const auto& seed = ai::authoring_plan_detail::argument(call,"seed")->value;
+                if (seed == "random")
+                    settings.seed = static_cast<std::uint32_t>(std::chrono::steady_clock::now().time_since_epoch().count());
+                else (void)std::from_chars(seed.data(),seed.data()+seed.size(),settings.seed);
+                const auto& radius = ai::authoring_plan_detail::argument(call,"radius_m")->value;
+                (void)std::from_chars(radius.data(),radius.data()+radius.size(),settings.reference_radius_meters);
+                settings.ocean_surface = ai::authoring_plan_detail::argument(call,"ocean")->value == "on";
+                const auto& detail = ai::authoring_plan_detail::argument(call,"detail")->value;
+                const auto preset = detail == "compact" ? project_planetary::DetailPreset::compact
+                    : detail == "fast" ? project_planetary::DetailPreset::fast
+                    : detail == "balanced" ? project_planetary::DetailPreset::detailed
+                    : project_planetary::DetailPreset::fine;
+                terrain = project_planetary::with_detail_preset(settings,preset);
+                if (!terrain)
+                { editor.aiToolStatus = "The requested terrain settings do not fit the provider budget. No project was created."; return false; }
+            }
+            const auto created = editor_create_project_shell(kind == "game" ? EditorProjectKind::Game : EditorProjectKind::Tool,
+                EditorProjectInputProvision::project_default);
+            if (!created.succeeded)
+            { editor.aiToolStatus = "project.create failed: " + created.summary; return false; }
+            const auto admitted = editor_admit_project_manifest(created.manifest_path);
+            if (!admitted.succeeded || admitted.project_id != created.project_id
+                || !editor_open_project(context,created.project_id))
+            { editor.aiToolStatus = "Created project " + created.project_id + " at " + created.root_path
+                + ", but could not open it. " + admitted.summary; return false; }
+            editor.projectCreationOpen = false;
+            editor.requestedMainSurface = EditorMainSurface::Project;
+            if (!terrain)
+            {
+                editor.aiToolStatus = "project.create completed: " + created.project_id
+                    + ". Empty project created and opened; nothing was built or run.";
+                return true;
+            }
+            const auto root = resolve_editor_path(std::filesystem::path{editor.projectRoot});
+            if (!project_planetary::save_settings(root,*terrain)
+                || project_planetary::load_settings(root) != terrain)
+            {
+                editor.aiToolStatus = "Created project " + created.project_id
+                    + ", but its terrain settings could not be saved. No terrain was generated; retry Save Settings in Project.";
+                return false;
+            }
+            editor.planetarySettings = *terrain;
+            editor.planetarySeedDraft = std::to_string(terrain->seed);
+            // Reuse the existing exact-source review and cancellation path.
+            // This approval never approves optional source/dependency bytes.
+            auto generation = call;
+            generation.tool = "terrain.generate";
+            generation.arguments = {{"coverage",terrain->mode},{"seed",std::to_string(terrain->seed)}};
+            const bool queued = dispatch_ai_project_package_tool(editor,generation,context,&*terrain);
+            editor.aiToolStatus = "Created and opened " + created.project_id + "; saved requested terrain settings (seed "
+                + std::to_string(terrain->seed) + "). " + editor.aiToolStatus;
+            return queued;
+        }
+
+        [[nodiscard]] std::string ai_project_package_tool_description(const ai::McpToolCall& call)
+        {
+            if (call.tool == "package.catalog") return "Find the project packages this host can actually add or review.";
+            if (call.tool == "package.install")
+            {
+                const auto* id = ai::authoring_plan_detail::argument(call, "package");
+                const auto* package = id ? package_registry::find(id->value) : nullptr;
+                return package ? "Review " + std::string{package->displayName}
+                    + " for this project. Downloaded source still needs its exact file approval."
+                    : "The proposed package is not in this host's project catalog. Nothing can be installed.";
+            }
+            const auto* coverage = ai::authoring_plan_detail::argument(call, "coverage");
+            const auto* seed = ai::authoring_plan_detail::argument(call, "seed");
+            return coverage && seed ? "Generate " + coverage->value + " terrain (seed " + seed->value
+                + "). Missing Planetary Terrain source must be reviewed and approved before its local build."
+                : "The terrain request is missing its coverage or seed.";
+        }
+
+        void continue_ai_project_package_after_attachment(EditorState& editor)
+        {
+            if (!editor.aiPackageRequest
+                || editor.aiPackageRequest->phase != EditorState::AiPackageRequest::Phase::attaching)
+                return;
+            if (!ai_project_package_request_current(editor)
+                || editor.aiPackageRequest->cancelled)
+            {
+                finish_ai_project_package_request(editor, "Package request cancelled or its project changed. No terrain build was started.");
+                return;
+            }
+#if EPOCH_EDITION_PUBLIC
+            if (!project_ai_scope_allowed(editor.projectRoot))
+            {
+                finish_ai_project_package_request(editor, "Package continuation refused: this is no longer an admitted application project.");
+                return;
+            }
+#endif
+            if (!editor.planetaryAttachment.source_attached())
+            {
+                finish_ai_project_package_request(editor, "Package attachment failed; no terrain build was started. "
+                    + editor.planetaryAttachment.message);
+                return;
+            }
+            if (editor.planetaryAttachment.registry_package_id != "research_planetary_terrain"
+                || editor.planetaryAttachment.content_hash != editor.aiPackageRequest->source_hash)
+            {
+                finish_ai_project_package_request(editor, "The approved package attachment did not complete with the exact reviewed source. No terrain build was started.");
+                return;
+            }
+            if (!editor.aiPackageRequest->generate)
+            {
+                finish_ai_project_package_request(editor, "Planetary Terrain source added to the active project. Nothing was built or run.");
+                return;
+            }
+            editor.planetarySettings = editor.aiPackageRequest->settings;
+            editor.planetarySeedDraft = std::to_string(editor.planetarySettings.seed);
+            editor.aiPackageRequest->phase = EditorState::AiPackageRequest::Phase::generating;
+            start_planetary_project_generation(editor);
+            if (!editor.planetaryGeneratePending && !editor.planetaryFeatureReviewPending && !editor.planetaryFeatureAdmissionPending)
+                finish_ai_project_package_request(editor, "The source was added, but terrain generation could not start: " + editor.planetaryStatus);
+            else
+                editor.aiToolStatus = "Exact approved source attached. Building and generating the requested terrain; progress and Cancel are in Project.";
+        }
+
+        [[nodiscard]] bool ai_project_package_generation_current(const EditorState& editor) noexcept
+        {
+            return !editor.aiPackageRequest
+                || (ai_project_package_request_current(editor)
+                    && !editor.aiPackageRequest->cancelled
+                    && editor.aiPackageRequest->phase == EditorState::AiPackageRequest::Phase::generating
+                    && editor.aiPackageRequest->settings == editor.planetarySettings
+                    && editor.aiPackageRequest->source_hash == editor.planetaryAttachment.content_hash);
         }

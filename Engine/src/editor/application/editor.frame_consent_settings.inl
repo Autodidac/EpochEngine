@@ -160,304 +160,340 @@
             }
             gui::end_modal_window();
         }
-        if (editor.showSettingsModal)
+        if (editor.showSettingsModal && editorSettingsOwnsInput)
         {
             editor.openMenu = TopMenu::None;
-            const gui::Vec2 modalSize = editorSettingsModalSize;
-            const gui::Vec2 modalPos = editorSettingsModalPos;
-            // Leave a little room for the settings scrollbar and keep the
-            // footer outside the scrolled settings page.
-            const float contentWidth = modalSize.x - 58.0f;
-            gui::begin_modal_window(gui::ModalWindowOptions{
-                .title = "Editor Settings",
-                .position = modalPos,
-                .size = modalSize,
-                .viewport_size = { w, h },
-                .dim_background = true
-            });
-            const gui::Vec2 settingsViewport = gui::cursor_position();
-            const float settingsBodyHeight = (std::max)(1.0f,
-                modalPos.y + modalSize.y - 76.0f - settingsViewport.y);
-            (void)gui::begin_scroll_area(gui::ScrollAreaOptions{
-                .id = "epoch-editor-settings-body",
-                .size = {modalSize.x - 36.0f, settingsBodyHeight},
-                .content_height = 0.0f, // measured from actual widget layout
-                .draw_background = false,
-                .show_scrollbar = true});
-            const gui::Vec2 contentPos = gui::cursor_position();
-            const float contentY = contentPos.y;
-            gui::set_cursor({ contentPos.x + 8.0f, contentY });
-            gui::wrapped_label("Editor defaults and active project runtime policy.", contentWidth);
-            gui::set_cursor({ contentPos.x + 8.0f, gui::cursor_position().y + 9.0f });
-            gui::property_row("Active backend", renderer_name(ctx), 116.0f);
-            const float contextSelectY = gui::cursor_position().y + 8.0f;
+            editorSettingsBackgroundInput.reset();
+            const auto settingsFloating = gui::begin_floating_window(
+                editor.editorSettingsWindow, editorSettingsWindowOptions);
+            if (settingsFloating.begun)
+            {
+                const float settingsWidth = (std::max)(1.0f, settingsFloating.content.size.x - 12.0f);
+                const std::array settingsFooterActions{
+                    gui::InlineButtonSpec{.label="Reset Layout"},
+                    gui::InlineButtonSpec{.label="Model Manager"},
+                    gui::InlineButtonSpec{.label="Close"}};
+                const gui::InlineButtonRowOptions settingsFooterLayout{
+                    .sizing=gui::InlineButtonSizing::FitContent,
+                    .alignment=gui::InlineButtonAlignment::Center,
+                    .wrap=true, .available_width=settingsWidth};
+                const float settingsFooterHeight = gui::inline_button_row_height(
+                    settingsFooterActions, 30.0f, 6.0f, settingsFooterLayout);
+                const float settingsFooterY = settingsFloating.content.position.y
+                    + settingsFloating.content.size.y - 6.0f - settingsFooterHeight;
+                const gui::Vec2 settingsViewport{
+                    settingsFloating.content.position.x + 6.0f, settingsFloating.content.position.y};
+                const float settingsBodyHeight = (std::max)(1.0f,
+                    settingsFooterY - settingsViewport.y - 12.0f);
+                gui::set_cursor(settingsViewport);
+                (void)gui::begin_scroll_area(gui::ScrollAreaOptions{
+                    .id="epoch-editor-settings-body",
+                    .size={settingsWidth, settingsBodyHeight},
+                    .content_height=0.0f,
+                    .draw_background=true, .show_scrollbar=true});
+                const gui::Vec2 contentPos = gui::cursor_position();
+                const float contentWidth = (std::max)(1.0f, settingsWidth - 26.0f);
+                const float settingsControlWidth = (std::min)(contentWidth, 720.0f);
+                const gui::InlineButtonRowOptions settingsActionLayout{
+                    .sizing=gui::InlineButtonSizing::FitContent,
+                    .alignment=gui::InlineButtonAlignment::Center,
+                    .wrap=true, .available_width=contentWidth};
+                const auto settings_row = [&](float gap = 8.0f) {
+                    gui::set_cursor({contentPos.x + 8.0f, gui::cursor_position().y + gap});
+                };
+                settings_row(4.0f);
+                gui::wrapped_label("Editor defaults and active project runtime policy.", contentWidth);
+                settings_row();
+                gui::section_heading("Renderer & capabilities");
+                settings_row(0.0f);
+                gui::wrapped_label(std::string{"Active backend: "} + std::string{renderer_name(ctx)}, contentWidth);
+                settings_row();
 
-            const auto settingsContextOptions = available_context_backend_options();
-            const bool contextReplacementInProgress = editor_context_replacement_in_progress();
-            std::vector<const ContextBackendOption*> settingsSelectableContexts;
-            std::vector<std::string_view> settingsContextLabels;
-            settingsSelectableContexts.reserve(settingsContextOptions.size());
-            settingsContextLabels.reserve(settingsContextOptions.size());
-            for (const auto& option : settingsContextOptions)
-            {
-                if (!option.selectable)
-                    continue;
-                settingsSelectableContexts.push_back(&option);
-                settingsContextLabels.emplace_back(option.label);
-            }
-
-            gui::set_cursor({ contentPos.x + 8.0f, contextSelectY });
-            if (contextReplacementInProgress)
-            {
-                gui::property_row("Backend selection", "Replacement in progress", 132.0f);
-            }
-            else if (!settingsSelectableContexts.empty())
-            {
-                const auto settingsContextSelect = gui::select_box(gui::SelectBoxOptions{
-                    .id = "editor-settings-context-select",
-                    .placeholder = "Editor backend",
-                    .selected = renderer_name(ctx),
-                    .options = std::span<const std::string_view>{ settingsContextLabels.data(), settingsContextLabels.size() },
-                    .size = { 300.0f, 30.0f },
-                    .row_height = 28.0f,
-                    .max_visible_options = 7
-                });
-                if (settingsContextSelect.changed
-                    && settingsContextSelect.selected_index
-                    && *settingsContextSelect.selected_index < settingsSelectableContexts.size())
+                const auto settingsContextOptions = available_context_backend_options();
+                const bool contextReplacementInProgress = editor_context_replacement_in_progress();
+                std::vector<const ContextBackendOption*> settingsSelectableContexts;
+                std::vector<std::string_view> settingsContextLabels;
+                settingsSelectableContexts.reserve(settingsContextOptions.size());
+                settingsContextLabels.reserve(settingsContextOptions.size());
+                for (const auto& option : settingsContextOptions)
                 {
-                    request_context_backend_selection(
-                        *settingsSelectableContexts[*settingsContextSelect.selected_index]);
+                    if (!option.selectable)
+                        continue;
+                    settingsSelectableContexts.push_back(&option);
+                    settingsContextLabels.emplace_back(option.label);
                 }
-            }
-            else
-            {
-                gui::property_row("Backend selection", "Unavailable on this host", 132.0f);
-            }
-            // Backends and capability gates are full-width rows, not competing
-            // overlapping columns. Each row advances the cursor by its actual
-            // wrapped font height; this works in both compact and 4K layouts.
-            gui::set_cursor({contentPos.x + 8.0f,
-                gui::cursor_position().y + 11.0f});
-            gui::wrapped_label(
-                std::string{"Compiled: "} + context_backend_summary(settingsContextOptions),
-                contentWidth);
-            const auto& projectProfile = active_project_profile(editor);
-            gui::set_cursor({contentPos.x + 8.0f, gui::cursor_position().y + 7.0f});
-            gui::wrapped_label(std::string{"Editor gate: "} + renderer_admission_summary(
-                renderer_backend_kind(ctx), projectProfile.renderer_capability), contentWidth);
-            gui::set_cursor({contentPos.x + 8.0f, gui::cursor_position().y + 5.0f});
-            gui::wrapped_label(std::string{"Run gate: "} + renderer_admission_summary(
-                renderer_backend_kind(editor.projectRunBackend),
-                projectProfile.renderer_capability), contentWidth);
-            const std::string disabledBackends = disabled_context_backend_summary(settingsContextOptions);
-            gui::set_cursor({contentPos.x + 8.0f, gui::cursor_position().y + 7.0f});
-            gui::wrapped_label(
-                disabledBackends == "none"
-                    ? editor.contextSelectionStatus
-                    : std::string{"Disabled: "} + disabledBackends + ". " + editor.contextSelectionStatus,
-                contentWidth);
-            const float themeY = gui::cursor_position().y + 18.0f;
 
-            const auto settingsThemeChoices = gui::theme_preference_choices();
-            std::vector<std::string_view> settingsThemeLabels;
-            settingsThemeLabels.reserve(settingsThemeChoices.size());
-            for (const auto& choice : settingsThemeChoices)
-                settingsThemeLabels.emplace_back(choice.label);
-            const bool compactSettings = modalSize.x < 620.0f;
-            const float themeControlWidth = compactSettings ? 200.0f : 300.0f;
-            gui::set_cursor({ contentPos.x + 8.0f, themeY + 0.0f });
-            const auto settingsThemeSelect = gui::select_box(gui::SelectBoxOptions{
-                .id = "editor-theme-select",
-                .placeholder = "Theme",
-                .selected = gui::theme_preference_label(editor.themePreference),
-                .options = std::span<const std::string_view>{ settingsThemeLabels.data(), settingsThemeLabels.size() },
-                .size = { themeControlWidth, 30.0f },
-                .row_height = 28.0f,
-                .max_visible_options = 8
-            });
-            if (settingsThemeSelect.changed && settingsThemeSelect.selected_index && *settingsThemeSelect.selected_index < settingsThemeChoices.size())
-            {
-                editor.themePreference = settingsThemeChoices[*settingsThemeSelect.selected_index].preference;
-                push_editor_log(editor, std::string("[settings] Theme set to ") + std::string(gui::theme_preference_label(editor.themePreference)) + ".");
-            }
-
-            const float roundingControlX = compactSettings ? 216.0f : 326.0f;
-            const float roundingControlWidth = (std::max)(
-                156.0f,
-                contentWidth - roundingControlX - 8.0f);
-            if (editor.themePreference == gui::ThemePreference::ThemeCycle)
-            {
-                const auto cycleChoices = gui::theme_cycle_interval_choices();
-                std::vector<std::string_view> intervalLabels;
-                intervalLabels.reserve(cycleChoices.size());
-                for (const auto& choice : cycleChoices)
-                    intervalLabels.emplace_back(choice.label);
-                gui::set_cursor({ contentPos.x + roundingControlX, themeY + 0.0f });
-                const auto intervalSelect = gui::select_box(gui::SelectBoxOptions{
-                    .id = "editor-theme-cycle-interval-select",
-                    .placeholder = "Cycle interval",
-                    .selected = gui::theme_cycle_interval_label(editor.themeCycleIntervalSeconds),
-                    .options = std::span<const std::string_view>{ intervalLabels.data(), intervalLabels.size() },
-                    .size = { roundingControlWidth, 30.0f },
-                    .row_height = 28.0f,
-                    .max_visible_options = 6
-                });
-                if (intervalSelect.changed && intervalSelect.selected_index
-                    && *intervalSelect.selected_index < cycleChoices.size())
+                if (contextReplacementInProgress)
                 {
-                    editor.themeCycleIntervalSeconds = cycleChoices[*intervalSelect.selected_index].seconds;
-                    gui::set_theme_cycle_interval(editor.themeCycleIntervalSeconds);
-                    push_editor_log(editor, "[settings] Theme cycle interval set to "
-                        + std::string(gui::theme_cycle_interval_label(editor.themeCycleIntervalSeconds)) + ".");
+                    gui::property_row("Backend selection", "Replacement in progress", 132.0f);
                 }
-            }
-
-            const auto settingsInputChoices = input_profile_choices();
-            std::vector<std::string_view> settingsInputLabels;
-            settingsInputLabels.reserve(settingsInputChoices.size());
-            for (const auto& choice : settingsInputChoices)
-                settingsInputLabels.emplace_back(choice.label);
-            gui::set_cursor({ contentPos.x + 8.0f, themeY + 46.0f });
-            const auto settingsInputSelect = gui::select_box(gui::SelectBoxOptions{
-                .id = "editor-input-profile-select",
-                .placeholder = "Input profile",
-                .selected = input_profile_label(editor.inputProfilePreset),
-                .options = std::span<const std::string_view>{ settingsInputLabels.data(), settingsInputLabels.size() },
-                .size = { compactSettings ? 200.0f : 300.0f, 30.0f },
-                .row_height = 28.0f,
-                .max_visible_options = 4
-            });
-            if (settingsInputSelect.changed && settingsInputSelect.selected_index && *settingsInputSelect.selected_index < settingsInputChoices.size())
-            {
-                editor.inputProfilePreset = settingsInputChoices[*settingsInputSelect.selected_index].preset;
-                input::set_active_profile(editor.inputProfilePreset);
-                push_editor_log(editor, std::string("[input] Shared profile set to ") + std::string(input_profile_label(editor.inputProfilePreset)) + ".");
-            }
-            gui::set_cursor({ contentPos.x + roundingControlX, themeY + 46.0f });
-            if (gui::toggle_switch(
-                compactSettings ? "Rounded GUI" : "Rounded rectangles",
-                editor.roundedRectangles,
-                { roundingControlWidth, 30.0f }))
-            {
-                push_editor_log(
-                    editor,
-                    editor.roundedRectangles
-                        ? "[settings] Rounded GUI rectangles enabled."
-                        : "[settings] Rounded GUI rectangles disabled.");
-            }
-            if (modalSize.x >= 620.0f)
-            {
-                // Cycling puts the interval selector beside the Theme field;
-                // move this secondary project action below, not over Rounded GUI.
-                const bool cycling = editor.themePreference == gui::ThemePreference::ThemeCycle;
-                gui::set_cursor({ contentPos.x + (cycling ? 336.0f : 326.0f),
-                    themeY + (cycling ? 184.0f : 50.0f) });
-                if (gui::button(
-                        has_open_project(editor)
-                            ? "Open Project Input Manager"
-                            : "Project Input: No Project",
-                        { roundingControlWidth - (cycling ? 10.0f : 0.0f), 30.0f }))
+                else if (!settingsSelectableContexts.empty())
                 {
-                    editor.projectWorkspaceSection = 1u;
-                    open_editor_surface(
-                        EditorMainSurface::Project,
-                        "Project input settings");
-                    editor.showSettingsModal = false;
+                    const auto settingsContextSelect = gui::select_box(gui::SelectBoxOptions{
+                        .id = "editor-settings-context-select",
+                        .placeholder = "Editor backend",
+                        .selected = renderer_name(ctx),
+                        .options = std::span<const std::string_view>{ settingsContextLabels.data(), settingsContextLabels.size() },
+                        .size = { settingsControlWidth, 30.0f },
+                        .row_height = 28.0f,
+                        .max_visible_options = 7
+                    });
+                    if (settingsContextSelect.changed
+                        && settingsContextSelect.selected_index
+                        && *settingsContextSelect.selected_index < settingsSelectableContexts.size())
+                    {
+                        request_context_backend_selection(
+                            *settingsSelectableContexts[*settingsContextSelect.selected_index]);
+                    }
+                }
+                else
+                {
+                    gui::property_row("Backend selection", "Unavailable on this host", 132.0f);
+                }
+                // Backends and capability gates are full-width rows, not competing
+                // overlapping columns. Each row advances the cursor by its actual
+                // wrapped font height; this works in both compact and 4K layouts.
+                settings_row();
+                gui::wrapped_label(
+                    std::string{"Compiled: "} + context_backend_summary(settingsContextOptions),
+                    contentWidth);
+                const auto& projectProfile = active_project_profile(editor);
+                settings_row(4.0f);
+                gui::wrapped_label(std::string{"Editor gate: "} + renderer_admission_summary(
+                    renderer_backend_kind(ctx), projectProfile.renderer_capability), contentWidth);
+                settings_row(4.0f);
+                gui::wrapped_label(std::string{"Run gate: "} + renderer_admission_summary(
+                    renderer_backend_kind(editor.projectRunBackend),
+                    projectProfile.renderer_capability), contentWidth);
+                const std::string disabledBackends = disabled_context_backend_summary(settingsContextOptions);
+                settings_row(4.0f);
+                gui::wrapped_label(
+                    disabledBackends == "none"
+                        ? editor.contextSelectionStatus
+                        : std::string{"Disabled: "} + disabledBackends + ". " + editor.contextSelectionStatus,
+                    contentWidth);
+                settings_row(14.0f);
+                gui::section_heading("Appearance");
+                settings_row(0.0f);
+                gui::label("Theme");
+
+                const auto settingsThemeChoices = gui::theme_preference_choices();
+                std::vector<std::string_view> settingsThemeLabels;
+                settingsThemeLabels.reserve(settingsThemeChoices.size());
+                for (const auto& choice : settingsThemeChoices)
+                    settingsThemeLabels.emplace_back(choice.label);
+                const auto settingsThemeSelect = gui::select_box(gui::SelectBoxOptions{
+                    .id = "editor-theme-select",
+                    .placeholder = "Theme",
+                    .selected = gui::theme_preference_label(editor.themePreference),
+                    .options = std::span<const std::string_view>{ settingsThemeLabels.data(), settingsThemeLabels.size() },
+                    .size = { settingsControlWidth, 30.0f },
+                    .row_height = 28.0f,
+                    .max_visible_options = 8
+                });
+                if (settingsThemeSelect.changed && settingsThemeSelect.selected_index && *settingsThemeSelect.selected_index < settingsThemeChoices.size())
+                {
+                    editor.themePreference = settingsThemeChoices[*settingsThemeSelect.selected_index].preference;
+                    push_editor_log(editor, std::string("[settings] Theme set to ") + std::string(gui::theme_preference_label(editor.themePreference)) + ".");
+                }
+
+                if (editor.themePreference == gui::ThemePreference::ThemeCycle)
+                {
+                    const auto cycleChoices = gui::theme_cycle_interval_choices();
+                    std::vector<std::string_view> intervalLabels;
+                    intervalLabels.reserve(cycleChoices.size());
+                    for (const auto& choice : cycleChoices)
+                        intervalLabels.emplace_back(choice.label);
+                    settings_row();
+                    gui::label("Theme cycle interval");
+                    const auto intervalSelect = gui::select_box(gui::SelectBoxOptions{
+                        .id = "editor-theme-cycle-interval-select",
+                        .placeholder = "Cycle interval",
+                        .selected = gui::theme_cycle_interval_label(editor.themeCycleIntervalSeconds),
+                        .options = std::span<const std::string_view>{ intervalLabels.data(), intervalLabels.size() },
+                        .size = { settingsControlWidth, 30.0f },
+                        .row_height = 28.0f,
+                        .max_visible_options = 6
+                    });
+                    if (intervalSelect.changed && intervalSelect.selected_index
+                        && *intervalSelect.selected_index < cycleChoices.size())
+                    {
+                        editor.themeCycleIntervalSeconds = cycleChoices[*intervalSelect.selected_index].seconds;
+                        gui::set_theme_cycle_interval(editor.themeCycleIntervalSeconds);
+                        push_editor_log(editor, "[settings] Theme cycle interval set to "
+                            + std::string(gui::theme_cycle_interval_label(editor.themeCycleIntervalSeconds)) + ".");
+                    }
+                }
+
+                settings_row();
+                if (gui::toggle_switch(
+                    "Rounded rectangles",
+                    editor.roundedRectangles,
+                    { settingsControlWidth, 30.0f }))
+                {
                     push_editor_log(
                         editor,
-                        "[settings] Opened the active project's Input Manager.");
+                        editor.roundedRectangles
+                            ? "[settings] Rounded GUI rectangles enabled."
+                            : "[settings] Rounded GUI rectangles disabled.");
                 }
-            }
+                settings_row(14.0f);
+                gui::section_heading("Input");
+                settings_row(0.0f);
+                gui::label("Shared input profile");
+                const auto settingsInputChoices = input_profile_choices();
+                std::vector<std::string_view> settingsInputLabels;
+                settingsInputLabels.reserve(settingsInputChoices.size());
+                for (const auto& choice : settingsInputChoices)
+                    settingsInputLabels.emplace_back(choice.label);
+                const auto settingsInputSelect = gui::select_box(gui::SelectBoxOptions{
+                    .id = "editor-input-profile-select",
+                    .placeholder = "Input profile",
+                    .selected = input_profile_label(editor.inputProfilePreset),
+                    .options = std::span<const std::string_view>{ settingsInputLabels.data(), settingsInputLabels.size() },
+                    .size = { settingsControlWidth, 30.0f },
+                    .row_height = 28.0f,
+                    .max_visible_options = 4
+                });
+                if (settingsInputSelect.changed && settingsInputSelect.selected_index && *settingsInputSelect.selected_index < settingsInputChoices.size())
+                {
+                    editor.inputProfilePreset = settingsInputChoices[*settingsInputSelect.selected_index].preset;
+                    input::set_active_profile(editor.inputProfilePreset);
+                    push_editor_log(editor, std::string("[input] Shared profile set to ") + std::string(input_profile_label(editor.inputProfilePreset)) + ".");
+                }
+                settings_row();
+                if (gui::inline_button_row(std::array{gui::InlineButtonSpec{
+                        .label=has_open_project(editor)
+                            ? "Open Project Input Manager" : "Project Input: No Project"}},
+                        30.0f, 6.0f, settingsActionLayout))
+                {
+                    editor.projectWorkspaceSection = 1u;
+                    open_editor_surface(EditorMainSurface::Project, "Project input settings");
+                    editor.showSettingsModal = false;
+                    push_editor_log(editor, "[settings] Opened the active project's Input Manager.");
+                }
+                settings_row(14.0f);
+                gui::section_heading("Frame pacing");
+                settings_row(0.0f);
+                gui::label("Editor frame limit");
+                if (frame_limit_control("editor-core-frame-limit-select", editor.editorFrameLimitFps,
+                        editor.editorFrameLimitEdit, settingsControlWidth, editor.editorFrameVsyncRequested))
+                {
+                    editor.editorFrameVsyncRequested = false;
+                    if (ctx->windowData)
+                        ctx->windowData->editorFramePacingOverride.publish(
+                            editor.editorFrameLimitFps > 0.0 ? perf::frame_pacing_mode::target_hz
+                                : perf::frame_pacing_mode::uncapped,
+                            editor.editorFrameLimitFps);
+                    push_editor_log(editor, std::string("[settings] Editor frame limit set to ") + std::string(frame_limit_label(editor.editorFrameLimitFps)) + ".");
+                }
+                settings_row();
+                gui::label("Project Run frame limit");
+                if (frame_limit_control("settings-project-frame-limit-select", editor.projectRunFrameLimitFps,
+                        editor.projectFrameLimitEdit, settingsControlWidth))
+                {
+                    persist_project_run_settings(editor);
+                    push_editor_log(editor, "[project] Project frame limit set to "
+                        + frame_limit_argument(editor.projectRunFrameLimitFps) + " FPS.");
+                }
 
-            gui::set_cursor({ contentPos.x + 8.0f, themeY + 92.0f });
-            if (frame_limit_control("editor-core-frame-limit-select", editor.editorFrameLimitFps,
-                    editor.editorFrameLimitEdit, modalSize.x - 32.0f, editor.editorFrameVsyncRequested))
-            {
-                editor.editorFrameVsyncRequested = false;
-                if (ctx->windowData)
-                    ctx->windowData->editorFramePacingOverride.publish(
-                        editor.editorFrameLimitFps > 0.0 ? perf::frame_pacing_mode::target_hz
-                            : perf::frame_pacing_mode::uncapped,
-                        editor.editorFrameLimitFps);
-                push_editor_log(editor, std::string("[settings] Editor frame limit set to ") + std::string(frame_limit_label(editor.editorFrameLimitFps)) + ".");
-            }
-            gui::set_cursor({ contentPos.x + 8.0f, themeY + 138.0f });
-            if (frame_limit_control("settings-project-frame-limit-select", editor.projectRunFrameLimitFps,
-                    editor.projectFrameLimitEdit, modalSize.x - 32.0f))
-            {
-                push_editor_log(editor, "[project] Project frame limit set to "
-                    + frame_limit_argument(editor.projectRunFrameLimitFps) + " FPS.");
-            }
+                settings_row(14.0f);
+                gui::section_heading("Camera & preview");
+                settings_row(0.0f);
+                const auto settingsCameraChoices = project_camera_choices();
+                std::vector<std::string_view> settingsCameraLabels;
+                settingsCameraLabels.reserve(settingsCameraChoices.size());
+                for (const auto& choice : settingsCameraChoices)
+                    settingsCameraLabels.emplace_back(choice.label);
 
-            const auto settingsCameraChoices = project_camera_choices();
-            std::vector<std::string_view> settingsCameraLabels;
-            settingsCameraLabels.reserve(settingsCameraChoices.size());
-            for (const auto& choice : settingsCameraChoices)
-                settingsCameraLabels.emplace_back(choice.label);
-            gui::set_cursor({ contentPos.x + 8.0f, themeY + 184.0f });
-            const auto settingsCameraSelect = gui::select_box(gui::SelectBoxOptions{
-                .id = "settings-project-camera-select",
-                .placeholder = "Camera style",
-                .selected = project_camera_label(editor.projectCameraMode),
-                .options = std::span<const std::string_view>{ settingsCameraLabels.data(), settingsCameraLabels.size() },
-                .size = { 320.0f, 30.0f },
-                .row_height = 28.0f,
-                .max_visible_options = 3
-            });
-            if (settingsCameraSelect.changed && settingsCameraSelect.selected_index && *settingsCameraSelect.selected_index < settingsCameraChoices.size())
-            {
-                editor.projectCameraMode = settingsCameraChoices[*settingsCameraSelect.selected_index].mode;
-                if (editor.projectCameraMode == previewgrid::CameraMode::Canvas2D)
-                    ensure_2d_canvas_entity(editor);
-                push_editor_log(editor, std::string("[project] Camera style set to ") + std::string(settingsCameraChoices[*settingsCameraSelect.selected_index].label) + ".");
-            }
+                gui::label("Editor camera controls");
 
-            const float previewControlWidth = (std::min)(146.0f, (contentWidth - 20.0f) / 3.0f);
-            gui::set_cursor({ contentPos.x + 8.0f, themeY + 234.0f });
-            if (gui::button(editor.previewMode == core::ScenePreviewMode::Editor ? "Disable Preview" : "Enable Preview", { previewControlWidth, 30.0f }))
-            {
-                editor.previewMode = editor.previewMode == core::ScenePreviewMode::Editor
-                    ? core::ScenePreviewMode::None
-                    : core::ScenePreviewMode::Editor;
-                if (ctx)
-                    ctx->set_scene_preview_mode(editor.previewMode);
-            }
-            gui::set_cursor({ contentPos.x + 18.0f + previewControlWidth, themeY + 234.0f });
-            if (gui::button(editor.helpersVisible ? "Hide Helpers" : "Show Helpers", { previewControlWidth, 30.0f }))
-                handle_scene_tool(editor, ctx.get(), "toggle_helpers");
-            gui::set_cursor({ contentPos.x + 28.0f + previewControlWidth * 2.0f, themeY + 234.0f });
-            if (gui::button("Reset Camera", { previewControlWidth, 30.0f }))
-                handle_scene_tool(editor, ctx.get(), "reset_camera");
+                const bool editorCameraAvailable = ctx && !editor_project_viewport_input_reserved(editor);
+                const auto settingsEditorCameraSelect = gui::select_box(gui::SelectBoxOptions{
+                    .id = "settings-editor-camera-select",
+                    .placeholder = "Editor camera controls",
+                    .selected = project_camera_label(editor.viewportCameraMode),
+                    .options = std::span<const std::string_view>{ settingsCameraLabels.data(), settingsCameraLabels.size() },
+                    .size = { settingsControlWidth, 30.0f },
+                    .row_height = 28.0f,
+                    .max_visible_options = 3,
+                    .enabled = editorCameraAvailable
+                });
+                if (editorCameraAvailable && settingsEditorCameraSelect.changed && settingsEditorCameraSelect.selected_index
+                    && *settingsEditorCameraSelect.selected_index < settingsCameraChoices.size())
+                {
+                    editor.viewportCameraMode = settingsCameraChoices[*settingsEditorCameraSelect.selected_index].mode;
+                    previewgrid::set_camera_mode(ctx.get(), editor.viewportCameraMode);
+                    push_editor_log(editor, std::string("[settings] Editor camera controls set to ")
+                        + std::string(settingsCameraChoices[*settingsEditorCameraSelect.selected_index].label) + ".");
+                }
+                settings_row();
+                gui::label("Project Run camera");
 
+                const auto settingsCameraSelect = gui::select_box(gui::SelectBoxOptions{
+                    .id = "settings-project-camera-select",
+                    .placeholder = "Project Run camera",
+                    .selected = project_camera_label(editor.projectCameraMode),
+                    .options = std::span<const std::string_view>{ settingsCameraLabels.data(), settingsCameraLabels.size() },
+                    .size = { settingsControlWidth, 30.0f },
+                    .row_height = 28.0f,
+                    .max_visible_options = 3
+                });
+                if (settingsCameraSelect.changed && settingsCameraSelect.selected_index && *settingsCameraSelect.selected_index < settingsCameraChoices.size())
+                {
+                    editor.projectCameraMode = settingsCameraChoices[*settingsCameraSelect.selected_index].mode;
+                    if (editor.projectCameraMode == previewgrid::CameraMode::Canvas2D)
+                        ensure_2d_canvas_entity(editor);
+                    push_editor_log(editor, std::string("[project] Camera style set to ") + std::string(settingsCameraChoices[*settingsCameraSelect.selected_index].label) + ".");
+                }
 
-            gui::set_cursor({contentPos.x + 8.0f, themeY + 283.0f});
-            gui::end_scroll_area();
-            const float actionY = modalPos.y + modalSize.y - 54.0f;
-            const float actionLeft = settingsViewport.x + 8.0f;
-            const float actionRight = modalPos.x + modalSize.x - 32.0f;
-            const float actionGap = 10.0f;
-            const float actionScale = std::clamp(
-                (actionRight - actionLeft - 2.0f * actionGap) / 368.0f, 0.0f, 1.0f);
-            const float resetWidth = 132.0f * actionScale;
-            const float aiWidth = 148.0f * actionScale;
-            const float closeWidth = 88.0f * actionScale;
-            gui::set_cursor({ actionLeft, actionY });
-            if (gui::button(actionScale < 0.7f ? "Reset" : "Reset Layout", { resetWidth, 30.0f }))
-            {
-                reset_editor_layout(editor);
-                push_editor_log(editor, "[settings] Editor layout reset.");
+                settings_row();
+                const std::array previewActions{
+                    gui::InlineButtonSpec{.label=editor.previewMode == core::ScenePreviewMode::Editor
+                        ? "Disable Preview" : "Enable Preview"},
+                    gui::InlineButtonSpec{.label=editor.helpersVisible ? "Hide Helpers" : "Show Helpers"},
+                    gui::InlineButtonSpec{.label="Reset Camera"}};
+                if (const auto action = gui::inline_button_row(
+                        previewActions, 30.0f, 6.0f, settingsActionLayout))
+                {
+                    if (*action == 0u)
+                    {
+                        editor.previewMode = editor.previewMode == core::ScenePreviewMode::Editor
+                            ? core::ScenePreviewMode::None : core::ScenePreviewMode::Editor;
+                        if (ctx)
+                            ctx->set_scene_preview_mode(editor_project_viewport_input_reserved(editor)
+                                ? core::ScenePreviewMode::None : editor.previewMode);
+                    }
+                    else if (*action == 1u)
+                        handle_scene_tool(editor, ctx.get(), "toggle_helpers");
+                    else
+                        handle_scene_tool(editor, ctx.get(), "reset_camera");
+                }
+                settings_row();
+                gui::end_scroll_area();
+                gui::set_cursor({settingsViewport.x, settingsFooterY});
+                if (const auto action = gui::inline_button_row(
+                        settingsFooterActions, 30.0f, 6.0f, settingsFooterLayout))
+                {
+                    if (*action == 0u)
+                    {
+                        reset_editor_layout(editor);
+                        push_editor_log(editor, "[settings] Editor layout reset.");
+                    }
+                    else if (*action == 1u)
+                    {
+                        editor.showAiModelManagerModal = true;
+                        editor.aiModelManagerSection = 0;
+                        editor.aiModelManagerTab = editor.aiMethodSelection == 1 ? 1 : editor.aiMethodSelection == 2 ? 2 : 0;
+                        editor.showSettingsModal = false;
+                    }
+                    else
+                        editor.showSettingsModal = false;
+                }
+                gui::end_floating_window();
             }
-            gui::set_cursor({ actionLeft + resetWidth + actionGap, actionY });
-            if (gui::button(actionScale < 0.7f ? "Models" : "Model Manager", { aiWidth, 30.0f }))
-            {
-                editor.showAiModelManagerModal = true;
-                editor.aiModelManagerSection = 0;
-                editor.aiModelManagerTab = editor.aiMethodSelection == 1 ? 1 : editor.aiMethodSelection == 2 ? 2 : 0;
+            if (settingsFloating.close_requested || !editor.editorSettingsWindow.open)
                 editor.showSettingsModal = false;
-            }
-            gui::set_cursor({ actionRight - closeWidth, actionY });
-            if (gui::button("Close", { closeWidth, 30.0f }))
-                editor.showSettingsModal = false;
-            gui::end_modal_window();
+            // Even Close must not pass this frame's release to later controls.
+            if (!automationInputReserved) editorSettingsBackgroundInput.emplace();
         }

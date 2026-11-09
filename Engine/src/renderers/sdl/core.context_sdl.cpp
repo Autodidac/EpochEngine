@@ -888,11 +888,13 @@ namespace
     void render_engine_arcade_sampled_surface_preview(
         const std::shared_ptr<epochengine::core::Context>& ctx,
         const epochengine::previewgrid::Mat4& mvp,
-        const epochengine::core::RenderViewport& viewport) noexcept
+        const epochengine::core::RenderViewport& viewport,
+        const std::shared_ptr<const epochengine::previewgrid::PublishedSceneFrame>& matchedScene) noexcept
     {
         if (!ctx || !s_renderer)
             return;
-        const auto markers = epochengine::previewgrid::sampled_render_surface_markers_for(ctx.get());
+        const auto markers = matchedScene ? epochengine::previewgrid::sampled_render_surface_markers_for(*matchedScene)
+            : epochengine::previewgrid::sampled_render_surface_markers_for(ctx.get());
         if (markers.empty() || !ensure_arcade_screen_preview_target(s_renderer))
             return;
 
@@ -984,7 +986,8 @@ namespace
             to_sdl_channel(clearColor[3]));
         (void)SDL_RenderFillRect(s_renderer, &background);
 
-        const auto camera = epochengine::previewgrid::camera_for(ctx.get());
+        const auto matchedScene = epochengine::previewgrid::scene_frame_for(ctx.get());
+        const auto camera = matchedScene ? matchedScene->camera : epochengine::previewgrid::camera_for(ctx.get());
         const float aspect = viewport.height > 0
             ? (viewport.width / static_cast<float>(viewport.height))
             : 1.0f;
@@ -1016,21 +1019,28 @@ namespace
             (void)SDL_RenderLine(s_renderer, ax, ay, bx, by);
         };
 
-        const auto gridGeometry = epochengine::previewgrid::grid_geometry_for(ctx.get());
-        const auto& vertices = gridGeometry->vertices;
-        const auto& indices = gridGeometry->indices;
-
-        for (std::size_t i = 0; i + 1 < indices.size(); i += 2)
+        if (!matchedScene)
         {
-            const auto firstIndex = static_cast<std::size_t>(indices[i]);
-            const auto secondIndex = static_cast<std::size_t>(indices[i + 1]);
-            if (firstIndex >= vertices.size() || secondIndex >= vertices.size())
-                continue;
+            const auto gridGeometry = epochengine::previewgrid::grid_geometry_for(ctx.get());
+            const auto& vertices = gridGeometry->vertices;
+            const auto& indices = gridGeometry->indices;
 
-            draw_projected_line(vertices[firstIndex], vertices[secondIndex]);
+            for (std::size_t i = 0; i + 1 < indices.size(); i += 2)
+            {
+                const auto firstIndex = static_cast<std::size_t>(indices[i]);
+                const auto secondIndex = static_cast<std::size_t>(indices[i + 1]);
+                if (firstIndex >= vertices.size() || secondIndex >= vertices.size())
+                    continue;
+
+                draw_projected_line(vertices[firstIndex], vertices[secondIndex]);
+            }
+
         }
 
-        const auto solidVertices = epochengine::previewgrid::object_solid_vertices_for(ctx.get());
+        const auto solidGeometry = matchedScene ? matchedScene->solids->geometry
+            : epochengine::previewgrid::object_solid_geometry_for(ctx.get());
+
+        const auto& solidVertices = *solidGeometry;
         for (std::size_t i = 0; i + 2 < solidVertices.size(); i += 3)
         {
             if (!epochengine::previewgrid::clockwise_solid_triangle_faces_camera(
@@ -1077,20 +1087,27 @@ namespace
             }
         }
 
-        render_engine_arcade_sampled_surface_preview(ctx, mvp, viewport);
+        render_engine_arcade_sampled_surface_preview(ctx, mvp, viewport, matchedScene);
 
-        const auto markerVertices = epochengine::previewgrid::look_marker_vertices_for(ctx.get());
-        const std::size_t markerCount = epochengine::previewgrid::look_marker_vertex_count_for(ctx.get());
-        for (std::size_t i = 0; i + 1 < markerCount; i += 2)
+        if (!matchedScene)
         {
-            draw_projected_line(markerVertices[i], markerVertices[i + 1]);
+            const auto markerVertices = epochengine::previewgrid::look_marker_vertices_for(ctx.get());
+            const std::size_t markerCount = epochengine::previewgrid::look_marker_vertex_count_for(ctx.get());
+            for (std::size_t i = 0; i + 1 < markerCount; i += 2)
+            {
+                draw_projected_line(markerVertices[i], markerVertices[i + 1]);
+            }
+
         }
 
-        const auto objectVertices = epochengine::previewgrid::object_marker_vertices_for(ctx.get());
-        for (std::size_t i = 0; i + 1 < objectVertices.size(); i += 2)
-        {
-            draw_projected_line(objectVertices[i], objectVertices[i + 1]);
-        }
+        const auto objectGeometry = matchedScene ? matchedScene->lines
+            : epochengine::previewgrid::object_marker_geometry_for(ctx.get());
+
+        const auto& objectVertices = *objectGeometry;
+        const auto meshWire = matchedScene ? matchedScene->wire
+            : epochengine::previewgrid::object_mesh_wire_frame_for(ctx.get());
+        epochengine::previewgrid::for_each_visible_marker_line(*meshWire, objectVertices, camera.eye,
+            draw_projected_line);
 
         (void)SDL_SetRenderClipRect(s_renderer, nullptr);
     }
@@ -1488,6 +1505,13 @@ namespace
         SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_WIDTH_NUMBER, s_width);
         SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_HEIGHT_NUMBER, s_height);
         SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_RESIZABLE_BOOLEAN, true);
+#if defined(__linux__)
+        // The context manager owns this X11 window and its input/lifetime.
+        // SDL owns only its wrapper and renderer, not a second native window.
+        if (ctx->hwnd)
+            SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_X11_WINDOW_NUMBER,
+                static_cast<Sint64>(reinterpret_cast<std::uintptr_t>(ctx->hwnd)));
+#endif
 #if defined(_WIN32)
         if (hostedWindow)
             SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_HIDDEN_BOOLEAN, true);
@@ -1761,6 +1785,31 @@ namespace
                     request_host_shutdown(ctx);
                     return false;
                 }
+
+#if defined(__linux__)
+                if ((event.type == SDL_EVENT_MOUSE_BUTTON_DOWN
+                        || event.type == SDL_EVENT_MOUSE_BUTTON_UP)
+                    && event.button.windowID == s_windowId)
+                {
+                    const int button = event.button.button == SDL_BUTTON_X1 ? 8
+                        : event.button.button == SDL_BUTTON_X2 ? 9 : event.button.button;
+                    epochengine::core::QueueX11PointerInput(ctx->hwnd, button,
+                        event.type == SDL_EVENT_MOUSE_BUTTON_DOWN,
+                        static_cast<int>(event.button.x), static_cast<int>(event.button.y));
+                }
+                else if (event.type == SDL_EVENT_MOUSE_WHEEL
+                    && event.wheel.windowID == s_windowId && std::isfinite(event.wheel.y))
+                {
+                    const double direction = event.wheel.direction == SDL_MOUSEWHEEL_FLIPPED
+                        ? -1.0 : 1.0;
+                    const int delta = static_cast<int>(std::lround(
+                        (std::clamp)(static_cast<double>(event.wheel.y), -32767.0, 32767.0)
+                            * direction * 120.0));
+                    epochengine::core::QueueX11PointerInput(ctx->hwnd, 0, false,
+                        static_cast<int>(event.wheel.mouse_x),
+                        static_cast<int>(event.wheel.mouse_y), delta);
+                }
+#endif
 
                 switch (event.type)
                 {

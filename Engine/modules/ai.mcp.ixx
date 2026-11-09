@@ -258,20 +258,31 @@ export namespace epochengine::ai
             std::string title,
             std::string description,
             McpToolCapability capabilities,
-            McpToolRisk risk) {
+            McpToolRisk risk,
+            std::string schema = "{\"type\":\"object\",\"additionalProperties\":false}") {
             (void)registry.register_tool(McpToolDescriptor{
                 .name = std::move(name),
                 .title = std::move(title),
                 .description = std::move(description),
-                .input_schema_json = "{\"type\":\"object\",\"additionalProperties\":false}",
+                .input_schema_json = std::move(schema),
                 .capabilities = capabilities,
                 .risk = risk});
         };
 
         add("project.inspect", "Inspect Project", "Read active project, scene, script, and build evidence.",
             McpToolCapability::inspect, McpToolRisk::read_only);
-        add("project.create", "Create Project", "Create a project through Epoch's validated project shell.",
+        add("project.list", "List Projects", "List the host's admitted game and application project identities.",
+            McpToolCapability::inspect, McpToolRisk::read_only);
+        add("project.open", "Open Project", "Open one host-listed project without discarding unsaved work.",
+            McpToolCapability::author, McpToolRisk::workspace_write,
+            "{\"type\":\"object\",\"properties\":{\"project\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":128,\"pattern\":\"^[A-Za-z0-9_:-]+$\"}},\"required\":[\"project\"],\"additionalProperties\":false}");
+        add("project.close", "Close Project", "Close the active project only after its work is saved and stopped.",
             McpToolCapability::author, McpToolRisk::workspace_write);
+        add("project.stop", "Stop Project", "Request graceful cancellation of the active project's owned build or runtime.",
+            McpToolCapability::execute, McpToolRisk::child_process);
+        add("project.create", "Create Project", "Create and open a new game/application through the normal project shell; optionally review a fully specified planetary setup.",
+            McpToolCapability::author, McpToolRisk::workspace_write,
+            "{\"type\":\"object\",\"properties\":{\"kind\":{\"type\":\"string\",\"enum\":[\"game\",\"tool\"]},\"coverage\":{\"type\":\"string\",\"enum\":[\"none\",\"planet\",\"universe\"]},\"seed\":{\"type\":\"string\"},\"radius_m\":{\"type\":\"string\"},\"detail\":{\"type\":\"string\",\"enum\":[\"compact\",\"fast\",\"balanced\",\"fine\"]},\"ocean\":{\"type\":\"string\",\"enum\":[\"on\",\"off\"]}},\"required\":[\"kind\",\"coverage\"],\"additionalProperties\":false}");
         add("project.save", "Save Project", "Persist the active project and authoring documents.",
             McpToolCapability::author, McpToolRisk::workspace_write);
         add("scene.create", "Create Scene Object", "Create a bounded object through the scene document command gateway.",
@@ -304,6 +315,23 @@ export namespace epochengine::ai
             McpToolCapability::capture, McpToolRisk::read_only);
         add("diagnostics.read", "Read Diagnostics", "Read bounded build, runtime, and editor diagnostics.",
             McpToolCapability::inspect | McpToolCapability::diagnose, McpToolRisk::read_only);
+        add("package.catalog", "Find Project Packages", "Read known project packages and their actual local review or attachment status.",
+            McpToolCapability::inspect, McpToolRisk::read_only);
+        add("package.install", "Review Project Package", "Open the existing exact source review or built-in Add flow. Source attachment requires its visible content approval.",
+            McpToolCapability::author, McpToolRisk::workspace_write);
+        add("asset.image.generate", "Generate Image", "Generate one local image from the exact chat request and reviewed Asset Generation controls. No reference approval or import.",
+            McpToolCapability::author | McpToolCapability::execute, McpToolRisk::child_process,
+            "{\"type\":\"object\",\"properties\":{\"source\":{\"type\":\"string\",\"enum\":[\"request\"]}},\"required\":[\"source\"],\"additionalProperties\":false}");
+        add("forest.paint", "Paint Forest Area", "Paint one bounded procedural forest region on the selected generated planet through Forest Factory; uses the current tree recipe and camera location.",
+            McpToolCapability::author, McpToolRisk::workspace_write);
+        add("forest.configure", "Configure Plant", "Edit the current Plant Lab recipe through its existing history and asset publication; does not place trees or update painted regions.",
+            McpToolCapability::author, McpToolRisk::workspace_write,
+            "{\"type\":\"object\",\"properties\":{\"height_m\":{\"type\":\"string\"},\"trunk_radius_m\":{\"type\":\"string\"},\"branch_length_m\":{\"type\":\"string\"},\"leaf_size_m\":{\"type\":\"string\"},\"leaf_sites\":{\"type\":\"string\"},\"bark_tile\":{\"type\":\"string\"}},\"minProperties\":1,\"maxProperties\":6,\"additionalProperties\":false}");
+        add("forest.material", "Set Plant Texture", "Bind one exact admitted project texture to the current tree bark or foliage; uses the existing texture and Plant Lab owners.",
+            McpToolCapability::author, McpToolRisk::workspace_write,
+            "{\"type\":\"object\",\"properties\":{\"slot\":{\"type\":\"string\",\"enum\":[\"bark\",\"foliage\"]},\"texture\":{\"type\":\"string\"},\"artifact\":{\"type\":\"string\"}},\"required\":[\"slot\",\"texture\",\"artifact\"],\"additionalProperties\":false}");
+        add("terrain.generate", "Generate Terrain", "Build and generate an approved optional provider. Missing source must first pass visible package review and attachment.",
+            McpToolCapability::author | McpToolCapability::build, McpToolRisk::child_process);
         return registry;
     }
 
@@ -510,7 +538,8 @@ export namespace epochengine::ai
                     || converted.ptr != columns->value.data() + columns->value.size()
                     || width == 0u || width > kAuthoringMaximumObjects
                     || !parse_vector3(spacing->value, vector)
-                    || vector[0] <= 0.0f || vector[1] < 0.0f || vector[2] <= 0.0f
+                    || vector[0] < 0.0f || (vector[0] == 0.0f && width != 1u)
+                    || vector[1] < 0.0f || vector[2] <= 0.0f
                     || std::ranges::any_of(vector, [](float v) { return v > 100000.0f; })
                     || !parse_vector3(origin->value, vector)
                     || std::ranges::any_of(vector, [](float v) { return std::abs(v) > 100000.0f; })
@@ -878,15 +907,17 @@ export namespace epochengine::ai
             " - scene.create: archetype=<cube|ground|light|spawn|camera> and optional positive unsigned count\n"
             " - scene.reconcile: archetype=<cube|ground|light|spawn|camera> and exact nonnegative unsigned count\n"
             " - scene.transform: exactly one object_id=<listed stable id> or object_name=<exact listed single-token name>, and one or more of position=x,y,z rotation=x,y,z scale=x,y,z; optional placement=<support|free>\n"
-            " - scene.arrange: archetype=<cube|ground|light|spawn|camera> columns=<positive unsigned integer> spacing=x,y,z origin=x,y,z; optional placement=<support|free>. Arrange ALL matching objects in document order in an XZ grid (row Y increment is spacing.y), including those created earlier in this plan. X/Z spacing must be positive; Y spacing nonnegative.\n"
+            " - scene.arrange: archetype=<cube|ground|light|spawn|camera> columns=<positive unsigned integer> spacing=x,y,z origin=x,y,z; optional placement=<support|free>. Arrange ALL matching objects in document order in an XZ grid (row Y increment is spacing.y), including those created earlier in this plan. X spacing may be zero only when columns=1, because that axis is unused; otherwise X spacing must be positive. Z spacing must be positive; Y spacing nonnegative.\n"
             " - gui.create: widget=<panel|button|text|image|image_button|tabs|input|slider|scroll> and optional positive unsigned count\n"
             "Treat the supplied canonical scene inventory as authoritative. Reuse existing objects instead of duplicating them.\n"
+            "In scene.transform include only the components the user asks to change. Earlier CALL lines change the scene: after scene.arrange, omit position from rotation-only or scale-only edits rather than copying old inventory positions.\n"
             "Use scene.reconcile when the request describes a desired final count. It preserves matching objects and creates or removes only the difference.\n"
             "scene.reconcile changes counts only. Use scene.transform with the exact stable object_id from the inventory to change position, rotation, or scale. Vector values are x,y,z without spaces.\n"
             "Solid meshes default to placement=support and Epoch snaps their lower face to the primary support surface after position or scale changes. Use placement=free only when the operator explicitly requests free vertical placement.\n"
             "Use scene.create only for explicitly additive requests. Use scene.clear scope=all only when the operator explicitly asks to clear, replace, reset, or start over, and disclose that removal in SUMMARY.\n"
             "When a request describes a complete final scene, reconcile every constrained archetype, including count=0 for conflicting managed archetypes. Preserve editor infrastructure unless removal is explicitly required.\n"
             "Honor the complete requested counts. Native capacity still applies; the host will not silently clamp. For creating and spreading 100 cubes, reconcile count=100 then scene.arrange in the SAME approved plan. The host resolves names/groups and generated IDs; never ask the user for internal IDs or a scene inventory, never invent IDs, and never delete/recreate objects just to obtain IDs. Questions are for missing USER intent, not host bookkeeping.\n"
+            "Trees and plants belong to Plant Lab/Forest Factory; terrain, planets and universes belong to registered terrain/project tools. These are not scene.create archetypes. Ask to use the project-tool lane rather than inventing a mesh, script or generic image-to-3D action. Only an explicit generated model, miniature, prop or special asset asks for generated-asset representation. A reference image informs appearance, not tool authority. If a small desktop scene versus a traversable world is unclear, ask before changing anything.\n"
             "Do not request files, source edits, native commands, Git, builds, runs, network access, updater work, or approval.";
     }
 
@@ -947,17 +978,414 @@ export namespace epochengine::ai
         {
             constexpr std::array tools{
                 std::string_view{"project.inspect"},
+                std::string_view{"project.list"},
+                std::string_view{"project.open"},
+                std::string_view{"project.create"},
+                std::string_view{"project.close"},
+                std::string_view{"project.stop"},
                 std::string_view{"project.save"},
                 std::string_view{"project.build"},
                 std::string_view{"project.run"},
                 std::string_view{"project.test"},
-                std::string_view{"diagnostics.read"}};
+                std::string_view{"diagnostics.read"},
+                std::string_view{"package.catalog"},
+                std::string_view{"package.install"},
+                std::string_view{"terrain.generate"}, std::string_view{"forest.paint"},
+                std::string_view{"forest.configure"}, std::string_view{"forest.material"},
+                std::string_view{"asset.image.generate"}};
             return std::find(tools.begin(), tools.end(), name) != tools.end();
         }
     }
 
+    // Typed data only. The host resolves registry identity, source hashes,
+    // project roots and executable admission; the model cannot supply them.
+    [[nodiscard]] inline McpValidation validate_project_tool_arguments(
+        const McpToolCall& call)
+    {
+        using authoring_plan_detail::argument;
+        if (call.tool == "asset.image.generate")
+        {
+            const auto* source=argument(call,"source");
+            return call.arguments.size()==1u&&source&&source->value=="request" ? McpValidation{}
+                : McpValidation{McpErrorCode::invalid_argument,"Image generation requires source=request; prompts, paths, backend choices and approvals cannot be supplied by the model."};
+        }
+        if (call.tool == "project.create")
+        {
+            const auto* kind = argument(call, "kind");
+            const auto* coverage = argument(call, "coverage");
+            if (!kind || !coverage || (kind->value != "game" && kind->value != "tool"))
+                return {McpErrorCode::invalid_argument, "project.create requires one literal kind (game or tool) and one literal coverage (none, planet or universe). Ask about missing choices before proposing creation; never send alternatives joined with '|'."};
+            if (coverage->value == "none")
+                return call.arguments.size() == 2u ? McpValidation{}
+                    : McpValidation{McpErrorCode::invalid_argument, "An empty project takes only kind and coverage=none; no requested settings may be silently ignored."};
+            const auto* seed = argument(call, "seed");
+            const auto* radius = argument(call, "radius_m");
+            const auto* detail = argument(call, "detail");
+            const auto* ocean = argument(call, "ocean");
+            if (kind->value != "game" || (coverage->value != "planet" && coverage->value != "universe")
+                || !seed || !radius || !detail || !ocean || call.arguments.size() != 6u)
+                return {McpErrorCode::invalid_argument, "Planetary creation requires kind=game, one coverage (planet or universe), seed (an unsigned integer or random), radius_m (meters), one detail (compact, fast, balanced or fine) and one ocean value (on or off). Each field takes one literal value; '|' alternatives are invalid."};
+            std::uint32_t parsedSeed{};
+            if (seed->value != "random")
+            {
+                const auto parsed = std::from_chars(seed->value.data(), seed->value.data()+seed->value.size(), parsedSeed);
+                if (parsed.ec != std::errc{} || parsed.ptr != seed->value.data()+seed->value.size())
+                    return {McpErrorCode::invalid_argument, "Use an unsigned terrain seed or the explicitly requested random seed."};
+            }
+            double parsedRadius{};
+            const auto parsed = std::from_chars(radius->value.data(), radius->value.data()+radius->value.size(), parsedRadius);
+            if (parsed.ec != std::errc{} || parsed.ptr != radius->value.data()+radius->value.size()
+                || !std::isfinite(parsedRadius) || parsedRadius < 250.0 || parsedRadius > 100000000.0
+                || (detail->value != "compact" && detail->value != "fast" && detail->value != "balanced" && detail->value != "fine")
+                || (ocean->value != "on" && ocean->value != "off"))
+                return {McpErrorCode::invalid_argument, "The planetary radius, detail preset or ocean choice is invalid. No project was created."};
+            return {};
+        }
+        if (call.tool == "project.open")
+        {
+            const auto* project = argument(call, "project");
+            if (!project || call.arguments.size() != 1u || project->value.empty()
+                || project->value.size() > 128u
+                || !std::ranges::all_of(project->value, [](char c) {
+                    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+                        || (c >= '0' && c <= '9') || c == '_' || c == '-' || c == ':';
+                }))
+                return {McpErrorCode::invalid_argument,
+                    "project.open requires exactly project=<host-listed ID>; paths and URLs are not accepted."};
+            return {};
+        }
+        if (call.tool == "package.install")
+        {
+            const auto* package = argument(call, "package");
+            if (!package || call.arguments.size() != 1u || package->value.empty()
+                || package->value.size() > 96u
+                || !std::ranges::all_of(package->value, [](const char c) {
+                    return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_'; }))
+                return {McpErrorCode::invalid_argument, "package.install requires exactly package=<known registry ID>; paths and URLs are not accepted."};
+            return {};
+        }
+        if (call.tool == "forest.material")
+        {
+            const auto* slot = argument(call,"slot");
+            const auto* texture = argument(call,"texture");
+            const auto* artifact = argument(call,"artifact");
+            if (call.arguments.size() != 3u || !slot || !texture || !artifact
+                || (slot->value != "bark" && slot->value != "foliage"))
+                return {McpErrorCode::invalid_argument,"forest.material requires exactly slot=bark|foliage texture=<host-listed logical asset> artifact=<full key>."};
+            const auto& path = texture->value;
+            if (!path.starts_with("Assets/") || path.size() > 240u || path.ends_with('/')
+                || path.find("//") != std::string::npos || path.find("/./") != std::string::npos
+                || path.find("/../") != std::string::npos || path.ends_with("/..") || path.ends_with("/.")
+                || !std::ranges::all_of(path, [](unsigned char ch) {
+                    return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z')
+                        || (ch >= '0' && ch <= '9') || ch == '_' || ch == '-' || ch == '.' || ch == '/'; }))
+                return {McpErrorCode::invalid_argument,"Choose an exact host-listed project Assets path; filesystem paths and URLs are not accepted."};
+            if (artifact->value.size() != 64u || !std::ranges::all_of(artifact->value, [](char ch) {
+                return (ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f'); }))
+                return {McpErrorCode::invalid_argument,"Use the exact full64 lowercase hex artifact key from the project texture catalog."};
+            return {};
+        }
+        if (call.tool == "forest.configure")
+        {
+            if (call.arguments.empty() || call.arguments.size() > 6u)
+                return {McpErrorCode::invalid_argument, "forest.configure requires one to six supported Plant Lab settings."};
+            for (std::size_t index{}; index < call.arguments.size(); ++index)
+            {
+                const auto& field = call.arguments[index];
+                if (std::ranges::any_of(std::span{call.arguments}.first(index),
+                    [&](const auto& previous) { return previous.name == field.name; }))
+                    return {McpErrorCode::invalid_argument, "Plant settings cannot repeat a field."};
+                double minimum{}, maximum{};
+                if (field.name == "height_m") { minimum = 0.1; maximum = 256.0; }
+                else if (field.name == "trunk_radius_m") { minimum = 0.005; maximum = 8.0; }
+                else if (field.name == "branch_length_m") { minimum = 0.01; maximum = 128.0; }
+                else if (field.name == "leaf_size_m") { minimum = 0.02; maximum = 2.0; }
+                else if (field.name == "leaf_sites" || field.name == "bark_tile")
+                {
+                    unsigned value{};
+                    const auto parsed = std::from_chars(field.value.data(), field.value.data() + field.value.size(), value);
+                    const bool sites = field.name == "leaf_sites";
+                    if (parsed.ec != std::errc{} || parsed.ptr != field.value.data() + field.value.size()
+                        || value < (sites ? 1u : 0u) || value > (sites ? 16u : 15u))
+                        return {McpErrorCode::invalid_argument, "Use leaf_sites=1..16 or bark_tile=0..15 as whole numbers."};
+                    continue;
+                }
+                else return {McpErrorCode::invalid_argument, "The requested Plant Lab setting is not exposed by this tool; ask rather than substitute it."};
+                double value{};
+                const auto parsed = std::from_chars(field.value.data(), field.value.data() + field.value.size(), value);
+                if (parsed.ec != std::errc{} || parsed.ptr != field.value.data() + field.value.size()
+                    || !std::isfinite(value) || value < minimum || value > maximum)
+                    return {McpErrorCode::invalid_argument, "Plant setting is outside its supported finite range."};
+            }
+            return {};
+        }
+        if (call.tool == "forest.paint")
+        {
+            const auto* radius = argument(call, "radius_m");
+            const auto* density = argument(call, "density");
+            if (!radius || !density || call.arguments.size() != 2u)
+                return {McpErrorCode::invalid_argument, "forest.paint requires radius_m=<0.25..1000> density=<trees per square meter, greater than zero and at most 1>."};
+            const auto numeric = [](const std::string& value, double minimum, double maximum) {
+                double parsed{};
+                const auto result = std::from_chars(value.data(), value.data()+value.size(), parsed);
+                return result.ec == std::errc{} && result.ptr == value.data()+value.size()
+                    && std::isfinite(parsed) && parsed >= minimum && parsed <= maximum;
+            };
+            if (!numeric(radius->value, 0.25, 1000.0) || !numeric(density->value, 0.000001, 1.0))
+                return {McpErrorCode::invalid_argument, "Invalid forest radius or density. Nothing was painted."};
+            return {};
+        }
+        if (call.tool == "terrain.generate")
+        {
+            const auto* coverage = argument(call, "coverage");
+            const auto* seed = argument(call, "seed");
+            constexpr std::array modes{std::string_view{"classic"}, std::string_view{"tiled"},
+                std::string_view{"hemisphere"}, std::string_view{"planet"}, std::string_view{"universe"}};
+            std::uint32_t parsed{};
+            if (!coverage || !seed || call.arguments.size() != 2u || seed->value.empty()
+                || std::find(modes.begin(), modes.end(), coverage->value) == modes.end())
+                return {McpErrorCode::invalid_argument, "terrain.generate requires coverage=<classic|tiled|hemisphere|planet|universe> and seed=<uint32>."};
+            const auto result = std::from_chars(seed->value.data(), seed->value.data() + seed->value.size(), parsed);
+            if (result.ec != std::errc{} || result.ptr != seed->value.data() + seed->value.size())
+                return {McpErrorCode::invalid_argument, "The terrain seed must be a whole number from 0 to 4294967295."};
+            return {};
+        }
+        if (!tool_plan_detail::is_allowed_tool(call.tool))
+            return {McpErrorCode::unknown_tool, "The tool is outside the active-project dispatcher."};
+        if (!call.arguments.empty())
+            return {McpErrorCode::invalid_argument, "This active-project tool takes no model-selected arguments."};
+        return {};
+    }
+
+    // Approval remains attached to the exact project selection that produced
+    // the request, including a close/reopen of the same ID. Never retarget it.
+    [[nodiscard]] inline bool project_tool_selection_matches(
+        std::string_view requested_id, std::string_view requested_root,
+        std::uint64_t requested_generation, std::string_view current_id,
+        std::string_view current_root, std::uint64_t current_generation) noexcept
+    {
+        return requested_id == current_id && requested_root == current_root
+            && requested_generation == current_generation;
+    }
+
+    namespace project_request_detail
+    {
+        [[nodiscard]] inline bool equal(std::string_view a, std::string_view b) noexcept
+        {
+            if (a.size() != b.size()) return false;
+            for (std::size_t i = 0u; i != a.size(); ++i)
+            {
+                const auto lower = [](unsigned char c) {
+                    return c >= 'A' && c <= 'Z' ? static_cast<unsigned char>(c+('a'-'A')) : c;
+                };
+                if (lower(static_cast<unsigned char>(a[i])) != lower(static_cast<unsigned char>(b[i]))) return false;
+            }
+            return true;
+        }
+        [[nodiscard]] inline bool starts(std::string_view value, std::string_view prefix) noexcept
+        {
+            return value.size() >= prefix.size() && equal(value.substr(0u,prefix.size()),prefix);
+        }
+        [[nodiscard]] inline bool word_character(unsigned char ch) noexcept
+        {
+            return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z')
+                || (ch >= '0' && ch <= '9') || ch == '_';
+        }
+        [[nodiscard]] inline bool contains(std::string_view text, std::string_view word) noexcept
+        {
+            char quote{};
+            for (std::size_t i=0u; i+word.size()<=text.size(); ++i)
+            {
+                const char ch = text[i];
+                if (quote) { if (ch == quote) quote = 0; continue; }
+                if (ch == '"' || ch == '`' || (ch == '\'' && (i == 0u || !word_character(text[i-1u]))))
+                { quote = ch; continue; }
+                if ((i == 0u || !word_character(static_cast<unsigned char>(text[i-1u])))
+                    && (i+word.size() == text.size() || !word_character(static_cast<unsigned char>(text[i+word.size()])))
+                    && equal(text.substr(i,word.size()),word)) return true;
+            }
+            return false;
+        }
+        [[nodiscard]] inline std::string_view action_object(std::string_view text, bool creation_only = false) noexcept
+        {
+            text = authoring_plan_detail::trim(text);
+            for (const auto prefix : {"please ", "can you ", "could you ", "i want you to "})
+                if (starts(text,prefix)) { text = authoring_plan_detail::trim(text.substr(std::string_view{prefix}.size())); break; }
+            if (starts(text,"please ")) text = authoring_plan_detail::trim(text.substr(7u));
+            std::string_view object;
+            for (const auto verb : {"create ", "make ", "generate ", "add ", "configure ", "adjust ", "set ", "change ", "update "})
+            {
+                if (creation_only && std::string_view{verb} != "create " && std::string_view{verb} != "make ") continue;
+                if (starts(text,verb)) { object = authoring_plan_detail::trim(text.substr(std::string_view{verb}.size())); break; }
+            }
+            constexpr std::string_view qualifiers[]{"me ", "a ", "an ", "the ", "current ", "selected ", "separate ", "new ", "basic ", "simple ", "game ", "software ", "procedural ", "native ", "3d "};
+            for (unsigned count = 0u; count != 8u; ++count)
+            {
+                bool consumed{};
+                for (const auto qualifier : qualifiers)
+                    if (starts(object,qualifier))
+                    { object = authoring_plan_detail::trim(object.substr(qualifier.size())); consumed = true; break; }
+                if (!consumed) break;
+            }
+            return object;
+        }
+        [[nodiscard]] inline bool subject(std::string_view object, std::string_view word) noexcept
+        {
+            return starts(object,word) && (object.size() == word.size()
+                || !word_character(static_cast<unsigned char>(object[word.size()])));
+        }
+        [[nodiscard]] inline std::string_view representation_object(std::string_view request) noexcept
+        {
+            auto object = action_object(request);
+            for (std::size_t index{}; index < object.size(); ++index)
+                if (object[index] == '\n' || object[index] == ';' || object[index] == ','
+                    || starts(object.substr(index), " with reference ") || starts(object.substr(index), " with image ")
+                    || starts(object.substr(index), " with an image ") || starts(object.substr(index), " with photo ")
+                    || (starts(object.substr(index), " using ")
+                        && !starts(object.substr(index), " using defaults")
+                        && !starts(object.substr(index), " using the defaults")
+                        && !starts(object.substr(index), " using default settings"))
+                    || starts(object.substr(index), " from ") || starts(object.substr(index), " based on ")
+                    || starts(object.substr(index), " without ") || starts(object.substr(index), " do not ")
+                    || starts(object.substr(index), " named ") || starts(object.substr(index), " called "))
+                { object = object.substr(0u, index); break; }
+            return object;
+        }
+    }
+
+    // Representation is an explicit user choice, never inferred from an image,
+    // attachment instruction or a later example in the same request.
+    [[nodiscard]] inline bool explicit_generated_asset_request(std::string_view request) noexcept
+    {
+        using namespace project_request_detail;
+        const auto object = representation_object(request);
+        return contains(object, "model") || contains(object, "miniature") || contains(object, "prop")
+            || contains(object, "toy") || contains(object, "generated") || contains(object, "special asset");
+    }
+
+    [[nodiscard]] inline bool image_generation_request(std::string_view request) noexcept
+    {
+        using namespace project_request_detail;
+        auto input=authoring_plan_detail::trim(request);
+        for(const auto prefix:{"please ","can you ","could you ","i want you to "})
+            if(starts(input,prefix)){input=authoring_plan_detail::trim(input.substr(std::string_view{prefix}.size()));break;}
+        if(starts(input,"please "))input=authoring_plan_detail::trim(input.substr(7u));
+        if(!starts(input,"create ")&&!starts(input,"make ")&&!starts(input,"generate "))return false;
+        auto object=representation_object(request);
+        // The target noun before a secondary 'with' clause owns this action.
+        // A texture for a tree is an image; a tree with a texture is a plant.
+        for(std::size_t i{};i<object.size();++i)
+            if(starts(object.substr(i)," with ")){object=object.substr(0u,i);break;}
+        if(object.empty()||contains(object,"model")||contains(object,"mesh")||contains(object,"3d"))return false;
+        if(subject(object,"image")||subject(object,"picture")||subject(object,"illustration")||subject(object,"texture"))return true;
+        return contains(object,"texture")&&!contains(object,"planet")&&!contains(object,"terrain")
+            &&(!contains(object,"tree")||contains(object,"tree bark"));
+    }
+
+    [[nodiscard]] inline bool plant_recipe_request(std::string_view request) noexcept
+    {
+        using namespace project_request_detail;
+        if (explicit_generated_asset_request(request)) return false;
+        const auto object = action_object(request);
+        if (contains(object,"theme") || contains(object,"script") || contains(object,"documentation")
+            || contains(object,"file") || contains(object,"label")) return false;
+        return subject(object,"tree") || subject(object,"birch") || subject(object,"oak")
+            || subject(object,"plant") || subject(object,"plant lab recipe");
+    }
+
+    [[nodiscard]] inline bool custom_plant_design_requested(std::string_view request) noexcept
+    {
+        using namespace project_request_detail;
+        request = representation_object(request);
+        return contains(request,"birch") || contains(request,"bark") || contains(request,"foliage")
+            || contains(request,"height") || contains(request,"leaves") || contains(request,"trunk")
+            || contains(request,"branch") || contains(request,"branches") || contains(request,"height_m")
+            || contains(request,"trunk_radius_m") || contains(request,"branch_length_m")
+            || contains(request,"leaf_size_m") || contains(request,"leaf_sites")
+            || contains(request,"bark_tile");
+    }
+
+    [[nodiscard]] inline bool planet_forest_project_request(std::string_view text) noexcept
+    {
+        using namespace project_request_detail;
+        if (explicit_generated_asset_request(text)) return false;
+        const auto object = action_object(text, true);
+        const auto desired = representation_object(text);
+        // Creating trees on an existing planet keeps ordinary authoring intent.
+        // Only creating the planet/project starts the new-project composition.
+        return (subject(object,"planet") || subject(object,"planetary") || subject(object,"project"))
+            && (contains(desired,"planet") || contains(desired,"planetary"))
+            && (contains(desired,"tree") || contains(desired,"trees") || contains(desired,"forest"))
+            && !contains(desired,"theme") && !contains(desired,"script");
+    }
+
+    // Only leading action requests select a lifecycle tool. Explanations,
+    // negations and quoted examples remain conversation, not execution intent.
+    [[nodiscard]] inline std::string_view project_lifecycle_request_tool(std::string_view request)
+    {
+        std::string text{authoring_plan_detail::trim(request)};
+        for (char& c : text) if (c >= 'A' && c <= 'Z') c = static_cast<char>(c + ('a' - 'A'));
+        std::string_view input{text};
+        for (const auto prefix : {"please ", "can you ", "could you ", "i want you to "})
+            if (input.starts_with(prefix)) { input.remove_prefix(std::string_view{prefix}.size()); break; }
+        if (input.starts_with("please ")) input.remove_prefix(7u);
+        if (image_generation_request(input)) return "asset.image.generate";
+        if (plant_recipe_request(input))
+        {
+            const auto object = project_request_detail::representation_object(input);
+            return project_request_detail::contains(object,"texture") || project_request_detail::contains(object,"material")
+                ? "forest.material" : "forest.configure";
+        }
+        if (explicit_generated_asset_request(input)) return {};
+        auto catalogQuestion=input;
+        if(!catalogQuestion.empty()&&(catalogQuestion.back()=='.'||catalogQuestion.back()=='?'))
+            catalogQuestion.remove_suffix(1u);
+        for(const auto question:{"check if project exists", "check if project exists elsewhere",
+                "check if the project exists", "check if the project exists elsewhere",
+                "find available projects", "find saved projects"})
+            if(catalogQuestion==question)return "project.list";
+        // A plain composed world request uses the same New Project action.
+        if (planet_forest_project_request(input))
+            return "project.create";
+        constexpr std::array<std::pair<std::string_view, std::string_view>, 12u> actions{{
+            {"create", "project.create"}, {"make", "project.create"},
+            {"open", "project.open"}, {"load", "project.open"}, {"close", "project.close"},
+            {"stop", "project.stop"}, {"save", "project.save"}, {"run", "project.run"},
+            {"build", "project.build"}, {"test", "project.test"},
+            {"list", "project.list"}, {"show", "project.list"}}};
+        for (const auto& [verb, tool] : actions)
+        {
+            if (!input.starts_with(verb) || input.size() <= verb.size() || input[verb.size()] != ' ') continue;
+            auto object = input.substr(verb.size() + 1u);
+            for (unsigned i = 0u; i < 4u; ++i)
+            {
+                bool consumed{};
+                for (const auto qualifier : {"me ", "the ", "my ", "this ", "current ", "active ", "a ", "an ", "separate ", "new ", "empty ", "blank ", "game ", "tool ", "software ", "available ", "saved ", "all "})
+                    if (object.starts_with(qualifier))
+                    { object.remove_prefix(std::string_view{qualifier}.size()); consumed = true; break; }
+                if (!consumed) break;
+            }
+            if (!object.starts_with("project")) continue;
+            object.remove_prefix(7u);
+            if (tool == "project.create")
+                for (const auto subject : {" script", " theme", " file", " label", " documentation", " note", " setting", " asset", " object"})
+                    if (object.starts_with(subject)) return {};
+            if (tool == "project.open" && object.starts_with('=')) return tool;
+            if (object.starts_with('s')) object.remove_prefix(1u);
+            if (object.empty() || object.front() == ' ' || object.front() == '?' || object.front() == '.') return tool;
+        }
+        if (input.starts_with("paint forest") || input.starts_with("paint a forest")
+            || input.starts_with("plant a forest") || input.starts_with("add a forest area")) return "forest.paint";
+        if (input.starts_with("cancel project build")) return "project.stop";
+        return {};
+    }
+
+    // Only a host that has explicit permission to use creation defaults may
+    // supply these missing generation fields. Ordinary callers remain strict;
+    // no default can choose the operation, project kind or world coverage.
     [[nodiscard]] inline ToolPlanParseResult parse_tool_plan(
-        std::string_view response)
+        std::string_view response,
+        std::span<const McpArgument> project_creation_defaults = {})
     {
         constexpr std::size_t maximumResponseBytes = 16u * 1024u;
         constexpr std::size_t maximumTitleBytes = 160u;
@@ -1086,14 +1514,13 @@ export namespace epochengine::ai
                 return result;
             }
 
-            const std::string_view tool = authoring_plan_detail::trim(
-                line.substr(5u));
-            if (tool.empty()
-                || tool.find_first_of(" \t") != std::string_view::npos)
+            std::string_view payload = authoring_plan_detail::trim(line.substr(5u));
+            const auto toolEnd = payload.find_first_of(" \t");
+            const std::string_view tool = payload.substr(0u, toolEnd);
+            if (tool.empty())
             {
                 result.code = ToolPlanCode::invalid_argument;
-                result.message =
-                    "Tool-plan calls use one implicit active-project tool and accept no model-selected arguments.";
+                result.message = "A tool call needs one exact registered tool name.";
                 return result;
             }
             if (!tool_plan_detail::is_allowed_tool(tool))
@@ -1108,6 +1535,79 @@ export namespace epochengine::ai
                 .call_id = "tool-call-1",
                 .tool = std::string{tool},
                 .step = 0u};
+            payload = toolEnd == std::string_view::npos ? std::string_view{}
+                : authoring_plan_detail::trim(payload.substr(toolEnd + 1u));
+            while (!payload.empty())
+            {
+                const auto end = payload.find_first_of(" \t");
+                const auto token = payload.substr(0u, end);
+                const auto equals = token.find('=');
+                if (equals == std::string_view::npos || equals == 0u || equals + 1u >= token.size()
+                    || token.find('=', equals + 1u) != std::string_view::npos
+                    || result.plan.call.arguments.size() >= (tool == "project.create" || tool == "forest.configure" ? 6u
+                        : tool == "forest.material" ? 3u : 2u))
+                {
+                    result.code = ToolPlanCode::invalid_argument;
+                    result.message = "Tool arguments must be exact bounded name=value fields.";
+                    return result;
+                }
+                result.plan.call.arguments.push_back({std::string{token.substr(0u, equals)},
+                    std::string{token.substr(equals + 1u)}});
+                payload = end == std::string_view::npos ? std::string_view{}
+                    : authoring_plan_detail::trim(payload.substr(end + 1u));
+            }
+            if (tool == "project.create" && !project_creation_defaults.empty())
+            {
+                constexpr std::array names{std::string_view{"kind"}, std::string_view{"coverage"},
+                    std::string_view{"seed"}, std::string_view{"radius_m"},
+                    std::string_view{"detail"}, std::string_view{"ocean"}};
+                const auto& supplied = result.plan.call.arguments;
+                for (std::size_t index{}; index < supplied.size(); ++index)
+                {
+                    if (std::ranges::find(names, supplied[index].name) == names.end()
+                        || std::ranges::any_of(std::span{supplied}.first(index),
+                            [&](const auto& previous) { return previous.name == supplied[index].name; }))
+                    {
+                        result.code = ToolPlanCode::invalid_argument;
+                        result.message = "Creation arguments must be known fields with no duplicates; defaults cannot repair them.";
+                        return result;
+                    }
+                }
+                const auto* kind = authoring_plan_detail::argument(result.plan.call, "kind");
+                const auto* coverage = authoring_plan_detail::argument(result.plan.call, "coverage");
+                if (kind && kind->value == "game" && coverage
+                    && (coverage->value == "planet" || coverage->value == "universe"))
+                {
+                    constexpr std::array defaultNames{std::string_view{"seed"}, std::string_view{"radius_m"},
+                        std::string_view{"detail"}, std::string_view{"ocean"}};
+                    if (project_creation_defaults.size() != defaultNames.size())
+                    {
+                        result.code = ToolPlanCode::invalid_argument;
+                        result.message = "The host did not provide a complete bounded creation-default set.";
+                        return result;
+                    }
+                    for (std::size_t index{}; index < project_creation_defaults.size(); ++index)
+                    {
+                        const auto& value = project_creation_defaults[index];
+                        if (value.name != defaultNames[index])
+                        {
+                            result.code = ToolPlanCode::invalid_argument;
+                            result.message = "The host creation-default set has an unsupported field or order.";
+                            return result;
+                        }
+                        // Explicit values, including invalid ones, always keep
+                        // their original bytes and must pass normal validation.
+                        if (!authoring_plan_detail::argument(result.plan.call, value.name))
+                            result.plan.call.arguments.push_back(value);
+                    }
+                }
+            }
+            if (const auto arguments = validate_project_tool_arguments(result.plan.call); !arguments)
+            {
+                result.code = ToolPlanCode::invalid_argument;
+                result.message = arguments.message;
+                return result;
+            }
             callSeen = true;
         }
 
@@ -1171,12 +1671,29 @@ export namespace epochengine::ai
             "SUMMARY one sentence\n"
             "CALL project.inspect\n"
             "END\n"
-            "Choose exactly one CALL from: project.inspect, project.save, project.build, project.run, project.test, diagnostics.read.\n"
+            "Choose exactly one CALL from: project.list, project.open, project.create, project.close, project.stop, project.inspect, project.save, project.build, project.run, project.test, diagnostics.read, package.catalog, package.install, terrain.generate, forest.configure, forest.material, forest.paint, asset.image.generate.\n"
+            "Each argument takes ONE literal value. Options in this protocol are choices to select from, never text to copy as a value. Do not send '|', angle brackets or multiple alternatives in an argument. Follow REQUEST_OPERATION_CONSTRAINT_V1 when the host supplies one.\n"
+            "asset.image.generate requires exactly source=request. It generates a 2D image or texture from the literal user request with the visible Asset Generation backend, Avoidance Prompt, seed and size. No model-written prompt, executable, filesystem path, model download, reference approval or import is accepted. A birch bark texture is an image; a birch tree is a Plant Lab design. Choosing an existing texture is forest.material, not image generation. The host shows the exact settings and requires approval before starting; missing settings open generation setup.\n"
+            "project.create makes a NEW host-named project using the normal New Project action. kind is game or tool. coverage is none for empty, planet for ONE planet, or universe for multiple bodies. Planetary projects require kind=game. These are separate syntax examples, not permission to choose settings:\n"
+            "Empty game example: CALL project.create kind=game coverage=none\n"
+            "Empty software example: CALL project.create kind=tool coverage=none\n"
+            "Single-planet example: CALL project.create kind=game coverage=planet seed=42 radius_m=6371000 detail=compact ocean=on\n"
+            "Universe example: CALL project.create kind=game coverage=universe seed=42 radius_m=6371000 detail=compact ocean=on\n"
+            "Use the user's chosen coverage and settings, not an unrelated example. seed is an unsigned integer or random; radius_m is meters; detail is compact, fast, balanced or fine; ocean is on or off. Ask which project kind and whether empty, single planet or universe; for a planet ask its size, seed, detail and ocean unless already specified or the user explicitly chose defaults. Only with that explicit choice, Epoch may fill omitted seed/radius_m/detail/ocean from HOST_PROJECT_CREATION_DEFAULTS_V1 before exact-call approval. kind and coverage are never filled by defaults. Keep every specified override explicit; never substitute a default for an invalid value. Earth radius is 6371000 meters and Moon radius is 1737400 meters. The host chooses a fresh project ID and reports it, never a user-selected path. Requested names or unsupported custom settings require clarification; do not claim they were applied. Source/package approval and generation are separate visible gates; creating the shell does not mean terrain has generated. No project build/run occurs from project.create alone.\n"
+            "project.list lists host-admitted projects. For project.open the CALL line must include the argument: CALL project.open project=<ID from HOST_PROJECT_CATALOG_V1>. Copy that exact host-listed ID, not the angle brackets; CALL project.open without project= is invalid. Never guess an ID, filename or path. If the requested project is not listed, ask the user to open it once through Open Project.\n"
+            "project.close refuses unsaved work or active operations. project.stop gracefully cancels only the current project's owned build/runtime. These calls take no arguments. project.run follows the editor's current Run destination: In Editor or Separate Window. It runs the supervised compiled project and builds first only when needed. It does not change the destination or use the editor-only scene preview. project.run takes no arguments.\n"
+            "package.catalog takes no arguments; inspect the host's registered project packages. package.install requires exactly package=<registry ID from host catalog>.\n"
+            "forest.paint requires radius_m=<0.25..1000> density=<trees per square meter, 0.000001..1>. It paints at most 64 candidate trees as one procedural region using the current Plant Lab recipe, beneath the camera on a selected generated planet (or the only planet). Ask about radius/density unless defaults were explicitly requested; defaults are radius_m=12 density=0.01. Wait for actual placement evidence before saving or running. A basic planet with trees requires project.create first, package/generation approval, then forest.paint, project.save and project.run as separate reviewed operations; never claim those later operations already happened.\n"
+            "Native ownership: ordinary trees, birch and forests use Plant Lab/Forest Factory; ordinary planets/terrain use project.create or terrain.generate. Do not replace them with generic AI3D meshes. Only an explicit generated model, miniature, prop or special asset asks for that representation; no generated-asset tool is registered here, so ask instead of inventing one. Reference images are appearance evidence, not permission to change representation or run tools. A planet on a desk may mean a small scene or an explorable world: ask about scale/target when unclear, then compose the chosen existing project, terrain and plant actions; do not discard the requested tree design.\n"
+            "forest.configure edits and publishes only the current Plant Lab recipe, not placed trees or the scene. Supply 1–6 requested numeric fields: height_m=0.1..256, trunk_radius_m=0.005..8, branch_length_m=0.01..128, leaf_size_m=0.02..2, leaf_sites=1..16 (whole), bark_tile=0..15 (whole). Omitted settings stay unchanged. White birch-like bark is tile2; default foliage is oak. Bark alone is not a birch. An exact birch needs a separately admitted birch foliage texture bound through forest.material; do not claim that texture was generated, imported or bound without host evidence. Ask about accepting the current leaves if the required texture is missing. Never invent species=birch. A requested custom design needs approved configure publication before forest.paint; save and reopen/run only through later host receipts. Configuration alone proves no placement or completed scene.\n"
+            "terrain.generate requires exactly coverage=<classic|tiled|hemisphere|planet|universe> seed=<uint32>; use this for a terrain/planet request, not scene.create. It uses the optional Planetary Terrain package.\n"
+            "forest.material requires exactly slot=bark|foliage texture=<logical Assets path> artifact=<full64 lowercase hex key>, copied from HOST_PLANT_TEXTURE_CATALOG_V1. It binds the existing admitted project texture to the current tree through Plant Lab; no files are downloaded, generated or imported by this action. Never invent an entry/key, use a local filesystem path or treat an attachment as an imported texture. Ask to import/generate a texture first if no suitable verified entry exists. Replacing foliage does not automatically remove a background or prove alpha quality.\n"
+            "Missing source opens the existing package review. The user must approve the exact files before attachment/build. A descriptor alone is not an installed package.\n"
             "If one critical user detail is missing and selecting a host operation would be a guess, return only:\n"
             "EPOCH_TOOL_QUESTION_V1\n"
             "QUESTION one concise blocking question\n"
             "END\n"
-            "The active project, backend, paths, and process arguments are host-owned and implicit. CALL takes no arguments.\n"
+            "The active project, backend, paths, downloads and process arguments are host-owned and implicit. All other CALLs take no arguments. Never invent a package ID, URL or path.\n"
             "Do not request source edits, scripts, files, native commands, shell access, Git, network access, release, updater, approval, or multiple calls.";
     }
 
@@ -1219,6 +1736,52 @@ export namespace epochengine::ai
             "SUMMARY Read bounded active-project evidence.\n"
             "CALL project.inspect\n"
             "END\n");
+        const auto lifecyclePlan = [](std::string_view operation) {
+            return parse_tool_plan(std::string{"EPOCH_TOOL_PLAN_V1\nTITLE Project lifecycle\n"}
+                + "SUMMARY Use the exact host-owned project operation.\nCALL " + std::string{operation} + "\nEND\n");
+        };
+        for (const auto operation : {"project.list", "project.open project=project:GameProject01", "project.close", "project.stop"})
+            if (!lifecyclePlan(operation)) return false;
+        for (const auto operation : {"project.open", "project.open project=../Engine", "project.open project=C:/secret",
+                "project.open project=https://example.org", "project.open project=a project=b", "project.close force=true", "project.stop pid=123"})
+            if (lifecyclePlan(operation).code != ToolPlanCode::invalid_argument) return false;
+        if (!project_tool_selection_matches("a", "Projects/a", 7u, "a", "Projects/a", 7u)
+            || project_tool_selection_matches("a", "Projects/a", 7u, "b", "Projects/b", 8u)
+            || project_tool_selection_matches("a", "Projects/a", 7u, "a", "Projects/a", 8u)
+            || project_tool_selection_matches("a", "Projects/a", 7u, "a", "Projects/other", 7u)) return false;
+        McpSessionAuthority lifecycleAuthority{.session_id="editor-tool-preview",
+            .granted_capabilities=McpToolCapability::inspect | McpToolCapability::author | McpToolCapability::execute};
+        for (const auto operation : {"project.open project=project:GameProject01", "project.close", "project.stop"})
+        {
+            const auto plan = lifecyclePlan(operation);
+            if (registry.validate(plan.plan.call, lifecycleAuthority).error != McpErrorCode::approval_required) return false;
+            auto approved = lifecycleAuthority;
+            approved.approved_call_ids.push_back(plan.plan.call.call_id);
+            if (!registry.validate(plan.plan.call, approved)) return false;
+        }
+        if (!registry.validate(lifecyclePlan("project.list").plan.call, lifecycleAuthority)) return false;
+        for (const auto& [request, expected] : std::array<std::pair<std::string_view, std::string_view>, 21u>{{
+                {"open project GameProject01", "project.open"}, {"load my project GameProject01", "project.open"},
+                {"close project", "project.close"}, {"stop the project", "project.stop"},
+                {"list projects", "project.list"}, {"show me projects", "project.list"},
+                {"please save project", "project.save"}, {"Can you run the project?", "project.run"},
+                {"build project", "project.build"}, {"cancel project build", "project.stop"},
+                {"list saved projects", "project.list"}, {"list available projects", "project.list"},
+                {"list all projects", "project.list"}, {"open my saved project GameProject01", "project.open"},
+                {"run the active project", "project.run"},
+                {"Open project=GameProject01 Do not edit, save, build or run it yet.", "project.open"},
+                {"please load my project=project:GameProject01", "project.open"},
+                {"open project = GameProject01", "project.open"},
+                {"check if project exists elsewhere", "project.list"},
+                {"Can you check if the project exists?", "project.list"},
+                {"find saved projects", "project.list"}}})
+            if (project_lifecycle_request_tool(request) != expected) return false;
+        for (const auto request : {"how do I open project X?", "do not run project", "never stop project",
+                "explain project build", "say exactly: open project X", "open projection settings",
+                "do not open project=GameProject01", "how do I open project=GameProject01?",
+                "open projects=GameProject01", "save project=GameProject01",
+                "check if project exists before deleting it", "find project bugs"})
+            if (!project_lifecycle_request_tool(request).empty()) return false;
         if (!toolPlan || toolPlan.plan.call.tool != "project.build"
             || !inspectPlan
             || parse_tool_plan(
@@ -1226,7 +1789,7 @@ export namespace epochengine::ai
                 "TITLE Unsafe\n"
                 "SUMMARY Refuse project creation.\n"
                 "CALL project.create\n"
-                "END\n").code != ToolPlanCode::unsupported_tool
+                "END\n").code != ToolPlanCode::invalid_argument
             || parse_tool_plan(
                 "EPOCH_TOOL_PLAN_V1\n"
                 "TITLE Injected\n"
@@ -1266,11 +1829,19 @@ export namespace epochengine::ai
             "CALL scene.arrange archetype=cube columns=10 spacing=2,0,2 origin=-9,0,-9\n"
             "CALL scene.transform object_name=StaticMesh_100 rotation=0,45,0\nEND\n");
         if (!validGrid || validGrid.plan.calls.size() != 3u) return false;
+        const auto singleColumn = parse_authoring_plan(
+            "EPOCH_AUTHORING_PLAN_V1\nTITLE Rising row\nSUMMARY Preserve non-cube objects.\n"
+            "CALL scene.reconcile archetype=cube count=8\n"
+            "CALL scene.arrange archetype=cube columns=1 spacing=0,0.5,2 origin=0,0.5,-7 placement=free\nEND\n");
+        if (!singleColumn || singleColumn.plan.calls.size() != 2u) return false;
         for (const auto invalidCall : {
             "scene.arrange archetype=cube columns=10 columns=10 spacing=2,0,2 origin=0,0,0",
             "scene.arrange archetype=cube columns=0 spacing=2,0,2 origin=0,0,0",
             "scene.arrange archetype=cube columns=42949672960 spacing=2,0,2 origin=0,0,0",
             "scene.arrange archetype=cube columns=10 spacing=2,-1,2 origin=0,0,0",
+            "scene.arrange archetype=cube columns=2 spacing=0,0.5,2 origin=0,0.5,-7 placement=free",
+            "scene.arrange archetype=cube columns=1 spacing=-1,0.5,2 origin=0,0.5,-7 placement=free",
+            "scene.arrange archetype=cube columns=1 spacing=nan,0.5,2 origin=0,0.5,-7 placement=free",
             "scene.arrange archetype=cube columns=10 spacing=nan,0,2 origin=0,0,0",
             "scene.arrange archetype=cube columns=10 spacing=2,0,2 origin=100001,0,0",
             "scene.arrange archetype=cube columns=10 spacing=2,0,2 origin=0,0,0 path=foreign",

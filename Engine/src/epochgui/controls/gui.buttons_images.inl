@@ -1,33 +1,95 @@
 // Epoch feature implementation; included by its owning module only.
 // SPDX-License-Identifier: LicenseRef-MIT-NoSell
+    static void draw_button_icon(ButtonIcon icon,Vec2 position,Vec2 size) noexcept
+    {
+        if(icon==ButtonIcon::none||size.x<=0.0f||size.y<=0.0f)return;
+        const auto ink=active_palette().isLight?g_resources.contrastBlack:g_resources.contrastWhite;
+        const float extent=(std::min)({12.0f,size.x-8.0f,size.y-8.0f});
+        if(extent<4.0f)return;
+        const float x=position.x+(size.x-extent)*.5f,y=position.y+(size.y-extent)*.5f;
+        const auto bar=[&](float bx){draw_sprite(ink,bx,y,2.0f,extent);};
+        const auto triangle=[&](float left,float width,bool right)
+        {
+            constexpr unsigned rows=12u;
+            for(unsigned row{};row<rows;++row)
+            {
+                const float v=(static_cast<float>(row)+.5f)/rows;
+                const float fill=width*(1.0f-std::abs(2.0f*v-1.0f));
+                draw_sprite(ink,right?left:left+width-fill,y+extent*row/rows,
+                    (std::max)(.5f,fill),extent/rows);
+            }
+        };
+        switch(icon)
+        {
+        case ButtonIcon::start:bar(x);triangle(x+3.0f,(extent-3.0f)*.5f,false);triangle(x+3.0f+(extent-3.0f)*.5f,(extent-3.0f)*.5f,false);break;
+        case ButtonIcon::step_back:bar(x);triangle(x+3.0f,extent-3.0f,false);break;
+        case ButtonIcon::play:triangle(x,extent,true);break;
+        case ButtonIcon::pause:bar(x+1.0f);bar(x+extent-3.0f);break;
+        case ButtonIcon::step_forward:triangle(x,extent-3.0f,true);bar(x+extent-2.0f);break;
+        case ButtonIcon::reverse:triangle(x,extent,false);break;
+        case ButtonIcon::fast_reverse:triangle(x,extent*.5f,false);triangle(x+extent*.5f,extent*.5f,false);break;
+        case ButtonIcon::fast_forward:triangle(x,extent*.5f,true);triangle(x+extent*.5f,extent*.5f,true);break;
+        case ButtonIcon::add:bar(x+extent*.5f-1.0f);draw_sprite(ink,x,y+extent*.5f-1.0f,extent,2.0f);break;
+        case ButtonIcon::more:
+            for(unsigned dot{};dot<3u;++dot)
+                draw_sprite(ink,x+extent*.5f-1.0f,y+extent*static_cast<float>(dot)*.4f,2.0f,2.0f);
+            break;
+        default:break;
+        }
+    }
+
+    static void draw_button_tooltip(std::string_view text,Vec2 position) noexcept
+    {
+        if(text.empty())return;
+        const float width=(std::min)(g_frame.windowSize.x,measure_text_width(text,kFontScale)+20.0f);
+        position.x=(std::clamp)(position.x,g_frame.origin.x,
+            (std::max)(g_frame.origin.x,g_frame.origin.x+g_frame.windowSize.x-width));
+        position.y=(std::min)(position.y,g_frame.origin.y+(std::max)(0.0f,g_frame.windowSize.y-28.0f));
+        begin_top_layer();
+        draw_rounded_sprite(active_palette().panelBackground,position.x,position.y,width,28.0f,
+            {.enabled=true,.control_radius=4.0f});
+        const auto fitted=fit_text_to_width(text,(std::max)(1.0f,width-20.0f),kFontScale);
+        draw_text_line(fitted,position.x+10.0f,position.y+4.0f,kFontScale);
+        end_top_layer();
+    }
+
     static bool button_with_state(
         std::string_view label,
         Vec2 size,
         bool selected,
         bool enabled = true,
         SemanticTone tone = SemanticTone::neutral,
-        bool circular = false) noexcept
+        bool circular = false,
+        bool high_contrast = false,
+        ButtonIcon icon = ButtonIcon::none,
+        std::string_view tooltip = {}) noexcept
     {
         if (!g_frame.insideWindow || !g_frame.ctx) return false;
 
         const Vec2 pos = g_frame.cursor;
         const float baseHeight = base_line_height(kFontScale);
-        const float minWidth = space_advance(kFontScale) + 2.0f * kContentPadding;
+        const float minWidth = icon==ButtonIcon::none
+            ?space_advance(kFontScale)+2.0f*kContentPadding:20.0f;
         const float width = (std::max)(static_cast<float>(size.x), minWidth);
-        const float height = (std::max)(static_cast<float>(size.y), baseHeight + 2.0f * kBoxInnerPadding);
+        const float height = (std::max)(static_cast<float>(size.y),
+            icon==ButtonIcon::none?baseHeight+2.0f*kBoxInnerPadding:20.0f);
 
         const float centerX = pos.x + width * 0.5f;
         const float centerY = pos.y + height * 0.5f;
         const float radius = (std::min)(width, height) * 0.5f;
-        const float dx = g_frame.mousePos.x - centerX;
-        const float dy = g_frame.mousePos.y - centerY;
-        const bool hovered = enabled
-            && point_in_rect(g_frame.mousePos, pos.x, pos.y, width, height)
-            && (!circular || (dx * dx + dy * dy <= radius * radius))
-            && point_in_active_clip(g_frame.mousePos);
+        const auto containsPointer = [&](Vec2 point) noexcept
+        {
+            const float dx = point.x - centerX;
+            const float dy = point.y - centerY;
+            return enabled && point_in_rect(point, pos.x, pos.y, width, height)
+                && (!circular || (dx * dx + dy * dy <= radius * radius))
+                && point_in_active_clip(point);
+        };
+        const bool hovered = containsPointer(g_frame.mousePos);
         const std::size_t pressKey = widget_press_key(label, pos, { width, height });
         auto& pressedKey = g_contextPressedButtonKeys[g_frame.ctx];
-        if (hovered && left_press_available())
+        const auto press = left_press_available() ? mouse_press_position() : std::nullopt;
+        if (press && containsPointer(*press))
         {
             pressedKey = pressKey;
             consume_left_press();
@@ -45,7 +107,19 @@
         const auto& palette = active_palette();
         const bool semantic = enabled && tone != SemanticTone::neutral;
 
-        if (circular)
+        const bool contrastPainted = high_contrast
+            && draw_high_contrast_control(pos.x, pos.y, width, height, circular);
+        if (contrastPainted)
+        {
+            // Opaque inverse face and outline; input remains this same button.
+        }
+        else if (draw_beveled_control(palette, palette.buttonNormal,
+                pos.x, pos.y, width, height, selected || pressed))
+        {
+            // Classic face and pressed edge are painted by the same control;
+            // input capture, semantic meaning and its bounds stay unchanged.
+        }
+        else if (circular)
         {
             const auto style = gui_lib::rounded_rect::RoundedRectStyle{
                 .enabled = true, .control_radius = radius};
@@ -105,6 +179,10 @@
                 });
         }
 
+        if(icon!=ButtonIcon::none)
+            draw_button_icon(icon,pos,{width,height});
+        else
+        {
         const std::string fittedLabel = fit_text_to_width(
             label,
             (std::max)(1.0f, width - 2.0f * kContentPadding - 2.0f),
@@ -127,7 +205,16 @@
             + std::floor((std::max)(0.0f, (height - textHeight) * 0.5f))
             + (circular ? 0.0f : 1.0f);
 
-        draw_text_line(displayLabel, textX, textY, kFontScale);
+        const float pressedOffset = !contrastPainted && palette.beveledControls && (selected || pressed) ? 1.0f : 0.0f;
+        if (contrastPainted)
+            draw_contrast_text(displayLabel, textX, textY, kFontScale);
+        else
+            draw_text_line(displayLabel, textX + pressedOffset, textY + pressedOffset, kFontScale);
+        }
+
+        if(hovered&&g_frame.pointerInputAllowed&&point_in_modal_input_capture(g_frame.mousePos)
+            &&(!tooltip.empty()||icon!=ButtonIcon::none))
+            draw_button_tooltip(tooltip.empty()?label:tooltip,{pos.x,pos.y+height+3.0f});
 
         g_frame.lastButtonBounds = WidgetBounds{ .position = pos, .size = { width, height } };
         advance_cursor({ 0.0f, height + kContentPadding });
@@ -153,21 +240,22 @@
 
     [[nodiscard]] static MenuItemLayout make_menu_item_layout(
         Vec2 position, Vec2 size, float textHeight,
-        float measuredLabelWidth, float shortcutWidth) noexcept
+        float measuredLabelWidth, float shortcutWidth, float indentation = 0.0f) noexcept
     {
         MenuItemLayout layout{};
         if (!std::isfinite(position.x) || !std::isfinite(position.y)
             || !std::isfinite(size.x) || !std::isfinite(size.y)
             || !std::isfinite(textHeight) || !std::isfinite(measuredLabelWidth)
-            || !std::isfinite(shortcutWidth)
+            || !std::isfinite(shortcutWidth) || !std::isfinite(indentation)
             || size.x <= 0.0f || size.y <= 0.0f || textHeight <= 0.0f)
             return layout;
         layout.row = {position, size};
         const float padding = (std::min)(8.0f, size.x * 0.25f);
         const float innerWidth = (std::max)(0.0f, size.x - 2.0f * padding);
-        const float gutter = (std::min)(22.0f, innerWidth);
-        const float labelX = position.x + padding + gutter;
-        const float available = (std::max)(0.0f, innerWidth - gutter);
+        const float indent = (std::clamp)(indentation, 0.0f, innerWidth);
+        const float gutter = (std::min)(22.0f, innerWidth - indent);
+        const float labelX = position.x + padding + indent + gutter;
+        const float available = (std::max)(0.0f, innerWidth - indent - gutter);
         // Shortcut hints yield before the command label in a narrow viewport.
         const bool showShortcut = shortcutWidth > 0.0f
             && available >= measuredLabelWidth + shortcutWidth + 12.0f;
@@ -176,7 +264,7 @@
             available - (showShortcut ? hintWidth + 12.0f : 0.0f));
         const float textY = position.y + std::floor((size.y - textHeight) * 0.5f);
         const float indicatorExtent = (std::min)({12.0f, gutter, size.y});
-        layout.indicator = {{position.x + padding + (gutter - indicatorExtent) * 0.5f,
+        layout.indicator = {{position.x + padding + indent + (gutter - indicatorExtent) * 0.5f,
             position.y + (size.y - indicatorExtent) * 0.5f},
             {indicatorExtent, indicatorExtent}};
         layout.label = {{labelX, textY}, {labelWidth, textHeight}};
@@ -245,7 +333,8 @@
             measure_text_width(options.shortcut, kFontScale));
     }
 
-    bool menu_item(const MenuItemOptions& options) noexcept
+    static bool menu_item_control(const MenuItemOptions& options,
+        bool interactive, bool focused = false, bool ownedPressed = false) noexcept
     {
         if (!g_frame.insideWindow || !g_frame.ctx)
             return false;
@@ -256,31 +345,37 @@
         const float height = (std::max)(menu_item_row_height(), options.size.y);
         const auto layout = make_menu_item_layout(position, {width, height},
             base_line_height(kFontScale), measure_text_width(options.label, kFontScale),
-            measure_text_width(options.shortcut, kFontScale));
+            measure_text_width(options.shortcut, kFontScale), options.indentation);
         if (!layout.valid)
             return false;
-        const bool hovered = point_in_rect(g_frame.mousePos,
-                position.x, position.y, width, height)
-            && point_in_active_clip(g_frame.mousePos);
-        const auto key = widget_press_key(options.label, position, {width, height});
+        const auto containsPointer = [&](Vec2 point) noexcept
+        {
+            return point_in_rect(point, position.x, position.y, width, height)
+                && point_in_active_clip(point);
+        };
+        const bool hovered = containsPointer(g_frame.mousePos);
+        const auto key = interactive
+            ? widget_press_key(options.label, position, {width, height}) : 0u;
         auto& pressedKey = g_contextPressedButtonKeys[g_frame.ctx];
-        if (hovered && left_press_available())
+        const auto press = interactive && left_press_available()
+            ? mouse_press_position() : std::nullopt;
+        if (press && containsPointer(*press))
         {
             pressedKey = options.enabled ? key : 0u;
             consume_left_press();
         }
-        const bool pressed = options.enabled && pressedKey == key
-            && (g_frame.mouseDown || g_frame.justReleased);
-        const bool clicked = options.enabled && hovered
+        const bool pressed = options.enabled && (ownedPressed || (interactive && pressedKey == key
+            && (g_frame.mouseDown || g_frame.justReleased)));
+        const bool clicked = interactive && options.enabled && hovered
             && left_release_available() && pressedKey == key;
-        if (hovered && left_release_available())
+        if (interactive && hovered && left_release_available())
             consume_left_release();
-        if (g_frame.justReleased && pressedKey == key)
+        if (interactive && g_frame.justReleased && pressedKey == key)
             pressedKey = 0u;
 
         const auto& palette = active_palette();
-        if (options.enabled && (hovered || pressed))
-            draw_rounded_sprite(pressed ? palette.buttonActive : palette.buttonHover,
+        if (options.enabled && (hovered || pressed || focused || options.selected))
+            draw_rounded_sprite(pressed || options.selected ? palette.buttonActive : palette.buttonHover,
                 position.x, position.y, width, height,
                 gui_lib::rounded_rect::RoundedRectStyle{
                     .enabled = true, .control_radius = 3.0f});
@@ -288,11 +383,14 @@
             draw_sprite(palette.titleBar, position.x + 4.0f, position.y,
                 (std::max)(0.0f, width - 8.0f), 1.0f);
 
-        const auto& muted = g_frame.activeTheme == ThemeVariant::DefaultLight
+        const auto& muted = active_palette_is_light()
             ? g_resources.halfTextLightFont : g_resources.halfTextFont;
         const auto* previousFont = g_temporaryTextFont;
         if (!options.enabled && muted.asset)
             g_temporaryTextFont = &muted;
+        else if (!hovered && !pressed && !focused && !options.selected)
+            if (const auto* tinted = semantic_text_font(options.tone))
+                g_temporaryTextFont = tinted;
         {
             ContentClipScope rowClip(position, {position.x + width, position.y + height});
             const auto label = fit_text_to_width(options.label,
@@ -315,7 +413,25 @@
                 const auto& mark = active_semantic_pair(options.enabled
                     ? SemanticTone::info : SemanticTone::muted);
                 const auto p = layout.indicator.position;
-                if (options.indicator == MenuItemIndicator::Radio)
+                if (options.indicator == MenuItemIndicator::Disclosure)
+                {
+                    const auto ink = palette.isLight ? g_resources.contrastBlack : g_resources.contrastWhite;
+                    for (unsigned step{}; step<5u; ++step)
+                    {
+                        const float offset = static_cast<float>(step);
+                        if (options.checked)
+                        {
+                            draw_sprite(ink,p.x+1.0f+offset,p.y+3.0f+offset,1.5f,1.5f);
+                            draw_sprite(ink,p.x+9.0f-offset,p.y+3.0f+offset,1.5f,1.5f);
+                        }
+                        else
+                        {
+                            draw_sprite(ink,p.x+3.0f+offset,p.y+1.0f+offset,1.5f,1.5f);
+                            draw_sprite(ink,p.x+3.0f+offset,p.y+9.0f-offset,1.5f,1.5f);
+                        }
+                    }
+                }
+                else if (options.indicator == MenuItemIndicator::Radio)
                 {
                     draw_rounded_sprite(mark.accent, p.x, p.y, 12.0f, 12.0f,
                         {.enabled = true, .control_radius = 6.0f});
@@ -342,6 +458,228 @@
         return clicked;
     }
 
+    bool menu_item(const MenuItemOptions& options) noexcept
+    {
+        return menu_item_control(options, true);
+    }
+
+    void close_command_menu(CommandMenuState& state) noexcept
+    {
+        gui_lib::close_command_menu(state);
+    }
+
+    CommandMenuResult command_menu(CommandMenuState& state,
+        std::span<const MenuItemOptions> items, const CommandMenuOptions& options) noexcept
+    {
+        CommandMenuResult result{};
+        if (!g_frame.ctx)
+        {
+            result.closed = state.popup.open;
+            gui_lib::close_command_menu(state);
+            return result;
+        }
+        // The caller latches capture before background controls. This narrow
+        // phase admits only the menu; it does not change overlay/frame order.
+        const bool previousOwner = g_frame.menuPopupOwnsInput;
+        begin_application_popup_input();
+        struct InputScope final
+        {
+            bool previous{};
+            ~InputScope() noexcept { g_frame.menuPopupOwnsInput = previous; }
+        } inputScope{previousOwner};
+        try
+        {
+            std::vector<gui_lib::CommandMenuItemSpec> specs;
+            std::vector<std::vector<gui_lib::CommandMenuItemSpec>> childSpecs;
+            childSpecs.reserve(1024u); // Stable child-vector addresses during bounded conversion.
+            std::size_t itemCount{};
+            const auto convert = [&](auto&& self, std::span<const MenuItemOptions> source,
+                std::vector<gui_lib::CommandMenuItemSpec>& destination, std::size_t depth) -> bool
+            {
+            if(depth>=8u||source.size()>1024u-itemCount) return false;
+            destination.reserve(source.size());
+            for (const auto& item : source)
+            {
+                if(itemCount>=1024u) return false;
+                ++itemCount;
+                auto id = item.command_id;
+                if (!id)
+                {
+                    id = 14695981039346656037ull;
+                    for (const auto text : {item.label, item.shortcut})
+                    {
+                        for (const unsigned char byte : text)
+                            id = (id ^ byte) * 1099511628211ull;
+                        id = (id ^ 0xffu) * 1099511628211ull;
+                    }
+                    if (!id) id = 1u;
+                }
+                std::span<const gui_lib::CommandMenuItemSpec> children{};
+                if(!item.children.empty())
+                {
+                    if(!item.children.begin()) return false;
+                    childSpecs.emplace_back();auto& converted=childSpecs.back();
+                    if(!self(self,item.children,converted,depth+1u)) return false;
+                    children=converted;
+                }
+                auto display=item;
+                if(!item.children.empty()&&display.shortcut.empty()) display.shortcut=">";
+                destination.push_back({.id = id, .label = item.label,
+                    .shortcut = display.shortcut,
+                    .preferred_width = menu_item_preferred_width(display),
+                    .enabled = item.enabled, .separator_before = item.separator_before,
+                    .indicator = item.indicator == MenuItemIndicator::Radio
+                        ? gui_lib::CommandMenuIndicator::radio
+                        : item.indicator == MenuItemIndicator::Check
+                            ? gui_lib::CommandMenuIndicator::check
+                            : gui_lib::CommandMenuIndicator::none,
+                    .checked = item.checked,.children=children});
+            }
+            return true;
+            };
+            if(!convert(convert,items,specs,0u))
+            { result.closed=state.popup.open;gui_lib::close_command_menu(state);return result; }
+            gui_lib::CommandMenuInput input{};
+            input.popup.mouse_position = {g_frame.mousePos.x, g_frame.mousePos.y};
+            input.popup.mouse_pressed = left_press_available();
+            input.popup.mouse_released = left_release_available();
+            input.popup.open_requested = options.open_requested;
+            input.popup.close_requested = options.close_requested;
+            if (input.popup.mouse_pressed)
+                if (const auto press = mouse_press_position())
+                    input.press_position = gui_lib::Vec2{press->x, press->y};
+            input.pointer_down = g_frame.mouseDown;
+            input.wheel_delta = static_cast<float>(g_frame.mouseWheelDelta) / 120.0f
+                * line_advance_amount(kFontScale) * 3.0f;
+            input.focus_lost = (g_frame.ctx->get_hwnd() || g_frame.ctx->windowData)
+                && !g_frame.ctx->has_input_focus_safe();
+            const auto menuKey = [](const InputEvent& event) noexcept
+            {
+                return event.type == EventType::KeyDown && !event.ctrl_down && !event.alt_down
+                    && (event.key == 13 || event.key == 27
+                        || (event.key >= 33 && event.key <= 40));
+            };
+            for (const auto& event : g_frame.events)
+            {
+                if (!menuKey(event)) continue;
+                input.accept_pressed |= event.key == 13;
+                input.popup.escape_pressed |= event.key == 27;
+                input.page_up_pressed |= event.key == 33;
+                input.page_down_pressed |= event.key == 34;
+                input.end_pressed |= event.key == 35;
+                input.home_pressed |= event.key == 36;
+                input.left_pressed |= event.key == 37;
+                input.up_pressed |= event.key == 38;
+                input.right_pressed |= event.key == 39;
+                input.down_pressed |= event.key == 40;
+            }
+            if (state.popup.open && options.dismiss_on_hover_exit
+                && !options.open_requested && !g_frame.mouseDown
+                && !state.dragging_scrollbar && g_frame.pointerInputAllowed
+                && state.pointer_initialized
+                && !std::any_of(g_frame.events.begin(), g_frame.events.end(), menuKey))
+            {
+                const auto contains = [&](gui_lib::Rect rect)
+                {
+                    return point_in_rect(g_frame.mousePos, rect.position.x,
+                        rect.position.y, rect.size.x, rect.size.y);
+                };
+                const gui_lib::Rect owner{{options.owner.position.x, options.owner.position.y},
+                    {options.owner.size.x, options.owner.size.y}};
+                // Only the gap between header and body joins their hit areas.
+                const float top = (std::min)(owner.position.y + owner.size.y,
+                    state.popup.rect.position.y + state.popup.rect.size.y);
+                const float bottom = (std::max)(owner.position.y, state.popup.rect.position.y);
+                const float left = (std::min)(owner.position.x, state.popup.rect.position.x);
+                const float right = (std::max)(owner.position.x + owner.size.x,
+                    state.popup.rect.position.x + state.popup.rect.size.x);
+                const gui_lib::Rect bridge{{left, top}, {right - left, (std::max)(0.0f, bottom - top)}};
+                const auto insideChild=[&](auto&& self,const CommandMenuState& parent)->bool
+                {
+                    for(const auto& child:parent.submenu)
+                        if(child.popup.open&&(contains(child.popup.rect)||self(self,child))) return true;
+                    return false;
+                };
+                const bool keepAlive = contains(owner) || contains(state.popup.rect)
+                    || contains(bridge) || insideChild(insideChild,state);
+                input.popup.close_requested |= gui_lib::command_menu_hover_exit_due(
+                    state, keepAlive, g_frame.deltaTime);
+            }
+            else
+                (void)gui_lib::command_menu_hover_exit_due(state, true, 0.0f);
+            const auto layout = gui_lib::update_command_menu(state, specs,
+                {.owner = {{options.owner.position.x, options.owner.position.y},
+                        {options.owner.size.x, options.owner.size.y}},
+                    .viewport_size = {options.viewport_size.x, options.viewport_size.y},
+                    .row_height = menu_item_row_height(),
+                    .maximum_height = options.maximum_height,
+                    .gap = options.gap, .margin = options.margin}, input);
+            result.bounds = {{layout.popup.popup.position.x, layout.popup.popup.position.y},
+                {layout.popup.popup.size.x, layout.popup.popup.size.y}};
+            result.activated_index = layout.activated_index;
+            result.activated_id = layout.activated_id;
+            result.owner_navigation = layout.owner_navigation;
+            result.visible = layout.popup.visible;
+            result.captured = layout.pointer_captured || layout.keyboard_captured;
+            result.closed = layout.popup.closed;
+            if (layout.pointer_captured)
+            {
+                consume_left_press();
+                consume_left_release();
+            }
+            if (layout.wheel_scrolled) g_frame.mouseWheelDelta = 0;
+            if (layout.keyboard_captured) std::erase_if(g_frame.events, menuKey);
+            if (!layout.popup.visible) return result;
+
+            begin_top_layer();
+            const auto drawMenu=[&](auto&& self,const gui_lib::CommandMenuLayout& current,
+                std::span<const MenuItemOptions> source,std::span<const gui_lib::CommandMenuItemSpec> converted,
+                const CommandMenuState& owner)->void
+            {
+            begin_window({}, {current.popup.popup.position.x,current.popup.popup.position.y},
+                {current.popup.popup.size.x,current.popup.popup.size.y});
+            {
+                ContentClipScope clip({current.content_clip.position.x, current.content_clip.position.y},
+                    {current.content_clip.position.x + current.content_clip.size.x,
+                        current.content_clip.position.y + current.content_clip.size.y});
+                for (const auto& row : current.rows)
+                {
+                    if (!row.visible || row.item_index >= source.size()) continue;
+                    auto item = source[row.item_index];
+                    if(!item.children.empty()&&item.shortcut.empty()) item.shortcut=">";
+                    item.size = {row.rect.size.x, row.rect.size.y};
+                    set_cursor({row.rect.position.x, row.rect.position.y});
+                    // The portable component alone dispatches activation.
+                    (void)menu_item_control(item, false, row.focused,
+                        owner.pressed_id == std::optional{row.id} && g_frame.mouseDown);
+                }
+            }
+            if (current.scrollbar)
+            {
+                const auto& palette = active_palette();
+                const auto& track = current.scrollbar->track;
+                const auto& thumb = current.scrollbar->thumb;
+                draw_sprite(palette.textField, track.position.x, track.position.y, track.size.x, track.size.y);
+                draw_sprite(palette.buttonActive, thumb.position.x, thumb.position.y, thumb.size.x, thumb.size.y);
+            }
+            end_window();
+            if(current.submenus.size()==1u&&owner.submenu.size()==1u)
+                for(std::size_t index=0;index<converted.size();++index)
+                    if(owner.open_submenu_id==converted[index].id)
+                        self(self,current.submenus.front(),source[index].children,converted[index].children,owner.submenu.front());
+            };
+            drawMenu(drawMenu,layout,items,specs,state);
+            end_top_layer();
+            return result;
+        }
+        catch (...)
+        {
+            result.closed = state.popup.open;
+            gui_lib::close_command_menu(state);
+            return result;
+        }
+    }
+
     bool toggle_switch(std::string_view label, bool& value, Vec2 size) noexcept
     {
         if (!g_frame.insideWindow || !g_frame.ctx)
@@ -355,11 +693,16 @@
         const float trackHeight = (std::min)(24.0f, height - 4.0f);
         const float trackX = pos.x + width - trackWidth;
         const float trackY = pos.y + (height - trackHeight) * 0.5f;
-        const bool hovered = point_in_rect(g_frame.mousePos, pos.x, pos.y, width, height)
-            && point_in_active_clip(g_frame.mousePos);
+        const auto containsPointer = [&](Vec2 point) noexcept
+        {
+            return point_in_rect(point, pos.x, pos.y, width, height)
+                && point_in_active_clip(point);
+        };
+        const bool hovered = containsPointer(g_frame.mousePos);
         const std::size_t pressKey = widget_press_key(label, pos, { width, height });
         auto& pressedKey = g_contextPressedButtonKeys[g_frame.ctx];
-        if (hovered && left_press_available())
+        const auto press = left_press_available() ? mouse_press_position() : std::nullopt;
+        if (press && containsPointer(*press))
         {
             pressedKey = pressKey;
             consume_left_press();
@@ -435,11 +778,16 @@
         const float width = (std::max)(static_cast<float>(size.x), minWidth);
         const float height = (std::max)(static_cast<float>(size.y), baseHeight + 2.0f * kBoxInnerPadding);
 
-        const bool hovered = point_in_rect(g_frame.mousePos, pos.x, pos.y, width, height)
-            && point_in_active_clip(g_frame.mousePos);
+        const auto containsPointer = [&](Vec2 point) noexcept
+        {
+            return point_in_rect(point, pos.x, pos.y, width, height)
+                && point_in_active_clip(point);
+        };
+        const bool hovered = containsPointer(g_frame.mousePos);
         const std::size_t pressKey = widget_press_key(label, pos, { width, height });
         auto& pressedKey = g_contextPressedButtonKeys[g_frame.ctx];
-        if (hovered && left_press_available())
+        const auto press = left_press_available() ? mouse_press_position() : std::nullopt;
+        if (press && containsPointer(*press))
         {
             pressedKey = pressKey;
             consume_left_press();
@@ -494,14 +842,15 @@
         const float width = 24.0f;
         const float height = 22.0f;
         const Vec2 pos{
-            window_position.x + (std::max)(0.0f, window_size.x - width - kContentPadding),
-            window_position.y + 5.0f
+            window_position.x + (std::max)(0.0f, window_size.x - width),
+            window_position.y
         };
         const bool hovered = point_in_rect(g_frame.mousePos, pos.x, pos.y, width, height)
             && point_in_modal_input_capture(g_frame.mousePos);
         const std::size_t pressKey = widget_press_key("window-close", pos, { width, height });
         auto& pressedKey = g_contextPressedButtonKeys[g_frame.ctx];
-        if (hovered && left_press_available())
+        const auto press = mouse_press_position();
+        if (press && point_in_rect(*press, pos.x, pos.y, width, height))
         {
             pressedKey = pressKey;
             consume_left_press();
@@ -516,19 +865,8 @@
             pressedKey = 0;
         }
 
-        const auto& palette = active_palette();
-        const SpriteHandle background =
-            pressed ? palette.buttonActive
-            : hovered ? palette.buttonHover
-            : palette.buttonNormal;
-        draw_sprite(background, pos.x, pos.y, width, height);
-        if (hovered || pressed)
-        {
-            draw_sprite(palette.textFieldActive, pos.x, pos.y, width, 2.0f);
-            draw_sprite(palette.textFieldActive, pos.x, pos.y, 2.0f, height);
-        }
-
-        draw_close_mark(pos, {width, height});
+        const ContentClipClearScope chromeClip;
+        draw_close_mark(pos, {width, height}, hovered, pressed, true);
         g_frame.lastButtonBounds = WidgetBounds{ .position = pos, .size = { width, height } };
         return clicked;
     }
@@ -557,15 +895,20 @@
             .caption_height = captionHeight
         });
 
-        const bool hovered = options.enabled
-            && point_in_rect(g_frame.mousePos, position.x, position.y, width, height)
-            && point_in_active_clip(g_frame.mousePos);
+        const auto containsPointer = [&](Vec2 point) noexcept
+        {
+            return options.enabled
+                && point_in_rect(point, position.x, position.y, width, height)
+                && point_in_active_clip(point);
+        };
+        const bool hovered = containsPointer(g_frame.mousePos);
         const std::string_view identity = !options.id.empty()
             ? options.id
             : (!options.caption.empty() ? options.caption : std::string_view{ "<image-box>" });
         const std::size_t pressKey = widget_press_key(identity, position, { width, height });
         auto& pressedKey = g_contextPressedButtonKeys[g_frame.ctx];
-        if (options.interactive && hovered && left_press_available())
+        const auto press = left_press_available() ? mouse_press_position() : std::nullopt;
+        if (options.interactive && press && containsPointer(*press))
         {
             pressedKey = pressKey;
             consume_left_press();

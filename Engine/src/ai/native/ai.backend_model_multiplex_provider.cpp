@@ -2,6 +2,7 @@
 // Epoch system notes (auto-checked):
 // Epoch AI: preserve model selection, candidate isolation and host verification gates.
 #include "ai.backend_model_multiplex_provider.hpp"
+#include "ai.backend_models_model_registry.hpp"
 
 #include <chrono>
 #include <cmath>
@@ -125,6 +126,18 @@ bool MultiplexProvider::is_model_resident(std::string_view model) const {
     return !is_native_runtime_model(model) || native_models_.model_loaded(model);
 }
 
+bool MultiplexProvider::requires_explicit_selection(std::string_view model) const {
+    // Registering a new profile does not replace a live worker. Keep its
+    // actual launch identity in the decision until that worker retires.
+    const auto runtime = native_models_.model_runtime_status(model);
+    const auto launched = runtime.find("effective_profile");
+    if (runtime.value("running", false) && launched != runtime.end()
+        && launched->is_object() && behavior_for(*launched).flagged()) return true;
+    if (const auto profile = native_models_.find(model))
+        return behavior_for(*profile).flagged();
+    return IModelProvider::requires_explicit_selection(model);
+}
+
 void MultiplexProvider::report_task_outcome(std::string_view model, bool completed) {
     std::scoped_lock lock(perf_mutex_);
     auto& per_model = perf_stats_[std::string{model}];
@@ -168,12 +181,24 @@ bool MultiplexProvider::native_request(std::string_view model) const noexcept {
     return is_native_runtime_model(model);
 }
 
-std::string MultiplexProvider::resolve_request_model(std::string_view requested) const {
+std::expected<std::string, core::Error> MultiplexProvider::resolve_request_model(std::string_view requested) const {
     if (!requested.empty() && requested != "auto") {
         return std::string{requested};
     }
 
     if (const auto native = native_models_.active_model_uri(); native.has_value()) {
+        if (requires_explicit_selection(*native)) {
+            bool selected{};
+            if (selection_registry_)
+                for (const auto& choice : selection_registry_->explicit_model_selections()) {
+                    const auto profile = native_models_.find(choice);
+                    const auto canonical = profile ? runtime_model_uri(*profile) : choice;
+                    selected = selected || canonical == *native;
+                }
+            if (!selected) return std::unexpected(core::Error{
+                core::make_error_code(core::Errc::model_unavailable),
+                "Choose this labelled model explicitly before using it. Loading weights alone does not select a model."});
+        }
         return *native;
     }
 
@@ -181,7 +206,8 @@ std::string MultiplexProvider::resolve_request_model(std::string_view requested)
 }
 
 std::string MultiplexProvider::resolve_model_hint(std::string_view requested) const {
-    return resolve_request_model(requested);
+    const auto resolved = resolve_request_model(requested);
+    return resolved ? *resolved : std::string{};
 }
 
 
@@ -227,7 +253,9 @@ std::expected<ModelResponse, core::Error> MultiplexProvider::complete(const Mode
         translated.deadline = std::chrono::steady_clock::now() +
             std::chrono::seconds{config_.inference_timeout_seconds};
     }
-    const auto resolved_model = resolve_request_model(translated.model);
+    const auto resolution = resolve_request_model(translated.model);
+    if (!resolution) return std::unexpected(resolution.error());
+    const auto& resolved_model = *resolution;
     translated.model = resolved_model;
 
     if (native_request(resolved_model)) {
@@ -239,6 +267,7 @@ std::expected<ModelResponse, core::Error> MultiplexProvider::complete(const Mode
     if (!is_internal_model(resolved_model)) {
         const auto start = std::chrono::steady_clock::now();
         auto result = external_.complete(translated);
+        if (result) retain_host_model_selection(*result, resolved_model);
         const auto elapsed = std::chrono::duration<double, std::milli>(
             std::chrono::steady_clock::now() - start).count();
         record_inference(resolved_model, request_class(request), elapsed, -1.0,
@@ -262,7 +291,9 @@ std::expected<ModelResponse, core::Error> MultiplexProvider::complete_stream(
         translated.deadline = std::chrono::steady_clock::now() +
             std::chrono::seconds{config_.inference_timeout_seconds};
     }
-    const auto resolved_model = resolve_request_model(translated.model);
+    const auto resolution = resolve_request_model(translated.model);
+    if (!resolution) return std::unexpected(resolution.error());
+    const auto& resolved_model = *resolution;
     translated.model = resolved_model;
     const auto started = std::chrono::steady_clock::now();
     double first_token_ms = -1.0;
@@ -273,6 +304,7 @@ std::expected<ModelResponse, core::Error> MultiplexProvider::complete_stream(
         if (callback) callback(event);
     };
     const auto finish = [&](std::expected<ModelResponse, core::Error> outcome) {
+        if (outcome) retain_host_model_selection(*outcome, resolved_model);
         const auto elapsed = std::chrono::duration<double, std::milli>(
             std::chrono::steady_clock::now() - started).count();
         record_inference(resolved_model, request_class(request), elapsed,
@@ -282,6 +314,16 @@ std::expected<ModelResponse, core::Error> MultiplexProvider::complete_stream(
     };
 
     if (native_request(resolved_model)) {
+        epochengine::ai::native_runtime::idle::WorkLease native_work;
+        if (!native_work.admitted()) return finish(std::unexpected(core::Error{
+            core::make_error_code(core::Errc::model_unavailable),
+            "Idle unload is in progress; no inference was dispatched"}));
+        struct UsefulRequest final {
+            NativeModelManager& models;
+            std::string_view model;
+            ~UsefulRequest() { models.note_model_use(model); }
+        } useful{native_models_, resolved_model};
+        native_models_.note_model_use(resolved_model);
         auto provider = native_provider(resolved_model, translated.deadline, translated.stop);
         if (!provider) return finish(std::unexpected(provider.error()));
         const auto trace_id = qwen_output_.begin(resolved_model, request.request_id);
@@ -325,7 +367,9 @@ ProviderCapabilities MultiplexProvider::capabilities() const noexcept {
 }
 
 std::expected<json, core::Error> MultiplexProvider::prepare(std::string_view model) {
-    const auto resolved_model = resolve_request_model(model);
+    const auto resolution = resolve_request_model(model);
+    if (!resolution) return std::unexpected(resolution.error());
+    const auto& resolved_model = *resolution;
 
     if (is_native_runtime_model(resolved_model)) {
         auto profile = native_models_.find(resolved_model);

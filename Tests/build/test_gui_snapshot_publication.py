@@ -1,11 +1,11 @@
 """CPU proof of the actual GUI snapshot publisher, without an Editor/renderer."""
 from Tools.source.owned_source_text import read_owned_source
 from pathlib import Path
-import os
-import shutil
-import subprocess
-import tempfile
+import hashlib
+import json
+import time
 import unittest
+from Tests.support.cpp import compile_and_run
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -22,13 +22,6 @@ def definition(source, marker, semicolon=False):
 
 class GuiSnapshotPublication(unittest.TestCase):
     def test_actual_publisher_cpu(self):
-        if os.name != 'nt':
-            self.skipTest('Installed MSVC CPU lane')
-        tools = sorted(Path('C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC').glob('*'))
-        sdk = Path('C:/Program Files (x86)/Windows Kits/10')
-        kits = sorted((sdk / 'Include').glob('*'))
-        if not tools or not kits:
-            self.skipTest('MSVC/SDK unavailable')
         source = read_owned_source(ROOT / 'Engine/src/epochgui/gui.engine.cpp', encoding='utf-8')
         production = '\n'.join((
             definition(source, 'struct QueuedSpriteDraw', True),
@@ -48,6 +41,7 @@ class GuiSnapshotPublication(unittest.TestCase):
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
+#include <fstream>
 #include <memory>
 #include <mutex>
 #include <new>
@@ -55,14 +49,18 @@ class GuiSnapshotPublication(unittest.TestCase):
 #include <unordered_map>
 #include <vector>
 static thread_local bool publicationLocked{};
+static thread_local bool countWarmAllocations{};
+static unsigned warmAllocations{},warmDeletions{};
 static std::atomic<unsigned> lockedAllocations{}, lockedDeletions{}, lockedComparisons{};
 void* operator new(std::size_t bytes) {
     if (publicationLocked) ++lockedAllocations;
+    if (countWarmAllocations) ++warmAllocations;
     if (auto* result = std::malloc(bytes ? bytes : 1)) return result;
     throw std::bad_alloc{};
 }
 void operator delete(void* value) noexcept {
     if (value && publicationLocked) ++lockedDeletions;
+    if (value && countWarmAllocations) ++warmDeletions;
     std::free(value);
 }
 void operator delete(void* value, std::size_t) noexcept { ::operator delete(value); }
@@ -90,7 +88,8 @@ struct Context {};
 #define CHECK(...) do { if (!(__VA_ARGS__)) return __LINE__; } while (false)
 '''
         main = r'''
-int main() {
+int main(int argc,char**argv) {
+    CHECK(argc==2);
     Context ctx{}, competing{};
     std::unordered_map<const void*, DeferredDrawBatch, PtrHash> batches;
     // First-context map-node allocation is permitted; hot publication is not.
@@ -108,6 +107,17 @@ int main() {
     auto reader = batches[&ctx].draws;
     CHECK(reader && reader->size() == 1u && batches[&ctx].generation == 1u);
     CHECK(pending.empty() && pending.capacity() >= 4096u);
+    const auto* warmStorage=pending.data();
+    countWarmAllocations=true;
+    for(unsigned frame=0;frame<256u;++frame) {
+        pending.push_back({SpriteHandle{1},1.2f,2.2f,10.f,11.f});
+        publish_deferred_draw_batch(&ctx,pending,batches,4096u);
+    }
+    countWarmAllocations=false;
+    {std::ofstream evidence{argv[1]};evidence<<"{\"warm_unchanged_frames\":256,\"allocations\":"<<warmAllocations
+        <<",\"deletions\":"<<warmDeletions<<"}\n";}
+    CHECK(warmAllocations==0u&&warmDeletions==0u);
+    CHECK(pending.empty()&&pending.data()==warmStorage&&batches[&ctx].draws==reader&&batches[&ctx].generation==1u);
     pending = draws(1); pending.front().x = 1.8f; // same existing pixel semantics
     publish_deferred_draw_batch(&ctx, pending, batches, 4096u);
     CHECK(batches[&ctx].draws == reader && batches[&ctx].generation == 1u);
@@ -157,11 +167,35 @@ int main() {
     if (!compareEntered.load()) { allowCompare = true; writer.join(); return __LINE__; }
     pending = draws(3);
     publish_deferred_draw_batch(&competing, pending, batches, 256u);
-    CHECK(batches[&competing].generation == 2u);
+    const bool competingPublished=batches[&competing].generation == 2u;
     allowCompare = true; writer.join();
+    CHECK(competingPublished);
     CHECK(batches[&competing].generation == 3u);
     CHECK(batches[&competing].draws->front().handle.value == 2);
     CHECK(old->front().handle.value == 1);
+
+    // Initially unchanged is not permission to drop a newer publication.
+    compareEntered=false;allowCompare=false;
+    std::thread unchangedWriter([&] {
+        auto candidate=draws(2);blockComparison=true;
+        publish_deferred_draw_batch(&competing,candidate,batches,256u);
+    });
+    const auto unchangedDeadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
+    while(!compareEntered.load()&&std::chrono::steady_clock::now()<unchangedDeadline)std::this_thread::yield();
+    if(!compareEntered.load()){allowCompare=true;unchangedWriter.join();return __LINE__;}
+    pending=draws(4);publish_deferred_draw_batch(&competing,pending,batches,256u);
+    const bool replacementPublished=batches[&competing].generation==4u;
+    allowCompare=true;unchangedWriter.join();
+    CHECK(replacementPublished);
+    CHECK(batches[&competing].generation==5u&&batches[&competing].draws->front().handle.value==2);
+
+    pending=draws(6);pending.push_back({SpriteHandle{7},3,4,5,6});
+    publish_deferred_draw_batch(&ctx,pending,batches,4096u);
+    const auto ordered=batches[&ctx].draws;const auto orderedGeneration=batches[&ctx].generation;
+    pending.assign(ordered->rbegin(),ordered->rend());
+    publish_deferred_draw_batch(&ctx,pending,batches,4096u);
+    CHECK(batches[&ctx].generation==orderedGeneration+1&&batches[&ctx].draws->front().handle.value==7);
+    CHECK(ordered->front().handle.value==6&&ordered->back().handle.value==7);
 
     // Exercise the actual top-layer caller, including its empty transition.
     g_frame.topLayerDraws = draws(5);
@@ -177,30 +211,15 @@ int main() {
     return 0;
 }
 '''
-        parent = ROOT / 'build/contract-tests'
-        parent.mkdir(parents=True, exist_ok=True)
-        scratch = Path(tempfile.mkdtemp(prefix='gui-publication-', dir=parent))
-        try:
-            contract = scratch / 'contract.cpp'
-            contract.write_text(preamble + production + main, encoding='utf-8')
-            binary = scratch / 'contract.exe'
-            toolset, kit = tools[-1], kits[-1]
-            args = [str(toolset / 'bin/Hostx64/x64/cl.exe'), '/nologo', '/std:c++latest', '/EHsc', '/WX',
-                    '/I' + str(toolset / 'include'), '/I' + str(kit / 'ucrt'),
-                    '/I' + str(kit / 'shared'), '/I' + str(kit / 'um'),
-                    '/Fo' + str(scratch / 'contract.obj'), '/Fe' + str(binary), str(contract),
-                    '/link', '/LIBPATH:' + str(toolset / 'lib/x64'),
-                    '/LIBPATH:' + str(sdk / 'Lib' / kit.name / 'um/x64'),
-                    '/LIBPATH:' + str(sdk / 'Lib' / kit.name / 'ucrt/x64')]
-            result = subprocess.run(args, cwd=scratch, capture_output=True, text=True, timeout=60)
-            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-            result = subprocess.run([str(binary)], cwd=scratch, capture_output=True, text=True, timeout=30)
-            lines = read_owned_source(contract, encoding='utf-8').splitlines()
-            failed = lines[result.returncode - 1] if 0 < result.returncode <= len(lines) else ''
-            self.assertEqual(result.returncode, 0, failed + result.stdout + result.stderr)
-        finally:
-            self.assertTrue(scratch.resolve().is_relative_to(parent.resolve()))
-            shutil.rmtree(scratch)
+        report=ROOT/'Artifacts/Reports/gui-unchanged-publication-oct30'/str(time.time_ns())
+        report.mkdir(parents=True)
+        contract=report/'contract.cpp';contract.write_text(preamble+production+main,encoding='utf-8')
+        runs=compile_and_run(self,contract,report,args=[str(report/'allocation-counts.json')],compile_timeout=90)
+        (report/'result.json').write_text(json.dumps({'passed':True,'cases':runs,
+            'allocation_counts':json.loads((report/'allocation-counts.json').read_text()),
+            'source_sha256':{str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest()for p in (
+                ROOT/'Engine/src/epochgui/gui.engine.cpp',Path(__file__))},
+            'scope':'Actual GUI publisher and top-layer caller, immutable concurrent readers, changed/unchanged publication races and counted warm allocations. No allocator denial, GUI, renderer, GPU, models or OS input.'},indent=2),encoding='utf-8')
 
     def test_base_top_publication_order_retained(self):
         source = read_owned_source(ROOT / 'Engine/src/epochgui/gui.engine.cpp', encoding='utf-8')

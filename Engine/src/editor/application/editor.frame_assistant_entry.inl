@@ -60,7 +60,13 @@
             editor.aiDeferredPrompt = std::move(prompt);
             editor.aiDeferredDisplay = std::move(display);
             editor.aiDeferredRequestKind = requestKind;
-            editor.aiDeferredModelLease = std::make_shared<AiModelSelectionLease>();
+            const bool awaitingIdleReload = editor.aiMethodSelection == 0
+                && ai::native_runtime::snapshot(false).idle_reload_available;
+            editor.aiDeferredModelLease = std::make_shared<AiModelSelectionLease>(!awaitingIdleReload);
+            // The authoring display may add "Plan: "; retain the original
+            // composer text while the queue's echo scope still identifies it.
+            editor.aiDeferredModelLease->retainedDraft = chat.suppressUserEcho
+                && !chat.activeDraftText.empty() ? chat.activeDraftText : editor.aiDeferredDisplay;
             editor.aiDeferredDispatchQueued = true;
             return true;
         };
@@ -129,8 +135,7 @@
                 }
                 break;
             case DetachedAiChatCommandKind::stop_pending:
-                if (chat.pending)
-                    (void)chat.cancel_pending();
+                automationEmergencyStopRequested = true;
                 break;
             }
         }

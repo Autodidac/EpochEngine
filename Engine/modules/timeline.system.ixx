@@ -33,6 +33,7 @@ module;
 #include "core.format_text.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -85,6 +86,13 @@ export namespace epochengine::timeline
         std::string payload{};
     };
 
+    enum class PlaybackDirection : std::int8_t { reverse = -1, forward = 1 };
+    enum class PlaybackCommand : std::uint8_t
+    {
+        rewind, step_back, toggle_forward, step_forward, toggle_reverse,
+        fast_reverse, fast_forward
+    };
+
     struct TimelineState
     {
         double playhead_seconds = 0.0;
@@ -95,6 +103,8 @@ export namespace epochengine::timeline
         bool playing = false;
         bool recording = false;
         bool simulation_clock_initialized = false;
+        PlaybackDirection direction{PlaybackDirection::forward};
+        double playback_rate = 1.0;
     };
 
     struct TimelineViewConfig
@@ -198,6 +208,13 @@ export namespace epochengine::timeline
 
     inline void clamp_state(TimelineState& state) noexcept
     {
+        if(!std::isfinite(state.duration_seconds))state.duration_seconds=120.0;
+        if(!std::isfinite(state.fixed_dt_seconds))state.fixed_dt_seconds=1.0/60.0;
+        if(!std::isfinite(state.playhead_seconds))state.playhead_seconds=0.0;
+        if(!std::isfinite(state.playback_rate))state.playback_rate=1.0;
+        state.playback_rate=(std::clamp)(state.playback_rate,1.0,8.0);
+        if(state.direction!=PlaybackDirection::forward&&state.direction!=PlaybackDirection::reverse)
+            state.direction=PlaybackDirection::forward;
         state.duration_seconds = (std::clamp)(state.duration_seconds, 1.0, 86'400.0);
         state.fixed_dt_seconds = (std::clamp)(state.fixed_dt_seconds, 1.0 / 240.0, 1.0 / 15.0);
         state.playhead_seconds = (std::clamp)(state.playhead_seconds, 0.0, state.duration_seconds);
@@ -206,8 +223,13 @@ export namespace epochengine::timeline
 
     inline void sync_to_simulation(TimelineState& state, const epochengine::core::time::simulation_stats& stats) noexcept
     {
+        // The simulation clock and side effects remain forward-only. Direction
+        // changes this bounded sample cursor, not physics or the event journal.
+        clamp_state(state);
+        if(!std::isfinite(stats.simulated_seconds)||stats.simulated_seconds<0.0)return;
         state.fixed_dt_seconds = stats.fixed_dt_seconds;
-        if (!state.simulation_clock_initialized)
+        if (!state.simulation_clock_initialized||!std::isfinite(state.last_simulation_seconds)
+            ||state.last_simulation_seconds<0.0)
         {
             state.last_simulation_seconds = stats.simulated_seconds;
             state.simulation_clock_initialized = true;
@@ -221,17 +243,74 @@ export namespace epochengine::timeline
         state.last_simulation_seconds = stats.simulated_seconds;
         if (state.playing && elapsed > 0.0)
         {
-            state.playhead_seconds += elapsed;
+            const double step=(std::min)(elapsed,state.duration_seconds/state.playback_rate)
+                *state.playback_rate;
+            state.playhead_seconds += state.direction==PlaybackDirection::reverse?-step:step;
             clamp_state(state);
-            if (state.playhead_seconds >= state.duration_seconds)
+            if ((state.direction==PlaybackDirection::forward&&state.playhead_seconds>=state.duration_seconds)
+                ||(state.direction==PlaybackDirection::reverse&&state.playhead_seconds<=0.0))
                 state.playing = false;
         }
+        else clamp_state(state);
     }
 
     inline void scrub_seconds(TimelineState& state, double delta_seconds) noexcept
     {
-        state.playhead_seconds += delta_seconds;
+        if(!std::isfinite(delta_seconds))return;
         clamp_state(state);
+        state.playhead_seconds += (std::clamp)(delta_seconds,-state.duration_seconds,state.duration_seconds);
+        clamp_state(state);
+    }
+
+    inline void seek_seconds(TimelineState& state,double seconds) noexcept
+    {
+        if(!std::isfinite(seconds))return;
+        state.playhead_seconds=seconds;state.playing=false;clamp_state(state);
+    }
+
+    inline void pause(TimelineState& state) noexcept { state.playing=false; }
+
+    inline void apply_playback_command(TimelineState& state,PlaybackCommand command) noexcept
+    {
+        clamp_state(state);
+        switch(command)
+        {
+        case PlaybackCommand::rewind:seek_seconds(state,0.0);break;
+        case PlaybackCommand::step_back:pause(state);scrub_seconds(state,-1.0);break;
+        case PlaybackCommand::step_forward:pause(state);scrub_seconds(state,1.0);break;
+        case PlaybackCommand::toggle_forward:
+        case PlaybackCommand::toggle_reverse:
+        {
+            const auto direction=command==PlaybackCommand::toggle_reverse?PlaybackDirection::reverse:PlaybackDirection::forward;
+            const bool normalRate=state.playback_rate==1.0;
+            state.playback_rate=1.0;
+            if(state.playing&&state.direction==direction&&normalRate)pause(state);
+            else
+            {
+                state.direction=direction;
+                state.playing=direction==PlaybackDirection::reverse?state.playhead_seconds>0.0
+                    :state.playhead_seconds<state.duration_seconds;
+            }
+            break;
+        }
+        case PlaybackCommand::fast_reverse:
+        case PlaybackCommand::fast_forward:
+        {
+            const auto direction=command==PlaybackCommand::fast_reverse?PlaybackDirection::reverse:PlaybackDirection::forward;
+            if(state.playing&&state.direction==direction)
+            {
+                if(state.playback_rate<2.0)state.playback_rate=2.0;
+                else if(state.playback_rate<4.0)state.playback_rate=4.0;
+                else if(state.playback_rate<8.0)state.playback_rate=8.0;
+                else state.playback_rate=2.0;
+            }
+            else state.playback_rate=2.0;
+            state.direction=direction;
+            state.playing=direction==PlaybackDirection::reverse?state.playhead_seconds>0.0
+                :state.playhead_seconds<state.duration_seconds;
+            break;
+        }
+        }
     }
 
     inline void clamp_view_config(TimelineViewConfig& view, double timeline_duration_seconds) noexcept

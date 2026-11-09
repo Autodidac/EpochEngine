@@ -36,11 +36,14 @@ module;
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <cmath>
 #include <cstdint>
 #include <functional>
 #include <map>
 #include <memory>
+#include <limits>
 #include <mutex>
+#include <optional>
 #include <queue>
 #include <shared_mutex>
 #include <span>
@@ -312,6 +315,22 @@ namespace epochengine::core
         {
             std::scoped_lock lock{frameWindowStateMutex};
             return frameWindowState;
+        }
+
+        // A sample of the existing session clock, not another clock. Kept on
+        // the context because legacy callers can share a Scene instance.
+        [[nodiscard]] bool publish_simulation_sample_time(double seconds) noexcept
+        {
+            if (!std::isfinite(seconds)) return false;
+            simulationSampleSeconds.store(seconds, std::memory_order_relaxed);
+            return true;
+        }
+
+        [[nodiscard]] std::optional<double> simulation_sample_time() const noexcept
+        {
+            const double seconds = simulationSampleSeconds.load(std::memory_order_relaxed);
+            if (!std::isfinite(seconds)) return {};
+            return seconds;
         }
 
         [[nodiscard]] perf::frame_activity frame_pacing_activity() const
@@ -637,20 +656,21 @@ namespace epochengine::core
         [[nodiscard]] bool action_modifiers_satisfied_safe(
             const input::ActionBinding& binding) const noexcept
         {
-            const bool control = is_key_held_safe(input::Key::LeftControl)
-                || is_key_held_safe(input::Key::RightControl);
-            const bool shift = is_key_held_safe(input::Key::LeftShift)
-                || is_key_held_safe(input::Key::RightShift);
-            const bool alt = is_key_held_safe(input::Key::LeftAlt)
-                || is_key_held_safe(input::Key::RightAlt);
-            return (!binding.control || control)
-                && (!binding.shift || shift)
-                && (!binding.alt || alt);
+            return (!binding.control
+                    || is_key_held_safe(input::Key::LeftControl)
+                    || is_key_held_safe(input::Key::RightControl))
+                && (!binding.shift
+                    || is_key_held_safe(input::Key::LeftShift)
+                    || is_key_held_safe(input::Key::RightShift))
+                && (!binding.alt
+                    || is_key_held_safe(input::Key::LeftAlt)
+                    || is_key_held_safe(input::Key::RightAlt));
         }
 
-        [[nodiscard]] bool action_held_safe(input::Action action) const
+        [[nodiscard]] bool action_held_safe(input::Action action,
+            const input::InputProfile& profile) const
         {
-            const input::ActionBinding binding = input::binding_for(action);
+            const input::ActionBinding binding = input::binding_for(profile, action);
             if (!action_modifiers_satisfied_safe(binding))
                 return false;
             if (binding.mouse != input::MouseButton::MouseCount
@@ -664,9 +684,15 @@ namespace epochengine::core
                     && is_key_held_safe(binding.secondary));
         }
 
-        [[nodiscard]] bool action_pressed_safe(input::Action action) const
+        [[nodiscard]] bool action_held_safe(input::Action action) const
         {
-            const input::ActionBinding binding = input::binding_for(action);
+            return action_held_safe(action, input::active_profile_snapshot());
+        }
+
+        [[nodiscard]] bool action_pressed_safe(input::Action action,
+            const input::InputProfile& profile) const
+        {
+            const input::ActionBinding binding = input::binding_for(profile, action);
             if (!action_modifiers_satisfied_safe(binding))
                 return false;
             if (binding.mouse != input::MouseButton::MouseCount
@@ -678,6 +704,11 @@ namespace epochengine::core
                     && is_key_down_safe(binding.primary))
                 || (binding.secondary != input::Key::Unknown
                     && is_key_down_safe(binding.secondary));
+        }
+
+        [[nodiscard]] bool action_pressed_safe(input::Action action) const
+        {
+            return action_pressed_safe(action, input::active_profile_snapshot());
         }
 
         int registry_get_safe(const char* key) const noexcept
@@ -817,6 +848,9 @@ namespace epochengine::core
         core::EpochAtomicFunction<std::uint32_t(TextureAtlas&, std::string, const ImageData&)> add_texture;
         core::EpochAtomicFunction<std::uint32_t(const TextureAtlas&)>                         add_atlas;
         std::function<void(int, int)>                                                          onResize;
+
+    private:
+        std::atomic<double> simulationSampleSeconds{std::numeric_limits<double>::quiet_NaN()};
     };
 
     // ---------------------------------------------------------------------

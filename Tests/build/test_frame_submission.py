@@ -9,6 +9,8 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+import hashlib,json,time
+from Tests.support.cpp import compile_and_run
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -36,16 +38,17 @@ class FrameSubmissionPolicy(unittest.TestCase):
         kits = sorted((kitroot / 'Include').glob('*'))
         if not toolsets or not kits:
             self.skipTest('MSVC/SDK unavailable')
-        parent = (ROOT / 'build/contract-tests').resolve()
+        parent = (ROOT / 'Artifacts/Reports/frame-pacing-fairness-oct30').resolve()
         parent.mkdir(parents=True, exist_ok=True)
         self.assertTrue(parent.is_relative_to(ROOT.resolve()))
-        scratch = Path(tempfile.mkdtemp(prefix='desktop-pacing-', dir=parent))
+        scratch = parent / str(time.time_ns());scratch.mkdir()
+        records=[]
         try:
             module = read_owned_source(ROOT / 'Engine/dep/EpochPlatformEngine/modules/perf.tier.ixx', encoding='utf-8')
             start = module.index('export namespace epochengine::perf')
             end = module.index('\nnamespace epochengine::perf', start)
             api = module[start:end].replace('export namespace', 'namespace', 1)
-            wait = module[module.index('    void frame_limiter::wait_for_next_frame()'):]
+            wait = module[module.index('    void frame_limiter::wait_for_next_frame()'):].replace('std::this_thread::yield()', 'pacing_clock::yield()')
             raylib = read_owned_source(
                 ROOT / 'Engine/src/renderers/raylib/core.context_raylib.cpp', encoding='utf-8')
             callback_start = raylib.index('ctx->apply_frame_pacing = [](')
@@ -104,9 +107,16 @@ MANUAL
 '''.replace('SANITIZE', finite + sanitize).replace('CAPTURE', capture).replace(
                 'RESTORE', restore).replace('MANUAL', manual)
             clock = '''namespace epochengine::core::time {
-inline double now{}; inline unsigned reads{}, sleeps{};
-double now_seconds() { ++reads; const auto value=now; now+=0.0002; return value; }
-void sleep_ms(std::uint32_t value) { ++sleeps; now+=static_cast<double>(value)/1000.0; }
+inline double now{},readStep=0.00005; inline unsigned reads{}, sleeps{};inline bool zeroSleep{};
+// The independent monotonic clock advances on observation, even when the OS
+// does not switch threads. Yield count must never drive deadline progress.
+double now_seconds() { ++reads;const double observed=now;now+=readStep;return observed; }
+void sleep_ms(std::uint32_t value) { ++sleeps;zeroSleep=zeroSleep||value==0; now+=static_cast<double>(value)/1000.0; }
+}
+namespace pacing_clock {
+inline unsigned yields{};
+// Deterministic OS scheduling port; production still calls this_thread::yield.
+void yield(){++yields;}
 }
 '''
             main = r'''
@@ -127,13 +137,32 @@ int main() {
         frame_limiter limiter; limiter.set_plan(unchanged);
         assert(limiter.target_dt==0.0);
         epochengine::core::time::reads=0; epochengine::core::time::sleeps=0;
+        const auto previousYields=pacing_clock::yields;
         limiter.wait_for_next_frame();
+        assert(pacing_clock::yields==previousYields+1);
         assert(epochengine::core::time::reads==0 && epochengine::core::time::sleeps==0);
         const auto pressure=with_frame_rate_ceiling(unchanged,10.0);
         assert(pressure.cpu_deadline_wait && pressure.effective_hz==10.0);
         const auto background=resolve_frame_pacing_with_capabilities(unrestrictedPolicy,frame_activity::background,capabilities);
         const auto minimized=resolve_frame_pacing_with_capabilities(unrestrictedPolicy,frame_activity::minimized,capabilities);
         assert(background.effective_hz==30.0 && minimized.effective_hz==10.0);
+        // Every backend shares this CPU fallback if native admission is absent.
+        // Exercise the real capability/policy/finalization chain, not a second
+        // pacing implementation; neither fixed nor late turns may burst yields.
+        for(double hz : {60.0,120.0,1500.0,5000.0}) {
+            const auto desiredFixed=resolve_frame_pacing_with_capabilities(target_hz_policy(hz),foreground,capabilities);
+            const auto fallbackFixed=finalize_native_frame_pacing(desiredFixed,{});
+            assert(fallbackFixed.cpu_deadline_wait&&fallbackFixed.effective_hz==hz);
+            frame_limiter fixed;fixed.set_plan(fallbackFixed);
+            epochengine::core::time::now=10;epochengine::core::time::reads=0;
+            epochengine::core::time::sleeps=0;pacing_clock::yields=0;
+            fixed.wait_for_next_frame();
+            assert(pacing_clock::yields==1&&epochengine::core::time::reads>2);
+            assert(std::abs(fixed.next_time-(10+1/hz))<1e-12);
+            epochengine::core::time::now=20;epochengine::core::time::sleeps=0;pacing_clock::yields=0;
+            fixed.wait_for_next_frame();
+            assert(fixed.next_time==20&&pacing_clock::yields==1&&epochengine::core::time::sleeps==0);
+        }
     }
     const auto standalone=resolve_frame_pacing(select_frame_pacing_policy(uncapped,0.0,true,true),foreground,false);
     assert(standalone.effective_mode==uncapped && standalone.effective_hz==0.0);
@@ -145,7 +174,7 @@ int main() {
     assert(!raylibCapabilities.vsync && !raylibCapabilities.target_hz);
     for(auto mode : {frame_pacing_mode::target_hz, frame_pacing_mode::vsync, uncapped}) {
         for(auto activity : {foreground, frame_activity::background, frame_activity::minimized}) {
-            for(double selectedHz : {59.94, 120.0, 240.0, 999.0}) {
+            for(double selectedHz : {59.94, 120.0, 240.0, 999.0, 1500.0, 5000.0}) {
                 const auto selected=select_frame_pacing_policy(mode,selectedHz,true,false);
                 const auto desired=resolve_frame_pacing_with_capabilities(selected,activity,raylibCapabilities);
                 const auto native=apply_raylib_native_pacing(desired.effective_mode,desired.effective_hz);
@@ -160,13 +189,15 @@ int main() {
                 assert(applied.cpu_deadline_wait==(expectedHz>0.0));
                 frame_limiter actualHostLimiter; actualHostLimiter.set_plan(applied);
                 epochengine::core::time::reads=0; epochengine::core::time::sleeps=0;
+                pacing_clock::yields=0;
                 actualHostLimiter.wait_for_next_frame();
+                assert(pacing_clock::yields==1);
                 assert((epochengine::core::time::reads>0)==(expectedHz>0.0));
                 if(expectedHz==0.0) assert(epochengine::core::time::sleeps==0);
             }
         }
     }
-    assert(epochengine::raylib_api::configurations==36);
+    assert(epochengine::raylib_api::configurations==54);
     // Actual context-local selection and Editor capture/restore paths cannot
     // mutate another context or turn persisted Uncapped into a 15 FPS target.
     const auto startupVsync=select_frame_pacing_policy(frame_pacing_mode::vsync,60.0,true,false);
@@ -212,10 +243,40 @@ int main() {
     epochengine::core::time::reads=0; epochengine::core::time::sleeps=0;
     unrestricted.wait_for_next_frame();
     assert(epochengine::core::time::reads==0 && epochengine::core::time::sleeps==0);
-    for(double hz : {60.0,120.0}) {
+    for(double hz : {60.0,120.0,1500.0,5000.0}) {
         const auto fixed=resolve_frame_pacing(select_frame_pacing_policy(frame_pacing_mode::target_hz,hz,true,false),foreground,false);
         assert(fixed.effective_hz==hz && fixed.cpu_deadline_wait);
     }
+    for(double hz : {1500.0,5000.0}) {
+        double parsed{};assert(parse_frame_limit_value(std::to_string(hz),parsed)&&parsed==hz);
+        editorA.editorFrameLimitFps=parsed;editorA.editorFrameVsyncRequested=false;
+        contextA.windowData->editorFramePacingOverride.publish(frame_pacing_mode::target_hz,parsed);
+        const auto highSaved=pacing_fixture::capture(editorA);
+        pacing_fixture::restore(restoredEditor,&restoredContext,highSaved);
+        const auto policy=with_frame_pacing_override(startupVsync,restoredContext.windowData->editorFramePacingOverride);
+        const auto high=resolve_frame_pacing_with_capabilities(policy,foreground,{true,false});
+        assert(restoredEditor.editorFrameLimitFps==hz&&policy.target_hz==hz);
+        assert(high.configured_hz==hz&&high.effective_hz==hz&&high.cpu_deadline_wait);
+    }
+    // Fine waits cooperate without inserting an integer-ms minimum or changing deadlines.
+    for(double hz : {1500.0,5000.0}) {
+        frame_limiter fine;fine.set_plan(resolve_frame_pacing(target_hz_policy(hz),foreground,false));
+        epochengine::core::time::readStep=1/(hz*64);
+        epochengine::core::time::now=10;epochengine::core::time::reads=0;epochengine::core::time::sleeps=0;pacing_clock::yields=0;
+        fine.wait_for_next_frame();
+        assert(pacing_clock::yields==1&&epochengine::core::time::sleeps==0&&epochengine::core::time::reads>32);
+        assert(std::abs(fine.next_time-(10+1/hz))<1e-12&&fine.target_dt==1/hz);
+        fine.next_time=1;epochengine::core::time::now=10;pacing_clock::yields=0;
+        fine.wait_for_next_frame();
+        assert(fine.next_time==10&&pacing_clock::yields==1&&epochengine::core::time::sleeps==0);
+    }
+    epochengine::core::time::readStep=0.00005;
+    frame_limiter coarse;coarse.set_plan(resolve_frame_pacing(target_hz_policy(120),foreground,false));
+    epochengine::core::time::now=10;epochengine::core::time::sleeps=0;pacing_clock::yields=0;
+    coarse.wait_for_next_frame();
+    assert(epochengine::core::time::sleeps>0&&pacing_clock::yields==1&&!epochengine::core::time::zeroSleep);
+    assert(std::abs(coarse.next_time-(10+1/120.0))<1e-12);
+    assert(sanitize_frame_hz((std::numeric_limits<double>::max)(),120)==(std::numeric_limits<double>::max)());
     const auto nativeVsync=finalize_native_frame_pacing(resolve_frame_pacing(
         select_frame_pacing_policy(frame_pacing_mode::vsync,60.0,true,false),foreground,true),
         {true,true,frame_pacing_mode::vsync,0.0});
@@ -244,27 +305,19 @@ int main() {
                 source.write_text('#include "epoch.edition.hpp"\n#include <cstdint>\n#include <cmath>\n'
                     '#include <charconv>\n#include <system_error>\n#include <cassert>\n#include <initializer_list>\n#include <limits>\n'
                     '#include <algorithm>\n#include <atomic>\n#include <array>\n#include <memory>\n#include <optional>\n#include <thread>\n'
-                    '#include <string_view>\n' + clock + api + '\nnamespace epochengine::perf {\n' + wait
+                    '#include <string>\n#include <string_view>\n' + clock + api + '\nnamespace epochengine::perf {\n' + wait
                     + raylib_mock + raylib_callback + persistence
                     + '\n#define CHECK(...) do { if(!(__VA_ARGS__)) return __LINE__; } while(false)\n'
                     + main.replace('assert(', 'CHECK('),
                     encoding='utf-8')
-                binary = include / 'contract.exe'
-                args = [str(toolset / 'bin/Hostx64/x64/cl.exe'), '/nologo', '/std:c++latest', '/EHsc', '/WX',
-                    '/I' + str(toolset / 'include'), '/I' + str(kit / 'ucrt'), '/I' + str(kit / 'shared'),
-                    '/I' + str(kit / 'um'), '/Fo' + str(include / 'contract.obj'), '/Fe' + str(binary),
-                    str(source), '/link', '/LIBPATH:' + str(toolset / 'lib/x64'),
-                    '/LIBPATH:' + str(kitroot / 'Lib' / kit.name / 'um/x64'),
-                    '/LIBPATH:' + str(kitroot / 'Lib' / kit.name / 'ucrt/x64')]
-                result = subprocess.run(args, cwd=include, capture_output=True, text=True)
-                self.assertEqual(result.returncode, 0, result.stdout[-3500:] + result.stderr)
-                result = subprocess.run([str(binary)], cwd=include, capture_output=True, text=True)
-                lines = read_owned_source(source, encoding='utf-8').splitlines()
-                failed = lines[result.returncode - 1] if 0 < result.returncode <= len(lines) else ''
-                self.assertEqual(result.returncode, 0, edition + ' CPU policy/deadline: ' + failed)
+                modes=compile_and_run(self,source,include,windows_flags=('/WX',),compile_timeout=90,run_timeout=10)
+                records.append({'edition':edition,'configurations':modes})
+            (scratch/'result.json').write_text(json.dumps({'scope':'Actual policy/override/snapshot/deadline with deterministic clock/sleep/yield ports; both physical edition markers; no window/GPU',
+                'owner_sha256':hashlib.sha256((ROOT/'Engine/dep/EpochPlatformEngine/modules/perf.tier.ixx').read_bytes()).hexdigest(),'results':records},indent=2),encoding='utf-8')
         finally:
             self.assertTrue(scratch.resolve().is_relative_to(parent))
-            shutil.rmtree(scratch)
+            # Retain source, complete compiler logs and results under this report.
+            pass
 
     def test_actual_gl_admission_with_mocked_driver_for_both_editions(self):
         if os.name != 'nt':
@@ -274,10 +327,15 @@ int main() {
         kits = sorted((kitroot / 'Include').glob('*'))
         if not toolsets or not kits:
             self.skipTest('MSVC/SDK unavailable')
-        parent = (ROOT / 'build/contract-tests').resolve()
+        parent = (ROOT / 'Artifacts/Intermediate/tests/frame-submission').resolve()
         parent.mkdir(parents=True, exist_ok=True)
         scratch = Path(tempfile.mkdtemp(prefix='gpu-admission-', dir=parent))
         try:
+            owner = read_owned_source(ROOT / 'Engine/src/renderers/opengl/opengl.context_process_impl.cpp', encoding='utf-8')
+            admission_start = owner.index('const auto admissionStart = FrameClock::now();')
+            admission_body = owner[admission_start:owner.index('const auto admissionEnd = FrameClock::now();', admission_start)]
+            submission_start = owner.index('if (uncappedSubmission && !frame_admission::submitted(')
+            submission_body = owner[submission_start:owner.index('const double admissionMs', submission_start)]
             contract = r'''#include "epoch.edition.hpp"
 #if defined(_WIN32)
 #define WIN32_LEAN_AND_MEAN
@@ -287,7 +345,10 @@ int main() {
 #define Status int
 #include "opengl.frame_admission.hpp"
 #include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <cstdint>
+#include <stdexcept>
 #include <unordered_map>
 #include <vector>
 
@@ -301,6 +362,7 @@ namespace mock
     inline int owner = 1;
     inline unsigned maximum{}, waits{}, polls{}, flushes{}, deletes{}, wrong_owner{};
     inline unsigned timeouts{}, flush_requests{}, wrong_flags{}, missing_flush{};
+    inline unsigned owner_swaps{};
     inline bool failed{}, null_fence{}, complete_new{};
 
     GLsync APIENTRY create(GLenum condition, GLbitfield flags)
@@ -372,6 +434,10 @@ PFNGLCLIENTWAITSYNCPROC glad_glClientWaitSync = mock::wait;
 PFNGLDELETESYNCPROC glad_glDeleteSync = mock::erase;
 PFNGLFLUSHPROC glad_glFlush = mock::flush;
 }
+
+// Extract the real process owner's admission/submission gates. The existing
+// mock driver measures actual GL calls; no second implementation of policy.
+__OWNER_GATED_FRAME__
 
 int main()
 {
@@ -446,6 +512,35 @@ int main()
     mock::owner = 1;
     CHECK(release(first) && mock::live.empty() && !mock::wrong_owner);
 
+    State switched{};
+    OwnerWindow window{};
+    OwnerContext context{&window};
+    const auto capped_id = mock::id;
+    const auto capped_polls = mock::polls;
+    const auto capped_waits = mock::waits;
+    const auto capped_deletes = mock::deletes;
+    const auto capped_swaps = mock::owner_swaps;
+    for (unsigned frame=0; frame<20000u; ++frame)
+        CHECK(owner_frame(false, switched, &context));
+    CHECK(mock::owner_swaps == capped_swaps+20000u);
+    CHECK(mock::id == capped_id && mock::polls == capped_polls);
+    CHECK(mock::waits == capped_waits && mock::deletes == capped_deletes && mock::live.empty());
+    CHECK(owner_frame(true, switched, &context) && owner_frame(true, switched, &context));
+    CHECK(mock::live.size()==2u);
+    const auto transition_deletes = mock::deletes;
+    const auto transition_id = mock::id;
+    CHECK(owner_frame(false, switched, &context));
+    CHECK(mock::live.empty() && mock::deletes==transition_deletes+2u && mock::id==transition_id);
+    CHECK(owner_frame(false, switched, &context));
+    CHECK(mock::deletes==transition_deletes+2u);
+    CHECK(owner_frame(true, switched, &context) && owner_frame(true, switched, &context));
+    CHECK(owner_frame(true, switched, &context) && mock::live.size()==2u);
+    const auto before_cancel_swaps = mock::owner_swaps;
+    window.running=false;
+    CHECK(!owner_frame(true, switched, &context) && mock::owner_swaps==before_cancel_swaps);
+    window.running=true;
+    CHECK(release(switched) && mock::live.empty());
+
     mock::null_fence = true;
     CHECK(!submitted(first) && mock::live.empty());
     mock::null_fence = false;
@@ -459,6 +554,17 @@ int main()
     return 0;
 }
 '''
+            contract = contract.replace('__OWNER_GATED_FRAME__', r'''
+namespace frame_admission = epochengine::openglcontext::frame_admission;
+struct OwnerWindow {
+    std::atomic_bool running{true};
+    bool get_should_close() const noexcept { return false; }
+};
+struct OwnerContext { OwnerWindow* windowData{}; };
+bool owner_frame(bool uncappedSubmission, frame_admission::State& state, OwnerContext* ctx) {
+    using FrameClock = std::chrono::steady_clock;
+    struct NativeState { frame_admission::State& frameAdmission; } nativeState{state};
+''' + admission_body + '\n++mock::owner_swaps;\n' + submission_body + '\nreturn true;\n}\n')
             toolset, kit = toolsets[-1], kits[-1]
             for edition, value in (('development', 0), ('public', 1)):
                 lane = scratch / edition
@@ -472,7 +578,7 @@ int main()
                 args = [str(toolset / 'bin/Hostx64/x64/cl.exe'), '/nologo', '/std:c++latest', '/EHsc', '/WX',
                     '/I' + str(toolset / 'include'), '/I' + str(kit / 'ucrt'), '/I' + str(kit / 'shared'),
                     '/I' + str(kit / 'um'), '/I' + str(ROOT / 'Engine/src/renderers/opengl'),
-                    '/I' + str(ROOT / 'Engine/vcpkg_installed/x64-windows/include'),
+                    '/I' + str(ROOT / 'Artifacts/Dependencies/vcpkg_installed/x64-windows/include'),
                     '/Fo' + str(lane / 'contract.obj'), '/Fe' + str(binary), str(source),
                     '/link', '/LIBPATH:' + str(toolset / 'lib/x64'),
                     '/LIBPATH:' + str(kitroot / 'Lib' / kit.name / 'um/x64'),
@@ -499,12 +605,24 @@ int main()
                 self.assertIn(condition, publication)
             self.assertNotIn('desktop_safety', source)
         source = read_owned_source(ROOT / 'Engine/src/renderers/opengl/opengl.context_process_impl.cpp', encoding='utf-8')
-        self.assertLess(source.index('guard.set(desired)'), source.index('state_for_platform_context('))
+        # The earlier state lookup only selects CPU handles/dimensions.
+        # GPU admission must use the state selected after the native guard.
+        native_state = source.index('auto& nativeState = opengltextures::state_for_platform_context(')
+        admission = source.index('frame_admission::admit(')
+        self.assertLess(source.index('guard.set(desired)'), native_state)
+        self.assertLess(native_state, admission)
+        self.assertIn('backend, guard.target(), ctx.get()', source[native_state:admission])
         self.assertLess(source.index('frame_admission::admit('), source.index('glViewport('))
         self.assertLess(source.index('glViewport('), source.index('opengl_clear();'))
         self.assertLess(source.index('opengl_clear();'), source.index('opengl_render_active_frame('))
         self.assertLess(source.index('opengl_render_active_frame('), source.index('PlatformGL::swap_buffers('))
         self.assertLess(source.index('PlatformGL::swap_buffers('), source.index('frame_admission::submitted('))
+        # Restore the retained capped policy: no new GL synchronization at a
+        # finite/VSync target, and retire the previous uncapped ring on transition.
+        # Actual gates and GL call counts are exercised by the compiled test above.
+        self.assertIn('if (uncappedSubmission)', source)
+        self.assertIn('uncappedSubmission && !frame_admission::submitted', source)
+        self.assertIn('else if (!frame_admission::release(nativeState.frameAdmission))', source)
         self.assertIn('ctx->windowData->running.load(', source)
         self.assertIn('!ctx->windowData->get_should_close()', source)
         self.assertIn('!core::cli::frame_vsync_requested', source)
@@ -520,7 +638,9 @@ int main()
         app = read_owned_source(ROOT / 'Engine/src/editor/editor.application.cpp', encoding='utf-8')
         self.assertNotIn('desktop safety', app)
         self.assertNotIn('120 FPS safety', app)
-        self.assertIn('.selected = edit.manual ? "Manual" : vsync ? "VSync"', app)
+        self.assertIn('import gui.frame_limit_control;', app)
+        control = read_owned_source(ROOT / 'Engine/modules/gui.frame_limit_control.ixx', encoding='utf-8')
+        self.assertIn('.selected = edit.manual ? "Manual" : vsync ? "VSync"', control)
         settings = read_owned_source(ROOT / 'Engine/src/editor/application/editor.frame_consent_settings.inl')
         self.assertNotIn('core::cli::frame_limit_explicit =', settings)
         self.assertNotIn('core::cli::frame_limit_fps =', settings)
@@ -530,3 +650,4 @@ int main()
 
 if __name__ == '__main__':
     unittest.main()
+

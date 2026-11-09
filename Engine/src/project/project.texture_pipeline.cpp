@@ -20,6 +20,7 @@ module;
 module project.texture_pipeline;
 
 import render.canvas2d_cpu;
+import render.texture_artifact;
 
 namespace epochengine::project_textures
 {
@@ -162,7 +163,8 @@ namespace epochengine::project_textures
 
     TexturePipelineResult ProjectTexturePipeline::publish(
         std::string_view logicalPath,
-        const asset::texture::CompiledTextureArtifact& artifact) noexcept
+        const asset::texture::CompiledTextureArtifact& artifact,
+        texture_artifact::TransferUsage usage) noexcept
     {
         ++metrics_.publication_requests;
         if (!valid())
@@ -203,7 +205,7 @@ namespace epochengine::project_textures
         }
         const bool libraryChanged = locator.code == LibraryCode::ready;
         return activate(
-            *canonical, artifact, std::move(locator), libraryChanged);
+            *canonical, artifact, std::move(locator), libraryChanged, usage);
     }
 
     TexturePipelineResult ProjectTexturePipeline::restore_latest(
@@ -257,7 +259,8 @@ namespace epochengine::project_textures
 
     TexturePipelineResult ProjectTexturePipeline::restore_exact(
         std::string_view logicalPath,
-        const asset::texture::ContentHash& artifactKey) noexcept
+        const asset::texture::ContentHash& artifactKey,
+        texture_artifact::TransferUsage usage) noexcept
     {
         ++metrics_.restore_requests;
         if (!valid())
@@ -329,7 +332,7 @@ namespace epochengine::project_textures
             registry_,
             handle,
             loaded.artifact,
-            false);
+            false, usage);
         if (!published || !accepted(published.code))
         {
             return reject(
@@ -409,7 +412,7 @@ namespace epochengine::project_textures
         std::string_view logicalPath,
         const asset::texture::CompiledTextureArtifact& artifact,
         TextureArtifactLocator locator,
-        bool libraryChanged) noexcept
+        bool libraryChanged, texture_artifact::TransferUsage usage) noexcept
     {
         const project_assets::AssetRevision revision = asset_revision(
             artifact.identity.source_revision);
@@ -459,7 +462,7 @@ namespace epochengine::project_textures
         }
 
         const PublicationResult published = resources_.publish(
-            registry_, handle, artifact);
+            registry_, handle, artifact, false, usage);
         if (!published || !accepted(published.code))
         {
             return reject(

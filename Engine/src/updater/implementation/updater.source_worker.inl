@@ -477,6 +477,7 @@
 
         [[nodiscard]] inline std::string archive_extension_from_url(const std::string_view url)
         {
+            if (PUBLIC_DISTRIBUTION && url == PROJECT_SOURCE_URL()) return ".zip";
             const auto normalized_url =
                 lower_ascii(strip_url_query_and_fragment(std::string{ url }));
 
@@ -1439,7 +1440,7 @@
 #if defined(_WIN32)
             return build_layout::windows_bin(source_root, SOURCE_BUILD_CONFIGURATION(), SOURCE_BUILD_PLATFORM());
 #else
-            return build_layout::linux_cmake(source_root, "Clang-Release");
+            return build_layout::linux_runtime(source_root, "Clang-Release");
 #endif
         }
 
@@ -1897,7 +1898,7 @@
 
             const bool build_ok = run_linux_build(
                 "clang",
-                build_layout::linux_cmake(source_root, "Clang-Release"));
+                build_layout::linux_runtime(source_root, "Clang-Release"));
 
             if (!build_ok)
             {
@@ -1924,16 +1925,53 @@
 #endif
         }
 
-        [[nodiscard]] inline std::filesystem::path first_subdirectory(const std::filesystem::path& root)
+        [[nodiscard]] inline std::filesystem::path source_snapshot_root(const std::filesystem::path& root)
         {
             std::error_code ec;
+            const auto complete = [&](const std::filesystem::path& candidate)
+            {
+                std::error_code shape_ec;
+                for (const auto* name : { "Engine.sln", "Engine/vcpkg.json", "Engine/include/epoch.edition.hpp" })
+                {
+                    const auto path = candidate / name;
+                    if (!std::filesystem::is_regular_file(path, shape_ec) || shape_ec
+                        || std::filesystem::is_symlink(path, shape_ec) || shape_ec) return false;
+                }
+                return true;
+            };
+            if (complete(root)) return root;
+            std::filesystem::path selected;
+            std::size_t count{};
             for (const auto& entry : std::filesystem::directory_iterator(root, ec))
             {
-                if (entry.is_directory())
-                    return entry.path();
+                if (++count > 64u || ec) return {};
+                if (entry.is_symlink(ec) || ec) return {};
+                if (entry.is_directory(ec) && !ec && complete(entry.path()))
+                {
+                    if (!selected.empty()) return {};
+                    selected = entry.path();
+                }
             }
+            return ec ? std::filesystem::path{} : selected;
+        }
 
-            return {};
+        [[nodiscard]] inline bool source_snapshot_matches(
+            const std::filesystem::path& root, const std::string_view signed_public_version)
+        {
+            if (root.empty() || !source_tree_matches_edition(root)) return false;
+            if (!PUBLIC_DISTRIBUTION) return signed_public_version.empty();
+            std::error_code ec;
+            const auto manifest = root / "source-projection.json";
+            const auto version = root / SOURCE_VERSION_FILE_NAME();
+            if (signed_public_version.empty()
+                || !std::filesystem::is_regular_file(manifest, ec) || ec
+                || std::filesystem::is_symlink(manifest, ec) || ec
+                || std::filesystem::file_size(manifest, ec) > 4u * 1024u * 1024u || ec
+                || !std::filesystem::is_regular_file(version, ec) || ec
+                || std::filesystem::is_symlink(version, ec) || ec
+                || std::filesystem::file_size(version, ec) > 128u * 1024u || ec
+                || std::filesystem::exists(root / "Engine/dep/EpochSelfCoding", ec) || ec) return false;
+            return extract_version_string(read_text_file(version)) == signed_public_version;
         }
 
         [[nodiscard]] inline bool env_flag_enabled(const char* name)

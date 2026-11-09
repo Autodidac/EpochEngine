@@ -1,5 +1,19 @@
 // Epoch feature implementation; included by its owning module only.
 // SPDX-License-Identifier: LicenseRef-MIT-NoSell
+    [[nodiscard]] static float segmented_button_width(const SegmentedButtonSpec& item) noexcept
+    {
+        return item.width > 0.0f ? item.width : (std::max)(1.0f,
+            measure_text_width(item.label, kFontScale)
+                + 2.0f * kContentPadding + 2.0f * kButtonTextClipInset + 2.0f);
+    }
+
+    float segmented_button_row_width(std::span<const SegmentedButtonSpec> items, float gap) noexcept
+    {
+        float width{};
+        for (const auto& item : items) width += segmented_button_width(item);
+        return width + (items.empty() ? 0.0f : static_cast<float>(items.size() - 1u) * (std::max)(0.0f, gap));
+    }
+
     std::optional<std::size_t> segmented_button_row(
         std::span<const SegmentedButtonSpec> items,
         float height,
@@ -14,7 +28,7 @@
         itemWidths.clear();
         itemWidths.reserve(items.size());
         for (const auto& item : items)
-            itemWidths.push_back(item.width);
+            itemWidths.push_back(segmented_button_width(item));
 
         const gui_lib::SegmentedControlLayoutOptions layoutOptions{
             .position = to_lib(rowStart),
@@ -92,11 +106,12 @@
                 tab.active || pressed ? palette.buttonActive
                 : hovered ? palette.buttonHover
                 : palette.buttonNormal;
-            draw_rounded_sprite(background, x, rowStart.y, width, h,
-                gui_lib::rounded_rect::RoundedRectStyle{
-                    .enabled = true,
-                    .control_radius = (std::min)(5.0f, h * 0.25f)
-                });
+            if (!draw_beveled_control(palette, palette.buttonNormal, x, rowStart.y, width, h, pressed))
+                draw_rounded_sprite(background, x, rowStart.y, width, h,
+                    gui_lib::rounded_rect::RoundedRectStyle{
+                        .enabled = true,
+                        .control_radius = (std::min)(5.0f, h * 0.25f)
+                    });
 
             if (tab.active)
             {
@@ -177,16 +192,42 @@
         return {};
     }
 
+    [[nodiscard]] static float tab_button_width(
+        const TabButtonSpec& tab, TabBarPresentation presentation) noexcept
+    {
+        const bool workbench = presentation == TabBarPresentation::Workbench;
+        // A requested width is a minimum, never permission to cut a title.
+        // Round the complete allocation before subtracting text/chrome gutters.
+        return std::ceil(gui_lib::resolve_responsive_tab_width({
+            .requested_width=tab.width,
+            .measured_label_width=measure_text_width(tab.label, kFontScale),
+            .minimum_hit_width=workbench ? 72.0f : 96.0f,
+            .horizontal_padding=workbench ? 24.0f : 2.0f * kContentPadding,
+            .close_extent=tab.closable ? 18.0f : 0.0f,
+            .dirty_extent=tab.dirty ? 8.0f : 0.0f}));
+    }
+
     TabBarResult tab_bar_buttons(
         std::span<const TabButtonSpec> tabs,
         float height,
         float gap,
         TabBarPresentation presentation,
-        Vec2 keyboard_region_size) noexcept
+        Vec2 keyboard_region_size,
+        const TabDragOptions& drag) noexcept
     {
         TabBarResult result{};
         if (!g_frame.insideWindow || !g_frame.ctx || tabs.empty())
+        {
+            if (drag.state) *drag.state = {};
             return result;
+        }
+        if (drag.state && (drag.state->pending || drag.state->dragging)
+            && (drag.active_id.empty() || std::ranges::none_of(tabs, [&](const TabButtonSpec& tab)
+                { return (tab.id.empty() ? tab.label : tab.id) == drag.active_id; })))
+        {
+            *drag.state = {};
+            return result;
+        }
         result.items.resize(tabs.size());
 
         const Vec2 rowStart = g_frame.cursor;
@@ -198,23 +239,7 @@
             presentation == TabBarPresentation::Workbench;
         for (const auto& tab : tabs)
         {
-            const float measuredLabel = measure_text_width(
-                tab.label, kFontScale);
-            const float requestedWidth = workbenchPresentation
-                ? gui_lib::resolve_responsive_tab_width({
-                    .requested_width = tab.width,
-                    .measured_label_width = measuredLabel,
-                    .minimum_hit_width = 72.0f,
-                    .horizontal_padding = 24.0f,
-                    .close_extent = tab.closable ? 18.0f : 0.0f,
-                    .dirty_extent = tab.dirty ? 8.0f : 0.0f})
-                : tab.width > 0.0f
-                    ? tab.width
-                    : gui_lib::preferred_tool_tab_width(
-                        measuredLabel,
-                        tab.closable,
-                        tab.dirty);
-            widths.push_back((std::max)(1.0f, requestedWidth));
+            widths.push_back(tab_button_width(tab, presentation));
         }
 
         const float rowHeight = (std::max)(
@@ -233,6 +258,7 @@
         const gui_lib::SegmentedControlLayout strip =
             gui_lib::make_segmented_control_layout(layoutOptions.strip);
         auto& pressedKey = g_contextPressedButtonKeys[g_frame.ctx];
+        const auto dragOrigin = drag.state ? mouse_press_position() : std::nullopt;
 
         if (workbenchPresentation && strip.valid)
         {
@@ -285,6 +311,31 @@
                 && !closeHovered;
 
             const std::string_view identity = !tab.id.empty() ? tab.id : tab.label;
+            if (drag.state && tab.enabled)
+            {
+                const bool continuing = (drag.state->pending || drag.state->dragging)
+                    && identity == drag.active_id;
+                const bool starting = !drag.state->pending && !drag.state->dragging
+                    && dragOrigin
+                    && point_in_rect(*dragOrigin, buttonPosition.x, buttonPosition.y,
+                        buttonSize.x, buttonSize.y)
+                    && (!tab.closable || !point_in_rect(*dragOrigin,
+                        closePosition.x, closePosition.y, closeSize.x, closeSize.y));
+                if (continuing || starting)
+                {
+                    const Vec2 origin = continuing ? drag.state->press_position : *dragOrigin;
+                    const auto gesture = drag_surface(*drag.state, {
+                        .position = buttonPosition, .size = buttonSize,
+                        .hit_padding = 0.0f, .minimum_hit_extent = 1.0f,
+                        .drag_threshold = drag.threshold, .enabled = true});
+                    if (continuing || gesture.pressed || gesture.dragging || gesture.released)
+                    {
+                        result.dragged_index = index;
+                        result.drag = gesture;
+                        result.drag_origin = origin;
+                    }
+                }
+            }
             const std::size_t buttonKey =
                 widget_press_key(identity, buttonPosition, buttonSize);
             std::string closeIdentity{ identity };
@@ -292,12 +343,19 @@
             const std::size_t closeKey =
                 widget_press_key(closeIdentity, closePosition, closeSize);
 
-            if (closeHovered && left_press_available())
+            const auto press = left_press_available() ? mouse_press_position() : std::nullopt;
+            const bool closePress = tab.enabled && tab.closable && press
+                && point_in_rect(*press, closePosition.x, closePosition.y, closeSize.x, closeSize.y)
+                && point_in_active_clip(*press);
+            const bool buttonPress = tab.enabled && press && !closePress
+                && point_in_rect(*press, buttonPosition.x, buttonPosition.y, buttonSize.x, buttonSize.y)
+                && point_in_active_clip(*press);
+            if (closePress)
             {
                 pressedKey = closeKey;
                 consume_left_press();
             }
-            else if (buttonHovered && left_press_available())
+            else if (buttonPress)
             {
                 pressedKey = buttonKey;
                 result.pressed_index = index;
@@ -391,22 +449,7 @@
 
             if (tab.closable)
             {
-                const SpriteHandle closeBackground = closePressed
-                    ? palette.buttonActive
-                    : closeHovered ? palette.textFieldActive
-                    : background;
-                // Small X control follows the same rounded surface as its tab;
-                // do not change its distinct hit target or close behavior.
-                draw_rounded_sprite(
-                    closeBackground == palette.panelBackground
-                        ? palette.buttonNormal : closeBackground,
-                    closePosition.x, closePosition.y,
-                    closeSize.x, closeSize.y,
-                    gui_lib::rounded_rect::RoundedRectStyle{
-                        .enabled = true,
-                        .control_radius = (std::min)(4.0f, closeSize.y * 0.25f)
-                    });
-                draw_close_mark(closePosition, closeSize);
+                draw_close_mark(closePosition, closeSize, closeHovered, closePressed);
             }
 
             if (buttonClicked)
@@ -543,15 +586,16 @@
             return result;
         }
         const float minWidth = space_advance(kFontScale) + 2.0f * kContentPadding;
-        height = (std::max)(height, base_line_height(kFontScale) + 2.0f * kBoxInnerPadding);
+        const bool hasText=std::any_of(items.begin(),items.end(),[](const auto& item){return item.icon==ButtonIcon::none;});
+        height = (std::max)(height, hasText?base_line_height(kFontScale)+2.0f*kBoxInnerPadding:20.0f);
         std::vector<float> widths{};
         widths.reserve(items.size());
         for (const auto& item : items)
         {
             const float preferred = item.width > 0.0f ? item.width
-                : std::ceil(measure_text_width(item.label, kFontScale)
+                : item.icon!=ButtonIcon::none?height:std::ceil(measure_text_width(item.label, kFontScale)
                     + 2.0f * kContentPadding + 2.0f * kButtonTextClipInset + 2.0f);
-            widths.push_back((std::max)(minWidth, preferred));
+            widths.push_back((std::max)(item.icon==ButtonIcon::none?minWidth:20.0f, preferred));
         }
         return make_inline_button_layout(widths, availableWidth, height, gap,
             options.wrap, options.alignment);
@@ -667,7 +711,7 @@
                     item.label,
                     bounds.size,
                     false,
-                    item.enabled))
+                    item.enabled,SemanticTone::neutral,false,false,item.icon,item.tooltip))
             {
                 clicked = i;
             }
@@ -676,6 +720,26 @@
         set_cursor(rowStart);
         advance_cursor({ 0.0f, layout.height + kContentPadding });
         return clicked;
+    }
+
+    float responsive_tab_bar_height(const ResponsiveTabBarOptions& options) noexcept
+    {
+        if (options.tabs.empty()) return 0.0f;
+        const float rowHeight = (std::max)(options.height,
+            base_line_height(kFontScale) + 2.0f * kBoxInnerPadding);
+        std::size_t rows = 1u;
+        float occupied{};
+        for (const auto& tab : options.tabs) {
+            const float width = tab_button_width(tab, options.presentation);
+            if (options.wrap && occupied > 0.0f
+                && occupied + options.gap + width > (std::max)(1.0f, options.available_width)) {
+                ++rows;
+                occupied = 0.0f;
+            }
+            occupied += (occupied > 0.0f ? options.gap : 0.0f) + width;
+        }
+        return static_cast<float>(rows) * rowHeight
+            + static_cast<float>(rows - 1u) * (std::max)(0.0f, options.gap);
     }
 
     TabBarResult responsive_tab_bar_buttons(
@@ -688,8 +752,6 @@
         static thread_local std::vector<float> widths{};
         widths.clear();
         widths.reserve(options.tabs.size());
-        const bool workbenchPresentation =
-            options.presentation == TabBarPresentation::Workbench;
         std::size_t activeIndex = (std::numeric_limits<std::size_t>::max)();
         float longestLabelWidth{};
         for (std::size_t index = 0; index < options.tabs.size(); ++index)
@@ -700,21 +762,56 @@
             const float measuredLabel = measure_text_width(
                 tab.label, kFontScale);
             longestLabelWidth = (std::max)(longestLabelWidth, measuredLabel);
-            const float requestedWidth = workbenchPresentation
-                ? gui_lib::resolve_responsive_tab_width({
-                    .requested_width = tab.width,
-                    .measured_label_width = measuredLabel,
-                    .minimum_hit_width = 72.0f,
-                    .horizontal_padding = 24.0f,
-                    .close_extent = tab.closable ? 18.0f : 0.0f,
-                    .dirty_extent = tab.dirty ? 8.0f : 0.0f})
-                : tab.width > 0.0f
-                    ? tab.width
-                    : gui_lib::preferred_tool_tab_width(
-                        measuredLabel,
-                        tab.closable,
-                        tab.dirty);
-            widths.push_back((std::max)(1.0f, requestedWidth));
+            widths.push_back(tab_button_width(tab, options.presentation));
+        }
+
+        if (options.wrap) {
+            const Vec2 origin = cursor_position();
+            const float rowHeight = (std::max)(options.height,
+                base_line_height(kFontScale) + 2.0f * kBoxInnerPadding);
+            const float rowGap = (std::max)(0.0f, options.gap);
+            const float available = (std::max)(1.0f, options.available_width);
+            result.items.resize(options.tabs.size());
+            std::string_view activeDrag = options.drag.active_id;
+            float y = origin.y;
+            for (std::size_t first{}; first < options.tabs.size();) {
+                std::size_t count = 1u;
+                float occupied = widths[first];
+                while (first + count < options.tabs.size()
+                    && occupied + rowGap + widths[first + count] <= available) {
+                    occupied += rowGap + widths[first + count];
+                    ++count;
+                }
+                const auto row = options.tabs.subspan(first, count);
+                const bool rowOwnsDrag = activeDrag.empty() || std::ranges::any_of(row,
+                    [&](const auto& tab) { return (tab.id.empty() ? tab.label : tab.id) == activeDrag; });
+                auto rowDrag = rowOwnsDrag ? options.drag : TabDragOptions{};
+                rowDrag.active_id = activeDrag;
+                set_cursor({origin.x, y});
+                const auto rowResult = tab_bar_buttons(row, rowHeight, options.gap,
+                    options.presentation, {}, rowDrag);
+                for (std::size_t i{}; i < rowResult.items.size(); ++i)
+                    result.items[first + i] = rowResult.items[i];
+                if (rowResult.pressed_index) result.pressed_index = first + *rowResult.pressed_index;
+                if (rowResult.selected_index) result.selected_index = first + *rowResult.selected_index;
+                if (rowResult.closed_index) result.closed_index = first + *rowResult.closed_index;
+                if (rowResult.dragged_index) {
+                    result.dragged_index = first + *rowResult.dragged_index;
+                    result.drag = rowResult.drag;
+                    result.drag_origin = rowResult.drag_origin;
+                    const auto& tab = options.tabs[*result.dragged_index];
+                    activeDrag = tab.id.empty() ? tab.label : tab.id;
+                }
+                y += rowHeight + rowGap;
+                first += count;
+            }
+            if (!result.selected_index && !result.closed_index) {
+                const Vec2 region{available, responsive_tab_bar_height(options)};
+                result.selected_index = navigate_tab_keys(options.tabs, origin,
+                    region, region, options.keyboard_navigation);
+            }
+            set_cursor({origin.x, y - rowGap + kContentPadding});
+            return result;
         }
 
         const Vec2 keyboardStripPosition = g_frame.cursor;
@@ -744,12 +841,15 @@
                 options.tabs,
                 options.height,
                 options.gap,
-                options.presentation);
+                options.presentation, {}, options.drag);
             apply_keyboard_navigation();
             return result;
         }
 
         const Vec2 rowStart = cursor_position();
+        // Consumers keep routes in original tab order for docking/hit tests.
+        // Hidden tabs have empty bounds; visible geometry retains that index.
+        result.items.resize(options.tabs.size());
         static thread_local std::vector<TabButtonSpec> visibleTabs{};
         visibleTabs.clear();
         visibleTabs.reserve(layout.visible_indices.size());
@@ -762,13 +862,22 @@
                 visibleTabs,
                 options.height,
                 options.gap,
-                options.presentation);
+                options.presentation, {}, options.drag);
+            for (std::size_t item = 0u;
+                item < visibleResult.items.size() && item < layout.visible_indices.size(); ++item)
+                result.items[layout.visible_indices[item]] = visibleResult.items[item];
             if (visibleResult.pressed_index)
                 result.pressed_index = layout.visible_indices[*visibleResult.pressed_index];
             if (visibleResult.selected_index)
                 result.selected_index = layout.visible_indices[*visibleResult.selected_index];
             if (visibleResult.closed_index)
                 result.closed_index = layout.visible_indices[*visibleResult.closed_index];
+            if (visibleResult.dragged_index)
+            {
+                result.dragged_index = layout.visible_indices[*visibleResult.dragged_index];
+                result.drag = visibleResult.drag;
+                result.drag_origin = visibleResult.drag_origin;
+            }
         }
 
         static thread_local std::vector<std::string_view> overflowLabels{};
@@ -1241,11 +1350,10 @@
                         (itemBounds.size.y - base_line_height(kFontScale))
                             * 0.5f)
                     + 1.0f;
-                draw_text_line(
-                    display,
-                    itemBounds.position.x + inset,
-                    textY,
-                    kFontScale);
+                if (item.role == ChromeItemRole::Status)
+                    draw_caption_text(display, itemBounds.position.x + inset, textY, kFontScale);
+                else
+                    draw_text_line(display, itemBounds.position.x + inset, textY, kFontScale);
             }
 
             if (zone.overflow_button.size.x <= 0.0f

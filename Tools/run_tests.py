@@ -27,15 +27,17 @@ def main() -> int:
     tests = root / 'Tests'
     suite = unittest.TestSuite()
     modules = {}
-    for directory in sorted({p.parent for p in tests.rglob('test_*.py')
-                             if '__pycache__' not in p.parts}):
-        for path in directory.glob('test_*.py'):
-            if path.stem in modules:
-                parser.error(f'duplicate test module: {path} and {modules[path.stem]}')
-            modules[path.stem] = path
-        # Each suite is independently importable; test data need no __init__.py.
-        loader = unittest.TestLoader()
-        suite.addTests(loader.discover(str(directory), pattern='test_*.py'))
+    from Tools.source.owned_source_text import discovery_source_snapshot
+    with discovery_source_snapshot(root / "Engine"):
+        for directory in sorted({p.parent for p in tests.rglob('test_*.py')
+                                 if '__pycache__' not in p.parts}):
+            for path in directory.glob('test_*.py'):
+                if path.stem in modules:
+                    parser.error(f'duplicate test module: {path} and {modules[path.stem]}')
+                modules[path.stem] = path
+            # Each suite is independently importable; test data need no __init__.py.
+            loader = unittest.TestLoader()
+            suite.addTests(loader.discover(str(directory), pattern='test_*.py'))
     if args.list:
         def entries(group):
             for test in group:

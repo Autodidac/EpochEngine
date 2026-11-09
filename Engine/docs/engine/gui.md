@@ -1,9 +1,278 @@
 # GUI Library Architecture
 
-Epoch GUI is an engine-internal library surface. It is not a one-off editor
-overlay, and it is not the Console Dock. The editor, launcher, project hub,
-systems view, AI sandbox, package manager, scripting view, and future popout
-windows should compose shared GUI primitives from the same layer.
+EpochGui is the reusable portable library. `gui.engine` adapts it to Engine
+rendering, input, theme and native hosts. The editor, launcher, project hub,
+systems view, Assistant, package manager, scripting view and popout windows
+compose the same shared primitives.
+
+Asset Generation keeps reference approval directly beneath the image preview,
+outside the settings scroll when the image has its own column. Approving an
+image does not generate a model or import anything into a project.
+
+Forest plant sliders show their values and units. A drag changes a temporary
+value; releasing it updates the plant once and adds one Undo step. Canceling a
+drag leaves the plant unchanged. Standard ranges cover ordinary plants; Extended
+ranges use the Forest system's existing limits. Loading a larger plant selects
+the extended range without changing it. A refused preview can still be reduced
+or undone. Source/CPU and native acceptance are recorded in the active pass.
+Forest controls occupy a bounded scroll area beside the plant preview, or above
+it in a narrow dock. Scrolling the controls must not consume the tree's viewport.
+Zero branch levels means a trunk without branches. Branch length is independent
+after it is edited; old saved plants retain their implicit geometry until then.
+
+MSVC follows the same ownership as CMake: EpochGui compiles its portable module
+interfaces and implementations once. Engine imports that project's module output;
+Editor links the separately owned library. Do not add portable GUI compile items
+to Engine's shared item list to work around a missing module reference.
+
+The Engine adapter requires the rounded-rectangle module. Bundled MSVC builds
+enable it by default, matching Engine CMake; an explicit incompatible override
+fails early with the required setting. Standalone EpochGui can still disable the
+optional feature. Debug/Release archive, compiler-import and final-link evidence
+plus regression tests verify this boundary. This does not establish native
+desktop responsiveness: the reported 120 FPS input/desktop stall remains open.
+
+## October29 interface repairs — source and CPU evidence
+
+Assistant code excerpts identify their file in each Before/After heading, using
+the filename and repository-relative path from that request's admitted source
+catalog. A later request cannot relabel an earlier event. Unresolved source IDs
+remain visibly unresolved; raw tool arguments remain unchanged and available.
+The displayed excerpt stays a snippet, rather than expanding to the whole file.
+
+Code coloring follows source-byte tokens, independently of window width, visual
+lines and frame count. The display scanner distinguishes C++ keywords, complete
+identifiers, numeric literals, comments and quoted/raw strings. Number separators
+such as `1'000` do not start strings; quotes inside comments do not recolor later
+code. A malformed ordinary string stops at its source newline. Debug/Release
+tests inspect actual colored glyph submissions in light/dark themes, wrapping,
+scaling and growing transport prefixes. This is display classification, not a
+C++ parser or evidence of native visual acceptance. Full integration and native
+review are tracked in the active pass.
+
+### Interface review checklist
+
+Preserve the current dock layout and visual style. Review each workspace against
+these concrete behaviors rather than replacing it with a different interface:
+
+- Show what is selected, what is running and which project a command changes.
+- Keep viewport status short. Put full errors, build output and paths in Output,
+  with a direct action to reveal the relevant messages.
+- Make every message in All discoverable in a named category. Search should
+  work with category filters; Clear and Copy must state their scope.
+- Menus stay usable while the pointer travels from their owner to a command.
+  Outside click, Escape and focus loss dismiss them without activating content
+  behind them. Tasks commands must open their real destination.
+- Give the World Outliner a right-click Deselect command. Generated universe
+  containers remain selectable in the list without blocking viewport picking.
+- Show transport direction and speed; support forward/reverse, fast transport,
+  pause, seek and endpoints through one time owner.
+- Check authoring during playback, simulation and project Run separately.
+  Pause/stop before unsafe script or scene replacement, explain refusals, and
+  preserve safe navigation, input focus, cancellation and project identity.
+- Keep readable theme contrast, labels that fit, consistent hit targets,
+  keyboard navigation, scrolling, selection/copy and responsive resizing.
+
+These are acceptance checks, not a statement that every workspace passes them.
+
+Ordinary section headings use a readable version of the selected theme's own
+accent. Objects, Create, Selection and Scripts no longer force informational
+blue. Explicit success, warning and error headings keep their status meaning.
+Heading fonts are prepared only for themes actually used, through the existing
+bounded font atlas. Their accent sheets contain the built-in labels' Basic Latin
+glyphs; other characters use the complete normal text font, including its
+kerning, instead of turning into question marks. A missing optional heading
+font also falls back to normal text.
+No glyph recoloring or font baking occurs on each normal drawing frame.
+
+Classic uses square raised and pressed controls, neutral gray faces, white
+inset fields and navy captions. The visual reference is Irrlicht's documented
+[Windows Classic skin](https://irrlicht.sourceforge.io/docu/namespaceirr_1_1gui.html),
+not its metallic gradient skin. Epoch's numeric palette is an interpretation;
+exact upstream color matching is not claimed. Existing theme IDs and the
+System default are unchanged. Native aesthetic review remains open.
+
+The generic scrollbar now uses the existing ordered pointer-drag owner. A
+press, movement and release received within one GUI frame must still move the
+thumb; a held drag continues outside the thumb's original bounds and releases
+on its matching up or cancellation. Actual-owner Debug/Release cases pass.
+The separately reported panel-divider fault came from idle runtime reconciliation
+clearing the drag every frame. Full-screen exit is now idempotent. Matching full
+Debug/Release contracts pass, and the operator confirms physical dividers work.
+
+## Queued pointer ownership and theme styles — October28 source
+
+A context that sends mouse-button events owns its button state through those
+events. A slower platform sample must not cancel a held drag or create another
+press after release. Focus/pointer cancellation clears held buttons; context
+cleanup clears their producer identity. Callers using only sampled left-button
+input keep that path. The existing per-context GUI state owns this distinction;
+there is no second input manager. Build/native acceptance lives in the active pass.
+
+The visible names are Codex Black and Classic Theme; existing enum names and
+saved IDs remain compatible. Classic uses gray faces, raised borders that reverse
+when pressed, inset white fields and navy captions with white caption text. Normal
+control text stays dark. Choosing it does not rewrite the saved rounding preference
+for other themes. Indigo Quartz uses saved ID16 and Signal Plum17; retired ID13
+stays retired. New settings start with System Light/Dark; saved choices still load.
+
+The jump-to-latest control uses the same circular button and hit test with an
+opaque high-contrast face and inverse outline. Dark themes use a black face and
+white arrow; light themes use a white face and dark arrow. Its drawing remains
+in the existing top layer; background code must not show through the circle.
+
+Physical divider acceptance is separate from CPU gesture tests. The existing
+`--trace-menu-button0` option enables bounded native delivery, GUI admission and
+divider decision evidence (120 interesting records per owner, no text or keys).
+It changes no input, frame or overlay order. Default operation records none of it.
+
+## Project keyboard input — October28, local source
+
+Project GUI uses the existing `project.gui_runtime` session for widget focus and
+the shared `gui.engine` text controller for caret, selection and text history.
+Click a project control first; Tab then moves through its enabled, visible
+controls and Shift+Tab moves back. Enter or Space activates a focused button.
+Arrow keys adjust a focused slider. Plain Tab remains text in multiline fields;
+Shift+Tab leaves the field and Ctrl+Tab retains dock-group navigation. A scene
+without project GUI focus keeps its own keys.
+
+The shared text owner handles multiline Tab from its key event; it does not
+depend on a platform sending Tab as a character. A paired Tab character is
+consumed once. Read-only fields and rejected edits keep their existing guards.
+When an actual project GUI loads, the debug Project Controls panel starts hidden
+behind a small Controls button. Show/Hide changes drawing and pointer capture
+together. Projects without GUI, including the planet controls, start expanded.
+This is a temporary view choice, not a saved project setting.
+
+Text, Tab and later text are processed in their original order. Modal/popup
+capture, focus loss, clipped controls and outside clicks retain their existing
+input gates. Drawing an authoring canvas does not activate its project actions.
+Controls that disappear release their current context's keyboard claim at the
+existing end of frame; their text history and other contexts stay intact.
+
+Focus changes and button activation publish their event before committing state.
+If event storage fails, focus, action counts and pending events stay unchanged.
+Actual-owner Debug/Release tests cover ordered input, hidden controls and payload
+allocation failure. MSVC Debug iterator-bookkeeping allocation is a separate STL
+limitation, explicitly excluded from the payload-failure fixture. Native acceptance
+and the matching combined build are recorded in the active pass.
+
+Tile Map uses the existing `image_box` rectangular control for cells, palette
+items and map objects. Text-button minimum sizes must not enlarge a tile's draw
+or click area. Item and viewport clips also apply to queued presses; the owned
+workspace background covers the gaps. Global Undo/Redo routes to the Tile Map's
+existing document journal while it is active. This does not close the complete
+playable 2D or wider GUI Editor missions.
+
+Tile collision belongs to a palette tile backed by a real project texture. The
+Collision inspector explains that prerequisite before editing. Clicking a painted
+cell selects its actual tile; an empty cell cannot toggle a palette-wide collider.
+Stage the shape in the inspector, then Apply. That change affects every placement
+of the selected tile. Texture-free cell colliders need a separate data/runtime
+contract; the current control must not invent a fake texture to enable them.
+
+Global Editor Undo/Redo uses the existing ordered GUI key events and their saved
+modifiers, so a quick press and release is not lost between polling frames. It
+claims no text focus and respects modal, menu and context ownership. Native
+verification of this follow-up remains in the active pass.
+
+## Tool-pane readability — October27, local source
+
+Section headings now use the current theme's readable accent color and wrap to
+the available width. Their measured height is shared with modal layout so the
+next controls and footer do not overlap. Package titles use the existing menu
+row's selected state and actual font height; summaries wrap underneath.
+
+3D Objects keeps a compact Create / filter / More toolbar above its hierarchy.
+Create and More open the existing command-menu component; object creation,
+selection actions, Undo/Redo and Ambient Lighting remain available there.
+The tree uses the remaining pane height, with indented rows and disclosure
+arrows. Its root shows the project name, or Scene, without changing stored IDs.
+Filtering, expansion, selection and generated-body access keep their existing
+controller. These October30 changes have focused Debug/Release control proof;
+matching Editor builds and narrow/wide native checks remain separate gates.
+
+Asset Browser, GUI Hierarchy and Script Browser group related actions.
+Buttons fit their labels, center as a group and wrap in narrow panes.
+File and widget rows remain left aligned for scanning. Asset search filters the
+visible list. Project, Timeline, Assets and GUI Overlay reuse these controls;
+diagnostic prefixes are removed from ordinary property labels.
+
+Dock/section tabs measure whole titles, close reservations and padding. Narrow
+dock headers wrap complete draggable tabs and reserve the resulting height before
+painting pane contents. Close glyphs sit in the upper-right corner without a
+separate button background; hover/press feedback changes the glyph ink, while
+paint and hit geometry share one owner. Floating caption/resize painting restores
+its body clip afterward, and queued short drags use the existing pointer owner.
+These controls have CPU/build proof; native acceptance remains separate.
+
+Focused control/layout tests and the combined Release build/contracts pass.
+Native normal/compressed acceptance remains in the active pass; this does not
+close the wider GUI Editor, floating-window or 2D authoring missions.
+
+## Command menus — October27, local source
+
+`epoch.gui.command_menu` is a compiled C++23 component in EpochGui. Give it one
+list of commands, measured text widths and the available window size. It places
+the popup and its rows, tracks focus and presses, and returns the chosen command.
+The Editor no longer keeps separate row counts or label-width lists.
+
+```text
+Editor command list → EpochGui layout and input → Engine drawing → Editor action
+```
+
+The component reuses EpochGui's rectangle, popup and scrollbar owners. A menu
+that fits has no scrollbar. A clipped menu has wheel scrolling, a draggable
+thumb and bounded scroll position. Arrow, Home, End and Page keys move focus;
+disabled commands are skipped. Enter chooses once; Escape, outside presses and
+focus loss close the menu. A press on one row cannot activate another row.
+
+The Editor command bar requires a click to open its first menu. While a menu is
+open, hovering over another command-bar button switches menus. Menus stay open
+while the pointer is over a header, popup, submenu or the gap connecting them.
+Continuous absence for 750 ms dismisses them; returning resets the delay.
+EpochGui owns the elapsed-time helper, and the Engine adapter supplies frame
+time and the combined keep-open region. Standalone Debug/Release tests cover
+the timer and menu navigation (`Artifacts/Reports/command-menu-nov06/`);
+the rebuilt Editor still needs native acceptance of this November6 change.
+
+`gui.engine` supplies the existing font measurements, theme, clipping and drawing.
+Only the component activates commands; the row painter does not dispatch again.
+The Editor supplies actions and availability, reserves space below its command
+bar, and closes the menu before calling an action. Existing early input capture
+and overlay order are retained. Standalone Debug/Release component tests and the
+Editor descriptor tests pass; see `Artifacts/Reports/command-menu-object-oct27/`.
+This adoption covers the Editor command bar. Other context menus and selectors
+still need individual migration and acceptance; no whole-GUI completion claim.
+
+The operator-approved Graphite Copper theme extends the existing palette,
+selector, cycle, native chrome and settings paths. Its persisted ID is14;
+retired13 continues to load as System. The original candidate reused13 and
+therefore failed reopen. Actual codec/resolver Debug/Release tests now cover
+the new theme, old IDs and invalid15. Fire Engine Red remains test-only.
+
+## Current portable input owner — local, unpublished
+
+Engine's58 portable Gui files and the Demo/Media working pins now bind local
+checkpoint `28d81396a4b1e782264712d97bbe7c8aefc05748`. Published Gui0.90.1 at
+`7d5d5514a1443c0ef340a626fa163569858ca362` remains unchanged. Portable hashes
+bind the exact committed blobs; this is a local source checkpoint, not a new
+published version or full-tree mirror.
+
+`epoch.gui.input` now compiles the popup/floating pointer-ownership decisions.
+The two existing Engine policy headers only delegate. Adapters still latch
+popup capture before background controls, give floating-window children body
+input before absorbing unused clicks, and retain existing frame/draw order.
+The module does not create a host, scheduler or new input manager.
+
+Standalone Gui plus actual Engine-wrapper consumers pass19/19 in Debug and
+Release, including all16 popup,32 chrome and four absorption combinations.
+Demo Platform passes5/5 and Media's native composition6/6 in each configuration
+against the explicit local Gui root. These are CPU/build results; native input,
+full Engine edition integration and the broader GUI ownership migration need
+their own acceptance. Receipt: `build/validation/gui-input-ownership-oct26/result.json`.
+
+## Shared frame and presentation contract
 
 Docked/tiled window backgrounds and splitter fills are rectangular so shared
 edges do not expose corner cutouts. Floating/top-layer windows retain rounded
@@ -24,12 +293,23 @@ frequency ceiling. A nominal sub-microsecond Windows timer measured1–1.7ms in
 the frame loop and was removed from those call sites. Native OpenGL completion
 fences bound unfinished GPU work, not frames per second. Render and monitor
 scanout rates remain distinct; desktop responsiveness needs runtime evidence.
+The October30 pacing repair preserves positive finite manual values such as
+1500/5000Hz and cooperatively yields during fine waits, late turns and uncapped
+turns. This adds no fixed sleep or FPS ceiling. The subsequent uncapped test
+still froze the operator's desktop: these changes are not responsiveness proof.
 
 Deferred GUI snapshots remain immutable while replay consumers hold them.
 Prepare their vectors, compare content and retire replaced storage outside the
 publication mutex. Under the mutex, copy the observed pointer or revalidate it
-before the short swap/generation update. Preserve unchanged/empty generation
+before the short swap/generation update. An unchanged pending frame is compared
+before allocating replacement storage; it retains its existing capacity.
+Preserve unchanged/empty generation
 semantics, existing base/top-layer publication order and renderer replay order.
+Actual Debug/Release CPU checks measured zero allocations/frees across256 warm
+unchanged publications after this repair, versus768 each before it. This is
+proof at the publication boundary, not a whole-Editor or desktop performance
+measurement. OpenGL stream-storage ownership is recorded in
+[renderer evidence](renderers.md#october30-gui-submission-repair--source-and-cpu-proof).
 
 The compact timeline reserves measured heading/readout/control heights before
 allocating scene space. Time text sits outside the thin progress track; the
@@ -156,7 +436,21 @@ projectless launcher GUI Editor consume the same canonical GUI document and
 projection adapter. Standard Editor presents the interactive placement canvas;
 GUI Editor presents widget creation, Canvas, Runtime Preview, Component Graph,
 Styles, verified `.epochgui` I/O, and reusable templates. Both share stable
-selection with Hierarchy and Properties.
+scene-projected widget identities with Hierarchy and Properties. A scratch
+document can contain widgets without scene projections; those rows currently
+report that selection is unavailable. Complete document-only selection and
+floating-window behavior still need native acceptance.
+
+Authored canvases shrink their text with their widget rectangles. The Engine
+adapter's `ScopedTextScale` keeps glyph drawing and measurement on the same
+scale, then restores the previous scale. `ContentClipScope` intersects each
+widget with its parent's visible bounds and restores those bounds afterward.
+Container names appear in the hierarchy; visible titles belong to text widgets,
+so a container cannot paint an extra title over its children. CPU tests cover
+nested scopes, separate threads, invalid scales and restoration after errors.
+Windows Development Release checks confirm the title-overlap repair at normal
+size. Small-window readability, canvas zoom and the complete authoring workflow
+remain open. This check does not establish Linux or other-backend behavior.
 
 The practical rule is strict: if an editor surface needs a control that normal
 software would also need, create or extend the shared GUI primitive first. A
@@ -275,7 +569,11 @@ menu replay remain unchanged.
   ordering. Theme preference labels, option data, preference resolution, and
   scoped theme application belong to `gui.engine`; editor surfaces may store the
   selected preference but must not recreate theme tables in domain code. The
-  baseline choices are `System Light/Dark`, `Light`, and `Dark`; named Epoch
+  launcher, its transitions and updater surfaces inherit this selected appearance;
+  they must not force a separate Classic palette. The Editor appearance query reads
+  live context settings or the existing saved layout without opening Editor services.
+  Theme resolution and Theme Cycle stay in the existing GUI owner.
+  The baseline choices are `System Light/Dark`, `Light`, and `Dark`; named Epoch
   palettes currently include Classic Launcher, Midnight Blue, Ember Forge,
   Forest Terminal, and Aurora Steel. System mode resolves through platform
   app-theme preference when available and falls back to the dark palette on
@@ -391,7 +689,7 @@ belong in proper GUI windows:
   Outliner may expose an `OS AI` tab with compact model/loop state, chat
   transcript, prompt entry, and plan controls because that keeps the selected
   AI model attached to normal editor chrome instead of hiding control in a main
-  document. AI Chat remains a separate dockable conversation tool so the scene
+  document. Assistant Chat remains a separate dockable conversation tool so the scene
   can stay visible. Reusable console windows own clipped transcript, input, and
   optional pinned/footer action rows; approval-sensitive actions stay pinned
   above scrollable content so compact docks cannot hide authority controls.
@@ -423,14 +721,14 @@ belong in proper GUI windows:
 - Scripting needs a real code/text editor surface, not a Console Dock submenu.
 
 The single `Output` tool owns selectable log text and compact Project, Assets,
-AI Output, and Systems evidence filters. These status categories are not
+Automation, and Systems evidence filters. These status categories are not
 independent dock routes. Do not reintroduce property-row blocks, action buttons,
 selection tables, or progress widgets into Output filters; those controls
 belong in central workspaces, modal windows, or Inspector-owned panels.
 
 Docking defaults to in-host tool-tab stacks over one live editor projection.
 World Outliner, Asset Browser, GUI Hierarchy, Script Browser, Tile Map,
-Properties, Global Settings, Output, and AI Chat each own an independent tool
+Properties, Global Settings, Output, and Assistant Chat each own an independent tool
 route. They may move between the left, right, Bottom Left, and Bottom Right
 groups without entering
 the main document strip or creating another editor, renderer, project session,
@@ -484,7 +782,7 @@ canonical state.
 
 The current editor keeps its main World/GUI/Forest/Plant/Timeline/Project/
 Assets/AI/Systems strip document-only. Tool routes use the Left, Right, Bottom
-Left, and Bottom Right tab groups. Output and AI Chat default to the two bottom
+Left, and Bottom Right tab groups. Output and Assistant Chat default to the two bottom
 groups, but neither route nor group is special after initialization.
 
 Document and reviewed-source tab strips use EpochGui's responsive strip
@@ -682,9 +980,9 @@ Do not split files only for aesthetics. The safe code split is:
 4. Build MSBuild Debug/Release and the active CMake preset before marking the
    split complete.
 
-`EpochGui` is now a real linkable static-library target for backend-neutral
-layout primitives under `Engine/include/gui` and `Engine/src/epochgui`, with
-standalone mirror metadata in `Engine/dep/EpochGui` for `Autodidac/EpochGui`.
+`EpochGui` is a real linkable static-library target with backend-neutral source,
+interfaces and consumers under `Engine/dep/EpochGui`, mirrored from
+`Autodidac/EpochGui`. Engine-specific composition remains in `Engine/src/epochgui`.
 Keep `gui.engine` as the engine module/API adapter around rendering, input,
 theme, text, and atlas/backend replay; keep portable math/control state in
 `EpochGui` first.
@@ -833,7 +1131,7 @@ not a second editor shell, and not the context-selection UI. Its contract is:
   state. Standard Editor, Plant Lab, and GUI Editor each persist pane visibility,
   Left/Right/Bottom Left/Bottom Right placement, active tabs, the bottom-column
   split ratio, theme choice, and rounded-control preference in versioned per-user
-  configuration outside project and release data. Output and AI Chat initially
+  configuration outside project and release data. Output and Assistant Chat initially
   occupy Bottom Left and Bottom Right respectively, but both are ordinary routes;
   an empty bottom group collapses and the occupied group consumes the available
   width. Restore is schema-bounded; malformed files fall back to application
@@ -884,7 +1182,7 @@ Native floating contexts are alternate hosts for canonical editor panes, not ind
 - A floating context's top row remains normal GUI hit-test space; host-window movement must use the explicit host-drag gesture instead of stealing ordinary clicks.
 - Docking guides are computed in the parent editor coordinate space after converting/scaling routed-host mouse coordinates.
 - Closing a detached pane returns it to its remembered dock. Window/command-menu restore actions make the pane active so a closed native host cannot make a tool permanently unreachable.
-- AI Chat is strictly single-owner: the canonical editor owns the AI/model/session state. A detached AI Chat owns only projection/input-buffer/mailbox state. It must never construct a second model/session owner during Play/Run or undock/redock.
+- Assistant Chat is strictly single-owner: the canonical editor owns the AI/model/session state. A detached Assistant Chat owns only projection/input-buffer/mailbox state. It must never construct a second model/session owner during Play/Run or undock/redock.
 
 These are lifecycle and ownership contracts, not backend-specific visual tricks.
 

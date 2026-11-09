@@ -32,6 +32,7 @@ module;
 #include <cmath>
 #include <limits>
 #include <string_view>
+#include <thread>
 
 export module perf.tier;
 
@@ -74,7 +75,7 @@ export namespace epochengine::perf
     struct frame_pacing_policy final
     {
         frame_pacing_mode mode = frame_pacing_mode::target_hz;
-        double target_hz = 120.0;
+        double target_hz = 30.0;
         double background_hz = 30.0;
         double minimized_hz = 10.0;
     };
@@ -211,7 +212,7 @@ export namespace epochengine::perf
         double requested,
         double fallback) noexcept
     {
-        if (!(requested > 0.0) || requested > 1000.0)
+        if (!(requested > 0.0) || requested > (std::numeric_limits<double>::max)())
             return fallback;
         return requested;
     }
@@ -231,7 +232,7 @@ export namespace epochengine::perf
         }
         return {
             frame_pacing_mode::target_hz,
-            sanitize_frame_hz(target_hz, 120.0),
+            sanitize_frame_hz(target_hz, 30.0),
             sanitize_frame_hz(background_hz, 30.0),
             sanitize_frame_hz(minimized_hz, 10.0)};
     }
@@ -243,7 +244,7 @@ export namespace epochengine::perf
     {
         policy.target_hz = policy.mode == frame_pacing_mode::uncapped
             ? 0.0
-            : sanitize_frame_hz(policy.target_hz, 120.0);
+            : sanitize_frame_hz(policy.target_hz, 30.0);
         policy.background_hz = sanitize_frame_hz(policy.background_hz, 30.0);
         policy.minimized_hz = sanitize_frame_hz(policy.minimized_hz, 10.0);
 
@@ -355,12 +356,12 @@ export namespace epochengine::perf
         frame_pacing_mode explicit_mode,
         double explicit_target_hz,
         bool explicit_selection,
-        bool standalone_project) noexcept
+        [[maybe_unused]] bool standalone_project) noexcept
     {
         if (!explicit_selection)
-            // Keep the Editor's advertised 120 Hz default and standalone
-            // projects' 60 Hz default consistent on every backend.
-            return target_hz_policy(standalone_project ? 60.0 : 120.0);
+            // Start lightly on every platform. Higher rates, VSync and true
+            // unlimited mode require an explicit saved/UI/launch selection.
+            return target_hz_policy(30.0);
         if (explicit_mode == frame_pacing_mode::uncapped)
             return target_hz_policy(0.0);
         if (explicit_mode == frame_pacing_mode::vsync)
@@ -372,7 +373,7 @@ export namespace epochengine::perf
                 10.0};
         }
         // An invalid numeric target is not permission to become uncapped.
-        return target_hz_policy(sanitize_frame_hz(explicit_target_hz, 120.0));
+        return target_hz_policy(sanitize_frame_hz(explicit_target_hz, 30.0));
     }
     struct frame_pacing_selection final
     {
@@ -392,7 +393,7 @@ export namespace epochengine::perf
             const double value = mode == frame_pacing_mode::uncapped ? 0.0
                 : mode == frame_pacing_mode::vsync
                     ? -sanitize_frame_hz(hz, 60.0)
-                    : sanitize_frame_hz(hz, 120.0);
+                    : sanitize_frame_hz(hz, 30.0);
             selected_hz_.store(value, std::memory_order_release);
         }
 
@@ -642,24 +643,40 @@ namespace epochengine::perf
     void frame_limiter::wait_for_next_frame() noexcept
     {
         if (target_dt <= 0.0)
+        {
+            // Uncapped removes the deadline, not the OS scheduler's opportunity
+            // to run another ready thread. Never impose a fixed minimum sleep.
+            std::this_thread::yield();
             return;
+        }
 
         const double now0 = epochengine::core::time::now_seconds();
 
         next_time = next_frame_deadline(
             next_time, now0, target_dt, started);
         started = true;
+        bool yielded = false;
 
         for (;;)
         {
             const double now = epochengine::core::time::now_seconds();
             const double remaining = next_time - now;
             if (remaining <= 0.0)
+            {
+                // A fine wait already offered this turn's cooperative pause.
+                if (!yielded)
+                    std::this_thread::yield();
                 break;
+            }
 
             const double ms = remaining * 1000.0;
             if (ms > 2.0)
                 epochengine::core::time::sleep_ms(static_cast<std::uint32_t>(ms - 1.0));
+            else if (!yielded)
+            {
+                std::this_thread::yield();
+                yielded = true;
+            }
         }
     }
 }

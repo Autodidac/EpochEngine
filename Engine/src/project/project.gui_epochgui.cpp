@@ -68,6 +68,11 @@ namespace epochengine::project_gui
         return !project_id_.empty() && !project_root_.empty();
     }
 
+    EpochGuiAdapter::~EpochGuiAdapter() noexcept
+    {
+        clear();
+    }
+
     EpochGuiRenderResult EpochGuiAdapter::render(
         project_gui_runtime::RuntimeSession& runtime,
         project_gui_runtime::Float2 viewport) noexcept
@@ -78,17 +83,42 @@ namespace epochengine::project_gui
         bool topLayerBegun{};
         try
         {
-            const project_gui_runtime::RuntimeFrame frame =
+            project_gui_runtime::RuntimeFrame frame =
                 runtime.build_frame(viewport);
             result.code = frame.code;
             if (!frame)
                 return result;
 
+            auto observed = runtime.metrics();
+            const auto refresh = [&]() {
+                const auto current = runtime.metrics();
+                if (current.artifact_replacements == observed.artifact_replacements
+                    && current.focus_changes == observed.focus_changes
+                    && current.tab_changes == observed.tab_changes
+                    && current.text_changes == observed.text_changes
+                    && current.slider_changes == observed.slider_changes)
+                    return true;
+                auto updated = runtime.build_frame(viewport);
+                if (!updated) { result.code = updated.code; return false; }
+                frame = std::move(updated);
+                observed = runtime.metrics();
+                return true;
+            };
+
             const gui::Vec2 mouse = gui::mouse_position();
             result.pointer_captured = runtime.pointer_captured(
                 {mouse.x, mouse.y});
+            if (const auto press = gui::mouse_press_position(); press
+                && !runtime.pointer_captured({press->x, press->y}))
+                (void)runtime.clear_focus();
             if (gui::was_mouse_released())
                 (void)runtime.pointer_release({mouse.x, mouse.y});
+            if (!refresh()) return result;
+            const auto keyboard = dispatch_keyboard(runtime, frame);
+            if (keyboard != project_gui_runtime::RuntimeCode::ready
+                && keyboard != project_gui_runtime::RuntimeCode::no_change)
+                result.code = keyboard;
+            if (!refresh()) return result;
 
             gui::begin_top_layer();
             topLayerBegun = true;
@@ -101,6 +131,12 @@ namespace epochengine::project_gui
                     gui::panel_rect(point(view.bounds), extent(view.bounds));
             }
             render_tabs(runtime, frame);
+            if (!refresh())
+            {
+                gui::end_top_layer();
+                topLayerBegun = false;
+                return result;
+            }
             for (const auto& view : frame.widgets)
             {
                 if (view.visible)
@@ -129,8 +165,115 @@ namespace epochengine::project_gui
 
     void EpochGuiAdapter::clear() noexcept
     {
+        gui::release_keyboard_input(this);
+        for (const auto& [id, text] : text_state_)
+        { (void)id; gui::release_keyboard_input(&text); }
         text_state_.clear();
         images_.clear();
+    }
+
+    project_gui_runtime::RuntimeCode EpochGuiAdapter::dispatch_keyboard(
+        project_gui_runtime::RuntimeSession& runtime,
+        const project_gui_runtime::RuntimeFrame& frame)
+    {
+        using Kind = asset::gui::WidgetKind;
+        using Code = project_gui_runtime::RuntimeCode;
+        Code code = Code::ready;
+        const auto record = [&](Code outcome) {
+            if (code == Code::ready || code == Code::no_change) code = outcome;
+            return outcome;
+        };
+        if (runtime.keyboard_captured()) for (const auto& view : frame.widgets)
+        {
+            if (view.kind != Kind::text_input) continue;
+            auto [text, inserted] = text_state_.try_emplace(view.id.value, view.primary_text);
+            if (!inserted && text->second != view.primary_text)
+                text->second = view.primary_text;
+        }
+        const auto focused = [&]() -> const project_gui_runtime::WidgetView* {
+            if (!runtime.keyboard_captured()) return nullptr;
+            const auto id = runtime.focused_widget();
+            const auto found = std::find_if(frame.widgets.begin(), frame.widgets.end(),
+                [&](const auto& view) { return view.id == id; });
+            return found != frame.widgets.end() && found->visible && found->enabled
+                ? &*found : nullptr;
+        };
+        bool tabTextPending{};
+        (void)gui::dispatch_keyboard_input({
+            .owner = this,
+            .owns_text = [&](const void* identity) {
+                return std::any_of(text_state_.begin(), text_state_.end(),
+                    [&](const auto& item) { return identity == &item.second; });
+            },
+            .target = [&]() {
+                gui::KeyboardInputTarget target{};
+                const auto* view = focused();
+                if (!view) return target;
+                target.identity = this;
+                if (view->kind == Kind::text_input)
+                {
+                    const auto& source = runtime.artifact()->widgets[view->index];
+                    target.text = &text_state_.at(view->id.value);
+                    target.identity = target.text;
+                    target.size = extent(view->bounds);
+                    target.maximum_bytes = source.maximum_length;
+                    target.multiline = source.multiline;
+                    target.read_only = source.read_only;
+                }
+                return target;
+            },
+            .command = [&](const gui::InputEvent& event) {
+                const auto* view = focused();
+                if (!view) return false;
+                if (event.type == gui::EventType::TextInput)
+                {
+                    if (tabTextPending && event.text == "\t")
+                    { tabTextPending = false; return true; }
+                    tabTextPending = false;
+                    return view->kind != Kind::text_input;
+                }
+                if (event.type != gui::EventType::KeyDown
+                    || event.ctrl_down || event.alt_down) return false;
+                if (event.key == 9)
+                {
+                    // Multiline fields retain literal Tab. Shift+Tab leaves
+                    // the field; Ctrl+Tab remains the containing group's key.
+                    if (!event.shift_down && view->kind == Kind::text_input
+                        && runtime.artifact()->widgets[view->index].multiline)
+                        return false;
+                    (void)record(runtime.focus_next(event.shift_down));
+                    tabTextPending = true;
+                    return true;
+                }
+                if (event.key == 27)
+                { (void)record(runtime.clear_focus()); return true; }
+                if ((event.key == 13 || event.key == 32)
+                    && (view->kind == Kind::button || view->kind == Kind::image_button))
+                { (void)record(runtime.activate_focused()); return true; }
+                if ((event.key == 37 || event.key == 39) && view->kind == Kind::slider)
+                {
+                    const auto& source = runtime.artifact()->widgets[view->index];
+                    const double step = source.step > 0.0 ? source.step
+                        : (source.maximum - source.minimum) * 0.01;
+                    const auto current = runtime.build_frame(frame.viewport);
+                    const auto currentView = std::find_if(current.widgets.begin(), current.widgets.end(),
+                        [&](const auto& item) { return item.id == view->id; });
+                    if (!current || currentView == current.widgets.end())
+                    { (void)record(Code::invalid_widget); return true; }
+                    (void)record(runtime.set_slider(view->id, currentView->value
+                        + (event.key == 37 ? -step : step)));
+                    return true;
+                }
+                return false;
+            },
+            .cancel = [&]() { (void)record(runtime.clear_focus()); },
+            .text_changed = [&]() {
+                const auto* view = focused();
+                if (!view || view->kind != Kind::text_input) return false;
+                const auto changed = record(runtime.set_text(view->id, text_state_.at(view->id.value)));
+                return changed == Code::ready || changed == Code::no_change;
+            }});
+        return code;
     }
 
     EpochGuiAdapter::ImageState& EpochGuiAdapter::resolve_image(
@@ -252,69 +395,81 @@ namespace epochengine::project_gui
         const gui::Vec2 position = point(view.bounds);
         const gui::Vec2 size = extent(view.bounds);
         gui::begin_window("", position, size, false);
-        switch (view.kind)
         {
-        case Kind::button:
-            (void)gui::button(view.primary_text, size);
-            break;
-        case Kind::text:
-            gui::wrapped_label(view.primary_text, size.x);
-            break;
-        case Kind::image:
-        case Kind::image_button:
-        {
-            ImageState& image = resolve_image(view.asset_path);
-            const auto id = widget_id(view.id, "image");
-            (void)gui::image_box({
-                .id = id,
-                .sprite = image.sprite,
-                .size = size,
-                .source_size = {
-                    static_cast<float>(image.width),
-                    static_cast<float>(image.height)},
-                .caption = view.secondary_text,
-                .fit = gui::ImageFit::Contain,
-                .interactive = view.kind == Kind::image_button,
-                .enabled = view.enabled});
-            break;
-        }
-        case Kind::text_input:
-        {
-            auto [text, inserted] = text_state_.try_emplace(
-                view.id.value, view.primary_text);
-            if (!inserted && text->second != view.primary_text
-                && !view.focused)
+            gui::ContentClipScope clip(point(view.clip),
+                {view.clip.x + view.clip.width, view.clip.y + view.clip.height});
+            gui::ScopedInputSuppression disabled{!view.enabled};
+            switch (view.kind)
             {
-                text->second = view.primary_text;
+            case Kind::button:
+                (void)gui::button_selected(view.primary_text, size, view.focused);
+                break;
+            case Kind::text:
+                gui::wrapped_label(view.primary_text, size.x);
+                break;
+            case Kind::image:
+            case Kind::image_button:
+            {
+                ImageState& image = resolve_image(view.asset_path);
+                const auto id = widget_id(view.id, "image");
+                (void)gui::image_box({
+                    .id = id,
+                    .sprite = image.sprite,
+                    .size = size,
+                    .source_size = {
+                        static_cast<float>(image.width),
+                        static_cast<float>(image.height)},
+                    .caption = view.secondary_text,
+                    .fit = gui::ImageFit::Contain,
+                    .interactive = view.kind == Kind::image_button,
+                    .selected = view.focused,
+                    .enabled = view.enabled});
+                break;
             }
-            const auto edited = gui::edit_box(
-                text->second,
-                size,
-                runtime.artifact()->widgets[view.index].maximum_length,
-                runtime.artifact()->widgets[view.index].multiline);
-            if (edited.changed)
-                (void)runtime.set_text(view.id, text->second);
-            break;
-        }
-        case Kind::slider:
-        {
-            const auto& source = runtime.artifact()->widgets[view.index];
-            const auto id = widget_id(view.id, "slider");
-            const auto changed = gui::slider({
-                .id = id,
-                .label = view.primary_text,
-                .minimum = static_cast<float>(source.minimum),
-                .maximum = static_cast<float>(source.maximum),
-                .value = static_cast<float>(view.value),
-                .step = static_cast<float>(source.step),
-                .size = size,
-                .enabled = view.enabled});
-            if (changed.changed)
-                (void)runtime.set_slider(view.id, changed.value);
-            break;
-        }
-        default:
-            break;
+            case Kind::text_input:
+            {
+                auto [text, inserted] = text_state_.try_emplace(
+                    view.id.value, view.primary_text);
+                if (!inserted && text->second != view.primary_text
+                    && !view.focused)
+                {
+                    text->second = view.primary_text;
+                }
+                const auto edited = gui::edit_box(
+                    text->second,
+                    size,
+                    runtime.artifact()->widgets[view.index].maximum_length,
+                    runtime.artifact()->widgets[view.index].multiline,
+                    gui::TextInputKeyboardPolicy::focused, false, {}, true);
+                if (edited.changed)
+                {
+                    const auto changed = runtime.set_text(view.id, text->second);
+                    if (changed != project_gui_runtime::RuntimeCode::ready
+                        && changed != project_gui_runtime::RuntimeCode::no_change)
+                        text->second = view.primary_text;
+                }
+                break;
+            }
+            case Kind::slider:
+            {
+                const auto& source = runtime.artifact()->widgets[view.index];
+                const auto id = widget_id(view.id, "slider");
+                const auto changed = gui::slider({
+                    .id = id,
+                    .label = view.primary_text,
+                    .minimum = static_cast<float>(source.minimum),
+                    .maximum = static_cast<float>(source.maximum),
+                    .value = static_cast<float>(view.value),
+                    .step = static_cast<float>(source.step),
+                    .size = size,
+                    .enabled = view.enabled});
+                if (changed.changed)
+                    (void)runtime.set_slider(view.id, changed.value);
+                break;
+            }
+            default:
+                break;
+            }
         }
         gui::end_window();
     }

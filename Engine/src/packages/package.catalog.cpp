@@ -497,6 +497,74 @@ namespace epochengine::package_catalog
 
     }
 
+    LocalSourceManifest parse_local_source_manifest(std::string_view json)
+    {
+        LocalSourceManifest result{};
+        result.message = "The local package manifest is invalid or unsupported.";
+        if (json.empty() || json.size() > kMaximumBodyBytes) return result;
+        Reader reader{json};
+        const auto document = reader.document();
+        const auto* root = document ? std::get_if<Object>(&document->storage) : nullptr;
+        if (!root) return result;
+        const auto object_member = [](const Object& parent, std::string_view key)
+            -> const Object*
+        {
+            const auto* value = member(parent, key);
+            return value ? std::get_if<Object>(&value->storage) : nullptr;
+        };
+        const auto* id = text_member(*root, "id");
+        const auto* name = text_member(*root, "displayName");
+        const auto* license = text_member(*root, "manifestLicense");
+        const auto* kind = text_member(*root, "kind");
+        const auto* activation = text_member(*root, "activation");
+        const auto* source = object_member(*root, "source");
+        const auto* security = object_member(*root, "security");
+        const auto* build = object_member(*root, "build");
+        const auto* script = object_member(*root, "script");
+        if (!id || !identifier(*id) || !name || name->empty() || name->size() > 160u
+            || !license || license->empty() || license->size() > 96u
+            || !kind || !one_of(*kind, {"code-extension", "downloadable-source"})
+            || !activation || *activation != "package-manager-opt-in"
+            || !source || !security || !build || !script) return result;
+        for (const auto key : {"serverOrListenerAllowed", "requiresExplicitNetworkApproval",
+                              "autoRunAllowed", "includeByDefault"})
+            if (bool_member(*security, key) != std::optional<bool>{false})
+            {
+                result.message = "Only inert, non-server optional source can be staged here.";
+                return result;
+            }
+        const auto* repository = text_member(*source, "repo");
+        const auto* sourcePath = text_member(*source, "path");
+        const auto* scriptPath = text_member(*script, "path");
+        const auto* language = text_member(*script, "language");
+        const auto* api = text_member(*script, "api");
+        if (!repository || repository->size() > 512u || !sourcePath || !scriptPath
+            || !language || *language != "C++23" || !api || *api != "epoch_package_script_api"
+            || bool_member(*script, "humanGated") != std::optional<bool>{true}
+            || bool_member(*script, "autoRunAllowed") != std::optional<bool>{false}
+            || bool_member(*build, "humanGated") != std::optional<bool>{true}) return result;
+        const auto* filesValue = member(*build, "sourceFiles");
+        const auto* files = filesValue ? std::get_if<Array>(&filesValue->storage) : nullptr;
+        if (!files || files->empty() || files->size() > 128u) return result;
+        for (const auto& value : *files)
+        {
+            const auto* path = std::get_if<std::string>(&value.storage);
+            if (!path || path->empty() || path->size() > 1024u) return result;
+            result.source_files.push_back(*path);
+        }
+        result.id = *id;
+        result.display_name = *name;
+        if (const auto* summary = text_member(*root, "summary"))
+            result.summary = summary->substr(0u, 1024u);
+        result.license = *license;
+        result.repository = *repository;
+        result.source_path = *sourcePath;
+        result.script_path = *scriptPath;
+        result.ok = true;
+        result.message = "Local source manifest decoded; files still require inspection.";
+        return result;
+    }
+
     Snapshot parse(std::string_view json)
     {
         Snapshot result{};

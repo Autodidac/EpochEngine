@@ -1,5 +1,29 @@
 // Epoch feature implementation; included by editor.core application owner only.
 // SPDX-License-Identifier: LicenseRef-MIT-NoSell
+    EditorAppearancePreferences editor_appearance_preferences(const core::Context* ctx)
+    {
+        const auto appearance = [](const EditorState& state)
+        {
+            return EditorAppearancePreferences{state.themePreference,
+                state.themeCycleIntervalSeconds, state.roundedRectangles};
+        };
+        auto& storage = editor_storage();
+        {
+            std::scoped_lock lock(storage.mutex);
+            if (const auto found = storage.states.find(ctx); found != storage.states.end())
+                return appearance(found->second);
+        }
+        // The ordinary bounded/symlink-checked layout codec owns cold-start
+        // preferences too. A temporary value does not initialize editor services.
+        static const auto saved = [&]
+        {
+            EditorState state;
+            load_editor_layout_preferences(state);
+            return appearance(state);
+        }();
+        return saved;
+    }
+
     void cleanup_chat_context(const core::Context* ctx)
     {
         if (!ctx) return;
@@ -18,13 +42,23 @@
                 {
                     return command.ownerContext == ctx;
                 });
+            std::erase_if(editorStorage.detachedGuiHierarchySelections,
+                [ctx](const DetachedGuiHierarchySelection& command)
+                {
+                    return command.ownerContext == ctx;
+                });
             if (editorStorage.detachedPaneProjection.ownerContext == ctx)
+            {
                 editorStorage.detachedPaneProjection = {};
+                if (editorStorage.detachedProjectionGeneration != (std::numeric_limits<std::uint64_t>::max)())
+                    ++editorStorage.detachedProjectionGeneration;
+            }
         }
         if (!retiredChat.empty() && retiredChat.mapped())
             (void)retiredChat.mapped()->cancel_pending();
         if (!retiredState.empty())
         {
+            request_editor_task_session_stop(retiredState.mapped());
             persist_editor_layout_preferences(retiredState.mapped(), true);
         }
         if (!retiredChat.empty())
@@ -53,7 +87,11 @@
             editorStorage.detachedPaneRoutes.clear();
             editorStorage.paneRedockRequests.clear();
             editorStorage.detachedAiChatCommands.clear();
+            editorStorage.detachedGuiHierarchySelections.clear();
             editorStorage.detachedPaneProjection = {};
+            // Do not reset/wrap the token while an old publisher may be in flight.
+            if (editorStorage.detachedProjectionGeneration != (std::numeric_limits<std::uint64_t>::max)())
+                ++editorStorage.detachedProjectionGeneration;
             editorStorage.passiveContextScores = {};
             shutdownAi = chatStorage.bot_initialized;
             chatStorage.bot_initialized = false;
@@ -68,6 +106,7 @@
         for (auto& [ctx, state] : retiredStates)
         {
             (void)ctx;
+            request_editor_task_session_stop(state);
             persist_editor_layout_preferences(state, true);
         }
         // Stop every context before joining any scheduler: a slow unrelated
@@ -243,6 +282,11 @@
         }
 
         auto& editor = editor_state_for(ctx);
+        if (planetary_project_busy(editor) && editor.projectId != project_id)
+        {
+            editor.projectStatus = "Cancel or finish the planetary operation before switching projects.";
+            return false;
+        }
         set_project(editor, project_id, true);
         epochengine::previewgrid::set_camera_mode(
             ctx.get(), editor.viewportCameraMode);
@@ -258,10 +302,16 @@
             return false;
 
         auto& editor = editor_state_for(ctx);
-        return close_active_project(
+        const bool closed = close_active_project(
             editor,
             editor_application_profile(editor.applicationKind),
             true);
+        if (closed)
+        {
+            epochengine::previewgrid::set_camera_mode(ctx.get(), editor.viewportCameraMode);
+            epochengine::previewgrid::reset_camera(ctx.get(), true);
+        }
+        return closed;
     }
 
     void editor_load_project(const std::shared_ptr<core::Context>& ctx, std::string_view project_id)
@@ -322,7 +372,7 @@
             return;
 
         auto& editor = editor_state_for(ctx);
-        editor.autoUpdateCheckQueued = true;
+        editor.autoUpdateCheckQueued = !core::cli::smoke_requested;
         if (editor.updateCheckPending.has_value()
             || editor.updateState == EditorUpdateState::SourceWorkerRunning
             || editor.updateState == EditorUpdateState::RestartReady)

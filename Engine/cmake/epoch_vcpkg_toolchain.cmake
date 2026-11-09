@@ -15,6 +15,10 @@ endif()
 
 get_filename_component(_epoch_engine_root "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
 get_filename_component(_epoch_repo_root "${_epoch_engine_root}/.." ABSOLUTE)
+if(NOT DEFINED VCPKG_INSTALLED_DIR OR "${VCPKG_INSTALLED_DIR}" STREQUAL "")
+    set(VCPKG_INSTALLED_DIR "${_epoch_repo_root}/Artifacts/Dependencies/vcpkg_installed"
+        CACHE PATH "Shared installed dependency cache; separate from compiler intermediates")
+endif()
 get_filename_component(_epoch_repo_parent "${_epoch_repo_root}/.." ABSOLUTE)
 list(APPEND _epoch_vcpkg_candidates
     "${_epoch_repo_root}/vcpkg"

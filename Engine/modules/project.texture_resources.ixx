@@ -285,7 +285,8 @@ export namespace epochengine::project_textures
             const project_assets::AssetRegistry& registry,
             project_assets::AssetHandle asset,
             const asset::texture::CompiledTextureArtifact& artifact,
-            bool requireCurrentSourceRevision = true) noexcept
+            bool requireCurrentSourceRevision = true,
+            texture_artifact::TransferUsage usage = texture_artifact::TransferUsage::linear_data) noexcept
         {
             ++metrics_.publication_requests;
             if (!valid() || !registry.valid())
@@ -316,7 +317,7 @@ export namespace epochengine::project_textures
                 record->identity.asset_key,
                 artifactRevision};
             const texture_artifact::ArtifactKeyResult key =
-                texture_artifact::make_artifact_key(sealed.artifact, logical);
+                texture_artifact::make_artifact_key(sealed.artifact, logical, 0u, usage);
             if (!key)
                 return reject_publication(detail::transfer_code(key.code));
 
@@ -373,6 +374,8 @@ export namespace epochengine::project_textures
                 auto payload = std::make_shared<detail::CpuTexturePayload>();
                 payload->logical = logical;
                 payload->extent = {mip.width, mip.height};
+                payload->color_space = artifact.identity.profile.color_space == asset::texture::ColorSpace::srgb
+                    ? canvas2d::SpriteColorSpace::srgb : canvas2d::SpriteColorSpace::linear;
                 payload->pixels.resize(
                     static_cast<std::size_t>(mip.width) * mip.height);
                 std::memcpy(
@@ -512,6 +515,17 @@ export namespace epochengine::project_textures
                 result.code_ = reject_code(ResourceCode::allocation_failure);
                 return result;
             }
+        }
+
+        // Retains the already sealed immutable publication for another renderer
+        // consumer. Exact registry ownership and revision checks stay here.
+        [[nodiscard]] texture_artifact::ValidatedCompiledTextureArtifact validated_artifact(
+            const project_assets::AssetRegistry& registry,
+            canvas2d::LogicalTextureReference logical) const noexcept
+        {
+            if (!valid() || !registry.valid()) return {};
+            const Entry* const entry = resolve_entry(registry, logical);
+            return entry ? entry->validated : texture_artifact::ValidatedCompiledTextureArtifact{};
         }
 
         [[nodiscard]] ResidencyResult acquire_resident(

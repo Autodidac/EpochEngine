@@ -68,7 +68,7 @@ std::string effective_gpu_layers(const RuntimeModelProfile& profile) {
 }
 
 nlohmann::json to_json(const RuntimeModelProfile& profile) {
-    return {
+    nlohmann::json result = {
         {"format", "engcoder.runtime-model.v4"},
         {"id", profile.id},
         {"display_name", profile.display_name},
@@ -79,6 +79,7 @@ nlohmann::json to_json(const RuntimeModelProfile& profile) {
         {"local_path", profile.local_path.empty() ? nlohmann::json(nullptr) : nlohmann::json(profile.local_path.string())},
         {"estimated_bytes", profile.estimated_bytes},
         {"profile_revision", profile.profile_revision},
+        {"idle_timeout_minutes", profile.idle_timeout_minutes},
         {"runtime_policy", profile.runtime_policy},
         {"gpu_offload_percent", profile.gpu_offload_percent},
         {"gpu_layer_count_hint", profile.gpu_layer_count_hint},
@@ -120,6 +121,9 @@ nlohmann::json to_json(const RuntimeModelProfile& profile) {
         {"provider_model", runtime_model_uri(profile)},
         {"kind", "foundation"},
     };
+    if (!profile.behavior_labels.empty()) result["behavior_labels"] = profile.behavior_labels;
+    if (!profile.tags.empty()) result["tags"] = profile.tags;
+    return result;
 }
 
 RuntimeModelProfile runtime_model_from_json(const nlohmann::json& value) {
@@ -131,6 +135,8 @@ RuntimeModelProfile runtime_model_from_json(const nlohmann::json& value) {
     RuntimeModelProfile profile;
     profile.id = string_value("id");
     profile.display_name = string_value("display_name", profile.id);
+    profile.behavior_labels = declared_behavior_labels(value);
+    profile.tags = behavior_metadata(value, "tags");
 
     const auto runtime = string_value("runtime", "qwen-flash");
     if (runtime == "internal-keymaker") profile.runtime = RuntimeKind::internal_keymaker;
@@ -185,6 +191,12 @@ RuntimeModelProfile runtime_model_from_json(const nlohmann::json& value) {
     profile.speculative_model = string_value("speculative_model");
     profile.speculative_tokens = value.value("speculative_tokens", 2U);
     profile.enabled = value.value("enabled", true);
+    if (const auto idle = value.find("idle_timeout_minutes"); idle != value.end()) {
+        if (!idle->is_number_integer() || idle->get<std::int64_t>() < 0
+            || idle->get<std::uint64_t>() > 1440u)
+            throw std::invalid_argument("idle_timeout_minutes must be an integer between 0 and 1440");
+        profile.idle_timeout_minutes = idle->get<std::uint32_t>();
+    }
 
     if (profile.id.empty()) throw std::invalid_argument("runtime model id is empty");
     if (profile.runtime_policy != "recommended" && profile.runtime_policy != "automatic" && profile.runtime_policy != "manual") {

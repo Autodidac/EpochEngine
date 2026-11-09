@@ -21,6 +21,7 @@ module;
 module directx.context;
 
 import core.context;
+import render.preview_grid;
 import core.logger;
 import render.context_frame;
 import atlas.texture;

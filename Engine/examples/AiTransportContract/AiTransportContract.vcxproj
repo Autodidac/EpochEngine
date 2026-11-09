@@ -1,5 +1,5 @@
-<?xml version='1.0' encoding='utf-8'?>
-<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" DefaultTargets="Build">
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Release|x64"><Configuration>Release</Configuration><Platform>x64</Platform></ProjectConfiguration>
     <ProjectConfiguration Include="Debug|x64"><Configuration>Debug</Configuration><Platform>x64</Platform></ProjectConfiguration>
@@ -65,6 +65,6 @@
       <LinkLibraryDependencies>true</LinkLibraryDependencies>
     </ProjectReference>
   </ItemGroup>
-  
+  <!-- Deliberately absent from Engine.sln and from all runtime/test hooks. -->
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>

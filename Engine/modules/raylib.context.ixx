@@ -652,8 +652,10 @@ namespace epochengine::raylibcontext
                 return;
             }
 
+            const auto matchedScene = epochengine::previewgrid::scene_frame_for(ctx.get());
             const auto sampledSurfaceMarkers =
-                epochengine::previewgrid::sampled_render_surface_markers_for(ctx.get());
+                matchedScene ? epochengine::previewgrid::sampled_render_surface_markers_for(*matchedScene)
+                    : epochengine::previewgrid::sampled_render_surface_markers_for(ctx.get());
             const bool arcadePreviewReady =
                 !sampledSurfaceMarkers.empty() && update_arcade_preview_target();
 
@@ -679,7 +681,7 @@ namespace epochengine::raylibcontext
                 });
             const auto cameraMode = epochengine::previewgrid::camera_mode_for(ctx.get());
 
-            const auto camera = epochengine::previewgrid::camera_for(ctx.get());
+            const auto camera = matchedScene ? matchedScene->camera : epochengine::previewgrid::camera_for(ctx.get());
             const float aspect = viewport.height > 0
                 ? (viewport.width / static_cast<float>(viewport.height))
                 : 1.0f;
@@ -689,32 +691,39 @@ namespace epochengine::raylibcontext
                 camera.target,
                 camera.up);
             const auto mvp = epochengine::previewgrid::multiply(proj, view);
-            const auto gridGeometry = epochengine::previewgrid::grid_geometry_for(ctx.get());
-            const auto& vertices = gridGeometry->vertices;
-            const auto& indices = gridGeometry->indices;
-
-            for (std::size_t i = 0; i + 1 < indices.size(); i += 2)
+            if (!matchedScene)
             {
-                const auto firstIndex = static_cast<std::size_t>(indices[i]);
-                const auto secondIndex = static_cast<std::size_t>(indices[i + 1]);
-                if (firstIndex >= vertices.size() || secondIndex >= vertices.size())
-                    continue;
+                const auto gridGeometry = epochengine::previewgrid::grid_geometry_for(ctx.get());
+                const auto& vertices = gridGeometry->vertices;
+                const auto& indices = gridGeometry->indices;
 
-                epochengine::raylib_api::Vector2 a{};
-                epochengine::raylib_api::Vector2 b{};
-                if (!project_preview_vertex(mvp, vertices[firstIndex].position, viewport, a)
-                    || !project_preview_vertex(mvp, vertices[secondIndex].position, viewport, b))
+                for (std::size_t i = 0; i + 1 < indices.size(); i += 2)
                 {
-                    continue;
+                    const auto firstIndex = static_cast<std::size_t>(indices[i]);
+                    const auto secondIndex = static_cast<std::size_t>(indices[i + 1]);
+                    if (firstIndex >= vertices.size() || secondIndex >= vertices.size())
+                        continue;
+
+                    epochengine::raylib_api::Vector2 a{};
+                    epochengine::raylib_api::Vector2 b{};
+                    if (!project_preview_vertex(mvp, vertices[firstIndex].position, viewport, a)
+                        || !project_preview_vertex(mvp, vertices[secondIndex].position, viewport, b))
+                    {
+                        continue;
+                    }
+
+                    epochengine::raylib_api::draw_line_v(
+                        a,
+                        b,
+                        to_raylib_color(vertices[firstIndex].color));
                 }
 
-                epochengine::raylib_api::draw_line_v(
-                    a,
-                    b,
-                    to_raylib_color(vertices[firstIndex].color));
             }
 
-            const auto solidVertices = epochengine::previewgrid::object_solid_vertices_for(ctx.get());
+            const auto solidGeometry = matchedScene ? matchedScene->solids->geometry
+                : epochengine::previewgrid::object_solid_geometry_for(ctx.get());
+
+            const auto& solidVertices = *solidGeometry;
             for (std::size_t i = 0; i + 2 < solidVertices.size(); i += 3)
             {
                 if (!epochengine::previewgrid::clockwise_solid_triangle_faces_camera(
@@ -783,40 +792,50 @@ namespace epochengine::raylibcontext
                 render_engine_arcade_sampled_surface_preview(
                     sampledSurfaceMarkers, mvp, viewport);
 
-            const auto markerVertices = epochengine::previewgrid::look_marker_vertices_for(ctx.get());
-            const std::size_t markerCount = epochengine::previewgrid::look_marker_vertex_count_for(ctx.get());
-            for (std::size_t i = 0; i + 1 < markerCount; i += 2)
+            if (!matchedScene)
+            {
+                const auto markerVertices = epochengine::previewgrid::look_marker_vertices_for(ctx.get());
+                const std::size_t markerCount = epochengine::previewgrid::look_marker_vertex_count_for(ctx.get());
+                for (std::size_t i = 0; i + 1 < markerCount; i += 2)
+                {
+                    epochengine::raylib_api::Vector2 a{};
+                    epochengine::raylib_api::Vector2 b{};
+                    if (!project_preview_vertex(mvp, markerVertices[i].position, viewport, a)
+                        || !project_preview_vertex(mvp, markerVertices[i + 1].position, viewport, b))
+                    {
+                        continue;
+                    }
+
+                    epochengine::raylib_api::draw_line_v(
+                        a,
+                        b,
+                        to_raylib_color(markerVertices[i].color));
+                }
+
+            }
+
+            const auto objectGeometry = matchedScene ? matchedScene->lines
+                : epochengine::previewgrid::object_marker_geometry_for(ctx.get());
+
+            const auto& objectVertices = *objectGeometry;
+            const auto meshWire = matchedScene ? matchedScene->wire
+                : epochengine::previewgrid::object_mesh_wire_frame_for(ctx.get());
+            epochengine::previewgrid::for_each_visible_marker_line(*meshWire, objectVertices, camera.eye,
+                [&](const auto& first, const auto& second)
             {
                 epochengine::raylib_api::Vector2 a{};
                 epochengine::raylib_api::Vector2 b{};
-                if (!project_preview_vertex(mvp, markerVertices[i].position, viewport, a)
-                    || !project_preview_vertex(mvp, markerVertices[i + 1].position, viewport, b))
+                if (!project_preview_vertex(mvp, first.position, viewport, a)
+                    || !project_preview_vertex(mvp, second.position, viewport, b))
                 {
-                    continue;
+                    return;
                 }
 
                 epochengine::raylib_api::draw_line_v(
                     a,
                     b,
-                    to_raylib_color(markerVertices[i].color));
-            }
-
-            const auto objectVertices = epochengine::previewgrid::object_marker_vertices_for(ctx.get());
-            for (std::size_t i = 0; i + 1 < objectVertices.size(); i += 2)
-            {
-                epochengine::raylib_api::Vector2 a{};
-                epochengine::raylib_api::Vector2 b{};
-                if (!project_preview_vertex(mvp, objectVertices[i].position, viewport, a)
-                    || !project_preview_vertex(mvp, objectVertices[i + 1].position, viewport, b))
-                {
-                    continue;
-                }
-
-                epochengine::raylib_api::draw_line_v(
-                    a,
-                    b,
-                    to_raylib_color(objectVertices[i].color));
-            }
+                    to_raylib_color(first.color));
+            });
 
             epochengine::raylib_api::end_scissor_mode();
         }
@@ -983,6 +1002,11 @@ namespace epochengine::raylibcontext
 
         if (!epochengine::raylib_api::is_window_ready())
             return fail_initialization("Raylib did not create a ready native window.");
+
+#if !defined(_WIN32)
+        if (!linux::capture_native_context())
+            return fail_initialization("Failed to capture Raylib GLFW context after initialization.");
+#endif
 
 #if defined(_WIN32)
         // Raylib creates its own OpenGL context. Capture it now so we bind the right rc later.

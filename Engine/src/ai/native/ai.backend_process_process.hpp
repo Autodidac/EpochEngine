@@ -5,6 +5,8 @@
 #include <chrono>
 #include <expected>
 #include <filesystem>
+#include <functional>
+#include <cstdint>
 #include <stop_token>
 #include <string>
 #include <utility>
@@ -20,6 +22,9 @@ struct Request {
     std::vector<std::pair<std::string, std::string>> environment;
     std::chrono::milliseconds timeout{300000};
     std::size_t max_output_bytes{256 * 1024};
+    // Observation only, after this owner has spawned/contained the process.
+    // Exceptions are absorbed; lifecycle ownership stays with run().
+    std::function<void(std::uint64_t)> on_started{};
 };
 
 struct Result {

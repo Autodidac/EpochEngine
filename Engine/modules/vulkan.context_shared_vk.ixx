@@ -80,6 +80,7 @@ import render.canvas2d_evidence;
 import render.canvas2d_cpu;
 import render.canvas2d_runtime;
 import render.device;
+import render.preview_grid;
 import vulkan.camera;
 import atlas.texture;
 import perf.tier;
@@ -194,6 +195,7 @@ namespace epochengine::vulkancontext
         std::uint32_t arcadeScreenIndexOffset = 0;
         std::uint32_t arcadeScreenIndexCount = 0;
         std::uint32_t lineIndexCount = 0;
+        bool previewIndicesSequential = false;
 
     private:
         std::weak_ptr<epochengine::core::Context> context;
@@ -213,6 +215,8 @@ namespace epochengine::vulkancontext
 
         std::thread::id renderThreadId{};
         std::uint64_t previewGeometryRevision = 0;
+        std::shared_ptr<const previewgrid::PublishedSceneFrame> previewSceneFrame{};
+        std::shared_ptr<const previewgrid::PublishedSceneFrame> uploadedPreviewSceneFrame{};
 
         vk::UniqueInstance instance;
         vk::DebugUtilsMessengerEXT debugMessenger = VK_NULL_HANDLE;
@@ -476,10 +480,16 @@ namespace epochengine::vulkancontext
         std::unordered_map<const epochengine::core::Context*, GuiContextState> guiContexts{};
     };
 
-    export std::vector<Application::Vertex> preview_vertices_for(const epochengine::core::Context* ctx);
-    export std::vector<std::uint16_t>       preview_indices_for(const epochengine::core::Context* ctx);
-    export std::uint32_t                    preview_solid_index_count_for(const epochengine::core::Context* ctx);
-    export std::uint32_t                    preview_arcade_screen_index_count_for(const epochengine::core::Context* ctx);
+    export bool preview_geometry_matches(const previewgrid::PublishedSceneFrame& current,
+        const previewgrid::PublishedSceneFrame& uploaded) noexcept;
+    export std::vector<Application::Vertex> preview_vertices_for(const epochengine::core::Context* ctx,
+        const std::shared_ptr<const previewgrid::PublishedSceneFrame>& matchedScene = {});
+    export std::vector<std::uint32_t>       preview_indices_for(const epochengine::core::Context* ctx,
+        const std::shared_ptr<const previewgrid::PublishedSceneFrame>& matchedScene = {});
+    export std::uint32_t                    preview_solid_index_count_for(const epochengine::core::Context* ctx,
+        const std::shared_ptr<const previewgrid::PublishedSceneFrame>& matchedScene = {});
+    export std::uint32_t                    preview_arcade_screen_index_count_for(const epochengine::core::Context* ctx,
+        const std::shared_ptr<const previewgrid::PublishedSceneFrame>& matchedScene = {});
 
     export Application& bind_vulkan_app(const std::shared_ptr<epochengine::core::Context>& ctx);
     export std::shared_ptr<Application> try_get_vulkan_app(const epochengine::core::Context* ctx) noexcept;

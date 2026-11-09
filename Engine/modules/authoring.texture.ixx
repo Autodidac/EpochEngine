@@ -722,12 +722,7 @@ export namespace epochengine::authoring::texture
         ResultCode code{ ResultCode::invalid_document };
         std::unique_ptr<TextureDocument> document{};
 
-        [[nodiscard]] explicit operator bool() const noexcept
-        {
-            return code == ResultCode::success
-                && document != nullptr
-                && document->valid();
-        }
+        [[nodiscard]] explicit operator bool() const noexcept;
     };
 
     [[nodiscard]] PhysicalResidencyPlan plan_physical_residency(

@@ -136,6 +136,7 @@ import atlas.manager;
 import atlas.texture;
 import core.commandline;
 import core.logger;
+import opengl.native_present;
 import diagnostics.engine;
 import telemetry.engine;
 import opengl.capture;
@@ -179,7 +180,11 @@ namespace epochengine::openglcontext
         openglcanvas2d::release_canvas2d_scene_renderer(ctx.get());
 
         auto& backend = opengltextures::get_opengl_backend();
-        auto& glState = backend.glState;
+        const auto retiringContext = ctx ? contextdetail::context_to_platform_context(ctx.get())
+            : PlatformGL::get_current();
+        auto& glState = retiringContext.valid()
+            ? opengltextures::state_for_platform_context(backend, retiringContext, ctx.get())
+            : backend.glState;
         const auto releaseAdmission = [&](const PlatformGL::PlatformGLContext& native,
                                           bool nativeCurrent)
         {
@@ -210,6 +215,7 @@ namespace epochengine::openglcontext
         };
 
 #if defined(_WIN32)
+        bool nativePresentationRetired = true;
         {
             PlatformGL::ScopedContext cleanupGuard;
             auto cleanupContext = ctx ? contextdetail::context_to_platform_context(ctx.get()) : PlatformGL::PlatformGLContext{};
@@ -222,14 +228,44 @@ namespace epochengine::openglcontext
                 canActivateCleanup = false;
 
             const bool nativeCurrent = canActivateCleanup && cleanupGuard.set(cleanupContext);
+            nativePresentationRetired = native_present::release(glState.nativePresent);
             releaseAdmission(cleanupContext, nativeCurrent);
             if (nativeCurrent)
             {
                 openglpreview::destroy_scene_preview_pipeline(glState);
+                openglquad::destroy_quad_pipeline(glState);
                 opengltextures::clear_gpu_atlases(cleanupContext);
             }
         }
         PlatformGL::clear_current();
+
+        if (!nativePresentationRetired)
+        {
+            // Retain NV/COM references rather than free a registered resource.
+            // Skip explicit context/DC deletion; the host may still destroy the
+            // window, so this is terminal retention, not a recoverable drawable.
+            // Admission is latched off by the resource owner after this failure.
+            if (ctx)
+            {
+                ctx->init_failed = true;
+                if (ctx->windowData)
+                {
+                    ctx->windowData->ownsNativeGlContext = false;
+                    ctx->windowData->ownsNativeDc = false;
+                    ctx->windowData->set_backend_lifecycle(core::BackendLifecycleState::failed);
+                }
+            }
+            logger::get("OpenGL").log(logger::LogLevel::Error,
+                "DXGI presentation retirement failed; retained native resources and disabled new trial admissions.",
+                std::source_location::current());
+            return;
+        }
+
+        // Context-map entries outlive the native HGLRC, whose value Windows may
+        // reuse. Clear a retired context's local failure only at this boundary;
+        // generic release must still prevent retrying the same failed context.
+        glState.nativePresent = native_present::State{};
+        glState.nativePresentSyncInterval = 0u;
 
         if (glState.ownsContext && glState.hglrc) { ::wglDeleteContext(glState.hglrc); }
         glState.hglrc = nullptr;
@@ -254,6 +290,7 @@ namespace epochengine::openglcontext
             if (nativeCurrent)
             {
                 openglpreview::destroy_scene_preview_pipeline(glState);
+                openglquad::destroy_quad_pipeline(glState);
                 opengltextures::clear_gpu_atlases(cleanupContext);
             }
         }

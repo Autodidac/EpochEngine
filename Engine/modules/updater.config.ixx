@@ -38,6 +38,7 @@ module;
 export module updater.config;
 
 import platform.engine;
+import updater.platform_policy;
 import epoch.version;
 
 namespace epochengine::updater
@@ -249,12 +250,14 @@ namespace epochengine::updater
 
     export inline std::string PROJECT_SOURCE_ARCHIVE_EXTENSION()
     {
-        return std::string{ epochengine::platform::policy::source_snapshot_archive_extension() };
+        if (PUBLIC_DISTRIBUTION) return ".zip";
+        return std::string{ epochengine::updater::platform_policy::source_snapshot_archive_extension() };
     }
 
     export inline std::string PROJECT_SOURCE_ARCHIVE_LABEL()
     {
-        return std::string{ epochengine::platform::policy::source_snapshot_archive_label() };
+        if (PUBLIC_DISTRIBUTION) return "signed Public source ZIP";
+        return std::string{ epochengine::updater::platform_policy::source_snapshot_archive_label() };
     }
 
     export inline std::string PACKAGED_BINARY_ASSET_PREFIX()
@@ -329,19 +332,23 @@ namespace epochengine::updater
         return {};
     }
 
+    export inline std::string PROJECT_RELEASE_INTEGRITY_URL()
+    {
+        return SITE_DISTRIBUTION ? std::string{}
+            : std::string{GITHUB_BASE} + "Autodidac/EpochEngine/releases/latest/download/epoch-release-integrity.json";
+    }
+
     export inline std::string PROJECT_SOURCE_URL()
     {
-        // An empty development URL selects the authenticated archive flow.
-        // Never expose a plaintext fallback for private development source.
+        // This is the signed discovery document, never an unsigned archive alias.
+        // Development's empty channel retains authenticated archive acquisition.
         return SOURCE_UPDATE_FALLBACK_ENABLED && PUBLIC_DISTRIBUTION
-            ? std::string{GITHUB_BASE} + "Autodidac/EpochEngine/releases/latest/download/epoch-source-main"
-                + PROJECT_SOURCE_ARCHIVE_EXTENSION() : std::string{};
+            ? PROJECT_RELEASE_INTEGRITY_URL() : std::string{};
     }
 
     export inline std::string PROJECT_SOURCE_CHECKSUM_URL()
     {
-        const std::string source_url = PROJECT_SOURCE_URL();
-        return source_url.empty() ? std::string{} : source_url + ".sha256";
+        return {}; // The source digest must come from the signed document.
     }
 
     export inline std::vector<std::string> PROJECT_SOURCE_FALLBACK_URLS()
@@ -411,12 +418,6 @@ namespace epochengine::updater
     // Private runtime downloads currently require owner SSO; device source
     // credentials do not grant binary download scopes.
     export inline constexpr bool PROJECT_PACKAGED_UPDATES_ENABLED = PUBLIC_DISTRIBUTION;
-
-    export inline std::string PROJECT_RELEASE_INTEGRITY_URL()
-    {
-        return SITE_DISTRIBUTION ? std::string{}
-            : std::string{GITHUB_BASE} + "Autodidac/EpochEngine/releases/latest/download/epoch-release-integrity.json";
-    }
 
     export inline std::string PROJECT_RELEASE_DOWNLOAD_PREFIX()
     {

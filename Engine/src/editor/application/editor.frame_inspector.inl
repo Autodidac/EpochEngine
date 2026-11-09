@@ -4,7 +4,6 @@
             gui::Vec2 pane_pos,
             gui::Vec2 pane_size,
             InspectorToolTab pane_tab,
-            std::string_view pane_route,
             std::string_view pane_label)
         {
         if (pane_size.x > 1.0f && pane_size.y > 1.0f)
@@ -13,8 +12,6 @@
         // The dock tab already owns the visible title; avoid a second title
         // taking content height and causing duplicate headings.
         gui::begin_window(pane_label, pane_pos, pane_size, true, false);
-        handle_pane_title_drag_to_tab(
-            pane_route, pane_label, pane_pos, pane_size);
         const gui::Vec2 inspectorScrollStart = gui::cursor_position();
         const float inspectorScrollHeight = (std::max)(
             48.0f,
@@ -31,6 +28,45 @@
             const auto view = previewgrid::camera_descriptor_for(ctx.get());
             const auto resolvedView = render_camera::resolve(view);
             gui::label("Global Settings");
+            gui::label("Environment / Ambient Lighting");
+            gui::wrapped_label(
+                "Every scene has ambient lighting. It cannot be deleted with scene objects. "
+                "Linear RGB values are saved with the scene; values above 1 are allowed.",
+                (std::max)(1.0f, pane_size.x - 24.0f));
+            const auto ambient = editor.sceneDocument.initialized()
+                ? editor.sceneDocument.project_settings().ambient : scene::kDefaultAmbientLight;
+            if (!editor.sceneAmbientDraftInitialized
+                || editor.sceneAmbientDraftSource != ambient)
+            {
+                for (std::size_t channel = 0u; channel < ambient.size(); ++channel)
+                    editor.sceneAmbientDraft[channel] = epochengine::format_text("{}", ambient[channel]);
+                editor.sceneAmbientDraftSource = ambient;
+                editor.sceneAmbientDraftInitialized = true;
+            }
+            constexpr std::array<std::string_view, 3> channelLabels{
+                "Ambient red", "Ambient green", "Ambient blue"};
+            for (std::size_t channel = 0u; channel < ambient.size(); ++channel)
+            {
+                gui::label(channelLabels[channel]);
+                (void)gui::edit_box(editor.sceneAmbientDraft[channel],
+                    {(std::min)(150.0f, (std::max)(1.0f, pane_size.x - 24.0f)), 28.0f}, 48u);
+            }
+            const std::array ambientActions{
+                gui::InlineButtonSpec{.label = "Apply Ambient", .width = 126.0f},
+                gui::InlineButtonSpec{.label = "Reset Ambient", .width = 126.0f}};
+            if (const auto action = gui::inline_button_row(ambientActions, 27.0f, 5.0f))
+            {
+                const auto value = *action == 1u
+                    ? std::optional<scene::Vec3>{scene::kDefaultAmbientLight}
+                    : parse_editor_ambient_channels(editor.sceneAmbientDraft);
+                if (!value)
+                    editor.projectStatus = "Ambient RGB channels must be finite and nonnegative.";
+                else if (set_editor_scene_ambient(editor, *value))
+                {
+                    editor.sceneAmbientDraftInitialized = false;
+                    editor.projectStatus = "Ambient lighting applied. Save Project to keep it.";
+                }
+            }
             gui::property_row("World", editor.activeWorld.empty() ? std::string("Untitled World") : editor.activeWorld, 118.0f);
             gui::property_row("Scene", editor.activeRuntimeScene.empty() ? std::string("Editor Scene") : editor.activeRuntimeScene, 118.0f);
             gui::property_row("Renderer", renderer_name(ctx), 118.0f);
@@ -41,160 +77,6 @@
             gui::property_row("Fly speed", epochengine::format_text("{:.2f}", previewgrid::fly_speed_for(ctx.get())), 118.0f);
             gui::property_row("Objects", std::to_string(visible_entity_count(editor)), 118.0f);
             gui::property_row("Project camera", std::string(project_camera_label(editor.projectCameraMode)), 118.0f);
-
-            const auto eventRenderDebug = epochengine::render_event_debug::snapshot();
-            gui::label("Event-Driven Rendering");
-            gui::property_row(
-                "Path",
-                std::string(epochengine::render_event_debug::path_name(eventRenderDebug.path)),
-                118.0f);
-            gui::property_row(
-                "Fallback",
-                std::string(epochengine::render_event_debug::fallback_name(eventRenderDebug.fallback)),
-                118.0f);
-            gui::property_row(
-                "Dirty regions",
-                std::to_string(eventRenderDebug.dirty_regions),
-                118.0f);
-            gui::property_row(
-                "Vacated regions",
-                std::to_string(eventRenderDebug.vacated_regions),
-                118.0f);
-            gui::property_row(
-                "Dirty coverage",
-                epochengine::format_text("{:.2f}%", eventRenderDebug.dirty_coverage_percent),
-                118.0f);
-            gui::property_row(
-                "Render time",
-                epochengine::format_text("{} us", eventRenderDebug.render_time_us),
-                118.0f);
-            gui::property_row(
-                "Frame path totals",
-                epochengine::format_text(
-                    "Cached {} / Partial {} / Full {} / Conventional {}",
-                    eventRenderDebug.cached_frames,
-                    eventRenderDebug.partial_frames,
-                    eventRenderDebug.full_frames,
-                    eventRenderDebug.conventional_frames),
-                118.0f);
-            const auto pathTimingText = [](
-                const epochengine::render_event_debug::BenchmarkTiming& timing)
-            {
-                if (timing.samples == 0u)
-                    return std::string{"waiting"};
-                return epochengine::format_text(
-                    "{:.1f} us avg / {:.0f} render FPS",
-                    timing.average_time_us,
-                    epochengine::render_event_debug::render_fps(timing));
-            };
-            gui::property_row("Cached avg / rate", pathTimingText(eventRenderDebug.cached), 118.0f);
-            gui::property_row("Partial avg / rate", pathTimingText(eventRenderDebug.partial), 118.0f);
-            gui::property_row("Full avg / rate", pathTimingText(eventRenderDebug.full), 118.0f);
-            gui::property_row("Conventional avg / rate", pathTimingText(eventRenderDebug.conventional), 118.0f);
-            gui::property_row(
-                "Benchmark lane",
-                std::string(epochengine::render_event_debug::benchmark_lane_name(eventRenderDebug.benchmark_lane)),
-                118.0f);
-            gui::property_row(
-                "Selective samples",
-                std::to_string(eventRenderDebug.selective.samples),
-                118.0f);
-            gui::property_row(
-                "Selective last / avg",
-                eventRenderDebug.selective.samples == 0u
-                    ? std::string("waiting")
-                    : epochengine::format_text(
-                        "{:.1f} / {:.1f} us",
-                        static_cast<double>(eventRenderDebug.selective.last_time_ns) / 1000.0,
-                        eventRenderDebug.selective.average_time_us),
-                118.0f);
-            gui::property_row(
-                "Selective total",
-                epochengine::format_text(
-                    "{:.3f} ms",
-                    static_cast<double>(eventRenderDebug.selective.total_time_ns) / 1'000'000.0),
-                118.0f);
-            gui::property_row(
-                "Full samples",
-                std::to_string(eventRenderDebug.full_baseline.samples),
-                118.0f);
-            gui::property_row(
-                "Full last / avg",
-                eventRenderDebug.full_baseline.samples == 0u
-                    ? std::string("waiting")
-                    : epochengine::format_text(
-                        "{:.1f} / {:.1f} us",
-                        static_cast<double>(eventRenderDebug.full_baseline.last_time_ns) / 1000.0,
-                        eventRenderDebug.full_baseline.average_time_us),
-                118.0f);
-            gui::property_row(
-                "Full total",
-                epochengine::format_text(
-                    "{:.3f} ms",
-                    static_cast<double>(eventRenderDebug.full_baseline.total_time_ns) / 1'000'000.0),
-                118.0f);
-            gui::property_row(
-                "Average comparison",
-                eventRenderDebug.selective.samples == 0u || eventRenderDebug.full_baseline.samples == 0u
-                    ? std::string("waiting for both lanes")
-                    : epochengine::format_text(
-                        "{:.2f}x speedup / {:.1f}% less time",
-                        eventRenderDebug.average_speedup,
-                        eventRenderDebug.average_time_saved_percent),
-                118.0f);
-
-            bool eventPathEnabled = eventRenderDebug.event_path_enabled;
-            if (gui::toggle_switch("Event renderer", eventPathEnabled, { 210.0f, 28.0f }))
-            {
-                epochengine::render_event_debug::set_event_path_enabled(eventPathEnabled);
-                if (!eventPathEnabled)
-                    epochengine::render_event_debug::set_benchmark_enabled(false);
-                push_editor_log(
-                    editor,
-                    eventPathEnabled
-                        ? "[renderer] Event-driven OpenGL scene reuse enabled."
-                        : "[renderer] Conventional OpenGL scene rendering forced; A/B benchmark disabled.");
-            }
-            bool benchmarkEnabled = eventRenderDebug.benchmark_enabled;
-            if (gui::toggle_switch("A/B render benchmark", benchmarkEnabled, { 210.0f, 28.0f }))
-            {
-                epochengine::render_event_debug::set_benchmark_enabled(benchmarkEnabled);
-                push_editor_log(
-                    editor,
-                    benchmarkEnabled
-                        ? "[renderer] A/B benchmark enabled: alternate SELECTIVE and FULL BASELINE frames with synchronized GPU-complete timing."
-                        : "[renderer] A/B benchmark disabled.");
-            }
-            if (gui::button("Reset render benchmark", { 210.0f, 27.0f }))
-            {
-                epochengine::render_event_debug::reset_benchmark_statistics();
-                push_editor_log(editor, "[renderer] A/B benchmark statistics reset.");
-            }
-            if (gui::button("Reset render path stats", { 210.0f, 27.0f }))
-            {
-                epochengine::render_event_debug::reset_path_statistics();
-                push_editor_log(editor, "[renderer] Cached/partial/full/conventional path statistics reset.");
-            }
-            bool dirtyOverlayEnabled = eventRenderDebug.dirty_overlay_enabled;
-            if (gui::toggle_switch("Dirty-region overlay", dirtyOverlayEnabled, { 210.0f, 28.0f }))
-            {
-                epochengine::render_event_debug::set_dirty_overlay_enabled(dirtyOverlayEnabled);
-                push_editor_log(
-                    editor,
-                    dirtyOverlayEnabled
-                        ? "[renderer] Dirty-region overlay enabled."
-                        : "[renderer] Dirty-region overlay disabled.");
-            }
-            bool vacatedOverlayEnabled = eventRenderDebug.vacated_overlay_enabled;
-            if (gui::toggle_switch("Vacated-region overlay", vacatedOverlayEnabled, { 210.0f, 28.0f }))
-            {
-                epochengine::render_event_debug::set_vacated_overlay_enabled(vacatedOverlayEnabled);
-                push_editor_log(
-                    editor,
-                    vacatedOverlayEnabled
-                        ? "[renderer] Vacated-region overlay enabled (previous object bounds)."
-                        : "[renderer] Vacated-region overlay disabled.");
-            }
 
             if (gui::toggle_switch("Scene helpers", editor.helpersVisible, { 210.0f, 28.0f }))
                 push_editor_log(editor, editor.helpersVisible ? "[world] Scene helpers enabled." : "[world] Scene helpers disabled.");
@@ -221,9 +103,9 @@
         if (pane_tab == InspectorToolTab::AiDevelopment)
         {
             const std::filesystem::path inspectorBuildLog =
-                project_build_log_path(editor.projectRoot);
+                project_build_log_path(editor.projectRoot, editor.projectBuildConfiguration);
             const std::filesystem::path inspectorOutputExe =
-                project_output_exe_path(editor.projectRoot);
+                project_output_exe_path(editor.projectRoot, editor.projectBuildConfiguration);
             const float inspectorWidth =
                 (std::max)(180.0f, pane_size.x - 24.0f);
             if (editor.aiWorkspaceDomain != AiWorkspaceDomain::Engine
@@ -443,7 +325,7 @@
                     const ProjectTextureThumbnailState* assetThumbnail =
                         nullptr;
                     if (exists && !directory
-                        && project_texture_source_path(
+                        && project_image_preview_path(
                             editor.selectedAssetPath))
                     {
                         if (auto* controller =
@@ -571,16 +453,13 @@
                 }
             }
             if (editor.mainSurface == EditorMainSurface::Game2D
-                && editor.outlinerToolTab == OutlinerToolTab::Gui)
+                && editor.game2DGuiWorkspace)
             {
                 auto* document = synchronize_gui_document(editor);
-                const auto mapped =
-                    editor.guiDocumentWidgets.find(
-                        editor.selectedEntityId);
+                const auto selected = selected_gui_widget(editor);
                 const auto widget =
-                    document
-                    && mapped != editor.guiDocumentWidgets.end()
-                    ? document->widget(mapped->second)
+                    document && selected
+                    ? document->widget(*selected)
                     : std::optional<
                         authoring::gui::WidgetView>{};
                 if (document && widget)
@@ -589,7 +468,6 @@
                     specializedProperties = true;
                     hydrate_gui_content_editor(
                         editor,
-                        editor.selectedEntityId,
                         *widget);
                     const float inspectorWidth =
                         (std::max)(160.0f, pane_size.x - 24.0f);
@@ -716,14 +594,9 @@
                         layout.height = heightSlider.value;
                         layoutChanged = true;
                     }
-                    if (layoutChanged
-                        && document->update_layout(
-                            widget->handle,
-                            std::move(layout)))
-                    {
-                        (void)project_gui_document_layout(
-                            editor);
-                    }
+                    if (layoutChanged)
+                        (void)commit_gui_layout_edit(
+                            editor, widget->handle, std::move(layout));
 
                     gui::label("Interaction");
                     InteractionDescriptor interaction =
@@ -803,6 +676,12 @@
                 gui::property_row("Name", entity.name, 84.0f);
                 gui::property_row("Type", entity.type, 84.0f);
                 gui::property_row("Category", entity.category, 84.0f);
+                if (entity.category == "Planetary Terrain")
+                {
+                    gui::label(editor.planetarySettings.stream_lod ? "Camera LOD: On" : "Camera LOD: Off");
+                    if (!editor.planetaryStreamStatus.empty())
+                        gui::wrapped_label(editor.planetaryStreamStatus, (std::max)(80.0f, pane_size.x - 28.0f));
+                }
                 gui::label("Transform");
                 gui::property_row(
                     "Position", vec3_text(entity.position), 84.0f);
@@ -820,73 +699,65 @@
                         "{} object(s)", editor.selectedEntityIds.size()),
                     84.0f);
 
-                gui::label("Movement / Benchmark");
+                gui::label("Project movement script");
                 const bool movable = !entity.editorOnly
                     && entity.type != "Level"
                     && entity.type != "Camera";
-                const bool oscillatorAttached = editor.scriptOscillator.enabled
+                const bool motionAttached = editor.scriptTranslationTracks.contains(entity.sceneObjectId)
+                    || editor.scriptOscillator.enabled
                     && editor.scriptOscillator.entity_id == entity.sceneObjectId
                     || editor.scriptCubeOscillators.contains(entity.sceneObjectId);
-                const std::array oscillatorActions{
+                const bool projectScriptReady=movable&&!editor.projectRoot.empty()&&!editor.scriptEditorDirty&&!editor.scriptBuildPending;
+                const bool movementMutationAllowed=editor_scene_script_mutation_allowed(editor);
+                const std::array movementActions{
                     gui::InlineButtonSpec{
-                        .label = oscillatorAttached ? "Reattach Oscillator" : "Attach Oscillator",
-                        .width = 132.0f,
-                        .enabled = movable},
+                        .label = "Open Movement Script",
+                        .width = 0.0f,
+                        .enabled = projectScriptReady},
                     gui::InlineButtonSpec{
-                        .label = "Detach",
-                        .width = 64.0f,
-                        .enabled = oscillatorAttached},
+                        .label = "Run Movement Script",
+                        .width = 0.0f,
+                        .enabled = projectScriptReady&&movementMutationAllowed},
                     gui::InlineButtonSpec{
-                        .label = "Open Source",
-                        .width = 94.0f}
+                        .label = "Remove Motion",
+                        .width = 0.0f,
+                        .enabled = motionAttached&&movementMutationAllowed}
                 };
                 if (const auto action = gui::inline_button_row(
-                        oscillatorActions, 27.0f, 4.0f))
+                        movementActions, 27.0f, 4.0f,{.sizing=gui::InlineButtonSizing::FitContent,
+                            .alignment=gui::InlineButtonAlignment::Center,.wrap=true,
+                            .available_width=(std::max)(1.0f,pane_size.x-24.0f)}))
                 {
-                    if (*action == 0u && movable)
+                    if (*action <= 1u && projectScriptReady&&(*action==0u||movementMutationAllowed)&&prepare_project_movement_script(editor))
                     {
-                        editor.scriptOscillator.enabled = true;
-                        editor.scriptCubeOscillators.erase(entity.sceneObjectId);
-                        editor.scriptOscillator.entity_id = entity.sceneObjectId;
-                        editor.scriptOscillator.base_position = entity.position;
-                        editor.scriptOscillator.axis = 0u;
-                        editor.scriptOscillator.amplitude = 2.0f;
-                        editor.scriptOscillator.frequency_hz = 0.5f;
-                        push_editor_log(
-                            editor,
-                            "[script] Oscillator attached from Properties: X +/-2 units at 0.5 Hz. Press Play to animate.");
+                        if(*action==1u)emit_command(EditorCommand::RunScript,editor.activeScript);
+                        else
+                        {
+                            editor.mainSurface=EditorMainSurface::Assets;editor.assetWorkspaceSection=2u;
+                            editor.workspaceTab=EditorWorkspaceTab::Assets;editor.outlinerToolTab=OutlinerToolTab::Scripting;
+                        }
                     }
-                    else if (*action == 1u)
+                    else if (*action == 2u&&movementMutationAllowed)
                     {
-                        editor.scriptOscillator.enabled = false;
+                        editor.scriptTranslationTracks.erase(entity.sceneObjectId);
                         editor.scriptCubeOscillators.erase(entity.sceneObjectId);
-                        editor.scriptOscillator.entity_id = scene::kInvalidSceneObjectId;
-                        push_editor_log(editor, "[script] Oscillator detached.");
-                    }
-                    else if (*action == 2u)
-                    {
-                        editor.activeScript = "oscillate_selected_entity";
-                        const std::string oscillatorSource =
-                            editor_resolve_script_source_path(
-                                editor.activeScript, editor.projectRoot);
-                        editor.mainSurface = EditorMainSurface::Assets;
-                        editor.assetWorkspaceSection = 2u;
-                        editor.workspaceTab = EditorWorkspaceTab::Assets;
-                        editor.outlinerToolTab = OutlinerToolTab::Scripting;
-                        // Opening source does not overwrite saved pane visibility.
-                        (void)load_script_source_editor(
-                            editor, oscillatorSource, false);
+                        if(editor.scriptOscillator.entity_id==entity.sceneObjectId)editor.scriptOscillator={};
+                        editor.sceneInteractionDirty=true;
+                        push_editor_log(editor,"[script] Removed preview motion. The authored transform is unchanged.");
                     }
                 }
+                if(!movementMutationAllowed)
+                    gui::wrapped_label("Stop the running project to run or remove Editor motion.",
+                        (std::max)(1.0f,pane_size.x-24.0f));
                 gui::wrapped_label(
-                    "Select a Cube, Attach Oscillator, press Play, then enable A/B Render Benchmark in Global Settings.",
+                    "Movement belongs to scripts/timeline_translation.ascript.cpp in your project. Edit its keys, Run it for this object, then Play, Reverse or seek on the timeline. The host copies the keys; sampling does not call the script.",
                     (std::max)(160.0f, pane_size.x - 24.0f));
             }
             else if (!specializedProperties)
             {
                 gui::label("No Object Selected");
                 gui::wrapped_label(
-                    "Select an object in the viewport or World Outliner to inspect it.",
+                    "Select an object in the viewport or 3D Objects to inspect it.",
                     (std::max)(160.0f, pane_size.x - 24.0f));
             }
             if (!specializedProperties)
@@ -914,7 +785,7 @@
                     "Select: left mouse  |  Add/remove: Shift + left mouse  |  "
                     "Marquee: drag empty viewport  |  Group move: drag any selected object  |  "
                     "Pan: middle mouse  |  Orbit: Alt + left mouse  |  "
-                    "Dolly: Alt + right mouse  |  Fly: right mouse + WASD/QE  |  Focus: F",
+                    "Dolly: Alt + right mouse  |  Fly: right mouse + WASD | Roll: Q/E | Up/down: Space/Ctrl  |  Shift: fast | Right mouse + wheel: speed | Focus: F",
                     (std::max)(160.0f, pane_size.x - 24.0f));
             }
         }
@@ -927,24 +798,26 @@
         const auto prepare_timeline_time_controls = [&]()
         {
             if (timelineControlsPrepared) return;
-            ensure_timeline_defaults(editor);
-            const auto timelineStats = timeline_stats_from_editor(editor);
-            epochengine::timeline::sync_to_simulation(editor.timelineState, timelineStats);
             epochengine::timeline::clamp_state(editor.timelineState);
             timelineControlsPrepared = true;
         };
         const auto timeline_playhead_readout = [&]()
         {
-            return epochengine::format_text("Playhead {:.2f}s / {:.2f}s  |  {}",
+            return epochengine::format_text("Playhead {:.2f}s / {:.2f}s  |  {}  |  {:.0f}x",
                 editor.timelineState.playhead_seconds, editor.timelineState.duration_seconds,
-                editor.timelineState.playing ? "Playing" : "Paused");
+                editor.timelineState.playing
+                    ?(editor.timelineState.direction==epochengine::timeline::PlaybackDirection::reverse?"Playing backward":"Playing forward")
+                    :"Paused",editor.timelineState.playback_rate);
         };
         const auto timeline_playback_buttons = [&]()
         {
             return std::array{
                 gui::InlineButtonSpec{.label = "Rewind"},
                 gui::InlineButtonSpec{.label = "-1s"},
-                gui::InlineButtonSpec{.label = editor.timelineState.playing ? "Pause" : "Play"},
+                gui::InlineButtonSpec{.label = "Fast Reverse",.tooltip="Play backward at 2x, 4x or 8x; click to cycle"},
+                gui::InlineButtonSpec{.label = editor.timelineState.playing&&editor.timelineState.playback_rate==1.0&&editor.timelineState.direction==epochengine::timeline::PlaybackDirection::reverse ? "Pause Reverse" : "Reverse"},
+                gui::InlineButtonSpec{.label = editor.timelineState.playing&&editor.timelineState.playback_rate==1.0&&editor.timelineState.direction==epochengine::timeline::PlaybackDirection::forward ? "Pause" : "Play"},
+                gui::InlineButtonSpec{.label = "Fast Forward",.tooltip="Play forward at 2x, 4x or 8x; click to cycle"},
                 gui::InlineButtonSpec{.label = "+1s"}};
         };
         const auto timeline_action_layout = [](float width)
@@ -955,14 +828,47 @@
                 .wrap = true,
                 .available_width = width};
         };
+        const auto timeline_compact_playback_buttons = [&]()
+        {
+            const bool forward=editor.timelineState.playing&&editor.timelineState.playback_rate==1.0&&editor.timelineState.direction==epochengine::timeline::PlaybackDirection::forward;
+            const bool reverse=editor.timelineState.playing&&editor.timelineState.playback_rate==1.0&&editor.timelineState.direction==epochengine::timeline::PlaybackDirection::reverse;
+            return std::array{
+                gui::InlineButtonSpec{.label="Rewind",.icon=gui::ButtonIcon::start,.tooltip="Jump to start"},
+                gui::InlineButtonSpec{.label="-1s",.icon=gui::ButtonIcon::step_back,.tooltip="Back one second"},
+                gui::InlineButtonSpec{.label="Fast Reverse",.icon=gui::ButtonIcon::fast_reverse,.tooltip="Play backward at 2x, 4x or 8x; click to cycle"},
+                gui::InlineButtonSpec{.label=reverse?"Pause Reverse":"Reverse",.icon=reverse?gui::ButtonIcon::pause:gui::ButtonIcon::reverse,.tooltip=reverse?"Pause playback":"Play backward at 1x"},
+                gui::InlineButtonSpec{.label=forward?"Pause":"Play",.icon=forward?gui::ButtonIcon::pause:gui::ButtonIcon::play,.tooltip=forward?"Pause playback":"Play forward at 1x"},
+                gui::InlineButtonSpec{.label="Fast Forward",.icon=gui::ButtonIcon::fast_forward,.tooltip="Play forward at 2x, 4x or 8x; click to cycle"},
+                gui::InlineButtonSpec{.label="+1s",.icon=gui::ButtonIcon::step_forward,.tooltip="Forward one second"}};
+        };
+        const auto timeline_apply_playback = [&](std::size_t action)
+        {
+            constexpr std::array commands{
+                epochengine::timeline::PlaybackCommand::rewind,
+                epochengine::timeline::PlaybackCommand::step_back,
+                epochengine::timeline::PlaybackCommand::fast_reverse,
+                epochengine::timeline::PlaybackCommand::toggle_reverse,
+                epochengine::timeline::PlaybackCommand::toggle_forward,
+                epochengine::timeline::PlaybackCommand::fast_forward,
+                epochengine::timeline::PlaybackCommand::step_forward};
+            if(action>=commands.size())return;
+            epochengine::timeline::apply_playback_command(editor.timelineState,commands[action]);
+            editor.timeControl.paused=!editor.timelineState.playing;
+            (void)request_project_runtime_presentation(editor);
+        };
+        const auto timeline_apply_scrub = [&](float seconds)
+        {
+            epochengine::timeline::seek_seconds(editor.timelineState,static_cast<double>(seconds));
+            editor.timeControl.paused=true;
+            (void)request_project_runtime_presentation(editor);
+        };
         const auto timeline_compact_controls_height = [&](float width)
         {
             prepare_timeline_time_controls();
-            const float rowHeight = gui::line_height() + 10.0f;
-            return gui::measure_wrapped_label_height(timeline_playhead_readout(), width)
-                + 6.0f + 14.0f + 6.0f + rowHeight + 6.0f
-                + gui::inline_button_row_height(timeline_playback_buttons(), rowHeight,
-                    4.0f, timeline_action_layout(width)) + 6.0f;
+            const float actionsWidth=width>=304.0f?width-112.0f:width;
+            return gui::inline_button_row_height(timeline_compact_playback_buttons(),24.0f,
+                4.0f,timeline_action_layout(actionsWidth))+2.0f
+                +(width>=304.0f?0.0f:gui::line_height()+2.0f)+gui::line_height()+8.0f+2.0f;
         };
         auto render_timeline_time_controls = [&](float availableWidth, bool compact)
         {
@@ -970,6 +876,32 @@
 
             const float width = (std::max)(1.0f, availableWidth);
             const float rowHeight = gui::line_height() + 10.0f;
+            if(compact)
+            {
+                const auto origin=gui::cursor_position();
+                const auto icons=timeline_compact_playback_buttons();
+                const float actionsWidth=width>=304.0f?width-112.0f:width;
+                const auto options=timeline_action_layout(actionsWidth);
+                const float actionsHeight=gui::inline_button_row_height(icons,24.0f,4.0f,options);
+                if(const auto action=gui::inline_button_row(icons,24.0f,4.0f,options))timeline_apply_playback(*action);
+                const float readoutHeight=width>=304.0f?0.0f:gui::line_height()+2.0f;
+                gui::set_cursor(width>=304.0f
+                    ?gui::Vec2{origin.x+width-104.0f,origin.y+(std::max)(0.0f,(24.0f-gui::line_height())*.5f)}
+                    :gui::Vec2{origin.x,origin.y+actionsHeight+2.0f});
+                gui::label(epochengine::format_text("{:.2f}s {}{:.0f}x",editor.timelineState.playhead_seconds,
+                    editor.timelineState.direction==epochengine::timeline::PlaybackDirection::reverse?"-":"",
+                    editor.timelineState.playback_rate));
+                gui::set_cursor({origin.x,origin.y+actionsHeight+2.0f+readoutHeight});
+                const auto scrubber=gui::slider(gui::SliderOptions{
+                    .id="scene-timeline-playhead",.minimum=0.0f,
+                    .maximum=static_cast<float>(editor.timelineState.duration_seconds),
+                    .value=static_cast<float>(editor.timelineState.playhead_seconds),
+                    .step=static_cast<float>(editor.timelineState.fixed_dt_seconds),
+                    .size={width,gui::line_height()+8.0f}});
+                if(scrubber.changed)timeline_apply_scrub(scrubber.value);
+                gui::set_cursor({origin.x,origin.y+timeline_compact_controls_height(width)});
+                return;
+            }
             // Keep text outside the thin progress track. The scrubber owns
             // the full track rather than painting its label over the thumb.
             gui::wrapped_label(timeline_playhead_readout(), width);
@@ -1000,50 +932,14 @@
             });
             if (scrubber.changed)
             {
-                editor.timelineState.playhead_seconds =
-                    static_cast<double>(scrubber.value);
-                editor.timelineState.playing = false;
-                editor.timeControl.paused = true;
-                epochengine::timeline::clamp_state(editor.timelineState);
+                timeline_apply_scrub(scrubber.value);
             }
 
-            if (compact)
+            const auto playbackButtons = timeline_playback_buttons();
+            if (const auto action = gui::inline_button_row(
+                    playbackButtons, rowHeight, 4.0f, timeline_action_layout(width)))
             {
-                const auto compactPlaybackButtons = timeline_playback_buttons();
-                if (const auto action = gui::inline_button_row(
-                        compactPlaybackButtons, rowHeight, 4.0f, timeline_action_layout(width)))
-                {
-                    switch (*action)
-                    {
-                    case 0:
-                        editor.timelineState.playhead_seconds = 0.0;
-                        editor.timelineState.playhead_frame = 0u;
-                        editor.timelineState.playing = false;
-                        editor.timeControl.paused = true;
-                        break;
-                    case 1:
-                        epochengine::timeline::scrub_seconds(
-                            editor.timelineState, -1.0);
-                        editor.timelineState.playing = false;
-                        editor.timeControl.paused = true;
-                        break;
-                    case 2:
-                        editor.timelineState.playing =
-                            !editor.timelineState.playing;
-                        editor.timeControl.paused =
-                            !editor.timelineState.playing;
-                        break;
-                    case 3:
-                        epochengine::timeline::scrub_seconds(
-                            editor.timelineState, 1.0);
-                        editor.timelineState.playing = false;
-                        editor.timeControl.paused = true;
-                        break;
-                    default:
-                        break;
-                    }
-                }
-                return;
+                timeline_apply_playback(*action);
             }
 
             const std::string pacingHealth = pacing_health_summary(editor.timeSnapshot);

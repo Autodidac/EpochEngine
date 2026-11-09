@@ -52,9 +52,20 @@
         }
         const bool paneRoute = sourcePaneRoute || floatingGuiRoute;
         const DetachedPaneProjection paneProjection =
-            externallyRoutedWorkspace
+            (externallyRoutedWorkspace || floatingGuiRoute)
                 ? detached_pane_projection()
                 : DetachedPaneProjection{};
+        const bool automationInputReserved = paneProjection.ready
+            && paneProjection.automationInputReserved;
+        if (automationInputReserved && ctx->has_input_focus_safe()
+            && (gui::dispatch_keyboard_shortcuts([](const gui::InputEvent& event) { return event.key == 27; })
+                || ctx->is_key_down_safe(input::Key::Escape)))
+            (void)queue_detached_ai_chat_command(paneProjection.ownerContext,
+                DetachedAiChatCommandKind::stop_pending);
+        // Only Assistant Chat retains its Stop control during owned work.
+        // Native window Close is outside this shared GUI event reservation.
+        std::optional<gui::ScopedInputSuppression> automationBackgroundInput;
+        if (automationInputReserved && !aiChatRoute) automationBackgroundInput.emplace();
         const auto& application = editor_application_profile(
             paneProjection.ready
                 ? paneProjection.applicationKind
@@ -112,7 +123,47 @@
                     118.0f);
             }
 
-            if (outlinerRoute)
+            if (routedToolPane == EditorToolPane::GuiHierarchy)
+            {
+                const auto& hierarchy = paneProjection.guiHierarchy;
+                if (!hierarchy || !hierarchy->ready)
+                {
+                    gui::wrapped_label("Open a GUI document in the active Editor to see its widgets.", contentWidth);
+                }
+                else
+                {
+                    const float viewportHeight = (std::max)(1.0f,
+                        h - gui::cursor_position().y - 12.0f);
+                    constexpr float rowStride = 31.0f;
+                    const auto scrolling = gui::begin_scroll_area(gui::ScrollAreaOptions{
+                        .id = "popout-gui-hierarchy",
+                        .size = {contentWidth, viewportHeight},
+                        .content_height = rowStride * static_cast<float>(hierarchy->rows.size()),
+                        .draw_background = true,
+                        .show_scrollbar = true,
+                        .capture_wheel = true});
+                    const auto origin = gui::cursor_position();
+                    const auto first = (std::min)(hierarchy->rows.size(),
+                        static_cast<std::size_t>((std::max)(0.0f, scrolling.scroll_y) / rowStride));
+                    const auto pastLast = (std::min)(hierarchy->rows.size(), first
+                        + static_cast<std::size_t>(std::ceil(viewportHeight / rowStride)) + 1u);
+                    for (auto index = first; index < pastLast; ++index)
+                    {
+                        const auto& row = hierarchy->rows[index];
+                        std::string label(static_cast<std::size_t>(row.depth) * 2u, ' ');
+                        label += row.name;
+                        label += " | ";
+                        label += authoring::gui::widget_kind_name(row.kind);
+                        gui::set_cursor({origin.x, origin.y + rowStride * static_cast<float>(index)});
+                        if (gui::button_selected(label,
+                                {(std::max)(1.0f, contentWidth - 14.0f), 27.0f},
+                                paneProjection.guiSelectedWidget == row.handle))
+                            (void)queue_detached_gui_hierarchy_selection(paneProjection, row.handle);
+                    }
+                    gui::end_scroll_area();
+                }
+            }
+            else if (outlinerRoute)
             {
                 const auto& paneEntities = paneProjection.ready
                     ? paneProjection.entities
@@ -251,7 +302,7 @@
                     && (paneProjection.aiDeferredChatQueued
                         || paneProjection.aiDetachedSubmitQueued);
                 const bool pending = paneProjection.ready
-                    && paneProjection.aiRequestPending;
+                    && (paneProjection.aiRequestPending || automationInputReserved);
                 (void)gui::scroll_text_panel(gui::ScrollTextPanelOptions{
                     .id = "popout-ai-chat",
                     .size = { contentWidth, (std::max)(80.0f, h - 212.0f
@@ -312,7 +363,7 @@
                 }
                 if (pending
                     && gui::button(
-                        "Stop Model Request", {contentWidth, 30.0f}))
+                            "Stop Automation", {contentWidth, 30.0f}))
                 {
                     (void)queue_detached_ai_chat_command(
                         paneProjection.ownerContext,

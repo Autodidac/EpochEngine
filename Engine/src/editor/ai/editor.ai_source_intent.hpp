@@ -9,6 +9,7 @@
 
 #include <array>
 #include <cstddef>
+#include <initializer_list>
 #include <string>
 #include <string_view>
 
@@ -74,9 +75,22 @@ namespace epochengine::editor_ai_source_intent
             || has_phrase("theme for the game")
             || has_phrase("theme for my project")
             || has_phrase("theme for the scene");
+        std::string_view command{lower};
+        while (!command.empty() && (command.front() == ' ' || command.front() == '\t'
+            || command.front() == '\r' || command.front() == '\n')) command.remove_prefix(1u);
+        for (unsigned pass = 0u; pass < 2u; ++pass)
+            for (const auto prefix : {"please ", "can you ", "could you ", "would you ", "i want you to "})
+                if (command.starts_with(prefix)) command.remove_prefix(std::string_view{prefix}.size());
+        const auto leading_creation = [&](std::string_view phrase)
+        {
+            return command.starts_with(phrase) && (command.size() == phrase.size()
+                || !is_word_character(command[phrase.size()]));
+        };
+        const bool creating_theme = leading_creation("create a theme") || leading_creation("create theme")
+            || leading_creation("make a theme") || leading_creation("make theme");
         const bool new_editor_theme = theme && !project_specific
             && (has_phrase("new theme") || has_phrase("another theme")
-                || has_phrase("unique theme") || has_phrase("theme like the others"));
+                || has_phrase("unique theme") || has_phrase("theme like the others") || creating_theme);
         return source_theme_registry
             || (theme && (editor_preferences
                 || has_phrase("configuration") || has_phrase("theme config")

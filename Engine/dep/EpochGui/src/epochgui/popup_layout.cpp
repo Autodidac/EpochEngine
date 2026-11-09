@@ -187,8 +187,21 @@ namespace epochengine::gui_lib
             if (alternate != placement)
             {
                 const Rect alternate_rect = candidate_rect(options, input, alternate, size);
-                if (!overflows(alternate_rect, options.viewport_size, sane_or(options.margin, 4.0f))
-                    || overflows(rect, options.viewport_size, sane_or(options.margin, 4.0f)))
+                // Flipping changes only its placement axis. Horizontal
+                // clamping of a below/above menu must not send it above its
+                // owner when there is already room below (and vice versa).
+                const auto placement_overflow = [&](Rect candidate) noexcept
+                {
+                    const bool vertical = placement == PopupPlacement::below
+                        || placement == PopupPlacement::above;
+                    const float first = vertical ? candidate.position.y : candidate.position.x;
+                    const float last = first + (vertical ? candidate.size.y : candidate.size.x);
+                    const float extent = vertical ? options.viewport_size.y : options.viewport_size.x;
+                    const float margin = (std::max)(0.0f, sane_or(options.margin, 4.0f));
+                    return (std::max)(0.0f, margin - first)
+                        + (std::max)(0.0f, last - (extent - margin));
+                };
+                if (placement_overflow(alternate_rect) < placement_overflow(rect))
                 {
                     rect = alternate_rect;
                     placement = alternate;

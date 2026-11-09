@@ -4,6 +4,7 @@ module;
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <memory>
 #include <mutex>
 #include <span>
 
@@ -211,44 +212,6 @@ namespace epochengine::anativecontext::detail
     class SoftwareCanvas2DPresenter final
     {
     public:
-        [[nodiscard]] bool scene_changed(
-            const core::Context& ctx,
-            const core::RenderViewport& viewport) noexcept
-        {
-            std::scoped_lock lock(mutex_);
-            if (!viewport.valid()
-                || ctx.scene_preview_mode() != core::ScenePreviewMode::Editor)
-            {
-                return deactivate_locked();
-            }
-
-            const canvas2d::runtime::PreparedSceneView prepared =
-                session_.prepare(
-                    &ctx,
-                    {
-                        static_cast<std::uint32_t>(viewport.width),
-                        static_cast<std::uint32_t>(viewport.height)},
-                    execution_limits_.canvas,
-                    execution_limits_.raster);
-            if (prepared.code == canvas2d::runtime::PrepareCode::ready)
-            {
-                active_ = true;
-                return true;
-            }
-            if (prepared.code == canvas2d::runtime::PrepareCode::reused)
-            {
-                active_ = true;
-                return false;
-            }
-            if (prepared.code == canvas2d::runtime::PrepareCode::missing_scene)
-                return deactivate_locked();
-
-            const bool changed = active_ || prepared.code
-                != canvas2d::runtime::PrepareCode::missing_scene;
-            active_ = false;
-            session_.reset();
-            return changed;
-        }
 
         [[nodiscard]] bool render(
             const core::Context& ctx,
@@ -273,12 +236,10 @@ namespace epochengine::anativecontext::detail
             {
                 if (prepared.code != canvas2d::runtime::PrepareCode::missing_scene)
                     session_.reset();
-                active_ = false;
                 return false;
             }
 
             const auto& presentation = prepared.raster->presentation;
-            active_ = true;
             return presentation.valid()
                 && blit_canvas2d_surface(
                     framebuffer,
@@ -294,24 +255,14 @@ namespace epochengine::anativecontext::detail
         {
             std::scoped_lock lock(mutex_);
             session_.reset();
-            active_ = false;
         }
 
     private:
-        [[nodiscard]] bool deactivate_locked() noexcept
-        {
-            const bool changed = active_;
-            if (active_)
-                session_.reset();
-            active_ = false;
-            return changed;
-        }
 
         std::mutex mutex_{};
         canvas2d::limits::NativeExecutionLimits execution_limits_{
             canvas2d::limits::for_backend(RendererBackendKind::software)};
         canvas2d::runtime::SceneRasterSession session_{};
-        bool active_{};
     };
 
     [[nodiscard]] SoftwareCanvas2DPresenter& canvas2d_presenter() noexcept
@@ -320,12 +271,6 @@ namespace epochengine::anativecontext::detail
         return presenter;
     }
 
-    [[nodiscard]] bool canvas2d_scene_changed(
-        const core::Context& ctx,
-        const core::RenderViewport& viewport) noexcept
-    {
-        return canvas2d_presenter().scene_changed(ctx, viewport);
-    }
 
     void reset_canvas2d_scene_renderer() noexcept
     {
@@ -684,9 +629,11 @@ namespace epochengine::anativecontext::detail
     void render_engine_arcade_sampled_surface_preview(
         const core::Context& ctx,
         const previewgrid::Mat4& mvp,
-        const core::RenderViewport& viewport) noexcept
+        const core::RenderViewport& viewport,
+        const std::shared_ptr<const epochengine::previewgrid::PublishedSceneFrame>& matchedScene) noexcept
     {
-        const auto markers = previewgrid::sampled_render_surface_markers_for(&ctx);
+        const auto markers = matchedScene ? previewgrid::sampled_render_surface_markers_for(*matchedScene)
+            : previewgrid::sampled_render_surface_markers_for(&ctx);
         if (markers.empty() || !prepare_arcade_screen_surface())
             return;
 
@@ -762,7 +709,8 @@ namespace epochengine::anativecontext::detail
             viewport.height,
             pack_color(clearColor[0], clearColor[1], clearColor[2], clearColor[3]));
 
-        const auto camera = epochengine::previewgrid::camera_for(&ctx);
+        const auto matchedScene = epochengine::previewgrid::scene_frame_for(&ctx);
+        const auto camera = matchedScene ? matchedScene->camera : epochengine::previewgrid::camera_for(&ctx);
         const float aspect = viewport.height > 0
             ? (viewport.width / static_cast<float>(viewport.height))
             : 1.0f;
@@ -772,38 +720,45 @@ namespace epochengine::anativecontext::detail
             camera.target,
             camera.up);
         const auto mvp = epochengine::previewgrid::multiply(proj, view);
-        const auto gridGeometry = epochengine::previewgrid::grid_geometry_for(&ctx);
-        const auto& vertices = gridGeometry->vertices;
-        const auto& indices = gridGeometry->indices;
-
-        for (std::size_t i = 0; i + 1 < indices.size(); i += 2)
+        if (!matchedScene)
         {
-            const auto firstIndex = static_cast<std::size_t>(indices[i]);
-            const auto secondIndex = static_cast<std::size_t>(indices[i + 1]);
-            if (firstIndex >= vertices.size() || secondIndex >= vertices.size())
-                continue;
+            const auto gridGeometry = epochengine::previewgrid::grid_geometry_for(&ctx);
+            const auto& vertices = gridGeometry->vertices;
+            const auto& indices = gridGeometry->indices;
 
-            float ax = 0.0f;
-            float ay = 0.0f;
-            float bx = 0.0f;
-            float by = 0.0f;
-            if (!project_preview_vertex(mvp, vertices[firstIndex].position, viewport, ax, ay)
-                || !project_preview_vertex(mvp, vertices[secondIndex].position, viewport, bx, by))
+            for (std::size_t i = 0; i + 1 < indices.size(); i += 2)
             {
-                continue;
+                const auto firstIndex = static_cast<std::size_t>(indices[i]);
+                const auto secondIndex = static_cast<std::size_t>(indices[i + 1]);
+                if (firstIndex >= vertices.size() || secondIndex >= vertices.size())
+                    continue;
+
+                float ax = 0.0f;
+                float ay = 0.0f;
+                float bx = 0.0f;
+                float by = 0.0f;
+                if (!project_preview_vertex(mvp, vertices[firstIndex].position, viewport, ax, ay)
+                    || !project_preview_vertex(mvp, vertices[secondIndex].position, viewport, bx, by))
+                {
+                    continue;
+                }
+
+                const auto color = vertices[firstIndex].color;
+                draw_line(
+                    static_cast<int>(std::lround(ax)),
+                    static_cast<int>(std::lround(ay)),
+                    static_cast<int>(std::lround(bx)),
+                    static_cast<int>(std::lround(by)),
+                    pack_color(color.x, color.y, color.z, 1.0f),
+                    viewport);
             }
 
-            const auto color = vertices[firstIndex].color;
-            draw_line(
-                static_cast<int>(std::lround(ax)),
-                static_cast<int>(std::lround(ay)),
-                static_cast<int>(std::lround(bx)),
-                static_cast<int>(std::lround(by)),
-                pack_color(color.x, color.y, color.z, 1.0f),
-                viewport);
         }
 
-        const auto solidVertices = epochengine::previewgrid::object_solid_vertices_for(&ctx);
+        const auto solidGeometry = matchedScene ? matchedScene->solids->geometry
+            : epochengine::previewgrid::object_solid_geometry_for(&ctx);
+
+        const auto& solidVertices = *solidGeometry;
         for (std::size_t i = 0; i + 2 < solidVertices.size(); i += 3)
         {
             if (!epochengine::previewgrid::clockwise_solid_triangle_faces_camera(
@@ -839,23 +794,56 @@ namespace epochengine::anativecontext::detail
                 viewport);
         }
 
-        render_engine_arcade_sampled_surface_preview(ctx, mvp, viewport);
+        render_engine_arcade_sampled_surface_preview(ctx, mvp, viewport, matchedScene);
 
-        const auto markerVertices = epochengine::previewgrid::look_marker_vertices_for(&ctx);
-        const std::size_t markerCount = epochengine::previewgrid::look_marker_vertex_count_for(&ctx);
-        for (std::size_t i = 0; i + 1 < markerCount; i += 2)
+        if (!matchedScene)
+        {
+            const auto markerVertices = epochengine::previewgrid::look_marker_vertices_for(&ctx);
+            const std::size_t markerCount = epochengine::previewgrid::look_marker_vertex_count_for(&ctx);
+            for (std::size_t i = 0; i + 1 < markerCount; i += 2)
+            {
+                float ax = 0.0f;
+                float ay = 0.0f;
+                float bx = 0.0f;
+                float by = 0.0f;
+                if (!project_preview_vertex(mvp, markerVertices[i].position, viewport, ax, ay)
+                    || !project_preview_vertex(mvp, markerVertices[i + 1].position, viewport, bx, by))
+                {
+                    continue;
+                }
+
+                const auto color = markerVertices[i].color;
+                draw_line(
+                    static_cast<int>(std::lround(ax)),
+                    static_cast<int>(std::lround(ay)),
+                    static_cast<int>(std::lround(bx)),
+                    static_cast<int>(std::lround(by)),
+                    pack_color(color.x, color.y, color.z, 1.0f),
+                    viewport);
+            }
+
+        }
+
+        const auto objectGeometry = matchedScene ? matchedScene->lines
+            : epochengine::previewgrid::object_marker_geometry_for(&ctx);
+
+        const auto& objectVertices = *objectGeometry;
+        const auto meshWire = matchedScene ? matchedScene->wire
+            : epochengine::previewgrid::object_mesh_wire_frame_for(&ctx);
+        epochengine::previewgrid::for_each_visible_marker_line(*meshWire, objectVertices, camera.eye,
+            [&](const auto& first, const auto& second)
         {
             float ax = 0.0f;
             float ay = 0.0f;
             float bx = 0.0f;
             float by = 0.0f;
-            if (!project_preview_vertex(mvp, markerVertices[i].position, viewport, ax, ay)
-                || !project_preview_vertex(mvp, markerVertices[i + 1].position, viewport, bx, by))
+            if (!project_preview_vertex(mvp, first.position, viewport, ax, ay)
+                || !project_preview_vertex(mvp, second.position, viewport, bx, by))
             {
-                continue;
+                return;
             }
 
-            const auto color = markerVertices[i].color;
+            const auto color = first.color;
             draw_line(
                 static_cast<int>(std::lround(ax)),
                 static_cast<int>(std::lround(ay)),
@@ -863,39 +851,9 @@ namespace epochengine::anativecontext::detail
                 static_cast<int>(std::lround(by)),
                 pack_color(color.x, color.y, color.z, 1.0f),
                 viewport);
-        }
-
-        const auto objectVertices = epochengine::previewgrid::object_marker_vertices_for(&ctx);
-        for (std::size_t i = 0; i + 1 < objectVertices.size(); i += 2)
-        {
-            float ax = 0.0f;
-            float ay = 0.0f;
-            float bx = 0.0f;
-            float by = 0.0f;
-            if (!project_preview_vertex(mvp, objectVertices[i].position, viewport, ax, ay)
-                || !project_preview_vertex(mvp, objectVertices[i + 1].position, viewport, bx, by))
-            {
-                continue;
-            }
-
-            const auto color = objectVertices[i].color;
-            draw_line(
-                static_cast<int>(std::lround(ax)),
-                static_cast<int>(std::lround(ay)),
-                static_cast<int>(std::lround(bx)),
-                static_cast<int>(std::lround(by)),
-                pack_color(color.x, color.y, color.z, 1.0f),
-                viewport);
-        }
+        });
     }
 
-    bool same_viewport(const core::RenderViewport& lhs, const core::RenderViewport& rhs) noexcept
-    {
-        return lhs.x == rhs.x
-            && lhs.y == rhs.y
-            && lhs.width == rhs.width
-            && lhs.height == rhs.height;
-    }
 #endif
 }
 namespace epochengine::anativecontext

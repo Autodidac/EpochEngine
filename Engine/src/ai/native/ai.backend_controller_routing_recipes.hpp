@@ -14,6 +14,7 @@
 #include <map>
 #include <mutex>
 #include <optional>
+#include <set>
 #include <cmath>
 #include <string>
 #include <string_view>
@@ -99,34 +100,41 @@ public:
         if (ec || size > max_bytes) return;
         std::string line;
         for (std::size_t lines = 0; lines < max_records && std::getline(stream, line); ++lines) {
+            if (stream.eof()) break; // An un-terminated append is not a committed record.
+            ++line_count_;
             if (line.size() > 128) continue;
             const auto a = line.find('\t');
             const auto b = line.find('\t', a == std::string::npos ? 0 : a + 1);
-            if (a == std::string::npos || b == std::string::npos || b + 2 != line.size()) continue;
+            const auto c = line.find('\t', b == std::string::npos ? 0 : b + 1);
+            if (a == std::string::npos || b == std::string::npos
+                || (c == std::string::npos ? b + 2 != line.size() : c + 2 != line.size())) continue;
             const auto category = line.substr(0, a);
             const auto identity = line.substr(a + 1, b - a - 1);
             if (!valid_key(category) || identity.size() != 16 ||
                 !std::all_of(identity.begin(), identity.end(), [](unsigned char c) { return std::isxdigit(c) != 0; })) continue;
+            const char verdict = line.back();
+            if (verdict != 'S' && verdict != 'F') continue;
+            if (c != std::string::npos) {
+                const auto receipt = line.substr(b + 1, c - b - 1);
+                if (!valid_receipt(receipt) || !receipts_.insert(receipt).second) continue;
+            }
             auto& entry = records_[{category, identity}];
-            if (line.back() == 'S') entry.successes = std::min(entry.successes + 1, 1000U);
-            else if (line.back() == 'F') entry.failures = std::min(entry.failures + 1, 1000U);
+            if (verdict == 'S') entry.successes = std::min(entry.successes + 1, 1000U);
+            else entry.failures = std::min(entry.failures + 1, 1000U);
         }
     }
 
     // Only verified goals/validation evidence count as S. A model merely
     // returning prose is not proof that code or a project objective works.
     void record(std::string_view category, std::string_view model, bool verified) {
-        if (file_.empty() || model.empty() || !valid_key(category)) return;
-        const auto identity = fingerprint(model);
-        std::scoped_lock lock(mutex_);
-        auto& entry = records_[{std::string{category}, identity}];
-        if (verified) entry.successes = std::min(entry.successes + 1, 1000U);
-        else entry.failures = std::min(entry.failures + 1, 1000U);
-        std::error_code ec;
-        if (std::filesystem::exists(file_, ec) && !ec &&
-            std::filesystem::file_size(file_, ec) > max_bytes) return;
-        std::ofstream out(file_, std::ios::binary | std::ios::app);
-        if (out) out << category << '\t' << identity << '\t' << (verified ? 'S' : 'F') << '\n';
+        (void)record_evidence(category, model, verified, {});
+    }
+
+    // A host receipt counts once across UI polling, resume and cache reload.
+    // The receipt is a SHA-256 binding, never a prompt, source or file path.
+    [[nodiscard]] bool record_once(std::string_view category, std::string_view model,
+        bool verified, std::string_view receipt) {
+        return valid_receipt(receipt) && record_evidence(category, model, verified, receipt);
     }
 
     // Three meaningful failures with no verified wins exclude a model from
@@ -196,6 +204,45 @@ private:
     struct Tally { unsigned successes{}; unsigned failures{}; };
     static constexpr std::uintmax_t max_bytes = 256 * 1024;
     static constexpr std::size_t max_records = 4096;
+    [[nodiscard]] static bool valid_receipt(std::string_view value) {
+        return value.size() == 64u && std::all_of(value.begin(), value.end(),
+            [](unsigned char c) { return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'); });
+    }
+    [[nodiscard]] bool record_evidence(std::string_view category, std::string_view model,
+        bool verified, std::string_view receipt) {
+        if (file_.empty() || model.empty() || model == "auto"
+            || model.find_first_of("\r\n\0", 0u, 3u) != std::string_view::npos
+            || !valid_key(category)) return false;
+        const auto identity = fingerprint(model);
+        std::scoped_lock lock(mutex_);
+        if (line_count_ >= max_records
+            || (!receipt.empty() && receipts_.contains(std::string{receipt}))) return false;
+        std::string line = std::string{category} + '\t' + identity + '\t';
+        if (!receipt.empty()) line += std::string{receipt} + '\t';
+        line += verified ? "S\n" : "F\n";
+        std::error_code ec;
+        const bool exists = std::filesystem::exists(file_, ec);
+        if (ec) return false;
+        const auto bytes = exists ? std::filesystem::file_size(file_, ec) : 0u;
+        if (ec || bytes > max_bytes || line.size() > max_bytes - bytes) return false;
+        if (bytes != 0u) {
+            std::ifstream previous(file_, std::ios::binary);
+            previous.seekg(-1, std::ios::end);
+            char end{};
+            if (!previous.get(end) || end != '\n') return false;
+        }
+        std::ofstream out(file_, std::ios::binary | std::ios::app);
+        if (!out) return false;
+        out.write(line.data(), static_cast<std::streamsize>(line.size()));
+        out.flush();
+        if (!out) return false;
+        ++line_count_;
+        auto& entry = records_[{std::string{category}, identity}];
+        if (verified) entry.successes = std::min(entry.successes + 1, 1000U);
+        else entry.failures = std::min(entry.failures + 1, 1000U);
+        if (!receipt.empty()) receipts_.emplace(receipt);
+        return true;
+    }
     [[nodiscard]] static bool valid_key(std::string_view key) {
         return !key.empty() && key.size() < 40 &&
             std::all_of(key.begin(), key.end(), [](unsigned char c) {
@@ -214,6 +261,8 @@ private:
     std::filesystem::path file_;
     mutable std::mutex mutex_;
     std::map<std::pair<std::string, std::string>, Tally> records_;
+    std::set<std::string> receipts_;
+    std::size_t line_count_{};
 };
 
 } // namespace epoch_ai::controller

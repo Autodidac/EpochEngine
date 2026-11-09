@@ -33,13 +33,15 @@ jobs:
           python-version: '3.12'
       - name: Verify public edition and source content
         run: python Tools/build/verify_public_source.py
+      - name: Check graphics test failure handling
+        run: python -m unittest discover -s Tests/build -p test_linux_graphics_smoke.py -v
       - name: Install build tools
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
           python -m pip install cmake==4.4.0
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $toolRoot = Join-Path $PWD 'build/public-ci/tools'
+          $toolRoot = Join-Path $PWD 'Artifacts/Tooling/public-ci/tools'
           New-Item -ItemType Directory -Force -Path $toolRoot | Out-Null
           $archive = Join-Path $toolRoot 'ninja-win.zip'
           Invoke-WebRequest 'https://github.com/ninja-build/ninja/releases/download/v1.13.2/ninja-win.zip' -OutFile $archive
@@ -53,7 +55,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $baseline = (Get-Content Engine/vcpkg.json -Raw | ConvertFrom-Json).'builtin-baseline'
           if ($baseline -cnotmatch '^[0-9a-f]{40}$') { throw 'Invalid dependency baseline' }
-          $root = Join-Path $PWD 'build/public-ci/vcpkg'
+          $root = Join-Path $PWD 'Artifacts/Tooling/public-ci/vcpkg'
           git init $root
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           git -C $root remote add origin https://github.com/microsoft/vcpkg.git
@@ -65,19 +67,49 @@ jobs:
           & "$root/bootstrap-vcpkg.bat" -disableMetrics
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           "EPOCH_VCPKG_ROOT=$root" | Add-Content -Path $env:GITHUB_ENV
-      - name: Build actual Debug engine and CPU target
+      - name: Build actual Debug engine and component tests
         shell: pwsh
         run: |
-          cmake --preset windows-msvc-debug "-DVCPKG_INSTALLED_DIR=$PWD/Engine/vcpkg_installed" -DBUILD_TESTING=ON
+          cmake --preset windows-msvc-debug "-DVCPKG_INSTALLED_DIR=$PWD/Artifacts/Dependencies/vcpkg_installed" -DBUILD_TESTING=ON
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          cmake --build --preset windows-msvc-debug --target epoch epoch_ci_headless --parallel 2
+          cmake --build --preset windows-msvc-debug --parallel 2
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Run build-safe contracts only
+      - name: Run compiled component and engine contracts
         shell: pwsh
         run: |
-          $env:PATH = "$PWD/Engine/vcpkg_installed/x64-windows/debug/bin;$PWD/Engine/vcpkg_installed/x64-windows/bin;$env:PATH"
-          ctest --preset windows-msvc-debug --output-on-failure -R '^(epoch_engine_contract|epoch_ci_headless)$'
+          $env:PATH = "$PWD/Artifacts/Dependencies/vcpkg_installed/x64-windows/debug/bin;$PWD/Artifacts/Dependencies/vcpkg_installed/x64-windows/bin;$env:PATH"
+          $env:TEMP = "$PWD/Artifacts/Tooling/public-ci/test-scratch"
+          New-Item -ItemType Directory -Force -Path $env:TEMP | Out-Null
+          $env:TMP = $env:TEMP
+          ctest --preset windows-msvc-debug --output-on-failure --no-tests=error --timeout 180
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build production Release Editor
+        shell: pwsh
+        run: cmake --build --preset windows-msvc-both-release --parallel 2
+      - name: Stage and audit Windows Release runtime
+        id: package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = (& ./Tools/build/get_epoch_version.ps1).Trim()
+          if ($version -cnotmatch '^\d+\.\d+\.\d+$') { throw 'Invalid release version' }
+          ./Tools/build/stage_epoch_windows_release.ps1 -Version $version `
+            -ReleaseOutputRoot "$PWD/Artifacts/Runtime/cmake/windows-msvc-debug/Release"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python Tools/build/verify_public_source.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "version=$version" >> $env:GITHUB_OUTPUT
+      - name: Return audited Windows runtime only
+        uses: actions/upload-artifact@v4
+        with:
+          name: epoch-public-windows-runtime
+          if-no-files-found: error
+          retention-days: 7
+          include-hidden-files: false
+          path: |
+            Artifacts/Packages/public/v${{ steps.package.outputs.version }}/epoch_win10_x64_v${{ steps.package.outputs.version }}.zip
+            Artifacts/Packages/public/v${{ steps.package.outputs.version }}/epoch_win10_x64_v${{ steps.package.outputs.version }}.zip.sha256
+            Artifacts/Packages/public/v${{ steps.package.outputs.version }}/epoch_win10_x64_v${{ steps.package.outputs.version }}.zip.build-validation.json
 
   linux:
     runs-on: ubuntu-22.04
@@ -95,19 +127,21 @@ jobs:
           python-version: '3.12'
       - name: Verify public edition and source content
         run: python Tools/build/verify_public_source.py
+      - name: Check graphics test failure handling
+        run: python -m unittest discover -s Tests/build -p test_linux_graphics_smoke.py -v
       - name: Install native build prerequisites
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential curl git unzip xz-utils pkg-config autoconf autoconf-archive automake libtool \
             libasound2-dev libdbus-1-dev libibus-1.0-dev libegl1-mesa-dev libgl1-mesa-dev libvulkan-dev \
             libudev-dev libx11-dev libxcursor-dev libxext-dev libxft-dev libxinerama-dev libxi-dev libxrandr-dev \
-            libxrender-dev libxtst-dev libwayland-dev libxkbcommon-dev wayland-protocols xvfb xauth libgl1-mesa-dri mesa-utils
+            libxrender-dev libxtst-dev libwayland-dev libxkbcommon-dev wayland-protocols xvfb xauth libgl1-mesa-dri mesa-utils mesa-vulkan-drivers
       - name: Prepare manifest-pinned dependencies
         run: |
           set -euo pipefail
           baseline="$(python -c 'import json; print(json.load(open("Engine/vcpkg.json"))["builtin-baseline"])')"
           [[ "$baseline" =~ ^[0-9a-f]{40}$ ]]
-          root="$GITHUB_WORKSPACE/build/public-ci/vcpkg"
+          root="$GITHUB_WORKSPACE/Artifacts/Tooling/public-ci/vcpkg"
           git init "$root"
           git -C "$root" remote add origin https://github.com/microsoft/vcpkg.git
           git -C "$root" fetch --depth 1 origin "$baseline"
@@ -117,17 +151,36 @@ jobs:
       - name: Build with production pinned Clang bootstrap
         run: |
           set -euo pipefail
-          bash Engine/build.sh --bootstrap-current-toolchain --tool-cache-root "$GITHUB_WORKSPACE/build/public-ci/tools" \
-            --vcpkg-root "$EPOCH_VCPKG_ROOT" clang Release -- -DBUILD_TESTING=ON
-      - name: Run build-safe contracts only
+          bash Engine/build.sh --bootstrap-current-toolchain --tool-cache-root "$GITHUB_WORKSPACE/Artifacts/Tooling/public-ci/tools" \
+            --vcpkg-root "$EPOCH_VCPKG_ROOT" clang Release -- -DBUILD_TESTING=ON -DEPOCH_ENABLE_GRAPHICS_TESTS=ON -DEPOCH_REQUIRE_OPTIONAL_DEPENDENCIES=ON
+      - name: Run compiled component and engine contracts
         run: |
           set -euo pipefail
-          build_dir="$GITHUB_WORKSPACE/build/cmake/linux/public/Clang-Release"
+          build_dir="$GITHUB_WORKSPACE/Artifacts/Intermediate/cmake/linux/public/Clang-Release"
           cache="$build_dir/CMakeCache.txt"
           cmake_bin="$(sed -n 's/^CMAKE_COMMAND:INTERNAL=//p' "$cache")"
           test -x "$cmake_bin"
+          cc="$(sed -n 's/^CMAKE_C_COMPILER:[^=]*=//p' "$cache")"
+          cxx="$(sed -n 's/^CMAKE_CXX_COMPILER:[^=]*=//p' "$cache")"
+          test -x "$cc"
+          test -x "$cxx"
+          test "$(dirname "$cc")" = "$(dirname "$cxx")"
+          export CC="$cc" CXX="$cxx"
+          export PATH="$(dirname "$cxx"):$PATH"
+          "$CXX" --version
+          echo "$(dirname "$cxx")" >> "$GITHUB_PATH"
+          printf 'CC=%s\nCXX=%s\n' "$CC" "$CXX" >> "$GITHUB_ENV"
+          export TMPDIR="$GITHUB_WORKSPACE/Artifacts/Tooling/public-ci/test-scratch"
+          mkdir -p "$TMPDIR"
           "$(dirname "$cmake_bin")/ctest" --test-dir "$build_dir" --output-on-failure \
-            -R '^(epoch_engine_contract|epoch_ci_headless)$'
+            -LE graphics --no-tests=error --timeout 180
+      - name: Render Linux Editor across compiled backends (Mesa CPU)
+        run: |
+          set -euo pipefail
+          build_dir="$GITHUB_WORKSPACE/Artifacts/Intermediate/cmake/linux/public/Clang-Release"
+          cmake_bin="$(sed -n 's/^CMAKE_COMMAND:INTERNAL=//p' "$build_dir/CMakeCache.txt")"
+          "$(dirname "$cmake_bin")/ctest" --test-dir "$build_dir" --output-on-failure \
+            -L graphics --no-tests=error
       - name: Stage and audit software OpenGL Linux runtime
         id: package
         run: |
@@ -145,6 +198,6 @@ jobs:
           retention-days: 7
           include-hidden-files: false
           path: |
-            build/packages/public/v${{ steps.package.outputs.version }}/epoch_linux_x64_v${{ steps.package.outputs.version }}.tar.gz
-            build/packages/public/v${{ steps.package.outputs.version }}/epoch_linux_x64_v${{ steps.package.outputs.version }}.tar.gz.sha256
-            build/packages/public/v${{ steps.package.outputs.version }}/epoch_linux_x64_v${{ steps.package.outputs.version }}.tar.gz.build-validation.json
+            Artifacts/Packages/public/v${{ steps.package.outputs.version }}/epoch_linux_x64_v${{ steps.package.outputs.version }}.tar.gz
+            Artifacts/Packages/public/v${{ steps.package.outputs.version }}/epoch_linux_x64_v${{ steps.package.outputs.version }}.tar.gz.sha256
+            Artifacts/Packages/public/v${{ steps.package.outputs.version }}/epoch_linux_x64_v${{ steps.package.outputs.version }}.tar.gz.build-validation.json

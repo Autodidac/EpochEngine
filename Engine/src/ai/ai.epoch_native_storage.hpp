@@ -2,6 +2,7 @@
 // Epoch AI: preserve model selection, candidate isolation and host verification gates.
 #pragma once
 #include "../../include/epoch.edition.hpp"
+#include "ai.native_shared_inputs.hpp"
 // Epoch-owned locations for the embedded C++ agent runtime. No EngCoder
 // application-data directory is created or required.
 #include <cstdlib>
@@ -18,6 +19,8 @@ struct Paths final {
     std::filesystem::path model_root;
     std::filesystem::path learning_root;
     std::filesystem::path web_root;
+    bool shared_model_inputs_bound{};
+    bool shared_native_inputs_disabled{};
 };
 
 [[nodiscard]] inline Paths under_epoch_root(const std::filesystem::path& epoch_root) {
@@ -27,7 +30,9 @@ struct Paths final {
     // Existing external weights remain selectable through explicit model paths.
     const auto data = epoch_root / "AI" / "public" / "native";
 #endif
-    return {data, data / "workspace", data / "model-cache", data / "models",
+    // Immutable downloaded weights are edition-neutral. Conversations, model
+    // selections, approvals, workspaces and learning state remain under data.
+    return {data, data / "workspace", epoch_root / "AI" / "model-cache", data / "models",
             data / "learning", data / "web"};
 }
 
@@ -46,6 +51,7 @@ struct Paths final {
 }
 
 [[nodiscard]] inline Paths defaults() {
+    const auto private_paths = [] {
 #ifdef _WIN32
     if (const auto local = environment("LOCALAPPDATA"); !local.empty())
         return under_epoch_root(std::filesystem::path{local} / "EpochEngine");
@@ -59,11 +65,25 @@ struct Paths final {
 #endif
     // Explicitly keep the fallback Epoch-owned, never under EngCoder.
     return under_epoch_root(std::filesystem::current_path() / ".epoch");
+    };
+    auto paths = private_paths();
+    const auto binding = native_shared_inputs::from_environment();
+    if (binding.bound) {
+        paths.model_cache = binding.weights_root;
+        paths.shared_model_inputs_bound = true;
+        paths.shared_native_inputs_disabled = binding.disabled;
+    }
+    return paths;
 }
 
 inline void initialize(const Paths& paths) {
+    if (paths.shared_model_inputs_bound)
+        (void)native_shared_inputs::validate_path(paths.model_cache, true, paths.shared_native_inputs_disabled);
     for (const auto& path : {paths.data_root, paths.workspace, paths.model_cache,
                              paths.model_root, paths.learning_root, paths.web_root}) {
+        // A child borrows this already-admitted directory. It never creates or
+        // repairs shared weights; a missing input must go to the parent manager.
+        if (paths.shared_model_inputs_bound && path == paths.model_cache) continue;
         std::error_code ec;
         if (!std::filesystem::create_directories(path, ec) && ec)
             throw std::runtime_error("Cannot initialize local model directory " + path.string() + ": " + ec.message());

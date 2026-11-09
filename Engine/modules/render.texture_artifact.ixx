@@ -67,12 +67,15 @@ export namespace epochengine::texture_artifact
         return "unknown";
     }
 
+    enum class TransferUsage : std::uint8_t { linear_data, base_color };
+
     struct ResidencySelection final
     {
         std::uint8_t mip_level{};
         texture_residency::ResidencyPolicy policy{};
         std::uint64_t frame_sequence{};
         std::string_view debug_name{"CompiledTextureArtifact"};
+        TransferUsage usage{TransferUsage::linear_data};
     };
 
     struct ArtifactKeyResult final
@@ -229,7 +232,8 @@ export namespace epochengine::texture_artifact
     [[nodiscard]] ArtifactKeyResult make_artifact_key(
         const ValidatedCompiledTextureArtifact& validated,
         canvas2d::LogicalTextureReference logical,
-        std::uint8_t mip_level = 0) noexcept
+        std::uint8_t mip_level = 0,
+        TransferUsage usage = TransferUsage::linear_data) noexcept
     {
         using namespace asset::texture;
 
@@ -246,11 +250,14 @@ export namespace epochengine::texture_artifact
         {
             return {TransferCode::revision_mismatch, {}};
         }
-        if (artifact.identity.profile.format != ArtifactFormat::rgba8_unorm)
+        const bool srgbBaseColor = usage == TransferUsage::base_color
+            && artifact.identity.profile.format == asset::texture::ArtifactFormat::rgba8_srgb
+            && artifact.identity.profile.color_space == asset::texture::ColorSpace::srgb;
+        if (artifact.identity.profile.format != ArtifactFormat::rgba8_unorm && !srgbBaseColor)
             return {TransferCode::unsupported_format, {}};
-        if (artifact.identity.profile.color_space != ColorSpace::linear)
+        if (artifact.identity.profile.color_space != ColorSpace::linear && !srgbBaseColor)
             return {TransferCode::unsupported_color_space, {}};
-        if (!detail::supported_format(artifact.identity))
+        if (!detail::supported_format(artifact.identity) && !srgbBaseColor)
             return {TransferCode::unsupported_format, {}};
         if (mip_level != 0)
             return {TransferCode::unsupported_mip_level, {}};
@@ -267,6 +274,9 @@ export namespace epochengine::texture_artifact
         key.width = mip.width;
         key.height = mip.height;
         key.mip_levels = 1;
+        // Physical byte storage is RGBA8. Explicit base-color consumers must
+        // use the sealed profile to decode sRGB in their native sample shader.
+        // The artifact profile/bytes and ordinary linear-data admission are unchanged.
         key.format = TextureFormat::rgba8_unorm;
         return {TransferCode::ready, key};
     }
@@ -280,7 +290,7 @@ export namespace epochengine::texture_artifact
         const ArtifactKeyResult key = make_artifact_key(
             validated,
             logical,
-            selection.mip_level);
+            selection.mip_level, selection.usage);
         if (!key)
             return {key.code, {}};
 

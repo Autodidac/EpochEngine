@@ -467,8 +467,7 @@ export namespace epochengine::authoring::morphology
             return {ValidationCode::invalid_limits};
 
         const auto& growth = recipe.growth;
-        if (growth.generations == 0u ||
-            growth.children_per_node == 0u ||
+        if (growth.children_per_node == 0u ||
             growth.generations > recipe.limits.maximum_depth ||
             growth.children_per_node > recipe.limits.maximum_children_per_node ||
             !(growth.root_length_meters > 0.0f) ||
@@ -930,6 +929,51 @@ export namespace epochengine::authoring::morphology
                 .scale_meters = terminal.scale_meters * progress,
                 .progress = progress});
         }
+        return result;
+    }
+
+    // A caller supplies central presentation time. Sampling never advances a clock
+    // or changes the authored graph, so seeking/reversal reproduces the strike.
+    struct DischargeTiming final
+    {
+        double start_seconds{};
+        double propagation_seconds{0.08};
+        double hold_seconds{0.02};
+        double decay_seconds{0.20};
+    };
+
+    struct DischargeSample final
+    {
+        Sample geometry{};
+        float intensity{};
+        bool valid{};
+    };
+
+    [[nodiscard]] inline DischargeSample sample_discharge(
+        const Graph& graph, double presentation_seconds, DischargeTiming timing = {})
+    {
+        DischargeSample result{};
+        if (graph.recipe.domain != Domain::electrical || !validate(graph)
+            || !std::isfinite(presentation_seconds) || !std::isfinite(timing.start_seconds)
+            || !std::isfinite(timing.propagation_seconds) || !(timing.propagation_seconds > 0.0)
+            || !std::isfinite(timing.hold_seconds) || timing.hold_seconds < 0.0
+            || !std::isfinite(timing.decay_seconds) || !(timing.decay_seconds > 0.0))
+            return result;
+        const double duration = timing.propagation_seconds + timing.hold_seconds + timing.decay_seconds;
+        const double elapsed = presentation_seconds - timing.start_seconds;
+        if (!std::isfinite(duration) || !std::isfinite(elapsed))
+            return result;
+        result.valid = true;
+        if (elapsed <= 0.0 || elapsed >= duration)
+            return result;
+        const double progress = (std::min)(elapsed / timing.propagation_seconds, 1.0);
+        result.geometry = sample(graph, static_cast<float>(progress * graph.recipe.duration_seconds));
+        // Discharge endpoints are graph metadata, not botanical leaf cards.
+        result.geometry.terminals.clear();
+        const double decay = (std::clamp)(
+            (elapsed - timing.propagation_seconds - timing.hold_seconds) / timing.decay_seconds, 0.0, 1.0);
+        const double remaining = 1.0 - decay;
+        result.intensity = static_cast<float>(remaining * remaining);
         return result;
     }
 

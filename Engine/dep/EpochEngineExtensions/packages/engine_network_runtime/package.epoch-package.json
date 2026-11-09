@@ -1,0 +1,59 @@
+{
+  "id": "engine_network_runtime",
+  "displayName": "Engine Network Runtime",
+  "manifestLicense": "LicenseRef-MIT-NoSell",
+  "manifestCopyright": "Copyright (c) 2026 Adam Rushford",
+  "status": "source-staged",
+  "kind": "network-runtime",
+  "activation": "project-opt-in",
+  "summary": "Shared client/session replication contracts that remain inert until a network package is explicitly enabled.",
+  "security": {
+    "serverOrListenerAllowed": false,
+    "requiresExplicitNetworkApproval": false,
+    "autoRunAllowed": false,
+    "includeByDefault": false
+  },
+  "source": {
+    "repo": "https://epoch.adamrushford.chatgpt.site/git/EpochEngineExtensions.git",
+    "path": "packages/engine_network_runtime",
+    "provenance": "inert C++23 network/session contract source staged in this package"
+  },
+  "engineBoundary": {
+    "epochPackageId": "engine_network_runtime",
+    "expectedCacheRoot": "cache/packages/engine_network_runtime",
+    "notes": "Keep shared contracts inert so software and single-player projects do not inherit server bloat."
+  },
+  "script": {
+    "language": "C++23",
+    "path": "scripts/engine_network_runtime_package.ascript.cpp",
+    "api": "epoch_package_script_api",
+    "mode": "download-stage-build-contract-smoke",
+    "downloadsSource": true,
+    "compilesSource": true,
+    "livePreview": false,
+    "humanGated": true,
+    "autoRunAllowed": false
+  },
+  "build": {
+    "humanGated": true,
+    "sourceFiles": [
+      "CMakeLists.txt",
+      "include/epoch/extensions/engine_network_runtime/engine_network_runtime.hpp",
+      "src/engine_network_runtime.cpp",
+      "tests/engine_network_runtime_self_test.cpp"
+    ],
+    "targets": [
+      "epoch_extension_engine_network_runtime",
+      "epoch_extension_engine_network_runtime_self_test"
+    ],
+    "commands": [
+      "cmake -S packages/engine_network_runtime -B cache/packages/engine_network_runtime/build",
+      "cmake --build cache/packages/engine_network_runtime/build --target epoch_extension_engine_network_runtime_self_test",
+      "cache/packages/engine_network_runtime/build/epoch_extension_engine_network_runtime_self_test"
+    ]
+  },
+  "notes": [
+    "This package is the inert dependency layer for future listen-server or dedicated-server packages.",
+    "It stages value types, packet frames, and policy decisions; it does not open sockets or bind ports."
+  ]
+}

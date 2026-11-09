@@ -8,7 +8,7 @@ EPOCH_OUTPUT_EDITION="development"
 if grep -q '^#define EPOCH_SOURCE_EDITION_PUBLIC 1[[:space:]]*$' "${SCRIPT_DIR}/include/epoch.edition.hpp"; then
   EPOCH_OUTPUT_EDITION="public"
 fi
-EPOCH_DEFAULT_BUILD_ROOT="${EPOCH_REPOSITORY_ROOT}/build/cmake/linux/${EPOCH_OUTPUT_EDITION}"
+EPOCH_DEFAULT_BUILD_ROOT="${EPOCH_REPOSITORY_ROOT}/Artifacts/Runtime/cmake/linux/${EPOCH_OUTPUT_EDITION}"
 
 
 COMPILER="gcc"

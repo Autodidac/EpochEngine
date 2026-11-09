@@ -173,6 +173,21 @@ namespace epochengine::editor_hierarchy
                 return ContractFailure::transactional_rejection;
             }
 
+            Controller attached;
+            auto nested = fixture();
+            nested.back().parent_id = 201u;
+            if (!attached.refresh("Nested", nested, 201u)) return ContractFailure::admission;
+            const auto parentNode = attached.node_for_entity(201u);
+            if (!attached.toggle_expanded(parentNode)) return ContractFailure::admission;
+            const auto* childRow = row_for_entity(attached,301u);
+            if (!childRow || childRow->parent_node_id != parentNode)
+                return ContractFailure::admission;
+            nested.back().parent_id = 999u;
+            if (attached.refresh("Nested",nested,201u)) return ContractFailure::transactional_rejection;
+            nested.back().parent_id = 201u;
+            nested[1].parent_id = 301u;
+            if (attached.refresh("Nested",nested,201u)) return ContractFailure::transactional_rejection;
+
             return ContractFailure::none;
         }
         catch (...)

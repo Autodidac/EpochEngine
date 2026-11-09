@@ -53,6 +53,7 @@ import epoch.version;
 import core.logger;
 import core.path;
 import platform.engine;
+import updater.platform_policy;
 import perf.tier;
 
 inline constexpr int DEFAULT_WINDOW_WIDTH = 1280;
@@ -104,7 +105,7 @@ namespace epochengine::core::cli
 
         [[nodiscard]] inline std::string_view default_updater_shell_backend() noexcept
         {
-            return epochengine::platform::policy::updater_shell_backend_name();
+            return epochengine::updater::platform_policy::updater_shell_backend_name();
         }
 
         [[nodiscard]] inline std::string standalone_only_window_message(const std::string_view action)
@@ -276,6 +277,7 @@ namespace epochengine::core::cli
 
     export inline RuntimePath runtime_path = RuntimePath::Epoch;
     export inline WindowMode window_mode = WindowMode::Auto;
+    export inline bool defer_window_show = false;
     export bool parented_mode = detail::default_parented_mode();
 
     export inline int raylib_window_count = 1;
@@ -390,8 +392,10 @@ namespace epochengine::core::cli
         bool editor_ai_gate_self_test_requested = false;
         bool engine_contract_self_test_requested = false;
         bool engine_validation_self_test_requested = false;
+        bool asset_generation_job_requested = false;
         RuntimePath runtime = RuntimePath::Epoch;
         std::string editor_project_self_test_id{};
+        std::string asset_generation_job_file{};
     };
 
     export [[nodiscard]] inline bool apply_backend_selection(const std::string_view value)
@@ -477,6 +481,7 @@ namespace epochengine::core::cli
         window_width_overridden = false;
         window_height_overridden = false;
         window_mode = WindowMode::Auto;
+        defer_window_show = false;
         parented_mode = detail::default_parented_mode();
         runtime_path = RuntimePath::Epoch;
         backend_selection_explicit = false;
@@ -570,6 +575,8 @@ namespace epochengine::core::cli
                     "                             Run deterministic guarded engine-development gate checks, then exit\n"
                     "  --engine-contract-self-test\n"
                     "                             Run pure engine contract checks, then exit\n"
+                    "  --asset-generation-job <request.json>\n"
+                    "                             Run an explicit local asset job without opening the Editor\n"
                     "  --menu                     Start the menu + games loop\n"
                     "  --runtime <epoch|legacy>   Select epoch-native or legacy parity runtime\n"
                     "  --epoch-native             Shortcut for --runtime epoch\n"
@@ -577,6 +584,7 @@ namespace epochengine::core::cli
                     "  --window-mode <mode>       Select auto|parented|standalone\n"
                     "  --parented                 Shortcut for --window-mode parented\n"
                     "  --standalone               Shortcut for --window-mode standalone\n"
+                    "  --defer-window-show        Keep startup window hidden for an owning Editor attachment\n"
                     "  --renderer <backend|auto>  Select one backend; auto requests the backend grid\n"
                     "                             Backends: auto, opengl, directx/d3d11, vulkan, raylib, sdl, sfml, software\n"
                     "  --backend <backend|auto>   Alias for --renderer\n"
@@ -667,6 +675,11 @@ namespace epochengine::core::cli
             {
                 result.engine_contract_self_test_requested = true;
             }
+            else if (key == "--asset-generation-job"sv)
+            {
+                result.asset_generation_job_requested = true;
+                result.asset_generation_job_file = std::string{read_value(key)};
+            }
             else if (key == "--engine-validation-self-test"sv)
             {
                 result.engine_validation_self_test_requested = true;
@@ -742,6 +755,16 @@ namespace epochengine::core::cli
             {
                 window_mode = WindowMode::Standalone;
                 parented_mode = false;
+            }
+            else if (key == "--owned-runtime-control"sv)
+            {
+                // Validated/claimed by the owned-process platform port. This
+                // reserved argument never enables a listener or generic input.
+                (void)read_value(key);
+            }
+            else if (key == "--defer-window-show"sv)
+            {
+                defer_window_show = true;
             }
             else if (key == "--renderer"sv || key == "--backend"sv)
             {

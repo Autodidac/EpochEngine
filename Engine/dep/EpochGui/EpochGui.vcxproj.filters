@@ -1,5 +1,5 @@
-<?xml version='1.0' encoding='utf-8'?>
-<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <Filter Include="Source Files">
       <UniqueIdentifier>{ed0f27a1-d4e8-46de-a540-e70b8de60c43}</UniqueIdentifier>
@@ -16,6 +16,9 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="$(EpochGuiModuleRoot)modules\epoch.gui.ixx">
+      <Filter>Module Files</Filter>
+    </ClCompile>
+    <ClCompile Include="$(EpochGuiModuleRoot)modules\epoch.gui.command_menu.ixx">
       <Filter>Module Files</Filter>
     </ClCompile>
     <ClCompile Include="$(EpochGuiModuleRoot)modules\epoch.gui.font.ixx">
@@ -55,6 +58,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\popup_layout.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\gui.command_menu.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="$(EpochGuiSourceRoot)src\epochgui\gui.scrollbar_layout.cpp">
@@ -100,6 +106,21 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="$(EpochGuiSourceRoot)include\gui\layout_primitives.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="$(EpochGuiSourceRoot)include\gui\chat_composer_layout.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="$(EpochGuiSourceRoot)include\gui\circle_raster.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="$(EpochGuiSourceRoot)include\gui\rounded_corner_raster.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="$(EpochGuiSourceRoot)include\gui\status_strip_layout.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="$(EpochGuiSourceRoot)include\gui\utf8_text_layout.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="$(EpochGuiSourceRoot)include\gui\panel_host.hpp">

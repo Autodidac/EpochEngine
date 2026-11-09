@@ -4,6 +4,7 @@
 module;
 
 #include <algorithm>
+#include <array>
 #include <compare>
 #include <cstddef>
 #include <cstdint>
@@ -167,10 +168,179 @@ export namespace epochengine::editor_authoring_history
         std::uint64_t transition_sequence{};
     };
 
+    // Domain owners supply journal identities; notifications are not history.
+    // A group currently admits one semantic entry per participating document.
+    struct GroupState final
+    {
+        BranchId branch{};
+        std::array<std::uint64_t, 4> identity{};
+        std::array<std::uint64_t, 4> content{};
+        std::uint64_t revision{};
+        std::size_t cursor{};
+        std::vector<std::uint64_t> entries{};
+    };
+
+    struct GroupChange final
+    {
+        GroupState before{};
+        GroupState after{};
+        std::uint64_t entry{};
+    };
+
+    enum class GroupCode : std::uint8_t
+    {
+        none, ready, stale, invalid, capacity
+    };
+
+    struct GroupPlan final
+    {
+        GroupCode code{GroupCode::none};
+        std::uint64_t group{};
+        std::uint64_t controller_revision{};
+        Direction direction{Direction::undo};
+        std::string label{};
+        std::vector<GroupChange> changes{};
+        std::vector<GroupState> expected{};
+    };
+
     class Controller final
     {
     public:
         static constexpr std::size_t maximum_branches = 128u;
+        static constexpr std::size_t maximum_groups = 2048u;
+        static constexpr std::size_t maximum_group_participants = 8u;
+
+        [[nodiscard]] GroupCode register_group(
+            const std::span<const GroupChange> changes,
+            const std::string_view label)
+        {
+            if (changes.size() < 2u
+                || changes.size() > maximum_group_participants
+                || label.empty() || label.size() > 192u)
+                return GroupCode::invalid;
+            for (std::size_t index = 0u; index < changes.size(); ++index)
+            {
+                const auto& change = changes[index];
+                if (!valid_group_state(change.before)
+                    || !valid_group_state(change.after)
+                    || !same_group_identity(change.before, change.after)
+                    || change.after.cursor != change.before.cursor + 1u
+                    || change.before.revision == change.after.revision
+                    || change.before.content == change.after.content
+                    || !std::equal(change.before.entries.begin(),
+                        change.before.entries.begin() + change.before.cursor,
+                        change.after.entries.begin())
+                    || std::any_of(changes.begin(), changes.begin() + index,
+                        [&](const GroupChange& prior)
+                        { return prior.before.branch == change.before.branch; }))
+                    return GroupCode::invalid;
+            }
+            // Drop only groups whose entries are absent from EVERY currently
+            // supplied journal. One surviving half remains guarded, never hidden.
+            std::erase_if(groups_, [&](const StoredGroup& group)
+            {
+                return std::all_of(group.changes.begin(), group.changes.end(),
+                    [&](const GroupChange& old)
+                    {
+                        const auto now = std::find_if(changes.begin(), changes.end(),
+                            [&](const GroupChange& change)
+                            { return change.after.branch == old.after.branch; });
+                        if (now == changes.end()) return false;
+                        return !same_group_identity(now->after, old.after)
+                            || std::find(now->after.entries.begin(), now->after.entries.end(),
+                                old.entry) == now->after.entries.end();
+                    });
+            });
+            if (groups_.size() >= maximum_groups
+                || group_sequence_ == (std::numeric_limits<std::uint64_t>::max)())
+                return GroupCode::capacity;
+            StoredGroup group{++group_sequence_, std::string{label},
+                {changes.begin(), changes.end()}};
+            for (auto& change : group.changes)
+            {
+                change.entry = change.after.entries[change.before.cursor];
+                std::vector<std::uint64_t>{}.swap(change.before.entries);
+                std::vector<std::uint64_t>{}.swap(change.after.entries);
+            }
+            groups_.push_back(std::move(group));
+            bump_revision();
+            return GroupCode::ready;
+        }
+
+        [[nodiscard]] GroupPlan plan_group(
+            const BranchId branch, const Direction direction,
+            const std::span<const GroupState> states) const
+        {
+            const auto selected = std::find_if(states.begin(), states.end(),
+                [branch](const GroupState& state) { return state.branch == branch; });
+            if (selected == states.end() || !valid_group_state(*selected))
+                return GroupPlan{.code = GroupCode::invalid};
+            const std::size_t index = direction == Direction::undo
+                ? (selected->cursor == 0u ? selected->entries.size() : selected->cursor - 1u)
+                : selected->cursor;
+            if (index >= selected->entries.size()) return {};
+            for (const auto& group : groups_)
+            {
+                const auto participant = std::find_if(group.changes.begin(), group.changes.end(),
+                    [&](const GroupChange& change)
+                    {
+                        return same_group_identity(change.after, *selected)
+                            && change.entry == selected->entries[index];
+                    });
+                if (participant == group.changes.end()) continue;
+                GroupPlan plan{.code = GroupCode::ready, .group = group.id,
+                    .controller_revision = revision_, .direction = direction,
+                    .label = group.label, .changes = group.changes};
+                for (const auto& change : group.changes)
+                {
+                    const auto now = std::find_if(states.begin(), states.end(),
+                        [&](const GroupState& state) { return state.branch == change.after.branch; });
+                    const auto& endpoint = direction == Direction::undo ? change.after : change.before;
+                    if (now == states.end() || !valid_group_state(*now)
+                        || !same_group_endpoint(*now, endpoint)
+                        || now->entries.size() <= change.before.cursor
+                        || now->entries[change.before.cursor]
+                            != change.entry)
+                    {
+                        plan.code = GroupCode::stale;
+                        return plan;
+                    }
+                    plan.expected.push_back(*now);
+                }
+                return plan;
+            }
+            return {};
+        }
+
+        [[nodiscard]] GroupCode accept_group(
+            const GroupPlan& plan, const std::span<const GroupState> before,
+            const std::span<const GroupState> after)
+        {
+            if (plan.code != GroupCode::ready || plan.controller_revision != revision_
+                || plan.expected.size() != plan.changes.size()
+                || before.size() != after.size() || before.size() != plan.changes.size()
+                || std::none_of(groups_.begin(), groups_.end(),
+                    [&](const StoredGroup& group) { return group.id == plan.group; }))
+                return GroupCode::stale;
+            const auto actual = plan_group(plan.expected.front().branch, plan.direction, before);
+            if (actual.code != GroupCode::ready || actual.group != plan.group)
+                return GroupCode::stale;
+            for (std::size_t index = 0u; index < before.size(); ++index)
+            {
+                const auto& endpoint = plan.direction == Direction::undo
+                    ? actual.changes[index].before : actual.changes[index].after;
+                if (!same_group_endpoint(before[index], actual.expected[index])
+                    || before[index].revision != actual.expected[index].revision
+                    || before[index].entries != actual.expected[index].entries
+                    || !valid_group_state(after[index])
+                    || !same_group_endpoint(after[index], endpoint)
+                    || after[index].revision == before[index].revision
+                    || after[index].entries != before[index].entries)
+                    return GroupCode::stale;
+            }
+            bump_revision();
+            return GroupCode::ready;
+        }
 
         [[nodiscard]] bool synchronize(
             const std::span<const BranchSnapshot> snapshots)
@@ -347,6 +517,36 @@ export namespace epochengine::editor_authoring_history
         }
 
     private:
+        struct StoredGroup final
+        {
+            std::uint64_t id{};
+            std::string label{};
+            std::vector<GroupChange> changes{};
+        };
+
+        [[nodiscard]] static bool valid_group_state(const GroupState& state) noexcept
+        {
+            return state.branch.valid() && state.revision != 0u
+                && state.cursor <= state.entries.size() && state.entries.size() <= 4096u
+                && state.identity != std::array<std::uint64_t, 4>{}
+                && state.content != std::array<std::uint64_t, 4>{}
+                && std::none_of(state.entries.begin(), state.entries.end(),
+                    [](const std::uint64_t entry) { return entry == 0u; });
+        }
+
+        [[nodiscard]] static bool same_group_identity(
+            const GroupState& left, const GroupState& right) noexcept
+        {
+            return left.branch == right.branch && left.identity == right.identity;
+        }
+
+        [[nodiscard]] static bool same_group_endpoint(
+            const GroupState& left, const GroupState& right) noexcept
+        {
+            return same_group_identity(left, right) && left.cursor == right.cursor
+                && left.content == right.content;
+        }
+
         struct StoredBranch final
         {
             BranchSnapshot snapshot{};
@@ -421,6 +621,8 @@ export namespace epochengine::editor_authoring_history
         }
 
         std::vector<StoredBranch> branches_{};
+        std::vector<StoredGroup> groups_{};
+        std::uint64_t group_sequence_{};
         std::optional<BranchId> active_branch_{};
         std::uint64_t revision_{1u};
         std::uint64_t transition_sequence_{};

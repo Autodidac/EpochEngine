@@ -9,7 +9,7 @@ EPOCH_OUTPUT_EDITION="development"
 if grep -q '^#define EPOCH_SOURCE_EDITION_PUBLIC 1[[:space:]]*$' "${SCRIPT_DIR}/include/epoch.edition.hpp"; then
   EPOCH_OUTPUT_EDITION="public"
 fi
-EPOCH_DEFAULT_BUILD_ROOT="${EPOCH_REPOSITORY_ROOT}/build/cmake/linux/${EPOCH_OUTPUT_EDITION}"
+EPOCH_DEFAULT_BUILD_ROOT="${EPOCH_REPOSITORY_ROOT}/Artifacts/Intermediate/cmake/linux/${EPOCH_OUTPUT_EDITION}"
 
 TOOLCHAIN_LOCK="${SCRIPT_DIR}/unix/current_toolchain.env"
 if [[ ! -f "${TOOLCHAIN_LOCK}" ]]; then
@@ -895,7 +895,7 @@ case "$COMPILER_CHOICE" in
     ;;
 esac
 
-INSTALL_PREFIX="${EPOCH_REPOSITORY_ROOT}/build/install/linux/${EPOCH_OUTPUT_EDITION}/${COMPILER_NAME}-${BUILD_TYPE}"
+INSTALL_PREFIX="${EPOCH_REPOSITORY_ROOT}/Artifacts/Install/linux/${EPOCH_OUTPUT_EDITION}/${COMPILER_NAME}-${BUILD_TYPE}"
 BUILD_VARIANT_SUFFIX=""
 if [[ $UPDATER_SHELL_BUILD -ne 0 ]]; then
   BUILD_VARIANT_SUFFIX="-UpdaterShell"

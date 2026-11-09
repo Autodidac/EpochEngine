@@ -6,6 +6,7 @@
 #include <chrono>
 #include <expected>
 #include <filesystem>
+#include <functional>
 #include <mutex>
 #include <map>
 #include <memory>
@@ -22,8 +23,20 @@
 #include "ai.backend_core_error.hpp"
 #include "ai.backend_model_qwen_flash_runtime.hpp"
 #include "ai.backend_model_runtime_model.hpp"
+#include "../ai.native_idle_policy.hpp"
 
 namespace epoch_ai::model {
+
+class NativeResidency final {
+public:
+    [[nodiscard]] std::vector<std::string> ids() const;
+    [[nodiscard]] std::vector<std::uint64_t> process_ids() const;
+private:
+    friend class NativeModelManager;
+    struct State;
+    explicit NativeResidency(std::shared_ptr<const State> state) : state_(std::move(state)) {}
+    std::shared_ptr<const State> state_;
+};
 
 // Owns Epoch AI-native downloadable runtimes and their catalog. This layer is
 // intentionally separate from both external providers and the agent loop.
@@ -60,6 +73,21 @@ public:
     void prefer_model(std::string_view id_or_uri);
     [[nodiscard]] bool model_loaded(std::string_view id_or_uri) const;
     [[nodiscard]] nlohmann::json model_runtime_status(std::string_view id_or_uri) const;
+    [[nodiscard]] std::expected<std::shared_ptr<const NativeResidency>, core::Error> capture_residency(
+        std::string_view exact_selected_id = {}) const;
+    [[nodiscard]] std::expected<void, core::Error> suspend_residency(
+        const NativeResidency&, const epochengine::ai::native_runtime::idle::RetirementClaim&);
+    [[nodiscard]] std::expected<void, core::Error> restore_residency(
+        const NativeResidency&, const epochengine::ai::native_runtime::idle::RetirementClaim&,
+        std::chrono::steady_clock::time_point deadline, std::stop_token,
+        const std::function<bool()>& still_current);
+    [[nodiscard]] bool residency_settings_match(const NativeResidency&) const;
+    void note_model_use(std::string_view id_or_uri,
+        epochengine::ai::native_runtime::idle::Clock::time_point now =
+            epochengine::ai::native_runtime::idle::Clock::now());
+    [[nodiscard]] nlohmann::json retire_idle_models(
+        epochengine::ai::native_runtime::idle::Clock::time_point now,
+        const std::function<void(std::string_view)>& before_stop);
     void cancel_installation();
 
     [[nodiscard]] nlohmann::json describe() const;
@@ -67,13 +95,22 @@ public:
     [[nodiscard]] QwenFlashRuntime& qwen_flash() noexcept { return qwen_flash_; }
 
 private:
+    friend struct NativeResidency::State;
     void seed_defaults();
     void load_profiles_locked();
     [[nodiscard]] std::filesystem::path manifest_path(std::string_view id) const;
     [[nodiscard]] std::string normalize_id(std::string_view value) const;
     [[nodiscard]] std::optional<RuntimeModelProfile> find_locked(std::string_view id_or_uri) const;
-    void save_profile(const RuntimeModelProfile& profile) const;
+    void save_profile(const RuntimeModelProfile& profile, bool only_if_absent = false) const;
     void set_install_state(nlohmann::json state);
+    struct GpuOwnership;
+    struct GpuUse;
+    [[nodiscard]] std::expected<std::shared_ptr<GpuOwnership>, core::Error> acquire_gpu_ownership();
+    void release_gpu_ownership_if_retired() noexcept;
+    mutable std::mutex gpu_owner_mutex_;
+    // One OS coordination lease across all slots; no catalog-only acquisition.
+    // Declared before slots so every runtime retires before final lease release.
+    std::shared_ptr<GpuOwnership> gpu_owner_;
 
     const core::Config& config_;
     std::filesystem::path state_root_;

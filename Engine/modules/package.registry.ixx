@@ -42,8 +42,6 @@ module;
 
 export module package.registry;
 
-import forest.factory;
-
 export namespace epochengine::package_registry
 {
     enum class PackageKind : std::uint8_t
@@ -162,7 +160,8 @@ export namespace epochengine::package_registry
     inline constexpr std::string_view kEpochGuiCatalogAuthorityId = "epoch-gui";
     inline constexpr std::string_view kEpochEngineExtensionsCatalogAuthorityId =
         "epoch-engine-extensions";
-    inline constexpr std::string_view kForestFactoryReferenceRepo = epochengine::forest::kForestFactoryReferenceRepo;
+    inline constexpr std::string_view kForestFactoryReferenceRepo =
+        "https://github.com/Autodidac/Temporal_Parametric_Graph_Lindenmayer_System_Plant_Lab";
     inline constexpr std::string_view kForestFactoryPackageSourceRepo = kEpochEngineExtensionsRepo;
     inline constexpr std::string_view kEngineArcadePackageId = "engine_arcade";
     inline constexpr std::string_view kEngineArcadeOptionalAssetRepo = kEpochEngineExtensionsRepo;
@@ -176,7 +175,7 @@ export namespace epochengine::package_registry
     inline constexpr std::string_view kEngineArcadeRenderTextureName = "engine_arcade.screen";
     inline constexpr std::uint32_t kEngineArcadeRenderTextureWidth = 512;
     inline constexpr std::uint32_t kEngineArcadeRenderTextureHeight = 512;
-    inline constexpr std::string_view kEngineForestFactoryPackageId = epochengine::forest::kForestFactoryPackageId;
+    inline constexpr std::string_view kEngineForestFactoryPackageId = "engine_forest_factory";
     inline constexpr std::string_view kEngineNetworkRuntimePackageId = "engine_network_runtime";
     inline constexpr std::string_view kEngineAuthoritativeServerPackageId = "engine_authoritative_dedicated_server";
     inline constexpr std::string_view kEngineListenServerPackageId = "engine_client_listen_server";
@@ -257,7 +256,7 @@ inline constexpr std::string_view kFluxKleinImagePackageId = "os_model_flux_2_kl
         {
             .id = kBonsaiImageTernaryPackageId,
             .displayName = "Bonsai Image Ternary 4B",
-            .summary = "Preferred local image generation/editing model lane for the best quality/footprint balance. Weights download on demand into cache/models.",
+            .summary = "Optional MLX image-model metadata. No compatible installer or image backend is included in this build.",
             .kind = PackageKind::ModelAsset,
             .activation = ActivationMode::ModelDownloadOptIn,
             .requiresHumanBuildGate = true,
@@ -266,7 +265,7 @@ inline constexpr std::string_view kFluxKleinImagePackageId = "os_model_flux_2_kl
         {
             .id = kBonsaiImageBinaryPackageId,
             .displayName = "Bonsai Image Binary 4B",
-            .summary = "Optional low-memory local image generation/editing model lane for the smallest local footprint. Weights download on demand into cache/models.",
+            .summary = "Optional MLX image-model metadata. No compatible installer or image backend is included in this build.",
             .kind = PackageKind::ModelAsset,
             .activation = ActivationMode::ModelDownloadOptIn,
             .requiresHumanBuildGate = true,
@@ -275,7 +274,7 @@ inline constexpr std::string_view kFluxKleinImagePackageId = "os_model_flux_2_kl
         {
             .id = kFluxKleinImagePackageId,
             .displayName = "FLUX.2 Klein 4B",
-            .summary = "Optional higher-memory fallback image generation/editing model lane. Bonsai Ternary 4B remains the recommended local default.",
+            .summary = "Optional image-generation model candidate. Backend integration and download admission remain separate requirements.",
             .kind = PackageKind::ModelAsset,
             .activation = ActivationMode::ModelDownloadOptIn,
             .requiresHumanBuildGate = true,
@@ -292,40 +291,40 @@ inline constexpr std::string_view kFluxKleinImagePackageId = "os_model_flux_2_kl
         },
         {
             .id = "research_voxel_planetoid",
-            .displayName = "Research Voxel Planetoid",
-            .summary = "Renderer-neutral voxel/chunk prototype snapshot staged for reviewed package import.",
+            .displayName = "Voxel Planetoid LOD",
+            .summary = "Source library for planetoid sampling and detail selection. Editor controls and project activation are not connected yet.",
             .kind = PackageKind::ResearchPrototype,
             .activation = ActivationMode::ManualResearchImport,
             .externalSourceRepo = kEpochEngineExtensionsRepo,
         },
         {
             .id = "research_voxel_authoring",
-            .displayName = "Research Voxel Authoring",
-            .summary = "External voxel authoring/toolkit prototype staged for API-boundary review.",
+            .displayName = "Voxel Authoring Tools",
+            .summary = "Source toolkit for density edits and material brushes. Editor controls and project activation are not connected yet.",
             .kind = PackageKind::ResearchPrototype,
             .activation = ActivationMode::ManualResearchImport,
             .externalSourceRepo = kEpochEngineExtensionsRepo,
         },
         {
             .id = "research_forest_temporal_graph",
-            .displayName = "Research Forest Factory Temporal Graph",
-            .summary = "Operator-owned Plant Lab authoring lineage for reusable tree assets and forest configurations consumed later by the standard-editor Forest Factory placement portal.",
+            .displayName = "Forest Graph Source",
+            .summary = "Source library for temporal tree graphs. Use Forest Factory for the built-in plant editor and placement tools; this separate source package has no connected project controls yet.",
             .kind = PackageKind::ResearchPrototype,
             .activation = ActivationMode::ManualResearchImport,
             .externalSourceRepo = kForestFactoryReferenceRepo,
         },
         {
             .id = "research_planetary_terrain",
-            .displayName = "Research Planetary Terrain",
-            .summary = "NMS-like planetary and multi-terrain stacks remain package-gated.",
+            .displayName = "Planetary Terrain",
+            .summary = "Optional terrain example: generate a planet, change camera-driven detail, save and reopen it. Local source review is required before adding it to a project.",
             .kind = PackageKind::DownloadableSource,
             .activation = ActivationMode::DownloadedOptIn,
             .externalSourceRepo = kEpochEngineExtensionsRepo,
         },
         {
             .id = "research_fft_ocean",
-            .displayName = "Research FFT Ocean",
-            .summary = "Ocean simulation package candidate; not part of the minimal engine clone.",
+            .displayName = "Water (FFT Ocean)",
+            .summary = "Source library for spectral ocean simulation. Project activation and water rendering are not connected yet; this is separate from Planetary Terrain's simple ocean surface.",
             .kind = PackageKind::DownloadableSource,
             .activation = ActivationMode::DownloadedOptIn,
             .externalSourceRepo = kEpochEngineExtensionsRepo,
@@ -399,9 +398,7 @@ inline constexpr std::string_view kFluxKleinImagePackageId = "os_model_flux_2_kl
     {
         // Registry identities, rather than names containing "model" or "AI",
         // distinguish project media resources from inference infrastructure.
-        if (id == kBonsaiImageTernaryPackageId
-            || id == kBonsaiImageBinaryPackageId
-            || id == kFluxKleinImagePackageId)
+        if (id == kFluxKleinImagePackageId)
             return CatalogSection::ProjectAiResources;
         const auto* package = find(id);
         if (id == kLocalAiLlamaCppRuntimePackageId
@@ -438,7 +435,9 @@ inline constexpr std::string_view kFluxKleinImagePackageId = "os_model_flux_2_kl
             else if (section == CatalogSection::ModelManager)
                 ++inferenceResources;
         }
-        return projectResources == 3u && inferenceResources == 3u
+        return projectResources == 1u && inferenceResources == 5u
+            && catalog_section(kBonsaiImageTernaryPackageId) == CatalogSection::ModelManager
+            && catalog_section(kBonsaiImageBinaryPackageId) == CatalogSection::ModelManager
             && catalog_section(kQwenCoderPackageId) == CatalogSection::ModelManager
             && catalog_section(kNemotronNanoPackageId) == CatalogSection::ModelManager
             && catalog_section(kLocalAiLlamaCppRuntimePackageId) == CatalogSection::ModelManager
@@ -469,6 +468,70 @@ inline constexpr std::string_view kFluxKleinImagePackageId = "os_model_flux_2_kl
         return package != nullptr &&
                (package->kind == PackageKind::ResearchPrototype ||
                 package->kind == PackageKind::DownloadableSource);
+    }
+
+    struct SourceManifestBinding final
+    {
+        std::string_view registry_id{};
+        std::string_view manifest_id{};
+        std::string_view declared_repository{};
+        std::string_view source_path{};
+    };
+
+    // Reviewed identities, not prefix aliases or an alternate package registry.
+    // The declared repository is provenance; the existing registry remains the
+    // authority for subsequent build/native activation evidence.
+    inline constexpr std::array<SourceManifestBinding, 5> kSourceManifestBindings{{
+        {"research_voxel_planetoid", "voxel_planetoid_lod", kEpochEngineExtensionsRepo, "packages/voxel_planetoid_lod"},
+        {"research_voxel_authoring", "voxel_authoring_tools", kEpochEngineExtensionsRepo, "packages/voxel_authoring_tools"},
+        {"research_forest_temporal_graph", "forest_temporal_graph", kEpochEngineExtensionsRepo, "packages/forest_temporal_graph"},
+        {"research_planetary_terrain", "planetary_terrain", kEpochEngineExtensionsRepo, "packages/planetary_terrain"},
+        {"research_fft_ocean", "fft_ocean", kEpochEngineExtensionsRepo, "packages/fft_ocean"}
+    }};
+
+    // Existing local snapshots retain their reviewed manifest and receipt bytes.
+    // This exact historical provenance alias permits an explicit source update;
+    // it is never a download target, repository fallback or execution approval.
+    [[nodiscard]] constexpr bool source_manifest_repository_matches(
+        const SourceManifestBinding& binding, std::string_view repository) noexcept
+    {
+        return repository == binding.declared_repository
+            || (binding.declared_repository == kEpochEngineExtensionsRepo
+                && repository.compare("https://github.com/Autodidac/EpochEngineExtensions") == 0);
+    }
+
+    enum class SourceFeature : std::uint8_t { planetary_ocean };
+    struct SourceFeatureDependencies final
+    {
+        const SourceManifestBinding* owner{};
+        std::span<const SourceManifestBinding> required{};
+        [[nodiscard]] constexpr bool valid() const noexcept { return owner != nullptr; }
+    };
+    // Exact registry/manifest identities only. A disabled feature deliberately
+    // has no required source; package presence does not enable a feature.
+    [[nodiscard]] constexpr SourceFeatureDependencies source_feature_dependencies(
+        std::string_view owner, SourceFeature feature, bool enabled) noexcept
+    {
+        if (feature != SourceFeature::planetary_ocean) return {};
+        const SourceManifestBinding* parent{};
+        const SourceManifestBinding* ocean{};
+        for (const auto& binding : kSourceManifestBindings)
+        {
+            if (binding.registry_id == std::string_view{"research_planetary_terrain"} &&
+                (owner == binding.registry_id || owner == binding.manifest_id)) parent = &binding;
+            if (binding.registry_id == std::string_view{"research_fft_ocean"}) ocean = &binding;
+        }
+        if (!parent || !ocean) return {};
+        return {parent, enabled ? std::span<const SourceManifestBinding>{ocean, 1u}
+                                : std::span<const SourceManifestBinding>{}};
+    }
+
+    [[nodiscard]] constexpr const SourceManifestBinding* source_manifest_binding(
+        std::string_view manifestId) noexcept
+    {
+        for (const auto& binding : kSourceManifestBindings)
+            if (binding.manifest_id == manifestId) return &binding;
+        return nullptr;
     }
 
     [[nodiscard]] constexpr bool ships_in_core_without_default_project_payload(std::string_view id) noexcept
@@ -697,7 +760,7 @@ inline constexpr std::string_view kFluxKleinImagePackageId = "os_model_flux_2_kl
 
     [[nodiscard]] constexpr std::string_view recommended_local_image_model_id() noexcept
     {
-        return kBonsaiImageTernaryPackageId;
+        return {}; // No image backend/model has been admitted as a default.
     }
 
     [[nodiscard]] constexpr std::string_view engine_arcade_default_scene_id() noexcept
@@ -811,7 +874,8 @@ inline constexpr std::string_view kFluxKleinImagePackageId = "os_model_flux_2_kl
             }
         }
 
-        result.ok = result.ok && is_model_asset(recommended_local_image_model_id())
+        result.ok = result.ok && (recommended_local_image_model_id().empty()
+                || is_model_asset(recommended_local_image_model_id()))
             && catalog_section_contract();
         return result;
     }

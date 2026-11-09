@@ -25,11 +25,7 @@ export import render.canvas2d_scene;
 
 export namespace epochengine::project_gameplay2d
 {
-    enum class InputFallbackPolicy : std::uint8_t
-    {
-        require_source_or_artifact,
-        allow_legacy_default
-    };
+    using InputFallbackPolicy = project_input::RuntimeFallbackPolicy;
 
     struct ProjectPreparationRequest final
     {

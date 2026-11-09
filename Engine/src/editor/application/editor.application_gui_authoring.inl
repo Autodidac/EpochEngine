@@ -12,6 +12,7 @@
             bool interactive)
         {
             using namespace authoring::gui;
+            const gui::ScopedTextScale textScale{canvasScale};
             const std::string label = gui_widget_display_text(widget);
             const bool selected =
                 gui_widget_selected(state, widget.handle);
@@ -19,14 +20,10 @@
 
             if (interactive)
             {
-                const bool dragActive = state.guiCanvasWidgetDrag.pending
-                    || state.guiCanvasWidgetDrag.dragging;
                 const bool ownsActiveDrag =
                     state.guiCanvasWidgetDragHandle == widget.handle;
-                if (!dragActive || ownsActiveDrag)
+                if (ownsActiveDrag)
                 {
-                    if (!dragActive)
-                        state.guiCanvasWidgetDragHandle = widget.handle;
                     const gui::DragSurfaceResult drag = gui::drag_surface(
                         state.guiCanvasWidgetDrag,
                         gui::DragSurfaceOptions{
@@ -99,22 +96,8 @@
                             widget.descriptor.layout;
                         changed.x = state.guiCanvasWidgetDragPreviewX;
                         changed.y = state.guiCanvasWidgetDragPreviewY;
-                        const MutationResult committed =
-                            document.update_layout(
-                                widget.handle,
-                                std::move(changed));
-                        if (committed)
-                        {
-                            (void)project_gui_document_layout(state);
-                            state.guiDocumentStatus =
-                                "Moved GUI widget on the canvas. Undo restores its previous layout.";
-                        }
-                        else if (committed.code != ResultCode::no_change)
-                        {
-                            state.guiDocumentStatus =
-                                "GUI canvas move rejected: "
-                                + std::string(result_code_name(committed.code));
-                        }
+                        (void)commit_gui_layout_edit(
+                            state, widget.handle, std::move(changed));
                     }
                     if (!state.guiCanvasWidgetDrag.pending
                         && !state.guiCanvasWidgetDrag.dragging)
@@ -122,7 +105,11 @@
                         state.guiCanvasWidgetDragHandle = {};
                     }
                 }
-            }            gui::set_cursor(position);
+            }
+            const gui::ContentClipScope widgetClip{
+                position, {position.x + size.x, position.y + size.y}};
+            const gui::ScopedInputSuppression inputSuppression{!interactive};
+            gui::set_cursor(position);
 
             if (widget.descriptor.kind == WidgetKind::image
                 || widget.descriptor.kind == WidgetKind::image_button)
@@ -149,9 +136,9 @@
                         .source_size = size,
                         .caption = label,
                         .fit = gui::ImageFit::Contain,
-                        .interactive = interactive,
+                        .interactive = true,
                         .selected = selected});
-                    activated = image.clicked;
+                    activated = interactive && image.clicked;
                 }
                 else
                 {
@@ -164,20 +151,11 @@
             }
             else if (widget.descriptor.kind == WidgetKind::button)
             {
-                if (interactive)
-                {
-                    activated = gui::button_selected(
-                        label.empty() ? widget.descriptor.name : label,
-                        size,
-                        selected);
-                }
-                else
-                {
-                    gui::panel_rect(position, size);
-                    gui::set_cursor({
-                        position.x + 6.0f, position.y + 4.0f});
-                    gui::label(label);
-                }
+                const bool clicked = gui::button_selected(
+                    label.empty() ? widget.descriptor.name : label,
+                    size,
+                    selected);
+                activated = interactive && clicked;
             }
             else if (widget.descriptor.kind
                 == WidgetKind::text_input)
@@ -186,20 +164,18 @@
                         std::get_if<TextInputContent>(
                             &widget.descriptor.content))
                 {
-                    if (interactive && selected
-                        && !content->read_only)
+                    if (selected && !content->read_only)
                     {
                         hydrate_gui_content_editor(
                             state,
-                            state.selectedEntityId,
                             widget);
                         const auto edited = gui::edit_box(
                             state.guiContentPrimary,
                             size,
                             content->maximum_length,
                             content->multiline);
-                        activated = edited.active;
-                        if (edited.changed)
+                        activated = interactive && edited.active;
+                        if (interactive && edited.changed)
                         {
                             TextInputContent changed =
                                 *content;
@@ -212,26 +188,15 @@
                                 "Edited text input content.";
                         }
                     }
-                    else if (interactive)
-                    {
-                        activated =
-                            gui::button_selected(
-                                label.empty()
-                                    ? content->placeholder
-                                    : label,
-                                size,
-                                selected);
-                    }
                     else
                     {
-                        gui::panel_rect(position, size);
-                        gui::set_cursor({
-                            position.x + 6.0f,
-                            position.y + 4.0f});
-                        gui::label(
+                        const bool clicked = gui::button_selected(
                             label.empty()
                                 ? content->placeholder
-                                : label);
+                                : label,
+                            size,
+                            selected);
+                        activated = interactive && clicked;
                     }
                 }
             }
@@ -248,8 +213,7 @@
                         .value = static_cast<float>(content->value),
                         .step = static_cast<float>(content->step),
                         .size = size,
-                        .enabled = interactive
-                            && widget.descriptor.interaction.enabled});
+                        .enabled = widget.descriptor.interaction.enabled});
                     if (interactive && slider.changed)
                     {
                         SliderContent changed = *content;
@@ -308,7 +272,7 @@
                 gui::set_cursor({
                     position.x + 4.0f,
                     position.y + 4.0f});
-                if (interactive && !tabs.empty())
+                if (!tabs.empty())
                 {
                     const auto tabResult =
                         gui::tab_bar_buttons(
@@ -317,7 +281,7 @@
                                 30.0f,
                                 size.y - 8.0f),
                             1.0f);
-                    if (tabResult.selected_index
+                    if (interactive && tabResult.selected_index
                         && *tabResult.selected_index
                             < pages.size())
                     {
@@ -331,11 +295,19 @@
                     }
                 }
             }
+            else if (widget.descriptor.kind == WidgetKind::panel
+                || widget.descriptor.kind == WidgetKind::scroll_area)
+            {
+                // Container names belong in the hierarchy. Their children own
+                // visible titles; a synthetic label here overlaps those titles.
+                gui::panel_rect(position, size);
+            }
             else
             {
                 gui::panel_rect(position, size);
                 gui::set_cursor({
-                    position.x + 6.0f, position.y + 4.0f});
+                    position.x + 6.0f * canvasScale,
+                    position.y + 4.0f * canvasScale});
                 if (widget.descriptor.kind == WidgetKind::text)
                     gui::wrapped_label(label, size.x);
                 else
@@ -345,10 +317,13 @@
 
             if (selected || gui_widget_selected(state, widget.handle))
                 gui::selection_outline(position, size, 2.0f);
-            if (!activated && interactive
-                && gui::was_mouse_pressed()
-                && editor_point_in_rect(
-                    gui::mouse_position(), position, size))
+            const auto selectionPress = interactive && gui::was_mouse_pressed()
+                ? gui::mouse_press_position() : std::nullopt;
+            if (!activated && interactive && selectionPress
+                && editor_point_in_rect(*selectionPress, position, size)
+                && gui::drag_surface_hit_test(*selectionPress, {
+                    .position = position, .size = size,
+                    .hit_padding = 0.0f, .minimum_hit_extent = 1.0f}))
                 activated = true;
             if (activated)
                 select_gui_widget(state, widget.handle);
@@ -362,6 +337,7 @@
             gui::Vec2 position{};
             gui::Vec2 size{};
             float scale{};
+            gui::Vec2 pan{};
 
             [[nodiscard]] explicit operator bool() const noexcept
             {
@@ -374,7 +350,9 @@
         [[nodiscard]] GuiDocumentCanvasFrame compute_gui_document_canvas(
             authoring::gui::GuiDocument& document,
             gui::Vec2 surfacePosition,
-            gui::Vec2 surfaceSize)
+            gui::Vec2 surfaceSize,
+            float requestedZoom = 0.0f,
+            gui::Vec2 requestedPan = {})
         {
             using namespace authoring::gui;
             const WidgetHandle rootHandle = document.roots().front();
@@ -388,27 +366,63 @@
             const float virtualHeight = canvas
                 ? (std::max)(1.0f, canvas->virtual_height)
                 : 720.0f;
-            const float availableWidth =
-                (std::max)(80.0f, surfaceSize.x - 40.0f);
-            const float availableHeight =
-                (std::max)(80.0f, surfaceSize.y - 58.0f);
-            const float scale = (std::min)(
+            const float surfaceWidth = (std::max)(1.0f, surfaceSize.x);
+            const float surfaceHeight = (std::max)(1.0f, surfaceSize.y);
+            const float insetX = (std::min)(20.0f, surfaceWidth * 0.05f);
+            const float insetY = (std::min)(12.0f, surfaceHeight * 0.05f);
+            const float availableWidth = surfaceWidth - 2.0f * insetX;
+            const float availableHeight = surfaceHeight - 2.0f * insetY;
+            const float fitScale = (std::min)(
                 availableWidth / virtualWidth,
                 availableHeight / virtualHeight);
+            const bool manualZoom = std::isfinite(requestedZoom) && requestedZoom > 0.0f;
+            const float scale = manualZoom
+                ? (std::clamp)(requestedZoom, 1.0f / 4096.0f, 4.0f)
+                : fitScale;
             const gui::Vec2 canvasSize{
                 virtualWidth * scale,
                 virtualHeight * scale};
+            const gui::Vec2 maximumPan{
+                (std::max)(0.0f, (canvasSize.x - availableWidth) * 0.5f),
+                (std::max)(0.0f, (canvasSize.y - availableHeight) * 0.5f)};
+            const gui::Vec2 pan{
+                manualZoom && std::isfinite(requestedPan.x)
+                    ? (std::clamp)(requestedPan.x, -maximumPan.x, maximumPan.x) : 0.0f,
+                manualZoom && std::isfinite(requestedPan.y)
+                    ? (std::clamp)(requestedPan.y, -maximumPan.y, maximumPan.y) : 0.0f};
             const gui::Vec2 canvasPosition{
-                surfacePosition.x
-                    + (surfaceSize.x - canvasSize.x) * 0.5f,
-                surfacePosition.y + 38.0f
-                    + (availableHeight - canvasSize.y) * 0.5f};
+                surfacePosition.x + (surfaceWidth - canvasSize.x) * 0.5f + pan.x,
+                surfacePosition.y + (surfaceHeight - canvasSize.y) * 0.5f + pan.y};
             return {
                 &document,
                 rootHandle,
                 canvasPosition,
                 canvasSize,
-                scale};
+                scale,
+                pan};
+        }
+
+        void set_gui_document_canvas_zoom(
+            EditorState& state,
+            authoring::gui::GuiDocument& document,
+            gui::Vec2 position,
+            gui::Vec2 size,
+            float zoom)
+        {
+            const auto current = compute_gui_document_canvas(document, position, size,
+                state.guiCanvasView.zoom, state.guiCanvasView.pan);
+            auto next = compute_gui_document_canvas(document, position, size, zoom);
+            // Keep the first visible authored point in view. A Fit canvas can
+            // be letterboxed; clamping the resulting pan reveals its top-left.
+            const gui::Vec2 anchor{
+                (std::max)(position.x, current.position.x),
+                (std::max)(position.y, current.position.y)};
+            const float ratio = next.scale / current.scale;
+            next = compute_gui_document_canvas(document, position, size, next.scale, {
+                anchor.x - (anchor.x - current.position.x) * ratio - next.position.x,
+                anchor.y - (anchor.y - current.position.y) * ratio - next.position.y});
+            state.guiCanvasView.zoom = next.scale;
+            state.guiCanvasView.pan = next.pan;
         }
 
         [[nodiscard]] GuiDocumentCanvasFrame prepare_gui_document_canvas(
@@ -418,7 +432,9 @@
             gui::panel_rect(pos, size);
             if (!document || !document->valid() || document->roots().empty())
                 return {};
-            const auto frame = compute_gui_document_canvas(*document, pos, size);
+            const auto frame = compute_gui_document_canvas(*document, pos, size,
+                state.guiCanvasView.zoom, state.guiCanvasView.pan);
+            state.guiCanvasView.pan = frame.pan;
             gui::panel_rect(frame.position, frame.size);
             return frame;
         }
@@ -429,10 +445,84 @@
             gui::Vec2 size,
             bool interactive)
         {
-            const auto frame =
-                prepare_gui_document_canvas(state, position, size);
+            if (size.x <= 0.0f || size.y <= 0.0f)
+                return;
+            const gui::ContentClipScope viewportClip{
+                position, {position.x + size.x, position.y + size.y}};
+            if (auto* document = synchronize_gui_document(state);
+                document && document->valid() && !document->roots().empty())
+            {
+                auto current = compute_gui_document_canvas(*document, position, size,
+                    state.guiCanvasView.zoom, state.guiCanvasView.pan);
+                std::string percent = std::to_string(
+                    static_cast<int>(std::lround(current.scale * 100.0f))) + "%";
+                std::array actions{
+                    gui::InlineButtonSpec{.label="Fit"},
+                    gui::InlineButtonSpec{.label="100% (1:1)"},
+                    gui::InlineButtonSpec{.label="-"},
+                    gui::InlineButtonSpec{.label=percent, .width=0.0f, .enabled=false},
+                    gui::InlineButtonSpec{.label="+"},
+                    gui::InlineButtonSpec{.label=state.guiCanvasView.panMode ? "Pan: On" : "Pan"}};
+                const gui::InlineButtonRowOptions options{
+                    .sizing=gui::InlineButtonSizing::FitContent,
+                    .alignment=gui::InlineButtonAlignment::Center,
+                    .wrap=true, .available_width=size.x};
+                gui::set_cursor(position);
+                const float controlsHeight = gui::inline_button_row_height(actions, 28.0f, 4.0f, options);
+                if (controlsHeight > 0.0f && controlsHeight + 8.0f < size.y)
+                {
+                    const gui::Vec2 viewPosition{position.x, position.y + controlsHeight + 4.0f};
+                    const gui::Vec2 viewSize{size.x, size.y - controlsHeight - 4.0f};
+                    current=compute_gui_document_canvas(*document, viewPosition, viewSize,
+                        state.guiCanvasView.zoom, state.guiCanvasView.pan);
+                    percent=std::to_string(static_cast<int>(std::lround(current.scale * 100.0f))) + "%";
+                    actions[3].label=percent;
+                    if (const auto action = gui::inline_button_row(actions, 28.0f, 4.0f, options))
+                    {
+                        auto& view = state.guiCanvasView;
+                        if (*action == 0u) { view.zoom=0.0f; view.pan={}; }
+                        else if (*action == 1u)
+                            set_gui_document_canvas_zoom(state, *document, viewPosition, viewSize, 1.0f);
+                        else if (*action == 2u || *action == 4u)
+                            set_gui_document_canvas_zoom(state, *document, viewPosition, viewSize,
+                                (std::clamp)(current.scale * (*action == 2u ? 0.8f : 1.25f),
+                                    1.0f / 4096.0f, 4.0f));
+                        else if (*action == 5u) view.panMode=!view.panMode;
+                        view.drag={};
+                        state.guiCanvasWidgetDrag={};
+                        state.guiCanvasWidgetDragHandle={};
+                    }
+                    position.y += controlsHeight + 4.0f;
+                    size.y -= controlsHeight + 4.0f;
+                }
+            }
+            // The viewport is the clip owner; zoomed content may be larger.
+            const gui::ContentClipScope canvasClip{
+                position, {position.x + size.x, position.y + size.y}};
+            auto frame = prepare_gui_document_canvas(state, position, size);
             if (!frame)
                 return;
+            auto& view = state.guiCanvasView;
+            if (view.panMode)
+            {
+                // Let the existing drag owner settle an admissible release,
+                // including motion since the last held frame. Focus loss cancels.
+                if (!gui::is_mouse_down() && !gui::was_mouse_released()) view.drag={};
+                const auto drag = gui::drag_surface(view.drag, {
+                    .position=position, .size=size, .hit_padding=0.0f,
+                    .minimum_hit_extent=1.0f, .drag_threshold=3.0f, .enabled=true});
+                if (drag.pressed) view.panOrigin=view.pan;
+                if (drag.dragging || drag.released)
+                {
+                    view.pan={view.panOrigin.x + drag.delta.x, view.panOrigin.y + drag.delta.y};
+                    frame=compute_gui_document_canvas(*frame.document, position, size, view.zoom, view.pan);
+                    view.pan=frame.pan;
+                }
+            }
+            else view.drag={};
+            const gui::ContentClipScope documentClip{
+                frame.position,
+                {frame.position.x + frame.size.x, frame.position.y + frame.size.y}};
             if (state.guiCanvasWidgetDragHandle
                 && !frame.document->widget(
                     state.guiCanvasWidgetDragHandle))
@@ -442,16 +532,21 @@
             }
             const std::vector<authoring::gui::WidgetView>
                 widgets = frame.document->widgets();
+            std::optional<gui::Vec2> pressOrigin{};
+            authoring::gui::WidgetHandle dragTarget{};
+            bool exactDragTarget = false;
             std::function<void(
                 authoring::gui::WidgetHandle,
                 gui::Vec2,
                 gui::Vec2,
-                std::size_t)> renderChildren;
+                std::size_t,
+                bool)> renderChildren;
             renderChildren = [&](
                 authoring::gui::WidgetHandle parent,
                 gui::Vec2 parentPosition,
                 gui::Vec2 parentSize,
-                std::size_t depth)
+                std::size_t depth,
+                bool hitTestOnly)
             {
                 using namespace authoring::gui;
                 if (depth >= 64u)
@@ -463,6 +558,15 @@
 
                 const LayoutDescriptor& parentLayout =
                     parentView->descriptor.layout;
+                std::optional<gui::ContentClipScope> childrenClip{};
+                if (parentLayout.clip_children
+                    || parentView->descriptor.kind == WidgetKind::scroll_area)
+                {
+                    childrenClip.emplace(
+                        parentPosition,
+                        gui::Vec2{parentPosition.x + parentSize.x,
+                            parentPosition.y + parentSize.y});
+                }
                 const float virtualParentWidth =
                     parentSize.x / frame.scale;
                 const float virtualParentHeight =
@@ -514,10 +618,11 @@
                                 {
                                     parentSize.x,
                                     (std::max)(
-                                        18.0f,
+                                        0.0f,
                                         parentSize.y
                                             - tabHeight)},
-                                depth + 1u);
+                                depth + 1u,
+                                hitTestOnly);
                         }
                         continue;
                     }
@@ -567,13 +672,27 @@
                         parentPosition.y
                             + virtualY * frame.scale};
                     const gui::Vec2 widgetSize{
-                        (std::max)(
-                            18.0f,
-                            virtualWidth * frame.scale),
-                        (std::max)(
-                            18.0f,
-                            virtualHeight * frame.scale)};
-                    (void)render_gui_document_widget(
+                        virtualWidth * frame.scale,
+                        virtualHeight * frame.scale};
+                    if (hitTestOnly)
+                    {
+                        if (pressOrigin && gui::drag_surface_hit_test(*pressOrigin, {
+                                .position = widgetPosition, .size = widgetSize,
+                                .hit_padding = 7.0f, .minimum_hit_extent = 36.0f,
+                                .drag_threshold = 3.0f, .enabled = true}))
+                        {
+                            const bool exact = editor_point_in_rect(
+                                *pressOrigin, widgetPosition, widgetSize);
+                            // A neighbour's expanded touch target must not
+                            // steal a press on an actually painted child.
+                            if (exact || !exactDragTarget)
+                            {
+                                dragTarget = widget.handle;
+                                exactDragTarget = exact;
+                            }
+                        }
+                    }
+                    else (void)render_gui_document_widget(
                         state,
                         *frame.document,
                         widget,
@@ -582,7 +701,7 @@
                         {availableWidth, availableHeight},
                         parentLayout.flow,
                         frame.scale,
-                        interactive);
+                        interactive && !view.panMode);
 
                     if (widget.descriptor.kind
                             == WidgetKind::panel
@@ -595,7 +714,8 @@
                             widget.handle,
                             widgetPosition,
                             widgetSize,
-                            depth + 1u);
+                            depth + 1u,
+                            hitTestOnly);
                     }
 
                     if (parentLayout.flow
@@ -612,11 +732,22 @@
                     }
                 }
             };
+            if (interactive && !view.panMode
+                && !state.guiCanvasWidgetDrag.pending
+                && !state.guiCanvasWidgetDrag.dragging)
+            {
+                state.guiCanvasWidgetDragHandle = {};
+                pressOrigin = gui::mouse_press_position();
+                if (pressOrigin)
+                    renderChildren(frame.root, frame.position, frame.size, 0u, true);
+                state.guiCanvasWidgetDragHandle = dragTarget;
+            }
             renderChildren(
                 frame.root,
                 frame.position,
                 frame.size,
-                0u);
+                0u,
+                false);
         }
 
         [[nodiscard]] bool activate_project_texture(

@@ -183,7 +183,13 @@ namespace epochengine::editor_ai_agent_routing
     {
         if (target.empty()
             || static_cast<unsigned>(settings.candidate_execution)
-                > static_cast<unsigned>(CandidateExecution::local_testing)) return false;
+                > static_cast<unsigned>(CandidateExecution::local_testing)
+            || !safe_model_id(settings.codex_model)
+            || !valid_effort(settings.codex_effort)
+            || !valid_summary(settings.codex_summary)
+            || (!settings.automatic_codex_model.empty()
+                && !safe_model_id(settings.automatic_codex_model)))
+            return false;
         std::error_code error{};
         std::filesystem::create_directories(target.parent_path(), error);
         if (error) return false;
@@ -199,16 +205,11 @@ namespace epochengine::editor_ai_agent_routing
             out << (settings.enabled ? 1 : 0) << '\n';
             for (const auto stage : settings.stages)
                 out << static_cast<unsigned>(stage) << '\n';
-            if (!safe_model_id(settings.codex_model)
-                || !valid_effort(settings.codex_effort)
-                || !valid_summary(settings.codex_summary)) return false;
             out << settings.codex_model << '\n' << settings.codex_effort
                 << '\n' << settings.codex_summary << '\n';
             out << (settings.automatic_codex_approved ? 1 : 0) << '\n';
             out << static_cast<unsigned>(settings.candidate_execution) << '\n';
             out << (settings.use_source_recipes ? 1 : 0) << '\n';
-            if (!settings.automatic_codex_model.empty()
-                && !safe_model_id(settings.automatic_codex_model)) return false;
             out << settings.automatic_codex_model << '\n';
             out.flush();
             if (!out) return false;

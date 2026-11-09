@@ -37,6 +37,8 @@
                 application.kind == EditorApplicationKind::GuiEditor
                     ? OutlinerToolTab::Gui
                     : OutlinerToolTab::World;
+            state.game2DGuiWorkspace = application.kind == EditorApplicationKind::GuiEditor;
+            state.workspaceCompanionsPending = true;
             state.projectCameraMode = application_camera_mode(application.camera_policy);
             state.viewportCameraMode = application_camera_mode(application.camera_policy);
             state.showOutliner = application.panes.outliner;
@@ -45,10 +47,67 @@
             state.showAiChat = application.panes.ai_chat;
         }
 
+        void retire_planetary_preview_publication(EditorState& state)
+        {
+            // A closed/replaced project's result must not pin its mesh buffers
+            // until another planetary Scene happens to open. Keep active work
+            // owned; only discard its already-settled, invalidated result.
+            if(!state.planetaryPreviewPending||state.planetaryPreviewSceneRevision!=0u
+                ||state.planetaryPreviewPending->wait_for(std::chrono::milliseconds{0})!=std::future_status::ready)return;
+            try{(void)state.planetaryPreviewPending->get();}catch(...){}
+            state.planetaryPreviewPending.reset();
+            state.planetaryPreviewCancellation={};
+        }
+
+        void reset_planetary_preview_publication(EditorState& state)
+        {
+            if(state.planetaryPreviewPending&&state.taskScheduler)
+                (void)state.taskScheduler->cancel(state.planetaryPreviewCancellation);
+            state.planetaryPreviewCancellation={};
+            state.planetaryPreviewRequest.reset();
+            state.viewportMeshWireframeRequest.reset();
+            state.planetaryPreviewProjectRoot.clear();
+            state.planetaryPreviewProjectGeneration=0u;
+            state.planetaryPreviewSceneRevision=0u;
+            retire_planetary_preview_publication(state);
+        }
+
         void reset_project_bound_editor_state(
             EditorState& state,
             std::string_view guiStatus)
         {
+            if(state.forestSurfacePending&&state.taskScheduler)
+                (void)state.taskScheduler->cancel(state.forestSurfaceCancellation);
+            state.forestSurfacePlacement.reset();
+            state.forestPlacementFocusPending=false;
+            state.forestTerrainPainting=false;
+            state.forestBrushHeld=false;
+            state.forestBrushTerrain=scene::kInvalidSceneObjectId;
+            state.forestBrushLastDirection.reset();
+            state.planetaryCheckedRoot.clear();
+            reset_planetary_preview_publication(state);
+            state.planetaryAttachment = {};
+            state.planetarySettings = {};
+            state.planetaryFeatureRequest.reset();
+            state.planetaryMeshPolicy.reset();
+            state.planetaryBodySelection.reset();
+            state.planetaryAttachmentIsUpdate=false;
+            state.planetarySeedDraft = "1337";
+            state.planetaryBuildLog.clear();
+            state.planetaryLogLines.clear();
+            state.planetaryBuildSeconds = 0.0;
+            state.planetaryGenerationSeconds = 0.0;
+            state.planetaryPreviewFocusPending = false;
+            state.planetaryInitialFramePending = false;
+            state.planetaryInitialFrameGeneration = 0u;
+            state.planetaryStreamContinue = true;
+            state.planetaryStreamFailed = false;
+            state.planetaryStreamStatus.clear();
+            state.planetaryStreamEntity = 0;
+            state.planetaryStreamSnapshot.reset();
+            state.planetaryStreamCloud.reset();
+            state.planetaryStreamNextTick = 0;
+            state.meshImportOpen = false;
             state.selectedProjectFile.clear();
             state.selectedAssetPath.clear();
             state.assetBrowserFolder.clear();
@@ -56,6 +115,7 @@
             state.projectWorkspaceSection = 0u;
             state.guiDocumentTab = 0u;
             state.guiCanvasWidgetDrag = {};
+            state.guiCanvasView = {};
             state.guiCanvasWidgetDragHandle = {};
             state.assetGridScroll = 0.0f;
             state.assetGridVisibleIds.clear();
@@ -66,6 +126,8 @@
             state.projectInputSettings.reset();
             state.projectInputSettingsStatus =
                 "Open Input Manager to load the active project's bindings.";
+            state.guiSelectedWidget = {};
+            state.guiContentEditorWidget = {};
             state.guiDocument.reset();
             state.guiDocumentRoot = {};
             state.guiDocumentWidgets.clear();
@@ -74,8 +136,7 @@
             state.guiDocumentSourcePath.clear();
             state.guiDocumentSavedRevision = 0u;
             state.guiDocumentLoadAttempted = false;
-            state.guiContentEditorEntityId =
-                scene::kInvalidSceneObjectId;
+            state.guiContentEditorWidget = {};
             state.guiContentPrimary.clear();
             state.guiContentSecondary.clear();
             state.guiActionEditor.clear();
@@ -85,18 +146,28 @@
             state.projectTextureThumbnails.clear();
             state.projectSourceTextureThumbnails.clear();
             state.projectTextureThumbnailAtlasSignature = 0u;
+            if (state.forestProjectCreationIntent)
+                state.plantLabStatus = "Project selection changed. Return to Forest Factory and choose Add to Scene again.";
             state.plantLabDocument = {};
+            state.forestProjectCreationIntent.reset();
             state.plantLabCompiled = {};
             state.plantLabPublishedArtifact = {};
             state.plantLabCompiledRevision = 0u;
             state.plantLabCompiledContentHash = 0u;
             state.plantLabDocumentInitialized = false;
+            state.forestPreviewEntities.clear();
+            state.forestPreviewRevision = 0u;
+            state.forestPreviewContentHash = 0u;
+            state.forestProjectCamera.reset();
+            state.forestDesignCamera.reset();
+            state.forestPlacementCamera.reset();
             state.aiAuthoringPlan = {};
             state.aiProjectScriptDraft.clear();
             state.aiProjectScriptRequested = false;
             state.aiProjectScriptRunAfterBuild = state.aiProjectScriptRepairQueued = false;
             state.aiProjectScriptCompilerDiagnostics.clear();
             state.scriptCubeOscillators.clear();
+            state.scriptTranslationTracks.clear();
             state.scriptOscillator = {};
             if (state.scriptBuildCancellation.valid() && state.taskScheduler)
                 (void)state.taskScheduler->cancel(state.scriptBuildCancellation);
@@ -106,8 +177,19 @@
             state.aiAuthoringApplyProgress.reset();
             state.aiAuthoringApplyCancellation = {};
             state.aiToolPlan = {};
+            state.aiToolModelRecovery = {};
+            state.aiToolImageBinding.clear();
+            state.aiToolImageWork.clear();
+            state.aiToolImageActivityId = 0u;
+            state.aiPackageRequest.reset();
             state.aiAuthoringAwaitingReply = false;
             state.aiToolAwaitingReply = false;
+            state.aiIntentClarificationPending = false;
+            state.aiIntentClarificationResumeIntent = AiChatIntent::Ambiguous;
+            state.aiIntentClarificationRequest.clear();
+            state.aiIntentClarificationQuestion.clear();
+            state.aiProjectClarificationObjective.clear();
+            state.aiProjectClarifications.clear();
             state.aiAuthoringPlanApplied = false;
             state.aiToolPlanApplied = false;
             state.aiAuthoringPlanForGoal = false;
@@ -115,6 +197,8 @@
                 "Project changed; request a new guarded tool plan.";
             if (!state.aiToolTestPending)
                 state.aiToolTestProjectId.clear();
+            state.aiGoalTools = {};
+            state.aiGoalPackageReceipt.reset();
             state.aiGoal.clear();
             state.aiGoalDraft.clear();
             state.aiGoalActive = false;
@@ -137,6 +221,7 @@
             state.tileMapTileExtent = 32u;
 #endif
             state.sceneDocument = authoring::scene::SceneDocument{};
+            state.sceneAmbientDraftInitialized = false;
         }
 
         void set_project(EditorState& state, std::string_view projectId, bool writeLog)
@@ -163,6 +248,11 @@
                 state.projectBuildAcceptedOutputDigest = {};
             state.projectName = std::string(profile->display_name);
             state.projectRoot = std::string(profile->root_path);
+            state.projectBuildConfiguration = editor_project_build_configuration(state.projectRoot).value_or("");
+            const auto runSettings = editor_project_run_settings(state.projectRoot).value_or(EditorProjectRunSettings{});
+            state.projectRunBackend = runSettings.backend;
+            state.projectRunFrameLimitFps = runSettings.frame_limit_fps;
+            state.projectFrameLimitEdit = {};
             reset_project_bound_editor_state(
                 state,
                 "GUI document will load from the selected project.");
@@ -190,6 +280,9 @@
                 (void)rebuild_editor_scene_document(state, "Load project scene seed");
 
             synchronize_editor_selection(state);
+            state.planetaryInitialFramePending = loadedScene && std::any_of(state.entities.begin(),state.entities.end(),
+                [](const EditorEntity& entity){return entity.visible&&entity.category=="Planetary Terrain"&&entity.meshAsset.has_value();});
+            state.planetaryInitialFrameGeneration = state.projectLifecycle.evidence().generations.selected_project.generation;
             if (writeLog)
                 push_editor_log(
                     state,
@@ -260,6 +353,19 @@
             return entity.type.starts_with("Gui")
                 && entity.type != "GuiDocument"
                 && entity.type != "GuiSafeArea";
+        }
+
+        [[nodiscard]] bool project_gui_document_is_active(
+            const EditorState& state)
+        {
+            const auto* profile = editor_find_project_profile(state.projectId);
+            return (profile && !profile->gui_path.empty())
+                || (state.guiDocument && state.guiDocument->valid())
+                || std::any_of(state.entities.begin(), state.entities.end(),
+                    [](const EditorEntity& entity)
+                    {
+                        return is_gui_authoring_entity(entity);
+                    });
         }
 
         [[nodiscard]] bool is_screen_space_gui_entity(
@@ -545,6 +651,199 @@
             }
         }
 
+        [[nodiscard]] std::array<editor_authoring_history::GroupState, 2>
+        gui_world_group_states(
+            const authoring::scene::SceneDocument& world,
+            const authoring::gui::GuiDocument& guiDocument)
+        {
+            using editor_authoring_history::GroupState;
+            const auto& identity = world.identity();
+            const auto document = guiDocument.document();
+            const auto branch = guiDocument.branch();
+            std::array<GroupState, 2> states{{
+                {.branch = {1u},
+                    .identity = {identity.scene.value, identity.project.value,
+                        identity.schema_version, 0u},
+                    .content = world.revision().content.words,
+                    .revision = world.revision().sequence,
+                    .cursor = world.metrics().applied_transactions},
+                {.branch = {2u},
+                    .identity = {document.index, document.generation,
+                        branch.timeline, branch.branch},
+                    .content = guiDocument.revision().content.words,
+                    .revision = guiDocument.revision().sequence,
+                    .cursor = guiDocument.metrics().applied_operations}
+            }};
+            for (const auto& entry : world.history())
+                states[0].entries.push_back(entry.id.value);
+            for (const auto& entry : guiDocument.journal())
+                states[1].entries.push_back(entry.id.value);
+            return states;
+        }
+
+        // Layout changes preserve object membership and selection. Build the
+        // complete disposable vector before publishing either authoritative journal.
+        [[nodiscard]] bool prepare_gui_world_projection(
+            const EditorState& state,
+            const authoring::scene::SceneDocument& world,
+            std::vector<EditorEntity>& entities)
+        {
+            const auto projected = world.project_snapshot(
+                state.timeSnapshot.frame_index,
+                state.timeSnapshot.simulated_seconds);
+            if (!projected || projected.snapshot.objects.size() != state.entities.size())
+                return false;
+            entities = state.entities;
+            for (auto& entity : entities)
+            {
+                const auto object = std::find_if(projected.snapshot.objects.begin(),
+                    projected.snapshot.objects.end(), [&](const auto& candidate)
+                    { return candidate.id == entity.sceneObjectId; });
+                if (object == projected.snapshot.objects.end()) return false;
+                entity.position = object->position;
+                entity.rotation = object->rotation;
+                entity.scale = object->scale;
+            }
+            return true;
+        }
+
+        void publish_gui_world_history(
+            EditorState& state,
+            authoring::scene::SceneDocument& world,
+            authoring::gui::GuiDocument& guiDocument,
+            editor_authoring_history::Controller& controller,
+            std::vector<EditorEntity>& entities) noexcept
+        {
+            static_assert(std::is_nothrow_swappable_v<authoring::scene::SceneDocument>);
+            static_assert(std::is_nothrow_swappable_v<authoring::gui::GuiDocument>);
+            static_assert(std::is_nothrow_swappable_v<editor_authoring_history::Controller>);
+            using std::swap;
+            swap(state.sceneDocument, world);
+            // Keep the GuiDocument object's address: canvas callers borrow it.
+            swap(*state.guiDocument, guiDocument);
+            swap(state.authoringHistory, controller);
+            state.entities.swap(entities);
+            state.sceneDocumentRevision = state.sceneDocument.revision().sequence;
+            state.sceneInteractionDirty = true;
+            state.sceneLightingDirty = true;
+        }
+
+        [[nodiscard]] bool commit_gui_layout_edit(
+            EditorState& state, const authoring::gui::WidgetHandle widget,
+            authoring::gui::LayoutDescriptor layout)
+        {
+            if (!state.guiDocument || !state.sceneDocument.initialized()) return false;
+            try
+            {
+                auto guiDocument = *state.guiDocument;
+                const auto changed = guiDocument.update_layout(widget, std::move(layout));
+                if (!changed) return false;
+                auto world = state.sceneDocument;
+                std::vector<authoring::scene::SceneOperation> operations{};
+                for (const auto& [sceneId, handle] : state.guiDocumentWidgets)
+                {
+                    const auto view = guiDocument.widget(handle);
+                    const auto entity = editor_entity_index(state, sceneId);
+                    const auto object = world.find(authoring::scene::ObjectId{sceneId});
+                    if (!view || !entity || !object)
+                    {
+                        state.guiDocumentStatus = "Layout change blocked: a GUI scene projection is stale.";
+                        return false;
+                    }
+                    const auto source = world.object(*object);
+                    if (!source) return false;
+                    auto transform = source->descriptor.transform;
+                    transform.position.x = view->descriptor.layout.x / 100.0f - 3.2f;
+                    transform.position.y = 1.8f - view->descriptor.layout.y / 100.0f;
+                    transform.scale.x = view->descriptor.layout.width / 100.0f;
+                    transform.scale.y = view->descriptor.layout.height / 100.0f;
+                    if (transform != source->descriptor.transform)
+                        operations.emplace_back(authoring::scene::ObjectTransformChangedOperation{
+                            .object = *object, .value = transform});
+                }
+                auto controller = state.authoringHistory;
+                if (!operations.empty())
+                {
+                    const auto before = gui_world_group_states(state.sceneDocument, *state.guiDocument);
+                    if (!world.apply_transaction(operations, "GUI layout"))
+                    {
+                        state.guiDocumentStatus = "Layout change blocked: the World journal rejected its projection.";
+                        return false;
+                    }
+                    const auto after = gui_world_group_states(world, guiDocument);
+                    const std::array<editor_authoring_history::GroupChange, 2> changes{{
+                        {before[0], after[0]}, {before[1], after[1]}}};
+                    if (controller.register_group(changes, "GUI layout")
+                        != editor_authoring_history::GroupCode::ready)
+                    {
+                        state.guiDocumentStatus = "Layout change blocked: grouped history is full or stale. Nothing changed.";
+                        return false;
+                    }
+                }
+                std::vector<EditorEntity> entities{};
+                if (!prepare_gui_world_projection(state, world, entities))
+                {
+                    state.guiDocumentStatus = "Layout change blocked: its scene projection could not be validated.";
+                    return false;
+                }
+                std::string status = "GUI layout saved in history. Undo restores the widget and its scene projection together.";
+                publish_gui_world_history(state, world, guiDocument, controller, entities);
+                state.guiDocumentStatus.swap(status);
+                return true;
+            }
+            catch (...)
+            {
+                state.guiDocumentStatus = "Layout change could not be prepared. Both documents are unchanged.";
+                return false;
+            }
+        }
+
+        [[nodiscard]] std::optional<bool> try_grouped_gui_world_history(
+            EditorState& state, const editor_authoring_history::BranchId branch,
+            const editor_authoring_history::Direction direction)
+        {
+            if (!state.guiDocument || !state.sceneDocument.initialized()) return std::nullopt;
+            try
+            {
+                using namespace editor_authoring_history;
+                const auto before = gui_world_group_states(state.sceneDocument, *state.guiDocument);
+                const auto plan = state.authoringHistory.plan_group(branch, direction, before);
+                if (plan.code == GroupCode::none) return std::nullopt;
+                if (plan.code != GroupCode::ready)
+                {
+                    state.guiDocumentStatus = "Undo/Redo blocked: this layout also changed another document. Restore its later edits first.";
+                    push_editor_log(state, "[edit] " + state.guiDocumentStatus);
+                    return false;
+                }
+                auto world = state.sceneDocument;
+                auto guiDocument = *state.guiDocument;
+                auto controller = state.authoringHistory;
+                const bool undo = direction == Direction::undo;
+                const bool worldChanged = undo ? static_cast<bool>(world.undo()) : static_cast<bool>(world.redo());
+                const bool guiChanged = undo ? static_cast<bool>(guiDocument.undo()) : static_cast<bool>(guiDocument.redo());
+                const auto after = gui_world_group_states(world, guiDocument);
+                std::vector<EditorEntity> entities{};
+                if (!worldChanged || !guiChanged
+                    || controller.accept_group(plan, before, after) != GroupCode::ready
+                    || !prepare_gui_world_projection(state, world, entities))
+                {
+                    state.guiDocumentStatus = "Undo/Redo could not be prepared. Both documents are unchanged.";
+                    push_editor_log(state, "[edit] " + state.guiDocumentStatus);
+                    return false;
+                }
+                std::string status = undo ? "GUI layout and scene projection undone together."
+                    : "GUI layout and scene projection redone together.";
+                publish_gui_world_history(state, world, guiDocument, controller, entities);
+                state.guiDocumentStatus.swap(status);
+                return true;
+            }
+            catch (...)
+            {
+                state.guiDocumentStatus = "Undo/Redo preparation failed. Both documents are unchanged.";
+                return false;
+            }
+        }
+
         [[nodiscard]] std::string_view gui_entity_type_for_widget(
             authoring::gui::WidgetKind kind) noexcept;
 
@@ -660,7 +959,10 @@
                 return false;
             }
 
+            state.guiSelectedWidget = {};
+            state.guiContentEditorWidget = {};
             state.guiDocument = std::move(document);
+            state.guiCanvasView = {};
             state.guiDocumentRoot = root;
             state.guiDocumentWidgets.clear();
 
@@ -760,6 +1062,16 @@
             return true;
         }
 
+        [[nodiscard]] bool gui_layout_matches_scene_projection(
+            const authoring::gui::LayoutDescriptor& layout,
+            const EditorEntity& entity) noexcept
+        {
+            return entity.position[0] == layout.x / 100.0f - 3.2f
+                && entity.position[1] == 1.8f - layout.y / 100.0f
+                && entity.scale[0] == layout.width / 100.0f
+                && entity.scale[1] == layout.height / 100.0f;
+        }
+
         [[nodiscard]] authoring::gui::GuiDocument*
         synchronize_gui_document(EditorState& state)
         {
@@ -779,13 +1091,18 @@
                 {
                     state.guiDocumentStatus =
                         "GUI starter document initialization failed.";
+                    state.guiSelectedWidget = {};
+                    state.guiContentEditorWidget = {};
                     state.guiDocument.reset();
                     state.guiDocumentRoot = {};
                     state.guiDocumentWidgets.clear();
                     return nullptr;
                 }
+                state.guiSelectedWidget = {};
+                state.guiContentEditorWidget = {};
                 state.guiDocument = std::make_unique<GuiDocument>(
                     std::move(*starter));
+                state.guiCanvasView = {};
                 state.guiDocumentRoot =
                     state.guiDocument->roots().front();
                 state.guiDocumentWidgets.clear();
@@ -877,9 +1194,16 @@
                     descriptor.layout.minimum_width;
                 mergedLayout.minimum_height =
                     descriptor.layout.minimum_height;
-                (void)state.guiDocument->update_layout(
-                    widget,
-                    std::move(mergedLayout));
+                // The GUI document owns this layout. Only import an actual
+                // World change; reversing its float projection would create a
+                // fresh history entry after every exact GUI edit/Undo.
+                if (!gui_layout_matches_scene_projection(
+                        existing->descriptor.layout, entity))
+                {
+                    (void)state.guiDocument->update_layout(
+                        widget,
+                        std::move(mergedLayout));
+                }
 
                 if ((descriptor.kind == WidgetKind::image
                         || descriptor.kind == WidgetKind::image_button)
@@ -1115,12 +1439,14 @@
                     "Replace GUI document projection");
             }
 
+            state.guiSelectedWidget = {};
+            state.guiContentEditorWidget = {};
             state.guiDocument = std::move(document);
+            state.guiCanvasView = {};
             state.guiDocumentRoot = root;
             state.guiDocumentWidgets.clear();
             state.guiProjectionTombstones.clear();
-            state.guiContentEditorEntityId =
-                scene::kInvalidSceneObjectId;
+            state.guiContentEditorWidget = {};
             state.guiDocumentLoadAttempted = true;
             state.guiDocumentSourcePath = std::move(source);
             state.guiDocumentSavedRevision = source_is_saved
@@ -1281,16 +1607,8 @@
                         + ".write");
                 if (std::filesystem::exists(temporary, error))
                 {
-                    error.clear();
-                    if (!std::filesystem::remove(
-                            temporary,
-                            error)
-                        || error)
-                    {
-                        failure =
-                            "Stale GUI temporary source could not be retired.";
-                        return false;
-                    }
+                    failure = "GUI temporary source already exists. It was preserved; choose another destination or review that file.";
+                    return false;
                 }
 
                 error.clear();
@@ -1448,14 +1766,16 @@
                 state,
                 std::move(document),
                 display_project_path(selected.path),
-                false,
-                "Opened GUI document as an unsaved project draft from "
+                !has_open_project(state),
+                (has_open_project(state)
+                    ? "Opened GUI document as an unsaved project draft from "
+                    : "Opened GUI document from ")
                     + display_project_path(selected.path)
                     + ".");
         }
 
-        [[nodiscard]] bool save_gui_template_from_dialog(
-            EditorState& state)
+        [[nodiscard]] bool save_gui_document_from_dialog(
+            EditorState& state, bool template_copy = false)
         {
             auto* document =
                 synchronize_gui_document(state);
@@ -1466,7 +1786,11 @@
                 state.guiTemplatePreset,
                 kGuiTemplateCatalog.size() - 1u);
             std::filesystem::path initialDirectory{};
-            if (!state.projectRoot.empty())
+            const std::filesystem::path openedSource{state.guiDocumentSourcePath};
+            if (!template_copy && openedSource.is_absolute()
+                && openedSource.extension() == ".epochgui")
+                initialDirectory = openedSource.parent_path();
+            if (initialDirectory.empty() && !state.projectRoot.empty())
             {
                 auto root = resolve_editor_path(state.projectRoot);
                 if (!core::path::candidate_data_root().empty())
@@ -1476,7 +1800,8 @@
                     state.guiDocumentStatus = "No writable project is admitted for this GUI template.";
                     return false;
                 }
-                initialDirectory = root / "Assets" / "Gui" / "Templates";
+                initialDirectory = root / "Assets" / "Gui";
+                if (template_copy) initialDirectory /= "Templates";
                 std::error_code ignored{};
                 std::filesystem::create_directories(
                     initialDirectory,
@@ -1486,22 +1811,34 @@
             {
                 if (!core::path::candidate_data_root().empty())
                 {
-                    state.guiDocumentStatus = "Select a private candidate project before saving a GUI template.";
-                    return false;
+                    if (template_copy)
+                    {
+                        state.guiDocumentStatus = "Select a private candidate project before saving a GUI template.";
+                        return false;
+                    }
+                    initialDirectory = editor_resolve_candidate_project_path(
+                        core::path::candidate_data_root() / "Projects" / "GuiDocument.epochgui").parent_path();
+                    if (initialDirectory.empty())
+                    {state.guiDocumentStatus = "No private GUI document destination is admitted.";return false;}
+                    std::error_code error{};
+                    std::filesystem::create_directories(initialDirectory,error);
+                    if(error) {state.guiDocumentStatus = "The private GUI document folder could not be created.";return false;}
                 }
-                std::error_code ignored{};
-                initialDirectory =
-                    std::filesystem::current_path(ignored);
+                else
+                {
+                    std::error_code ignored{};
+                    initialDirectory = std::filesystem::current_path(ignored);
+                }
             }
 
             const std::wstring defaultName =
                 std::filesystem::path{
-                    std::string{
-                        kGuiTemplateCatalog[presetIndex].id}
-                    + ".epochgui"}.wstring();
+                    template_copy ? std::string{kGuiTemplateCatalog[presetIndex].id} + ".epochgui"
+                        : openedSource.is_absolute() && openedSource.extension() == ".epochgui"
+                            ? openedSource.filename().string() : "GuiDocument.epochgui"}.wstring();
             const auto destination =
                 platform::filesystem::save_file_dialog(
-                    L"Save Epoch GUI Template",
+                    template_copy ? L"Save Epoch GUI Template" : L"Save Epoch GUI Document",
                     L"Epoch GUI document",
                     L"*.epochgui",
                     defaultName,
@@ -1527,57 +1864,143 @@
                     std::move(failure);
                 return false;
             }
-            state.guiDocumentStatus =
-                "Saved reusable GUI template to "
-                + display_project_path(destination.path)
-                + ".";
+            auto savedPath=destination.path;
+            if(savedPath.extension()!=".epochgui")savedPath+=".epochgui";
+            const auto savedSource=display_project_path(savedPath);
+            if(!template_copy)
+            {
+                const auto previousSource=state.guiDocumentSourcePath;
+                for(auto* identity:{&state.guiSelectedWidget,&state.guiContentEditorWidget})
+                    if(identity->document==document->document() && identity->branch==document->branch()
+                        && identity->projectId==state.projectId && identity->projectRoot==state.projectRoot
+                        && identity->sourcePath==previousSource) identity->sourcePath=savedSource;
+                state.guiDocumentSourcePath=savedSource;
+                state.guiDocumentSavedRevision=document->revision().sequence;
+                state.guiDocumentReplaceArmed=false;
+            }
+            state.guiDocumentStatus = std::string{template_copy ? "Saved reusable GUI template to " : "Saved GUI document to "}
+                + savedSource + ".";
             push_editor_log(
                 state,
                 "[gui] " + state.guiDocumentStatus);
             return true;
         }
 
-        [[nodiscard]] bool gui_widget_selected(
-            const EditorState& state,
-            authoring::gui::WidgetHandle widget) noexcept
+        [[nodiscard]] bool reload_standalone_gui_document(EditorState& state)
         {
-            const auto mapped = std::ranges::find(
-                state.guiDocumentWidgets,
-                widget,
-                &decltype(state.guiDocumentWidgets)::value_type::second);
-            return mapped != state.guiDocumentWidgets.end()
-                && mapped->first == state.selectedEntityId;
+            const std::filesystem::path source{state.guiDocumentSourcePath};
+            if(!source.is_absolute() || source.extension()!=".epochgui")
+            {state.guiDocumentStatus="Save this GUI document before reloading it.";return false;}
+            if(gui_document_has_unsaved_changes(state)&&!state.guiDocumentReplaceArmed)
+            {state.guiDocumentReplaceArmed=true;state.guiDocumentStatus="Unsaved GUI changes exist. Press Reload again to replace them.";return false;}
+            std::string failure;
+            auto document=decode_gui_document_file(source,failure);
+            if(!document)
+            {state.guiDocumentReplaceArmed=false;state.guiDocumentStatus=std::move(failure);return false;}
+            return install_gui_document(state,std::move(document),display_project_path(source),true,
+                "Reloaded GUI document from "+display_project_path(source)+".");
         }
 
-        void select_gui_widget(
-            EditorState& state,
-            authoring::gui::WidgetHandle widget)
+        [[nodiscard]] EditorState::GuiWidgetIdentity gui_widget_identity(
+            const EditorState& state, authoring::gui::WidgetHandle widget)
         {
-            const auto mapped = std::ranges::find(
-                state.guiDocumentWidgets,
-                widget,
-                &decltype(state.guiDocumentWidgets)::value_type::second);
-            if (mapped == state.guiDocumentWidgets.end())
-                return;
-            const auto entityIndex =
-                editor_entity_index(state, mapped->first);
-            if (entityIndex)
-            {
-                select_editor_entity(state, *entityIndex);
-                state.outlinerToolTab = OutlinerToolTab::Gui;
-                state.guiAuthoringSection = 1u;
-                state.inspectorToolTab = InspectorToolTab::Properties;
-            }
+            return {
+                state.guiDocument->document(), state.guiDocument->branch(), widget,
+                state.projectId, state.projectRoot, state.guiDocumentSourcePath};
+        }
+
+        [[nodiscard]] bool gui_widget_identity_matches(
+            const EditorState& state,
+            const EditorState::GuiWidgetIdentity& identity,
+            authoring::gui::WidgetHandle widget) noexcept
+        {
+            return state.guiDocument && state.guiDocument->valid()
+                && identity.widget == widget
+                && identity.document == state.guiDocument->document()
+                && identity.branch == state.guiDocument->branch()
+                && identity.projectId == state.projectId
+                && identity.projectRoot == state.projectRoot
+                && identity.sourcePath == state.guiDocumentSourcePath;
         }
 
         [[nodiscard]] std::optional<authoring::gui::WidgetHandle>
-        selected_gui_widget(const EditorState& state) noexcept
+        selected_gui_widget(const EditorState& state)
         {
+            if (!state.guiDocument || !state.guiDocument->valid())
+                return std::nullopt;
+            const auto& selected = state.guiSelectedWidget;
+            if (selected.widget)
+            {
+                return gui_widget_identity_matches(state, selected, selected.widget)
+                    && state.guiDocument->widget(selected.widget)
+                    ? std::optional{selected.widget} : std::nullopt;
+            }
+            // A scene-selected GUI proxy is still accepted, without making a
+            // scene proxy a prerequisite for authoring-document selection.
             const auto mapped = state.guiDocumentWidgets.find(
                 state.selectedEntityId);
-            if (mapped == state.guiDocumentWidgets.end())
+            if (mapped == state.guiDocumentWidgets.end()
+                || !editor_entity_index(state, mapped->first)
+                || !state.guiDocument->widget(mapped->second))
                 return std::nullopt;
             return mapped->second;
+        }
+
+        [[nodiscard]] bool gui_widget_selected(
+            const EditorState& state, authoring::gui::WidgetHandle widget)
+        {
+            return selected_gui_widget(state) == widget;
+        }
+
+        bool select_gui_widget(
+            EditorState& state, authoring::gui::WidgetHandle widget)
+        {
+            if (!state.guiDocument || !state.guiDocument->widget(widget))
+                return false;
+            auto identity = gui_widget_identity(state, widget);
+            const bool unchanged = gui_widget_identity_matches(
+                state, state.guiSelectedWidget, widget);
+            const auto mapped = std::ranges::find(state.guiDocumentWidgets, widget,
+                &decltype(state.guiDocumentWidgets)::value_type::second);
+            const auto entity = mapped != state.guiDocumentWidgets.end()
+                ? editor_entity_index(state, mapped->first) : std::nullopt;
+            if (!unchanged)
+            {
+                if (entity) select_editor_entity(state, *entity);
+                else clear_editor_selection(state);
+                state.guiSelectedWidget = std::move(identity);
+            }
+            state.outlinerToolTab = OutlinerToolTab::Gui;
+            state.game2DGuiWorkspace = true;
+            state.inspectorToolTab = InspectorToolTab::Properties;
+            return true;
+        }
+
+        [[nodiscard]] bool select_gui_hierarchy_widget(
+            EditorState& state, authoring::gui::WidgetHandle widget)
+        {
+            return select_gui_widget(state, widget);
+        }
+
+        void apply_detached_gui_hierarchy_selections(
+            const core::Context* ownerContext, EditorState& state)
+        {
+            for (const auto& command : consume_detached_gui_hierarchy_selections(ownerContext))
+            {
+                const auto* document = state.guiDocument.get();
+                const auto& projected = command.hierarchy;
+                if (!projected || !document || !document->valid()
+                    || state.projectId != command.projectId
+                    || state.projectRoot != command.projectRoot
+                    || state.guiDocumentSourcePath != command.sourcePath
+                    || state.guiDocumentRoot != projected->root
+                    || document->document() != projected->document
+                    || document->branch() != projected->branch
+                    || document->revision() != projected->revision
+                    || !document->widget(command.widget))
+                    continue;
+                (void)select_gui_hierarchy_widget(state, command.widget);
+            }
         }
 
         void remember_gui_projection_tombstone(
@@ -1605,6 +2028,7 @@
             EditorState& state,
             authoring::gui::GuiDocument& document)
         {
+            const auto previousGuiSelection = state.guiSelectedWidget;
             struct RemovedProjection final
             {
                 scene::SceneObjectId scene_id{};
@@ -1684,6 +2108,18 @@
                 state.selectedEntityId = previousSelection;
                 synchronize_editor_selection(state);
             }
+            if (previousGuiSelection.widget)
+            {
+                if (gui_widget_identity_matches(
+                        state, previousGuiSelection, previousGuiSelection.widget)
+                    && document.widget(previousGuiSelection.widget))
+                    state.guiSelectedWidget = previousGuiSelection;
+                else
+                {
+                    state.guiSelectedWidget = {};
+                    state.guiContentEditorWidget = {};
+                }
+            }
             (void)project_gui_document_layout(state);
         }
 
@@ -1709,8 +2145,7 @@
             }
 
             reconcile_gui_document_projections(state, document);
-            state.guiContentEditorEntityId =
-                scene::kInvalidSceneObjectId;
+            state.guiContentEditorWidget = {};
             state.guiDocumentStatus =
                 "GUI widget subtree removed. Undo restores the document and canvas projection.";
             push_editor_log(state, "[gui] " + state.guiDocumentStatus);
@@ -1753,14 +2188,7 @@
             }
 
             reconcile_gui_document_projections(state, document);
-            const auto projection = std::ranges::find_if(
-                state.guiDocumentWidgets,
-                [&](const auto& entry) { return entry.second == created.widget; });
-            if (projection != state.guiDocumentWidgets.end())
-            {
-                if (const auto index = editor_entity_index(state, projection->first))
-                    select_editor_entity(state, *index);
-            }
+            (void)select_gui_widget(state, created.widget);
             state.guiDocumentStatus =
                 "GUI widget duplicated in the active GUI document.";
             push_editor_log(state, "[gui] " + state.guiDocumentStatus);
@@ -1770,6 +2198,9 @@
 
         [[nodiscard]] bool undo_gui_document(EditorState& state)
         {
+            if (const auto grouped = try_grouped_gui_world_history(
+                    state, {2u}, editor_authoring_history::Direction::undo))
+                return *grouped;
             auto* document = synchronize_gui_document(state);
             if (!document)
                 return false;
@@ -1780,7 +2211,7 @@
                     + std::string(authoring::gui::result_code_name(result.code));
                 return false;
             }
-            state.guiContentEditorEntityId = scene::kInvalidSceneObjectId;
+            state.guiContentEditorWidget = {};
             reconcile_gui_document_projections(state, *document);
             state.guiDocumentStatus = "GUI document undo committed to the shared canvas projection.";
             push_editor_log(state, "[edit] " + state.guiDocumentStatus);
@@ -1789,6 +2220,9 @@
 
         [[nodiscard]] bool redo_gui_document(EditorState& state)
         {
+            if (const auto grouped = try_grouped_gui_world_history(
+                    state, {2u}, editor_authoring_history::Direction::redo))
+                return *grouped;
             auto* document = synchronize_gui_document(state);
             if (!document)
                 return false;
@@ -1799,7 +2233,7 @@
                     + std::string(authoring::gui::result_code_name(result.code));
                 return false;
             }
-            state.guiContentEditorEntityId = scene::kInvalidSceneObjectId;
+            state.guiContentEditorWidget = {};
             reconcile_gui_document_projections(state, *document);
             state.guiDocumentStatus = "GUI document redo committed to the shared canvas projection.";
             push_editor_log(state, "[edit] " + state.guiDocumentStatus);
@@ -1817,14 +2251,17 @@
                 push_editor_log(state, "[gui] " + state.guiDocumentStatus);
                 return false;
             }
+            state.guiSelectedWidget = {};
+            state.guiContentEditorWidget = {};
             state.guiDocument.reset();
             state.guiDocumentRoot = {};
             state.guiDocumentWidgets.clear();
             state.guiCanvasWidgetDrag = {};
+            state.guiCanvasView = {};
             state.guiCanvasWidgetDragHandle = {};
             state.guiProjectionTombstones.clear();
             state.guiDocumentLoadAttempted = false;
-            state.guiContentEditorEntityId = scene::kInvalidSceneObjectId;
+            state.guiContentEditorWidget = {};
             if (!load_project_gui_document(state))
                 return synchronize_gui_document(state) != nullptr;
             return project_gui_document_layout(state);
@@ -1845,14 +2282,15 @@
             if (state.mainSurface == EditorMainSurface::Scene)
                 return ActiveEditDocument::scene;
             if (state.mainSurface == EditorMainSurface::Game2D
-                && state.outlinerToolTab == OutlinerToolTab::Gui)
+                && state.game2DGuiWorkspace)
                 return ActiveEditDocument::gui;
 #if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
             if (state.mainSurface == EditorMainSurface::Game2D
-                && state.outlinerToolTab == OutlinerToolTab::TileMap)
+                && !state.game2DGuiWorkspace)
                 return ActiveEditDocument::tilemap;
 #endif
-            if (state.mainSurface == EditorMainSurface::PlantLab)
+            if (state.mainSurface == EditorMainSurface::PlantLab
+                || state.mainSurface == EditorMainSurface::ForestFactory)
                 return ActiveEditDocument::plant_lab;
             return ActiveEditDocument::none;
         }
@@ -1944,14 +2382,13 @@
         }
         void hydrate_gui_content_editor(
             EditorState& state,
-            scene::SceneObjectId entity,
             const authoring::gui::WidgetView& widget)
         {
-            if (state.guiContentEditorEntityId == entity)
+            if (gui_widget_identity_matches(state, state.guiContentEditorWidget, widget.handle))
                 return;
 
             using namespace authoring::gui;
-            state.guiContentEditorEntityId = entity;
+            state.guiContentEditorWidget = gui_widget_identity(state, widget.handle);
             state.guiContentPrimary.clear();
             state.guiContentSecondary.clear();
             state.guiActionEditor =
@@ -2080,9 +2517,16 @@
             return changed;
         }
 
-        [[nodiscard]] bool save_project_gui_document(EditorState& state)
+        [[nodiscard]] bool save_project_gui_document(
+            EditorState& state, bool create_if_absent)
         {
             using namespace authoring::gui;
+
+            // Project Save/Run commits active documents; it must not install a
+            // starter HUD into an ordinary game merely to build that game.
+            // Explicit Save GUI retains its document-creation behavior.
+            if (!create_if_absent && !project_gui_document_is_active(state))
+                return true;
 
             GuiDocument* document =
                 synchronize_gui_document(state);

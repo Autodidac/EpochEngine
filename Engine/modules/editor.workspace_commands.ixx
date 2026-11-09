@@ -75,6 +75,7 @@ export namespace epochengine::editor_workspace_commands
         code_editor,
         ai_development,
         systems,
+        tilemap_canvas,
         count
     };
 
@@ -93,6 +94,7 @@ export namespace epochengine::editor_workspace_commands
         case Surface::code_editor: return "code_editor";
         case Surface::ai_development: return "ai_development";
         case Surface::systems: return "systems";
+        case Surface::tilemap_canvas: return "tilemap_canvas";
         case Surface::count: break;
         }
         return "invalid_surface";
@@ -188,6 +190,9 @@ export namespace epochengine::editor_workspace_commands
         systems_resume_task,
         systems_cancel_task,
         systems_open_evidence,
+
+        tilemap_undo,
+        tilemap_redo,
 
         count
     };
@@ -538,6 +543,12 @@ export namespace epochengine::editor_workspace_commands
             EPOCH_WORKSPACE_COMMAND(systems_open_evidence, systems,
                 system_service, observe, "Open system evidence", {})};
 
+        inline constexpr std::array tilemap_commands{
+            EPOCH_WORKSPACE_COMMAND(tilemap_undo, tilemap_canvas, document,
+                bounded_mutation, "Undo Tile Map edit", document_write),
+            EPOCH_WORKSPACE_COMMAND(tilemap_redo, tilemap_canvas, document,
+                bounded_mutation, "Redo Tile Map edit", document_write)};
+
 #undef EPOCH_WORKSPACE_COMMAND
     }
 
@@ -556,6 +567,7 @@ export namespace epochengine::editor_workspace_commands
         case Surface::code_editor: return detail::code_commands;
         case Surface::ai_development: return detail::ai_commands;
         case Surface::systems: return detail::systems_commands;
+        case Surface::tilemap_canvas: return detail::tilemap_commands;
         case Surface::count: break;
         }
         return {};

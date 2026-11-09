@@ -22,6 +22,7 @@ module;
 #include <system_error>
 #include <utility>
 #include <vector>
+#include "native/ai.backend_models_candidate_catalog.hpp"
 
 module ai.model_install;
 
@@ -72,9 +73,26 @@ namespace epochengine::ai::model_install
                 || plan.artifact_source.find('#') != std::string::npos)
                 return false;
             const std::string base = plan.artifact_source + "/resolve/"
-                + plan.revision + "/" + artifact.file;
+                + plan.revision + "/" + artifact.source_path.value_or(artifact.file);
             return artifact.source_url == base
                 || artifact.source_url == base + "?download=true";
+        }
+
+        [[nodiscard]] bool safe_source_path(const std::optional<std::string>& source)
+        {
+            if (!source) return true;
+            if (source->empty() || source->size() > 768u) return false;
+            std::size_t start{}, components{};
+            while (start < source->size())
+            {
+                const auto end = source->find('/', start);
+                const auto component = std::string_view{*source}.substr(start,
+                    end == std::string::npos ? std::string::npos : end - start);
+                if (++components > 8u || !safe_component(component)) return false;
+                if (end == std::string::npos) return true;
+                start = end + 1u;
+            }
+            return false;
         }
 
         [[nodiscard]] bool safe_root(
@@ -236,7 +254,9 @@ namespace epochengine::ai::model_install
             if (!platform::filesystem::exclusive_create_and_write(
                     temporary, std::as_bytes(characters), error))
             {
-                diagnostic = "The model receipt temporary file could not be written durably.";
+                diagnostic = "The model receipt temporary file could not be written durably. "
+                    "Filesystem error " + std::to_string(error.value()) + ": " + error.message()
+                    + "; path characters=" + std::to_string(temporary.native().size()) + ".";
                 return false;
             }
             if (!receipt_matches(plan,
@@ -249,8 +269,10 @@ namespace epochengine::ai::model_install
             if (!platform::filesystem::atomic_replace_same_filesystem(
                     temporary, root / receipt_filename, error))
             {
-                (void)std::filesystem::remove(temporary, error);
-                diagnostic = "The model receipt could not be published atomically.";
+                std::error_code cleanup_error{};
+                (void)std::filesystem::remove(temporary, cleanup_error);
+                diagnostic = "The model receipt could not be published atomically. Filesystem error "
+                    + std::to_string(error.value()) + ": " + error.message() + ".";
                 return false;
             }
             return true;
@@ -328,14 +350,137 @@ namespace epochengine::ai::model_install
                     artifact("nano_v3_reasoning_parser.py", 798ull,
                         "aafb12208054504f619cbdd01837e1532a482ad937ed987bfe9a13fb812ae2b7")}};
         }
+
+        [[nodiscard]] InstallPlan image_component_plan(
+            const std::string_view package,
+            const std::string_view display,
+            const std::string_view official,
+            const std::string_view source,
+            const std::string_view revision,
+            const std::string_view file,
+            const std::uint64_t bytes,
+            const std::string_view sha256)
+        {
+            return {
+                .package_id = std::string{package},
+                .display_name = std::string{display},
+                .revision = std::string{revision},
+                .official_source = std::string{official},
+                .artifact_source = std::string{source},
+                .artifacts = {{
+                    .file = std::string{file},
+                    .source_url = std::string{source} + "/resolve/"
+                        + std::string{revision} + "/" + std::string{file},
+                    .bytes = bytes,
+                    .sha256 = std::string{sha256}}}};
+        }
+
+        [[nodiscard]] InstallPlan trellis_q4_plan()
+        {
+            constexpr std::string_view source = "https://huggingface.co/ilintar/trellis2-gguf";
+            constexpr std::string_view revision = "a57397bd3d351599d9729fc144b3f87c3f87d65b";
+            const auto artifact = [&](std::string_view file, std::uint64_t bytes, std::string_view sha)
+            {
+                const std::string remote = "q4/" + std::string{file};
+                return ArtifactSpec{.file = std::string{file},
+                    .source_url = std::string{source} + "/resolve/" + std::string{revision} + "/" + remote,
+                    .bytes = bytes, .sha256 = std::string{sha}, .source_path = remote};
+            };
+            // DINOv3 has separate custom terms. Presence of this plan does not
+            // authorize downloading/running it; the explicit human gate remains
+            // in model_generation and the host package-consent boundary.
+            return {.package_id = "os_model_trellis_2_cpp_q4_512",
+                .display_name = "TRELLIS.2 native Q4 512 components (DINOv3 custom terms)",
+                .revision = std::string{revision},
+                .official_source = "https://huggingface.co/microsoft/TRELLIS.2-4B",
+                .artifact_source = std::string{source},
+                .artifacts = {
+                    artifact("birefnet.gguf", 882'749'024ull,
+                        "10c5dd4dcac904cf81c9a16180eb66f167dd52ab55867f54a44567b0b2babbc1"),
+                    artifact("dinov3.gguf", 172'662'976ull,
+                        "6473cf96fd275bf84f5cc0556975a2abaa10b641e4a07101dcad561df1917ef2"),
+                    artifact("ss_flow.gguf", 730'496'672ull,
+                        "a43c6393ee4a763a03e382de750d4f62752bacf969940442fd856230e62b88c2"),
+                    artifact("ss_dec.gguf", 147'379'392ull,
+                        "2790b5eecb261cc877d9bf175ce2bd6dd48cd65be8c042c5f5bc023dfca01cf7"),
+                    artifact("shape_flow_512.gguf", 730'520'576ull,
+                        "de7b87a92280035258c94314258e3b8314de39e5f001eac1ada0b4087785fb63"),
+                    artifact("shape_dec.gguf", 845'423'552ull,
+                        "79a52ddfed3454f724683940c11cfbfcf76c427ab3b7fdeb4c3cfc6d26647de4"),
+                    artifact("tex_flow_512.gguf", 730'548'224ull,
+                        "fff7bca6418ad607b8b9ff24034ff63f591d0a9b72f308960bffd6f5cd17390b"),
+                    artifact("tex_dec.gguf", 845'414'272ull,
+                        "20b208e402db907c6800dd4ad486a0d6e927e4511a6ff87fb51049794988927b")}};
+        }
+
+        [[nodiscard]] InstallPlan triposr_plan()
+        {
+            constexpr std::string_view source = "https://huggingface.co/stabilityai/TripoSR";
+            constexpr std::string_view revision = "5b521936b01fbe1890f6f9baed0254ab6351c04a";
+            const auto artifact = [&](std::string_view file, std::uint64_t bytes, std::string_view sha)
+            {
+                return ArtifactSpec{.file = std::string{file},
+                    .source_url = std::string{source} + "/resolve/" + std::string{revision} + "/" + std::string{file},
+                    .bytes = bytes, .sha256 = std::string{sha}};
+            };
+            // Model inputs only. The optional isolated Python runtime, offline
+            // source and their licenses are separately admitted by the adapter.
+            return {.package_id = "os_model_triposr", .display_name = "TripoSR image-to-3D weights and configuration (MIT)",
+                .revision = std::string{revision}, .official_source = std::string{source}, .artifact_source = std::string{source},
+                .artifacts = {artifact("model.ckpt", 1'677'246'742ull,
+                    "429e2c6b22a0923967459de24d67f05962b235f79cde6b032aa7ed2ffcd970ee"),
+                    artifact("config.yaml", 987u,
+                        "74ca708ce086bf68e97709ea6b3d91f14717921c04691e84043f0eb8fcc68e62")}};
+        }
     }
 
     std::optional<InstallPlan> plan_for(const std::string_view package_id)
     {
+        for (const auto& offer : epoch_ai::model::catalog::offers())
+        {
+            if (offer.package_id != package_id
+                || !epoch_ai::model::catalog::download_allowed(offer)) continue;
+            const std::string source = "https://huggingface.co/" + std::string{offer.repo};
+            return image_component_plan(package_id, offer.label, source, source,
+                offer.revision, offer.filename, offer.bytes, offer.sha256);
+        }
         if (package_id == qwen_package_id)
             return qwen_plan();
         if (package_id == nemotron_package_id)
             return nemotron_plan();
+        if (package_id == "os_model_trellis_2_cpp_q4_512")
+            return trellis_q4_plan();
+        if (package_id == "os_model_triposr")
+            return triposr_plan();
+        if (package_id == "os_model_triposr_dino_v1_config")
+            return image_component_plan(package_id, "DINOv1 ViT-B/16 local configuration only (Apache-2.0)",
+                "https://huggingface.co/facebook/dino-vitb16", "https://huggingface.co/facebook/dino-vitb16",
+                "f205d5d8e640a89a2b8ef0369670dfc37cc07fc2", "config.json", 454u,
+                "b87c0270b97db085fd82cf114a761fd0f62ae7914fbd407c752a2260646b689c");
+        if (package_id == "os_model_flux_2_klein_4b_q4_0")
+            return image_component_plan(package_id,
+                "FLUX.2 Klein 4B Q4_0 diffusion weights",
+                "https://huggingface.co/black-forest-labs/FLUX.2-klein-4B",
+                "https://huggingface.co/leejet/FLUX.2-klein-4B-GGUF",
+                "3b1f5a9dc3abb32238b053aeb3d823c30afdacbd",
+                "flux-2-klein-4b-Q4_0.gguf", 2'460'378'560ull,
+                "d1023499ef3f2f82ff7c50e6778495195c1b6cc34835741778868428111f9ff4");
+        if (package_id == "os_model_qwen_3_4b_image_encoder_q4_k_m")
+            return image_component_plan(package_id,
+                "Qwen3 4B Q4_K_M image text encoder",
+                "https://huggingface.co/Qwen/Qwen3-4B",
+                "https://huggingface.co/unsloth/Qwen3-4B-GGUF",
+                "22c9fc8a8c7700b76a1789366280a6a5a1ad1120",
+                "Qwen3-4B-Q4_K_M.gguf", 2'497'281'312ull,
+                "f6f851777709861056efcdad3af01da38b31223a3ba26e61a4f8bf3a2195813a");
+        if (package_id == "os_model_flux_2_small_decoder")
+            return image_component_plan(package_id,
+                "FLUX.2 complete encoder and small VAE decoder",
+                "https://huggingface.co/black-forest-labs/FLUX.2-small-decoder",
+                "https://huggingface.co/black-forest-labs/FLUX.2-small-decoder",
+                "a3efc24f613ef42d9428af62fdbd6f5fd8856c4a",
+                "full_encoder_small_decoder.safetensors", 249'519'092ull,
+                "ea4273f02d1fafbf8e1d1c2cf6018ed8748652eb0bf34f2dd91171f16f15ab62");
         return std::nullopt;
     }
 
@@ -349,7 +494,7 @@ namespace epochengine::ai::model_install
         std::set<std::string, std::less<>> files{};
         for (const ArtifactSpec& artifact : plan.artifacts)
         {
-            if (!safe_component(artifact.file) || artifact.bytes == 0u
+            if (!safe_component(artifact.file) || !safe_source_path(artifact.source_path) || artifact.bytes == 0u
                 || !lower_hex(artifact.sha256, 64u)
                 || !files.insert(artifact.file).second
                 || !valid_hugging_face_url(plan, artifact))
@@ -444,8 +589,10 @@ namespace epochengine::ai::model_install
         for (std::size_t index = 0u; index < plan.artifacts.size(); ++index)
         {
             const ArtifactSpec& artifact = plan.artifacts[index];
-            out << "    {\"file\": \"" << json_escape(artifact.file)
-                << "\", \"source_url\": \"" << json_escape(artifact.source_url)
+            out << "    {\"file\": \"" << json_escape(artifact.file) << "\"";
+            if (artifact.source_path)
+                out << ", \"source_path\": \"" << json_escape(*artifact.source_path) << "\"";
+            out << ", \"source_url\": \"" << json_escape(artifact.source_url)
                 << "\", \"bytes\": " << artifact.bytes
                 << ", \"sha256\": \"" << artifact.sha256 << "\"}"
                 << (index + 1u == plan.artifacts.size() ? "\n" : ",\n");
@@ -470,6 +617,25 @@ namespace epochengine::ai::model_install
 
     namespace detail
     {
+    PublishResult verify_snapshot_for_plan(
+        const std::filesystem::path& models_cache_root,
+        const InstallPlan& plan)
+    {
+        if (!valid_plan(plan))
+            return failure(Code::invalid_plan, {}, "The model install plan is invalid.");
+        // A read must not normalize away a caller's '..' or traverse a redirected
+        // cache ancestor. Publication and later admission retain separate gates.
+        if (!safe_root(models_cache_root))
+            return failure(Code::unsafe_cache_root, {},
+                "The model cache root is not a normalized absolute directory.");
+        const auto root = version_root(models_cache_root, plan);
+        std::error_code error{};
+        if (std::filesystem::canonical(root, error) != root || error)
+            return failure(Code::unsafe_cache_root, root,
+                "The installed model path is missing or redirects outside its exact location.");
+        return verify_artifacts(plan, root, true, true);
+    }
+
     PublishResult publish_verified_snapshot_for_plan(const PublishRequest& request)
     {
         if (!valid_plan(request.plan))
@@ -549,7 +715,12 @@ namespace epochengine::ai::model_install
         std::filesystem::rename(staged, installed, error);
         if (error)
             return failure(Code::filesystem_error, installed,
-                "The verified model snapshot could not be published atomically.");
+                "The verified model snapshot could not be published atomically. Filesystem error "
+                + std::to_string(error.value()) + " (" + error.category().name()
+                + "): " + error.message() + "; source=" + staged.string()
+                + "; destination=" + installed.string()
+                + "; source characters=" + std::to_string(staged.native().size())
+                + "; destination characters=" + std::to_string(installed.native().size()) + ".");
 
         PublishResult final_result = verify_artifacts(
             request.plan, installed, true, true);
@@ -571,5 +742,16 @@ namespace epochengine::ai::model_install
             return failure(Code::unknown_package, {},
                 "Only an exact compiled model install plan may be published.");
         return detail::publish_verified_snapshot_for_plan(request);
+    }
+
+    PublishResult verify_snapshot(
+        const std::filesystem::path& models_cache_root,
+        const InstallPlan& plan)
+    {
+        const auto compiled = plan_for(plan.package_id);
+        if (!compiled || *compiled != plan)
+            return failure(Code::unknown_package, {},
+                "Only an exact compiled model install plan may be admitted.");
+        return detail::verify_snapshot_for_plan(models_cache_root, plan);
     }
 }

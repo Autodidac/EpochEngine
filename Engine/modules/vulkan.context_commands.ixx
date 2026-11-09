@@ -112,7 +112,9 @@ namespace epochengine::vulkancontext
 
     void Application::recordArcadeRenderTexturePass(vk::CommandBuffer commandBuffer)
     {
-        if (epochengine::previewgrid::sampled_render_surface_markers_for(bound_context()).empty())
+        if ((previewSceneFrame
+            ? previewgrid::sampled_render_surface_markers_for(*previewSceneFrame)
+            : previewgrid::sampled_render_surface_markers_for(bound_context())).empty())
             return;
         if (!arcadeRenderPass
             || !arcadeRenderFramebuffer
@@ -219,19 +221,42 @@ namespace epochengine::vulkancontext
             });
         }
 
-        const bool renderScenePreview = frame.scene_visible && indexCount > 0;
-        if (renderScenePreview && ctx)
+        if (frame.scene_visible && ctx)
         {
             const std::uint64_t previewRevision =
-                epochengine::previewgrid::preview_geometry_revision_for(ctx);
-            if (previewRevision != previewGeometryRevision)
+                previewSceneFrame ? previewSceneFrame->revision
+                    : epochengine::previewgrid::preview_geometry_revision_for(ctx);
+            const bool geometryChanged = previewSceneFrame
+                ? !uploadedPreviewSceneFrame
+                    || !preview_geometry_matches(*previewSceneFrame, *uploadedPreviewSceneFrame)
+                : uploadedPreviewSceneFrame || previewRevision != previewGeometryRevision;
+            if (geometryChanged)
             {
-                createVertexBuffer();
-                createIndexBuffer();
+                const bool emptyScene = previewSceneFrame
+                    && previewSceneFrame->solids->geometry->empty()
+                    && previewSceneFrame->lines->empty()
+                    && (!previewSceneFrame->wire->depth_triangles
+                        || previewSceneFrame->wire->depth_triangles->empty())
+                    && (!previewSceneFrame->wire->helper_lines
+                        || previewSceneFrame->wire->helper_lines->empty())
+                    && previewgrid::sampled_render_surface_markers_for(*previewSceneFrame).empty();
+                if (emptyScene)
+                {
+                    indexCount = solidIndexCount = lineIndexCount = 0;
+                    arcadeScreenIndexOffset = arcadeScreenIndexCount = 0;
+                    previewIndicesSequential = false;
+                }
+                else
+                {
+                    createVertexBuffer();
+                    createIndexBuffer();
+                }
                 previewGeometryRevision = previewRevision;
+                uploadedPreviewSceneFrame = previewSceneFrame;
             }
         }
 
+        const bool renderScenePreview = frame.scene_visible && indexCount > 0;
         if (renderScenePreview)
         {
             const vk::Buffer vb[] = { *vertexBuffer };
@@ -248,7 +273,7 @@ namespace epochengine::vulkancontext
                 nullptr
             );
 
-            cmd.bindIndexBuffer(*indexBuffer, 0, vk::IndexType::eUint16);
+            cmd.bindIndexBuffer(*indexBuffer, 0, vk::IndexType::eUint32);
 
             vk::Viewport viewport{};
             viewport.x = static_cast<float>(frame.scene.x);
@@ -694,6 +719,7 @@ namespace epochengine::vulkancontext
                 throw std::runtime_error("[ Vulkan ] - resetFences failed.");
         }
 
+        previewSceneFrame = previewgrid::scene_frame_for(bound_context());
         updateUniformBuffer(imageIndex, cam);
         updateGuiUniformBuffer(imageIndex);
         recordCommandBuffer(imageIndex);

@@ -141,7 +141,7 @@
             editor_tool_pane_labels() noexcept
         {
             return {
-                "World Outliner",
+                "3D Objects",
                 "Asset Browser",
                 "GUI Hierarchy",
                 "Script Browser",
@@ -150,8 +150,8 @@
                 "Global Settings",
                 "AI Settings",
                 "Output",
-                "Assistant",
-                "Assistant"
+                "Assistant Chat",
+                "Automation"
             };
         }
 
@@ -294,13 +294,40 @@
         // context reads another context's mutable chat/editor state.
         struct AiModelSelectionLease final
         {
-            AiModelSelectionLease()
+            std::optional<ai::native_runtime::WorkLease> residency;
+            std::stop_source idleReloadCancellation;
+            std::string idleReloadModel;
+            std::string retainedDraft;
+            std::uint64_t idleReloadGeneration{};
+            bool idleReloadApproved{};
+            void request_idle_reload(const ai::native_runtime::Snapshot& selected)
             {
+                if (!idleReloadModel.empty() || !selected.idle_reload_available) return;
+                residency.reset(); // Reload must claim retirement before a chat WorkLease.
+                idleReloadModel = selected.model;
+                idleReloadGeneration = selected.idle_reload_generation;
+            }
+            [[nodiscard]] bool idle_reload_matches(const ai::native_runtime::Snapshot& selected) const
+            {
+                return !idleReloadCancellation.stop_requested()
+                    && selected.idle_reload_available && selected.model == idleReloadModel
+                    && selected.idle_reload_generation == idleReloadGeneration;
+            }
+            [[nodiscard]] bool approve_idle_reload(const ai::native_runtime::Snapshot& selected)
+            {
+                if (!idle_reload_matches(selected)) return false;
+                idleReloadApproved = true;
+                return true;
+            }
+            explicit AiModelSelectionLease(bool protectResident = true)
+            {
+                if (protectResident) residency.emplace();
                 std::scoped_lock lock(aiModelSelectionMutex);
                 ++aiModelSelectionUsers;
             }
             ~AiModelSelectionLease()
             {
+                idleReloadCancellation.request_stop();
                 std::scoped_lock lock(aiModelSelectionMutex);
                 --aiModelSelectionUsers;
             }
@@ -441,6 +468,7 @@
             std::unordered_map<std::string, gui::ChatImageAttachment> referencePreviews{};
             std::uint64_t nextImageRequestId{}, queuedImageRequestId{}, activeImageRequestId{};
             std::string queuedInput{};
+            std::optional<ai::native_runtime::WorkLease> queuedResidency;
             std::chrono::steady_clock::time_point queuedInputAt{};
             unsigned queuedInputFrames{};
             std::string queuedBlockReported{};
@@ -460,6 +488,7 @@
             static constexpr std::size_t kNoActivityLine = (std::numeric_limits<std::size_t>::max)();
             std::size_t inlineHostActivityLine{kNoActivityLine};
             std::uint64_t inlineHostActivityId{};
+            std::uint64_t pendingHostActivityId{};
             // One host disclosure per submitted user turn; setup/restoration
             // chatter stays in the dedicated Activity history, not the chat.
             bool hostActivityRequested{};
@@ -530,9 +559,24 @@
                 // assistant reply is separate and must not be copied again into
                 // the Worked disclosure, where it otherwise appears twice.
                 end_host_activity(failed);
+                hostActivityRequested = false;
                 append_line("Assistant: " + summary);
                 sourceOutcomeEmitted = true;
                 sourceTaskOpen = false;
+            }
+
+            bool stop_unsubmitted_activity() noexcept
+            {
+                // Only the queue's just-created turn may close on admission
+                // refusal. An active model/source task keeps its own lifetime.
+                if (!suppressUserEcho || !hostActivityRequested || sourceTaskOpen
+                    || pending || worker.joinable() || inlineHostActivityId == 0u
+                    || inlineHostActivityLine >= lineRunDetails.size()) return false;
+                const auto& info = lineRunDetails[inlineHostActivityLine];
+                if (info.run_id != inlineHostActivityId || !info.stream_block
+                    || info.route != "Activity" || !info.stream_live) return false;
+                end_host_activity(false, true);
+                return true;
             }
 
             void end_host_activity(bool failed = false, bool stopped = false) noexcept
@@ -578,6 +622,7 @@
                 // status; never leave old token sections marked Streaming.
                 for (auto& event : activity.activity_events)
                 {
+                    if (event.summary == "Tool arguments") refresh_tool_display(event, false);
                     const bool rawStream = event.group == "Model"
                         && (event.summary == "Reasoning tokens"
                             || event.summary == "Tool arguments"
@@ -611,6 +656,30 @@
                 activity.evidence += std::move(telemetry);
             }
 
+            [[nodiscard]] bool finish_project_request_activity(
+                AiDeferredRequestKind requestKind,
+                const gui::ChatMessageRunInfo& runInfo)
+            {
+                // A returned plan is awaiting human review, not still generating.
+                // Source campaigns have their own build/review lifetime.
+                if ((requestKind != AiDeferredRequestKind::Authoring
+                        && requestKind != AiDeferredRequestKind::Tooling)
+                    || pendingHostActivityId == 0u
+                    || pendingHostActivityId != inlineHostActivityId
+                    || inlineHostActivityLine >= lines.size()
+                    || inlineHostActivityLine >= lineRunDetails.size()
+                    || lineRunDetails[inlineHostActivityLine].run_id != pendingHostActivityId)
+                    return false;
+                for (std::size_t index = inlineHostActivityLine + 1u;
+                    index < lines.size(); ++index)
+                    if (lines[index].starts_with("User: ")) return false;
+                complete_activity_metadata(runInfo);
+                end_host_activity(runInfo.status == "Failed",
+                    runInfo.status == "Cancelled");
+                pendingHostActivityId = 0u;
+                return true;
+            }
+
             [[nodiscard]] gui::ChatMessageRunInfo* ensure_host_activity()
             {
                 if (!hostActivityRequested) return nullptr;
@@ -637,33 +706,49 @@
                 // Do not manufacture visible rows for startup, model restore,
                 // unrelated background telemetry, or a completed request.
                 if (!hostActivityRequested) return;
-                if (group == "Assistant") group = "Assistant";
                 std::string detail = normalize_editor_text_for_gui(event);
-                for (std::size_t at{}; (at = detail.find("Assistant", at)) != std::string::npos;)
-                { detail.replace(at, 13u, "Assistant"); at += 9u; }
                 if (detail.empty()) return;
                 // Host producers sometimes include their own group prefix.
                 // Canonicalize at the boundary so "Assistant: Assistant:"
                 // cannot appear in the chat or exported run evidence.
                 const std::string prefix = std::string{group} + ": ";
-                while (detail.starts_with(prefix)) detail.erase(0u, prefix.size());
+                std::size_t prefixBytes{};
+                while (std::string_view{detail}.substr(prefixBytes).starts_with(prefix))
+                    prefixBytes += prefix.size();
+                detail.erase(0u, prefixBytes);
                 if (detail.empty()) return;
                 auto* entry = ensure_host_activity();
                 if (!entry) return;
                 auto& info = *entry;
-                const std::string record = std::string{group} + ": " + detail;
+                const auto display_text = [](std::string_view value, std::size_t limit,
+                    std::string_view marker) -> std::string
+                {
+                    if (value.size() <= limit) return std::string{value};
+                    std::size_t end = limit - marker.size();
+                    while (end > 0u && (static_cast<unsigned char>(value[end]) & 0xc0u) == 0x80u)
+                        --end;
+                    return std::string{value.substr(0u, end)} + std::string{marker};
+                };
+                constexpr std::string_view truncated{"\n[Display text truncated]"};
+                const auto displayDetail = display_text(detail, 4096u, truncated);
+                const auto displayGroup = display_text(group, 64u, truncated);
+                const std::string record = displayGroup + ": " + displayDetail;
                 // Distinct host events remain inspectable but cannot multiply
                 // chat rows. Bound the evidence just like native token streams.
-                if (!info.evidence.empty()
+                if (detail.size() <= 4096u && group.size() <= 64u && !info.evidence.empty()
                     && info.evidence.size() >= record.size()
                     && info.evidence.compare(info.evidence.size() - record.size(),
                         record.size(), record) == 0)
                     return;
                 if (info.evidence.size() + record.size() + 1u > kMaxRawBytesPerRecord)
                 {
-                    info.evidence.erase(0u, (std::min)(info.evidence.size(),
-                        kMaxRawBytesPerRecord / 4u));
-                    info.evidence.insert(0u, "[Earlier host events are retained in the activity log]\n");
+                    constexpr std::string_view omitted{"[Earlier display text omitted]\n"};
+                    const auto keep = kMaxRawBytesPerRecord - record.size() - omitted.size() - 1u;
+                    const auto begin = info.evidence.size() > keep ? info.evidence.size() - keep : 0u;
+                    const auto lineEnd = info.evidence.find('\n', begin);
+                    info.evidence.erase(0u, lineEnd == std::string::npos
+                        ? info.evidence.size() : lineEnd + 1u);
+                    info.evidence.insert(0u, omitted);
                 }
                 if (!info.evidence.empty()) info.evidence += '\n';
                 info.evidence += record;
@@ -700,7 +785,8 @@
                 else if (group == "Workflow")
                     summary = detail.substr(0u, detail.find('\n'));
                 else if (detail.size() > 80u)
-                    summary = detail.substr(0u, 80u) + "...";
+                    summary = display_text(detail, 83u, "...");
+                summary = display_text(summary, 83u, "...");
                 // Full evidence above is retained for diagnostics. Ordinary users
                 // only need meaningful workflow transitions and model output;
                 // queue/transport chatter is one expandable technical trace.
@@ -718,15 +804,32 @@
                     if (repeatedMilestone)
                     {
                         auto& existing = info.activity_events.back();
-                        if (existing.detail != detail
-                            && existing.detail.find(detail) == std::string::npos
-                            && existing.detail.size() + detail.size() + 1u <= 4096u)
-                            existing.detail += "\n" + detail;
+                        if (existing.detail != displayDetail
+                            && existing.detail.find(displayDetail) == std::string::npos
+                            && existing.detail.size() + displayDetail.size() + 1u <= 4096u)
+                            existing.detail += "\n" + displayDetail;
                     }
                     else if (info.activity_events.size() < 512u)
                         info.activity_events.push_back(gui::ChatActivityEvent{
-                            .group = std::string{group}, .summary = std::move(summary),
-                            .detail = detail, .status = "Observed"});
+                            .group = displayGroup, .summary = std::move(summary),
+                            .detail = displayDetail, .status = "Observed"});
+                }
+                // Bound this owner's nested display history as well as the
+                // combined evidence text. Tool cards and raw Model streams
+                // retain their independent identities and retention owners.
+                const auto hostEvent = [](const gui::ChatActivityEvent& item) {
+                    return !item.tool && item.group != "Model";
+                };
+                std::size_t hostDetailBytes{};
+                for (const auto& item : info.activity_events)
+                    if (hostEvent(item)) hostDetailBytes += item.detail.size();
+                while (hostDetailBytes > kMaxRawBytesPerRecord)
+                {
+                    const auto oldest = std::find_if(info.activity_events.begin(),
+                        info.activity_events.end(), hostEvent);
+                    if (oldest == info.activity_events.end()) break;
+                    hostDetailBytes -= oldest->detail.size();
+                    info.activity_events.erase(oldest);
                 }
                 // This is the most recent *observed host milestone*, not a
                 // model-authored progress claim. Never show "Coding" merely
@@ -852,6 +955,31 @@
             ai::native_runtime::OutputKind nativeRawKind{ai::native_runtime::OutputKind::boundary};
             std::uint64_t inlineNativeRunId{};
             std::size_t inlineNativeLine{(std::numeric_limits<std::size_t>::max)()};
+            bool toolDisplayHydrated{};
+            std::shared_ptr<const std::vector<std::string>> toolDisplaySourcePaths{};
+
+            static void refresh_tool_display(gui::ChatActivityEvent& item, bool streaming)
+            {
+                if (item.summary != "Tool arguments") return;
+                item.display_source_bytes = item.detail.size();
+                const auto paths=item.display_source_paths
+                    ?std::span<const std::string>{*item.display_source_paths}:std::span<const std::string>{};
+                auto display = ai::format_tool_output_for_display(item.detail, streaming,paths);
+                item.display_detail = std::move(display.text);
+                item.display_code_ranges = std::move(display.code_ranges);
+            }
+
+            void prepare_tool_displays()
+            {
+                if (toolDisplayHydrated) return;
+                toolDisplayHydrated = true;
+                // Retained activity may predate the current presentation cache.
+                // Populate it once, never parse historical JSON every frame.
+                for (auto& run : lineRunDetails)
+                    for (auto& item : run.activity_events)
+                        if (item.summary == "Tool arguments" && item.display_source_bytes == 0u)
+                            refresh_tool_display(item, run.stream_live);
+            }
 
             void end_inline_native_block() noexcept
             {
@@ -917,7 +1045,9 @@
                             activity.activity_events.push_back(gui::ChatActivityEvent{
                                 .group = "Model", .summary = label,
                                 .detail = {}, .status = activity.stream_live
-                                    ? "Streaming" : "Complete"});
+                                    ? "Streaming" : "Complete",
+                                .display_source_paths = event.kind==ai::native_runtime::OutputKind::tool_arguments
+                                    ?toolDisplaySourcePaths:nullptr});
                         }
                         if (!activity.activity_events.empty())
                         {
@@ -929,6 +1059,18 @@
                                         chunk.size(), kMaxRawBytesPerRecord - stream.detail.size()));
                                 if (stream.detail.size() == kMaxRawBytesPerRecord)
                                     stream.status = "Capture limit reached";
+                                if (event.kind == ai::native_runtime::OutputKind::tool_arguments)
+                                {
+                                    const auto last = stream.detail.find_last_not_of(" \t\r\n");
+                                    if (last != stream.detail.npos
+                                        && std::string_view{"\"},]"}.find(stream.detail[last]) != std::string_view::npos)
+                                    {
+                                        std::size_t backslashes{};
+                                        for (auto i = last; i != 0u && stream.detail[i - 1u] == '\\'; --i) ++backslashes;
+                                        if (stream.detail[last] != '"' || backslashes % 2u == 0u)
+                                            refresh_tool_display(stream, true);
+                                    }
+                                }
                             }
                         }
                         // Keep the full, bounded transcript export compatible
@@ -956,6 +1098,7 @@
             ai::ModelTerminalFailure latestTerminalFailure{ai::ModelTerminalFailure::none};
             std::string latestTerminalStatus{};
             ai::InferenceWorkload latestCompletionWorkload{ai::InferenceWorkload::chat};
+            std::string latestCanonicalModelKey{};
             AiDeferredRequestKind latestCompletionRequestKind{AiDeferredRequestKind::None};
             AiDeferredRequestKind pendingRequestKind{AiDeferredRequestKind::None};
             std::uint64_t completionGeneration{};
@@ -979,10 +1122,15 @@
                 latestTerminalFailure = ai::ModelTerminalFailure::none;
                 latestTerminalStatus.clear();
                 latestCompletionRequestKind = AiDeferredRequestKind::None;
+                latestCanonicalModelKey.clear();
             }
 
             void pump()
             {
+                // Dequeue transfers protection to the admitted request lease
+                // within the same frame. Cancellation releases on this pump,
+                // including when the Assistant pane is hidden.
+                if (queuedInput.empty()) queuedResidency.reset();
                 if (pending && activeImageRequestId)
                 {
                     const auto stage = pending->stage.load(std::memory_order_acquire);
@@ -1030,6 +1178,10 @@
                 end_inline_native_block();
                 latestCompletionWorkload = pendingWorkload;
                 latestCompletionRequestKind = pendingRequestKind;
+                {
+                    std::scoped_lock lock(pending->progressMutex);
+                    latestCanonicalModelKey = pending->progress.canonical_model_key;
+                }
                 statusRequestKind = pendingRequestKind;
                 if (pendingRequestKind == AiDeferredRequestKind::Chat)
                     end_host_activity();
@@ -1045,7 +1197,7 @@
                 {
                     std::scoped_lock lock(pending->progressMutex);
                     image_status(pending->progress.input_image_tokens > 0u
-                        ? "Image input confirmed" : "Response received · image usage not reported");
+                        ? "Image input confirmed" : "Response received Ãƒâ€šÃ‚Â· image usage not reported");
                 }
                 if ((activeImageRequestId || !activeReferenceFiles.empty()) && (pending->terminalFailure != ai::ModelTerminalFailure::none
                     || !pending->error.empty() || pending->cancellation.stop_requested()))
@@ -1120,6 +1272,12 @@
                             if (reply.empty()) reply = "(empty reply)";
                             append_status(reply, completed_run_info("Completed"));
                         }
+                    }
+                    else if (latestCompletionRequestKind == AiDeferredRequestKind::Authoring
+                        || latestCompletionRequestKind == AiDeferredRequestKind::Tooling)
+                    {
+                        (void)finish_project_request_activity(latestCompletionRequestKind,
+                            completed_run_info("Completed"));
                     }
                     pendingPrompt.clear();
                 }
@@ -1199,14 +1357,17 @@
                     const auto& p = pending->progress;
                     if (p.attempt > 0u)
                     {
-                        const auto decodeRate = p.token_usage_reported
-                            ? ai::metrics::tokens_per_second(p.completion_tokens, p.generation_ms)
-                            : std::nullopt;
+                        const auto decodeRate = ai::metrics::generation_rate(
+                            p.tps_known ? std::optional<double>{p.measured_tps} : std::nullopt,
+                            p.token_usage_reported ? p.completion_tokens : 0u, p.generation_ms);
                         if (decodeRate)
                             info.tps = epochengine::format_text(
-                                "{:.1f} t/s ({} output tokens; {})", *decodeRate,
-                                p.completion_tokens,
-                                p.provider_generation_timing ? "provider decode" : "stream-observed");
+                                "{:.1f} t/s ({}; {})", *decodeRate,
+                                p.token_usage_reported
+                                    ? std::to_string(p.completion_tokens) + " output tokens"
+                                    : std::string{"output count not reported"},
+                                p.tps_known ? "measured" : p.provider_generation_timing
+                                    ? "provider decode" : "stream-observed");
                         const auto requestMs = requestStartedAt.time_since_epoch().count() != 0
                             ? std::chrono::duration<double, std::milli>(
                                 std::chrono::steady_clock::now() - requestStartedAt).count()
@@ -1336,6 +1497,9 @@
                 // Protocol/transport details belong to the turn's single system
                 // disclosure, never a second run-details footer under the answer.
                 // The full original counters remain in its expandable evidence.
+                if (runInfo.present()
+                    && finish_project_request_activity(latestCompletionRequestKind, runInfo))
+                    runInfo = {};
                 if (runInfo.present())
                 {
                     const std::size_t index = inlineHostActivityLine < lineRunDetails.size()
@@ -1516,6 +1680,7 @@
                 append_user_message(display, retryable && draftReferenceImages.empty() ? text : std::string{}, std::move(imageInfo));
                 queuedReferenceImages = std::move(draftReferenceImages);
                 draftReferenceFiles.clear();
+                queuedResidency.emplace();
                 queuedInput = std::move(text);
                 queuedInputAt = std::chrono::steady_clock::now();
                 queuedCompletionGeneration = completionGeneration;
@@ -1616,14 +1781,14 @@
                     const auto& info = lineRunDetails[index];
                     const std::string speaker = info.model.empty()
                         ? "Epoch Host" : info.model;
-                    std::string exportText = speaker + " · " + info.route;
+                    std::string exportText = speaker + " Ãƒâ€šÃ‚Â· " + info.route;
                     if (info.route == "Activity" && !info.activity_events.empty())
                     {
                         for (const auto& event : info.activity_events)
                         {
-                            exportText += "\n  " + event.group + " · " + event.summary;
+                            exportText += "\n  " + event.group + " Ãƒâ€šÃ‚Â· " + event.summary;
                             if (event.tool && !event.status.empty())
-                                exportText += " · " + event.status;
+                                exportText += " Ãƒâ€šÃ‚Â· " + event.status;
                             exportText += "\n    " + event.detail;
                         }
                     }
@@ -1700,6 +1865,8 @@
                 // Keep the global raw-output cursor; no reset on another chat.
                 pendingWorkload = workload;
                 pendingRequestKind = requestKind;
+                pendingHostActivityId = inlineHostActivityId;
+                toolDisplaySourcePaths.reset();
                 requestStartedAt = std::chrono::steady_clock::now();
                 pendingRunInfo = {};
                 if (ai::native_runtime::selected())
@@ -1798,6 +1965,8 @@
                 std::optional<std::string> retryInput = std::nullopt,
                 gui::ChatMessageRunInfo runInfo = {})
             {
+                for (auto& item : runInfo.activity_events)
+                    if (item.summary == "Tool arguments") refresh_tool_display(item, runInfo.stream_live);
                 retryInputs.resize(lines.size());
                 lineRunDetails.resize(lines.size());
                 lines.emplace_back(std::move(text));
@@ -1868,6 +2037,14 @@
             bool editorOnly{ false };
             std::optional<scene::SceneTextureMaterialSnapshot>
                 textureMaterial{};
+            std::optional<scene::SceneMeshSnapshot> meshAsset{};
+            std::shared_ptr<const asset::mesh::Artifact> meshSnapshot{};
+            std::optional<project_planetary::GeneratedMeshFrame> meshSnapshotFrame{};
+            bool meshLoadAttempted{};
+            std::optional<scene::SceneTextureMaterialSnapshot> meshMaterialAttempted{};
+            std::shared_ptr<const previewgrid::MeshBaseColorBinding> meshBaseColorTexture{};
+            std::optional<std::array<double,3>> positionAnchor{};
+            std::optional<scene::SceneForestRegionInstance> forestRegion{};
         };
 
         [[nodiscard]] std::optional<EditorWorkspaceTab> requested_editor_workspace_tab() noexcept
@@ -2006,6 +2183,18 @@
             std::string evidenceDigest{};
         };
 
+        struct EditorPackageSourceTask final
+        {
+            std::stop_source cancellation{};
+            std::string expectedPackageId{};
+            std::uint64_t projectGeneration{};
+            std::optional<std::future<package_source::Inspection>> inspection{};
+            std::optional<std::future<package_source::CachedSource>> cachedInspection{};
+            std::optional<std::future<package_source::StageResult>> staging{};
+            ~EditorPackageSourceTask() { cancellation.request_stop(); }
+            [[nodiscard]] bool busy() const noexcept { return inspection.has_value() || cachedInspection.has_value() || staging.has_value(); }
+        };
+
         struct EditorModelInstallState
         {
             ai::model_install::InstallPlan plan{};
@@ -2018,6 +2207,8 @@
             platform::child_process::ProcessHandle process{};
             std::optional<std::future<ai::model_install::PublishResult>>
                 publishPending{};
+            std::string registrationOfferId{};
+            bool cancelled{};
         };
 
         enum class TimelineWorkspaceSection : std::uint8_t
@@ -2049,12 +2240,56 @@
             std::atomic<std::uint64_t> peakBatchUs{};
         };
 
+        struct EditorWorkspaceSpec final
+        {
+            EditorMainSurface surface{};
+            std::string_view id{}, label{};
+            float width{};
+            std::optional<bool> gui_workspace{};
+            bool default_open{};
+        };
+
+        // One inventory owns tab identity, Window commands and saved visibility.
+        inline constexpr std::array<EditorWorkspaceSpec, 11> kEditorWorkspaceSpecs{{
+            {EditorMainSurface::Scene,"document.world","3D Preview",112.0f,{},true},
+            {EditorMainSurface::Game2D,"document.game2d","2D",64.0f,false,false},
+            {EditorMainSurface::Game2D,"document.gui","UI",64.0f,true,false},
+            {EditorMainSurface::ForestFactory,"document.forest","Forest Factory",126.0f,{},false},
+            {EditorMainSurface::PlantLab,"document.plant","Plant Lab",92.0f,{},false},
+            {EditorMainSurface::Timeline,"document.timeline","Timeline",88.0f,{},false},
+            {EditorMainSurface::Project,"document.project","Project",78.0f,{},true},
+            {EditorMainSurface::Assets,"document.assets","Assets",76.0f,{},true},
+            {EditorMainSurface::AssetGeneration,"document.asset_generation","Asset Generation",154.0f,{},false},
+            {EditorMainSurface::AISandbox,"document.ai_development","Automation",132.0f,{},true},
+            {EditorMainSurface::Systems,"document.systems","Systems",86.0f,{},false}
+        }};
+
         struct EditorState
         {
             bool initialized{ false };
+            bool workspaceVisibilityCustomized{};
+            std::vector<std::string> visibleWorkspaceIds{};
             TopMenu openMenu{ TopMenu::None };
+            gui::CommandMenuState commandMenuState{};
+            struct OutlinerContextMenu final
+            {
+                enum class Kind : std::uint8_t { selection, create, actions, preview_selection };
+                gui::CommandMenuState menu{};
+                gui::Vec2 anchor{};
+                std::string scene{};
+                std::uint64_t project_generation{}, last_frame{};
+                Kind kind{Kind::selection};
+                bool open_requested{};
+                bool preview_right_held{}, preview_right_candidate{};
+                gui::Vec2 preview_press{};
+                std::uint64_t preview_camera_revision{};
+            } outlinerContextMenu{};
+            TopMenu commandMenuOwner{ TopMenu::None };
+            TopMenu suppressedMenuHover{ TopMenu::None };
             std::string projectId{};
             std::string projectPickerId{};
+            std::string projectManifestPathDraft{};
+            bool projectPathAdvancedOpen{};
             std::string projectName{};
             std::string projectRoot{};
             std::string projectScenePath{};
@@ -2089,43 +2324,63 @@
             bool aiTasksDetailsVisible{false};
             std::optional<std::future<EditorProjectBuildResult>> projectBuildPending{};
             editor_tasks::CancellationTicket projectBuildCancellation{};
+            std::chrono::steady_clock::time_point projectBuildProgressSample{};
             project_lifecycle::EvidenceLedger projectLifecycle{};
             platform::child_process::ProcessHandle projectRuntimeProcess{};
+            struct ProjectRuntimeLaunchEvidence final
+            {
+                project_lifecycle::ProjectStamp project{};
+                std::uint64_t artifact_generation{};
+                platform::child_process::ExecutableIdentity executable{};
+                std::string correlation{};
+            } projectRuntimeLaunch{};
             std::optional<platform::child_process::ProcessSnapshot>
                 projectRuntimeSnapshot{};
             std::string projectRuntimeStatus{
                 "No external project runtime has been launched this session."};
             bool projectRuntimeForceStopAvailable{false};
+            bool projectRuntimeInEditor{};
+            bool projectRuntimeViewportMaximized{};
+            std::string projectRuntimeBuildConfiguration{};
+            std::weak_ptr<core::Context> projectRuntimeViewportContext{};
+            std::uintptr_t projectRuntimeWindow{};
+            std::uint64_t projectRuntimeWindowProcess{};
+            std::string projectRuntimeAttachmentError{};
+            std::string projectRuntimeOutputLog{};
             std::uint64_t projectBuildLifecycleGeneration{};
             std::uint64_t projectBuildProjectKey{};
             std::string projectBuildProjectId{};
             std::string projectBuildProjectRoot{};
+            std::string projectBuildRequestedConfiguration{};
+            std::string projectBuildConfiguration{ "Release" };
             core::sha256::Digest projectBuildAcceptedOutputDigest{};
             bool projectBuildRunAfterBuild{ false };
+            bool projectBuildRunInEditor{};
             std::string projectBuildRunScene{};
             std::string projectBuildOutputPath{};
+            struct ProjectBuildTranscript final
+            {
+                project_lifecycle::ProjectStamp project{};
+                std::string configuration{}, path{};
+            } projectBuildTranscript{};
             std::string projectBuildRunBackend{};
-            double projectBuildRunFrameLimitFps{ 60.0 };
+            double projectBuildRunFrameLimitFps{ 30.0 };
             previewgrid::CameraMode projectBuildRunCameraMode{ previewgrid::CameraMode::Editor };
             input::ProfilePreset projectBuildRunInputProfile{ input::ProfilePreset::EditorDefault };
             std::string projectRunBackend{ "opengl" };
             EditorCanvas2DProjectSnapshot canvas2dProject{};
-            double projectRunFrameLimitFps{ 60.0 };
-            struct FrameLimitEditState final
-            {
-                bool initialized{};
-                bool manual{};
-                std::string text{"1500"};
-                std::string error{};
-            };
+            double projectRunFrameLimitFps{ 30.0 };
+            using FrameLimitEditState = gui::FrameLimitEditState;
             FrameLimitEditState projectFrameLimitEdit{};
             previewgrid::CameraMode projectCameraMode{ previewgrid::CameraMode::Editor };
             previewgrid::CameraMode viewportCameraMode{ previewgrid::CameraMode::Editor };
+            bool viewportMeshWireframe{};
+            std::optional<bool> viewportMeshWireframeRequest{};
             input::ProfilePreset inputProfilePreset{ input::ProfilePreset::EditorDefault };
             gui::ThemePreference themePreference{ gui::ThemePreference::FollowSystemDark };
             std::uint32_t themeCycleIntervalSeconds{30u};
             bool roundedRectangles{ true };
-            double editorFrameLimitFps{ 120.0 };
+            double editorFrameLimitFps{ 30.0 };
             FrameLimitEditState editorFrameLimitEdit{};
             bool editorFrameVsyncRequested{ false };
             std::string selectedProjectFile{};
@@ -2141,6 +2396,24 @@
             std::string projectTextureStatus{
                 "Create an editable texture or select a BMP, TGA, PPM, or .epoch_texture source."};
             std::string assetSearch{};
+            editor_asset_generation::State assetGeneration{};
+            std::optional<std::future<editor_asset_generation::Completion>> assetGenerationPending{};
+            editor_tasks::CancellationTicket assetGenerationCancellation{};
+            bool assetGenerationFocusPending{};
+            std::optional<previewgrid::CameraRigSnapshot> assetGenerationPreviousCamera{};
+            bool meshImportOpen{};
+            std::string meshImportPathDraft{};
+            struct ModelImportReview final
+            {
+                std::string requestedPath{}, projectId{}, projectRoot{}, sourceSha256{};
+                std::uint64_t projectGeneration{};
+                std::filesystem::path source{};
+                std::vector<std::byte> sourceBytes{};
+                asset::model_import::BaseColorCompilation compiled{};
+                SpriteHandle texturePreview{};
+                bool texturePreviewAttempted{};
+            };
+            std::optional<ModelImportReview> modelImportReview{};
             std::string assetBrowserFolder{};
             std::size_t assetCategory{};
             std::size_t assetWorkspaceSection{};
@@ -2154,6 +2427,14 @@
                 "Open Project Audio to manage decoded cues and buses."};
             std::size_t guiAuthoringSection{};
             std::size_t guiDocumentTab{};
+            struct GuiCanvasViewState final
+            {
+                float zoom{}; // Zero follows Fit; positive is framebuffer pixels per authored unit.
+                gui::Vec2 pan{};
+                bool panMode{};
+                gui::DragSurfaceState drag{};
+                gui::Vec2 panOrigin{};
+            } guiCanvasView{};
             gui::DragSurfaceState guiCanvasWidgetDrag{};
             authoring::gui::WidgetHandle guiCanvasWidgetDragHandle{};
             float guiCanvasWidgetDragOriginX{};
@@ -2162,6 +2443,22 @@
             float guiCanvasWidgetDragPreviewY{};
             std::unique_ptr<authoring::gui::GuiDocument> guiDocument{};
             authoring::gui::WidgetHandle guiDocumentRoot{};
+            struct GuiWidgetIdentity final
+            {
+                authoring::gui::DocumentHandle document{};
+                authoring::gui::BranchIdentity branch{};
+                authoring::gui::WidgetHandle widget{};
+                std::string projectId{};
+                std::string projectRoot{};
+                std::string sourcePath{};
+            };
+            GuiWidgetIdentity guiSelectedWidget{};
+            GuiWidgetIdentity guiContentEditorWidget{};
+            std::shared_ptr<const editor_hierarchy::GuiHierarchyProjection>
+                guiHierarchyProjection{};
+            std::string guiHierarchyProjectId{};
+            std::string guiHierarchyProjectRoot{};
+            std::string guiHierarchySourcePath{};
             std::unordered_map<scene::SceneObjectId, authoring::gui::WidgetHandle>
                 guiDocumentWidgets{};
             std::vector<GuiProjectionTombstone>
@@ -2170,8 +2467,6 @@
             std::string guiDocumentSourcePath{};
             std::uint64_t guiDocumentSavedRevision{};
             bool guiDocumentLoadAttempted{};
-            scene::SceneObjectId guiContentEditorEntityId{
-                scene::kInvalidSceneObjectId};
             std::string guiContentPrimary{};
             std::string guiContentSecondary{};
             std::string guiActionEditor{};
@@ -2216,11 +2511,37 @@
                 projectSourceTextureThumbnails{};
             std::uint64_t projectTextureThumbnailAtlasSignature{};
             forest::ForestAssetDocument plantLabDocument{};
+            struct ForestProfileSliderDraft final
+            {
+                forest::ForestProfileProperty property{};
+                float value{};
+                std::uint64_t revision{}, contentHash{};
+                std::string projectId{}, projectRoot{};
+                bool cancelled{};
+            };
+            std::optional<ForestProfileSliderDraft> forestProfileSliderDraft{};
+            bool forestExtendedRange{};
+            struct ForestProjectCreationIntent final
+            {
+                std::string project_id, project_root;
+                std::uint64_t project_generation{}, profile_revision{}, profile_hash{};
+            };
+            std::optional<ForestProjectCreationIntent> forestProjectCreationIntent{};
             forest::CompiledForestAsset plantLabCompiled{};
             project_forests::ForestArtifactLocator plantLabPublishedArtifact{};
             std::uint64_t plantLabCompiledRevision{};
             std::uint64_t plantLabCompiledContentHash{};
             bool plantLabDocumentInitialized{};
+            std::vector<EditorEntity> forestPreviewEntities{};
+            std::uint64_t forestPreviewRevision{};
+            std::uint64_t forestPreviewContentHash{};
+            std::optional<previewgrid::CameraRigSnapshot> forestProjectCamera{};
+            std::optional<previewgrid::CameraRigSnapshot> forestDesignCamera{};
+            bool forestTerrainPainting{};
+            bool forestBrushHeld{};
+            scene::SceneObjectId forestBrushTerrain{scene::kInvalidSceneObjectId};
+            std::optional<std::array<double,3>> forestBrushLastDirection{};
+            std::optional<previewgrid::Camera> forestPlacementCamera{};
             std::string plantLabStatus{
                 "Plant Lab document is ready to initialize."};
             std::string plantLabAssetStatus{
@@ -2233,13 +2554,28 @@
 #endif
             std::vector<EditorEntity> entities{};
             ScriptOscillator scriptOscillator{};
+            std::shared_ptr<const asset::mesh::Artifact> temporalWaterMesh{};
+            double temporalWaterSampleTime{std::numeric_limits<double>::quiet_NaN()};
             std::unordered_map<scene::SceneObjectId, ScriptOscillator> scriptCubeOscillators{};
+            std::unordered_map<scene::SceneObjectId, project_motion_track::Track> scriptTranslationTracks{};
             authoring::scene::SceneDocument sceneDocument{};
             lighting::LightManager sceneLighting{ 128 };
             std::vector<lighting::LightHandle> sceneLightHandles{};
             bool sceneLightingDirty{ true };
+            std::array<std::string, 3> sceneAmbientDraft{};
+            scene::Vec3 sceneAmbientDraftSource{scene::kDefaultAmbientLight};
+            bool sceneAmbientDraftInitialized{};
             scene_interaction::SceneInteractionQuery sceneInteraction{};
             bool sceneInteractionDirty{ true };
+            std::optional<std::future<std::optional<previewgrid::PreparedSceneFrame>>> planetaryPreviewPending{};
+            editor_tasks::CancellationTicket planetaryPreviewCancellation{};
+            std::shared_ptr<const previewgrid::SceneFrameRequest> planetaryPreviewRequest{};
+            std::string planetaryPreviewProjectRoot{};
+            std::uint64_t planetaryPreviewProjectGeneration{},planetaryPreviewSceneRevision{};
+            scene::SceneObjectId planetaryPreviewSelection{};
+            std::vector<scene::SceneObjectId> planetaryPreviewSelections{};
+            bool planetaryPreviewWireframe{};
+            std::array<double,3> sceneInteractionOrigin{};
             std::size_t selectedEntity{ 0 };
             scene::SceneObjectId selectedEntityId{ scene::kInvalidSceneObjectId };
             std::vector<scene::SceneObjectId> selectedEntityIds{};
@@ -2252,8 +2588,20 @@
                 scene::kInvalidSceneObjectId};
             std::uint64_t sceneDocumentRevision{ 1u };
             std::vector<std::string> logLines{};
+            std::uint64_t outputLogRevision{1u};
+            std::uint64_t outputFilterRevision{};
+            std::string outputSearch{};
+            std::string outputFilterSearch{};
+            std::string outputLastRunDetail{};
+            std::vector<std::string> outputFilteredLines{};
+            EditorWorkspaceTab outputFilterTab{EditorWorkspaceTab::Output};
+            bool outputGeneralOnly{};
+            bool outputFilterGeneral{};
+            bool outputShowDetails{};
             bool helpersVisible{ true };
             bool sceneDragActive{ false };
+            bool sceneDragMoved{}, sceneDragPendingToggle{}, sceneDragVertical{};
+            unsigned sceneDragHorizontalAxis{}; //0 undecided,1 X,2 Z.
             bool sceneLeftWasHeld{ false };
             std::size_t sceneDragEntity{ 0 };
             scene::SceneObjectId sceneDragEntityId{ scene::kInvalidSceneObjectId };
@@ -2289,7 +2637,8 @@
                 TimelineWorkspaceSection::sequence};
             EditorApplicationKind applicationKind{ EditorApplicationKind::Standard };
             core::ScenePreviewMode previewMode{ core::ScenePreviewMode::Editor };
-            bool sceneRunFullscreenInEditor{}; // Optional Run dropdown: full client-area scene, Escape returns.
+            bool sceneRunFullscreenInEditor{true}; // In-editor scene by default; compiled providers use the owned docked runtime.
+            bool sceneRunMaximizedInEditor{};
             EditorWorkspaceTab workspaceTab{ initial_editor_workspace_tab() };
             EditorWorkspaceTab dockStatusTab{ EditorWorkspaceTab::Output };
             EditorMainSurface mainSurface{ initial_editor_main_surface(workspaceTab) };
@@ -2297,7 +2646,7 @@
             // once on the frame owner, never inferred from a running task.
             std::optional<EditorMainSurface> requestedMainSurface{};
             float bottomGridSplit{ 0.32f };
-            float bottomGridDragOffset{};
+            float layoutDividerDragOffset{};
             float outlinerSplit{ 0.20f };
             float inspectorSplit{ 0.33f };
             float dockSplit{ 0.28f };
@@ -2350,12 +2699,19 @@
             std::chrono::steady_clock::time_point layoutPreferencesNextCheck{};
             bool layoutPreferencesSaveErrorLogged{ false };
             EditorLayoutDrag layoutDrag{ EditorLayoutDrag::None };
+            gui::DragSurfaceState layoutDividerDrag{};
             OutlinerToolTab outlinerToolTab{ OutlinerToolTab::World };
+            // The document workspace is independent of whichever tool pane
+            // happened to render last (including detached/custom dock groups).
+            bool game2DGuiWorkspace{};
+            bool workspaceCompanionsPending{};
             InspectorToolTab inspectorToolTab{ InspectorToolTab::Properties };
             bool paneTitleDragActive{ false };
             std::string paneTitleDragRoute{};
             std::string paneTitleDragLabel{};
             gui::Vec2 paneTitleDragStart{};
+            gui::DragSurfaceState paneTitleDrag{};
+            gui::DragSurfaceResult paneTitleDragFrame{};
             int surfaceSettleFrames{ 0 };
             gui::Vec2 lastLayoutExtent{};
             gui::DockableWindowHostState dockableGuiHost{};
@@ -2375,8 +2731,10 @@
             bool projectNotesVisible{ false };
             bool showAboutModal{ false };
             bool showSettingsModal{ false };
+            gui::FloatingWindowState editorSettingsWindow{};
             bool showPackageManagerModal{ false };
             bool showAiModelManagerModal{ false };
+            gui::FloatingWindowState aiModelManagerWindow{};
             bool aiModelManagerOpenLogged{}; // Only log lifecycle transitions.
             bool aiModelManagerAutoRescanPending{};
             bool aiChatModelPickerOpen{}; // One read-only scan per opening.
@@ -2384,14 +2742,18 @@
             // start GGUF inference or restore a saved set without an operator action.
             unsigned aiNativeAutoScanDelayFrames{ 4u };
             bool aiNativeAutoScanAttempted{};
-            int aiModelManagerTab{}; // Native / Local API / Direct GGUF
+            int aiModelManagerTab{}; // Installed / Local API / Direct GGUF / Browse
             int aiModelManagerSection{}; // Runtime / System 1 / Routing / Training / Tools
             std::string aiModelPendingUnregister{}; // Inline confirmation; no weight deletion
             std::string aiDirectExecutableDraft{};
             std::string aiDirectModelDraft{};
             std::string aiModelManagerFeedback{};
+            bool aiModelCatalogDetailsOpen{};
+            std::string aiModelCatalogSelection{};
+            std::string aiModelCatalogApproval{}; // Exact offer/revision/hash; never a tool permission.
             std::unordered_map<std::string, unsigned> aiNativeOffloadDraft{};
             std::unordered_map<std::string, epochengine::ai::native_runtime::ModelTuning> aiNativeTuningDraft{};
+            std::unordered_map<std::string, std::string> aiNativeIdleMinutesDraft{};
             bool aiNativeAdvancedTuningOpen{false};
             std::string aiNativeTestPrompt{
                 "Explain in two short sentences how a C++23 game engine safely shares GPU memory between rendering and local AI inference."};
@@ -2405,7 +2767,117 @@
             std::string aiEndpointStatus{};
             bool showVoiceConsentModal{ false };
             std::string selectedPackageId{};
+            bool packageSourceView{};
+            bool packageSourceTechnicalDetails{};
+            std::string packageSourceExpectedId{};
+            std::string packageSourcePathDraft{};
+            std::string packageSourceStatus{"Choose a local package manifest to review its source."};
+            std::optional<package_source::Inspection> packageSourceReview{};
+            bool packageSourceReviewCurrent{};
+            std::vector<std::string> packageSourceFileLines{};
+            package_source::StageResult packageSourceStaged{};
+            std::unique_ptr<EditorPackageSourceTask> packageSourceTask{};
+
+            std::string planetaryCheckedRoot{};
+            std::string planetaryOperationRoot{};
+            std::uint64_t planetaryOperationProjectKey{};
+            std::uint64_t planetaryOperationProjectGeneration{};
+            package_source::ProjectAttachment planetaryAttachment{};
+            struct PlanetaryFeatureRequest final
+            {
+                std::string project_root{}, owner_hash{};
+                std::uint64_t project_key{}, project_generation{};
+                project_planetary::Settings settings{};
+                bool generate{};
+                std::optional<package_source::ProjectFeatureReview> reviewed{};
+            };
+            std::optional<PlanetaryFeatureRequest> planetaryFeatureRequest{};
+            std::optional<std::future<package_source::ProjectFeatureReview>> planetaryFeatureReviewPending{};
+            std::optional<std::future<package_source::ProjectFeatureAdmission>> planetaryFeatureAdmissionPending{};
+            std::optional<std::future<package_source::ProjectAttachment>> waterAttachmentPending{};
+            project_planetary::Settings planetarySettings{};
+            struct PlanetaryMeshPolicy final
+            {
+                std::string selected_root{};
+                project_planetary::SourceGeneration source{};
+                project_planetary::Settings settings{};
+                std::optional<project_planetary::MeshGenerationIdentity> generated_mesh{};
+                std::vector<project_planetary::GeneratedBody> generated_bodies{};
+                bool body_inventory_checked{};
+            };
+            std::optional<PlanetaryMeshPolicy> planetaryMeshPolicy{};
+            struct PlanetaryBodySelection final
+            {
+                std::uint64_t entity{};
+                std::array<std::uint64_t,4> mesh_key{};
+                std::uint32_t body{};
+            };
+            std::optional<PlanetaryBodySelection> planetaryBodySelection{};
+            struct ForestSurfacePlacement final
+            {
+                std::string projectId{},projectRoot{};
+                std::uint64_t projectGeneration{},plantRevision{},plantHash{},entity{},ordinal{};
+                std::array<float,3> position{},rotation{},scale{};
+                std::optional<std::array<double,3>> anchor{};
+                std::array<double,3> heading{};
+                project_planetary::SurfaceQuery query{};
+                std::optional<forest::ForestAreaDistribution> area{};
+                std::vector<std::array<double,3>> directions{};
+                // Nonempty only for an explicit placement refresh. Keep the
+                // exact authored trees while new procedural ground is sampled.
+                std::uint64_t sceneRevision{};
+                std::vector<scene::SceneObjectSnapshot> refreshTrees{};
+                std::vector<project_planetary::GeneratedBody> refreshBodies{};
+            };
+            std::optional<ForestSurfacePlacement> forestSurfacePlacement{};
+            struct ForestSurfacePrepared final
+            {
+                project_planetary::SurfaceBatchResult surface{};
+                std::vector<EditorEntity> prototype{};
+            };
+            std::optional<std::future<ForestSurfacePrepared>> forestSurfacePending{};
+            editor_tasks::CancellationTicket forestSurfaceCancellation{};
+            std::uint64_t forestSurfaceSequence{};
+            forest::ForestAreaDistribution forestArea{};
+            bool forestPlacementFocusPending{};
+            std::string planetarySeedDraft{"1337"};
+            std::string planetaryRadiusDraft{"6371000"};
+            double planetaryRadiusSynced{6371000.0};
+            std::uint32_t planetaryRadiusReferenceSynced{};
+            std::filesystem::path planetaryBuildLog{};
+            std::vector<std::string> planetaryLogLines{};
+            double planetaryBuildSeconds{}, planetaryGenerationSeconds{};
+            std::string planetaryStatus{"Add the optional Planetary Terrain package to this project to generate terrain."};
+            std::optional<std::future<package_source::ProjectAttachment>> planetaryAttachmentPending{};
+            std::optional<std::future<project_planetary::Result>> planetaryGeneratePending{};
+            editor_tasks::CancellationTicket planetaryCancellation{};
+            bool planetaryAttachmentIsInstall{};
+            bool planetaryAttachmentIsUpdate{};
+            bool planetaryPreviewFocusPending{};
+            bool planetaryInitialFramePending{};
+            std::uint64_t planetaryInitialFrameGeneration{};
+            std::optional<std::future<project_planetary::StreamResult>> planetaryStreamPending{};
+            project_planetary::StreamView planetaryStreamView{};
+            bool planetaryStreamTimelinePlaying{};
+            epochengine::timeline::PlaybackDirection planetaryStreamTimelineDirection{epochengine::timeline::PlaybackDirection::forward};
+            double planetaryStreamTimelineRate{1.0};
+            project_planetary::Settings planetaryStreamSettings{};
+            project_planetary::SourceGeneration planetaryStreamSource{};
+            project_planetary::MeshGenerationIdentity planetaryStreamMesh{};
+            std::uint64_t planetaryStreamSequence{}, planetaryStreamEntity{};
+            std::shared_ptr<const asset::mesh::Artifact> planetaryStreamSnapshot{};
+            std::optional<project_planetary_snapshot::CloudLayer> planetaryStreamCloud{};
+            std::optional<project_planetary::GeneratedMeshFrame> planetaryStreamFrame{};
+            std::array<std::uint64_t, 4> planetaryStreamFallbackKey{};
+            std::array<float, 3> planetaryStreamPosition{}, planetaryStreamRotation{}, planetaryStreamScale{};
+            std::uint64_t planetaryStreamNextTick{};
+            std::uint32_t planetaryViewportHeight{720};
+            std::uint32_t planetaryViewportWidth{1280};
+            bool planetaryStreamContinue{true}, planetaryStreamFailed{};
+            std::string planetaryStreamStatus{};
+
             bool packageCatalogModelsOnly{};
+            bool packageTechnicalDetailsOpen{};
             std::string packageCatalogSearch{};
             std::string packageInstallStatus{ "The Site package catalog has not loaded." };
             float packageInstallProgress{ 0.0f };
@@ -2512,6 +2984,31 @@
             std::uint64_t aiAuthoringApplyGuiRevision{};
             bool aiAuthoringApplyCancelled{};
             epochengine::ai::ToolPlanParseResult aiToolPlan{};
+            std::string aiToolProjectId{}, aiToolProjectRoot{};
+            std::string aiToolBoundRequest{};
+            std::string aiToolImageBinding{};
+            std::filesystem::path aiToolImageWork{};
+            std::uint64_t aiToolImageActivityId{};
+            std::uint64_t aiToolProjectGeneration{}, aiToolSceneRevision{}, aiToolGuiRevision{};
+            bool aiToolPlantRecipeBound{};
+            std::uint64_t aiToolPlantRevision{}, aiToolPlantHash{};
+            // Catalog identities are host-owned snapshots, never model paths.
+            std::vector<std::pair<std::string, std::string>> aiToolProjectCatalog{};
+            std::string aiToolExecution{};
+            std::string aiToolExecutionProjectId{}, aiToolExecutionProjectRoot{};
+            std::uint64_t aiToolExecutionProjectGeneration{};
+            std::uint64_t aiToolExecutionBuildGeneration{};
+            struct AiPackageRequest final
+            {
+                enum class Phase : std::uint8_t { review, attaching, generating };
+                std::string project_id{}, project_root{}, source_hash{};
+                std::uint64_t project_key{}, project_generation{};
+                project_planetary::Settings settings{};
+                Phase phase{Phase::review};
+                bool generate{}, cancelled{};
+            };
+            std::optional<AiPackageRequest> aiPackageRequest{};
+
             std::string aiAuthoringStatus{
                 "Describe scene or GUI objects for the selected local model to plan."};
             std::string aiToolStatus{
@@ -2522,15 +3019,21 @@
             std::uint64_t aiAuthoringIgnoredThroughGeneration{};
             bool aiToolAwaitingReply{};
             bool aiToolPlanApplied{};
+            editor_ai_project_model_recovery::Pending aiToolModelRecovery{};
             std::optional<std::future<EditorProjectBuildResult>>
                 aiToolTestPending{};
             editor_tasks::CancellationTicket aiToolTestCancellation{};
             std::string aiToolTestProjectId{};
+            std::string aiToolTestProjectRoot{};
+            std::uint64_t aiToolTestProjectGeneration{};
             bool aiToolTestAfterBuild{};
             std::size_t aiGoalCompletedMilestones{};
             std::vector<std::string> aiGoalAttemptedMilestoneSignatures{};
             std::string aiGoalLastMilestoneSignature{};
             std::string aiGoalLastMilestoneReceipt{};
+            epochengine::editor::ai_chat_goal::ToolSequence aiGoalTools{};
+            std::optional<bool> aiGoalPackageReceipt{};
+            bool aiGoalForestReceipt{};
             bool aiGoalActive{};
             bool aiGoalRunning{};
             bool aiGoalEditing{};
@@ -2547,6 +3050,7 @@
             bool aiAuthoringPlanForGoal{};
             bool aiContinuousBuildEnabled{ false };
             std::optional<std::future<EditorProjectBuildResult>> aiContinuousBuildPending{};
+            editor_tasks::CancellationTicket aiContinuousBuildCancellation{};
             std::string aiContinuousBuildFingerprint{};
             std::string aiContinuousBuildStatus{ "Manual OS AI evidence gate is idle." };
             std::size_t aiContinuousBuildRunCount{ 0 };

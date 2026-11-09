@@ -93,6 +93,53 @@ namespace epochengine::editor_tilemaps
             return {rect.size.x, rect.size.y};
         }
 
+        [[nodiscard]] bool canvas_item(
+            std::string_view id,
+            gui_lib::Rect bounds,
+            std::string_view caption,
+            bool selected,
+            bool interactive) noexcept
+        {
+            if (!std::isfinite(bounds.position.x)
+                || !std::isfinite(bounds.position.y)
+                || !std::isfinite(bounds.size.x)
+                || !std::isfinite(bounds.size.y)
+                || bounds.size.x <= 0.0f || bounds.size.y <= 0.0f)
+            {
+                return false;
+            }
+            const gui::ContentClipScope itemClip{
+                gui_point(bounds.position),
+                {bounds.position.x + bounds.size.x,
+                 bounds.position.y + bounds.size.y}};
+            gui::set_cursor(gui_point(bounds.position));
+            return gui::image_box({
+                .id = id,
+                .size = gui_size(bounds),
+                .caption = caption,
+                .interactive = interactive,
+                .selected = selected}).clicked;
+        }
+
+        [[nodiscard]] constexpr bool cell_action_available(
+            Tool tool,
+            bool occupied,
+            bool interactive) noexcept
+        {
+            return interactive && (tool != Tool::collision || occupied);
+        }
+
+        [[nodiscard]] constexpr std::string_view collision_guidance(
+            bool hasPalette,
+            bool hasSelection) noexcept
+        {
+            if (!hasPalette)
+                return "Attach a tileset texture first: select a project texture in Assets, then choose Attach Selected Texture in the Tile Map pane.";
+            if (!hasSelection)
+                return "Select a palette tile or click a painted cell to edit its collision.";
+            return "Collision changes apply to every placement of the selected palette tile. Edit below, then choose Apply.";
+        }
+
         [[nodiscard]] bool point_in_rect(
             gui::Vec2 point,
             gui_lib::Rect rect) noexcept
@@ -609,8 +656,11 @@ namespace epochengine::editor_tilemaps
         if (!has_document())
             return reject(ControllerCode::invalid_controller);
         ui_state_.tool = tool;
-        status_ = std::string(gui_lib::tile_workspace::tool_name(tool))
-            + " tool selected.";
+        status_ = tool == Tool::collision
+            ? std::string(collision_guidance(
+                !snapshot().palette.empty(), selected_palette().has_value()))
+            : std::string(gui_lib::tile_workspace::tool_name(tool))
+                + " tool selected.";
         return {
             ControllerCode::ready,
             authoring::tilemap::ResultCode::success,
@@ -947,19 +997,33 @@ namespace epochengine::editor_tilemaps
         }
         if (ui_state_.tool == Tool::collision)
         {
-            const auto palette = selected_palette();
-            if (!palette)
+            const auto current = document_->snapshot();
+            if (current.palette.empty())
+            {
+                const auto rejected = reject(ControllerCode::palette_required);
+                status_ = collision_guidance(false, false);
+                return rejected;
+            }
+            const auto cell = document_->cell(*layer, mapCoordinate);
+            if (!cell || !cell->occupied())
+            {
+                const auto rejected = reject(ControllerCode::tool_not_applicable);
+                status_ = "This cell is empty. Select a palette tile or click a painted cell to edit collision.";
+                return rejected;
+            }
+            const auto palette = std::find_if(
+                current.palette.begin(), current.palette.end(),
+                [&](const auto& entry) { return entry.handle == cell->palette; });
+            if (palette == current.palette.end())
                 return reject(ControllerCode::palette_required);
-            auto descriptor = document_->palette_entry(*palette);
-            if (!descriptor)
-                return reject(ControllerCode::palette_required);
-            authoring::tilemap::CollisionShape collision =
-                descriptor->collision;
-            collision.kind = descriptor->collision.kind
-                    == asset::tilemap::CollisionKind::none
-                ? asset::tilemap::CollisionKind::full_cell
-                : asset::tilemap::CollisionKind::none;
-            return set_selected_palette_collision(collision);
+            const auto selected = select_palette(static_cast<std::uint32_t>(
+                palette - current.palette.begin()));
+            if (selected)
+            {
+                selected_cell_ = coordinate;
+                status_ = collision_guidance(true, true);
+            }
+            return selected;
         }
         if (ui_state_.tool == Tool::object)
         {
@@ -1857,6 +1921,11 @@ namespace epochengine::editor_tilemaps
                 return result;
 
             result.visible = true;
+            const gui::ContentClipScope workspaceClip{
+                options.viewport.position,
+                {options.viewport.position.x + options.viewport.size.x,
+                 options.viewport.position.y + options.viewport.size.y}};
+            gui::panel_rect(options.viewport.position, options.viewport.size);
             const gui::Vec2 pointer = gui::mouse_position();
             const gui_lib::Vec2 libraryPointer = gui_lib_point(pointer);
 
@@ -1895,6 +1964,16 @@ namespace epochengine::editor_tilemaps
                  layout.palette.position.y + 26.0f},
                 {(std::max)(1.0f, layout.palette.size.x - 8.0f),
                  (std::max)(1.0f, layout.palette.size.y - 30.0f)}};
+            if (current.palette.empty())
+            {
+                const gui::ContentClipScope paletteClip{
+                    gui_point(paletteViewport.position),
+                    {paletteViewport.position.x + paletteViewport.size.x,
+                     paletteViewport.position.y + paletteViewport.size.y}};
+                gui::set_cursor(gui_point(paletteViewport.position));
+                gui::wrapped_label(
+                    collision_guidance(false, false), paletteViewport.size.x);
+            }
             if (point_in_rect(pointer, paletteViewport))
             {
                 const int wheel = gui::consume_mouse_wheel_delta();
@@ -1918,6 +1997,10 @@ namespace epochengine::editor_tilemaps
             state.palette_scroll = paletteGrid.scroll_y;
             if (paletteGrid.valid)
             {
+                const gui::ContentClipScope paletteClip{
+                    gui_point(paletteViewport.position),
+                    {paletteViewport.position.x + paletteViewport.size.x,
+                     paletteViewport.position.y + paletteViewport.size.y}};
                 const std::uint32_t first = paletteGrid.first_visible_row
                     * paletteGrid.columns;
                 const std::uint32_t last = (std::min)(
@@ -1933,12 +2016,13 @@ namespace epochengine::editor_tilemaps
                             state.selected_palette == index);
                     if (!cell.visible)
                         continue;
-                    gui::set_cursor(gui_point(cell.content.position));
-                    if (gui::button_selected(
+                    if (canvas_item(
+                            "tilemap.palette",
+                            cell.content,
                             std::to_string(
                                 current.palette[index].descriptor.local_tile),
-                            gui_size(cell.content),
-                            state.selected_palette == index))
+                            state.selected_palette == index,
+                            options.interactive))
                     {
                         result.changed = static_cast<bool>(
                             controller.select_palette(index));
@@ -2027,6 +2111,10 @@ namespace epochengine::editor_tilemaps
                 .limits = workspaceLimits});
             if (canvas.valid)
             {
+                const gui::ContentClipScope canvasClip{
+                    gui_point(canvas.viewport.position),
+                    {canvas.viewport.position.x + canvas.viewport.size.x,
+                     canvas.viewport.position.y + canvas.viewport.size.y}};
                 state.zoom = canvas.zoom;
                 state.pan = canvas.pan;
                 if (gui_lib::contains(canvas.viewport, libraryPointer))
@@ -2184,7 +2272,6 @@ namespace epochengine::editor_tilemaps
                         }
                         const bool selected = controller.selected_cell()
                             == std::optional<CellCoordinate>{coordinate};
-                        gui::set_cursor(gui_point(bounds.position));
                         const bool objectOwnsPointer = pointerObject
                             && point_in_rect(pointer, bounds);
                         if (objectOwnsPointer)
@@ -2193,11 +2280,13 @@ namespace epochengine::editor_tilemaps
                                 gui_point(bounds.position),
                                 gui_size(bounds));
                         }
-                        else if (gui::button_selected(
+                        else if (canvas_item(
+                                     "tilemap.cell",
+                                     bounds,
                                      collisionMarker,
-                                     gui_size(bounds),
-                                     occupied || selected)
-                                 && options.interactive)
+                                     occupied || selected,
+                                     cell_action_available(
+                                         state.tool, occupied, options.interactive)))
                         {
                             const auto changed = controller.apply_cell(coordinate);
                             result.changed = result.changed
@@ -2226,12 +2315,12 @@ namespace epochengine::editor_tilemaps
                         canvas.viewport);
                     if (bounds.size.x <= 0.0f || bounds.size.y <= 0.0f)
                         continue;
-                    gui::set_cursor(gui_point(bounds.position));
-                    if (gui::button_selected(
+                    if (canvas_item(
+                            "tilemap.object",
+                            bounds,
                             descriptor->name,
-                            gui_size(bounds),
-                            selected)
-                        && options.interactive)
+                            selected,
+                            options.interactive))
                     {
                         const auto changed =
                             controller.select_object(object.handle);
@@ -2282,6 +2371,15 @@ namespace epochengine::editor_tilemaps
                     "Objects",
                     std::to_string(current.objects.size()),
                     64.0f);
+
+                if (state.tool == Tool::collision)
+                {
+                    gui::wrapped_label(
+                        collision_guidance(
+                            !current.palette.empty(),
+                            controller.selected_palette_collision_draft() != nullptr),
+                        (std::max)(80.0f, layout.inspector.size.x - 12.0f));
+                }
 
                 if (state.tool == Tool::collision
                     && controller.selected_palette_collision_draft())
@@ -2929,13 +3027,24 @@ namespace epochengine::editor_tilemaps
         {
             return ControllerContractFailure::collision;
         }
-        const auto collision = controller.document()->palette_entry(
+        auto collision = controller.document()->palette_entry(
             controller.snapshot().palette[0].handle);
         if (!collision || collision->collision.kind
-            != asset::tilemap::CollisionKind::full_cell)
+            != asset::tilemap::CollisionKind::none)
         {
             return ControllerContractFailure::collision;
         }
+        auto solidCollision = collision->collision;
+        solidCollision.kind = asset::tilemap::CollisionKind::full_cell;
+        if (!controller.stage_selected_palette_collision(solidCollision)
+            || !controller.apply_selected_palette_collision())
+        {
+            return ControllerContractFailure::collision;
+        }
+        collision = controller.document()->palette_entry(
+            controller.snapshot().palette[0].handle);
+        if (!collision || collision->collision != solidCollision)
+            return ControllerContractFailure::collision;
         authoring::tilemap::CollisionShape authoredCollision =
             collision->collision;
         authoredCollision.kind =

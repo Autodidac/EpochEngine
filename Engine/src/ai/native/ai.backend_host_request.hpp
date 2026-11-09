@@ -62,6 +62,8 @@ inline json host_response(const ModelResponse& response) {
     json result{{"choices",json::array({json{{"message",std::move(message)}}})}};
     if (response.raw.is_object())
     {
+        const auto selection = host_model_selection_key(response, {});
+        if (!selection.empty()) result["epoch_host_selection_key"] = selection;
         if (response.raw.contains("usage") && response.raw.at("usage").is_object())
             result["usage"] = response.raw.at("usage");
         if (response.raw.contains("timings") && response.raw.at("timings").is_object())

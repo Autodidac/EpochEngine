@@ -10,7 +10,7 @@
 #include <cstdint>
 namespace epochengine::platform_image_codec {
 struct Result final { bool succeeded{}; std::string message{}; };
-struct Thumbnail final { std::vector<std::uint8_t> rgba{}; std::uint32_t width{}, height{}; };
+struct Thumbnail final { std::vector<std::uint8_t> rgba{}; std::uint32_t width{}, height{}, source_width{}, source_height{}; };
 }
 #if defined(_WIN32)
 #ifndef WIN32_LEAN_AND_MEAN
@@ -91,7 +91,7 @@ namespace epochengine::platform_image_codec
                 || static_cast<std::uint64_t>(width) * height > 64u * 1024u * 1024u) return {};
             const auto scale = (std::min)({1.0, 160.0 / width, 160.0 / height});
             Thumbnail result{{}, static_cast<UINT>((std::max)(1.0, width * scale)),
-                static_cast<UINT>((std::max)(1.0, height * scale))};
+                static_cast<UINT>((std::max)(1.0, height * scale)), width, height};
             ComHandle<IWICBitmapScaler> scaler;
             ComHandle<IWICFormatConverter> converter;
             if (FAILED(factory->CreateBitmapScaler(scaler.put()))

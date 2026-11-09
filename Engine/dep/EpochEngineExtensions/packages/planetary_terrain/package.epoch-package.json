@@ -1,0 +1,122 @@
+{
+  "id": "planetary_terrain",
+  "displayName": "Planetary Terrain Extension",
+  "manifestLicense": "LicenseRef-MIT-NoSell",
+  "manifestCopyright": "Copyright (c) 2026 Adam Rushford",
+  "status": "source-staged",
+  "kind": "code-extension",
+  "activation": "package-manager-opt-in",
+  "summary": "Optional renderer-neutral indexed cube-sphere meshing core with a C++23 module facade; existing biome/tile sampler retained.",
+  "security": {
+    "serverOrListenerAllowed": false,
+    "requiresExplicitNetworkApproval": false,
+    "autoRunAllowed": false,
+    "includeByDefault": false
+  },
+  "source": {
+    "repo": "https://epoch.adamrushford.chatgpt.site/git/EpochEngineExtensions.git",
+    "path": "packages/planetary_terrain",
+    "provenance": "renderer-neutral C++23 planetary terrain composition source staged in this package"
+  },
+  "engineBoundary": {
+    "epochPackageId": "planetary_terrain",
+    "expectedCacheRoot": "cache/packages/planetary_terrain",
+    "notes": "Use core voxel field/pathing/tracing contracts, but keep heavy generation and authoring code package-gated."
+  },
+  "script": {
+    "language": "C++23",
+    "path": "scripts/planetary_terrain_package.ascript.cpp",
+    "api": "epoch_package_script_api",
+    "mode": "download-stage-build-live-preview",
+    "downloadsSource": true,
+    "compilesSource": true,
+    "livePreview": true,
+    "humanGated": true,
+    "autoRunAllowed": false
+  },
+  "build": {
+    "humanGated": true,
+    "sourceFiles": [
+      "CMakeLists.txt",
+      "include/epoch/extensions/planetary_terrain/planetary_terrain.hpp",
+      "src/planetary_terrain.cpp",
+      "tests/planetary_terrain_self_test.cpp",
+      "modules/planet.terrain.ixx",
+      "modules/planet.coverage.ixx",
+      "modules/planet.streaming.ixx",
+      "modules/planet.exploration.ixx",
+      "modules/planet.exploration_runtime.ixx",
+      "modules/planet.clouds.ixx",
+      "modules/water.planetary.ixx",
+      "src/planet.exploration_runtime.cpp",
+      "include/epoch/extensions/planetary_terrain/planet.runtime_bridge.hpp",
+      "tests/planet.terrain_consumer.cpp",
+      "tests/planet.coverage_consumer.cpp",
+      "tests/planet.streaming_consumer.cpp",
+      "tests/planet.view_priority_consumer.cpp",
+      "tests/planet.view_export_contract.py",
+      "tests/planet.parallel_streaming_consumer.cpp",
+      "tests/planet.snapshot_consumer.cpp",
+      "tests/planet.water_time_consumer.cpp",
+      "tests/planet.patch_export_contract.py",
+      "tests/planet.exploration_consumer.cpp",
+      "tests/planet.runtime_controller_consumer.cpp",
+      "tests/planet.clouds_consumer.cpp",
+      "tests/planet.cloud_density_transport.py",
+      "tests/planet.size_consumer.cpp",
+      "tests/planet.size_export_contract.py",
+      "tools/planet.mesh_export.cpp",
+      "tools/planet.stream_export.cpp",
+      "tools/planet.stream_cache.hpp",
+      "tests/planet.mesh_export_contract.py",
+      "tests/planet.stream_export_contract.py",
+      "upstream/provenance.json",
+      "upstream/EpochPlanet-0.2.3/LICENSE",
+      "upstream/EpochPlanet-0.2.3/THIRD_PARTY.md",
+      "upstream/EpochPlanet-0.2.3/src/core/world.cpp",
+      "upstream/EpochPlanet-0.2.3/src/core/terrain.cpp",
+      "upstream/EpochPlanet-0.2.3/src/core/simulation.cpp",
+      "upstream/EpochPlanet-0.2.3/include/epoch/planet/math.hpp",
+      "upstream/EpochPlanet-0.2.3/include/epoch/planet/world.hpp",
+      "upstream/EpochPlanet-0.2.3/include/epoch/planet/terrain.hpp",
+      "upstream/EpochPlanet-0.2.3/include/epoch/planet/simulation.hpp"
+    ],
+    "targets": [
+      "epoch_extension_planetary_terrain",
+      "epoch_extension_planetary_terrain_self_test",
+      "epoch_extension_planetary_core",
+      "epoch_extension_planetary_core_contract",
+      "epoch_extension_planetary_coverage_contract",
+      "epoch_extension_planetary_streaming_contract",
+      "epoch_extension_planetary_exploration_contract",
+      "epoch_extension_planetary_size_contract"
+    ],
+    "commands": [
+      "cmake -S packages/planetary_terrain -B cache/packages/planetary_terrain/build",
+      "cmake --build cache/packages/planetary_terrain/build",
+      "ctest --test-dir cache/packages/planetary_terrain/build --output-on-failure"
+    ]
+  },
+  "notes": [
+    "The selected upstream replacement world/terrain owners produce indexed cube-sphere CPU meshes, distinct from the compatibility height/biome sampler.",
+    "Module facade exposes one upstream ABI; this is not a completed source-module conversion.",
+    "Package installation, project activation and native Engine mesh presentation are not yet connected or accepted.",
+    "Excluded legacy voxel derivatives, worker pools, viewer loops, model loading and graphics APIs are not included.",
+    "planet.exploration exposes reviewed camera/travel algorithms for caller-owned ticks; Editor and project runtime controls are not connected by this module."
+  ],
+  "core": {
+    "target": "EpochEngineExtensions::PlanetaryCore",
+    "module": "planet.terrain",
+    "coverage_module": "planet.coverage",
+    "streaming_module": "planet.streaming",
+    "exploration_module": "planet.exploration",
+    "optional_project_controller": "epoch_extension_planetary_runtime",
+    "optional_controller_module": "planet.exploration_runtime",
+    "optional_engine_artifact_producer": "epoch_planet_mesh_export",
+    "upstream_version": "EpochPlanet0.2.3",
+    "provenance": "upstream/provenance.json",
+    "implementation_module_conversion_complete": false,
+    "native_engine_preview_verified": false,
+    "default_engine_startup_dependency": false
+  }
+}

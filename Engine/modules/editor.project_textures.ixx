@@ -28,6 +28,7 @@ import project.texture_resources;
 import project.texture_source;
 import render.canvas2d;
 import render.canvas2d_scene;
+import render.texture_artifact;
 import scene.snapshot;
 
 export namespace epochengine::editor_project_textures
@@ -262,6 +263,8 @@ export namespace epochengine::editor_project_textures
     {
         scene::SceneTextureMaterialSnapshot material{};
         canvas2d::LogicalTextureReference logical{};
+        texture_artifact::ValidatedCompiledTextureArtifact artifact{};
+        canvas2d::SpriteSamplerDeclaration sampler{};
 
         [[nodiscard]] explicit operator bool() const noexcept
         {
@@ -353,6 +356,8 @@ export namespace epochengine::editor_project_textures
         [[nodiscard]] SceneTextureLeaseResult bind_scene_materials(
             std::span<const scene::SceneTextureMaterialSnapshot>
                 materials) noexcept;
+        [[nodiscard]] ResolvedTextureMaterial resolve_scene_material(
+            const scene::SceneTextureMaterialSnapshot& material) noexcept;
 
         [[nodiscard]] const project_textures::ProjectTexturePipeline&
             pipeline() const noexcept;

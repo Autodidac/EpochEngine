@@ -69,7 +69,8 @@
             state.sceneDragStartPositions.clear();
             state.sceneDragHasPlaneHit = false;
             state.sceneMarqueeActive = false;
-            state.guiContentEditorEntityId = scene::kInvalidSceneObjectId;
+            state.guiSelectedWidget = {};
+            state.guiContentEditorWidget = {};
             state.textureBrushActive = false;
         }
 
@@ -131,6 +132,8 @@
                 return;
             }
 
+            state.guiSelectedWidget = {};
+            state.guiContentEditorWidget = {};
             state.selectedEntity = (std::min)(index, state.entities.size() - 1u);
             EditorEntity& selected = state.entities[state.selectedEntity];
             state.selectedEntityId = selected.sceneObjectId;
@@ -161,6 +164,8 @@
         {
             if (state.entities.empty())
                 return;
+            state.guiSelectedWidget = {};
+            state.guiContentEditorWidget = {};
             if (state.selectedEntityIds.empty()
                 && state.selectedEntityId != scene::kInvalidSceneObjectId
                 && editor_entity_index(state, state.selectedEntityId))
@@ -180,6 +185,8 @@
         {
             if (state.entities.empty())
                 return;
+            state.guiSelectedWidget = {};
+            state.guiContentEditorWidget = {};
             if (state.selectedEntityIds.empty()
                 && state.selectedEntityId != scene::kInvalidSceneObjectId
                 && editor_entity_index(state, state.selectedEntityId))
@@ -214,7 +221,11 @@
             normalize_editor_entity_ids(state);
             if (state.entities.empty())
             {
-                select_editor_entity(state, 0u);
+                // Normalizing an empty World must not deselect a document-only
+                // GUI widget. Explicit scene selection and Deselect own that.
+                state.selectedEntity = 0u;
+                state.selectedEntityId = scene::kInvalidSceneObjectId;
+                state.selectedEntityIds.clear();
                 state.sceneDragEntity = 0u;
                 state.sceneDragEntityId = scene::kInvalidSceneObjectId;
                 return;
@@ -307,6 +318,9 @@
                 object.visible = entity.visible;
                 object.editor_only = entity.editorOnly;
                 object.texture_material = entity.textureMaterial;
+                object.mesh_asset = entity.meshAsset;
+                object.position_anchor = entity.positionAnchor;
+                object.forest_region = entity.forestRegion;
                 snapshot.objects.emplace_back(std::move(object));
             }
 
@@ -337,6 +351,9 @@
             return capture_editor_entity_projection(state);
         }
 
+        [[nodiscard]] bool editor_planetary_outliner_only(
+            const EditorState& editor, const EditorEntity& entity);
+
         [[nodiscard]] bool ensure_editor_scene_interaction(EditorState& state)
         {
             synchronize_editor_selection(state);
@@ -350,26 +367,54 @@
             if (!validation)
                 return false;
 
+            state.sceneInteractionOrigin={};
+            for(const auto& object:projection.objects)
+                if(object.position_anchor){state.sceneInteractionOrigin=*object.position_anchor;break;}
+
             std::vector<scene_interaction::SceneObjectInteractionOverride>
                 interactionOverrides{};
             interactionOverrides.reserve(projection.objects.size());
             for (const auto& object : projection.objects)
             {
-                if (object.type != "Camera")
-                    continue;
+                const auto entity = editor_entity_index(state, object.id);
+                const auto mesh = entity ? state.entities[*entity].meshSnapshot : nullptr;
+                const bool outlinerOnly = entity
+                    && editor_planetary_outliner_only(state, state.entities[*entity]);
+                if (object.type != "Camera" && !mesh && !outlinerOnly) continue;
                 const auto objectId =
                     scene_interaction::derive_scene_object_id(
                         projection, object);
                 if (!objectId)
                     continue;
-                interactionOverrides.push_back({
-                    .object = *objectId,
-                    .selectability =
-                        scene_interaction::Selectability::Unselectable});
+                if (mesh)
+                {
+                    const auto minimum = mesh->minimum(), maximum = mesh->maximum();
+                    const auto unitScale = scene::mesh_render_scale({1.0f,1.0f,1.0f}, object.mesh_asset);
+                    if (!unitScale) return false;
+                    std::array<float,3> metricMinimum{},metricMaximum{};
+                    for (std::size_t axis=0;axis<3;++axis)
+                    {
+                        const auto& frame=state.entities[*entity].meshSnapshotFrame;
+                        const double scale=frame?frame->meters_per_unit:(*unitScale)[axis];
+                        const double offset=frame?frame->source_origin_meters[axis]:0.0;
+                        metricMinimum[axis]=static_cast<float>(double(minimum[axis])*scale+offset);
+                        metricMaximum[axis]=static_cast<float>(double(maximum[axis])*scale+offset);
+                        if (!std::isfinite(metricMinimum[axis])||!std::isfinite(metricMaximum[axis])) return false;
+                    }
+                    interactionOverrides.push_back({.object = *objectId,
+                        .localBounds = {{metricMinimum[0], metricMinimum[1], metricMinimum[2]},
+                            {metricMaximum[0], metricMaximum[1], metricMaximum[2]}},
+                        .selectability = outlinerOnly
+                            ? scene_interaction::Selectability::Unselectable
+                            : scene_interaction::Selectability::Inherit,
+                        .useLocalBounds = true});
+                }
+                else interactionOverrides.push_back({.object = *objectId,
+                    .selectability = scene_interaction::Selectability::Unselectable});
             }
             const auto report = state.sceneInteraction.rebuild(
                 projection,
-                scene_interaction::SceneInteractionBuildOptions{},
+                scene_interaction::SceneInteractionBuildOptions{.coordinateOrigin=state.sceneInteractionOrigin},
                 interactionOverrides);
             if (!report.committed())
                 return false;
@@ -393,5 +438,12 @@
         [[nodiscard]] std::string display_project_path(
             const std::filesystem::path& path);
         [[nodiscard]] bool project_gui_document_layout(EditorState& state);
-        [[nodiscard]] bool save_project_gui_document(EditorState& state);
-
+        [[nodiscard]] bool commit_gui_layout_edit(
+            EditorState& state, authoring::gui::WidgetHandle widget,
+            authoring::gui::LayoutDescriptor layout);
+        [[nodiscard]] std::optional<bool> try_grouped_gui_world_history(
+            EditorState& state, editor_authoring_history::BranchId branch,
+            editor_authoring_history::Direction direction);
+        [[nodiscard]] bool has_open_project(const EditorState& state) noexcept;
+        [[nodiscard]] bool save_project_gui_document(
+            EditorState& state, bool create_if_absent = true);

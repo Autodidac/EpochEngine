@@ -11,13 +11,11 @@ module;
 module software.context;
 
 import core.context;
-import core.commandline;
 import context.commandqueue;
 import software.state;
 import diagnostics.engine;
 import gui.engine;
 import telemetry.engine;
-import render.preview_grid;
 
 namespace epochengine::anativecontext
 {
@@ -32,12 +30,6 @@ namespace epochengine::anativecontext
     {
         void refresh_dimensions(core::Context& ctx) noexcept;
         void render_scene_preview(const core::Context& ctx) noexcept;
-        [[nodiscard]] bool canvas2d_scene_changed(
-            const core::Context& ctx,
-            const core::RenderViewport& viewport) noexcept;
-        bool same_viewport(
-            const core::RenderViewport& lhs,
-            const core::RenderViewport& rhs) noexcept;
         bool present_frame(const core::Context& ctx, const SoftRendState& sr) noexcept;
     }
 
@@ -53,19 +45,6 @@ namespace epochengine::anativecontext
             queue.clear();
             return false;
         }
-        if (core::cli::smoke_requested && !core::cli::capture_requested)
-        {
-            ++sr.smokeFrames;
-            if (sr.smokeFrames >= 3u)
-            {
-                sr.running = false;
-                if (ctx.windowData)
-                    ctx.windowData->set_should_close(true);
-                queue.clear();
-                return false;
-            }
-        }
-
         detail::refresh_dimensions(ctx);
 
         std::uintptr_t windowId = 0;
@@ -76,136 +55,88 @@ namespace epochengine::anativecontext
 #endif
 
         diagnostics::FrameTiming frameTimer{ ctx.type, windowId, "Software" };
-        const auto viewport = ctx.scene_viewport();
-        const auto previewMode = ctx.scene_preview_mode();
-        const std::uint64_t cameraRevision =
-            previewMode == core::ScenePreviewMode::Editor
-            ? epochengine::previewgrid::camera_revision_for(&ctx)
-            : 0;
-        const std::uint64_t geometryRevision =
-            previewMode == core::ScenePreviewMode::Editor
-            ? epochengine::previewgrid::preview_content_revision_for(&ctx)
-            : 0;
-        const std::uint64_t guiGeneration = epochengine::gui::deferred_batch_generation(&ctx);
         const std::int64_t commandDepth = static_cast<std::int64_t>(queue.depth());
-        const bool hasPendingCommands = commandDepth != 0;
         sr.arcadeScreen.preparedThisFrame = false;
-        const bool sampledPreviewActive =
-            previewMode == core::ScenePreviewMode::Editor
-            && !epochengine::previewgrid::sampled_render_surface_markers_for(&ctx).empty();
-        const bool canvas2dSceneChanged =
-            detail::canvas2d_scene_changed(ctx, viewport);
-        const bool sceneDirty =
-            !sr.frameValid
-            || hasPendingCommands
-            || sampledPreviewActive
-            || canvas2dSceneChanged
-            || !detail::same_viewport(viewport, sr.lastSceneViewport)
-            || static_cast<std::uint8_t>(previewMode) != sr.lastPreviewMode
-            || cameraRevision != sr.lastCameraRevision
-            || geometryRevision != sr.lastGeometryRevision;
-        const bool guiDirty =
-            !sr.frameValid
-            || guiGeneration != sr.lastGuiGeneration;
-
-        const bool compositionDirty = sceneDirty || guiDirty;
-        if (compositionDirty)
-        {
 #if EPOCH_USE_CLEAR_COLOR
-            const auto clearColor = core::clear_color_for_context(core::ContextType::Software);
-            const auto clearR = static_cast<std::uint8_t>(
-                std::clamp(clearColor[0], 0.0f, 1.0f) * 255.0f);
-            const auto clearG = static_cast<std::uint8_t>(
-                std::clamp(clearColor[1], 0.0f, 1.0f) * 255.0f);
-            const auto clearB = static_cast<std::uint8_t>(
-                std::clamp(clearColor[2], 0.0f, 1.0f) * 255.0f);
-            const auto clearA = static_cast<std::uint8_t>(
-                std::clamp(clearColor[3], 0.0f, 1.0f) * 255.0f);
-            const std::uint32_t packedColor =
-                (std::uint32_t(clearA) << 24)
-                | (std::uint32_t(clearR) << 16)
-                | (std::uint32_t(clearG) << 8)
-                | std::uint32_t(clearB);
-            std::fill(sr.framebuffer.begin(), sr.framebuffer.end(), packedColor);
+        const auto clearColor = core::clear_color_for_context(core::ContextType::Software);
+        const auto clearR = static_cast<std::uint8_t>(
+            std::clamp(clearColor[0], 0.0f, 1.0f) * 255.0f);
+        const auto clearG = static_cast<std::uint8_t>(
+            std::clamp(clearColor[1], 0.0f, 1.0f) * 255.0f);
+        const auto clearB = static_cast<std::uint8_t>(
+            std::clamp(clearColor[2], 0.0f, 1.0f) * 255.0f);
+        const auto clearA = static_cast<std::uint8_t>(
+            std::clamp(clearColor[3], 0.0f, 1.0f) * 255.0f);
+        const std::uint32_t packedColor =
+            (std::uint32_t(clearA) << 24)
+            | (std::uint32_t(clearR) << 16)
+            | (std::uint32_t(clearG) << 8)
+            | std::uint32_t(clearB);
+        std::fill(sr.framebuffer.begin(), sr.framebuffer.end(), packedColor);
 
-            if (sr.lastTelemetryWidth != sr.width)
-            {
-                telemetry::emit_gauge(
-                    "renderer.framebuffer.size",
-                    static_cast<std::int64_t>(sr.width),
-                    telemetry::RendererTelemetryTags{ ctx.type, windowId, "width" });
-                sr.lastTelemetryWidth = sr.width;
-            }
-            if (sr.lastTelemetryHeight != sr.height)
-            {
-                telemetry::emit_gauge(
-                    "renderer.framebuffer.size",
-                    static_cast<std::int64_t>(sr.height),
-                    telemetry::RendererTelemetryTags{ ctx.type, windowId, "height" });
-                sr.lastTelemetryHeight = sr.height;
-            }
-            if (sr.lastTelemetryBufferLength != sr.framebuffer.size())
-            {
-                telemetry::emit_gauge(
-                    "renderer.framebuffer.size",
-                    static_cast<std::int64_t>(sr.framebuffer.size()),
-                    telemetry::RendererTelemetryTags{ ctx.type, windowId, "buffer_length" });
-                sr.lastTelemetryBufferLength = sr.framebuffer.size();
-            }
+        if (sr.lastTelemetryWidth != sr.width)
+        {
+            telemetry::emit_gauge(
+                "renderer.framebuffer.size",
+                static_cast<std::int64_t>(sr.width),
+                telemetry::RendererTelemetryTags{ ctx.type, windowId, "width" });
+            sr.lastTelemetryWidth = sr.width;
+        }
+        if (sr.lastTelemetryHeight != sr.height)
+        {
+            telemetry::emit_gauge(
+                "renderer.framebuffer.size",
+                static_cast<std::int64_t>(sr.height),
+                telemetry::RendererTelemetryTags{ ctx.type, windowId, "height" });
+            sr.lastTelemetryHeight = sr.height;
+        }
+        if (sr.lastTelemetryBufferLength != sr.framebuffer.size())
+        {
+            telemetry::emit_gauge(
+                "renderer.framebuffer.size",
+                static_cast<std::int64_t>(sr.framebuffer.size()),
+                telemetry::RendererTelemetryTags{ ctx.type, windowId, "buffer_length" });
+            sr.lastTelemetryBufferLength = sr.framebuffer.size();
+        }
 #endif
 
-            if (!ctx.gui_overlay_priority()
-                && ctx.windowData
-                && ctx.windowData->context)
-            {
-                if (auto liveContext = std::reinterpret_pointer_cast<epochengine::core::Context>(
-                        ctx.windowData->context))
-                {
-                    ::epochengine::gui::render_deferred_batch(liveContext.get());
-                }
-            }
-            detail::render_scene_preview(ctx);
-
-            if (sr.lastTelemetryCommandDepth != commandDepth)
-            {
-                telemetry::emit_gauge(
-                    "renderer.command_queue.depth",
-                    commandDepth,
-                    telemetry::RendererTelemetryTags{ ctx.type, windowId });
-                sr.lastTelemetryCommandDepth = commandDepth;
-            }
-            queue.drain();
-            sr.sceneFramebuffer = sr.framebuffer;
-        }
-
-        const bool needsPresent = compositionDirty;
-        if (needsPresent)
+        if (!ctx.gui_overlay_priority()
+            && ctx.windowData
+            && ctx.windowData->context)
         {
-            if (ctx.windowData && ctx.windowData->context)
+            if (auto liveContext = std::reinterpret_pointer_cast<epochengine::core::Context>(
+                    ctx.windowData->context))
             {
-                if (auto liveContext = std::reinterpret_pointer_cast<epochengine::core::Context>(ctx.windowData->context))
-                    ::epochengine::gui::render_deferred_batch(liveContext.get());
+                ::epochengine::gui::render_deferred_batch(liveContext.get());
             }
+        }
+        detail::render_scene_preview(ctx);
 
-            if (ctx.windowData && ctx.windowData->context)
-            {
-                if (auto liveContext = std::reinterpret_pointer_cast<epochengine::core::Context>(ctx.windowData->context))
-                    ::epochengine::gui::render_top_layer_batch(liveContext.get());
-            }
+        if (sr.lastTelemetryCommandDepth != commandDepth)
+        {
+            telemetry::emit_gauge(
+                "renderer.command_queue.depth",
+                commandDepth,
+                telemetry::RendererTelemetryTags{ ctx.type, windowId });
+            sr.lastTelemetryCommandDepth = commandDepth;
+        }
+        queue.drain();
 
-            sr.lastGuiGeneration = guiGeneration;
-            sr.lastCameraRevision = cameraRevision;
-            sr.lastGeometryRevision = geometryRevision;
-            sr.lastSceneViewport = viewport;
-            sr.lastPreviewMode = static_cast<std::uint8_t>(previewMode);
-            sr.frameValid = true;
+        if (ctx.windowData && ctx.windowData->context)
+        {
+            if (auto liveContext = std::reinterpret_pointer_cast<epochengine::core::Context>(ctx.windowData->context))
+                ::epochengine::gui::render_deferred_batch(liveContext.get());
         }
 
-        if (needsPresent)
-            capture_frame_if_requested(sr.framebuffer, sr.width, sr.height, windowId);
+        if (ctx.windowData && ctx.windowData->context)
+        {
+            if (auto liveContext = std::reinterpret_pointer_cast<epochengine::core::Context>(ctx.windowData->context))
+                ::epochengine::gui::render_top_layer_batch(liveContext.get());
+        }
 
-        if (needsPresent)
-            (void)detail::present_frame(ctx, sr);
+        capture_frame_if_requested(sr.framebuffer, sr.width, sr.height, windowId);
+
+        (void)detail::present_frame(ctx, sr);
 
         frameTimer.finish();
         return true;

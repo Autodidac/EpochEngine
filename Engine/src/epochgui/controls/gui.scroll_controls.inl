@@ -8,12 +8,27 @@
 
         ensure_resources();
 
-        const Vec2 start = g_frame.cursor;
-        const float availableWidth = (std::max)(1.0f, content_available_width(start.x));
+        const Vec2 rowStart = g_frame.cursor;
+        const float availableWidth = (std::max)(1.0f, content_available_width(rowStart.x));
         const float requestedWidth = options.size.x > 0.0f
             ? (std::max)(96.0f, options.size.x)
             : availableWidth;
-        const float width = (std::max)(1.0f, (std::min)(requestedWidth, availableWidth));
+        const float rowWidth = (std::max)(1.0f, (std::min)(requestedWidth, availableWidth));
+        float width = rowWidth;
+        if (options.fit_content)
+        {
+            const auto label = options.selected.empty() ? options.placeholder : options.selected;
+            const float fittedWidth = measure_text_width(label, kFontScale)
+                + (std::max)(measure_text_width("  v", kFontScale),
+                    measure_text_width("  ^", kFontScale))
+                + 2.0f * kContentPadding + 12.0f;
+            width = (std::clamp)(fittedWidth, (std::min)(96.0f, rowWidth), rowWidth);
+        }
+        const float offset = options.alignment == InlineButtonAlignment::Center
+            ? (rowWidth - width) * 0.5f
+            : options.alignment == InlineButtonAlignment::End ? rowWidth - width : 0.0f;
+        const Vec2 start{rowStart.x + offset, rowStart.y};
+        set_cursor(start);
         const float rowHeight = (std::max)(22.0f, options.row_height);
         const float closedHeight = options.size.y > 0.0f
             ? (std::max)(rowHeight, options.size.y)
@@ -62,7 +77,8 @@
             }
             toggledThisFrame = true;
         }
-        const Vec2 afterClosedCursor = g_frame.cursor;
+        const Vec2 afterClosedCursor{rowStart.x, g_frame.cursor.y};
+        set_cursor(afterClosedCursor);
 
         result.opened = state.open;
         if (!state.open || options.options.empty())
@@ -81,6 +97,11 @@
         const float requestedListHeight = static_cast<float>(visibleCount) * optionPitch - 2.0f;
         const float contentHeight = static_cast<float>(options.options.size()) * rowHeight
             + static_cast<float>(options.options.size() - 1u) * 2.0f;
+        float popupWidth = width;
+        if (options.fit_content)
+            for (const auto option : options.options)
+                popupWidth = (std::max)(popupWidth,
+                    measure_text_width(option, kFontScale) + 2.0f * kContentPadding + 22.0f);
         const std::string listId = key + "-list";
         gui_lib::Rect popupViewport{
             {0.0f, 0.0f},
@@ -101,7 +122,7 @@
         const auto placement = gui_lib::place_popup(gui_lib::PopupOptions{
             .owner = {{start.x - popupViewport.position.x, start.y - popupViewport.position.y},
                 {width, closedHeight}},
-            .preferred_size = {width, requestedListHeight},
+            .preferred_size = {popupWidth, requestedListHeight},
             .viewport_size = popupViewport.size,
             .gap = (std::max)(0.0f, afterClosedCursor.y - start.y - closedHeight)},
             {});
@@ -519,6 +540,27 @@
         advance_cursor({ 0.0f, height + kContentPadding });
     }
 
+    [[nodiscard]] static bool update_scrollbar_drag(
+        DragSurfaceState& state, float& grab_offset,
+        const gui_lib::ScrollbarLayout& scrollbar, float& scroll_offset) noexcept
+    {
+        const auto press = mouse_press_position();
+        const Vec2 origin = state.pending ? state.press_position : press.value_or(g_frame.mousePos);
+        const auto gesture = drag_surface(state, {
+            .position={scrollbar.track.position.x,scrollbar.track.position.y},
+            .size={scrollbar.track.size.x,scrollbar.track.size.y},
+            .minimum_hit_extent=1.0f,.drag_threshold=0.0f});
+        if (gesture.pressed)
+        {
+            const bool thumb = point_in_rect(origin,scrollbar.thumb.position.x,scrollbar.thumb.position.y,
+                scrollbar.thumb.size.x,scrollbar.thumb.size.y) && point_in_active_clip(origin);
+            grab_offset = gui_lib::scrollbar_grab_offset(scrollbar, origin.y, thumb);
+        }
+        if (!gesture.dragging && !gesture.released) return false;
+        scroll_offset = gui_lib::scrollbar_offset_from_pointer(scrollbar, origin.y + gesture.delta.y, grab_offset);
+        return true;
+    }
+
     ScrollAreaResult begin_scroll_area(const ScrollAreaOptions& options) noexcept
     {
         ScrollAreaResult result{};
@@ -581,7 +623,8 @@
         const bool selectList = is_select_box_list_id(id);
         const bool selectBoxCapturesWheel = any_select_box_open(g_frame.ctx) && !selectList;
         if (options.capture_wheel && hovered
-            && g_frame.mouseWheelDelta != 0 && !selectBoxCapturesWheel)
+            && g_frame.mouseWheelDelta != 0 && !selectBoxCapturesWheel
+            && !edit_box_captures_wheel())
         {
             const float wheelSteps = static_cast<float>(g_frame.mouseWheelDelta) / 120.0f;
             const float step = line_advance_amount(kFontScale) * 3.0f;
@@ -607,29 +650,12 @@
             const auto scrollbar = gui_lib::make_scrollbar_layout({
                 .track = {{trackX, trackY}, {scrollbarWidth, height}},
                 .content_extent = estimatedContentHeight, .scroll_offset = state.scrollY });
-            const float thumbHeight = scrollbar.thumb.size.y;
-            const float thumbY = scrollbar.thumb.position.y;
-            const bool trackHovered = point_in_rect(g_frame.mousePos, trackX, trackY, scrollbarWidth, height)
-                && point_in_active_clip(g_frame.mousePos);
-            const bool thumbHovered = point_in_rect(g_frame.mousePos, trackX, thumbY, scrollbarWidth, thumbHeight)
-                && point_in_active_clip(g_frame.mousePos);
-
-            if (left_press_available() && trackHovered)
+            if (update_scrollbar_drag(state.scrollbarDrag, state.dragGrabOffset, scrollbar, state.scrollY))
             {
-                state.draggingScrollbar = true;
-                state.dragGrabOffset = gui_lib::scrollbar_grab_offset(scrollbar, g_frame.mousePos.y, thumbHovered);
-                consume_left_press();
-            }
-
-            if (!g_frame.mouseDown)
-                state.draggingScrollbar = false;
-
-            if (state.draggingScrollbar)
-            {
-                state.scrollY = gui_lib::scrollbar_offset_from_pointer(scrollbar, g_frame.mousePos.y, state.dragGrabOffset);
                 state.followTail = state.scrollY >= maxScroll - 1.5f;
             }
         }
+        else state.scrollbarDrag = {};
 
         g_scrollAreaStack.push_back(ScrollAreaFrame{
             .key = stateKey,
@@ -997,6 +1023,7 @@
         auto& state = g_scrollTextStates[scroll_panel_key(id)];
         if (state.expandedRuns.size() > 1024u)
             state.expandedRuns.clear(); // bounded state after conversation pruning
+        if (state.rawActivityItems.size() > 4096u) state.rawActivityItems.clear();
         if (state.expandedActivityItems.size() > 4096u)
             state.expandedActivityItems.clear(); // no state inheritance after pruning
         // Streaming state must never reset operator disclosure choices.
@@ -1017,22 +1044,21 @@
         const float activityItemHeaderHeight = linePitch + 8.0f;
         const float activityItemPadding = 8.0f;
         constexpr float activityIndent = 16.0f;
-        const auto activity_detail = [](const ChatActivityEvent& item) -> std::string_view
+        const auto activity_detail = [](const ChatActivityEvent& item, bool raw = false) -> std::string_view
         {
             // A host message's detail must not repeat the group in both
             // the disclosure label and the expanded child content.
-            std::string_view detail{item.detail};
+            if (raw) return item.detail;
+            std::string_view detail{item.display_detail.empty() ? item.detail : item.display_detail};
             const std::string prefix = item.group + ": ";
             if (detail.starts_with(prefix)) detail.remove_prefix(prefix.size());
             // Status-only events have no hidden extra detail. Other events
             // frequently repeat their summary before the useful explanation;
             // keep only the information that is not already in the title.
             const std::string_view summary{item.summary};
-            // Preserve an existing event's disclosure even when its recorded
-            // detail equals the summary: the earlier suppression removed
-            // child arrows and their click targets from the Activity trail.
-            // The duplicate is shown only on explicit expansion.
-            if (detail == summary) return detail;
+            // A status-only milestone stays visible as a row, but needs no
+            // disclosure arrow or duplicate body. Raw evidence is unchanged.
+            if (detail == summary) return {};
             if (detail.starts_with(summary) && detail.size() > summary.size())
             {
                 const auto remainder = detail.substr(summary.size());
@@ -1053,16 +1079,24 @@
                 + (key << 6u) + (key >> 2u);
             return key;
         };
+        const auto activity_item_raw = [&](std::size_t index, std::size_t ordinal) noexcept
+        {
+            const auto it = state.rawActivityItems.find(activity_item_key(index, ordinal));
+            return it != state.rawActivityItems.end() && it->second;
+        };
         const auto activity_item_expanded = [&](std::size_t index,
             std::size_t ordinal) noexcept
         {
-            const auto it = state.expandedActivityItems.find(
-                activity_item_key(index, ordinal));
-            if (it != state.expandedActivityItems.end()) return it->second;
             const auto* info = run_info(index);
             if (!info || ordinal >= info->activity_events.size()
                 || activity_detail(info->activity_events[ordinal]).empty())
                 return false;
+            // A retained expansion choice cannot create an empty body after
+            // an updated event becomes status-only. Keep the choice so real
+            // details that arrive later still respect the user's toggle.
+            const auto it = state.expandedActivityItems.find(
+                activity_item_key(index, ordinal));
+            if (it != state.expandedActivityItems.end()) return it->second;
             // Details reveals token text immediately and stays stable across
             // streaming/completion; explicit per-item choices take precedence.
             const auto& item = info->activity_events[ordinal];
@@ -1078,11 +1112,12 @@
             if (!info || ordinal >= info->activity_events.size()) return 0.0f;
             float height = activityItemHeaderHeight;
             if (activity_item_expanded(index, ordinal))
-                height += measure_wrapped_text_height(
-                    activity_detail(info->activity_events[ordinal]),
+                height += chat_activity_detail_surface(info->activity_events[ordinal],
+                    activity_detail(info->activity_events[ordinal], activity_item_raw(index, ordinal)),
+                    activity_item_raw(index, ordinal), 0.0f, 0.0f,
                     (std::max)(1.0f, detailsWidth - 2.0f * activityItemPadding
                         - 2.0f * activityIndent),
-                    kFontScale) + 2.0f * activityItemPadding;
+                    kFontScale, false) + 2.0f * activityItemPadding;
             return height;
         };
         if (options.incremental_line_measurements)
@@ -1232,7 +1267,7 @@
             begin_top_layer();
             set_cursor(latestPos);
             if (button_with_state("↓", {latestDiameter, latestDiameter},
-                    false, true, SemanticTone::neutral, true))
+                    false, true, SemanticTone::neutral, true, true))
             {
                 state.scrollY = maxScrollY;
                 state.followTail = true;
@@ -1264,12 +1299,13 @@
                 std::string out = info->route;
                 if (info->route == "Activity" && !info->activity_events.empty())
                 {
-                    for (const auto& item : info->activity_events)
+                    for (std::size_t ordinal{}; ordinal < info->activity_events.size(); ++ordinal)
                     {
+                        const auto& item = info->activity_events[ordinal];
                         out += "\n  " + item.summary;
                         if (item.tool && !item.status.empty())
                             out += " · " + item.status;
-                        if (const auto detail = activity_detail(item); !detail.empty())
+                        if (const auto detail = activity_detail(item, activity_item_raw(index, ordinal)); !detail.empty())
                             out += "\n      " + std::string{detail};
                     }
                 }
@@ -1339,31 +1375,14 @@
             const auto scrollbar = gui_lib::make_scrollbar_layout({
                 .track = {{trackX, trackY}, {scrollbarWidth, contentHeight}},
                 .content_extent = totalTextHeight, .scroll_offset = state.scrollY });
-            const float thumbHeight = scrollbar.thumb.size.y;
-            const float thumbY = scrollbar.thumb.position.y;
-            const bool trackHovered = point_in_rect(g_frame.mousePos, trackX, trackY, scrollbarWidth, contentHeight)
-                && point_in_active_clip(g_frame.mousePos);
-            const bool thumbHovered = point_in_rect(g_frame.mousePos, trackX, thumbY, scrollbarWidth, thumbHeight)
-                && point_in_active_clip(g_frame.mousePos);
-
-            if (left_press_available() && trackHovered)
+            if (update_scrollbar_drag(state.scrollbarDrag, state.dragGrabOffset, scrollbar, state.scrollY))
             {
-                state.draggingScrollbar = true;
-                state.dragGrabOffset = gui_lib::scrollbar_grab_offset(scrollbar, g_frame.mousePos.y, thumbHovered);
-                consume_left_press();
-            }
-
-            if (!g_frame.mouseDown)
-                state.draggingScrollbar = false;
-
-            if (state.draggingScrollbar)
-            {
-                state.scrollY = gui_lib::scrollbar_offset_from_pointer(scrollbar, g_frame.mousePos.y, state.dragGrabOffset);
                 result.first_visible_line = state.firstLine;
                 result.user_scrolled = true;
                 state.followTail = state.scrollY >= maxScrollY - 1.5f;
             }
         }
+        else state.scrollbarDrag = {};
 
         result.first_visible_line = (std::min)(state.firstLine, lineCount);
         bool openedContextMenuThisFrame = false;
@@ -1404,6 +1423,7 @@
             // Defer disclosure toggles until the frame ends so the measured
             // row geometry and the draw pass always describe the same state.
             std::optional<std::pair<std::size_t, bool>> activityToggle{};
+            std::optional<std::pair<std::size_t, bool>> rawToggle{};
             bool foundFirstVisible = false;
             float rowY = contentY + edgePadding - state.scrollY;
             for (std::size_t lineIndex = 0; lineIndex < lineCount; ++lineIndex)
@@ -1500,7 +1520,8 @@
                             const std::string label = item.summary + (item.tool && !item.status.empty()
                                     ? " · " + item.status : "");
                             const float itemLabelWidth = (std::max)(1.0f,
-                                activityWidth - activityIndent - 2.0f * activityItemPadding);
+                                activityWidth - activityIndent - 2.0f * activityItemPadding
+                                    - (item.display_detail.empty() || activityWidth < 150.0f ? 0.0f : 72.0f));
                             const std::string itemHeader = hasDetails
                                 ? inline_disclosure_text(label, itemLabelWidth,
                                     activity_item_expanded(lineIndex, ordinal))
@@ -1512,7 +1533,17 @@
                                     (std::min)(itemLabelWidth,
                                         measure_text_width(itemHeader, kFontScale) + 10.0f),
                                     activityItemHeaderHeight);
-                            activityItemHovered = activityItemHovered || hit;
+                            const float rawX = boxX + messageInsetX + activityWidth - 68.0f;
+                            const bool rawHit = lineHovered && !item.display_detail.empty()
+                                && activityWidth >= 150.0f
+                                && point_in_rect(g_frame.mousePos, rawX, itemY, 64.0f, activityItemHeaderHeight);
+                            activityItemHovered = activityItemHovered || hit || rawHit;
+                            if (rawHit && left_press_available())
+                            {
+                                rawToggle = {activity_item_key(lineIndex, ordinal),
+                                    !activity_item_raw(lineIndex, ordinal)};
+                                consume_left_press();
+                            }
                             if (hit && left_press_available())
                             {
                                 const auto key = activity_item_key(lineIndex, ordinal);
@@ -1614,7 +1645,8 @@
                         boxWidth, visibleMessageHeight, bubbleStyle);
                     else if (!(options.conversation_style && isStream))
                         draw_sprite(palette.buttonActive, contentX - 2.0f, rowY - 1.0f,
-                            contentWidth + 4.0f, rowHeight);
+                            contentWidth + 4.0f,
+                            options.conversation_style ? visibleMessageHeight : rowHeight);
                 }
                 else if (lineHovered)
                 {
@@ -1623,7 +1655,8 @@
                     else if (!(options.conversation_style &&
                         (role == TextMessageRole::assistant || isStream)))
                         draw_sprite(palette.buttonHover, contentX - 2.0f, rowY - 1.0f,
-                            contentWidth + 4.0f, rowHeight);
+                            contentWidth + 4.0f,
+                            options.conversation_style ? visibleMessageHeight : rowHeight);
                 }
 
                 // Read the answer first. Model/timing and expandable evidence
@@ -1729,33 +1762,29 @@
                                 // as the Activity parent. No far-right arrow lane.
                                 const float labelWidth = (std::max)(1.0f,
                                     activityWidth - activityIndent
-                                        - 2.0f * activityItemPadding);
+                                        - 2.0f * activityItemPadding
+                                        - (item.display_detail.empty() || activityWidth < 150.0f ? 0.0f : 72.0f));
                                 const std::string childHeader = hasDetails
                                     ? inline_disclosure_text(label, labelWidth, expanded)
                                     : fit_text_to_width(label, labelWidth, kFontScale);
                                 draw_text_line(childHeader, textX,
                                     itemY + 4.0f, kFontScale);
+                                if (!item.display_detail.empty() && activityWidth >= 150.0f)
+                                    draw_text_line(activity_item_raw(lineIndex, ordinal) ? "Code" : "Raw",
+                                        boxX + messageInsetX + activityWidth - 68.0f, itemY + 4.0f, kFontScale);
                                 if (expanded)
                                 {
                                     const float innerY = itemY
                                         + activityItemHeaderHeight;
-                                    draw_rounded_sprite(palette.consoleBackground,
-                                        itemX + 2.0f, innerY,
-                                        (std::max)(1.0f,
-                                            activityWidth - activityIndent - 4.0f),
-                                        (std::max)(1.0f, height - activityItemHeaderHeight),
-                                        gui_lib::rounded_rect::RoundedRectStyle{
-                                            .enabled = true, .control_radius = 10.0f});
-                                    draw_wrapped_text(activity_detail(item),
+                                    (void)chat_activity_detail_surface(item,
+                                        activity_detail(item, activity_item_raw(lineIndex, ordinal)),
+                                        activity_item_raw(lineIndex, ordinal),
                                         textX + activityIndent,
                                         innerY + activityItemPadding,
                                         (std::max)(1.0f,
                                             activityWidth - 2.0f * activityItemPadding
                                                 - 2.0f * activityIndent),
-                                        kFontScale, !item.tool && item.group != "Model",
-                                        item.tool || item.summary == "Tool arguments"
-                                            || (item.summary == "Response tokens"
-                                                && activity_detail(item).find("```") != std::string_view::npos));
+                                        kFontScale, true);
                                 }
                                 itemY += height;
                             }
@@ -1798,6 +1827,7 @@
                 }
                 rowY += rowHeight;
             }
+            if (rawToggle.has_value()) state.rawActivityItems[rawToggle->first] = rawToggle->second;
             if (activityToggle.has_value())
                 state.expandedActivityItems[activityToggle->first] =
                     activityToggle->second;

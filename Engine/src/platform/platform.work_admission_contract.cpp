@@ -19,6 +19,27 @@ namespace
 
     [[nodiscard]] int run_contract()
     {
+        // Streaming can check a bounded allocation without waiting for a CPU
+        // utilization sample or imposing the heavyweight-operation cooldown.
+        auto memory = healthy(100u);
+        memory.cpu_valid = false;
+        memory.cpu_busy_fraction = (std::numeric_limits<double>::quiet_NaN)();
+        if (assess_memory_budget(memory, 100u, 14u * gib) != Reason::ready
+            || assess_memory_budget(memory, 100u, 14u * gib + 1u) != Reason::memory_pressure
+            || assess_memory_budget(memory, 100u, (std::numeric_limits<std::uint64_t>::max)())
+                != Reason::memory_pressure
+            || assess_memory_budget(memory, 5'101u, 1u) != Reason::resources_stale
+            || assess_memory_budget(memory, 99u, 1u) != Reason::resources_stale) return 62;
+        memory.total_memory_bytes = 64u * gib;
+        memory.available_memory_bytes = 4u * gib;
+        if (assess_memory_budget(memory, 100u, gib) != Reason::memory_pressure) return 63;
+        memory.memory_valid = false;
+        if (assess_memory_budget(memory, 100u, 0u) != Reason::resources_unavailable) return 64;
+        Policy invalidMemoryPolicy{};
+        invalidMemoryPolicy.minimum_available_memory_fraction =
+            (std::numeric_limits<double>::quiet_NaN)();
+        if (assess_memory_budget(healthy(100u), 100u, 0u, invalidMemoryPolicy)
+            != Reason::invalid_policy) return 65;
         // Epoch AI's operator-selected unrestricted policy admits work even
         // with missing/stale metrics or a fully occupied model, while retaining
         // ownership, candidate choice and token retirement.

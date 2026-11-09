@@ -36,12 +36,14 @@ module;
 #include <cmath>
 #include <chrono>
 #include <cstdint>
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
 #include <optional>
+#include <source_location>
 
 #include <include/engine.config.hpp>
 
@@ -53,11 +55,17 @@ export module opengl.preview;
 
 import core.context;
 import opengl.state;
+import opengl.textures;
+import opengl.cloud_volume;
+import render.texture_artifact;
+import render.texture_residency;
+import render.canvas2d;
+import render.device;
+import asset.texture_artifact;
+import core.logger;
 import package.registry;
 import render.arcade;
-import render.event_debug;
 import render.lighting;
-import render.neuromorphic_invalidation;
 import render.preview_grid;
 
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
@@ -74,7 +82,10 @@ export namespace epochengine::openglpreview
             GLboolean scissorEnabled = GL_FALSE;
             GLboolean depthTestEnabled = GL_FALSE;
             GLboolean depthMask = GL_FALSE;
+            GLboolean colorMask[4]{}, polygonOffsetEnabled = GL_FALSE;
+            GLfloat polygonOffsetFactor{}, polygonOffsetUnits{};
             GLint depthFunc = GL_LESS;
+            GLint cullFaceMode{}, frontFace{}, polygonMode[2]{};
             GLint viewport[4]{};
             GLint scissorBox[4]{};
             GLint program = 0;
@@ -94,7 +105,14 @@ export namespace epochengine::openglpreview
                 scissorEnabled = glIsEnabled(GL_SCISSOR_TEST);
                 depthTestEnabled = glIsEnabled(GL_DEPTH_TEST);
                 glGetBooleanv(GL_DEPTH_WRITEMASK, &depthMask);
+                glGetBooleanv(GL_COLOR_WRITEMASK, colorMask);
+                polygonOffsetEnabled = glIsEnabled(GL_POLYGON_OFFSET_FILL);
+                glGetFloatv(GL_POLYGON_OFFSET_FACTOR, &polygonOffsetFactor);
+                glGetFloatv(GL_POLYGON_OFFSET_UNITS, &polygonOffsetUnits);
                 glGetIntegerv(GL_DEPTH_FUNC, &depthFunc);
+                glGetIntegerv(GL_CULL_FACE_MODE, &cullFaceMode);
+                glGetIntegerv(GL_FRONT_FACE, &frontFace);
+                glGetIntegerv(GL_POLYGON_MODE, polygonMode);
                 glGetIntegerv(GL_VIEWPORT, viewport);
                 glGetIntegerv(GL_SCISSOR_BOX, scissorBox);
                 glGetIntegerv(GL_CURRENT_PROGRAM, &program);
@@ -125,7 +143,13 @@ export namespace epochengine::openglpreview
                 glScissor(scissorBox[0], scissorBox[1], scissorBox[2], scissorBox[3]);
                 glClearColor(clearColor[0], clearColor[1], clearColor[2], clearColor[3]);
                 glDepthFunc(static_cast<GLenum>(depthFunc));
+                glCullFace(static_cast<GLenum>(cullFaceMode));
+                glFrontFace(static_cast<GLenum>(frontFace));
+                glPolygonMode(GL_FRONT_AND_BACK, static_cast<GLenum>(polygonMode[0]));
                 glDepthMask(depthMask);
+                glColorMask(colorMask[0], colorMask[1], colorMask[2], colorMask[3]);
+                glPolygonOffset(polygonOffsetFactor, polygonOffsetUnits);
+                if (polygonOffsetEnabled == GL_TRUE) glEnable(GL_POLYGON_OFFSET_FILL); else glDisable(GL_POLYGON_OFFSET_FILL);
 
                 if (blendEnabled == GL_TRUE) glEnable(GL_BLEND); else glDisable(GL_BLEND);
                 if (cullFaceEnabled == GL_TRUE) glEnable(GL_CULL_FACE); else glDisable(GL_CULL_FACE);
@@ -204,13 +228,14 @@ export namespace epochengine::openglpreview
             throw std::runtime_error("[ OpenGL ] - Scene preview program link failed: " + log);
         }
 
-        [[nodiscard]] inline GLuint link_textured_scene_program(GLuint vertexShader, GLuint fragmentShader)
+        [[nodiscard]] inline GLuint link_textured_scene_program(GLuint vertexShader, GLuint fragmentShader, bool vertexColor = false)
         {
             GLuint program = glCreateProgram();
             glAttachShader(program, vertexShader);
             glAttachShader(program, fragmentShader);
             glBindAttribLocation(program, 0, "aPos");
             glBindAttribLocation(program, 1, "aUv");
+            if (vertexColor) glBindAttribLocation(program, 2, "aColor");
             if (glBindFragDataLocation)
                 glBindFragDataLocation(program, 0, "outColor");
             glLinkProgram(program);
@@ -231,6 +256,16 @@ export namespace epochengine::openglpreview
 
     inline void destroy_scene_preview_pipeline(epochengine::openglstate::OpenGL4State& state) noexcept
     {
+        openglcloud::release(state.cloudVolume);
+        if (state.meshBaseColor)
+        {
+            auto& resources=*state.meshBaseColor;
+            resources.residency.retire_all();
+            if(resources.vbo) glDeleteBuffers(1,&resources.vbo);
+            if(resources.vao) glDeleteVertexArrays(1,&resources.vao);
+            if(resources.program) glDeleteProgram(resources.program);
+            state.meshBaseColor.reset();
+        }
         if (state.arcadeScreenFramebuffer && glIsFramebuffer(state.arcadeScreenFramebuffer))
             glDeleteFramebuffers(1, &state.arcadeScreenFramebuffer);
         if (state.arcadeScreenDepth && glIsRenderbuffer(state.arcadeScreenDepth))
@@ -257,18 +292,6 @@ export namespace epochengine::openglpreview
         state.arcadeScreenDepth = 0;
         state.arcadeScreenFrame = 0;
 
-        if (state.sceneCacheFramebuffer && glIsFramebuffer(state.sceneCacheFramebuffer)) glDeleteFramebuffers(1, &state.sceneCacheFramebuffer);
-        if (state.sceneCacheDepth && glIsRenderbuffer(state.sceneCacheDepth)) glDeleteRenderbuffers(1, &state.sceneCacheDepth);
-        if (state.sceneCacheColor && glIsTexture(state.sceneCacheColor)) glDeleteTextures(1, &state.sceneCacheColor);
-        state.sceneCacheFramebuffer = 0;
-        state.sceneCacheDepth = 0;
-        state.sceneCacheColor = 0;
-        state.sceneCacheWidth = 0;
-        state.sceneCacheHeight = 0;
-        state.sceneCacheCameraRevision = 0;
-        state.sceneCacheGeometryRevision = 0;
-        state.sceneCacheValid = false;
-        state.sceneInvalidationNetwork.reset();
 
         if (state.sceneMarkerVbo && glIsBuffer(state.sceneMarkerVbo)) glDeleteBuffers(1, &state.sceneMarkerVbo);
         if (state.sceneMarkerVao && glIsVertexArray(state.sceneMarkerVao)) glDeleteVertexArrays(1, &state.sceneMarkerVao);
@@ -543,6 +566,32 @@ void main() {
         }
     }
 
+    namespace detail
+    {
+        [[nodiscard]] inline std::pair<std::string,std::string> world_texture_shader_sources(bool modern, bool mesh)
+        {
+            const std::string version=modern?"#version 330 core\n":"#version 120\n";
+            const std::string attribute=modern?"in ":"attribute ";
+            const std::string varyingOut=modern?"out ":"varying ";
+            const std::string varyingIn=modern?"in ":"varying ";
+            std::string vertex=version+attribute+"vec3 aPos;\n"+attribute+"vec2 aUv;\n"
+                +"uniform mat4 uMvp;\n"+varyingOut+"vec2 vUv;\n";
+            if(mesh) vertex+=attribute+"vec3 aColor;\n"+varyingOut+"vec3 vColor;\n";
+            vertex+="void main(){gl_Position=uMvp*vec4(aPos,1.0);vUv=aUv;";
+            if(mesh) vertex+="vColor=aColor;";
+            vertex+="}\n";
+            std::string fragment=version+varyingIn+"vec2 vUv;\nuniform sampler2D uTexture;\n";
+            if(modern) fragment+="out vec4 outColor;\n";
+            if(mesh) fragment+=varyingIn+"vec3 vColor;\nuniform int uDecodeSrgb;\nuniform int uEncodeSrgb;\nuniform int uAlphaCutout;\nuniform float uAlphaCutoff;\n"
+                "vec3 decodeSrgb(vec3 c){return mix(c/12.92,pow((c+0.055)/1.055,vec3(2.4)),step(vec3(0.04045),c));}\n"
+                "vec3 encodeSrgb(vec3 c){return mix(c*12.92,1.055*pow(max(c,vec3(0.0)),vec3(1.0/2.4))-0.055,step(vec3(0.0031308),c));}\n";
+            fragment+="void main(){vec4 texel="+std::string(modern?"texture":"texture2D")+"(uTexture,vUv);vec3 color=texel.rgb;";
+            if(mesh) fragment+="if(uAlphaCutout!=0&&texel.a<uAlphaCutoff)discard;if(uDecodeSrgb!=0)color=decodeSrgb(color);color*=vColor;if(uEncodeSrgb!=0)color=encodeSrgb(color);";
+            fragment+=std::string(modern?"outColor":"gl_FragColor")+"=vec4(color,1.0);}";
+            return {std::move(vertex),std::move(fragment)};
+        }
+    }
+
     inline bool ensure_arcade_screen_preview_pipeline(epochengine::openglstate::OpenGL4State& state)
     {
         if (state.arcadeScreenShader
@@ -561,8 +610,6 @@ void main() {
         if (textureWidth <= 0 || textureHeight <= 0)
             return false;
 
-        std::string vertexSource;
-        std::string fragmentSource;
         GLint major = 0;
         GLint minor = 0;
         glGetIntegerv(GL_MAJOR_VERSION, &major);
@@ -574,45 +621,8 @@ void main() {
             minor = parsed.second;
         }
 
-        if (major > 3 || (major == 3 && minor >= 3))
-        {
-            vertexSource = R"(#version 330 core
-layout(location = 0) in vec3 aPos;
-layout(location = 1) in vec2 aUv;
-uniform mat4 uMvp;
-out vec2 vUv;
-void main() {
-    gl_Position = uMvp * vec4(aPos, 1.0);
-    vUv = aUv;
-})";
-            fragmentSource = R"(#version 330 core
-in vec2 vUv;
-uniform sampler2D uTexture;
-out vec4 outColor;
-void main() {
-    vec4 texel = texture(uTexture, vUv);
-    outColor = vec4(texel.rgb, 1.0);
-})";
-        }
-        else
-        {
-            vertexSource = R"(#version 120
-attribute vec3 aPos;
-attribute vec2 aUv;
-uniform mat4 uMvp;
-varying vec2 vUv;
-void main() {
-    gl_Position = uMvp * vec4(aPos, 1.0);
-    vUv = aUv;
-})";
-            fragmentSource = R"(#version 120
-varying vec2 vUv;
-uniform sampler2D uTexture;
-void main() {
-    vec4 texel = texture2D(uTexture, vUv);
-    gl_FragColor = vec4(texel.rgb, 1.0);
-})";
-        }
+        const auto [vertexSource,fragmentSource]=detail::world_texture_shader_sources(
+            major>3||(major==3&&minor>=3),false);
 
         const GLuint vertexShader = detail::compile_scene_shader(GL_VERTEX_SHADER, vertexSource);
         GLuint fragmentShader = 0;
@@ -720,9 +730,12 @@ void main() {
         int viewportX,
         int viewportY,
         int viewportWidth,
-        int viewportHeight)
+        int viewportHeight,
+        const std::shared_ptr<const epochengine::previewgrid::PublishedSceneFrame>& matchedScene)
     {
-        const auto screenMarkers = epochengine::previewgrid::sampled_render_surface_markers_for(ctx);
+        const auto screenMarkers = matchedScene
+            ? epochengine::previewgrid::sampled_render_surface_markers_for(*matchedScene)
+            : epochengine::previewgrid::sampled_render_surface_markers_for(ctx);
         if (screenMarkers.empty())
             return;
 
@@ -769,283 +782,187 @@ void main() {
         glUseProgram(0);
     }
 
-    namespace detail
+    // Uses the same context-owned native texture hooks and residency policy as
+    // compiled Canvas2D textures; the geometry remains a perspective world mesh.
+    [[nodiscard]] inline bool render_mesh_base_color_preview(const core::Context* ctx,
+        epochengine::openglstate::OpenGL4State& state,const detail::Mat4& mvp,
+        const std::shared_ptr<const epochengine::previewgrid::PublishedSceneFrame>& matchedScene)
     {
-        struct DirtyRect final
+        const auto frame=matchedScene ? matchedScene->solids
+            : epochengine::previewgrid::object_solid_frame_for(ctx);
+        bool hasTexture{};
+        for(const auto& entry:frame->markers) hasTexture=hasTexture||bool(entry.textured&&!entry.textured->empty());
+        if(!hasTexture) return true;
+        const detail::ScopedPreviewGLState preserved;
+        struct TextureZeroScope final
         {
-            int x{};
-            int y{};
-            int width{};
-            int height{};
+            GLint active{}, texture{}, cull{}, winding{}, sampler{};
+            bool samplerObjects{};
+            TextureZeroScope()
+            {
+                glGetIntegerv(GL_ACTIVE_TEXTURE,&active);
+                glGetIntegerv(GL_CULL_FACE_MODE,&cull);glGetIntegerv(GL_FRONT_FACE,&winding);
+                glActiveTexture(GL_TEXTURE0);glGetIntegerv(GL_TEXTURE_BINDING_2D,&texture);
+                samplerObjects=GLAD_GL_VERSION_3_3!=0&&glBindSampler!=nullptr;
+                if(samplerObjects){glGetIntegerv(GL_SAMPLER_BINDING,&sampler);glBindSampler(0,0);}
+            }
+            ~TextureZeroScope()
+            {
+                glFrontFace(static_cast<GLenum>(winding));glCullFace(static_cast<GLenum>(cull));
+                glActiveTexture(GL_TEXTURE0);glBindTexture(GL_TEXTURE_2D,static_cast<GLuint>(texture));
+                if(samplerObjects)glBindSampler(0,static_cast<GLuint>(sampler));
+                glActiveTexture(static_cast<GLenum>(active));
+            }
+        } textureZero;
+        if(!state.meshBaseColor)
+        {
+            try
+            {
+                state.meshBaseColor=std::make_unique<epochengine::openglstate::MeshBaseColorResources>();
+                state.meshBaseColor->device.set_native_texture_hooks(epochengine::opengltextures::make_native_texture_hooks());
+            }
+            catch(const std::exception&)
+            {
+                epochengine::logger::error("OpenGL.MeshBaseColor","Native texture residency allocation failed; textured mesh unavailable.");
+                return false;
+            }
+        }
+        auto& resources=*state.meshBaseColor;
+        const auto fail=[&](const char* message) {
+            if(!resources.failed) epochengine::logger::error("OpenGL.MeshBaseColor",message);
+            resources.failed=true;return false;
         };
-
-        [[nodiscard]] inline bool ensure_scene_cache(
-            epochengine::openglstate::OpenGL4State& state,
-            int width,
-            int height)
+        try
         {
-            if (width <= 0 || height <= 0 || !glBlitFramebuffer)
-                return false;
-            if (state.sceneCacheFramebuffer
-                && state.sceneCacheColor
-                && state.sceneCacheDepth
-                && state.sceneCacheWidth == width
-                && state.sceneCacheHeight == height)
-                return true;
-
-            if (state.sceneCacheFramebuffer && glIsFramebuffer(state.sceneCacheFramebuffer))
-                glDeleteFramebuffers(1, &state.sceneCacheFramebuffer);
-            if (state.sceneCacheDepth && glIsRenderbuffer(state.sceneCacheDepth))
-                glDeleteRenderbuffers(1, &state.sceneCacheDepth);
-            if (state.sceneCacheColor && glIsTexture(state.sceneCacheColor))
-                glDeleteTextures(1, &state.sceneCacheColor);
-
-            state.sceneCacheFramebuffer = 0;
-            state.sceneCacheColor = 0;
-            state.sceneCacheDepth = 0;
-            state.sceneCacheValid = false;
-
-            glGenTextures(1, &state.sceneCacheColor);
-            glBindTexture(GL_TEXTURE_2D, state.sceneCacheColor);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-
-            glGenRenderbuffers(1, &state.sceneCacheDepth);
-            glBindRenderbuffer(GL_RENDERBUFFER, state.sceneCacheDepth);
-            glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, width, height);
-
-            glGenFramebuffers(1, &state.sceneCacheFramebuffer);
-            glBindFramebuffer(GL_FRAMEBUFFER, state.sceneCacheFramebuffer);
-            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, state.sceneCacheColor, 0);
-            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, state.sceneCacheDepth);
-
-            if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+            if(!resources.device.native_texture_hooks_ready()) return fail("Native texture upload hooks unavailable; textured mesh was not drawn.");
+            if(!resources.program)
             {
-                if (state.sceneCacheFramebuffer) glDeleteFramebuffers(1, &state.sceneCacheFramebuffer);
-                if (state.sceneCacheDepth) glDeleteRenderbuffers(1, &state.sceneCacheDepth);
-                if (state.sceneCacheColor) glDeleteTextures(1, &state.sceneCacheColor);
-                state.sceneCacheFramebuffer = 0;
-                state.sceneCacheDepth = 0;
-                state.sceneCacheColor = 0;
-                state.sceneCacheWidth = 0;
-                state.sceneCacheHeight = 0;
-                return false;
-            }
-
-            state.sceneCacheWidth = width;
-            state.sceneCacheHeight = height;
-            state.sceneCacheCameraRevision = 0;
-            state.sceneCacheGeometryRevision = 0;
-            return true;
-        }
-
-        [[nodiscard]] inline std::optional<DirtyRect> marker_dirty_rect(
-            const epochengine::previewgrid::ObjectMarker& marker,
-            const Mat4& mvp,
-            int width,
-            int height) noexcept
-        {
-            const float maxScale = (std::max)({
-                std::abs(marker.scale.x),
-                std::abs(marker.scale.y),
-                std::abs(marker.scale.z),
-                marker.radius * 2.0f,
-                0.25f
-            });
-            // Bounding sphere projected as an AABB. sqrt(3)/2 encloses a rotated unit cube.
-            const float extent = maxScale * 0.90f + marker.radius;
-            const epochengine::previewgrid::Vec3 corners[8]{
-                { marker.position.x - extent, marker.position.y - extent, marker.position.z - extent },
-                { marker.position.x + extent, marker.position.y - extent, marker.position.z - extent },
-                { marker.position.x - extent, marker.position.y + extent, marker.position.z - extent },
-                { marker.position.x + extent, marker.position.y + extent, marker.position.z - extent },
-                { marker.position.x - extent, marker.position.y - extent, marker.position.z + extent },
-                { marker.position.x + extent, marker.position.y - extent, marker.position.z + extent },
-                { marker.position.x - extent, marker.position.y + extent, marker.position.z + extent },
-                { marker.position.x + extent, marker.position.y + extent, marker.position.z + extent }
-            };
-
-            float minX = 1.0f;
-            float maxX = -1.0f;
-            float minY = 1.0f;
-            float maxY = -1.0f;
-            bool any = false;
-            for (const auto& corner : corners)
-            {
-                const auto clip = epochengine::previewgrid::transform_point(mvp, corner);
-                if (clip.w <= 0.0001f)
-                    return DirtyRect{ 0, 0, width, height };
-                const float x = clip.x / clip.w;
-                const float y = clip.y / clip.w;
-                minX = (std::min)(minX, x);
-                maxX = (std::max)(maxX, x);
-                minY = (std::min)(minY, y);
-                maxY = (std::max)(maxY, y);
-                any = true;
-            }
-            if (!any || maxX < -1.0f || minX > 1.0f || maxY < -1.0f || minY > 1.0f)
-                return std::nullopt;
-
-            minX = (std::clamp)(minX, -1.0f, 1.0f);
-            maxX = (std::clamp)(maxX, -1.0f, 1.0f);
-            minY = (std::clamp)(minY, -1.0f, 1.0f);
-            maxY = (std::clamp)(maxY, -1.0f, 1.0f);
-
-            constexpr int pad = 6;
-            int x0 = static_cast<int>((minX * 0.5f + 0.5f) * static_cast<float>(width)) - pad;
-            int x1 = static_cast<int>((maxX * 0.5f + 0.5f) * static_cast<float>(width)) + pad;
-            int y0 = static_cast<int>((minY * 0.5f + 0.5f) * static_cast<float>(height)) - pad;
-            int y1 = static_cast<int>((maxY * 0.5f + 0.5f) * static_cast<float>(height)) + pad;
-            x0 = (std::clamp)(x0, 0, width);
-            x1 = (std::clamp)(x1, 0, width);
-            y0 = (std::clamp)(y0, 0, height);
-            y1 = (std::clamp)(y1, 0, height);
-            if (x1 <= x0 || y1 <= y0)
-                return std::nullopt;
-            return DirtyRect{ x0, y0, x1 - x0, y1 - y0 };
-        }
-
-        [[nodiscard]] inline std::optional<DirtyRect> light_influence_dirty_rect(
-            const epochengine::lighting::LightInfluenceVolume& influence,
-            const Mat4& mvp,
-            int width,
-            int height) noexcept
-        {
-            if (!std::isfinite(influence.radius) || influence.radius <= 0.0f)
-                return DirtyRect{0, 0, width, height};
-            epochengine::previewgrid::ObjectMarker proxy{};
-            proxy.position = {
-                influence.center.x,
-                influence.center.y,
-                influence.center.z
-            };
-            const float scale = influence.radius / 0.90f;
-            proxy.scale = {scale, scale, scale};
-            proxy.radius = 0.0f;
-            return marker_dirty_rect(proxy, mvp, width, height);
-        }
-
-        inline void append_union_rect(
-            std::vector<DirtyRect>& rects,
-            const DirtyRect& candidate,
-            int width,
-            int height)
-        {
-            if (candidate.width <= 0 || candidate.height <= 0)
-                return;
-            if (candidate.x == 0 && candidate.y == 0
-                && candidate.width >= width && candidate.height >= height)
-            {
-                rects.assign(1, DirtyRect{ 0, 0, width, height });
-                return;
-            }
-
-            DirtyRect merged = candidate;
-            std::size_t index = 0u;
-            while (index < rects.size())
-            {
-                const auto& rect = rects[index];
-                const int ax1 = rect.x + rect.width;
-                const int ay1 = rect.y + rect.height;
-                const int bx1 = merged.x + merged.width;
-                const int by1 = merged.y + merged.height;
-                const bool touches = !(ax1 + 4 < merged.x || bx1 + 4 < rect.x
-                    || ay1 + 4 < merged.y || by1 + 4 < rect.y);
-                if (!touches)
+                GLint major{},minor{};glGetIntegerv(GL_MAJOR_VERSION,&major);glGetIntegerv(GL_MINOR_VERSION,&minor);
+                if(!major){const auto version=detail::parse_gl_version(reinterpret_cast<const char*>(glGetString(GL_VERSION)));major=version.first;minor=version.second;}
+                const auto sources=detail::world_texture_shader_sources(major>3||(major==3&&minor>=3),true);
+                GLuint vertex{},fragment{};
+                try
                 {
-                    ++index;
-                    continue;
+                    vertex=detail::compile_scene_shader(GL_VERTEX_SHADER,sources.first);
+                    fragment=detail::compile_scene_shader(GL_FRAGMENT_SHADER,sources.second);
+                    resources.program=detail::link_textured_scene_program(vertex,fragment,true);
                 }
-
-                const int x0 = (std::min)(rect.x, merged.x);
-                const int y0 = (std::min)(rect.y, merged.y);
-                const int x1 = (std::max)(ax1, bx1);
-                const int y1 = (std::max)(ay1, by1);
-                merged = DirtyRect{ x0, y0, x1 - x0, y1 - y0 };
-                rects.erase(rects.begin() + static_cast<std::ptrdiff_t>(index));
-                index = 0u;
+                catch(...){if(vertex)glDeleteShader(vertex);if(fragment)glDeleteShader(fragment);throw;}
+                glDeleteShader(vertex);glDeleteShader(fragment);
+                resources.mvp=glGetUniformLocation(resources.program,"uMvp");
+                resources.texture=glGetUniformLocation(resources.program,"uTexture");
+                resources.decode_srgb=glGetUniformLocation(resources.program,"uDecodeSrgb");
+                resources.encode_srgb=glGetUniformLocation(resources.program,"uEncodeSrgb");
+                resources.alpha_cutout=glGetUniformLocation(resources.program,"uAlphaCutout");
+                resources.alpha_cutoff=glGetUniformLocation(resources.program,"uAlphaCutoff");
+                glGenVertexArrays(1,&resources.vao);glGenBuffers(1,&resources.vbo);
+                glBindVertexArray(resources.vao);glBindBuffer(GL_ARRAY_BUFFER,resources.vbo);
+                using Vertex=epochengine::previewgrid::TexturedVertex;
+                glEnableVertexAttribArray(0);glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,sizeof(Vertex),reinterpret_cast<void*>(offsetof(Vertex,position)));
+                glEnableVertexAttribArray(1);glVertexAttribPointer(1,2,GL_FLOAT,GL_FALSE,sizeof(Vertex),reinterpret_cast<void*>(offsetof(Vertex,uv)));
+                glEnableVertexAttribArray(2);glVertexAttribPointer(2,3,GL_FLOAT,GL_FALSE,sizeof(Vertex),reinterpret_cast<void*>(offsetof(Vertex,color)));
             }
-            rects.push_back(merged);
-        }
-
-        inline void draw_dirty_rect_overlay(
-            const std::vector<DirtyRect>& rects,
-            int viewportX,
-            int destinationY,
-            bool fullRedraw) noexcept
-        {
-            if (rects.empty() || !epochengine::render_event_debug::dirty_overlay_enabled())
-                return;
-
-            constexpr int thickness = 2;
-            glDisable(GL_DEPTH_TEST);
-            glDepthMask(GL_FALSE);
-            glDisable(GL_BLEND);
-            glEnable(GL_SCISSOR_TEST);
-            if (fullRedraw)
-                glClearColor(1.0f, 0.20f, 0.12f, 1.0f);
-            else
-                glClearColor(0.95f, 0.82f, 0.10f, 1.0f);
-
-            for (const auto& rect : rects)
+            if(!resources.program||!resources.vao||!resources.vbo||resources.mvp<0||resources.texture<0
+                ||resources.decode_srgb<0||resources.encode_srgb<0
+                ||resources.alpha_cutout<0||resources.alpha_cutoff<0) return fail("Textured mesh shader or native geometry allocation unavailable.");
+            if(++resources.sequence==0){resources.residency.retire_all();resources.sequence=1;}
+            if(!resources.residency.begin_frame(resources.sequence)) return fail("Textured mesh residency frame refused.");
+            struct ReadyRange final
             {
-                const int x = viewportX + rect.x;
-                const int y = destinationY + rect.y;
-                const int w = (std::max)(0, rect.width);
-                const int h = (std::max)(0, rect.height);
-                if (w <= 0 || h <= 0)
-                    continue;
-
-                glScissor(x, y, w, (std::min)(thickness, h));
-                glClear(GL_COLOR_BUFFER_BIT);
-                glScissor(x, y + (std::max)(0, h - thickness), w, (std::min)(thickness, h));
-                glClear(GL_COLOR_BUFFER_BIT);
-                glScissor(x, y, (std::min)(thickness, w), h);
-                glClear(GL_COLOR_BUFFER_BIT);
-                glScissor(x + (std::max)(0, w - thickness), y, (std::min)(thickness, w), h);
-                glClear(GL_COLOR_BUFFER_BIT);
-            }
-        }
-
-        inline void draw_vacated_rect_overlay(
-            const std::vector<DirtyRect>& rects,
-            int viewportX,
-            int destinationY) noexcept
-        {
-            if (rects.empty() || !epochengine::render_event_debug::vacated_overlay_enabled())
-                return;
-
-            constexpr int thickness = 2;
-            glDisable(GL_DEPTH_TEST);
-            glDepthMask(GL_FALSE);
-            glDisable(GL_BLEND);
-            glEnable(GL_SCISSOR_TEST);
-            // Cyan identifies the previous/vacated object footprint. This overlay is
-            // diagnostic only; previous bounds are always invalidated regardless of this toggle.
-            glClearColor(0.10f, 0.90f, 1.0f, 1.0f);
-
-            for (const auto& rect : rects)
+                const epochengine::previewgrid::SolidDrawMarker* source{};
+                GLuint texture{};
+                epochengine::texture_residency::ResidencyHandle resident{};
+            };
+            std::vector<ReadyRange> ranges;ranges.reserve(frame->markers.size());
+            struct Unpin final
             {
-                const int x = viewportX + rect.x;
-                const int y = destinationY + rect.y;
-                const int w = (std::max)(0, rect.width);
-                const int h = (std::max)(0, rect.height);
-                if (w <= 0 || h <= 0)
-                    continue;
-
-                glScissor(x, y, w, (std::min)(thickness, h));
-                glClear(GL_COLOR_BUFFER_BIT);
-                glScissor(x, y + (std::max)(0, h - thickness), w, (std::min)(thickness, h));
-                glClear(GL_COLOR_BUFFER_BIT);
-                glScissor(x, y, (std::min)(thickness, w), h);
-                glClear(GL_COLOR_BUFFER_BIT);
-                glScissor(x + (std::max)(0, w - thickness), y, (std::min)(thickness, w), h);
-                glClear(GL_COLOR_BUFFER_BIT);
+                epochengine::openglstate::MeshBaseColorResources& resources;
+                std::vector<ReadyRange>& ranges;
+                ~Unpin(){for(const auto& range:ranges)(void)resources.residency.set_pinned(range.resident,false);}
+            } unpin{resources,ranges};
+            // Admit the complete material set before issuing any textured draws.
+            for(const auto& entry:frame->markers)
+            {
+                if(!entry.textured||entry.textured->empty()) continue;
+                if(!entry.marker.baseColorTexture||!epochengine::previewgrid::valid_mesh_base_color_binding(*entry.marker.baseColorTexture))
+                    return fail("Invalid compiled base-color mesh binding.");
+                const auto& material=*entry.marker.baseColorTexture;
+                epochengine::texture_artifact::ResidencySelection selection{};
+                selection.usage=epochengine::texture_artifact::TransferUsage::base_color;
+                selection.policy.pin=true;selection.frame_sequence=resources.sequence;
+                const auto acquired=epochengine::texture_artifact::acquire_compiled_texture(resources.residency,material.artifact,material.logical,selection);
+                if(!acquired) return fail("Compiled base-color texture residency refused; textured mesh was not drawn.");
+                const auto* native=resources.device.resolve_texture(acquired.residency.physical);
+                ranges.push_back({&entry,native?native->texture_object:0,acquired.residency.handle});
+                if(!native||!native->native_allocation_ready||!native->texture_object) return fail("Compiled base-color native texture is not ready.");
             }
+            glUseProgram(resources.program);glUniformMatrix4fv(resources.mvp,1,GL_FALSE,mvp.data());
+            glUniform1i(resources.texture,0);
+            // RGBA8 is physical storage; the sealed artifact retains its actual
+            // color space. Decode once, light in linear, encode only when the
+            // active framebuffer will not perform that final conversion.
+            GLint framebuffer{},encoding{GL_LINEAR};glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING,&framebuffer);
+            GLboolean doubleBuffered{};glGetBooleanv(GL_DOUBLEBUFFER,&doubleBuffered);
+            const GLenum attachment=framebuffer?GL_COLOR_ATTACHMENT0:(doubleBuffered?GL_BACK_LEFT:GL_FRONT_LEFT);
+            glGetFramebufferAttachmentParameteriv(GL_DRAW_FRAMEBUFFER,attachment,GL_FRAMEBUFFER_ATTACHMENT_COLOR_ENCODING,&encoding);
+            glUniform1i(resources.encode_srgb,glIsEnabled(GL_FRAMEBUFFER_SRGB)==GL_TRUE&&encoding==GL_SRGB?0:1);
+            glEnable(GL_DEPTH_TEST);glDepthMask(GL_TRUE);glDisable(GL_BLEND);
+            glEnable(GL_CULL_FACE);glCullFace(GL_BACK);glFrontFace(GL_CW);
+            glBindVertexArray(resources.vao);glBindBuffer(GL_ARRAY_BUFFER,resources.vbo);
+            for(const auto& range:ranges)
+            {
+                const auto& material=*range.source->marker.baseColorTexture;
+                glBindTexture(GL_TEXTURE_2D,range.texture);
+                const auto filter=[](auto value){return value==epochengine::FilterMode::linear?GL_LINEAR:GL_NEAREST;};
+                const auto address=[](auto value){return value==epochengine::AddressMode::repeat?GL_REPEAT:
+                    value==epochengine::AddressMode::mirrored_repeat?GL_MIRRORED_REPEAT:GL_CLAMP_TO_EDGE;};
+                glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,filter(material.sampler.min_filter));
+                glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,filter(material.sampler.mag_filter));
+                glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,address(material.sampler.address_u));
+                glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,address(material.sampler.address_v));
+                glUniform1i(resources.decode_srgb,material.artifact.artifact()->identity.profile.color_space==epochengine::asset::texture::ColorSpace::srgb?1:0);
+                glUniform1i(resources.alpha_cutout,material.alpha_cutout?1:0);
+                glUniform1f(resources.alpha_cutoff,material.alpha_cutoff);
+                const auto& vertices=*range.source->textured;
+                glBufferData(GL_ARRAY_BUFFER,static_cast<GLsizeiptr>(vertices.size()*sizeof(vertices[0])),vertices.data(),GL_DYNAMIC_DRAW);
+                glDrawArrays(GL_TRIANGLES,0,static_cast<GLsizei>(vertices.size()));
+                state.meshTrianglesSubmitted+=vertices.size()/3u;
+                ++state.meshDrawCallsSubmitted;
+                state.meshUploadBytesSubmitted+=vertices.size()*sizeof(vertices[0]);
+            }
+            resources.failed=false;return true;
         }
+        catch(const std::exception&){return fail("Textured mesh compilation/upload failed; no color-only substitute was used.");}
+    }
+
+    inline void render_mesh_wire_preview(const epochengine::previewgrid::MeshWireDrawFrame& frame,
+        epochengine::openglstate::OpenGL4State& state, const detail::Mat4& mvp)
+    {
+        if(!frame.depth_triangles||frame.depth_triangles->empty()
+            ||!state.sceneMarkerVao||!state.sceneMarkerVbo) return;
+        glUseProgram(state.sceneShader);
+        glUniformMatrix4fv(state.sceneMvpLoc,1,GL_FALSE,mvp.data());
+        glEnable(GL_DEPTH_TEST); glDepthFunc(GL_LEQUAL);
+        glEnable(GL_CULL_FACE); glCullFace(GL_BACK); glFrontFace(GL_CW);
+        glBindVertexArray(state.sceneMarkerVao); glBindBuffer(GL_ARRAY_BUFFER,state.sceneMarkerVbo);
+        // Both passes rasterize the same front-facing triangles. GL_LINES
+        // cannot be face-culled and would expose back-side silhouette edges.
+        glPolygonMode(GL_FRONT_AND_BACK,GL_FILL);
+        glColorMask(GL_FALSE,GL_FALSE,GL_FALSE,GL_FALSE); glDepthMask(GL_TRUE);
+        glEnable(GL_POLYGON_OFFSET_FILL); glPolygonOffset(1.0f,1.0f);
+        const auto& triangles=*frame.depth_triangles;
+        glBufferData(GL_ARRAY_BUFFER,static_cast<GLsizeiptr>(triangles.size()*sizeof(triangles[0])),triangles.data(),GL_DYNAMIC_DRAW);
+        glDrawArrays(GL_TRIANGLES,0,static_cast<GLsizei>(triangles.size()));
+        state.meshTrianglesSubmitted+=triangles.size()/3u;
+        ++state.meshDrawCallsSubmitted;
+        state.meshUploadBytesSubmitted+=triangles.size()*sizeof(triangles[0]);
+        glDisable(GL_POLYGON_OFFSET_FILL);
+        glColorMask(GL_TRUE,GL_TRUE,GL_TRUE,GL_TRUE); glDepthMask(GL_FALSE);
+        glPolygonMode(GL_FRONT_AND_BACK,GL_LINE);
+        glDrawArrays(GL_TRIANGLES,0,static_cast<GLsizei>(triangles.size()));
+        state.meshTrianglesSubmitted+=triangles.size()/3u;
+        ++state.meshDrawCallsSubmitted;
+        glPolygonMode(GL_FRONT_AND_BACK,GL_FILL);
     }
 
     inline void render_scene_preview_conventional(
@@ -1073,7 +990,9 @@ void main() {
 
         if (previewMode == core::ScenePreviewMode::Editor && ensure_scene_preview_pipeline(ctx, state))
         {
-            const auto camera = epochengine::previewgrid::camera_for(ctx);
+            const auto matchedScene = epochengine::previewgrid::scene_frame_for(ctx);
+            const auto camera = matchedScene ? matchedScene->camera
+                : epochengine::previewgrid::camera_for(ctx);
             const float aspect = viewportHeight > 0
                 ? (viewportWidth / static_cast<float>(viewportHeight))
                 : 1.0f;
@@ -1084,46 +1003,94 @@ void main() {
                 camera.up);
             const detail::Mat4 mvp = epochengine::previewgrid::multiply(proj, view);
 
+            // Sample actual render-target depth and the admitted camera, not
+            // merely the window's requested pixel format. Bounded evidence keeps
+            // distant-geometry diagnostics out of the normal per-frame workload.
+            struct DepthEvidence { const core::Context* owner{}; unsigned reports{};
+                std::int64_t nextNanoseconds{}; float nearPlane{},farPlane{}; };
+            static thread_local DepthEvidence depthEvidence;
+            if(depthEvidence.owner!=ctx)depthEvidence={ctx};
+            if(matchedScene && depthEvidence.reports<32u)
+            {
+                const auto evidenceNow=std::chrono::duration_cast<std::chrono::nanoseconds>(
+                    std::chrono::steady_clock::now().time_since_epoch()).count();
+                // Startup-only samples miss the orbital-to-ground transition.
+                // After those samples, record only a factor-of-two depth change,
+                // at most once per five seconds and within the same fixed cap.
+                const bool depthChanged=depthEvidence.nearPlane<=0.0f
+                    ||camera.nearPlane<depthEvidence.nearPlane*0.5f
+                    ||camera.nearPlane>depthEvidence.nearPlane*2.0f
+                    ||camera.farPlane<depthEvidence.farPlane*0.5f
+                    ||camera.farPlane>depthEvidence.farPlane*2.0f;
+                if(evidenceNow>=depthEvidence.nextNanoseconds
+                    &&(depthEvidence.reports<8u||depthChanged))
+                {
+                GLint bits{},drawTarget{};GLdouble range[2]{},clear{};
+                glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING,&drawTarget);
+                glGetFramebufferAttachmentParameteriv(GL_DRAW_FRAMEBUFFER,
+                    drawTarget ? GL_DEPTH_ATTACHMENT : GL_DEPTH,
+                    GL_FRAMEBUFFER_ATTACHMENT_DEPTH_SIZE,&bits);
+                glGetDoublev(GL_DEPTH_RANGE,range);glGetDoublev(GL_DEPTH_CLEAR_VALUE,&clear);
+                logger::get("OpenGL.Depth").logf(logger::LogLevel::INFO,
+                    std::source_location::current(),
+                    "Preview depth bits={}, target={}, range={:.3f}/{:.3f}, clear={:.3f}; near={:.9g}, far={:.9g}; eye=({:.9g},{:.9g},{:.9g}), target=({:.9g},{:.9g},{:.9g})",
+                    bits,drawTarget,range[0],range[1],clear,camera.nearPlane,camera.farPlane,
+                    camera.eye.x,camera.eye.y,camera.eye.z,camera.target.x,camera.target.y,camera.target.z);
+                ++depthEvidence.reports;
+                depthEvidence.nearPlane=camera.nearPlane;depthEvidence.farPlane=camera.farPlane;
+                depthEvidence.nextNanoseconds=evidenceNow+(depthEvidence.reports<8u?2'000'000'000ll:5'000'000'000ll);
+                }
+            }
+
             glEnable(GL_DEPTH_TEST);
-            glDisable(GL_CULL_FACE);
+            glEnable(GL_CULL_FACE);
+            glCullFace(GL_BACK); glFrontFace(GL_CW);
+            glPolygonMode(GL_FRONT_AND_BACK,GL_FILL);
             glDepthFunc(GL_LEQUAL);
             glUseProgram(state.sceneShader);
             glUniformMatrix4fv(state.sceneMvpLoc, 1, GL_FALSE, mvp.data());
 
-            const auto gridGeometry = epochengine::previewgrid::grid_geometry_for(ctx);
-            if (state.sceneGridSignature != gridGeometry->signature)
+            if (!matchedScene)
             {
+                const auto gridGeometry = epochengine::previewgrid::grid_geometry_for(ctx);
+                if (state.sceneGridSignature != gridGeometry->signature)
+                {
+                    glBindVertexArray(state.sceneVao);
+                    glBindBuffer(GL_ARRAY_BUFFER, state.sceneVbo);
+                    glBufferData(
+                        GL_ARRAY_BUFFER,
+                        static_cast<GLsizeiptr>(
+                            gridGeometry->vertices.size() * sizeof(gridGeometry->vertices[0])),
+                        gridGeometry->vertices.data(),
+                        GL_DYNAMIC_DRAW);
+                    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state.sceneEbo);
+                    glBufferData(
+                        GL_ELEMENT_ARRAY_BUFFER,
+                        static_cast<GLsizeiptr>(
+                            gridGeometry->indices.size() * sizeof(gridGeometry->indices[0])),
+                        gridGeometry->indices.data(),
+                        GL_DYNAMIC_DRAW);
+                    state.sceneGridSignature = gridGeometry->signature;
+                    state.sceneGridIndexCount =
+                        static_cast<GLsizei>(gridGeometry->indices.size());
+                }
+
+                // The grid is visual reference, not depth authority. Let objects draw over it
+                // deterministically instead of fighting coplanar/near-coplanar helper pixels.
+                glDepthMask(GL_FALSE);
                 glBindVertexArray(state.sceneVao);
-                glBindBuffer(GL_ARRAY_BUFFER, state.sceneVbo);
-                glBufferData(
-                    GL_ARRAY_BUFFER,
-                    static_cast<GLsizeiptr>(
-                        gridGeometry->vertices.size() * sizeof(gridGeometry->vertices[0])),
-                    gridGeometry->vertices.data(),
-                    GL_DYNAMIC_DRAW);
-                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state.sceneEbo);
-                glBufferData(
-                    GL_ELEMENT_ARRAY_BUFFER,
-                    static_cast<GLsizeiptr>(
-                        gridGeometry->indices.size() * sizeof(gridGeometry->indices[0])),
-                    gridGeometry->indices.data(),
-                    GL_DYNAMIC_DRAW);
-                state.sceneGridSignature = gridGeometry->signature;
-                state.sceneGridIndexCount =
-                    static_cast<GLsizei>(gridGeometry->indices.size());
+                glDrawElements(
+                    GL_LINES,
+                    state.sceneGridIndexCount,
+                    GL_UNSIGNED_INT,
+                    nullptr);
+
             }
 
-            // The grid is visual reference, not depth authority. Let objects draw over it
-            // deterministically instead of fighting coplanar/near-coplanar helper pixels.
-            glDepthMask(GL_FALSE);
-            glBindVertexArray(state.sceneVao);
-            glDrawElements(
-                GL_LINES,
-                state.sceneGridIndexCount,
-                GL_UNSIGNED_INT,
-                nullptr);
+            const auto solidGeometry = matchedScene ? matchedScene->solids->geometry
+                : epochengine::previewgrid::object_solid_geometry_for(ctx);
 
-            auto solidVertices = epochengine::previewgrid::object_solid_vertices_for(ctx);
+            const auto& solidVertices = *solidGeometry;
             if (solidVertices.size() >= 3 && state.sceneMarkerVao && state.sceneMarkerVbo)
             {
                 glDepthMask(GL_TRUE);
@@ -1135,8 +1102,12 @@ void main() {
                     solidVertices.data(),
                     GL_DYNAMIC_DRAW);
                 glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(solidVertices.size()));
+                state.meshTrianglesSubmitted+=solidVertices.size()/3u;
+                ++state.meshDrawCallsSubmitted;
+                state.meshUploadBytesSubmitted+=solidVertices.size()*sizeof(solidVertices[0]);
             }
 
+            (void)render_mesh_base_color_preview(ctx,state,mvp,matchedScene);
             render_engine_arcade_sampled_surface_preview(
                 ctx,
                 state,
@@ -1146,14 +1117,29 @@ void main() {
                 viewportX,
                 viewportY,
                 viewportWidth,
-                viewportHeight);
+                viewportHeight,
+                matchedScene);
+
+            if(matchedScene)
+                (void)openglcloud::render(state.cloudVolume,*matchedScene,viewportX,glViewportY,
+                    viewportWidth,viewportHeight);
+
+            const auto meshWire = matchedScene ? matchedScene->wire
+                : epochengine::previewgrid::object_mesh_wire_frame_for(ctx);
+            render_mesh_wire_preview(*meshWire,state,mvp);
 
             std::vector<epochengine::previewgrid::Vertex> dynamicVertices{};
-            const auto focusVertices = epochengine::previewgrid::look_marker_vertices_for(ctx);
-            const auto focusCount = epochengine::previewgrid::look_marker_vertex_count_for(ctx);
-            if (focusCount > 0)
-                dynamicVertices.insert(dynamicVertices.end(), focusVertices.begin(), focusVertices.begin() + focusCount);
-            auto objectVertices = epochengine::previewgrid::object_marker_vertices_for(ctx);
+            if (!matchedScene)
+            {
+                const auto focusVertices = epochengine::previewgrid::look_marker_vertices_for(ctx);
+                const auto focusCount = epochengine::previewgrid::look_marker_vertex_count_for(ctx);
+                if (focusCount > 0)
+                    dynamicVertices.insert(dynamicVertices.end(), focusVertices.begin(), focusVertices.begin() + focusCount);
+            }
+            const auto objectGeometry = meshWire->helper_lines ? meshWire->helper_lines
+                : matchedScene ? matchedScene->lines
+                    : epochengine::previewgrid::object_marker_geometry_for(ctx);
+            const auto& objectVertices = *objectGeometry;
             dynamicVertices.insert(dynamicVertices.end(), objectVertices.begin(), objectVertices.end());
 
             if (dynamicVertices.size() >= 2 && state.sceneMarkerVao && state.sceneMarkerVbo)
@@ -1187,434 +1173,12 @@ void main() {
         int viewportWidth,
         int viewportHeight)
     {
-        using clock = std::chrono::steady_clock;
-        const auto renderStart = clock::now();
-        const auto neuralTimestampNs = static_cast<std::uint64_t>(
-            std::chrono::duration_cast<std::chrono::nanoseconds>(
-                renderStart.time_since_epoch()).count());
-        const auto elapsed_us = [&]() noexcept -> std::uint64_t
-        {
-            return static_cast<std::uint64_t>(
-                std::chrono::duration_cast<std::chrono::microseconds>(
-                    clock::now() - renderStart).count());
-        };
-        const auto elapsed_ns_from = [](const clock::time_point start) noexcept -> std::uint64_t
-        {
-            return static_cast<std::uint64_t>(
-                std::chrono::duration_cast<std::chrono::nanoseconds>(
-                    clock::now() - start).count());
-        };
-
-        const detail::ScopedPreviewGLState preservedState;
         if (!ctx || viewportWidth <= 0 || viewportHeight <= 0)
             return;
 
-        const int destinationY = (std::max)(0, framebufferHeight - (viewportY + viewportHeight));
-        const auto clearColor = epochengine::previewgrid::kClearColor;
-        const std::uint64_t cameraRevision = epochengine::previewgrid::camera_revision_for(ctx);
-        const std::uint64_t geometryRevision = epochengine::previewgrid::preview_content_revision_for(ctx);
-
-        epochengine::render_event_debug::FallbackReason conventionalReason =
-            epochengine::render_event_debug::FallbackReason::none;
-        bool useConventional = false;
-        if (!epochengine::render_event_debug::event_path_enabled())
-        {
-            useConventional = true;
-            conventionalReason = epochengine::render_event_debug::FallbackReason::event_path_disabled;
-        }
-        else if (previewMode != core::ScenePreviewMode::Editor)
-        {
-            useConventional = true;
-            conventionalReason = epochengine::render_event_debug::FallbackReason::unsupported_preview_mode;
-        }
-        else if (!ensure_scene_preview_pipeline(ctx, state))
-        {
-            useConventional = true;
-            conventionalReason = epochengine::render_event_debug::FallbackReason::preview_pipeline_unavailable;
-        }
-        else if (!detail::ensure_scene_cache(state, viewportWidth, viewportHeight))
-        {
-            useConventional = true;
-            conventionalReason = epochengine::render_event_debug::FallbackReason::scene_cache_unavailable;
-        }
-
-        if (useConventional)
-        {
-            render_scene_preview_conventional(
-                ctx, state, previewMode, framebufferWidth, framebufferHeight,
-                viewportX, viewportY, viewportWidth, viewportHeight);
-            epochengine::render_event_debug::publish(
-                epochengine::render_event_debug::Path::conventional,
-                conventionalReason,
-                0u,
-                0u,
-                100.0f,
-                cameraRevision,
-                geometryRevision,
-                elapsed_us());
-            return;
-        }
-
-        const auto benchmarkLane = epochengine::render_event_debug::begin_benchmark_frame();
-        clock::time_point benchmarkStart{};
-        if (benchmarkLane != epochengine::render_event_debug::BenchmarkLane::disabled)
-        {
-            // Drain earlier GUI/backend work before timing this scene path. The matching
-            // glFinish below makes each A/B sample represent scene submission + GPU completion
-            // rather than whichever previous frame happened to still be in flight.
-            glFinish();
-            benchmarkStart = clock::now();
-        }
-
-        const auto camera = epochengine::previewgrid::camera_for(ctx);
-        const float aspect = viewportHeight > 0
-            ? (viewportWidth / static_cast<float>(viewportHeight))
-            : 1.0f;
-        const detail::Mat4 proj = epochengine::previewgrid::projection_for(ctx, aspect, camera);
-        const detail::Mat4 view = epochengine::previewgrid::look_at(camera.eye, camera.target, camera.up);
-        const detail::Mat4 mvp = epochengine::previewgrid::multiply(proj, view);
-        const auto changeFrame = epochengine::previewgrid::consume_object_marker_change_frame_for(ctx);
-        const auto lightingDamage = epochengine::previewgrid::consume_lighting_invalidation_frame_for(ctx);
-        const bool sampledSurfaceActive = !epochengine::previewgrid::sampled_render_surface_markers_for(ctx).empty();
-
-        std::vector<detail::DirtyRect> dirtyRects{};
-        std::vector<detail::DirtyRect> vacatedRects{};
-        auto fallbackReason = epochengine::render_event_debug::FallbackReason::none;
-        bool fullRedraw = false;
-
-        if (!state.sceneCacheValid)
-        {
-            fullRedraw = true;
-            fallbackReason = epochengine::render_event_debug::FallbackReason::cache_invalid;
-        }
-        else if (state.sceneCacheCameraRevision != cameraRevision)
-        {
-            fullRedraw = true;
-            fallbackReason = epochengine::render_event_debug::FallbackReason::camera_changed;
-        }
-        else if (sampledSurfaceActive)
-        {
-            fullRedraw = true;
-            fallbackReason = epochengine::render_event_debug::FallbackReason::sampled_surface_active;
-        }
-
-        if (benchmarkLane == epochengine::render_event_debug::BenchmarkLane::full_baseline)
-        {
-            // The B lane deliberately reconstructs the entire persistent scene cache. Using
-            // the same cache target and final blit as the selective A lane keeps presentation
-            // overhead identical and, critically, leaves the cache current for the next A frame.
-            fullRedraw = true;
-            fallbackReason = epochengine::render_event_debug::FallbackReason::benchmark_full_baseline;
-        }
-
-        std::uint64_t dirtyArea = 0u;
-        const std::uint64_t frameArea =
-            static_cast<std::uint64_t>(viewportWidth) * static_cast<std::uint64_t>(viewportHeight);
-
-        if (!fullRedraw && state.sceneCacheGeometryRevision != geometryRevision)
-        {
-            bool haveLocalizedDamage = false;
-            bool damageUnavailable = false;
-
-            const bool objectFrameCurrent = changeFrame.revision > state.sceneCacheGeometryRevision
-                && changeFrame.revision <= geometryRevision;
-            if (objectFrameCurrent)
-            {
-                if (changeFrame.global_invalidation)
-                {
-                    fullRedraw = true;
-                    fallbackReason = epochengine::render_event_debug::FallbackReason::global_invalidation;
-                }
-                else
-                {
-                    for (const auto& change : changeFrame.changes)
-                    {
-                        if (change.had_previous)
-                        {
-                            if (const auto rect = detail::marker_dirty_rect(
-                                    change.previous, mvp, viewportWidth, viewportHeight))
-                            {
-                                detail::append_union_rect(
-                                    dirtyRects, *rect, viewportWidth, viewportHeight);
-                                detail::append_union_rect(
-                                    vacatedRects, *rect, viewportWidth, viewportHeight);
-                                haveLocalizedDamage = true;
-                            }
-                        }
-                        if (change.has_current)
-                        {
-                            if (const auto rect = detail::marker_dirty_rect(
-                                    change.current, mvp, viewportWidth, viewportHeight))
-                            {
-                                detail::append_union_rect(
-                                    dirtyRects, *rect, viewportWidth, viewportHeight);
-                                haveLocalizedDamage = true;
-                            }
-                        }
-                    }
-                }
-            }
-
-            const bool lightingFrameCurrent = lightingDamage.revision > state.sceneCacheGeometryRevision
-                && lightingDamage.revision <= geometryRevision;
-            if (!fullRedraw && lightingFrameCurrent)
-            {
-                if (lightingDamage.global_invalidation)
-                {
-                    fullRedraw = true;
-                    fallbackReason = epochengine::render_event_debug::FallbackReason::global_invalidation;
-                }
-                else
-                {
-                    for (const auto& change : lightingDamage.changes)
-                    {
-                        if (change.had_previous)
-                        {
-                            if (const auto rect = detail::light_influence_dirty_rect(
-                                    change.previous, mvp, viewportWidth, viewportHeight))
-                            {
-                                detail::append_union_rect(
-                                    dirtyRects, *rect, viewportWidth, viewportHeight);
-                                haveLocalizedDamage = true;
-                            }
-                        }
-                        if (change.has_current)
-                        {
-                            if (const auto rect = detail::light_influence_dirty_rect(
-                                    change.current, mvp, viewportWidth, viewportHeight))
-                            {
-                                detail::append_union_rect(
-                                    dirtyRects, *rect, viewportWidth, viewportHeight);
-                                haveLocalizedDamage = true;
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (!fullRedraw && !haveLocalizedDamage)
-            {
-                damageUnavailable = true;
-                fullRedraw = true;
-                fallbackReason = epochengine::render_event_debug::FallbackReason::change_frame_unavailable;
-            }
-
-            if (!fullRedraw)
-            {
-                dirtyArea = 0u;
-                for (const auto& rect : dirtyRects)
-                {
-                    dirtyArea += static_cast<std::uint64_t>(rect.width)
-                        * static_cast<std::uint64_t>(rect.height);
-                }
-
-                if (dirtyRects.size() > 12u)
-                {
-                    fullRedraw = true;
-                    fallbackReason = epochengine::render_event_debug::FallbackReason::dirty_region_limit;
-                }
-                else if (frameArea > 0u && dirtyArea * 10u >= frameArea * 6u)
-                {
-                    fullRedraw = true;
-                    fallbackReason = epochengine::render_event_debug::FallbackReason::dirty_coverage_limit;
-                }
-                else if (!dirtyRects.empty())
-                {
-                    std::vector<epochengine::render::neuromorphic_invalidation::ChangeSample> neuralSamples{};
-                    neuralSamples.reserve(dirtyRects.size());
-                    for (std::size_t index = 0u; index < dirtyRects.size(); ++index)
-                    {
-                        const auto& rect = dirtyRects[index];
-                        const std::uint64_t area = static_cast<std::uint64_t>(rect.width)
-                            * static_cast<std::uint64_t>(rect.height);
-                        const float areaFraction = frameArea > 0u
-                            ? static_cast<float>(area) / static_cast<float>(frameArea)
-                            : 1.0f;
-                        const std::uint64_t source =
-                            (static_cast<std::uint64_t>(static_cast<std::uint32_t>(rect.x)) << 32u)
-                            ^ static_cast<std::uint64_t>(static_cast<std::uint32_t>(rect.y))
-                            ^ (static_cast<std::uint64_t>(index + 1u) * 0x9e3779b97f4a7c15ull);
-                        neuralSamples.push_back({
-                            .source = source == 0u ? static_cast<std::uint64_t>(index + 1u) : source,
-                            .magnitude = (std::clamp)(0.30f + areaFraction * 8.0f, 0.30f, 4.0f),
-                            .salience = 1.0f
-                        });
-                    }
-
-                    const auto neuralDecision = state.sceneInvalidationNetwork.evaluate(
-                        neuralTimestampNs,
-                        neuralSamples);
-                    if (neuralDecision.force_full_redraw)
-                    {
-                        fullRedraw = true;
-                        fallbackReason = epochengine::render_event_debug::FallbackReason::neuromorphic_dense_activity;
-                    }
-                }
-            }
-            (void)damageUnavailable;
-        }
-
-        if (fullRedraw)
-        {
-            if (fallbackReason != epochengine::render_event_debug::FallbackReason::neuromorphic_dense_activity
-                && fallbackReason != epochengine::render_event_debug::FallbackReason::benchmark_full_baseline)
-            {
-                state.sceneInvalidationNetwork.reset(neuralTimestampNs);
-            }
-            dirtyRects.assign(1, detail::DirtyRect{ 0, 0, viewportWidth, viewportHeight });
-            vacatedRects.clear();
-            dirtyArea = frameArea;
-        }
-
-        if (!dirtyRects.empty())
-        {
-            glBindFramebuffer(GL_FRAMEBUFFER, state.sceneCacheFramebuffer);
-            glViewport(0, 0, viewportWidth, viewportHeight);
-            glDisable(GL_BLEND);
-            glEnable(GL_SCISSOR_TEST);
-            glEnable(GL_DEPTH_TEST);
-            glDepthFunc(GL_LEQUAL);
-            glDepthMask(GL_TRUE);
-
-            const auto gridGeometry = epochengine::previewgrid::grid_geometry_for(ctx);
-            if (state.sceneGridSignature != gridGeometry->signature)
-            {
-                glBindVertexArray(state.sceneVao);
-                glBindBuffer(GL_ARRAY_BUFFER, state.sceneVbo);
-                glBufferData(GL_ARRAY_BUFFER,
-                    static_cast<GLsizeiptr>(gridGeometry->vertices.size() * sizeof(gridGeometry->vertices[0])),
-                    gridGeometry->vertices.data(), GL_DYNAMIC_DRAW);
-                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, state.sceneEbo);
-                glBufferData(GL_ELEMENT_ARRAY_BUFFER,
-                    static_cast<GLsizeiptr>(gridGeometry->indices.size() * sizeof(gridGeometry->indices[0])),
-                    gridGeometry->indices.data(), GL_DYNAMIC_DRAW);
-                state.sceneGridSignature = gridGeometry->signature;
-                state.sceneGridIndexCount = static_cast<GLsizei>(gridGeometry->indices.size());
-            }
-
-            auto solidVertices = epochengine::previewgrid::object_solid_vertices_for(ctx);
-            std::vector<epochengine::previewgrid::Vertex> dynamicVertices{};
-            const auto focusVertices = epochengine::previewgrid::look_marker_vertices_for(ctx);
-            const auto focusCount = epochengine::previewgrid::look_marker_vertex_count_for(ctx);
-            if (focusCount > 0)
-                dynamicVertices.insert(dynamicVertices.end(), focusVertices.begin(), focusVertices.begin() + focusCount);
-            auto objectVertices = epochengine::previewgrid::object_marker_vertices_for(ctx);
-            dynamicVertices.insert(dynamicVertices.end(), objectVertices.begin(), objectVertices.end());
-
-            for (const auto& rect : dirtyRects)
-            {
-                glScissor(rect.x, rect.y, rect.width, rect.height);
-                glClearColor(clearColor[0], clearColor[1], clearColor[2], clearColor[3]);
-                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-                glUseProgram(state.sceneShader);
-                glUniformMatrix4fv(state.sceneMvpLoc, 1, GL_FALSE, mvp.data());
-
-                glDepthMask(GL_FALSE);
-                glEnable(GL_DEPTH_TEST);
-                glBindVertexArray(state.sceneVao);
-                glDrawElements(GL_LINES, state.sceneGridIndexCount, GL_UNSIGNED_INT, nullptr);
-
-                if (solidVertices.size() >= 3 && state.sceneMarkerVao && state.sceneMarkerVbo)
-                {
-                    glDepthMask(GL_TRUE);
-                    glEnable(GL_DEPTH_TEST);
-                    glBindVertexArray(state.sceneMarkerVao);
-                    glBindBuffer(GL_ARRAY_BUFFER, state.sceneMarkerVbo);
-                    glBufferData(GL_ARRAY_BUFFER,
-                        static_cast<GLsizeiptr>(solidVertices.size() * sizeof(solidVertices[0])),
-                        solidVertices.data(), GL_DYNAMIC_DRAW);
-                    glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(solidVertices.size()));
-                }
-
-                render_engine_arcade_sampled_surface_preview(
-                    ctx, state, mvp, viewportWidth, viewportHeight, 0, 0, viewportWidth, viewportHeight);
-
-                if (dynamicVertices.size() >= 2 && state.sceneMarkerVao && state.sceneMarkerVbo)
-                {
-                    glDepthMask(GL_FALSE);
-                    glDisable(GL_DEPTH_TEST);
-                    glBindVertexArray(state.sceneMarkerVao);
-                    glBindBuffer(GL_ARRAY_BUFFER, state.sceneMarkerVbo);
-                    glBufferData(GL_ARRAY_BUFFER,
-                        static_cast<GLsizeiptr>(dynamicVertices.size() * sizeof(dynamicVertices[0])),
-                        dynamicVertices.data(), GL_DYNAMIC_DRAW);
-                    glDrawArrays(GL_LINES, 0, static_cast<GLsizei>(dynamicVertices.size()));
-                }
-            }
-
-            glBindVertexArray(0);
-            glUseProgram(0);
-            state.sceneCacheCameraRevision = cameraRevision;
-            state.sceneCacheGeometryRevision = geometryRevision;
-            state.sceneCacheValid = true;
-        }
-        else if (!fullRedraw && state.sceneCacheGeometryRevision != geometryRevision)
-        {
-            // A valid change frame can contain only off-screen mutations. No pixels need
-            // reconstruction, but the cache still advances to the new scene revision.
-            state.sceneCacheGeometryRevision = geometryRevision;
-        }
-
-        // Present the complete cached scene every frame. Unchanged scene pixels are reused;
-        // GUI composition can continue normally on the real framebuffer.
-        glBindFramebuffer(GL_READ_FRAMEBUFFER, state.sceneCacheFramebuffer);
-        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, static_cast<GLuint>(preservedState.drawFramebuffer));
-        glDisable(GL_SCISSOR_TEST);
-        glBlitFramebuffer(
-            0, 0, viewportWidth, viewportHeight,
-            viewportX, destinationY, viewportX + viewportWidth, destinationY + viewportHeight,
-            GL_COLOR_BUFFER_BIT, GL_NEAREST);
-
-        std::uint64_t benchmarkDurationNs = 0u;
-        if (benchmarkLane != epochengine::render_event_debug::BenchmarkLane::disabled)
-        {
-            glFinish();
-            benchmarkDurationNs = elapsed_ns_from(benchmarkStart);
-            epochengine::render_event_debug::record_benchmark_sample(
-                benchmarkLane,
-                benchmarkDurationNs);
-        }
-
-        detail::draw_dirty_rect_overlay(
-            dirtyRects,
-            viewportX,
-            destinationY,
-            fullRedraw);
-        detail::draw_vacated_rect_overlay(
-            vacatedRects,
-            viewportX,
-            destinationY);
-
-        if (benchmarkLane != epochengine::render_event_debug::BenchmarkLane::disabled
-            && (epochengine::render_event_debug::dirty_overlay_enabled()
-                || epochengine::render_event_debug::vacated_overlay_enabled()))
-        {
-            // Keep optional diagnostics out of the measured interval and also out of the next
-            // sample by draining them after they are drawn.
-            glFinish();
-        }
-
-        const float dirtyCoverage = frameArea > 0u
-            ? (std::min)(100.0f,
-                static_cast<float>(dirtyArea) * 100.0f / static_cast<float>(frameArea))
-            : 0.0f;
-        const auto path = fullRedraw
-            ? epochengine::render_event_debug::Path::full
-            : (!dirtyRects.empty()
-                ? epochengine::render_event_debug::Path::partial
-                : epochengine::render_event_debug::Path::cached);
-        epochengine::render_event_debug::publish(
-            path,
-            fallbackReason,
-            static_cast<std::uint32_t>(dirtyRects.size()),
-            static_cast<std::uint32_t>(vacatedRects.size()),
-            dirtyCoverage,
-            cameraRevision,
-            geometryRevision,
-            benchmarkDurationNs > 0u
-                ? (benchmarkDurationNs + 999u) / 1000u
-                : elapsed_us());
+        render_scene_preview_conventional(
+            ctx, state, previewMode, framebufferWidth, framebufferHeight,
+            viewportX, viewportY, viewportWidth, viewportHeight);
     }
 
 }

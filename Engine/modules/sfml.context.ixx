@@ -233,12 +233,14 @@ export namespace epochengine::sfmlcontext
         inline void render_engine_arcade_sampled_surface_preview(
             const std::shared_ptr<core::Context>& ctx,
             const epochengine::previewgrid::Mat4& mvp,
-            const core::RenderViewport& viewport)
+            const core::RenderViewport& viewport,
+            const std::shared_ptr<const epochengine::previewgrid::PublishedSceneFrame>& matchedScene)
         {
             if (!ctx || !sfmlcontext.window)
                 return;
 
-            const auto markers = epochengine::previewgrid::sampled_render_surface_markers_for(ctx.get());
+            const auto markers = matchedScene ? epochengine::previewgrid::sampled_render_surface_markers_for(*matchedScene)
+                : epochengine::previewgrid::sampled_render_surface_markers_for(ctx.get());
             if (markers.empty() || !update_arcade_preview_surface())
                 return;
 
@@ -402,7 +404,8 @@ export namespace epochengine::sfmlcontext
             sf::RenderStates renderStates{};
             sfmlcontext.window->draw(background, renderStates);
 
-            const auto camera = epochengine::previewgrid::camera_for(ctx.get());
+            const auto matchedScene = epochengine::previewgrid::scene_frame_for(ctx.get());
+            const auto camera = matchedScene ? matchedScene->camera : epochengine::previewgrid::camera_for(ctx.get());
             const float aspect = viewport.height > 0
                 ? (viewport.width / static_cast<float>(viewport.height))
                 : 1.0f;
@@ -413,42 +416,51 @@ export namespace epochengine::sfmlcontext
                 camera.up);
             const auto mvp = epochengine::previewgrid::multiply(proj, view);
 
-            const auto gridGeometry = epochengine::previewgrid::grid_geometry_for(ctx.get());
-            const auto& vertices = gridGeometry->vertices;
-            const auto& indices = gridGeometry->indices;
             sf::VertexArray lines(sf::PrimitiveType::Lines);
-
-            for (std::size_t i = 0; i + 1 < indices.size(); i += 2)
+            sf::VertexArray solids(sf::PrimitiveType::Triangles);
+            if (!matchedScene)
             {
-                const auto firstIndex = static_cast<std::size_t>(indices[i]);
-                const auto secondIndex = static_cast<std::size_t>(indices[i + 1]);
-                if (firstIndex >= vertices.size() || secondIndex >= vertices.size())
-                    continue;
+                const auto gridGeometry = epochengine::previewgrid::grid_geometry_for(ctx.get());
+                const auto& vertices = gridGeometry->vertices;
+                const auto& indices = gridGeometry->indices;
 
-                sf::Vector2f a{};
-                sf::Vector2f b{};
-                if (!project_preview_vertex(mvp, vertices[firstIndex].position, viewport, a)
-                    || !project_preview_vertex(mvp, vertices[secondIndex].position, viewport, b))
+                for (std::size_t i = 0; i + 1 < indices.size(); i += 2)
                 {
-                    continue;
+                    const auto firstIndex = static_cast<std::size_t>(indices[i]);
+                    const auto secondIndex = static_cast<std::size_t>(indices[i + 1]);
+                    if (firstIndex >= vertices.size() || secondIndex >= vertices.size())
+                        continue;
+
+                    sf::Vector2f a{};
+                    sf::Vector2f b{};
+                    if (!project_preview_vertex(mvp, vertices[firstIndex].position, viewport, a)
+                        || !project_preview_vertex(mvp, vertices[secondIndex].position, viewport, b))
+                    {
+                        continue;
+                    }
+
+                    a.x -= static_cast<float>(viewport.x);
+                    a.y -= static_cast<float>(viewport.y);
+                    b.x -= static_cast<float>(viewport.x);
+                    b.y -= static_cast<float>(viewport.y);
+
+                    lines.append(sf::Vertex(a, to_sfml_color(vertices[firstIndex].color)));
+                    lines.append(sf::Vertex(b, to_sfml_color(vertices[secondIndex].color)));
                 }
 
-                a.x -= static_cast<float>(viewport.x);
-                a.y -= static_cast<float>(viewport.y);
-                b.x -= static_cast<float>(viewport.x);
-                b.y -= static_cast<float>(viewport.y);
+                if (lines.getVertexCount() > 0)
+                    sfmlcontext.window->draw(lines, renderStates);
 
-                lines.append(sf::Vertex(a, to_sfml_color(vertices[firstIndex].color)));
-                lines.append(sf::Vertex(b, to_sfml_color(vertices[secondIndex].color)));
             }
 
-            if (lines.getVertexCount() > 0)
-                sfmlcontext.window->draw(lines, renderStates);
-
-            sf::VertexArray solids(sf::PrimitiveType::Triangles);
-            const auto solidVertices = epochengine::previewgrid::object_solid_vertices_for(ctx.get());
+            const auto solidGeometry = matchedScene ? matchedScene->solids->geometry
+                : epochengine::previewgrid::object_solid_geometry_for(ctx.get());
+            const auto& solidVertices = *solidGeometry;
             for (std::size_t i = 0; i + 2 < solidVertices.size(); i += 3)
             {
+                if (!epochengine::previewgrid::clockwise_solid_triangle_faces_camera(
+                    solidVertices[i].position,solidVertices[i+1u].position,
+                    solidVertices[i+2u].position,camera.eye)) continue;
                 sf::Vector2f a{};
                 sf::Vector2f b{};
                 sf::Vector2f c{};
@@ -475,7 +487,7 @@ export namespace epochengine::sfmlcontext
             if (solids.getVertexCount() > 0)
                 sfmlcontext.window->draw(solids, renderStates);
 
-            render_engine_arcade_sampled_surface_preview(ctx, mvp, viewport);
+            render_engine_arcade_sampled_surface_preview(ctx, mvp, viewport, matchedScene);
 
             const auto appendPreviewLines = [&](const auto& lineVertices, std::size_t vertexCount)
             {
@@ -500,12 +512,21 @@ export namespace epochengine::sfmlcontext
             };
 
             lines.clear();
-            const auto markerVertices = epochengine::previewgrid::look_marker_vertices_for(ctx.get());
-            appendPreviewLines(
-                markerVertices,
-                epochengine::previewgrid::look_marker_vertex_count_for(ctx.get()));
-            const auto objectVertices = epochengine::previewgrid::object_marker_vertices_for(ctx.get());
-            appendPreviewLines(objectVertices, objectVertices.size());
+            if (!matchedScene)
+            {
+                const auto markerVertices = epochengine::previewgrid::look_marker_vertices_for(ctx.get());
+                appendPreviewLines(
+                    markerVertices,
+                    epochengine::previewgrid::look_marker_vertex_count_for(ctx.get()));
+            }
+
+            const auto objectGeometry = matchedScene ? matchedScene->lines
+                : epochengine::previewgrid::object_marker_geometry_for(ctx.get());
+            const auto& objectVertices = *objectGeometry;
+            const auto meshWire = matchedScene ? matchedScene->wire
+                : epochengine::previewgrid::object_mesh_wire_frame_for(ctx.get());
+            epochengine::previewgrid::for_each_visible_marker_line(*meshWire, objectVertices, camera.eye,
+                [&](const auto& first,const auto& second){const std::array pair{first,second};appendPreviewLines(pair,pair.size());});
 
             if (lines.getVertexCount() > 0)
                 sfmlcontext.window->draw(lines, renderStates);

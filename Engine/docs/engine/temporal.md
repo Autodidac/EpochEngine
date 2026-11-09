@@ -14,6 +14,77 @@ persistence, simulation fidelity, side effects, and server authority.
 The complete temporal world is a target architecture. Current modules implement
 bounded portions and must not be described as the full system.
 
+## Sampled water and project movement — October29 source
+
+```text
+central clock → editor timeline playhead → analytic water mesh
+                                       → copied project movement keys
+```
+
+The clock still advances monotonically. The editor timeline chooses a forward,
+paused, sought or backward presentation sample. `water.surface` builds a bounded
+indexed mesh from `water.system` at that explicit time. A normal Water scene
+object participates in creation, Undo/Redo and save/reopen. Ordinary project
+runtime receives the existing clock's sample through its own Context, rather
+than storing mutable time on a Scene shared by several contexts.
+
+Project movement starts from the reusable Engine template but is copied into
+the project's `scripts/timeline_translation.ascript.cpp`. The separate sized
+script-host V2 entry submits finite translation keys. The host copies them into
+the existing temporal history representation; playback never calls an unloaded
+script DLL. The track is bound to a project generation, scene and object, and
+offsets the object's authored position without overwriting it. There is no
+automatic loop. Removing the track restores the authored pose.
+
+Actual Debug/Release owner checks and the combined Editor builds/contracts pass
+for these source tranches. Native water/model acceptance is still open. Movement
+source persists with the project; its copied live track must currently be
+registered again by running the script after reopening. Standalone generated
+runtime movement-host integration is still open. This is not physics reversal,
+full event-history replay, rigging, or animation authoring.
+
+### One Water system; optional FFT implementation
+
+The operator's target is one editable Water system, from a still pool or pond
+to a rough ocean. Users should not have to choose between unrelated water tools.
+The FFT package supplies its spectral wave implementation and a standalone
+example. Planetary uses that same implementation for oceans: choosing an ocean
+must resolve the FFT package dependency through the existing package installer.
+A dry planet does not need the ocean dependency. Missing packages must be shown
+before generation, with the normal installation choice, not hidden manual wiring.
+
+Water settings, transforms, project persistence and timeline control must remain
+shared. Planetary supplies the curved surface, body scale and local coordinates;
+the selected wave implementation supplies displacement and surface normals.
+Sea of Thieves and No Man's Sky are visual references, not present capabilities.
+Foam, reflection, refraction, underwater rendering and caustic lighting need their
+own renderer evidence; wave displacement alone does not implement them.
+Caustics must form changing light patterns from the interacting wave surface:
+bright lines join, separate and concentrate as waves change. Translating a fixed
+grid or texture is not acceptance. Their time sample must match the water;
+seeking back to the same time must reproduce the same pattern. This remains
+unimplemented, including its renderer, performance and visual checks.
+
+The optional FFT package now supplies the planetary wave evaluator. Typed retained
+water geometry records its source triangles, clipping basis and coordinate frame;
+runtime resampling keeps the ground unchanged and clips the current shoreline.
+The FFT converts its discrete spectral density to metres after the normalized
+inverse transform. This includes the frequency-cell width and cancels the FFT's
+numerical division by resolution squared. Resolution therefore refines the same
+physical sea instead of shrinking its waves. The previous default was about
+one centimetre peak height; the corrected CPU samples are roughly metre-scale.
+That correction does not prove visible planetary animation or finished shading.
+CPU Debug/Release checks reproduce time0→1.25→0 through the real provider. Existing
+owned child-control pipes carry explicit Editor Play/Pause/seek/reverse/rate changes
+to the existing runtime timeline. This changes presentation time; planetary physics
+still advances forward. No per-frame IPC, additional clock or listener is added.
+The existing scheduler coalesces water work and retains the previous valid surface
+on cancellation, stale source or failure. A48kvertex cut takes about114ms to retime
+on the measured target; a20Hz request interval does not promise20completed updates.
+Native animation/control acceptance and the combined water/vegetation appearance
+remain open. Reflection, refraction, underwater effects and merged caustics are not
+implemented by this CPU FFT/time proof.
+
 ## Editor Authoring History
 
 `editor.authoring_history` is the current bounded cross-surface coordinator. It
@@ -23,15 +94,53 @@ stable identity, generation, revision, cursor, retained-entry count, and exact
 Undo/Redo labels. The coordinator selects the visible compatible branch first
 and otherwise the most recently changed compatible branch.
 
-An Undo/Redo request produces a plan bound to the controller revision and the
-branch generation/revision/cursor. The owning document journal performs the
-transition; the coordinator accepts only the expected one-step result. Stale,
-cross-document, malformed, or unexpected transitions fail closed. This gives
-the editor one predictable command surface without collapsing independent
-document timelines into one ambiguous global stack. Texture, tilemap, timeline,
+An Undo/Redo request names the document, branch, revision and history position
+it expects to change. The document performs the change; the coordinator then
+checks that the result was one expected step. A rejected check is detected,
+but the current Editor refreshes the coordinator after the document has already
+changed. It does **not** roll that document change back. This must not be
+described as atomic cross-document Undo or rollback on every failure.
+
+The first grouped repair covers GUI layout controls. A canvas move or inspector
+layout change that moves a World proxy records one GUI entry and one World
+transaction, linked by the existing coordinator. Undo/Redo prepares copies of
+both journals and their scene projection. It checks the document identities,
+content, entry IDs and exact history positions before publishing them together
+with nonthrowing swaps. If either side has a later edit, the request stops with
+a visible reason. It cannot silently undo half the pair. A full group budget
+rejects the new layout change before either document changes; retained group
+records contain compact endpoints, not copies of complete journals.
+
+Actual Debug/Release owner tests cover repeated paired replay, redo invalidation,
+foreign identities/content, stale acceptance and failed projection preparation.
+The existing GUI synchronization also avoids importing a float round trip as a
+new edit when the World proxy already exactly matches its GUI source. Matching
+Engine and native acceptance remain pending. Proof:
+`build/validation/gui-world-history-repair-oct27/source-freeze.json`.
+Create/delete, AI multi-tool edits and selection-changing groups are not covered
+by this slice. Extend these same owners; do not build a second history manager
+or use notifications as an authoritative journal.
+GUI source files currently save document state, not the Undo/Redo journal;
+history across save/reopen remains a separate persistence requirement.
+
+The existing command surface keeps each document's journal. Texture, tilemap, timeline,
 audio, project-settings, and workspace-layout journals must join through the
 same typed snapshot/executor boundary as their concrete journal support matures;
 their names alone are not completion evidence.
+
+### Event notifications
+
+The existing `events.bus` typed subscription now has an actual standalone
+Debug/Release consumer. Callback storage survives self-removal, nested dispatch,
+clear and registration during a callback. Removing a subscription prevents later
+delivery; callers must remove borrowed user data before destroying it. Ordinary
+dispatch, nested dispatch, removal and clear pass tests with allocations denied.
+Registering a callback may allocate. This bus is used by one owner thread and is
+not a transaction journal, a cross-thread queue or a completed temporal world.
+Integrated3 Release/full Engine contracts pass; broader consumers remain
+unverified. Proof:
+`build/validation/events-bus-repair-oct27/result.json`. The original subscription
+compile failure remains in `build/validation/events-subscribe-oct27/debug-build.log`.
 
 ## Mission
 
@@ -329,6 +438,13 @@ Backward playback reconstructs state and visual channels; it does not reverse
 external side effects.
 
 ## Execution And Resource Fabric
+
+The [connected voxel/SDF world](voxels.md) uses these time/revision contracts for
+durable edits, derived representations and stale-job rejection. World streaming
+and AI model lifecycle share admission budgets while retaining separate owners.
+Unload/reload cannot lose edits or reinterpret unavailable regions as empty.
+These rules apply to universal software consumers as well as games; an empty
+application or camera-only consumer need not instantiate the world or any bot.
 
 The capability plan selects an implementation after observation. A demand-driven
 execution graph may span:

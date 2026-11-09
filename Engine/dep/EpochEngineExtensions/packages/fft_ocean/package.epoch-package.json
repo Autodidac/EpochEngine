@@ -1,0 +1,60 @@
+{
+  "id": "fft_ocean",
+  "displayName": "FFT Ocean Extension",
+  "manifestLicense": "LicenseRef-MIT-NoSell",
+  "manifestCopyright": "Copyright (c) 2026 Adam Rushford",
+  "status": "source-staged",
+  "kind": "code-extension",
+  "activation": "package-manager-opt-in",
+  "summary": "FFT ocean simulation code extension, excluded from minimal EpochEngine clones.",
+  "security": {
+    "serverOrListenerAllowed": false,
+    "requiresExplicitNetworkApproval": false,
+    "autoRunAllowed": false,
+    "includeByDefault": false
+  },
+  "source": {
+    "repo": "https://epoch.adamrushford.chatgpt.site/git/EpochEngineExtensions.git",
+    "path": "packages/fft_ocean",
+    "provenance": "initial renderer-neutral C++23 FFT ocean source staged in this package"
+  },
+  "engineBoundary": {
+    "epochPackageId": "fft_ocean",
+    "expectedCacheRoot": "cache/packages/fft_ocean",
+    "notes": "Optional renderer/simulation feature, not a core dependency."
+  },
+  "script": {
+    "language": "C++23",
+    "path": "scripts/fft_ocean_package.ascript.cpp",
+    "api": "epoch_package_script_api",
+    "mode": "download-stage-build-live-preview",
+    "downloadsSource": true,
+    "compilesSource": true,
+    "livePreview": true,
+    "humanGated": true,
+    "autoRunAllowed": false
+  },
+  "build": {
+    "humanGated": true,
+    "sourceFiles": [
+      "CMakeLists.txt",
+      "include/epoch/extensions/fft_ocean/fft_ocean.hpp",
+      "src/fft_ocean.cpp",
+      "modules/water.fft.ixx",
+      "tests/fft_ocean_self_test.cpp"
+    ],
+    "targets": [
+      "epoch_extension_fft_ocean",
+      "epoch_extension_fft_ocean_self_test"
+    ],
+    "commands": [
+      "cmake -S packages/fft_ocean -B cache/packages/fft_ocean/build",
+      "cmake --build cache/packages/fft_ocean/build --target epoch_extension_fft_ocean_self_test",
+      "cache/packages/fft_ocean/build/epoch_extension_fft_ocean_self_test"
+    ]
+  },
+  "notes": [
+    "Keep separate from Forest Factory and core voxel/path tracing contracts.",
+    "Source owns deterministic spectrum generation, inverse FFT evaluation, renderer-neutral samples, normals, displacement, and foam hints."
+  ]
+}

@@ -2,6 +2,10 @@
 // Epoch AI: preserve model selection, candidate isolation and host verification gates.
 #pragma once
 #include "../../include/epoch.edition.hpp"
+#include "ai.asset_stage_fwd.hpp"
+#include "ai.native_idle_policy.hpp"
+#include "ai.model_behavior.hpp"
+#include "native/ai.backend_models_candidate_catalog.hpp"
 // Epoch-owned, native C++23 Epoch AI service. The public boundary deliberately
 // does not leak nlohmann/json or backend headers into Epoch C++ module BMIs.
 #include <stop_token>
@@ -12,8 +16,72 @@
 #include <string>
 #include <string_view>
 #include <functional>
+#include <atomic>
+#include <memory>
+#include <thread>
+#include <chrono>
+#include <utility>
+#include <filesystem>
+#include <span>
 
 namespace epochengine::ai::native_runtime {
+    struct SharedRuntimeEnvironment final {
+        bool weights_bound{};
+        bool ready{}; // Native inputs available; not a model load/ownership claim.
+        std::string diagnostic;
+        std::filesystem::path weights_root, executable;
+        std::vector<std::filesystem::path> dependency_directories;
+        std::vector<std::pair<std::string, std::string>> environment;
+    };
+    // Capture in the trusted parent, before child HOME/LOCALAPPDATA isolation.
+    // Overlay environment after prepare_workspace_environment. Even unavailable
+    // native inputs retain the binding; model-free children remain supported.
+    [[nodiscard]] SharedRuntimeEnvironment capture_shared_runtime_environment(
+        const std::filesystem::path& installed_server = {},
+        std::span<const std::filesystem::path> dependency_directories = {});
+    using WorkLease = idle::WorkLease;
+    namespace detail { struct AssetStagePermitOwner; }
+    class AssetStagePermit final {
+    public:
+        [[nodiscard]] bool valid() const noexcept {
+            return generation_ && expected_ != 0u
+                && generation_->load(std::memory_order_acquire) == expected_
+                && thread_ == std::this_thread::get_id();
+        }
+    private:
+        friend struct detail::AssetStagePermitOwner;
+        AssetStagePermit(std::shared_ptr<const std::atomic<std::uint64_t>> generation,
+            std::uint64_t expected, std::thread::id thread)
+            : generation_(std::move(generation)), expected_(expected), thread_(thread) {}
+        std::shared_ptr<const std::atomic<std::uint64_t>> generation_{};
+        std::uint64_t expected_{};
+        std::thread::id thread_{};
+    };
+    struct AssetStageCompletion final {
+        bool succeeded{};
+        bool workers_retired{}; // Explicitly true for a stage which started no child.
+    };
+    enum class AssetStageCode : std::uint8_t {
+        completed, cancelled, unavailable, retirement_failed, stage_failed,
+        workers_unretired, restoration_failed, superseded
+    };
+    struct AssetStageOutcome final {
+        AssetStageCode code{AssetStageCode::unavailable};
+        bool stage_started{}, stage_succeeded{}, workers_retired{}, restored{};
+        std::vector<std::string> suspended_ids{}, restored_ids{}, recovery_ids{};
+        std::vector<std::uint64_t> suspended_process_ids{}, restored_process_ids{};
+        std::string diagnostic{};
+        [[nodiscard]] explicit operator bool() const noexcept {
+            return code == AssetStageCode::completed;
+        }
+    };
+    using AssetStageCallback = std::function<AssetStageCompletion(
+        std::stop_token, const AssetStagePermit&)>;
+    // Blocking boundary for an existing cancellable task/headless command, never
+    // a UI frame or the native queue worker. No source/model preferences are saved.
+    [[nodiscard]] AssetStageOutcome run_asset_stage(AssetStageCallback callback,
+        std::stop_token cancellation = {},
+        std::chrono::seconds queue_timeout = std::chrono::seconds{600});
     struct Result final {
         bool ok{};
         std::string message{};
@@ -21,8 +89,10 @@ namespace epochengine::ai::native_runtime {
         std::uint32_t completion_tokens{};
         double generation_tps{};
         bool generation_tps_known{};
+        std::string canonical_model_key{}; // Captured host selection, not provider display/path.
     };
     struct ModelTuning final {
+        std::uint32_t idle_timeout_minutes{20}; // 0 explicitly keeps residency.
         std::string runtime_policy{"recommended"};
         std::string gpu_layers{"auto"};
         std::uint32_t gpu_layer_count_hint{48};
@@ -51,6 +121,9 @@ namespace epochengine::ai::native_runtime {
         return total == 0u ? 0u : total / (slots == 0u ? 1u : slots);
     }
     struct ModelEntry final {
+        std::uint64_t owned_process_id{};
+        std::uint64_t idle_seconds{};
+        std::string idle_status{};
         ModelTuning loaded_tuning{};
         bool loaded_tuning_known{};
         std::string loaded_gpu_layers{};
@@ -69,6 +142,7 @@ namespace epochengine::ai::native_runtime {
         bool tps_known{}, first_token_known{}, simple_baseline_available{};
         double simple_latency_difference_ms{};
         bool image_input_known{}, image_input_supported{};
+        model_behavior::Classification behavior{};
     };
     struct TrainingState final {
         bool running{}, enabled{}, progress_known{};
@@ -85,6 +159,9 @@ namespace epochengine::ai::native_runtime {
         bool busy{};
         bool loaded{};
         bool selected{};
+        bool idle_reload_available{}, idle_reload_pending{};
+        std::uint64_t idle_reload_generation{};
+        std::string idle_reload_error{};
         bool inventory_preview{}; // Read-only manifest scan; cache state is not verified.
         std::string model{};
         std::string last_response_model{};
@@ -120,6 +197,8 @@ namespace epochengine::ai::native_runtime {
     // Operations are queued off the editor/UI thread; they never launch Epoch AIServer.
     [[nodiscard]] bool provision();
     [[nodiscard]] bool install(std::string model_id);
+    // Read-only path discovery. Shared/bound children cannot install weights.
+    [[nodiscard]] std::filesystem::path model_install_cache_root() noexcept;
     [[nodiscard]] bool load(std::string model_id, bool select_for_requests = true);
     // Explicit user-owned three-model load set: read-only inventory scan on opening; no weights loaded.
     [[nodiscard]] bool load_set(std::vector<std::string> model_ids);
@@ -133,13 +212,16 @@ namespace epochengine::ai::native_runtime {
     // Selecting a method/model starts one owned readiness flow: reuse cache,
     // provision/install if required, load, select and report actual failures.
     [[nodiscard]] bool prepare(std::string model_id = {});
+    // Exact per-request user approval is required; never provision, install or substitute.
+    [[nodiscard]] bool reload_idle_selected(std::string_view approved_model,
+        std::uint64_t approved_generation, std::stop_token request_stop);
     void cancel_setup();
     // Two-phase application teardown: signal before context cleanup, join only
     // after request owners retire. Neither call initializes an unused runtime.
     void request_shutdown() noexcept;
     void finish_shutdown() noexcept;
     [[nodiscard]] bool shutdown_contract() noexcept;
-    [[nodiscard]] bool register_model(std::string model_id, std::string local_path);
+    [[nodiscard]] bool register_model(std::string model_id, std::string local_path, bool only_if_absent = false);
     // Explicit operator-selected metadata only; never loads or selects a model.
     [[nodiscard]] bool import_model_profiles(std::string selected_path);
     // Profile only: loads already in GPU memory require unload/reload.

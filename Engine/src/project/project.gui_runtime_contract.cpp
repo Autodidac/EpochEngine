@@ -265,6 +265,27 @@ namespace epochengine::project_gui_runtime
             return ContractFailure::event_budget;
         }
 
+        RuntimeSession keyboard{source};
+        if (keyboard.activate_focused() != RuntimeCode::no_change
+            || keyboard.focus(source.widgets[2u].id) != RuntimeCode::ready
+            || !keyboard.keyboard_captured())
+            return ContractFailure::focus_order;
+        (void)keyboard.drain_events();
+        if (keyboard.activate_focused() != RuntimeCode::ready)
+            return ContractFailure::pointer_action;
+        events = keyboard.drain_events();
+        if (events.size() != 1u || events.front().kind != EventKind::activated
+            || events.front().widget != source.widgets[2u].id
+            || events.front().action != source.widgets[2u].action)
+            return ContractFailure::pointer_action;
+        if (keyboard.clear_focus() != RuntimeCode::ready
+            || keyboard.keyboard_captured() || keyboard.focused_widget())
+            return ContractFailure::focus_order;
+        if (bounded.activate_focused() != RuntimeCode::action_limit_exceeded
+            || bounded.clear_focus() != RuntimeCode::action_limit_exceeded
+            || bounded.focused_widget() != source.widgets[2u].id)
+            return ContractFailure::event_budget;
+
         return ContractFailure::none;
     }
 }

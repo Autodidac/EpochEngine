@@ -90,21 +90,8 @@
 
     [[nodiscard]] static std::string read_env_var(std::string_view name)
     {
-#if defined(_WIN32)
-        char* raw = nullptr;
-        std::size_t rawSize = 0;
-        const std::string key{ name };
-        if (_dupenv_s(&raw, &rawSize, key.c_str()) != 0 || raw == nullptr)
-            return {};
-
-        std::string value{ raw };
-        std::free(raw);
-        return value;
-#else
-        if (const char* const value = std::getenv(std::string(name).c_str()))
-            return std::string{ value };
-        return {};
-#endif
+        const auto value = epochengine::core::env::get({name.data(), name.size()});
+        return value ? std::string{value->data(), value->size()} : std::string{};
     }
 
     [[nodiscard]] static bool is_epoch_repo_root(const fs::path& candidate) noexcept
@@ -534,6 +521,48 @@
         return std::move(result.value);
     }
 
+    [[nodiscard]] static std::optional<nlohmann::ordered_json>
+        parse_project_build_configuration_manifest(std::string_view text)
+    {
+        using Json = nlohmann::ordered_json;
+        std::vector<std::set<std::string>> keys;
+        bool duplicate = false, rootConfiguration = false, nestedConfiguration = false;
+        auto document = Json::parse(text, [&](int depth, Json::parse_event_t event, Json& parsed)
+        {
+            if (event == Json::parse_event_t::object_start) keys.emplace_back();
+            else if (event == Json::parse_event_t::object_end && !keys.empty()) keys.pop_back();
+            else if (event == Json::parse_event_t::key && !keys.empty())
+            {
+                const auto key = parsed.get<std::string>();
+                duplicate = !keys.back().insert(key).second || duplicate;
+                if (key == "build_configuration")
+                {
+                    if (depth == 1) rootConfiguration = true;
+                    else nestedConfiguration = true;
+                }
+            }
+            return true;
+        }, false);
+        if (!document.is_object() || duplicate || (nestedConfiguration && !rootConfiguration)) return std::nullopt;
+        return document;
+    }
+
+    [[nodiscard]] static std::optional<std::string> project_build_configuration_manifest_text(
+        std::string_view manifest, std::string_view configuration)
+    {
+        if (!epochengine::editor_project_build_configuration_supported(configuration)) return std::nullopt;
+        auto document = parse_project_build_configuration_manifest(manifest);
+        if (!document) return std::nullopt;
+        const auto field = document->find("build_configuration");
+        if (field != document->end())
+        {
+            if (!field->is_string()) return std::nullopt;
+            if (field->get<std::string>() == configuration) return std::string{manifest};
+        }
+        (*document)["build_configuration"] = configuration;
+        return document->dump(2) + "\n";
+    }
+
     [[nodiscard]] static std::string default_world_name(EditorProjectKind kind)
     {
         if (kind == EditorProjectKind::Editor)
@@ -687,6 +716,27 @@
         profile.root_path = manifest_path.parent_path().lexically_normal().generic_string();
 
         fs::path scenePath{ *sceneText };
+        // Older generated shells stored absolute project-local paths. Rebase
+        // only the scene beneath that shell's declared source/epoch.main.cpp
+        // owner; never follow its old directory after the project is copied.
+        if (const auto entry = extract_json_string_field(manifestText, "entry_source"); entry)
+        {
+            const fs::path declaredEntry{*entry};
+            const auto oldRoot = declaredEntry.parent_path().parent_path();
+            const auto oldRootText = oldRoot.generic_string();
+            const bool portableDrive = oldRootText.size() > 2u
+                && ((oldRootText[0] >= 'A' && oldRootText[0] <= 'Z')
+                    || (oldRootText[0] >= 'a' && oldRootText[0] <= 'z'))
+                && oldRootText[1] == ':' && oldRootText[2] == '/';
+            if (declaredEntry.filename() == "epoch.main.cpp"
+                && declaredEntry.parent_path().filename() == "source"
+                && (oldRoot.is_absolute() || portableDrive))
+            {
+                const auto relative = scenePath.lexically_relative(oldRoot);
+                if (!relative.empty() && !relative.is_absolute() && *relative.begin() != "..")
+                    scenePath = manifest_path.parent_path() / relative;
+            }
+        }
         if (!candidate_data.empty())
         {
             if (scenePath.is_relative() && !scenePath.empty()
@@ -830,7 +880,11 @@
     }
     static void rebuild_project_profile_cache()
     {
-        if (!project_profiles_cache_dirty())
+        // Startup binding can change after a consumer has inspected built-ins.
+        // Read through the same portable environment owner used by the binder.
+        const std::string requestedManifest = read_env_var("EPOCH_EDITOR_PROJECT_MANIFEST");
+        static std::string cachedRequestedManifest{};
+        if (!project_profiles_cache_dirty() && requestedManifest == cachedRequestedManifest)
             return;
 
         auto& owned = discovered_project_profiles();
@@ -851,8 +905,7 @@
             }
         }
 
-        if (const std::string requestedManifest = read_env_var("EPOCH_EDITOR_PROJECT_MANIFEST");
-            !requestedManifest.empty())
+        if (!requestedManifest.empty())
         {
             const auto parsed = parse_manifest_project_profile(fs::path{ requestedManifest });
             if (parsed
@@ -898,6 +951,7 @@
         for (const auto& profile : owned)
             cached.push_back(profile.view());
 
+        cachedRequestedManifest = requestedManifest;
         project_profiles_cache_dirty() = false;
     }
 
@@ -1092,30 +1146,57 @@
         return root / (generated_project_artifact_stem(root) + ".vcxproj");
     }
 
-    [[nodiscard]] static fs::path generated_project_build_log_path(const fs::path& root)
+    [[nodiscard]] static fs::path generated_project_build_log_path(
+        const fs::path& root, std::string_view configuration = "Debug")
     {
+        if (!epochengine::editor_project_build_configuration_supported(configuration)) return {};
 #if defined(_WIN32)
-        return root / "build" / "logs" / "build-debug-x64.log";
+        return root / "Artifacts" / "Reports" / (configuration == "Release" ? "build-release-x64.log" : "build-debug-x64.log");
 #else
-        return root / "build" / "logs" / "build-linux.log";
+        return root / "Artifacts" / "Reports" / (configuration == "Release" ? "build-linux-release.log" : "build-linux-debug.log");
 #endif
     }
 
-    [[nodiscard]] static fs::path generated_project_output_path(const fs::path& root)
+    [[nodiscard]] static fs::path reserve_generated_project_build_transcript(
+        const fs::path& root, std::string_view configuration, std::uint64_t sequence)
     {
+        const auto latest = generated_project_build_log_path(root, configuration);
+        if (latest.empty() || !root.is_absolute() || sequence == 0u) return {};
+        const auto reports = latest.parent_path().lexically_normal();
+        std::error_code error;
+        if (fs::weakly_canonical(reports, error) != reports || error) return {};
+        fs::create_directories(reports, error);
+        if (error || fs::canonical(reports, error) != reports || error) return {};
+        const auto tick = std::chrono::steady_clock::now().time_since_epoch().count();
+        const auto path = reports / (latest.stem().string() + "-" + std::to_string(tick)
+            + "-" + std::to_string(sequence) + ".log");
+        std::ofstream transcript{path, std::ios::binary | std::ios::noreplace};
+        if (!transcript) return {};
+        transcript << "=== Epoch project build | configuration=" << configuration
+            << " | attempt=" << sequence << " ===\n";
+        transcript.flush();
+        return transcript ? path : fs::path{};
+    }
+
+    [[nodiscard]] static fs::path generated_project_output_path(
+        const fs::path& root, std::string_view configuration = "Debug")
+    {
+        if (!epochengine::editor_project_build_configuration_supported(configuration)) return {};
 #if defined(_WIN32)
-        return root / "build" / "bin" / "windows" / "Debug" / "x64" / (generated_project_artifact_stem(root) + ".exe");
+        return root / "Artifacts" / "Runtime" / "windows" / configuration / "x64" / (generated_project_artifact_stem(root) + ".exe");
 #else
-        return root / "build" / "bin" / "linux" / "Debug" / "x64" / generated_project_artifact_stem(root);
+        return root / "Artifacts" / "Runtime" / "linux" / configuration / "x64" / generated_project_artifact_stem(root);
 #endif
     }
 
-    [[nodiscard]] static std::vector<fs::path> generated_project_output_candidates(const fs::path& root)
+    [[nodiscard]] static std::vector<fs::path> generated_project_output_candidates(
+        const fs::path& root, std::string_view configuration = "Debug")
     {
+        if (!epochengine::editor_project_build_configuration_supported(configuration)) return {};
 #if defined(_WIN32)
-        const fs::path outputDir = root / "build" / "bin" / "windows" / "Debug" / "x64";
+        const fs::path outputDir = root / "Artifacts" / "Runtime" / "windows" / configuration / "x64";
 #else
-        const fs::path outputDir = root / "build" / "bin" / "linux" / "Debug" / "x64";
+        const fs::path outputDir = root / "Artifacts" / "Runtime" / "linux" / configuration / "x64";
 #endif
         std::vector<fs::path> candidates;
         const auto add_candidate = [&](std::string name) {
@@ -1135,26 +1216,20 @@
         };
 
         add_candidate(generated_project_artifact_stem(root));
-        add_candidate(root.filename().string());
-        add_candidate("EpochEngine");
-#if defined(_WIN32)
-        add_candidate("EpochEditor");
-#else
-        add_candidate("epoch");
-#endif
         return candidates;
     }
 
-    [[nodiscard]] static fs::path generated_project_existing_output_path(const fs::path& root)
+    [[nodiscard]] static fs::path generated_project_existing_output_path(
+        const fs::path& root, std::string_view configuration = "Debug")
     {
         std::error_code ec;
-        for (const auto& candidate : generated_project_output_candidates(root))
+        for (const auto& candidate : generated_project_output_candidates(root, configuration))
         {
             if (fs::exists(candidate, ec) && !ec)
                 return candidate;
             ec.clear();
         }
-        return generated_project_output_path(root);
+        return generated_project_output_path(root, configuration);
     }
 
     [[nodiscard]] static std::string next_generated_project_name(EditorProjectKind kind)

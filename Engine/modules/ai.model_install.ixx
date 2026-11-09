@@ -28,6 +28,9 @@ export namespace epochengine::ai::model_install
         std::string source_url{};
         std::uint64_t bytes{};
         std::string sha256{};
+        // Optional immutable upstream subpath; installed files remain flat.
+        // Absence preserves existing URLs and receipt bytes exactly.
+        std::optional<std::string> source_path{};
 
         friend bool operator==(const ArtifactSpec&, const ArtifactSpec&) = default;
     };
@@ -122,5 +125,9 @@ export namespace epochengine::ai::model_install
         std::string_view bytes) noexcept;
     [[nodiscard]] PublishResult publish_verified_snapshot(
         const PublishRequest& request);
+    // Read-only admission. Never recovers receipts or changes installed files.
+    [[nodiscard]] PublishResult verify_snapshot(
+        const std::filesystem::path& models_cache_root,
+        const InstallPlan& plan);
     [[nodiscard]] bool run_contract();
 }

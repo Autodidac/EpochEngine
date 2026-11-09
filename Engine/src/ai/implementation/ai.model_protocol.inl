@@ -390,6 +390,11 @@
                     progress.generation_ms = providerGenerationMs_;
                     progress.provider_generation_timing = true;
                 }
+                if (providerGenerationTps_)
+                {
+                    progress.measured_tps = *providerGenerationTps_;
+                    progress.tps_known = true;
+                }
             }
 
             void feed(std::string_view chunk)
@@ -501,14 +506,27 @@
                 try
                 {
                     const auto fields = model_json_fields(encoded);
-                    const auto raw = model_json_field(fields, "predicted_ms");
-                    if (raw.empty()) return;
-                    double ms{};
-                    const auto [end, error] = std::from_chars(
-                        raw.data(), raw.data() + raw.size(), ms);
-                    if (error == std::errc{} && end == raw.data() + raw.size()
-                        && std::isfinite(ms) && ms > 0.0)
-                        providerGenerationMs_ = ms;
+                    if (!tokensReported_)
+                    {
+                        const auto raw = model_json_field(fields, "predicted_n");
+                        if (!raw.empty())
+                        {
+                            std::uint64_t count{};
+                            const auto [end, error] = std::from_chars(
+                                raw.data(), raw.data() + raw.size(), count);
+                            if (error == std::errc{} && end == raw.data() + raw.size())
+                            {
+                                completionTokens_ = count;
+                                tokensReported_ = true;
+                            }
+                        }
+                    }
+                    if (const auto ms = metrics::reported_positive(
+                        model_json_field(fields, "predicted_ms")))
+                        providerGenerationMs_ = *ms;
+                    if (const auto rate = metrics::reported_positive(
+                        model_json_field(fields, "predicted_per_second")))
+                        providerGenerationTps_ = *rate;
                 }
                 catch (const std::exception&) { /* supplemental telemetry */ }
             }
@@ -610,6 +628,7 @@
             std::uint64_t completionTokens_{};
             std::uint64_t imageTokens_{};
             double providerGenerationMs_{};
+            std::optional<double> providerGenerationTps_{};
             bool tokensReported_{};
             bool sourceAction_{}, modeChosen_{}, jsonFallback_{}, toolSeen_{}, finished_{}, done_{};
         };

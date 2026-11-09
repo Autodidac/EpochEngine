@@ -9,18 +9,19 @@ $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $versionFile = Join-Path $root 'Engine\modules\epoch.version.ixx'
 $resourceFile = Join-Path $root 'Engine\resource\WinResource.rc'
 $engineFile = Join-Path $root 'Engine\src\ai\ai.engine.cpp'
+$thinkingParserFile = Join-Path $root 'Engine\src\ai\implementation\ai.connection_preferences.inl'
 $solution = Join-Path $root 'Engine.sln'
 . (Join-Path $root 'Tools\build\epoch_package_layout.ps1')
 $edition = Get-EpochSourceEdition -RepoRoot $root
-$binaryRoot = Join-Path $root ('build\bin\windows\{0}\x64\Release' -f $edition.Directory)
-$probeFile = Join-Path $root 'Engine\src\build\build.cpp_feature_probe.hpp'
+$binaryRoot = Join-Path $root ('Artifacts\Runtime\windows\{0}\x64\Release' -f $edition.Directory)
+$probeFile = Join-Path $root 'Engine\dep\EpochPlatformEngine\include\build.cpp_feature_probe.hpp'
 $perfHeaderFile = Join-Path $root 'Engine\src\editor\editor.frame_performance.hpp'
 $itemsFile = Join-Path $root 'Engine\Engine.vcxitems'
 $editorProjectFile = Join-Path $root 'Engine\examples\EpochEditor\EpochEditor.vcxproj'
 $editorIcon = Join-Path $root 'Engine\resource\icon.ico'
 $buildDocs = Join-Path $root 'Engine\docs\build'
 
-foreach ($file in @($versionFile, $resourceFile, $editorProjectFile, $editorIcon, $engineFile, $solution, $probeFile, $perfHeaderFile, $itemsFile)) {
+foreach ($file in @($versionFile, $resourceFile, $editorProjectFile, $editorIcon, $engineFile, $thinkingParserFile, $solution, $probeFile, $perfHeaderFile, $itemsFile)) {
     if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "Missing source file: $file" }
 }
 # epoch.version.ixx is the sole authority for development version metadata.
@@ -36,7 +37,7 @@ foreach ($component in @('MAJOR', 'MINOR', 'REVISION')) {
     }
     $versionFields[$component] = [int]$definitions[0].Groups[1].Value
 }
-$expectedVersion = '{0}.{1}.{2}' -f $versionFields['MAJOR'], $versionFields['MINOR'], $versionFields['REVISION']
+$expectedVersion = & (Join-Path $root 'Tools\build\get_epoch_version.ps1') -VersionModule $versionFile
 $expectedRevision = $versionFields['REVISION']
 # MSVC-safe editor frame timer environment lookup. Prevent C4996 from
 # breaking the strict Release build again; do not relax warning policy.
@@ -46,8 +47,7 @@ if ($perfHeaderSource -notmatch '#if defined\(_MSC_VER\)' -or
     $perfHeaderSource -notmatch 'std::free\s*\(value\)') {
     throw "Missing MSVC-safe editor frame timer environment lookup: $perfHeaderFile"
 }
-# The feature-probe header is first-party SOURCE, not a generated build artifact.
-# A prior ZIP accidentally removed Engine/src/build alongside actual build outputs.
+# The Platform dependency owns the feature-probe header. Require it in the source package.
 $probeSource = Get-Content -LiteralPath $probeFile -Raw
 foreach ($feature in @('has_expected', 'has_stacktrace', 'has_std_execution', 'has_contracts', 'has_static_reflection')) {
     if ($probeSource -notmatch [regex]::Escape($feature)) {
@@ -98,13 +98,13 @@ if ($iconBytes.Length -lt 6 -or $iconBytes[0] -ne 0 -or $iconBytes[1] -ne 0 -or
     throw "Invalid editor icon file: $editorIcon"
 }
 $resourceSource = Get-Content -LiteralPath $resourceFile -Raw
-$engineSource = Get-Content -LiteralPath $engineFile -Raw
+$thinkingParser = Get-Content -LiteralPath $thinkingParserFile -Raw
 if ($versionSource -notmatch "(?m)^\s*#\s*define\s+EPOCH_VERSION_REVISION_VALUE\s+$expectedRevision\s*$") {
     throw "Wrong source revision in $versionFile (expected $expectedVersion)."
 }
 # Use one expected source version for all RC checks. Never carry forward an
 # older product-version literal when generating a new source release.
-$expectedResourceTuple = [regex]::Escape(($expectedVersion.Replace('.', ',') + ',0'))
+$expectedResourceTuple = [regex]::Escape(('{0},{1},{2},0' -f $versionFields['MAJOR'], $versionFields['MINOR'], $expectedRevision))
 $expectedResourceText = [regex]::Escape($expectedVersion)
 if ($resourceSource -notmatch ('FILEVERSION\s+' + $expectedResourceTuple) -or
     $resourceSource -notmatch ('PRODUCTVERSION\s+' + $expectedResourceTuple) -or
@@ -115,8 +115,8 @@ if ($resourceSource -notmatch ('FILEVERSION\s+' + $expectedResourceTuple) -or
 foreach ($mode in @('off','low','high')) {
     $safe = 'choice\.compare\("' + $mode + '"\)\s*==\s*0'
     $unsafe = 'choice\s*==\s*"' + $mode + '"'
-    if ($engineSource -notmatch $safe -or $engineSource -match $unsafe) {
-        throw "Unsafe thinking parser for '$mode' in $engineFile."
+    if ($thinkingParser -notmatch $safe -or $thinkingParser -match $unsafe) {
+        throw "Unsafe thinking parser for '$mode' in $thinkingParserFile."
     }
 }
 Write-Host "Verified EpochEngine $expectedVersion source: $root"

@@ -798,15 +798,33 @@
         return "ENGINE_STATICLIB;$(EpochRaylibDllDefine)NDEBUG;_CONSOLE;%(PreprocessorDefinitions)";
     }
 
-    [[nodiscard]] static constexpr std::string_view generated_child_project_link_dependencies(bool debug) noexcept
+    [[nodiscard]] static std::string generated_child_project_library_properties(
+        std::string_view default_directory, std::string_view edition, bool shared_layout,
+        bool artifacts_layout = false)
     {
-        return debug ? "sfml-graphics-d.lib;sfml-window-d.lib;sfml-system-d.lib;libcurl-d.lib;opengl32.lib;glad.lib;SDL3.lib;raylib.lib;sqlite3.lib;libcrypto.lib;ws2_32.lib;crypt32.lib;wldap32.lib;setupapi.lib;cfgmgr32.lib;version.lib;imm32.lib;winmm.lib;sapi.lib;ole32.lib;oleaut32.lib;uuid.lib;advapi32.lib;userenv.lib;bcrypt.lib;ncrypt.lib;user32.lib;gdi32.lib;shell32.lib;comdlg32.lib;d3d11.lib;dxgi.lib;d3dcompiler.lib;EpochEngine.lib;EpochGui.lib;%(AdditionalDependencies)" : "sfml-graphics.lib;sfml-window.lib;sfml-system.lib;libcurl.lib;opengl32.lib;glad.lib;SDL3.lib;raylib.lib;sqlite3.lib;libcrypto.lib;ws2_32.lib;crypt32.lib;wldap32.lib;setupapi.lib;cfgmgr32.lib;version.lib;imm32.lib;winmm.lib;sapi.lib;ole32.lib;oleaut32.lib;uuid.lib;advapi32.lib;userenv.lib;bcrypt.lib;ncrypt.lib;user32.lib;gdi32.lib;shell32.lib;comdlg32.lib;d3d11.lib;dxgi.lib;d3dcompiler.lib;EpochEngine.lib;EpochGui.lib;%(AdditionalDependencies)";
+        std::string properties;
+        if (shared_layout)
+            properties = "    <EpochEngineLibraryDirectory Condition=\"'$(EpochEngineLibraryDirectory)'=='' and '$(EpochBuildRoot)'!=''\">"
+                "$([MSBuild]::EnsureTrailingSlash('$(EpochBuildRoot)'))"
+                + std::string{artifacts_layout ? "Runtime\\windows\\" : "bin\\windows\\"}
+                + std::string{edition} + "\\$(Platform)\\$(Configuration)\\</EpochEngineLibraryDirectory>\n";
+        properties += "    <EpochEngineLibraryDirectory Condition=\"'$(EpochEngineLibraryDirectory)'==''\">"
+            + std::string{default_directory} + "</EpochEngineLibraryDirectory>\n";
+        return properties;
+    }
+
+    [[nodiscard]] static std::string generated_child_project_link_dependencies(bool debug)
+    {
+        std::string dependencies = debug ? "sfml-graphics-d.lib;sfml-window-d.lib;sfml-system-d.lib;libcurl-d.lib;opengl32.lib;glad.lib;SDL3.lib;raylib.lib;sqlite3.lib;libcrypto.lib;ws2_32.lib;crypt32.lib;wldap32.lib;setupapi.lib;cfgmgr32.lib;version.lib;imm32.lib;winmm.lib;sapi.lib;ole32.lib;oleaut32.lib;uuid.lib;advapi32.lib;userenv.lib;bcrypt.lib;ncrypt.lib;user32.lib;gdi32.lib;shell32.lib;comdlg32.lib;d3d11.lib;dxgi.lib;d3dcompiler.lib;EpochPlatformEngine.lib;EpochAudioEngine.lib;EpochMediaEngine.lib;EpochEngine.lib;EpochGui.lib;%(AdditionalDependencies)" : "sfml-graphics.lib;sfml-window.lib;sfml-system.lib;libcurl.lib;opengl32.lib;glad.lib;SDL3.lib;raylib.lib;sqlite3.lib;libcrypto.lib;ws2_32.lib;crypt32.lib;wldap32.lib;setupapi.lib;cfgmgr32.lib;version.lib;imm32.lib;winmm.lib;sapi.lib;ole32.lib;oleaut32.lib;uuid.lib;advapi32.lib;userenv.lib;bcrypt.lib;ncrypt.lib;user32.lib;gdi32.lib;shell32.lib;comdlg32.lib;d3d11.lib;dxgi.lib;d3dcompiler.lib;EpochPlatformEngine.lib;EpochAudioEngine.lib;EpochMediaEngine.lib;EpochEngine.lib;EpochGui.lib;%(AdditionalDependencies)";
+        return dependencies;
     }
 
     static void repair_generated_project_link_dependencies(std::string& project)
     {
         // Migrate known generated lists only; retain custom linker input.
-        constexpr std::array<std::string_view, 5> legacy{"raylib.lib;setupapi.lib;cfgmgr32.lib;version.lib;imm32.lib;winmm.lib;ole32.lib;oleaut32.lib;uuid.lib;advapi32.lib;userenv.lib;bcrypt.lib;user32.lib;gdi32.lib;shell32.lib;EpochEngine.lib;EpochGui.lib;%(AdditionalDependencies)",
+        constexpr std::array<std::string_view, 7> legacy{"sfml-graphics-d.lib;sfml-window-d.lib;sfml-system-d.lib;libcurl-d.lib;opengl32.lib;glad.lib;SDL3.lib;raylib.lib;sqlite3.lib;libcrypto.lib;ws2_32.lib;crypt32.lib;wldap32.lib;setupapi.lib;cfgmgr32.lib;version.lib;imm32.lib;winmm.lib;sapi.lib;ole32.lib;oleaut32.lib;uuid.lib;advapi32.lib;userenv.lib;bcrypt.lib;ncrypt.lib;user32.lib;gdi32.lib;shell32.lib;comdlg32.lib;d3d11.lib;dxgi.lib;d3dcompiler.lib;EpochEngine.lib;EpochGui.lib;%(AdditionalDependencies)",
+            "sfml-graphics.lib;sfml-window.lib;sfml-system.lib;libcurl.lib;opengl32.lib;glad.lib;SDL3.lib;raylib.lib;sqlite3.lib;libcrypto.lib;ws2_32.lib;crypt32.lib;wldap32.lib;setupapi.lib;cfgmgr32.lib;version.lib;imm32.lib;winmm.lib;sapi.lib;ole32.lib;oleaut32.lib;uuid.lib;advapi32.lib;userenv.lib;bcrypt.lib;ncrypt.lib;user32.lib;gdi32.lib;shell32.lib;comdlg32.lib;d3d11.lib;dxgi.lib;d3dcompiler.lib;EpochEngine.lib;EpochGui.lib;%(AdditionalDependencies)",
+            "raylib.lib;setupapi.lib;cfgmgr32.lib;version.lib;imm32.lib;winmm.lib;ole32.lib;oleaut32.lib;uuid.lib;advapi32.lib;userenv.lib;bcrypt.lib;user32.lib;gdi32.lib;shell32.lib;EpochEngine.lib;EpochGui.lib;%(AdditionalDependencies)",
             "raylib.lib;setupapi.lib;cfgmgr32.lib;version.lib;imm32.lib;winmm.lib;ole32.lib;oleaut32.lib;uuid.lib;advapi32.lib;user32.lib;gdi32.lib;shell32.lib;EpochEngine.lib;EpochGui.lib;%(AdditionalDependencies)",
             "sfml-graphics-d.lib;sfml-window-d.lib;sfml-system-d.lib;winmm.lib;EpochEngine.lib;%(AdditionalDependencies)",
             "sfml-graphics.lib;sfml-window.lib;sfml-system.lib;winmm.lib;EpochEngine.lib;%(AdditionalDependencies)",
@@ -886,6 +904,174 @@
         return write_text_file(entrySource, source);
     }
 
+    inline constexpr std::array<std::string_view, 7> generated_child_runtime_assets{
+        "fonts/Roboto-Regular.ttf", "fonts/OFL.txt", "vulkan/texture.ppm",
+        "vulkan/shaders/vert.spv", "vulkan/shaders/frag.spv",
+        "vulkan/shaders/gui_vert.spv", "vulkan/shaders/gui_frag.spv"};
+
+    [[nodiscard]] static std::string generated_child_runtime_assets_msbuild()
+    {
+        std::string text = "  <ItemGroup>\n";
+        for (const auto asset : generated_child_runtime_assets)
+        {
+            const auto path = to_windows_path(std::string{asset});
+            text += "    <EpochRequiredRuntimeAsset Include=\"$(EpochRepoRoot)Engine\\assets\\" + path + "\">\n"
+                "      <TargetPath>assets\\" + path + "</TargetPath>\n"
+                "    </EpochRequiredRuntimeAsset>\n";
+        }
+        text += "  </ItemGroup>\n"
+            "  <Target Name=\"EpochVerifyRuntimeAssets\" BeforeTargets=\"PrepareForBuild\">\n"
+            "    <Error Condition=\"!Exists('%(EpochRequiredRuntimeAsset.Identity)')\" Text=\"Required Engine runtime asset is missing: %(EpochRequiredRuntimeAsset.Identity)\" />\n"
+            "  </Target>\n"
+            "  <Target Name=\"EpochCopyRequiredRuntimeAssets\" AfterTargets=\"Build\" DependsOnTargets=\"EpochCopyProjectAssets;EpochVerifyRuntimeAssets\">\n"
+            "    <Copy SourceFiles=\"@(EpochRequiredRuntimeAsset)\" DestinationFiles=\"@(EpochRequiredRuntimeAsset->'$(OutDir)%(TargetPath)')\" SkipUnchangedFiles=\"true\" />\n"
+            "  </Target>\n";
+        return text;
+    }
+
+    [[nodiscard]] static std::string generated_child_runtime_assets_cmake()
+    {
+        std::string text = "set(epoch_required_runtime_assets\n";
+        for (const auto asset : generated_child_runtime_assets)
+            text += "    \"" + std::string{asset} + "\"\n";
+        text += ")\n"
+            "foreach(epoch_asset IN LISTS epoch_required_runtime_assets)\n"
+            "    set(epoch_asset_source \"${EPOCH_REPO_ROOT}/Engine/assets/${epoch_asset}\")\n"
+            "    if(NOT EXISTS \"${epoch_asset_source}\" OR IS_DIRECTORY \"${epoch_asset_source}\" OR IS_SYMLINK \"${epoch_asset_source}\")\n"
+            "        message(FATAL_ERROR \"Required Engine runtime asset is missing or invalid: ${epoch_asset_source}\")\n"
+            "    endif()\n"
+            "    get_filename_component(epoch_asset_directory \"${epoch_asset}\" DIRECTORY)\n"
+            "    add_custom_command(TARGET epoch_project_runtime POST_BUILD\n"
+            "        COMMAND \"${CMAKE_COMMAND}\" -E make_directory \"${epoch_project_output_dir}/assets/${epoch_asset_directory}\"\n"
+            "        COMMAND \"${CMAKE_COMMAND}\" -E copy_if_different \"${epoch_asset_source}\" \"${epoch_project_output_dir}/assets/${epoch_asset}\"\n"
+            "        VERBATIM)\n"
+            "endforeach()\n";
+        return text;
+    }
+
+    [[nodiscard]] static constexpr std::string_view generated_windows_dependency_properties() noexcept
+    {
+        // Keep per-object CL freshness. MSVC MultiToolTask can treat a newer
+        // shared module PDB as proof that stale implementation objects are built.
+        // CL_MPCount still bounds the ordinary compiler's /MP worker count.
+        return
+            "    <VcpkgInstalledDir Condition=\"'$(VcpkgInstalledDir)'==''\">$(EpochRepoRoot)Artifacts\\Dependencies\\vcpkg_installed\\</VcpkgInstalledDir>\n"
+            "    <VcpkgManifestInstall>false</VcpkgManifestInstall>\n"
+            "    <VcpkgAutoBootstrap>false</VcpkgAutoBootstrap>\n"
+            "    <UseMultiToolTask>false</UseMultiToolTask>\n"
+            "    <CL_MPCount Condition=\"'$(CL_MPCount)'==''\">2</CL_MPCount>\n"
+            "    <EnforceProcessCountAcrossBuilds>true</EnforceProcessCountAcrossBuilds>\n";
+    }
+
+    [[nodiscard]] static std::string generated_windows_dependency_script()
+    {
+        // VcpkgInstalledDir is the installed BASE, not its triplet directory.
+        // Ordinary project builds consume reviewed host dependencies; installing
+        // or repairing the SDK is a separate, explicit operation.
+        return R"EPOCH(    # EPOCH_INSTALLED_DEPENDENCIES_BEGIN
+    function ConvertTo-EpochMSBuildValue([string]$value) {
+        return $value.Replace('%', '%25').Replace(';', '%3B')
+    }
+    function Get-EpochInstalledDependencies {
+        if ($Platform -ne 'x64' -or $Configuration -notin @('Debug', 'Release')) {
+            throw 'This generated Windows project supports x64 Debug or Release.'
+        }
+        $base = Join-Path $repoRoot 'Artifacts\Dependencies\vcpkg_installed'
+        if (-not [string]::IsNullOrWhiteSpace($env:EPOCH_CANDIDATE_DEPENDENCY_ROOT)) {
+            $base = $env:EPOCH_CANDIDATE_DEPENDENCY_ROOT
+        }
+        if (-not [System.IO.Path]::IsPathRooted($base)) { throw 'The installed dependency base must be an absolute path.' }
+        $base = [System.IO.Path]::GetFullPath($base).TrimEnd('\', '/')
+        $headers = @('asio.hpp', 'curl/curl.h', 'glad/glad.h', 'GLFW/glfw3.h', 'glm/glm.hpp', 'openssl/ssl.h', 'vulkan/vulkan.hpp', 'volk.h', 'shaderc/shaderc.hpp', 'spirv-tools/libspirv.hpp', 'SDL3/SDL.h', 'SFML/Graphics.hpp', 'raylib.h', 'zlib.h', 'nlohmann/json.hpp', 'httplib.h', 'sqlite3.h')
+        $libraries = @('glad.lib', 'SDL3.lib', 'raylib.lib', 'sqlite3.lib', 'libcrypto.lib', 'libssl.lib', 'glfw3dll.lib', 'volk.lib', 'vulkan-1.lib', 'shaderc.lib', 'SPIRV-Tools.lib')
+        if ($Configuration -eq 'Debug') {
+            $libraryPath = 'debug\lib'
+            $libraries += @('sfml-graphics-d.lib', 'sfml-window-d.lib', 'sfml-system-d.lib', 'libcurl-d.lib', 'zd.lib')
+        } else {
+            $libraryPath = 'lib'
+            $libraries += @('sfml-graphics.lib', 'sfml-window.lib', 'sfml-system.lib', 'libcurl.lib', 'z.lib')
+        }
+        $triplet = Join-Path $base 'x64-windows'
+        $firstMissing = $null
+        # Prefer the canonical layout even when an obsolete nested install exists.
+        foreach ($root in @($triplet, (Join-Path $triplet 'x64-windows'))) {
+            $missing = $null
+            foreach ($header in $headers) {
+                $file = Join-Path $root ('include\' + $header)
+                if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { $missing = $file; break }
+            }
+            if ($null -eq $missing) {
+                foreach ($library in $libraries) {
+                    $file = Join-Path $root (Join-Path $libraryPath $library)
+                    if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { $missing = $file; break }
+                }
+            }
+            if ($null -eq $missing) {
+                return @{ Base = (Split-Path -Parent $root) + '\'; Triplet = $root + '\' }
+            }
+            if ($null -eq $firstMissing) { $firstMissing = $missing }
+        }
+        throw ('Installed dependencies are incomplete for ' + $Configuration + '. Missing: ' + $firstMissing + '. Repair the Engine SDK dependencies explicitly; this project build will not download or reinstall them.')
+    }
+    $dependencies = Get-EpochInstalledDependencies
+    $msbuildArgs += @('/p:VcpkgManifestInstall=false', '/p:VcpkgAutoBootstrap=false', '/p:VcpkgTriplet=x64-windows', ('/p:VcpkgInstalledDir=' + (ConvertTo-EpochMSBuildValue $dependencies.Base)), ('/p:EpochVcpkgInstallRoot=' + (ConvertTo-EpochMSBuildValue $dependencies.Triplet)), '/p:PreferredToolArchitecture=x64', '/p:UseMultiToolTask=false', '/p:CL_MPCount=2', '/p:EnforceProcessCountAcrossBuilds=true')
+    ('[INFO] Installed dependency triplet: ' + $dependencies.Triplet + ' (reuse only; 2 compiler workers)') | Tee-Object -FilePath $logPath -Append
+    $previousBuildEnvironment = @{}
+    foreach ($name in @('VCPKG_MAX_CONCURRENCY', 'CMAKE_BUILD_PARALLEL_LEVEL', 'MSBUILDDISABLENODEREUSE')) {
+        $previousBuildEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
+        [Environment]::SetEnvironmentVariable($name, $(if ($name -eq 'MSBUILDDISABLENODEREUSE') { '1' } else { '2' }), 'Process')
+    }
+    # EPOCH_INSTALLED_DEPENDENCIES_END
+)EPOCH";
+    }
+
+    [[nodiscard]] static bool repair_generated_windows_dependency_script(std::string& text)
+    {
+        constexpr std::string_view begin{"    # EPOCH_INSTALLED_DEPENDENCIES_BEGIN\n"};
+        constexpr std::string_view end{"    # EPOCH_INSTALLED_DEPENDENCIES_END\n"};
+        if (const auto at = text.find(begin); at != std::string::npos)
+        {
+            const auto last = text.find(end, at + begin.size());
+            if (last == std::string::npos) return false;
+            text.replace(at, last + end.size() - at, generated_windows_dependency_script());
+        }
+        else
+        {
+            constexpr std::string_view old =
+                "    if (-not [string]::IsNullOrWhiteSpace($env:EPOCH_CANDIDATE_DEPENDENCY_ROOT)) {\n"
+                "        $dependencyRoot = $env:EPOCH_CANDIDATE_DEPENDENCY_ROOT.TrimEnd('\\', '/') + '\\'\n"
+                "        $tripletRoot = Join-Path $dependencyRoot 'x64-windows'\n"
+                "        if (-not (Test-Path -LiteralPath (Join-Path $tripletRoot 'include'))) { $tripletRoot = Join-Path $tripletRoot 'x64-windows' }\n"
+                "        if (-not (Test-Path -LiteralPath (Join-Path $tripletRoot 'include'))) { throw 'The admitted host dependency triplet is unavailable.' }\n"
+                "        $msbuildArgs += @('/p:VcpkgManifestInstall=false', '/p:VcpkgAutoBootstrap=false', ('/p:VcpkgInstalledDir=' + $dependencyRoot), ('/p:EpochVcpkgInstallRoot=' + $tripletRoot + '\\'))\n"
+                "    }\n";
+            const auto legacyAt = text.find(old);
+            if (legacyAt == std::string::npos) return false;
+            text.replace(legacyAt, old.size(), generated_windows_dependency_script());
+        }
+        constexpr std::string_view previousFinally =
+            "    } finally { $ErrorActionPreference = $nativeErrorPreference }\n";
+        replace_all(text, previousFinally,
+            "    } finally {\n"
+            "        $ErrorActionPreference = $nativeErrorPreference\n"
+            "        foreach ($name in $previousBuildEnvironment.Keys) { [Environment]::SetEnvironmentVariable($name, $previousBuildEnvironment[$name], 'Process') }\n"
+            "    }\n");
+        constexpr std::string_view previousCandidates = R"EPOCH(    $candidates = @(
+        'C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe',
+        'C:\Program Files\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe'
+    )
+)EPOCH";
+        constexpr std::string_view currentCandidates = R"EPOCH(    $candidates = @(
+        'C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\amd64\MSBuild.exe',
+        'C:\Program Files\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\amd64\MSBuild.exe',
+        'C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe',
+        'C:\Program Files\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe'
+    )
+)EPOCH";
+        replace_all(text, previousCandidates, currentCandidates);
+        return true;
+    }
+
     [[nodiscard]] static bool repair_generated_windows_child_project_build_files(const fs::path& root)
     {
         const fs::path projectFile = generated_project_windows_vcxproj_path(root);
@@ -917,14 +1103,14 @@
         const std::string projectReferenceProperties =
             "SolutionDir=" + repoRootXml
             + "\\;VcpkgManifestRoot=" + repoRootXml
-            + "\\Engine\\;EpochExtraDefines=EPOCH_MAIN_IN_MAIN_CPP=1;PlatformToolset=v143";
+            + "\\Engine\\;PlatformToolset=v143;VcpkgManifestInstall=false;VcpkgAutoBootstrap=false;VcpkgInstalledDir=$(VcpkgInstalledDir);EpochVcpkgInstallRoot=$(EpochVcpkgInstallRoot);UseMultiToolTask=$(UseMultiToolTask);CL_MPCount=$(CL_MPCount);EnforceProcessCountAcrossBuilds=true";
         const std::string epochGuiProjectReference =
             "    <ProjectReference Include=\"" + epochGuiProjectXml + "\">\n"
             "      <Project>{7B41A9B2-4B7E-4B5D-9B39-68D2408BCA90}</Project>\n"
             "      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>\n"
             "      <LinkLibraryDependencies>false</LinkLibraryDependencies>\n"
             "      <AdditionalProperties>SolutionDir=" + repoRootXml
-                + "\\;PlatformToolset=v143</AdditionalProperties>\n"
+                + "\\;PlatformToolset=v143;VcpkgManifestInstall=false;VcpkgAutoBootstrap=false;VcpkgInstalledDir=$(VcpkgInstalledDir);EpochVcpkgInstallRoot=$(EpochVcpkgInstallRoot);UseMultiToolTask=$(UseMultiToolTask);CL_MPCount=$(CL_MPCount);EnforceProcessCountAcrossBuilds=true</AdditionalProperties>\n"
             "    </ProjectReference>\n";
 
         std::error_code ec;
@@ -959,10 +1145,34 @@
                     return false;
                 projectText.insert(groupEndPosition, epochGuiProjectReference);
             }
-            replace_all(projectText, "$(MSBuildThisFileDirectory)bin\\windows\\", "$(MSBuildThisFileDirectory)build\\bin\\windows\\");
-            replace_all(projectText, "$(MSBuildThisFileDirectory)build\\windows\\obj\\", "$(MSBuildThisFileDirectory)build\\obj\\msvc\\");
+            replace_all(projectText, "$(MSBuildThisFileDirectory)bin\\windows\\", "$(MSBuildThisFileDirectory)Artifacts\\Runtime\\windows\\");
+            replace_all(projectText, "$(MSBuildThisFileDirectory)build\\bin\\windows\\", "$(MSBuildThisFileDirectory)Artifacts\\Runtime\\windows\\");
+            replace_all(projectText, "$(MSBuildThisFileDirectory)build\\obj\\msvc\\", "$(MSBuildThisFileDirectory)Artifacts\\Intermediate\\msvc\\");
+            replace_all(projectText, "$(MSBuildThisFileDirectory)build\\windows\\obj\\", "$(MSBuildThisFileDirectory)Artifacts\\Intermediate\\msvc\\");
+            if (epochengine::build_layout::source_layout(repoRoot) == epochengine::build_layout::Layout::Artifacts)
+            {
+                replace_all(projectText, "$(EpochRepoRoot)build\\bin\\windows\\",
+                    "$(EpochRepoRoot)Artifacts\\Runtime\\windows\\");
+                replace_all(projectText, "$([MSBuild]::EnsureTrailingSlash('$(EpochBuildRoot)'))bin\\windows\\",
+                    "$([MSBuild]::EnsureTrailingSlash('$(EpochBuildRoot)'))Runtime\\windows\\");
+                replace_all(projectText, "$(EpochRepoRoot)Engine\\vcpkg_installed\\</VcpkgInstalledDir>",
+                    "$(EpochRepoRoot)Artifacts\\Dependencies\\vcpkg_installed\\</VcpkgInstalledDir>");
+            }
             replace_all(projectText, "$(EpochRepoRoot)x64\\$(Configuration)\\;",
                 "$(EpochRepoRoot)" + engineLibraryRelative + ";");
+            if (projectText.find("<EpochEngineLibraryDirectory") == std::string::npos)
+            {
+                constexpr std::string_view rootEnd = "</EpochRepoRoot>\n";
+                const auto rootEndPosition = projectText.find(rootEnd);
+                if (rootEndPosition == std::string::npos) return false;
+                projectText.insert(rootEndPosition + rootEnd.size(), generated_child_project_library_properties(
+                    "$(EpochRepoRoot)" + engineLibraryRelative, epochengine::build_layout::edition,
+                    (epochengine::build_layout::source_layout(repoRoot) == epochengine::build_layout::Layout::Shared
+                        || epochengine::build_layout::source_layout(repoRoot) == epochengine::build_layout::Layout::Artifacts),
+                    epochengine::build_layout::source_layout(repoRoot) == epochengine::build_layout::Layout::Artifacts));
+            }
+            replace_all(projectText, "$(EpochRepoRoot)" + engineLibraryRelative + ";",
+                "$(EpochEngineLibraryDirectory);");
             replace_all(projectText, "StaticLib1.lib", "EpochEngine.lib");
             replace_all(
                 projectText,
@@ -1009,7 +1219,33 @@
                 projectText,
                 "<Target Name=\"EpochCopyReleaseVcpkgRuntimeDlls\" AfterTargets=\"Build\" Condition=\"'$(Configuration)|$(Platform)'=='Release|x64'\">",
                 "<Target Name=\"EpochCopyReleaseVcpkgRuntimeDlls\" AfterTargets=\"Build\" Condition=\"'$(Configuration)|$(Platform)'=='Release|x64' And '$(VcpkgUseStatic)'!='true'\">");
+            replace_all(projectText, "EpochExtraDefines=EPOCH_MAIN_IN_MAIN_CPP=1;", "");
+            replace_all(projectText,
+                "<EpochExtraDefines Condition=\"'$(EpochExtraDefines)'==''\">EPOCH_MAIN_IN_MAIN_CPP=1</EpochExtraDefines>", "");
             repair_generated_project_link_dependencies(projectText);
+            replace_all(projectText,
+                "$(EpochRepoRoot)Engine\\vcpkg_installed\\$(VcpkgTriplet)\\</EpochVcpkgInstallRoot>",
+                "$(VcpkgInstalledDir)$(VcpkgTriplet)\\</EpochVcpkgInstallRoot>");
+            replace_all(projectText,
+                "<AdditionalProperties>SolutionDir=" + repoRootXml + "\\;PlatformToolset=v143</AdditionalProperties>",
+                "<AdditionalProperties>SolutionDir=" + repoRootXml + "\\;PlatformToolset=v143;VcpkgManifestInstall=false;VcpkgAutoBootstrap=false;VcpkgInstalledDir=$(VcpkgInstalledDir);EpochVcpkgInstallRoot=$(EpochVcpkgInstallRoot);UseMultiToolTask=$(UseMultiToolTask);CL_MPCount=$(CL_MPCount);EnforceProcessCountAcrossBuilds=true</AdditionalProperties>");
+            replace_all(projectText,
+                "Condition=\"Exists('$(EpochVcpkgNestedInstallRoot)include\\')\"",
+                "Condition=\"!Exists('$(EpochVcpkgInstallRoot)include\\') And Exists('$(EpochVcpkgNestedInstallRoot)include\\')\"");
+            if (projectText.find("<VcpkgInstalledDir") == std::string::npos)
+            {
+                constexpr std::string_view after{"</VcpkgTriplet>\n"};
+                const auto at = projectText.find(after);
+                if (at == std::string::npos) return false;
+                projectText.insert(at + after.size(), generated_windows_dependency_properties());
+            }
+            if (projectText.find("<Target Name=\"EpochCopyRequiredRuntimeAssets\"") == std::string::npos)
+            {
+                constexpr std::string_view before{"  <ImportGroup Label=\"ExtensionTargets\" />"};
+                const auto at = projectText.find(before);
+                if (at == std::string::npos) return false;
+                projectText.insert(at, generated_child_runtime_assets_msbuild());
+            }
             // Repair already materialized child .vcxproj files as well as newly
             // generated files. Without longPathAware the deep disposable test
             // roots can fail at ~260-character Windows artifact paths.
@@ -1039,7 +1275,16 @@
         {
             std::string scriptText = read_text_file(buildScript);
             const std::string original = scriptText;
-            replace_all(scriptText, "('bin\\windows\\' + $Configuration", "('build\\bin\\windows\\' + $Configuration");
+            if (scriptText.find("EPOCH_MANAGED_GENERATED_FILE: windows_build_v1") < 256u)
+            {
+                replace_all(scriptText, "'/clp:ErrorsOnly'", "'/v:minimal'");
+                replace_all(scriptText, "[string]$Configuration = 'Debug'", "[string]$Configuration = 'Release'");
+            }
+            replace_all(scriptText, "'/p:EpochExtraDefines=EPOCH_MAIN_IN_MAIN_CPP=1',", "");
+            replace_all(scriptText, "('bin\\windows\\' + $Configuration", "('Artifacts\\Runtime\\windows\\' + $Configuration");
+            replace_all(scriptText, "('build\\bin\\windows\\' + $Configuration", "('Artifacts\\Runtime\\windows\\' + $Configuration");
+            replace_all(scriptText, "'build\\logs'", "'Artifacts\\Reports'");
+            replace_all(scriptText, "'build\\generated-project-build.lock'", "'Artifacts\\generated-project-build.lock'");
             const bool scriptRootsRepaired =
                 replace_delimited_value(
                     scriptText,
@@ -1052,6 +1297,8 @@
                     "'",
                     vcpkgManifestRootPowerShell);
             if (!scriptRootsRepaired)
+                return false;
+            if (!repair_generated_windows_dependency_script(scriptText))
                 return false;
             if (scriptText.find("'/p:PlatformToolset=v143'") == std::string::npos)
             {
@@ -1073,6 +1320,7 @@
         EditorProjectKind kind{ EditorProjectKind::Game };
         std::string project_name{};
         std::string project_id{};
+        std::string scene_identity{};
         fs::path root{};
         fs::path world_file{};
         std::string world_name{};
@@ -1111,7 +1359,8 @@
             entities = sandbox_seed_entities();
 
         epochengine::scene::SceneSnapshot snapshot{};
-        snapshot.scene_id = "project:" + spec.project_id;
+        snapshot.scene_id = spec.scene_identity.empty()
+            ? "project:" + spec.project_id : spec.scene_identity;
         snapshot.project_id = spec.project_id;
         snapshot.world_name = spec.world_name;
         snapshot.document_kind = std::string{kind_text};
@@ -1223,6 +1472,7 @@
             "  \"kind\": \"kernel-engine-asset-script-package\",\n"
             "  \"ownership\": \"engine-owned; project-selectable\",\n"
             "  \"default_script\": \"engine_arcade_scene\",\n"
+            "  \"script_source\": \"scripts/engine_arcade_scene.ascript.cpp\",\n"
             "  \"default_scene\": \"" + json_escape(defaultScene) + "\",\n"
             "  \"runtime_role\": \"built-in scenes for render-to-texture arcade cabinets and in-game terminals\",\n"
             "  \"render_asset_role\": \"" + json_escape(renderAssetRole) + "\",\n"
@@ -1381,15 +1631,15 @@
         const fs::path source = root / "source";
         const fs::path include = root / "include";
         const fs::path modules = root / "modules";
-        const fs::path assets = root / "assets";
+        const fs::path assets = root / "Assets";
         const fs::path assetPackages = assets / "packages";
         const fs::path resource = root / "resource";
-        const fs::path buildRoot = root / "build";
-        const fs::path buildLogs = buildRoot / "logs";
-        const fs::path outputDebugDir = root / "build" / "bin" / "windows" / "Debug" / "x64";
-        const fs::path outputReleaseDir = root / "build" / "bin" / "windows" / "Release" / "x64";
-        const fs::path outputLinuxDebugDir = root / "build" / "bin" / "linux" / "Debug" / "x64";
-        const fs::path outputLinuxReleaseDir = root / "build" / "bin" / "linux" / "Release" / "x64";
+        const fs::path buildRoot = root / "Artifacts";
+        const fs::path buildLogs = buildRoot / "Reports";
+        const fs::path outputDebugDir = root / "Artifacts" / "Runtime" / "windows" / "Debug" / "x64";
+        const fs::path outputReleaseDir = root / "Artifacts" / "Runtime" / "windows" / "Release" / "x64";
+        const fs::path outputLinuxDebugDir = root / "Artifacts" / "Runtime" / "linux" / "Debug" / "x64";
+        const fs::path outputLinuxReleaseDir = root / "Artifacts" / "Runtime" / "linux" / "Release" / "x64";
         const fs::path manifest = root / "project.epoch.json";
         const fs::path readme = root / "README.md";
         const fs::path pathsFile = root / "project.paths.txt";
@@ -1460,7 +1710,7 @@
                     .summary = "Candidate project creation refused a scene or script outside its private project."};
         }
         const fs::path engineArcadePackageFile = assetPackages / "engine_arcade.package.json";
-        const fs::path engineArcadeScriptFile = scripts / "script.engine_arcade_scene.cpp";
+        const fs::path engineArcadeScriptFile = scripts / "engine_arcade_scene.ascript.cpp";
         const fs::path inputProfileFile = spec.input_profile_path.empty()
             ? fs::path{}
             : (root / fs::path{spec.input_profile_path}).lexically_normal();
@@ -1475,7 +1725,6 @@
             root / "Assets" / "Audio" / "default_ambient.wav";
         const fs::path rootAbsolute = fs::absolute(root).lexically_normal();
         const std::string artifactStem = generated_project_artifact_stem(root);
-        const fs::path manifestAbsolute = fs::absolute(manifest).lexically_normal();
         const fs::path repoEngineInclude = (repoRoot / "Engine" / "include").lexically_normal();
         const fs::path repoEngineProject = (repoRoot / "Engine" / "examples" / "EpochEngine" / "EpochEngine.vcxproj").lexically_normal();
         const fs::path repoEpochGuiProject = (repoRoot / "Engine" / "dep" / "EpochGui" / "EpochGui.vcxproj").lexically_normal();
@@ -1510,13 +1759,10 @@
             to_windows_path((repoRoot / "Engine").string()));
         const std::string repoEngineProjectWin = xml_escape(to_windows_path(repoEngineProject.string()));
         const std::string repoEpochGuiProjectWin = xml_escape(to_windows_path(repoEpochGuiProject.string()));
-        const std::string manifestAbsoluteText = manifestAbsolute.generic_string();
-        const std::string rootAbsoluteText = rootAbsolute.generic_string();
-        const std::string aiProfileAbsoluteText =
-            (rootAbsolute / "Assets" / "AI" / "project_ai.epochai")
-                .generic_string();
-        const std::string worldFileAbsoluteText =
-            fs::absolute(worldFile).lexically_normal().generic_string();
+        const auto relativeWorld = fs::absolute(worldFile).lexically_normal().lexically_relative(rootAbsolute);
+        const std::string declaredWorld = !relativeWorld.empty() && !relativeWorld.is_absolute()
+                && *relativeWorld.begin() != ".."
+            ? relativeWorld.generic_string() : worldFile.generic_string();
 
         std::error_code ec;
         fs::create_directories(worlds, ec);
@@ -1657,7 +1903,7 @@
             "  \"kind\": \"" + kindText + "\",\n"
             "  \"template_family\": \"" + json_escape(spec.template_family) + "\",\n"
             "  \"engine_edition\": \"" + json_escape(sourceEdition) + "\",\n"
-            "  \"scene\": \"" + json_escape(worldFile.generic_string()) + "\",\n"
+            "  \"scene\": \"" + json_escape(declaredWorld) + "\",\n"
             "  \"default_script\": \"" + json_escape(spec.script_id) + "\",\n"
             + demoModelLine
             + tileMapManifestLine
@@ -1676,7 +1922,7 @@
             "  \"engine_script_root\": \"Engine/src/scripts\",\n"
             "  \"engine_resource_root\": \"Engine/resource\",\n"
             "  \"build_fragment\": \"" + json_escape(cmakeFragment.filename().generic_string()) + "\",\n"
-            "  \"entry_source\": \"" + json_escape(entrySource.generic_string()) + "\",\n"
+            "  \"entry_source\": \"source/epoch.main.cpp\",\n"
             "  \"windows_project\": \"" + json_escape(windowsProject.filename().generic_string()) + "\",\n"
             "  \"windows_build_script\": \"" + json_escape(windowsBuildScript.filename().generic_string()) + "\",\n"
             "  \"linux_build_script\": \"" + json_escape(linuxBuildScript.filename().generic_string()) + "\",\n"
@@ -1785,6 +2031,9 @@
             "#endif\n"
             "#include <epoch.edition.hpp>\n"
             "#include <epoch.engine.hpp>\n\n"
+            "#if defined(EPOCH_PROJECT_PLANETARY_RUNTIME)\n"
+            "extern \"C\" bool epoch_install_planetary_runtime(const char*, const char*) noexcept;\n"
+            "#endif\n\n"
             "static_assert(EPOCH_SOURCE_EDITION_PUBLIC == "
             + std::string{epochengine::updater::distribution::public_edition ? "1" : "0"}
             + ", \"Generated project source edition differs\");\n\n"
@@ -1803,40 +2052,29 @@
             "        }\n"
             "        return false;\n"
             "    }\n\n"
-            "    void boot_project_shell()\n"
+            "    epochengine::project::RuntimeProjectBinding boot_project_shell()\n"
             "    {\n"
-            "#if defined(_WIN32)\n"
-            "        _putenv_s(\"EPOCH_EDITOR_PROJECT_ID\", \"" + cxx_escape(spec.project_id) + "\");\n"
-            "        _putenv_s(\"EPOCH_EDITOR_PROJECT_MANIFEST\", \"" + cxx_escape(manifestAbsoluteText) + "\");\n"
-            "        _putenv_s(\"EPOCH_EDITOR_PROJECT_ROOT\", \"" + cxx_escape(rootAbsoluteText) + "\");\n"
-            "        _putenv_s(\"EPOCH_PROJECT_AI_PROFILE\", \"" + cxx_escape(aiProfileAbsoluteText) + "\");\n"
-            "#else\n"
-            "        setenv(\"EPOCH_EDITOR_PROJECT_ID\", \"" + cxx_escape(spec.project_id) + "\", 1);\n"
-            "        setenv(\"EPOCH_EDITOR_PROJECT_MANIFEST\", \"" + cxx_escape(manifestAbsoluteText) + "\", 1);\n"
-            "        setenv(\"EPOCH_EDITOR_PROJECT_ROOT\", \"" + cxx_escape(rootAbsoluteText) + "\", 1);\n"
-            "        setenv(\"EPOCH_PROJECT_AI_PROFILE\", \"" + cxx_escape(aiProfileAbsoluteText) + "\", 1);\n"
-            "#endif\n"
+            "        return epochengine::project::BindRuntimeProject(\"" + cxx_escape(spec.project_id) + "\");\n"
             "    }\n"
             "\n"
             "    void log_project_shell_self_test_line(const char* message) noexcept\n"
             "    {\n"
             "        core_log_write(1u, \"Epoch.ChildProject\", message ? message : \"\");\n"
             "    }\n\n"
-            "    int log_project_shell_self_test() noexcept\n"
+            "    int log_project_shell_self_test(const epochengine::project::RuntimeProjectBinding& project) noexcept\n"
             "    {\n"
             "        log_project_shell_self_test_line(\"" + cxx_escape(selfTestTitle) + "\");\n"
             "        log_project_shell_self_test_line(\"project_id=" + cxx_escape(spec.project_id) + "\");\n"
             "        log_project_shell_self_test_line(\"project_name=" + cxx_escape(spec.project_name) + "\");\n"
-            "        log_project_shell_self_test_line(\"project_root=" + cxx_escape(rootAbsoluteText) + "\");\n"
-            "        log_project_shell_self_test_line(\"manifest=" + cxx_escape(manifestAbsoluteText) + "\");\n"
-            "        log_project_shell_self_test_line(\"ai_profile=" + cxx_escape(aiProfileAbsoluteText) + "\");\n"
+            "        log_project_shell_self_test_line((std::string{\"project_root=\"} + project.project_root).c_str());\n"
+            "        log_project_shell_self_test_line((std::string{\"manifest=\"} + project.manifest_path).c_str());\n"
             "        log_project_shell_self_test_line(\"engine_integration=" + cxx_escape(integrationMode) + "\");\n"
             "        log_project_shell_self_test_line(\"project_format=epoch-project-v1\");\n"
             "        log_project_shell_self_test_line(\"build_profile=epoch-runtime-static\");\n"
             "        const epochengine::project::ArtifactAcceptanceRequest request{\n"
             "            .project_id = \"" + cxx_escape(spec.project_id) + "\",\n"
-            "            .project_root = \"" + cxx_escape(rootAbsoluteText) + "\",\n"
-            "            .scene_path = \"" + cxx_escape(worldFileAbsoluteText) + "\",\n"
+            "            .project_root = project.project_root,\n"
+            "            .scene_path = project.scene_path,\n"
             "            .tilemap_path = \"" + cxx_escape(spec.tilemap_path) + "\",\n"
             "            .input_profile_path = \"" + cxx_escape(spec.input_profile_path) + "\",\n"
             "            .sprite_animation_path = \"" + cxx_escape(spec.sprite_animation_path) + "\",\n"
@@ -1902,12 +2140,21 @@
             "        log_project_shell_self_test_line(\"" + cxx_escape(versionTitle + spec.project_name) + "\");\n"
             "        return 0;\n"
             "    }\n"
-            "    if (has_arg(argc, argv, \"--project-self-test\"))\n"
+            "    const auto project = boot_project_shell();\n"
+            "    if (!project.succeeded)\n"
             "    {\n"
-            "        boot_project_shell();\n"
-            "        return log_project_shell_self_test();\n"
+            "        log_project_shell_self_test_line(project.summary.c_str());\n"
+            "        return 2;\n"
             "    }\n"
-            "    boot_project_shell();\n"
+            "#if defined(EPOCH_PROJECT_PLANETARY_RUNTIME)\n"
+            "    if (!epoch_install_planetary_runtime(project.project_root.c_str(), \"" + cxx_escape(spec.project_id) + "\"))\n"
+            "    {\n"
+            "        log_project_shell_self_test_line(\"The planetary runtime does not match this project's approved source and settings.\");\n"
+            "        return 3;\n"
+            "    }\n"
+            "#endif\n"
+            "    if (has_arg(argc, argv, \"--project-self-test\"))\n"
+            "        return log_project_shell_self_test(project);\n"
             + make_project_entry_run_text(spec.kind) +
             "    return 0;\n"
             "}\n";
@@ -1950,6 +2197,10 @@
             "        \"${EPOCH_REPO_ROOT}/Engine/include\"\n"
             "        \"${EPOCH_REPO_ROOT}/Engine\")\n"
             "    target_link_libraries(${target} PRIVATE epoch)\n"
+            "    set(epoch_dependency_fragment \"${CMAKE_CURRENT_FUNCTION_LIST_DIR}/Packages/epoch.dependencies.cmake\")\n"
+            "    if(EXISTS \"${epoch_dependency_fragment}\")\n"
+            "        include(\"${epoch_dependency_fragment}\")\n"
+            "    endif()\n"
             "endfunction()\n";
 
         const std::string cmakeListsText =
@@ -1967,9 +2218,9 @@
             "        \"/MANIFESTINPUT:${EPOCH_REPO_ROOT}/Engine/resource/epoch.manifest\")\n"
             "endif()\n"
             "if(WIN32)\n"
-            "    set(epoch_project_output_dir \"${CMAKE_CURRENT_LIST_DIR}/build/bin/windows/${CMAKE_BUILD_TYPE}/x64\")\n"
+            "    set(epoch_project_output_dir \"${CMAKE_CURRENT_LIST_DIR}/Artifacts/Runtime/windows/${CMAKE_BUILD_TYPE}/x64\")\n"
             "else()\n"
-            "    set(epoch_project_output_dir \"${CMAKE_CURRENT_LIST_DIR}/build/bin/linux/${CMAKE_BUILD_TYPE}/x64\")\n"
+            "    set(epoch_project_output_dir \"${CMAKE_CURRENT_LIST_DIR}/Artifacts/Runtime/linux/${CMAKE_BUILD_TYPE}/x64\")\n"
             "endif()\n"
             "set_target_properties(epoch_project_runtime PROPERTIES\n"
             "    OUTPUT_NAME \"" + json_escape(artifactStem) + "\"\n"
@@ -1988,6 +2239,7 @@
             "            \"$<TARGET_FILE_DIR:epoch_project_runtime>/Assets\"\n"
             "        VERBATIM)\n"
             "endif()\n"
+            + generated_child_runtime_assets_cmake() +
             "message(STATUS \"Epoch generated child target: epoch_project_runtime\")\n";
         const std::string windowsProjectText =
             "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
@@ -2011,13 +2263,13 @@
             "      <Project>{BBA639B7-2B54-4E38-90AC-667FC3303475}</Project>\n"
             "      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>\n"
             "      <LinkLibraryDependencies>false</LinkLibraryDependencies>\n"
-            "      <AdditionalProperties>SolutionDir=" + repoRootWin + "\\;VcpkgManifestRoot=" + repoRootWin + "\\Engine\\;EpochExtraDefines=EPOCH_MAIN_IN_MAIN_CPP=1;PlatformToolset=v143</AdditionalProperties>\n"
+            "      <AdditionalProperties>SolutionDir=" + repoRootWin + "\\;VcpkgManifestRoot=" + repoRootWin + "\\Engine\\;PlatformToolset=v143;VcpkgManifestInstall=false;VcpkgAutoBootstrap=false;VcpkgInstalledDir=$(VcpkgInstalledDir);EpochVcpkgInstallRoot=$(EpochVcpkgInstallRoot);UseMultiToolTask=$(UseMultiToolTask);CL_MPCount=$(CL_MPCount);EnforceProcessCountAcrossBuilds=true</AdditionalProperties>\n"
             "    </ProjectReference>\n"
             "    <ProjectReference Include=\"" + repoEpochGuiProjectWin + "\">\n"
             "      <Project>{7B41A9B2-4B7E-4B5D-9B39-68D2408BCA90}</Project>\n"
             "      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>\n"
             "      <LinkLibraryDependencies>false</LinkLibraryDependencies>\n"
-            "      <AdditionalProperties>SolutionDir=" + repoRootWin + "\\;PlatformToolset=v143</AdditionalProperties>\n"
+            "      <AdditionalProperties>SolutionDir=" + repoRootWin + "\\;PlatformToolset=v143;VcpkgManifestInstall=false;VcpkgAutoBootstrap=false;VcpkgInstalledDir=$(VcpkgInstalledDir);EpochVcpkgInstallRoot=$(EpochVcpkgInstallRoot);UseMultiToolTask=$(UseMultiToolTask);CL_MPCount=$(CL_MPCount);EnforceProcessCountAcrossBuilds=true</AdditionalProperties>\n"
             "    </ProjectReference>\n"
             "  </ItemGroup>\n"
             "  <PropertyGroup Label=\"Globals\">\n"
@@ -2053,21 +2305,27 @@
             "  <PropertyGroup Label=\"UserMacros\" />\n"
              "  <PropertyGroup>\n"
              "    <EpochRepoRoot>" + repoRootWin + "\\</EpochRepoRoot>\n"
+            + generated_child_project_library_properties(
+                "$(EpochRepoRoot)" + engineLibraryRelative, epochengine::build_layout::edition,
+                (epochengine::build_layout::source_layout(repoRoot) == epochengine::build_layout::Layout::Shared
+                        || epochengine::build_layout::source_layout(repoRoot) == epochengine::build_layout::Layout::Artifacts),
+                    epochengine::build_layout::source_layout(repoRoot) == epochengine::build_layout::Layout::Artifacts)
+            +
             "    <SolutionDir Condition=\"'$(SolutionDir)'==''\">$(EpochRepoRoot)</SolutionDir>\n"
             "    <VcpkgManifestRoot Condition=\"'$(VcpkgManifestRoot)'==''\">$(EpochRepoRoot)Engine\\</VcpkgManifestRoot>\n"
-            "    <EpochExtraDefines Condition=\"'$(EpochExtraDefines)'==''\">EPOCH_MAIN_IN_MAIN_CPP=1</EpochExtraDefines>\n"
              "    <VcpkgTriplet Condition=\"'$(VcpkgTriplet)'==''\">x64-windows</VcpkgTriplet>\n"
-             "    <EpochVcpkgInstallRoot Condition=\"'$(EpochVcpkgInstallRoot)'==''\">$(EpochRepoRoot)Engine\\vcpkg_installed\\$(VcpkgTriplet)\\</EpochVcpkgInstallRoot>\n"
+            + std::string{generated_windows_dependency_properties()} +
+             "    <EpochVcpkgInstallRoot Condition=\"'$(EpochVcpkgInstallRoot)'==''\">$(VcpkgInstalledDir)$(VcpkgTriplet)\\</EpochVcpkgInstallRoot>\n"
              "    <EpochVcpkgNestedInstallRoot>$(EpochVcpkgInstallRoot)$(VcpkgTriplet)\\</EpochVcpkgNestedInstallRoot>\n"
-            "    <EpochVcpkgInstallRoot Condition=\"Exists('$(EpochVcpkgNestedInstallRoot)include\\')\">$(EpochVcpkgNestedInstallRoot)</EpochVcpkgInstallRoot>\n"
+            "    <EpochVcpkgInstallRoot Condition=\"!Exists('$(EpochVcpkgInstallRoot)include\\') And Exists('$(EpochVcpkgNestedInstallRoot)include\\')\">$(EpochVcpkgNestedInstallRoot)</EpochVcpkgInstallRoot>\n"
             "  </PropertyGroup>\n"
             "  <PropertyGroup Condition=\"'$(Configuration)|$(Platform)'=='Debug|x64'\">\n"
-            "    <OutDir>$(MSBuildThisFileDirectory)build\\bin\\windows\\Debug\\x64\\</OutDir>\n"
-            "    <IntDir>$(MSBuildThisFileDirectory)build\\obj\\msvc\\Debug\\x64\\</IntDir>\n"
+            "    <OutDir>$(MSBuildThisFileDirectory)Artifacts\\Runtime\\windows\\Debug\\x64\\</OutDir>\n"
+            "    <IntDir>$(MSBuildThisFileDirectory)Artifacts\\Intermediate\\msvc\\Debug\\x64\\</IntDir>\n"
             "  </PropertyGroup>\n"
             "  <PropertyGroup Condition=\"'$(Configuration)|$(Platform)'=='Release|x64'\">\n"
-            "    <OutDir>$(MSBuildThisFileDirectory)build\\bin\\windows\\Release\\x64\\</OutDir>\n"
-            "    <IntDir>$(MSBuildThisFileDirectory)build\\obj\\msvc\\Release\\x64\\</IntDir>\n"
+            "    <OutDir>$(MSBuildThisFileDirectory)Artifacts\\Runtime\\windows\\Release\\x64\\</OutDir>\n"
+            "    <IntDir>$(MSBuildThisFileDirectory)Artifacts\\Intermediate\\msvc\\Release\\x64\\</IntDir>\n"
             "  </PropertyGroup>\n"
             "  <PropertyGroup Label=\"Vcpkg\">\n"
             "    <VcpkgEnableManifest>true</VcpkgEnableManifest>\n"
@@ -2092,7 +2350,7 @@
             "    <Link>\n"
             "      <SubSystem>Console</SubSystem>\n"
             "      <GenerateDebugInformation>true</GenerateDebugInformation>\n"
-            "      <AdditionalLibraryDirectories>$(EpochRepoRoot)" + engineLibraryRelative + ";$(EpochVcpkgInstallRoot)debug\\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>\n"
+            "      <AdditionalLibraryDirectories>$(EpochEngineLibraryDirectory);$(EpochVcpkgInstallRoot)debug\\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>\n"
             "      <AdditionalDependencies>" + std::string(generated_child_project_link_dependencies(true)) + "</AdditionalDependencies>\n"
             "      <EntryPointSymbol>mainCRTStartup</EntryPointSymbol>\n"
             "    </Link>\n"
@@ -2119,7 +2377,7 @@
             "    <Link>\n"
             "      <SubSystem>Console</SubSystem>\n"
             "      <GenerateDebugInformation>true</GenerateDebugInformation>\n"
-            "      <AdditionalLibraryDirectories>$(EpochRepoRoot)" + engineLibraryRelative + ";$(EpochVcpkgInstallRoot)lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>\n"
+            "      <AdditionalLibraryDirectories>$(EpochEngineLibraryDirectory);$(EpochVcpkgInstallRoot)lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>\n"
             "      <AdditionalDependencies>" + std::string(generated_child_project_link_dependencies(false)) + "</AdditionalDependencies>\n"
             "      <EntryPointSymbol>mainCRTStartup</EntryPointSymbol>\n"
             "    </Link>\n"
@@ -2128,6 +2386,7 @@
             "      <AdditionalManifestFiles>$(EpochRepoRoot)Engine\\resource\\epoch.manifest;%(AdditionalManifestFiles)</AdditionalManifestFiles>\n"
             "    </Manifest>\n"
             "  </ItemDefinitionGroup>\n"
+            "  <Import Project=\"Packages\\epoch.dependencies.props\" Condition=\"Exists('Packages\\epoch.dependencies.props')\" />\n"
             "  <Import Project=\"$(VCTargetsPath)\\Microsoft.Cpp.targets\" />\n"
             "  <Target Name=\"EpochVerifyGeneratedSource\">\n"
             "    <Exec Command=\"python &quot;$(EpochRepoRoot)Tools/build/verify_epoch_project_source.py&quot; --root &quot;$(EpochRepoRoot).&quot; --edition " + xml_escape(sourceEdition) + "\" />\n"
@@ -2150,13 +2409,14 @@
             "    </ItemGroup>\n"
             "    <Copy SourceFiles=\"@(EpochProjectAssetFiles)\" DestinationFiles=\"@(EpochProjectAssetFiles->'$(OutDir)Assets\\%(RecursiveDir)%(Filename)%(Extension)')\" SkipUnchangedFiles=\"true\" />\n"
             "  </Target>\n"
+            + generated_child_runtime_assets_msbuild() +
             "  <ImportGroup Label=\"ExtensionTargets\" />\n"
             "</Project>\n";
 
         const std::string windowsBuildScriptText =
             "# EPOCH_MANAGED_GENERATED_FILE: windows_build_v1\n"
             "param(\n"
-            "    [string]$Configuration = 'Debug',\n"
+            "    [string]$Configuration = 'Release',\n"
             "    [string]$Platform = 'x64'\n"
             ")\n"
             "$ErrorActionPreference = 'Stop'\n"
@@ -2167,17 +2427,19 @@
             "if ($LASTEXITCODE -ne 0) { throw 'Generated project source verification failed.' }\n"
             "$solutionDir = $repoRoot.TrimEnd('\\\\') + '\\\\'\n"
             "$vcpkgManifestRoot = '" + vcpkgManifestRootPowerShell + "'\n"
-            "$logDir = Join-Path $projectRoot 'build\\logs'\n"
-            "$binDir = Join-Path $projectRoot ('build\\bin\\windows\\' + $Configuration + '\\' + $Platform)\n"
+            "$logDir = Join-Path $projectRoot 'Artifacts\\Reports'\n"
+            "$binDir = Join-Path $projectRoot ('Artifacts\\Runtime\\windows\\' + $Configuration + '\\' + $Platform)\n"
             "New-Item -ItemType Directory -Force -Path $logDir | Out-Null\n"
             "New-Item -ItemType Directory -Force -Path $binDir | Out-Null\n"
             "$logPath = Join-Path $logDir ('build-' + $Configuration.ToLowerInvariant() + '-' + $Platform.ToLowerInvariant() + '.log')\n"
-            "$repoBuildLockPath = Join-Path $repoRoot 'build\\generated-project-build.lock'\n"
+            "$repoBuildLockPath = Join-Path $repoRoot 'Artifacts\\generated-project-build.lock'\n"
             "function Resolve-MSBuild {\n"
             "    if (-not [string]::IsNullOrWhiteSpace($env:MSBUILD_EXE_PATH) -and (Test-Path -LiteralPath $env:MSBUILD_EXE_PATH)) {\n"
             "        return $env:MSBUILD_EXE_PATH\n"
             "    }\n"
             "    $candidates = @(\n"
+            "        'C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\MSBuild\\Current\\Bin\\amd64\\MSBuild.exe',\n"
+            "        'C:\\Program Files\\Microsoft Visual Studio\\2022\\BuildTools\\MSBuild\\Current\\Bin\\amd64\\MSBuild.exe',\n"
             "        'C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\MSBuild\\Current\\Bin\\MSBuild.exe',\n"
             "        'C:\\Program Files\\Microsoft Visual Studio\\2022\\BuildTools\\MSBuild\\Current\\Bin\\MSBuild.exe'\n"
             "    )\n"
@@ -2223,25 +2485,21 @@
             "        '/p:PlatformToolset=v143',\n"
             "        ('/p:SolutionDir=' + $solutionDir),\n"
             "        ('/p:VcpkgManifestRoot=' + $vcpkgManifestRoot),\n"
-            "        '/p:EpochExtraDefines=EPOCH_MAIN_IN_MAIN_CPP=1',\n"
             "        '/m:1',\n"
             "        '/nr:false',\n"
-            "        '/clp:ErrorsOnly'\n"
+            "        '/v:minimal'\n"
             "    )\n"
-            "    if (-not [string]::IsNullOrWhiteSpace($env:EPOCH_CANDIDATE_DEPENDENCY_ROOT)) {\n"
-            "        $dependencyRoot = $env:EPOCH_CANDIDATE_DEPENDENCY_ROOT.TrimEnd('\\', '/') + '\\'\n"
-            "        $tripletRoot = Join-Path $dependencyRoot 'x64-windows'\n"
-            "        if (-not (Test-Path -LiteralPath (Join-Path $tripletRoot 'include'))) { $tripletRoot = Join-Path $tripletRoot 'x64-windows' }\n"
-            "        if (-not (Test-Path -LiteralPath (Join-Path $tripletRoot 'include'))) { throw 'The admitted host dependency triplet is unavailable.' }\n"
-            "        $msbuildArgs += @('/p:VcpkgManifestInstall=false', '/p:VcpkgAutoBootstrap=false', ('/p:VcpkgInstalledDir=' + $dependencyRoot), ('/p:EpochVcpkgInstallRoot=' + $tripletRoot + '\\'))\n"
-            "    }\n"
+            + generated_windows_dependency_script() +
             "    $nativeErrorPreference = $ErrorActionPreference\n"
             "    try {\n"
             "        # Windows PowerShell treats native stderr as ErrorRecord. Preserve it and the actual exit code.\n"
             "        $ErrorActionPreference = 'Continue'\n"
             "        & $msbuild @msbuildArgs 2>&1 | Tee-Object -FilePath $logPath -Append\n"
             "        $buildExit = $LASTEXITCODE\n"
-            "    } finally { $ErrorActionPreference = $nativeErrorPreference }\n"
+            "    } finally {\n"
+            "        $ErrorActionPreference = $nativeErrorPreference\n"
+            "        foreach ($name in $previousBuildEnvironment.Keys) { [Environment]::SetEnvironmentVariable($name, $previousBuildEnvironment[$name], 'Process') }\n"
+            "    }\n"
             "    ('[INFO] MSBuild exit code: ' + $buildExit) | Tee-Object -FilePath $logPath -Append\n"
             "}\n"
             "catch {\n"
@@ -2255,7 +2513,7 @@
             "if ($buildExit -ne 0) {\n"
             "    exit $buildExit\n"
             "}\n"
-            "$exePath = Join-Path $projectRoot ('build\\bin\\windows\\' + $Configuration + '\\' + $Platform + '\\' + '" + powershell_escape_single_quoted(artifactStem) + ".exe')\n"
+            "$exePath = Join-Path $projectRoot ('Artifacts\\Runtime\\windows\\' + $Configuration + '\\' + $Platform + '\\' + '" + powershell_escape_single_quoted(artifactStem) + ".exe')\n"
             "'[INFO] Output: ' + $exePath | Tee-Object -FilePath $logPath -Append\n";
 
         const std::string linuxBuildScriptText =
@@ -2264,15 +2522,16 @@
             "set -euo pipefail\n"
             "project_dir=\"$(cd \"$(dirname \"${BASH_SOURCE[0]}\")\" && pwd)\"\n"
             "repo_root='" + bash_escape_single_quoted(repoRoot.generic_string()) + "'\n"
+            "if [[ -n \"${EPOCH_REPO_ROOT:-}\" ]]; then repo_root=\"$EPOCH_REPO_ROOT\"; fi\n"
             "engine_dir=\"$repo_root/Engine\"\n"
             "python3 \"$repo_root/Tools/build/verify_epoch_project_source.py\" --root \"$repo_root\" --edition '" + bash_escape_single_quoted(sourceEdition) + "'\n"
             "artifact_stem='" + bash_escape_single_quoted(artifactStem) + "'\n"
-            "configuration=\"${1:-Debug}\"\n"
+            "configuration=\"${1:-Release}\"\n"
             "case \"$configuration\" in Debug|Release) ;; *) echo \"Configuration must be Debug or Release.\" >&2; exit 2 ;; esac\n"
-            "log_dir=\"$project_dir/build/logs\"\n"
-            "build_dir=\"$project_dir/build/cmake/linux/Clang-$configuration\"\n"
-            "output_dir=\"$project_dir/build/bin/linux/$configuration/x64\"\n"
-            "log_path=\"$log_dir/build-linux.log\"\n"
+            "log_dir=\"$project_dir/Artifacts/Reports\"\n"
+            "build_dir=\"$project_dir/Artifacts/Intermediate/cmake/linux/Clang-$configuration\"\n"
+            "output_dir=\"$project_dir/Artifacts/Runtime/linux/$configuration/x64\"\n"
+            "log_path=\"$log_dir/build-linux-${configuration,,}.log\"\n"
             "tool_cache_root=\"${EPOCH_TOOL_CACHE_ROOT:-${XDG_CACHE_HOME:-${HOME}/.cache}/epoch/tools}\"\n"
             "mkdir -p \"$log_dir\" \"$output_dir\"\n"
             "exec > >(tee \"$log_path\") 2>&1\n\n"
@@ -2301,7 +2560,7 @@
             "resolve_vcpkg_root() {\n"
             "  local candidate cache line toolchain\n"
             "  local -a candidates=(\"${EPOCH_VCPKG_ROOT:-}\" \"${VCPKG_ROOT:-}\" \"$repo_root/vcpkg\" \"$(dirname \"$repo_root\")/vcpkg\" \"$HOME/vcpkg\" \"$HOME/Documents/repos/vcpkg\" \"$HOME/source/repos/vcpkg\" /opt/vcpkg)\n"
-            "  for cache in \"$repo_root\"/build/cmake/linux/*/Clang-*/CMakeCache.txt \"$engine_dir\"/Bin/Clang-*/CMakeCache.txt; do\n"
+            "  for cache in \"$repo_root\"/Artifacts/Intermediate/cmake/linux/*/Clang-*/CMakeCache.txt \"$repo_root\"/build/cmake/linux/*/Clang-*/CMakeCache.txt \"$engine_dir\"/Bin/Clang-*/CMakeCache.txt; do\n"
             "    [[ -f \"$cache\" ]] || continue\n"
             "    toolchain=\"\"\n"
             "    while IFS= read -r line; do\n"
@@ -2327,6 +2586,7 @@
             "export CC=\"$clang_c\" CXX=\"$clang_cxx\" VCPKG_ROOT=\"$vcpkg_root\" VCPKG_FORCE_SYSTEM_BINARIES=1 VCPKG_FEATURE_FLAGS=manifests\n"
             "\"$cmake_bin\" --fresh -S \"$project_dir\" -B \"$build_dir\" -G Ninja \\\n"
             "  -DCMAKE_BUILD_TYPE=\"$configuration\" \\\n"
+            "  -DEPOCH_REPO_ROOT=\"$repo_root\" \\\n"
             "  -DCMAKE_C_COMPILER=\"$clang_c\" \\\n"
             "  -DCMAKE_CXX_COMPILER=\"$clang_cxx\" \\\n"
             "  -DCMAKE_CXX_COMPILER_CLANG_SCAN_DEPS=\"$clang_scan_deps\" \\\n"
@@ -2341,7 +2601,6 @@
             "\"$cmake_bin\" --build \"$build_dir\" --target epoch_project_runtime --verbose\n"
             "runtime_path=\"$output_dir/$artifact_stem\"\n"
             "if [[ ! -x \"$runtime_path\" ]]; then echo \"[ERROR] Build completed without executable: $runtime_path\" >&2; exit 6; fi\n"
-            "if [[ -d \"$build_dir/epoch-engine/assets\" ]]; then \"$cmake_bin\" -E copy_directory \"$build_dir/epoch-engine/assets\" \"$output_dir/assets\"; fi\n"
             "echo \"[INFO] Output: $runtime_path\"\n";
         bool ok = defaultAiProfile
             && write_text_file_if_allowed(manifest, manifestText, spec.overwrite_existing)

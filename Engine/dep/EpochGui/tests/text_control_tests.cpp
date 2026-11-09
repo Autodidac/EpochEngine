@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <cmath>
 #include <limits>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -349,7 +350,7 @@ namespace
         EPOCHGUI_CHECK(tab.indicator.position.y == 27.0f);
         EPOCHGUI_CHECK(tab.indicator.size.y == 3.0f);
         EPOCHGUI_CHECK(tab.close_button.position.x == 206.0f);
-        EPOCHGUI_CHECK(tab.close_button.position.y == 7.0f);
+        EPOCHGUI_CHECK(tab.close_button.position.y == 0.0f);
         EPOCHGUI_CHECK(tab.label.size.x == 88.0f);
 
         const SliderLayoutOptions sliderOptions{

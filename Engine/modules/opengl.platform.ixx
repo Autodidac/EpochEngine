@@ -39,7 +39,9 @@ module;
 // Global module fragment: macros + native headers only.
 #include <include/engine.config.hpp> // for EPOCH_USING Macros
 
-#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
+#if (defined(EPOCH_USING_OPENGL) && EPOCH_USING_OPENGL == 1) \
+    || (defined(_WIN32) && ((defined(EPOCH_USING_SFML) && EPOCH_USING_SFML == 1) \
+        || (defined(EPOCH_USING_RAYLIB) && EPOCH_USING_RAYLIB == 1)))
 
 #if defined(_WIN32)
 
@@ -73,11 +75,13 @@ module;
 
 #endif
 
-#endif // EPOCH_USING_OPENGL
+#endif // OpenGL backend or Windows GL-family native helpers
 
 export module opengl.platform;
 
-#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
+#if (defined(EPOCH_USING_OPENGL) && EPOCH_USING_OPENGL == 1) \
+    || (defined(_WIN32) && ((defined(EPOCH_USING_SFML) && EPOCH_USING_SFML == 1) \
+        || (defined(EPOCH_USING_RAYLIB) && EPOCH_USING_RAYLIB == 1)))
 
 export namespace epochengine::openglcontext::PlatformGL
 {
@@ -222,8 +226,11 @@ export namespace epochengine::openglcontext::PlatformGL
                 return reinterpret_cast<void*>(wglProc);
         }
 
-        static HMODULE opengl32 = ::GetModuleHandleW(L"opengl32.dll");
-        if (!opengl32) opengl32 = ::LoadLibraryW(L"opengl32.dll");
+        static const HMODULE opengl32 = []() noexcept
+        {
+            const HMODULE loaded = ::GetModuleHandleW(L"opengl32.dll");
+            return loaded ? loaded : ::LoadLibraryW(L"opengl32.dll");
+        }();
         if (!opengl32) return nullptr;
 
         const auto coreProc = ::GetProcAddress(opengl32, name);
@@ -394,4 +401,4 @@ export namespace epochengine::openglcontext::PlatformGL
     };
 }
 
-#endif // EPOCH_USING_OPENGL
+#endif // OpenGL backend or Windows GL-family native helpers

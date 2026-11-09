@@ -12,7 +12,9 @@ module;
 #include <filesystem>
 #include <fstream>
 #include <limits>
+#include <new>
 #include <optional>
+#include <source_location>
 #include <span>
 #include <string>
 #include <string_view>
@@ -22,6 +24,7 @@ module;
 
 module project.input_profile;
 
+import core.logger;
 import platform.filesystem;
 
 namespace epochengine::project_input
@@ -2210,6 +2213,18 @@ namespace epochengine::project_input
                 if (!platform::filesystem::atomic_replace_same_filesystem(
                         sourceTemporary, sourceDestination, error))
                 {
+                    logger::get("Project.InputProfile").log(logger::LogLevel::Error,
+                        "Paired source replacement failed; error="
+                            + std::to_string(error.value())
+                            + "; category=" + error.category().name()
+                            + "; message=" + error.message()
+                            + "; source=" + sourceTemporary.string()
+                            + "; source_length="
+                            + std::to_string(sourceTemporary.native().size())
+                            + "; destination=" + sourceDestination.string()
+                            + "; destination_length="
+                            + std::to_string(sourceDestination.native().size()),
+                        std::source_location::current());
                     cleanupTemporary();
                     return reject_pair(StoreCode::atomic_replace_failure);
                 }
@@ -2234,6 +2249,18 @@ namespace epochengine::project_input
                 if (!platform::filesystem::atomic_replace_same_filesystem(
                         artifactTemporary, artifactDestination, error))
                 {
+                    logger::get("Project.InputProfile").log(logger::LogLevel::Error,
+                        "Paired artifact replacement failed; error="
+                            + std::to_string(error.value())
+                            + "; category=" + error.category().name()
+                            + "; message=" + error.message()
+                            + "; source=" + artifactTemporary.string()
+                            + "; source_length="
+                            + std::to_string(artifactTemporary.native().size())
+                            + "; destination=" + artifactDestination.string()
+                            + "; destination_length="
+                            + std::to_string(artifactDestination.native().size()),
+                        std::source_location::current());
                     cleanupTemporary();
                     ++metrics_.paired_partial_saves;
                     ++metrics_.rejected_operations;
@@ -2548,5 +2575,123 @@ namespace epochengine::project_input
     {
         ++metrics_.rejected_operations;
         return {code};
+    }
+
+    PreparedRuntimeProfile prepare_runtime_profile(
+        const RuntimeProfileRequest& request) noexcept
+    {
+        PreparedRuntimeProfile result{};
+        try
+        {
+            if (fs::path{request.logical_path}.lexically_normal().generic_string()
+                != canonical_source_path)
+            {
+                result.diagnostic = "unsupported project input path";
+                return result;
+            }
+
+            ProjectInputProfileStore store{
+                request.project_id, request.project_root};
+            if (!store.valid())
+            {
+                result.diagnostic = "invalid project input store";
+                return result;
+            }
+
+            std::error_code error{};
+            const bool sourceExists = fs::exists(store.source_path(), error);
+            if (error)
+            {
+                result.diagnostic =
+                    "project input source existence check failed";
+                return result;
+            }
+            if (sourceExists)
+            {
+                const auto loaded = store.load_source();
+                if (!loaded)
+                {
+                    result.diagnostic = std::string{"project input source "}
+                        + std::string{store_code_name(
+                            loaded.code)};
+                    return result;
+                }
+                auto compiled = compile_profile(
+                    request.project_id, loaded.source);
+                if (!compiled)
+                {
+                    result.diagnostic = std::string{"project input compile "}
+                        + std::string{validation_code_name(
+                            compiled.code)};
+                    return result;
+                }
+                const auto published = store.publish_artifact(
+                    compiled.artifact);
+                if (!published)
+                {
+                    result.diagnostic = std::string{
+                        "project input artifact publication "}
+                        + std::string{store_code_name(
+                            published.code)};
+                    return result;
+                }
+                result.artifact = std::move(compiled.artifact);
+                result.compiled_from_source = true;
+                result.diagnostic = published.code
+                        == StoreCode::unchanged
+                    ? "project input source compiled; Library artifact current"
+                    : "project input source compiled and published";
+                return result;
+            }
+
+            const auto loadedArtifact = store.load_artifact();
+            if (loadedArtifact)
+            {
+                result.artifact = loadedArtifact.artifact;
+                result.restored_from_artifact = true;
+                result.diagnostic =
+                    "compiled project input restored from Library";
+                return result;
+            }
+
+            if (loadedArtifact.code != StoreCode::not_found)
+            {
+                result.diagnostic = std::string{"project input artifact "}
+                    + std::string{store_code_name(loadedArtifact.code)};
+                return result;
+            }
+
+            if (request.fallback
+                != RuntimeFallbackPolicy::allow_legacy_default)
+            {
+                result.diagnostic =
+                    "project input source and Library artifact are missing";
+                return result;
+            }
+            auto fallback = compile_profile(
+                request.project_id,
+                make_legacy_default_profile());
+            if (!fallback)
+            {
+                result.diagnostic =
+                    "legacy default project input compile failed";
+                return result;
+            }
+            result.artifact = std::move(fallback.artifact);
+            result.legacy_fallback = true;
+            result.diagnostic =
+                "in-memory legacy project input fallback";
+            return result;
+        }
+        catch (const std::bad_alloc&)
+        {
+            result.diagnostic = "project input allocation failure";
+            return result;
+        }
+        catch (...)
+        {
+            result.diagnostic = "project input preparation failure";
+            return result;
+        }
     }
 }

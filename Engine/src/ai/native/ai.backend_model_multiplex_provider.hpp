@@ -15,6 +15,8 @@
 #include "ai.backend_model_qwen_output_journal.hpp"
 #include "ai.backend_model_native_model_manager.hpp"
 
+namespace epoch_ai::models { class ModelRegistry; }
+
 namespace epoch_ai::model {
 
 class MultiplexProvider final : public IModelProvider {
@@ -29,6 +31,7 @@ public:
     [[nodiscard]] std::optional<double> observed_latency_ms(
         std::string_view model, std::string_view task_class) const override;
     [[nodiscard]] bool is_model_resident(std::string_view model) const override;
+    [[nodiscard]] bool requires_explicit_selection(std::string_view model) const override;
     [[nodiscard]] json performance() const;
     [[nodiscard]] std::expected<json, core::Error> discover() override;
     [[nodiscard]] std::expected<json, core::Error> prepare(std::string_view model) override;
@@ -38,6 +41,8 @@ public:
     // Resolves only already-known local state. It never starts a model or
     // performs provider discovery, so UI/status callers can use it cheaply.
     [[nodiscard]] std::string resolve_model_hint(std::string_view requested) const;
+    // Bound once by RuntimeHost before publication; the registry outlives this provider.
+    void bind_model_selections(const models::ModelRegistry& registry) noexcept { selection_registry_ = &registry; }
 
     [[nodiscard]] LmStudioProvider& external() noexcept { return external_; }
     [[nodiscard]] NativeModelManager& native_models() noexcept { return native_models_; }
@@ -45,7 +50,7 @@ public:
 
 private:
     [[nodiscard]] bool native_request(std::string_view model) const noexcept;
-    [[nodiscard]] std::string resolve_request_model(std::string_view requested) const;
+    [[nodiscard]] std::expected<std::string, core::Error> resolve_request_model(std::string_view requested) const;
     [[nodiscard]] std::expected<LmStudioProvider*, core::Error> native_provider(std::string_view model, std::chrono::steady_clock::time_point deadline, std::stop_token stop);
 
     void record_inference(std::string_view model, std::string_view task_class,
@@ -60,6 +65,7 @@ private:
     std::filesystem::path perf_file_;
     QwenOutputJournal qwen_output_;
     NativeModelManager& native_models_;
+    const models::ModelRegistry* selection_registry_{};
     LmStudioProvider external_;
     mutable std::mutex transports_mutex_;
     std::map<std::string, std::unique_ptr<LmStudioProvider>> native_transports_;

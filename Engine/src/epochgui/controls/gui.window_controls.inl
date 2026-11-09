@@ -162,7 +162,7 @@
                 title,
                 (std::max)(1.0f, size.x - 2.0f * kContentPadding),
                 kTitleScale);
-            draw_text_line(
+            draw_caption_text(
                 fittedTitle.empty() ? title : std::string_view{ fittedTitle },
                 position.x + kContentPadding,
                 titleTextY,
@@ -208,7 +208,7 @@
             if (auto state = g_scrollAreaStates.find(leakedKey);
                 state != g_scrollAreaStates.end())
             {
-                state->second.draggingScrollbar = false;
+                state->second.scrollbarDrag = {};
             }
         }
         g_frame.cursor = previous.cursor;
@@ -289,6 +289,154 @@
         }
     }
 
+    [[nodiscard]] static gui_lib::FloatingWindowOptions floating_window_core_options(
+        const FloatingWindowOptions& options) noexcept
+    {
+        return {
+            .default_position = to_lib(options.default_position),
+            .default_size = to_lib(options.default_size),
+            .min_size = to_lib(options.min_size),
+            .viewport_size = to_lib(options.viewport_size),
+            .title_bar_height = line_advance_amount(kTitleScale) + 2.0f * kTitleBarPadding,
+            .content_padding = kContentPadding,
+            .movable = options.movable,
+            .resizable = options.resizable,
+            .closable = options.closable,
+            .constrain_to_viewport = options.constrain_to_viewport
+        };
+    }
+
+    void normalize_floating_window(FloatingWindowState& state,
+        const FloatingWindowOptions& options) noexcept
+    {
+        auto coreState = to_lib(state);
+        gui_lib::normalize_floating_window(coreState, floating_window_core_options(options));
+        from_lib(coreState, state);
+    }
+
+    struct FloatingWindowPointerReplay final
+    {
+        gui_lib::FloatingWindowLayout layout{};
+        bool chrome_press{}, chrome_release{};
+    };
+
+    [[nodiscard]] static FloatingWindowPointerReplay replay_floating_window_pointer(
+        gui_lib::FloatingWindowState& state, const gui_lib::FloatingWindowOptions& options) noexcept
+    {
+        FloatingWindowPointerReplay result{};
+        result.layout = gui_lib::update_floating_window(state, options,
+            {to_lib(g_frame.mousePos), false, false, false});
+        const bool ownerAllowed = g_frame.pointerInputAllowed
+            && g_frame.modalInput.owner_input_allowed()
+            && g_frame.modalInput.mode() != gui_lib::input::ModalInputMode::blocked_until_clear
+            && popup_input::allows_pointer({
+                .selection_open_this_frame=g_frame.selectPopupCapturedThisFrame,
+                .current_selection_owner=g_frame.selectPopupOwnsInput,
+                .application_menu_open_this_frame=g_frame.menuPopupBlocksBackground,
+                .application_menu_owner=g_frame.menuPopupOwnsInput});
+        if (!ownerAllowed)
+        {
+            state.dragging = state.resizing = state.close_pressed = false;
+            result.layout = gui_lib::update_floating_window(state, options, {});
+            return result;
+        }
+        bool moved{}, resized{}, focused{}, closed{};
+        const auto advance = [&](Vec2 point, bool down, bool pressed, bool released) {
+            if (!std::isfinite(point.x) || !std::isfinite(point.y)) return;
+            const bool owned = state.dragging || state.resizing || state.close_pressed;
+            const bool admitted = pressed && !g_frame.mousePressConsumed
+                && point_in_modal_input_capture(point);
+            result.layout = gui_lib::update_floating_window(state, options,
+                {to_lib(point), down, admitted, released});
+            result.chrome_press |= admitted && floating_input::chrome_owns_press(
+                result.layout.hovered, options.movable, result.layout.title_hovered,
+                result.layout.close_hovered, result.layout.resize_hovered);
+            result.chrome_release |= released && owned;
+            moved |= result.layout.moved; resized |= result.layout.resized;
+            focused |= result.layout.focused; closed |= result.layout.close_requested;
+        };
+        const bool queuedEdges = std::ranges::any_of(g_frame.events, [](const auto& event) {
+            return event.mouse_button == 0
+                && (event.type == EventType::MouseDown || event.type == EventType::MouseUp);
+        });
+        if (!queuedEdges)
+        {
+            if (!g_frame.mouseDown && !g_frame.justReleased)
+                state.dragging = state.resizing = state.close_pressed = false;
+            if (g_frame.mouseReleaseConsumed && !g_frame.mouseDown)
+                state.dragging = state.resizing = state.close_pressed = false;
+            advance(g_frame.mousePos, g_frame.mouseDown,
+                left_press_available(), g_frame.justReleased && !g_frame.mouseReleaseConsumed);
+        }
+        else
+        {
+            bool down = g_frame.prevMouseDown;
+            for (const auto& event : g_frame.events)
+            {
+                if (event.type == EventType::MouseDown && event.mouse_button == 0 && !down)
+                {
+                    down = true;
+                    advance(event.mouse_pos, true, true, false);
+                }
+                else if (event.type == EventType::MouseUp && event.mouse_button == 0 && down)
+                {
+                    if (g_frame.mouseReleaseConsumed)
+                    {
+                        down = false;
+                        state.dragging = state.resizing = state.close_pressed = false;
+                        advance(event.mouse_pos, false, false, false);
+                        continue;
+                    }
+                    // A real release can carry the final motion even when no
+                    // separate Move reached this frame; apply it before release.
+                    if (state.dragging || state.resizing)
+                        advance(event.mouse_pos, true, false, false);
+                    down = false;
+                    advance(event.mouse_pos, false, false, true);
+                }
+                else if (event.type == EventType::MouseMove)
+                    advance(event.mouse_pos, down, false, false);
+                if (!state.open) break;
+            }
+        }
+        result.layout.moved |= moved; result.layout.resized |= resized;
+        result.layout.focused |= focused; result.layout.close_requested |= closed;
+        return result;
+    }
+
+    static void paint_floating_window_chrome(const FloatingWindowState& state,
+        const FloatingWindowOptions& options, const FloatingWindowResult& result)
+    {
+        // begin_window established body clipping. Chrome owns the full window,
+        // then the existing scope restores the exact body clip for children.
+        const ContentClipClearScope chromeClip;
+        if (options.dim_background && options.draw_background)
+        {
+            const auto& palette = active_palette();
+            const auto& bounds = result.window;
+            const float edge = (std::min)(1.0f, (std::min)(bounds.size.x, bounds.size.y));
+            draw_sprite(palette.headingAccent, bounds.position.x, bounds.position.y, bounds.size.x, edge);
+            draw_sprite(palette.headingAccent, bounds.position.x, bounds.position.y + bounds.size.y - edge, bounds.size.x, edge);
+            draw_sprite(palette.headingAccent, bounds.position.x, bounds.position.y, edge, bounds.size.y);
+            draw_sprite(palette.headingAccent, bounds.position.x + bounds.size.x - edge, bounds.position.y, edge, bounds.size.y);
+        }
+        if (options.closable)
+            draw_close_mark(result.close_button.position, result.close_button.size,
+                result.close_hovered, state.close_pressed, true);
+        if (options.resizable)
+        {
+            const auto& palette = active_palette();
+            const SpriteHandle handleSprite = state.resizing || result.resize_hovered
+                ? palette.textFieldActive : palette.buttonHover;
+            const float x = result.resize_handle.position.x;
+            const float y = result.resize_handle.position.y;
+            const float w = result.resize_handle.size.x;
+            const float h = result.resize_handle.size.y;
+            draw_sprite(handleSprite, x+w-10.0f, y+h-3.0f, 8.0f, 2.0f);
+            draw_sprite(handleSprite, x+w-6.0f, y+h-7.0f, 4.0f, 2.0f);
+        }
+    }
+
     FloatingWindowResult begin_floating_window(
         FloatingWindowState& state,
         const FloatingWindowOptions& options) noexcept
@@ -300,29 +448,10 @@
         try { ensure_resources(); }
         catch (...) { return result; }
 
-        const float titleHeight = line_advance_amount(kTitleScale) + 2.0f * kTitleBarPadding;
         gui_lib::FloatingWindowState coreState = to_lib(state);
-        const bool wasInteracting = coreState.dragging || coreState.resizing || coreState.close_pressed;
-        const gui_lib::FloatingWindowOptions coreOptions{
-            .default_position = to_lib(options.default_position),
-            .default_size = to_lib(options.default_size),
-            .min_size = to_lib(options.min_size),
-            .viewport_size = to_lib(options.viewport_size),
-            .title_bar_height = titleHeight,
-            .content_padding = kContentPadding,
-            .movable = options.movable,
-            .resizable = options.resizable,
-            .closable = options.closable
-        };
-        const gui_lib::FloatingWindowInput coreInput{
-            .mouse_position = to_lib(g_frame.mousePos),
-            .mouse_down = g_frame.mouseDown,
-            .mouse_pressed = left_press_available(),
-            .mouse_released = left_release_available()
-        };
-
-        const gui_lib::FloatingWindowLayout layout =
-            gui_lib::update_floating_window(coreState, coreOptions, coreInput);
+        const auto coreOptions = floating_window_core_options(options);
+        const auto replay = replay_floating_window_pointer(coreState, coreOptions);
+        const auto& layout = replay.layout;
         from_lib(coreState, state);
 
         result.focused = layout.focused;
@@ -341,13 +470,10 @@
 
         // Frame chrome can own a press before child rendering; the content
         // must receive its own button/input hit tests before the host absorbs it.
-        const bool chromePress = floating_input::chrome_owns_press(
-            layout.hovered, options.movable, layout.title_hovered,
-            layout.close_hovered, layout.resize_hovered);
-        if (coreInput.mouse_pressed && chromePress)
-            consume_left_press();
-        if (coreInput.mouse_released && wasInteracting)
-            consume_left_release();
+        if (replay.chrome_press)
+            g_frame.mousePressConsumed = true;
+        if (replay.chrome_release)
+            g_frame.mouseReleaseConsumed = true;
         if (layout.close_requested || !state.open)
             return result;
 
@@ -359,47 +485,21 @@
         g_floatingWindowTopLayerStack.push_back(options.top_layer);
         g_floatingWindowPointerCoverStack.push_back(layout.hovered);
 
+        if (options.dim_background && options.viewport_size.x > 0.0f && options.viewport_size.y > 0.0f)
+        {
+            // The scrim belongs behind this top-layer owner, across the entire
+            // viewport rather than the background window's current body clip.
+            const ContentClipClearScope scrimClip;
+            g_frame.contentMin = {};
+            g_frame.contentMax = options.viewport_size;
+            draw_sprite(active_palette().modalScrim, 0.0f, 0.0f,
+                options.viewport_size.x, options.viewport_size.y);
+        }
         begin_window(options.title, state.position, state.size, options.draw_background);
         if (!options.id.empty())
             g_frame.windowKey.assign(options.id.begin(), options.id.end());
 
-        const auto& palette = active_palette();
-        if (options.closable)
-        {
-            const SpriteHandle closeBackground =
-                state.close_pressed ? palette.buttonActive
-                : result.close_hovered ? palette.buttonHover
-                : palette.buttonNormal;
-            draw_sprite(
-                closeBackground,
-                result.close_button.position.x,
-                result.close_button.position.y,
-                result.close_button.size.x,
-                result.close_button.size.y);
-            if (result.close_hovered || state.close_pressed)
-            {
-                draw_sprite(
-                    palette.textFieldActive,
-                    result.close_button.position.x,
-                    result.close_button.position.y,
-                    result.close_button.size.x,
-                    2.0f);
-            }
-
-            draw_close_mark(result.close_button.position, result.close_button.size);
-        }
-
-        if (options.resizable)
-        {
-            const SpriteHandle handleSprite =
-                state.resizing || result.resize_hovered ? palette.textFieldActive : palette.buttonHover;
-            const float x = result.resize_handle.position.x;
-            const float y = result.resize_handle.position.y;
-            const float w = result.resize_handle.size.x;
-            const float h = result.resize_handle.size.y;
-            draw_sprite(handleSprite, x + w - 10.0f, y + h - 3.0f, 8.0f, 2.0f);
-            draw_sprite(handleSprite, x + w - 6.0f, y + h - 7.0f, 4.0f, 2.0f);
-        }
+        paint_floating_window_chrome(state, options, result);
 
         set_cursor(result.content.position);
         result.begun = true;
@@ -639,7 +739,7 @@
                 title,
                 (std::max)(1.0f, width - 2.0f * kContentPadding),
                 kTitleScale);
-            draw_text_line(
+            draw_caption_text(
                 fittedTitle.empty() ? title : std::string_view{ fittedTitle },
                 position.x + kContentPadding,
                 titleTextY,
@@ -745,10 +845,14 @@
         try { ensure_resources(); }
         catch (...) { return; }
 
-        draw_sprite(active_palette().titleBar, position.x, position.y, size.x, size.y);
+        const auto& palette = active_palette();
+        // A bare decoration has no caption text scope. Keep normal ink readable
+        // when consumers place an ordinary label over this rectangle.
+        draw_sprite(palette.captionUsesLightText ? palette.buttonNormal : palette.titleBar,
+            position.x, position.y, size.x, size.y);
     }
 
-    void splitter_bar(Vec2 position, Vec2 size, bool hovered, bool active) noexcept
+    void splitter_bar(Vec2 position, Vec2 size, bool hovered, bool active, bool enabled) noexcept
     {
         ensure_resources();
         if (!g_frame.ctx || size.x <= 0.0f || size.y <= 0.0f)
@@ -758,8 +862,11 @@
         draw_sprite_raw(palette.windowBackground, position.x, position.y, size.x, size.y);
         // Fixed high-visibility edges plus a central grab rail. The old idle
         // divider was a single title-bar-coloured pixel on a dark background.
-        const SpriteHandle rail = active ? palette.buttonActive
+        const SpriteHandle disabled = active_semantic_pair(SemanticTone::muted).accent;
+        const SpriteHandle rail = !enabled ? disabled : active ? palette.buttonActive
             : hovered ? palette.textFieldActive : palette.textFieldActive;
+        const SpriteHandle grip = enabled ? palette.buttonActive : disabled;
+        const SpriteHandle edge = enabled ? palette.titleBar : palette.panelBackground;
         const bool vertical = size.y >= size.x;
         if (vertical && size.x >= 5.0f)
         {
@@ -771,14 +878,14 @@
             const float railHeight = (std::max)(0.0f, size.y - 2.0f * endInset);
             if (railHeight > 0.0f)
             {
-                draw_sprite(palette.titleBar, position.x, position.y + endInset, 1.0f, railHeight);
+                draw_sprite(edge, position.x, position.y + endInset, 1.0f, railHeight);
                 draw_sprite(rail, x - 1.0f, position.y + endInset, 2.0f, railHeight);
-                draw_sprite(palette.titleBar, position.x + size.x - 1.0f,
+                draw_sprite(edge, position.x + size.x - 1.0f,
                     position.y + endInset, 1.0f, railHeight);
             }
             // Centre grip shows that this boundary is draggable.
             for (int n = -1; n <= 1; ++n)
-                draw_sprite(palette.buttonActive, x - 3.0f,
+                draw_sprite(grip, x - 3.0f,
                     position.y + size.y * 0.5f + static_cast<float>(n) * 7.0f,
                     6.0f, 2.0f);
         }
@@ -789,13 +896,13 @@
             const float railWidth = (std::max)(0.0f, size.x - 2.0f * endInset);
             if (railWidth > 0.0f)
             {
-                draw_sprite(palette.titleBar, position.x + endInset, position.y, railWidth, 1.0f);
+                draw_sprite(edge, position.x + endInset, position.y, railWidth, 1.0f);
                 draw_sprite(rail, position.x + endInset, y - 1.0f, railWidth, 2.0f);
-                draw_sprite(palette.titleBar, position.x + endInset,
+                draw_sprite(edge, position.x + endInset,
                     position.y + size.y - 1.0f, railWidth, 1.0f);
             }
             for (int n = -1; n <= 1; ++n)
-                draw_sprite(palette.buttonActive,
+                draw_sprite(grip,
                     position.x + size.x * 0.5f + static_cast<float>(n) * 7.0f,
                     y - 3.0f, 2.0f, 6.0f);
         }

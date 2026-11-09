@@ -321,7 +321,8 @@ namespace epochengine::vulkancontext
             });
         }
         const bool editorPreview = frame.scene_visible;
-        const auto previewCamera = epochengine::previewgrid::camera_for(ctx);
+        const auto previewCamera = previewSceneFrame ? previewSceneFrame->camera
+            : epochengine::previewgrid::camera_for(ctx);
 
         ubo.model = glm::mat4(1.0f);
         if (editorPreview)

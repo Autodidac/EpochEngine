@@ -33,6 +33,7 @@ import authoring.task_graph;
 import editor.systems_workspace;
 import editor.task_scheduler;
 import gui.engine;
+import platform.work_admission;
 import sprite.handle;
 import taskgraph.dotsystem;
 
@@ -40,6 +41,46 @@ namespace epochengine::editor_systems_panel
 {
     namespace
     {
+        void render_gpu_resources(const platform::work_admission::GpuResourceSample& gpu,
+            float width)
+        {
+            gui::section_heading("GPU telemetry");
+            if (gpu.source != platform::work_admission::GpuTelemetrySource::nvidia_nvml)
+            {
+                gui::wrapped_label("Unavailable: optional NVIDIA telemetry, driver or device support is absent. No zero-load observation is inferred.", width);
+                return;
+            }
+            const auto nameEnd = std::find(gpu.adapter_name.begin(), gpu.adapter_name.end(), '\0');
+            gui::wrapped_label(epochengine::format_text("NVML adapter {} of {}: {}. All applications and driver use; not the selected renderer or this Editor alone.",
+                gpu.adapter_index, gpu.adapter_count,
+                std::string_view{gpu.adapter_name.data(), static_cast<std::size_t>(nameEnd - gpu.adapter_name.begin())}), width);
+            const auto activity = [](bool valid, double fraction)
+            {
+                return valid && std::isfinite(fraction) && fraction >= 0.0 && fraction <= 1.0
+                    ? epochengine::format_text("{:.0f}%", fraction * 100.0) : std::string{"Unavailable"};
+            };
+            gui::property_row("Kernel activity", activity(gpu.busy_valid, gpu.busy_fraction), 132.0f);
+            gui::property_row("Memory activity", activity(gpu.memory_activity_valid, gpu.memory_activity_fraction), 132.0f);
+            gui::wrapped_label("Memory activity measures device reads/writes over the driver sample window; it is not allocated VRAM percentage.", width);
+            const bool memory = gpu.memory_valid && gpu.dedicated_total_bytes > 0u
+                && gpu.dedicated_used_bytes <= gpu.dedicated_total_bytes;
+            gui::property_row("Dedicated VRAM", memory ? epochengine::format_text("{:.2f} / {:.2f} GiB used ({} / {} bytes)",
+                static_cast<double>(gpu.dedicated_used_bytes) / (1024.0 * 1024.0 * 1024.0),
+                static_cast<double>(gpu.dedicated_total_bytes) / (1024.0 * 1024.0 * 1024.0),
+                gpu.dedicated_used_bytes, gpu.dedicated_total_bytes) : std::string{"Unavailable"}, 132.0f);
+            const auto video = [&activity](bool valid, double fraction, std::uint32_t period)
+            {
+                const auto value = activity(valid, fraction);
+                return value == "Unavailable" || period == 0u ? value
+                    : epochengine::format_text("{} / {:.1f} ms driver sample", value, static_cast<double>(period) / 1000.0);
+            };
+            gui::property_row("Video encode", video(gpu.encoder_valid, gpu.encoder_busy_fraction, gpu.encoder_sample_period_us), 132.0f);
+            gui::property_row("Video decode", video(gpu.decoder_valid, gpu.decoder_busy_fraction, gpu.decoder_sample_period_us), 132.0f);
+            gui::property_row("Engine split", "3D / compute / copy unavailable", 132.0f);
+            gui::property_row("Process usage", "Unavailable: Editor, child and model processes are not attributed", 132.0f);
+            gui::wrapped_label("Host observations are cached for one second; driver sample windows can differ. Adapter0 is not verified against the active renderer on multi-GPU systems.", width);
+        }
+
         struct PixelCanvas final
         {
             int width{};
@@ -477,6 +518,23 @@ namespace epochengine::editor_systems_panel
             return "Unknown";
         }
 
+        [[nodiscard]] constexpr gui::SemanticTone scheduler_row_tone(
+            gui_lib::system_workspace::RowStatus status) noexcept
+        {
+            using Status = gui_lib::system_workspace::RowStatus;
+            switch (status)
+            {
+            case Status::running: return gui::SemanticTone::info;
+            case Status::queued:
+            case Status::waiting:
+            case Status::blocked: return gui::SemanticTone::warning;
+            case Status::healthy: return gui::SemanticTone::success;
+            case Status::failed: return gui::SemanticTone::error;
+            case Status::cancelled: return gui::SemanticTone::neutral;
+            default: return gui::SemanticTone::muted;
+            }
+        }
+
         [[nodiscard]] PixelCanvas build_live_scheduler_surface(
             const taskgraph::GraphSnapshot& snapshot)
         {
@@ -889,6 +947,7 @@ namespace epochengine::editor_systems_panel
                 epochengine::format_text("{} logical processors",
                     snapshot.hardware_threads),
                 92.0f);
+            render_gpu_resources(snapshot.gpu, width);
             const auto& liveScheduler = state.workspace.live_scheduler_snapshot();
             if (liveScheduler.state == editor_systems::LiveDataState::available)
             {
@@ -1164,7 +1223,8 @@ namespace epochengine::editor_systems_panel
                     && row.row->id == "scheduler:"
                         + std::to_string(
                             state.workspace.selected_live_scheduler_node()->id);
-                if (gui::button_selected(label, {width, 28.0f}, selected))
+                if (gui::menu_item({.label = label, .size = {width, 28.0f},
+                        .tone = scheduler_row_tone(row.row->status), .selected = selected}))
                 {
                     const std::string_view id = row.row->id;
                     std::uint64_t nodeId = 0u;

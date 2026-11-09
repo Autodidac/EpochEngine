@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from Tests.build.test_opengl_sprite_stream import definition
 
 ROOT = Path(__file__).resolve().parents[2]
 HOST = read_owned_source(ROOT/'Engine/src/renderers/host/host.context_win.cpp', encoding='utf-8')
@@ -22,13 +23,28 @@ class NativeTitleOwnerRoute(unittest.TestCase):
         retirement = HOST.split('    void forget_native_title_frame_source(', 1)[1].split(
             '\n}\n\nnamespace epochengine::core', 1)[0]
         retirement = '    void forget_native_title_frame_source(' + retirement
+        # Compile only the two actual portable title functions. Adjacent native
+        # diagnostics are not part of this controlled title-routing consumer.
+        backend_titles = 'namespace backend {\n' + definition(
+            HOST, '        std::wstring_view BackendDisplayName(') + '\n' + definition(
+            HOST, '        std::wstring BuildChildWindowTitle(') + '\n}\n'
+        detached = HOST.split('    bool MultiContextManager::CreateDetachedContextWindowOnOwnerThread(', 1)[1]
+        selection = detached.split('        std::shared_ptr<Context> ctx;\n', 1)[1].split(
+            '        ctx->type = request.type;', 1)[0]
+        selection = '        std::shared_ptr<Context> ctx;\n' + selection
+        fps_title = HOST.split('    [[nodiscard]] std::wstring make_native_fps_title(', 1)[1].split(
+            '    void record_native_title_frame(', 1)[0]
+        fps_title = '    [[nodiscard]] std::wstring make_native_fps_title(' + fps_title
         code = r'''
 #include <algorithm>
 #include <cstdint>
+#include <memory>
 #include <mutex>
+#include <shared_mutex>
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include "FRAME_RATE_HEADER"
 using HWND=std::uintptr_t;
 using DWORD=unsigned long;
 using UINT=unsigned;
@@ -80,6 +96,63 @@ bool SetWindowTextW(HWND hwnd,const wchar_t*text) {
  if(reentrantUpdate){reentrantUpdate=false;queue_native_title_if_owned(hwnd,L"during owner apply");}
  return true;
 }
+enum class ContextType {None,OpenGL,SDL,SFML,RayLib,Software,Vulkan,DirectX,Noop,Custom};
+namespace epochengine::core::cli { bool updater_shell_requested=false; }
+BACKEND_TITLES
+FPS_TITLE_HELPER_BLOCK
+struct Context {void* windowData{};};
+struct BackendSlot {std::shared_ptr<Context>master;std::vector<std::shared_ptr<Context>>duplicates;};
+std::unordered_map<ContextType,BackendSlot>g_backends;
+std::shared_mutex g_backendsMutex;
+std::shared_ptr<Context>CloneContext(const Context&){return std::make_shared<Context>();}
+unsigned released{},destroyed{};
+void ReleaseDC(HWND,int){++released;}
+void DestroyWindow(HWND){++destroyed;}
+struct Request {ContextType type;};
+std::shared_ptr<Context>selectedContext;
+std::wstring selectedTitle;
+bool select_detached_slot(Request request) {
+ HWND hwnd=2;int hdc=0;std::wstring title=L"Epoch GUI";
+ ACTUAL_SELECTION
+ selectedContext=ctx;selectedTitle=title;return true;
+}
+#define TITLE_CHECK(...) do {if(!(__VA_ARGS__))return __LINE__;}while(false)
+int title_contract() {
+ currentThread=30;
+ auto&slot=g_backends[ContextType::OpenGL];slot.master=std::make_shared<Context>();
+ TITLE_CHECK(select_detached_slot({ContextType::OpenGL}));
+ TITLE_CHECK(selectedContext==slot.master && selectedTitle==L"OpenGL 1");
+ slot.master->windowData=reinterpret_cast<void*>(1);
+ TITLE_CHECK(select_detached_slot({ContextType::OpenGL}));
+ TITLE_CHECK(selectedContext==slot.duplicates[0] && selectedTitle==L"OpenGL 2");
+ slot.duplicates[0]->windowData=reinterpret_cast<void*>(1);
+ TITLE_CHECK(select_detached_slot({ContextType::OpenGL}));
+ TITLE_CHECK(selectedContext==slot.duplicates[1] && selectedTitle==L"OpenGL 3");
+ slot.duplicates[1]->windowData=reinterpret_cast<void*>(1);
+ slot.duplicates[0]->windowData=nullptr; // reuse does not renumber another live slot
+ TITLE_CHECK(select_detached_slot({ContextType::OpenGL}));
+ TITLE_CHECK(selectedContext==slot.duplicates[0] && selectedTitle==L"OpenGL 2");
+ TITLE_CHECK(slot.duplicates.size()==2 && slot.duplicates[1]->windowData!=nullptr);
+ for(auto type:{ContextType::SDL,ContextType::SFML,ContextType::RayLib,ContextType::Software,
+                 ContextType::Vulkan,ContextType::DirectX,ContextType::Noop,ContextType::Custom}) {
+  auto&other=g_backends[type];other.master=std::make_shared<Context>();
+  TITLE_CHECK(select_detached_slot({type}));
+  TITLE_CHECK(selectedTitle==std::wstring(backend::BackendDisplayName(type))+L" 1");
+  other.master->windowData=reinterpret_cast<void*>(1);
+  TITLE_CHECK(select_detached_slot({type}));
+  TITLE_CHECK(selectedTitle==std::wstring(backend::BackendDisplayName(type))+L" 2");
+ }
+ TITLE_CHECK(!select_detached_slot({ContextType::None}) && released==1 && destroyed==1);
+ epochengine::renderhost::frame_rate::Sample measured;
+ TITLE_CHECK(!measured.observe(0,0));TITLE_CHECK(measured.observe(100,1));
+ TITLE_CHECK(measured.observe(400,2));
+ TITLE_CHECK(measured.live_rate()==300 && measured.average_rate()==200);
+ TITLE_CHECK(make_native_fps_title(L"OpenGL 2",measured.average_rate())==L"OpenGL 2 | 200 FPS avg");
+ epochengine::core::cli::updater_shell_requested=true;
+ TITLE_CHECK(backend::BuildChildWindowTitle(ContextType::OpenGL,0)==L"Epoch Updater Shell");
+ TITLE_CHECK(backend::BuildChildWindowTitle(ContextType::OpenGL,1)==L"OpenGL 2");
+ return 0;
+}
 LONG_PTR BackendProc(HWND,UINT,WPARAM,LPARAM){return 0;}
 #define CHECK(...) do {if(!(__VA_ARGS__))return __LINE__;}while(false)
 int main() {
@@ -130,12 +203,17 @@ int main() {
  CHECK(!g_nativeTitleFps.contains(&first) && g_nativeTitleFps.contains(&second));
  forget_native_title_frame_source(&second);CHECK(!g_nativeFpsTitles.contains(2));
  forget_native_title_window(1);CHECK(g_nativeFpsTitles.empty());
+ const auto titleResult=title_contract();if(titleResult)return titleResult;
  CHECK(wrongOwnerWrites==0);
  return 0;
 }
-'''.replace('HELPERS', helpers).replace('RETIREMENT', retirement)
+'''.replace('HELPERS', helpers).replace('RETIREMENT', retirement).replace(
+            'BACKEND_TITLES', backend_titles).replace('FPS_TITLE_HELPER_BLOCK', fps_title).replace(
+            'ACTUAL_SELECTION', selection).replace('FRAME_RATE_HEADER',
+            (ROOT/'Engine/src/renderers/host/host.frame_rate_sample.hpp').as_posix())
         parent = (ROOT/'build/contract-tests').resolve(); parent.mkdir(parents=True, exist_ok=True)
         scratch = Path(tempfile.mkdtemp(prefix='native-title-owner-', dir=parent))
+        passed = False
         try:
             source = scratch/'contract.cpp'; source.write_text(code, encoding='utf-8')
             if os.name == 'nt':
@@ -158,9 +236,11 @@ int main() {
             self.assertEqual(result.returncode,0,result.stdout+result.stderr)
             result=subprocess.run([str(binary)],cwd=scratch,capture_output=True,text=True,timeout=10)
             self.assertEqual(result.returncode,0,'Actual owner-route CPU line '+str(result.returncode))
+            passed = True
         finally:
             self.assertTrue(scratch.resolve().is_relative_to(parent))
-            shutil.rmtree(scratch)
+            if passed:
+                shutil.rmtree(scratch)
 
     def test_both_epoch_procedures_consume_and_clean_the_cache(self):
         self.assertEqual(HOST.count('apply_pending_native_title(hwnd, static_cast<std::uintptr_t>(wParam));'),2)

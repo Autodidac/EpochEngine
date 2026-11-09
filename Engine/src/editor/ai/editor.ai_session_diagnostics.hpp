@@ -138,7 +138,7 @@ namespace epochengine::editor_ai_session_diagnostics
             std::error_code ec;
             if (!engineRoot.is_absolute() || fs::is_symlink(engineRoot, ec) || ec
                 || !fs::is_directory(engineRoot, ec) || ec) return false;
-            const auto logs = engineRoot / "build" / "logs";
+            const auto logs = engineRoot / "Artifacts" / "Reports";
             if (fs::weakly_canonical(logs, ec) != logs.lexically_normal() || ec) return false;
             const bool logsExist = fs::exists(logs, ec);
             if (ec) return false;
@@ -157,7 +157,7 @@ namespace epochengine::editor_ai_session_diagnostics
         catch (...) { return false; }
     }
 
-    // The archive is published under engineRoot/build/logs, independent of whether
+    // The archive is published under engineRoot/Artifacts/Reports, independent of whether
     // a candidate has been materialized. Workspace files are included only
     // when the caller has verified that the isolated copy completed.
     [[nodiscard]] inline std::optional<fs::path> bundle_engine(
@@ -169,7 +169,7 @@ namespace epochengine::editor_ai_session_diagnostics
             std::error_code ec;
             if (!engineRoot.is_absolute() || fs::is_symlink(engineRoot, ec) || ec
                 || !fs::is_directory(engineRoot, ec) || ec) return std::nullopt;
-            const fs::path logs = engineRoot / "build" / "logs";
+            const fs::path logs = engineRoot / "Artifacts" / "Reports";
             if (fs::weakly_canonical(logs, ec) != logs.lexically_normal() || ec) return std::nullopt;
             const bool logsExist = fs::exists(logs, ec);
             if (ec) return std::nullopt;

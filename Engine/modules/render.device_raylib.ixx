@@ -530,37 +530,60 @@ export namespace epochengine
             return state.running && state.renderingActive;
         }
 
-        [[nodiscard]] bool native_resource_context_available(
+        [[nodiscard]] const char* native_resource_context_refusal(
             const core::Context* expected = nullptr) const noexcept
         {
             const auto& state = epochengine::raylibstate::s_raylibstate;
-            if (!state.renderingActive || !state.owner_ctx
-                || !epochengine::raylib_api::is_window_ready()
-                || (expected && expected != state.owner_ctx))
-            {
-                return false;
-            }
+            if (!state.renderingActive)
+                return "renderer is inactive";
+            if (!state.owner_ctx)
+                return "owner context is missing";
+            if (!epochengine::raylib_api::is_window_ready())
+                return "native window is not ready";
+            if (expected && expected != state.owner_ctx)
+                return "requested owner does not match";
 
             const auto current = core::get_current_render_context();
-            if (!current || current.get() != state.owner_ctx
-                || current->type != core::ContextType::RayLib)
-            {
-                return false;
-            }
+            if (!current)
+                return "current engine context is missing";
+            if (current.get() != state.owner_ctx)
+                return "current engine context does not match owner";
+            if (current->type != core::ContextType::RayLib)
+                return "current engine context is not Raylib";
 
 #if defined(_WIN32)
-            return epochengine::raylibcontext::win::native_context_is_current();
+            const bool nativeCurrent = epochengine::raylibcontext::win::native_context_is_current();
 #else
-            return epochengine::raylibcontext::linux::native_context_is_current();
+            const bool nativeCurrent = epochengine::raylibcontext::linux::native_context_is_current();
 #endif
+            return nativeCurrent ? nullptr : "native GL context is not current";
+        }
+
+        [[nodiscard]] bool native_resource_context_available(
+            const core::Context* expected = nullptr) const noexcept
+        {
+            return native_resource_context_refusal(expected) == nullptr;
+        }
+
+        [[nodiscard]] const char* native_presentation_context_refusal(
+            const core::Context* expected) const noexcept
+        {
+            if (const char* reason = native_resource_context_refusal(expected))
+                return reason;
+            const auto& state = epochengine::raylibstate::s_raylibstate;
+            if (!state.running)
+                return "renderer is stopped";
+            if (!state.frameActive)
+                return "drawing frame is not active";
+            if (state.frameInTextureMode)
+                return "drawing frame is targeting a texture";
+            return nullptr;
         }
 
         [[nodiscard]] bool native_presentation_context_available(
             const core::Context* expected) const noexcept
         {
-            const auto& state = epochengine::raylibstate::s_raylibstate;
-            return native_resource_context_available(expected)
-                && state.running && state.frameActive && !state.frameInTextureMode;
+            return native_presentation_context_refusal(expected) == nullptr;
         }
 
         [[nodiscard]] const RaylibTextureRecord* resolve_texture(

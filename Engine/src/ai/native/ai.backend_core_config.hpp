@@ -54,6 +54,9 @@ struct Config {
     bool qwen_flash_enabled = true;
     std::filesystem::path qwen_flash_server;
     std::filesystem::path model_cache_root;
+    bool shared_model_inputs_bound{};
+    bool shared_native_inputs_disabled{};
+    std::vector<std::filesystem::path> shared_runtime_dependency_directories;
     std::uint16_t qwen_flash_port = 8188;
     std::uint32_t qwen_flash_context_tokens = 81'920;
     std::uint32_t qwen_flash_parallel_slots = 1;

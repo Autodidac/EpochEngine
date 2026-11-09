@@ -13,6 +13,31 @@ sampling, composition, capture, and teardown.
 
 ## Evidence Layers
 
+### Linux checks on GitHub
+
+The Public workflow builds the complete Engine with the pinned Clang toolchain.
+It runs the compiled component tests, not just the two top-level engine tests.
+The separate `epoch_linux_<backend>_smoke` tests open the real Editor under Xvfb.
+The matrix includes the compiled OpenGL, SDL, SFML, Raylib, Vulkan and Software
+providers. OpenGL-based providers use Mesa CPU rendering; Vulkan selects Mesa
+lavapipe explicitly. A missing CPU Vulkan driver fails rather than using a GPU.
+Each test must report the requested provider ready, finish the test frames,
+and close normally within 30 seconds. A clean process exit without those events
+fails. Logs, executable hash, elapsed time and sampled process memory/CPU stay
+under `build/validation/linux-graphics`.
+
+Enable this test locally with `-DEPOCH_ENABLE_GRAPHICS_TESTS=ON`, build normally,
+then run `ctest --test-dir <build-directory> -L graphics --output-on-failure`.
+It is off by default; ordinary contract checks do not open
+windows. The release packager repeats the smoke against the copied runtime and
+checks its shared libraries and archive contents. Generated test logs are kept
+outside the archive.
+
+This checks real software rendering and shutdown. It does not check a physical
+GPU, mouse/keyboard behavior or matching pixels across renderers. Those need the
+native and image-comparison checks below. DirectX is a Windows backend, not a
+missing Linux graphics test.
+
 Run the cheapest faithful layer first:
 
 1. C++23 module and contract build;

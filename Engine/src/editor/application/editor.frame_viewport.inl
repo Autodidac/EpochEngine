@@ -1,9 +1,10 @@
 // Epoch feature implementation; included by editor.core application owner only.
 // SPDX-License-Identifier: LicenseRef-MIT-NoSell
 
+        const auto projectBuildActivity = project_build_activity_label(editor);
         bool guiDocumentWorkspace =
             editor.mainSurface == EditorMainSurface::Game2D
-            && (editor.outlinerToolTab == OutlinerToolTab::Gui
+            && (editor.game2DGuiWorkspace
                 || editor_application_owns_dedicated_gui_workspace(
                     editor.applicationKind));
         bool active_center_uses_scene =
@@ -14,15 +15,22 @@
         // Document tabs provide the surface identity. A second generic
         // "Editor Workbench" header only consumes valuable vertical space.
         gui::begin_window(
-            active_center_uses_scene ? std::string_view{} : std::string_view{"Editor Workbench"},
+            active_center_uses_scene || editor.mainSurface == EditorMainSurface::AssetGeneration
+                ? std::string_view{} : std::string_view{"Editor Workbench"},
             viewport_pos,
             viewport_size,
-            !active_center_uses_scene,
+            !active_center_uses_scene && editor.mainSurface != EditorMainSurface::AssetGeneration,
             false);
         if (editor.mainSurface == EditorMainSurface::Game2D
             && !editor_application_owns_dedicated_gui_workspace(
                 editor.applicationKind))
         {
+            // The transparent scene window can retain the previous 3D title
+            // behind this shorter tab strip. Line advance bounds glyph height;
+            // include the control's inner padding and following layout gap.
+            if (!guiDocumentWorkspace)
+                gui::panel_rect({viewport_pos.x, gui::cursor_position().y},
+                    {viewport_size.x, (std::max)(31.0f, gui::line_height() + 10.0f) + 8.0f});
             const std::array modeTabs{
                 gui::TabButtonSpec{
                     .id = "game2d.workspace.tilemap",
@@ -41,14 +49,8 @@
             {
                 guiDocumentWorkspace = *selected.selected_index == 1u;
                 active_center_uses_scene = !guiDocumentWorkspace;
-                editor.outlinerToolTab = guiDocumentWorkspace
-                    ? OutlinerToolTab::Gui
-                    : OutlinerToolTab::TileMap;
-                const std::string_view route = guiDocumentWorkspace
-                    ? "pane.gui_hierarchy"
-                    : "pane.tile_map";
-                set_pane_shown(route, true);
-                set_active_pane(pane_dock_region(route), route);
+                guiDocumentWorkspace = select_editor_2d_workspace(editor, guiDocumentWorkspace);
+                activate_workspace_companions(EditorMainSurface::Game2D);
                 push_editor_log(
                     editor,
                     guiDocumentWorkspace
@@ -63,6 +65,10 @@
                       "Undo and Redo stay on this tile-map document.";
             const float instructionWidth = (std::max)(1.0f,
                 viewport_pos.x + viewport_size.x - instructionPos.x - 6.0f);
+            if (!guiDocumentWorkspace)
+                gui::panel_rect({viewport_pos.x, instructionPos.y},
+                    {viewport_size.x,
+                        gui::measure_wrapped_label_height(instruction, instructionWidth) + 8.0f});
             gui::wrapped_label(instruction, instructionWidth);
             // Reserve the complete measured text block plus a gap before
             // drawing the scene title; a clipped draw is not layout height.
@@ -71,77 +77,633 @@
         }
         if (active_center_uses_scene)
         {
-            const std::string_view sceneTitle = main_surface_title(editor.mainSurface);
-            const gui::Vec2 scene_pos = gui::cursor_position();
-            const float sceneAvailableWidth = (std::max)(48.0f, viewport_pos.x + viewport_size.x - scene_pos.x);
-            const float sceneAvailableHeight = (std::max)(48.0f, viewport_pos.y + viewport_size.y - scene_pos.y);
-            // Keep the entire compact timeline above the lower dock splitter.
-            // It needs space for the title, progress, scrubber, controls and
-            // state. At short heights the dedicated Timeline tab remains usable.
-            const float timelineStripHeadingHeight = gui::line_height() + 8.0f;
-            const float timelineStripBodyOffset = timelineStripHeadingHeight + 6.0f;
-            const float timelineStripRequiredHeight = timelineStripBodyOffset
-                + timeline_compact_controls_height((std::max)(1.0f, sceneAvailableWidth - 16.0f)) + 6.0f;
+            const auto forestPanelBounds = [](gui::Vec2 position, gui::Vec2 size)
+            {
+                size = {(std::max)(0.0f, size.x), (std::max)(0.0f, size.y)};
+                std::array<gui::WidgetBounds, 2> panels{};
+                if (size.x >= 600.0f)
+                {
+                    const float controlsWidth = (std::clamp)(size.x * .38f, 260.0f, 360.0f);
+                    panels[0] = {position, {controlsWidth, size.y}};
+                    panels[1] = {{position.x + controlsWidth + 8.0f, position.y},
+                        {size.x - controlsWidth - 8.0f, size.y}};
+                }
+                else
+                {
+                    const float gap = (std::min)(8.0f, size.y);
+                    const float controlsHeight = (std::min)(300.0f, (size.y - gap) * .4f);
+                    panels[0] = {position, {size.x, controlsHeight}};
+                    panels[1] = {{position.x, position.y + controlsHeight + gap},
+                        {size.x, size.y - controlsHeight - gap}};
+                }
+                return panels;
+            };
+            if (editor.mainSurface == EditorMainSurface::ForestFactory)
+            {
+                const auto panels = forestPanelBounds(gui::cursor_position(), viewport_size);
+                gui::panel_rect(panels[0].position, panels[0].size);
+                (void)gui::begin_scroll_area({.id="forest-authoring-controls",
+                    .size=panels[0].size, .draw_background=false});
+                {
+                const auto forestControlPosition = panels[0].position;
+                const auto forestControlSize = panels[0].size;
+            if(editor.mainSurface==EditorMainSurface::ForestFactory)
+            {
+                const float width=(std::max)(48.0f,forestControlSize.x-16.0f);
+                const auto backing=[&](float height){gui::panel_rect({forestControlPosition.x,gui::cursor_position().y},{forestControlSize.x,height});};
+                backing(gui::measure_section_heading_height("Tree Materials",width));
+                gui::section_heading("Tree Materials");
+                std::vector<std::string> names{"Built-in texture"};
+                std::vector<forest::ForestTextureReference> materials(1u);
+                if(editor.projectTextures)
+                    for(const auto& texture:editor.projectTextures->catalog())
+                    {
+                        forest::ForestTextureReference reference{texture.logical_path,texture.artifact_key.words};
+                        if(!texture||!reference.valid())continue;
+                        names.push_back(texture.logical_path);materials.push_back(std::move(reference));
+                    }
+                std::vector<std::string_view> labels;labels.reserve(names.size());
+                for(const auto& name:names)labels.push_back(name);
+                for(const auto slot:{forest::ForestTextureSlot::bark,forest::ForestTextureSlot::foliage})
+                {
+                    const bool bark=slot==forest::ForestTextureSlot::bark;
+                    const auto current=bark?editor.plantLabDocument.profile.barkTexture:editor.plantLabDocument.profile.foliageTexture;
+                    backing(gui::line_height()+38.0f);
+                    gui::label(bark?"Bark texture":"Leaf texture (transparent PNG)");
+                    const auto selected=gui::select_box({.id=bark?"forest-bark-texture":"forest-leaf-texture",
+                        .placeholder="Choose an imported project texture",
+                        .selected=current.empty()?std::string_view{"Built-in texture"}:std::string_view{current.logicalPath},
+                        .options=labels,.size={width,28.0f}});
+                    if(selected.changed&&selected.selected_index&&*selected.selected_index<materials.size())
+                    {
+                        if(*selected.selected_index==0u)(void)clear_plant_lab_texture(editor,slot);
+                        else if(editor.projectTextures)
+                        {
+                            const auto& expected=materials[*selected.selected_index];
+                            if(editor.projectTextures->select(expected.logicalPath))
+                                if(const auto material=editor.projectTextures->selected_material();material&&material->artifact_key==expected.artifactKey)
+                                    (void)assign_plant_lab_texture(editor,slot,*material);
+                        }
+                    }
+                }
+                const gui::InlineButtonRowOptions options{.sizing=gui::InlineButtonSizing::FitContent,
+                    .alignment=gui::InlineButtonAlignment::Center,.wrap=true,.available_width=width};
+                const std::array actions{
+                    gui::InlineButtonSpec{.label="Import Texture...",.enabled=has_open_project(editor)&&!editor.forestSurfacePending},
+                    gui::InlineButtonSpec{.label="Generate Texture..."}};
+                backing(gui::inline_button_row_height(actions,28.0f,6.0f,options)+8.0f);
+                if(const auto selected=gui::inline_button_row(actions,28.0f,6.0f,options))
+                {
+                    if(*selected==0u)browse_project_image_source(editor,ctx);
+                    else editor.requestedMainSurface=EditorMainSurface::AssetGeneration;
+                }
+            }
+            if (editor.mainSurface == EditorMainSurface::ForestFactory && !editor.forestTerrainPainting)
+            {
+                bool ready = ensure_forest_factory_preview(editor);
+                // Preview admission may fail after an edit. Keep the document's
+                // recovery controls available without admitting stale geometry.
+                const bool editable = editor.plantLabDocumentInitialized;
+                const float forestTextWidth = (std::max)(1.0f, (std::min)(forestControlSize.x,
+                    (std::max)(80.0f, forestControlSize.x - 16.0f)));
+                // Scene-backed windows leave a hole for the renderer. Their
+                // controls still need opaque backing: the previous workspace's
+                // pixels above the scene are not cleared by the scene pass.
+                const auto paintForestHeader = [&](float height)
+                {
+                    gui::panel_rect({forestControlPosition.x, gui::cursor_position().y},
+                        {forestControlSize.x, height});
+                };
+                const std::string_view forestInstructions = ready
+                    ? "Adjust the plant here; release a slider to update its preview. Higher branch levels add smaller branches. Add to Scene places a copy in your project."
+                    : editable ? "Preview unavailable. Reduce branches or leaves, or use Undo. The previous preview is retained."
+                    : "The plant source could not be loaded. Its saved files have not been replaced.";
+                const gui::InlineButtonRowOptions forestButtons{
+                    .sizing = gui::InlineButtonSizing::FitContent,
+                    .alignment = gui::InlineButtonAlignment::Center,
+                    .wrap = true, .available_width = forestTextWidth};
+                paintForestHeader(gui::measure_section_heading_height("Plant preview", forestTextWidth)
+                    + gui::measure_wrapped_label_height(forestInstructions, forestTextWidth));
+                gui::section_heading("Plant preview");
+                gui::wrapped_label(forestInstructions, forestTextWidth);
+                // Sliders own pointer capture. Sample the shared mouse state
+                // before they consume release, and keep drafts outside the
+                // document so dragging neither rebuilds meshes nor fills Undo.
+                const bool sliderMouseDown = gui::is_mouse_down();
+                const bool sliderMouseReleased = gui::was_mouse_released();
+                const bool sliderMousePressed = gui::was_mouse_pressed();
+                auto& sliderDraft = editor.forestProfileSliderDraft;
+                if (sliderDraft && (sliderMousePressed || !editable
+                        || (!sliderMouseDown && !sliderMouseReleased)))
+                    sliderDraft.reset();
+                if (sliderDraft && (sliderDraft->revision != editor.plantLabDocument.revision
+                        || sliderDraft->contentHash != editor.plantLabDocument.contentHash
+                        || sliderDraft->projectId != editor.projectId
+                        || sliderDraft->projectRoot != editor.projectRoot))
+                    sliderDraft->cancelled = true;
+
+                using ForestProperty = forest::ForestProfileProperty;
+                struct ForestSliderSpec
+                {
+                    std::string_view id, label, unit;
+                    ForestProperty property;
+                    float minimum, standardMaximum, maximum, step;
+                };
+                const std::array sliderSpecs{
+                    ForestSliderSpec{"forest.height", "Height", " m", ForestProperty::TargetHeightMeters, .1f, 32.f, 256.f, .05f},
+                    ForestSliderSpec{"forest.branch_levels", "Branch levels", "", ForestProperty::BranchLevels, 0.f, 8.f, 32.f, 1.f},
+                    ForestSliderSpec{"forest.branch_length", "Branch length", " m", ForestProperty::BranchLengthMeters, .01f, 8.f, 128.f, .01f},
+                    ForestSliderSpec{"forest.leaf_size", "Leaf size", " m", ForestProperty::LeafSizeMeters, .02f, 2.f, 2.f, .01f},
+                    ForestSliderSpec{"forest.leaf_sites", "Leaf groups per branch", "", ForestProperty::LeafSitesPerBranch, 1.f, 16.f, 16.f, 1.f}};
+                const auto& sliderProfile = editor.plantLabDocument.profile;
+                const auto sliderCanopy = forest::forest_canopy_settings(sliderProfile);
+                const std::array sliderValues{sliderProfile.config.targetHeightMeters,
+                    static_cast<float>(sliderProfile.branch.levels), sliderProfile.branch.branchLengthMeters,
+                    sliderCanopy.leafSizeMeters, static_cast<float>(sliderCanopy.leafSitesPerBranch)};
+                const bool fitsStandardRange = sliderValues[0] <= 32.f
+                    && sliderValues[1] <= 8.f && sliderValues[2] <= 8.f;
+                if (!fitsStandardRange) editor.forestExtendedRange = true;
+                const auto sliderLabel = [](const ForestSliderSpec& spec, float value)
+                {
+                    return spec.unit.empty() ? epochengine::format_text("{}: {:.0f}", spec.label, value)
+                        : epochengine::format_text("{}: {:.2f}{}", spec.label, value, spec.unit);
+                };
+                const auto sliderColumns = (std::clamp)(static_cast<std::size_t>(forestTextWidth / 140.f),
+                    std::size_t{1u}, std::size_t{3u});
+                const float sliderWidth = (forestTextWidth - 8.f * static_cast<float>(sliderColumns - 1u))
+                    / static_cast<float>(sliderColumns);
+                float sliderLabelHeight = 0.f;
+                for (const auto& spec : sliderSpecs)
+                    sliderLabelHeight = (std::max)(sliderLabelHeight,
+                        gui::measure_wrapped_label_height(sliderLabel(spec, spec.maximum), sliderWidth));
+                const float sliderHeight = (std::max)(28.f, gui::line_height() + 8.f);
+                const float sliderRowHeight = sliderLabelHeight + sliderHeight + 8.f;
+                const auto sliderOrigin = gui::cursor_position();
+                const float sliderGridHeight = sliderRowHeight
+                    * static_cast<float>((sliderSpecs.size() + sliderColumns - 1u) / sliderColumns);
+                paintForestHeader(sliderGridHeight);
+                for (std::size_t index = 0u; index < sliderSpecs.size(); ++index)
+                {
+                    const auto& spec = sliderSpecs[index];
+                    const gui::Vec2 cell{sliderOrigin.x + static_cast<float>(index % sliderColumns) * (sliderWidth + 8.f),
+                        sliderOrigin.y + static_cast<float>(index / sliderColumns) * sliderRowHeight};
+                    const bool hasDraft = sliderDraft && !sliderDraft->cancelled && sliderDraft->property == spec.property;
+                    gui::set_cursor({cell.x, cell.y + sliderLabelHeight});
+                    const auto control = gui::slider({.id = spec.id, .minimum = spec.minimum,
+                        .maximum = editor.forestExtendedRange ? spec.maximum : spec.standardMaximum,
+                        .value = hasDraft ? sliderDraft->value : sliderValues[index], .step = spec.step,
+                        .size = {sliderWidth, sliderHeight}, .enabled = editable && !(sliderDraft && sliderDraft->cancelled)});
+                    if ((control.changed || (sliderMousePressed && control.hovered))
+                        && editable && !(sliderDraft && sliderDraft->cancelled))
+                    {
+                        if (!sliderDraft)
+                            sliderDraft.emplace(decltype(editor.forestProfileSliderDraft)::value_type{
+                                .property = spec.property, .value = control.value,
+                                .revision = editor.plantLabDocument.revision, .contentHash = editor.plantLabDocument.contentHash,
+                                .projectId = editor.projectId, .projectRoot = editor.projectRoot});
+                        else if (sliderDraft->property == spec.property)
+                            sliderDraft->value = control.value;
+                    }
+                    gui::set_cursor(cell);
+                    gui::wrapped_label(sliderLabel(spec, control.value), sliderWidth);
+                }
+                gui::set_cursor({sliderOrigin.x, sliderOrigin.y + sliderGridHeight});
+                if (sliderMouseReleased && sliderDraft)
+                {
+                    if (!sliderDraft->cancelled && forest::apply_forest_profile_edit(editor.plantLabDocument,
+                            sliderDraft->property, sliderDraft->value))
+                        ready = ensure_forest_factory_preview(editor);
+                    sliderDraft.reset();
+                }
+                const auto& foliageProfile = editor.plantLabDocument.profile;
+                const std::array<gui::InlineButtonSpec, 3> foliageEdits{{
+                    {"2D Plant", 0.0f, editable}, {"3D Plant", 0.0f, editable},
+                    {editor.forestExtendedRange ? "Extended range" : "Standard range", 0.0f,
+                        editable && (!editor.forestExtendedRange || fitsStandardRange)}}};
+                paintForestHeader(gui::inline_button_row_height(foliageEdits, 28.0f, 6.0f, forestButtons) + 8.0f);
+                if (const auto clicked = gui::inline_button_row(foliageEdits, 28.0f, 6.0f, forestButtons))
+                {
+                    using Property = forest::ForestProfileProperty;
+                    sliderDraft.reset();
+                    if (*clicked == 2u) editor.forestExtendedRange = !editor.forestExtendedRange;
+                    else if (forest::apply_forest_profile_edit(editor.plantLabDocument, Property::PreviewMode,
+                            static_cast<float>(*clicked == 0u ? forest::ForestPreviewMode::Mode2D : forest::ForestPreviewMode::Mode3D)))
+                        ready = ensure_forest_factory_preview(editor);
+                }
+                const auto canopy = forest::forest_canopy_settings(foliageProfile);
+                const auto foliageSummary = !canopy.enabled
+                    ? std::string{"Tip-only leaves. Adjust leaf size or leaf groups to add a canopy."}
+                    : epochengine::format_text(
+                    "{} plant | Leaf size {:.2f} m | {} leaf groups per outer branch",
+                    foliageProfile.previewMode == forest::ForestPreviewMode::Mode2D ? "2D" : "3D",
+                    canopy.leafSizeMeters, canopy.leafSitesPerBranch);
+                paintForestHeader(gui::measure_wrapped_label_height(foliageSummary, forestTextWidth));
+                gui::wrapped_label(foliageSummary, forestTextWidth);
+                const std::array<gui::InlineButtonSpec, 2> barkEdits{{
+                    {"Previous bark", 0.0f, editable}, {"Next bark", 0.0f, editable}}};
+                paintForestHeader(gui::inline_button_row_height(barkEdits, 28.0f, 6.0f, forestButtons) + 8.0f);
+                if (const auto clicked = gui::inline_button_row(barkEdits, 28.0f, 6.0f, forestButtons))
+                {
+                    constexpr auto count = forest::preview_mesh::kBarkTileCount;
+                    const auto current = editor.plantLabDocument.profile.barkTileIndex;
+                    const auto next = (current + (*clicked == 0u ? count - 1u : 1u)) % count;
+                    if (forest::apply_forest_profile_edit(editor.plantLabDocument,
+                            forest::ForestProfileProperty::BarkTileIndex, static_cast<float>(next)))
+                        ready = ensure_forest_factory_preview(editor);
+                }
+                const auto barkSummary = epochengine::format_text("Bark {} / {}",
+                    editor.plantLabDocument.profile.barkTileIndex + 1u, forest::preview_mesh::kBarkTileCount);
+                paintForestHeader(gui::measure_wrapped_label_height(barkSummary, forestTextWidth));
+                gui::wrapped_label(barkSummary, forestTextWidth);
+                const std::array<gui::InlineButtonSpec, 5> actions{{
+                    {"Undo", 0.0f, editable}, {"Redo", 0.0f, editable},
+                    {has_open_project(editor) ? "Add to Scene" : "Create Project & Add Plant...",
+                        0.0f, ready},
+                    {"Back to Scene", 0.0f}, {"Advanced Plant Lab", 0.0f, editable}}};
+                paintForestHeader(gui::inline_button_row_height(actions, 28.0f, 6.0f, forestButtons) + 8.0f);
+                if (const auto clicked = gui::inline_button_row(actions, 28.0f, 6.0f, forestButtons))
+                {
+                    if (*clicked < 2u)
+                    {
+                        const bool changed = *clicked == 0u
+                            ? forest::undo_forest_profile_edit(editor.plantLabDocument)
+                            : forest::redo_forest_profile_edit(editor.plantLabDocument);
+                        if (changed) ready = ensure_forest_factory_preview(editor);
+                    }
+                    else if (*clicked == 2u)
+                    {
+                        if (!has_open_project(editor))
+                        {
+                            if (begin_forest_project_creation(editor))
+                                apply_editor_surface(EditorMainSurface::Project, "Create Project for Plant");
+                        }
+                        else if (place_forest_factory_asset(editor) > 0u)
+                        {
+                            (void)save_editor_scene_snapshot(editor);
+                            apply_editor_surface(EditorMainSurface::Scene, "Add Plant to Scene");
+                            (void)focus_forest_factory_placement(ctx.get(), editor);
+                        }
+                    }
+                    else if (*clicked == 3u)
+                        apply_editor_surface(EditorMainSurface::Scene, "Plant Preview");
+                    else
+                    {
+                        result.command = EditorCommand::OpenContextWindow;
+                        result.command_argument = "application.plant_lab";
+                        result.requested_context_type = ctx->type;
+                    }
+                }
+                const bool refreshReady=ready&&has_open_project(editor)&&!editor.forestSurfacePending
+                    &&!editor.projectBuildPending&&!editor.projectRuntimeProcess.valid();
+                const bool placementRefreshReady=has_open_project(editor)&&!editor.forestSurfacePending
+                    &&!editor.projectBuildPending&&!editor.planetaryGeneratePending&&!editor.projectRuntimeProcess.valid();
+                const std::array refreshActions{gui::InlineButtonSpec{"Update Painted Trees",0.0f,refreshReady},
+                    gui::InlineButtonSpec{"Refresh Forest Placement",0.0f,placementRefreshReady}};
+                paintForestHeader(gui::inline_button_row_height(refreshActions,28.0f,6.0f,forestButtons)+8.0f);
+                if(const auto clicked=gui::inline_button_row(refreshActions,28.0f,6.0f,forestButtons))
+                {
+                    if(*clicked==0u)(void)refresh_forest_factory_instances(editor);
+                    else (void)begin_forest_surface_refresh(editor);
+                }
+                const std::array paintModeActions{
+                    gui::InlineButtonSpec{"Paint Forest on Terrain",0.0f,ready&&has_open_project(editor)}};
+                paintForestHeader(gui::inline_button_row_height(paintModeActions,28.0f,6.0f,forestButtons)+8.0f);
+                if(gui::inline_button_row(paintModeActions,28.0f,6.0f,forestButtons))
+                {
+                    editor.forestDesignCamera=previewgrid::capture_camera_rig_snapshot(ctx.get());
+                    editor.forestTerrainPainting=true;
+                    if(editor.forestProjectCamera)
+                        (void)previewgrid::restore_camera_rig_snapshot(ctx.get(),*editor.forestProjectCamera);
+                }
+                paintForestHeader(gui::measure_wrapped_label_height(editor.plantLabStatus,forestTextWidth));
+                gui::wrapped_label(editor.plantLabStatus,forestTextWidth);
+            }
+            if(editor.mainSurface==EditorMainSurface::ForestFactory&&editor.forestTerrainPainting)
+            {
+                const bool ready=ensure_forest_factory_preview(editor);
+                const float forestTextWidth=(std::max)(1.0f,forestControlSize.x-16.0f);
+                const gui::InlineButtonRowOptions forestButtons{
+                    .sizing=gui::InlineButtonSizing::FitContent,
+                    .alignment=gui::InlineButtonAlignment::Center,
+                    .wrap=true,.available_width=forestTextWidth};
+                const auto paintForestHeader=[&](float height) {
+                    gui::panel_rect({forestControlPosition.x,gui::cursor_position().y},{forestControlSize.x,height});
+                };
+                paintForestHeader(gui::measure_section_heading_height("Forest Painting",forestTextWidth));
+                gui::section_heading("Forest Painting");
+                constexpr std::string_view paintHelp="Hold the left mouse button and drag over terrain to paint forest areas. Right-drag moves the camera. Green marks planted regions; amber marks the selected region. Scene Undo removes an area. Done Painting restores the scene.";
+                paintForestHeader(gui::measure_wrapped_label_height(paintHelp,forestTextWidth));
+                gui::wrapped_label(paintHelp,forestTextWidth);
+                const auto areaSummary=epochengine::format_text(
+                    "Paint Area: radius {:.1f} m, density {:.3f}/m2, seed {}, up to {} selected-plant trees beneath the scene camera. Select a generated planet in 3D Objects; underwater samples are skipped.",
+                    editor.forestArea.radiusMeters,editor.forestArea.densityPerSquareMeter,editor.forestArea.seed,
+                    forest::forest_area_candidate_count(editor.forestArea));
+                paintForestHeader(gui::measure_wrapped_label_height(areaSummary,forestTextWidth));
+                gui::wrapped_label(areaSummary,forestTextWidth);
+                const bool areaReady=ready&&has_open_project(editor)&&!editor.forestSurfacePending
+                    &&!editor.projectBuildPending&&!editor.projectRuntimeProcess.valid();
+                const std::array<gui::InlineButtonSpec,9> areaActions{{
+                    {"Radius -",0.0f,areaReady},{"Radius +",0.0f,areaReady},
+                    {"Density -",0.0f,areaReady},{"Density +",0.0f,areaReady},{"Seed +",0.0f,areaReady},
+                    {"Paint Area",0.0f,areaReady},{"Erase Selected Area",0.0f,areaReady},
+                    {"Cancel Placement",0.0f,editor.forestSurfacePending.has_value()},
+                    {"Refresh Forest Placement",0.0f,has_open_project(editor)&&!editor.forestSurfacePending
+                        &&!editor.projectBuildPending&&!editor.planetaryGeneratePending&&!editor.projectRuntimeProcess.valid()}}};
+                paintForestHeader(gui::inline_button_row_height(areaActions,28.0f,6.0f,forestButtons)+8.0f);
+                if(const auto clicked=gui::inline_button_row(areaActions,28.0f,6.0f,forestButtons))
+                {
+                    if(*clicked==0u)editor.forestArea.radiusMeters=(std::max)(0.25,editor.forestArea.radiusMeters-2.0);
+                    else if(*clicked==1u)editor.forestArea.radiusMeters=(std::min)(1000.0,editor.forestArea.radiusMeters+2.0);
+                    else if(*clicked==2u)editor.forestArea.densityPerSquareMeter=(std::max)(0.001,editor.forestArea.densityPerSquareMeter-0.005);
+                    else if(*clicked==3u)editor.forestArea.densityPerSquareMeter=(std::min)(1.0,editor.forestArea.densityPerSquareMeter+0.005);
+                    else if(*clicked==4u)++editor.forestArea.seed;
+                    else if(*clicked==5u)
+                    {
+                        editor.forestPlacementCamera=previewgrid::camera_for(ctx.get());
+                        (void)paint_forest_factory_area(editor);
+                    }
+                    else if(*clicked==6u)(void)erase_selected_forest_area(editor);
+                    else if(*clicked==8u)(void)begin_forest_surface_refresh(editor);
+                    else if(editor.taskScheduler)
+                    {
+                        (void)editor.taskScheduler->cancel(editor.forestSurfaceCancellation);
+                        editor.forestSurfacePlacement.reset();
+                        editor.plantLabStatus="Plant placement cancelled; scene unchanged.";
+                    }
+                }
+                paintForestHeader(gui::measure_wrapped_label_height(editor.plantLabStatus, forestTextWidth));
+                gui::wrapped_label(editor.plantLabStatus, forestTextWidth);
+                const std::array paintViewActions{
+                    gui::InlineButtonSpec{"Edit Plant",0.0f},gui::InlineButtonSpec{"Done Painting",0.0f}};
+                paintForestHeader(gui::inline_button_row_height(paintViewActions,28.0f,6.0f,forestButtons)+8.0f);
+                if(const auto selected=gui::inline_button_row(paintViewActions,28.0f,6.0f,forestButtons))
+                {
+                    editor.forestTerrainPainting=false;
+                    editor.forestPlacementCamera.reset();
+                    editor.forestProjectCamera=previewgrid::capture_camera_rig_snapshot(ctx.get());
+                    if (*selected == 1u)
+                        editor.requestedMainSurface = EditorMainSurface::Scene;
+                    else if(editor.forestDesignCamera)
+                        (void)previewgrid::restore_camera_rig_snapshot(ctx.get(),*editor.forestDesignCamera);
+                    else focus_forest_factory_preview(ctx.get(),editor);
+                }
+            }
+                }
+                gui::end_scroll_area();
+                if (panels[1].position.x > panels[0].position.x)
+                    gui::panel_rect({panels[0].position.x + panels[0].size.x, panels[0].position.y},
+                        {8.0f, panels[0].size.y});
+                else
+                    gui::panel_rect({panels[0].position.x, panels[0].position.y + panels[0].size.y},
+                        {panels[0].size.x, panels[1].position.y - panels[0].position.y - panels[0].size.y});
+                gui::set_cursor(panels[1].position);
+            }
+            const std::string_view sceneTitle = editor.mainSurface == EditorMainSurface::Game2D
+                ? (editor.game2DGuiWorkspace ? "UI" : "2D") : main_surface_title(editor.mainSurface);
+            const gui::Vec2 sceneCursor = gui::cursor_position();
+            const gui::Vec2 scene_pos{
+                std::clamp(sceneCursor.x, viewport_pos.x, viewport_pos.x + (std::max)(0.0f, viewport_size.x)),
+                std::clamp(sceneCursor.y, viewport_pos.y, viewport_pos.y + (std::max)(0.0f, viewport_size.y))};
+            const float sceneAvailableWidth = (std::max)(0.0f, viewport_pos.x + viewport_size.x - scene_pos.x);
+            const float sceneAvailableHeight = (std::max)(0.0f, viewport_pos.y + viewport_size.y - scene_pos.y);
+            // One icon/readout row and the real scrubber. Reserve exactly the
+            // shared measured content, including wrapping in a narrow viewport.
+            const float timelineStripRequiredHeight = 8.0f
+                + timeline_compact_controls_height((std::max)(1.0f, sceneAvailableWidth - 16.0f));
             constexpr float sceneMinHeightWithTimeline = 100.0f;
-            const bool showSceneTimeline = sceneAvailableHeight >=
+            const bool showSceneTimeline = !projectViewportMaximized
+                && editor.mainSurface != EditorMainSurface::ForestFactory && sceneAvailableWidth>=80.0f&&sceneAvailableHeight >=
                 timelineStripRequiredHeight + sceneMinHeightWithTimeline;
             const float timelineStripGap = 0.0f;
             const float timelineStripHeight = showSceneTimeline
                 ? timelineStripRequiredHeight : 0.0f;
             const gui::Vec2 scene_size{
                 sceneAvailableWidth,
-                (std::max)(72.0f, sceneAvailableHeight - timelineStripHeight - timelineStripGap)
+                (std::max)(0.0f, sceneAvailableHeight - timelineStripHeight - timelineStripGap)
             };
-            result.scene_viewport = gui::scene_viewport(sceneTitle, scene_pos, scene_size);
-            // The scene Run button keeps the existing verified project launch
-            // semantics. Fullscreen In Editor instead runs the saved scene in
-            // the current window (no child process); Escape returns to editor.
-            constexpr std::array<std::string_view, 2> kSceneRunModes{
-                "Project Run", "Fullscreen In Editor (Esc)"};
-            const float runButtonWidth = 62.0f;
-            const float runModeWidth = (std::min)(172.0f,
-                (std::max)(100.0f, scene_size.x * 0.20f));
-            const bool showSceneRun = application.allow_project_run
-                && has_open_project(editor);
+            // A dock can be shorter than its instructions and title. Do not
+            // manufacture a minimum scene height outside the space it owns.
+            const bool sceneFits = scene_size.x >= 80.0f
+                && scene_size.y >= gui::titled_window_total_height(0.0f);
+            result.scene_viewport = sceneFits
+                ? gui::scene_viewport(projectViewportMaximized ? std::string_view{} : sceneTitle, scene_pos, scene_size)
+                : gui::WidgetBounds{.position=scene_pos, .size={0.0f, 0.0f}};
+            editor.planetaryViewportHeight = static_cast<std::uint32_t>(std::clamp(scene_size.y, 64.0f, 16384.0f));
+            editor.planetaryViewportWidth = static_cast<std::uint32_t>(std::clamp(scene_size.x, 64.0f, 16384.0f));
+            // None stops scene submissions, but does not erase the old native
+            // pixels. Paint exposed content during child moves/resizes and when
+            // preview is disabled; preserve the user's authoring mode for Stop.
+            if (sceneFits && (editor_project_viewport_input_reserved(editor)
+                || editor.previewMode == core::ScenePreviewMode::None))
+                gui::panel_rect(result.scene_viewport.position, result.scene_viewport.size);
+            // Ordinary scenes run in the current Editor. A compiled optional
+            // provider keeps its verified child and docks that owned window.
+            // Separate Window remains an explicit external launch.
+            constexpr std::array<std::string_view, 3> kSceneRunModes{
+                "Separate Window", "In Editor", "In-Editor Full Screen"};
+            const bool compiledProjectRunning = editor.projectRuntimeInEditor
+                && editor.projectRuntimeProcess.valid();
+            // Until the owned runtime attaches, its viewport still shows the
+            // authoring scene. A click intended for play must not edit that scene.
+            result.scene_input_captured = result.scene_input_captured
+                || editor_project_viewport_input_reserved(editor);
+            const auto sceneRunButtonLabel = project_scene_run_button_label(editor, compiledProjectRunning);
+            const float runButtonWidth = sceneRunButtonLabel.size() > 13u ? 196.0f : 112.0f;
+            const float runControlOffset = projectViewportMaximized ? 8.0f : 96.0f;
+            const float runModeWidth = projectViewportMaximized
+                ? (std::min)(172.0f, (std::max)(80.0f, scene_size.x - runButtonWidth - 20.0f))
+                : (std::min)(172.0f, (std::max)(100.0f, scene_size.x * 0.20f));
+            const bool showSceneRun = sceneFits
+                && scene_size.x >= runControlOffset + runButtonWidth + (editor.projectBuildPending ? 0.0f : runModeWidth) + 12.0f
+                && application.allow_project_run
+                && has_open_project(editor) && editor.mainSurface != EditorMainSurface::ForestFactory;
+            const bool showMeshDrawMode = sceneFits && !projectViewportMaximized
+                && editor.mainSurface != EditorMainSurface::Game2D;
+            const float meshDrawWidth = (std::min)(112.0f, (std::max)(0.0f, scene_size.x - 16.0f));
+            const float headerOccupiedLeft = showSceneRun
+                ? runControlOffset + runButtonWidth + 4.0f
+                    + (editor.projectBuildPending ? 0.0f : runModeWidth)
+                : 96.0f;
+            const bool meshDrawSecondRow = showMeshDrawMode
+                && scene_size.x < headerOccupiedLeft + meshDrawWidth + 16.0f;
+            if (meshDrawSecondRow)
+            {
+                // Native project children must begin below the wrapped toolbar.
+                const float headerBottom = scene_pos.y + 52.0f;
+                const float inset = std::clamp(headerBottom - result.scene_viewport.position.y,
+                    0.0f, result.scene_viewport.size.y);
+                result.scene_viewport.position.y += inset;
+                result.scene_viewport.size.y -= inset;
+            }
+            const float sceneNoticeTop = meshDrawSecondRow ? 52.0f : 26.0f;
             if (showSceneRun)
             {
-                gui::set_cursor({scene_pos.x + 96.0f, scene_pos.y + 2.0f});
-                if (gui::button("Run", {runButtonWidth, 20.0f})
-                    && !menusBlockedByModal && !toolbarControlsBlockedByMenu)
+                gui::set_cursor({scene_pos.x + runControlOffset, scene_pos.y + 2.0f});
+                if (editor.projectBuildPending && !compiledProjectRunning)
                 {
-                    if (editor.sceneRunFullscreenInEditor
-                        || editor.projectKind == "Engine Development")
-                        play_active_context();
-                    else
-                        launch_active_project_context();
+                    const std::array busyRun{gui::InlineButtonSpec{
+                        .label=sceneRunButtonLabel, .width=runButtonWidth, .enabled=false}};
+                    (void)gui::inline_button_row(busyRun, 20.0f, 0.0f,
+                        gui::InlineButtonRowOptions{.sizing=gui::InlineButtonSizing::FitContent,
+                            .available_width=runButtonWidth});
                 }
-                if (scene_size.x >= 440.0f)
+                else
                 {
-                    gui::set_cursor({scene_pos.x + 96.0f + runButtonWidth + 4.0f,
+                    // Restore events for this existing Stop only, never for Run
+                    // or the adjacent authoring controls during automation.
+                    if (automationInputReserved && compiledProjectRunning)
+                        automationBackgroundInput.reset();
+                    const bool runClicked = gui::button(sceneRunButtonLabel, {runButtonWidth, 20.0f})
+                        && !menusBlockedByModal && !toolbarControlsBlockedByMenu;
+                    if (automationInputReserved && compiledProjectRunning)
+                        automationBackgroundInput.emplace();
+                    if (runClicked)
+                    {
+                        if (compiledProjectRunning)
+                            (void)stop_project_runtime(editor,
+                                platform::child_process::StopMode::graceful);
+                        else if (editor.sceneRunFullscreenInEditor
+                            || editor.projectKind == "Engine Development")
+                            play_active_context();
+                        else
+                            launch_active_project_context();
+                    }
+                }
+                // A Run click above may have queued the build in this frame.
+                // Read its current state instead of the pre-click activity label.
+                const auto currentBuildActivity = project_build_activity_label(editor);
+                const std::string runStatus = editor.projectBuildPending
+                    ? currentBuildActivity + " " + editor.projectBuildStatus
+                    : !editor.projectRuntimeAttachmentError.empty()
+                        ? editor.projectRuntimeAttachmentError
+                        : compiledProjectRunning && !editor.projectRuntimeWindow
+                            ? editor.projectRuntimeStatus : std::string{};
+                record_editor_run_output(editor, runStatus);
+                if (!runStatus.empty())
+                {
+                    const std::string shortRunStatus = editor.projectBuildPending
+                        ? currentBuildActivity
+                        : !editor.projectRuntimeAttachmentError.empty()
+                            ? "Project launch failed. See Output."
+                            : editor.projectRuntimeForceStopAvailable
+                                ? "Stopping project..." : "Starting project in the Editor...";
+                    const float availableStatusWidth = (std::max)(1.0f, scene_size.x - 16.0f);
+                    const gui::Vec2 statusPosition{scene_pos.x + 8.0f, scene_pos.y + sceneNoticeTop};
+                    const std::array statusMetric{gui::SegmentedButtonSpec{.label=shortRunStatus}};
+                    const std::array outputMetric{gui::SegmentedButtonSpec{.label="Show Output"}};
+                    const float outputButtonWidth = (std::min)(availableStatusWidth,
+                        gui::segmented_button_row_width(outputMetric));
+                    const float statusWidth = (std::min)(availableStatusWidth,
+                        gui::segmented_button_row_width(statusMetric) + outputButtonWidth + 8.0f);
+                    const bool inlineOutputButton = statusWidth >= outputButtonWidth + 112.0f;
+                    const float statusTextWidth = inlineOutputButton
+                        ? statusWidth - outputButtonWidth - 8.0f : statusWidth;
+                    const float statusTextHeight = (std::min)(2.0f * gui::line_height(),
+                        gui::measure_wrapped_label_height(shortRunStatus, statusTextWidth));
+                    const float statusHeight = (std::min)(
+                        inlineOutputButton ? (std::max)(24.0f, statusTextHeight) : statusTextHeight + 28.0f,
+                        (std::max)(0.0f, scene_size.y - sceneNoticeTop));
+                    if (statusHeight > 0.0f)
+                    {
+                        const gui::ContentClipScope statusClip{statusPosition,
+                            {statusPosition.x + statusWidth, statusPosition.y + statusHeight}};
+                        gui::panel_rect(statusPosition, {statusWidth, statusHeight});
+                        gui::set_cursor(statusPosition);
+                        gui::wrapped_label(shortRunStatus, statusTextWidth);
+                        gui::set_cursor(inlineOutputButton
+                            ? gui::Vec2{statusPosition.x + statusWidth - outputButtonWidth, statusPosition.y}
+                            : gui::Vec2{statusPosition.x, statusPosition.y + statusTextHeight + 4.0f});
+                        if (gui::button("Show Output", {outputButtonWidth, 24.0f})
+                            && !menusBlockedByModal && !toolbarControlsBlockedByMenu)
+                        {
+                            exit_project_runtime_full_screen(editor);
+                            editor.dockStatusTab = EditorWorkspaceTab::Output;
+                            editor.outputGeneralOnly = false;
+                            editor.outputShowDetails = false;
+                            editor.outputSearch.clear();
+                            request_pane_region("pane.output", "Output", pane_dock_region("pane.output"));
+                        }
+                    }
+                }
+                if (projectViewportMaximized)
+                {
+                    gui::set_cursor({scene_pos.x + runControlOffset + runButtonWidth + 4.0f,
+                        scene_pos.y + 2.0f});
+                    if (gui::button(runModeWidth >= 140.0f ? "Exit Full Screen" : "Exit (Esc)", {runModeWidth, 20.0f})
+                        && !menusBlockedByModal && !toolbarControlsBlockedByMenu)
+                        exit_project_runtime_full_screen(editor);
+                }
+                else if (!editor.projectBuildPending && scene_size.x >= 440.0f)
+                {
+                    gui::set_cursor({scene_pos.x + runControlOffset + runButtonWidth + 4.0f,
                         scene_pos.y + 2.0f});
                     const auto modeChoice = gui::select_box(gui::SelectBoxOptions{
                         .id = "scene-run-mode-select",
                         .placeholder = "Run mode",
-                        .selected = kSceneRunModes[editor.sceneRunFullscreenInEditor ? 1u : 0u],
+                        .selected = kSceneRunModes[scene_run_mode_index(editor)],
                         .options = kSceneRunModes,
                         .size = {runModeWidth, 20.0f},
                         .row_height = 26.0f,
-                        .max_visible_options = 2u,
+                        .max_visible_options = 3u,
                         .enabled = !menusBlockedByModal});
                     if (modeChoice.changed && modeChoice.selected_index)
-                        editor.sceneRunFullscreenInEditor = *modeChoice.selected_index == 1u;
+                        select_scene_run_mode(editor, static_cast<unsigned>(*modeChoice.selected_index));
                     result.scene_input_captured = result.scene_input_captured || modeChoice.opened;
                 }
-                else
+                else if (!editor.projectBuildPending)
                 {
                     // At narrow widths the dropdown becomes a directly
                     // actionable mode toggle; Run itself stays visible.
-                    gui::set_cursor({scene_pos.x + 96.0f + runButtonWidth + 4.0f,
+                    gui::set_cursor({scene_pos.x + runControlOffset + runButtonWidth + 4.0f,
                         scene_pos.y + 2.0f});
-                    if (gui::button(editor.sceneRunFullscreenInEditor ? "Fullscreen" : "Project",
+                    constexpr std::array<std::string_view, 3> compactRunModes{
+                        "Separate", "In Editor", "Full Screen"};
+                    if (gui::button(compactRunModes[scene_run_mode_index(editor)],
                         {runModeWidth, 20.0f}))
-                        editor.sceneRunFullscreenInEditor = !editor.sceneRunFullscreenInEditor;
+                        select_scene_run_mode(editor, (scene_run_mode_index(editor) + 1u) % 3u);
                 }
+            }
+            result.scene_input_captured = result.scene_input_captured
+                || editor_project_viewport_input_reserved(editor);
+            if (showMeshDrawMode)
+            {
+                const gui::Vec2 modePosition{scene_pos.x + scene_size.x - meshDrawWidth - 8.0f,
+                    scene_pos.y + (meshDrawSecondRow ? 26.0f : 2.0f)};
+                if (meshDrawSecondRow) gui::panel_rect(modePosition, {meshDrawWidth, 20.0f});
+                gui::set_cursor(modePosition);
+                const bool authoringView = !editor_project_viewport_input_reserved(editor)
+                    && editor.previewMode == core::ScenePreviewMode::Editor;
+                using ControlStatus=platform::child_process::RuntimeControlStatus;
+                const auto runtimeControl=editor.projectRuntimeSnapshot
+                    ?editor.projectRuntimeSnapshot->runtime_control:platform::child_process::RuntimeControlSnapshot{};
+                const bool runtimeView=editor_project_viewport_covered(editor)
+                    &&runtimeControl.status!=ControlStatus::unavailable;
+                constexpr std::array<std::string_view, 2> meshDrawModes{"Solid", "Wireframe"};
+                const bool wireframe=runtimeView
+                    ?runtimeControl.acknowledged_mode==platform::child_process::MeshDrawMode::wireframe
+                    :editor.viewportMeshWireframe;
+                const std::string_view drawModeLabel=runtimeView&&runtimeControl.status==ControlStatus::pending
+                    ?(wireframe?"Wire (wait)":"Solid (wait)")
+                    :runtimeView&&runtimeControl.status==ControlStatus::rejected
+                        ?(wireframe?"Wire (refused)":"Solid (refused)")
+                        :runtimeView&&runtimeControl.status==ControlStatus::disconnected
+                            ?"Disconnected":wireframe?(meshDrawWidth<100.0f?"Wire":"Wireframe"):"Solid";
+                const auto drawChoice = gui::select_box(gui::SelectBoxOptions{
+                    .id = "scene-mesh-draw-mode", .placeholder = "Mesh drawing",
+                    .selected = drawModeLabel,
+                    .options = meshDrawModes, .size = {meshDrawWidth, 20.0f},
+                    .row_height = 26.0f, .max_visible_options = 2u,
+                    .enabled = (authoringView||runtimeView)&&!menusBlockedByModal&&!toolbarControlsBlockedByMenu
+                        &&(!runtimeView||(runtimeControl.status!=ControlStatus::pending
+                            &&runtimeControl.status!=ControlStatus::disconnected))});
+                if (!menusBlockedByModal && !toolbarControlsBlockedByMenu && drawChoice.changed
+                    && drawChoice.selected_index && *drawChoice.selected_index < meshDrawModes.size())
+                {
+                    if(runtimeView)(void)request_project_runtime_mesh_mode(editor,*drawChoice.selected_index==1u);
+                    else if(authoringView)editor.viewportMeshWireframeRequest=*drawChoice.selected_index==1u;
+                }
+                if(!authoringView)editor.viewportMeshWireframeRequest.reset();
+                result.scene_input_captured = result.scene_input_captured || drawChoice.opened;
             }
             constexpr std::array<std::string_view, 8> kEditorViewLabels{
                 "Perspective",
@@ -165,11 +727,14 @@
             };
             const float viewSelectWidth = (std::min)(148.0f, (std::max)(112.0f, scene_size.x * 0.22f));
             const float focusButtonWidth = 58.0f;
-            const bool showViewSelect = !showSceneRun
-                || scene_size.x >= (96.0f + runButtonWidth + runModeWidth
-                    + viewSelectWidth + focusButtonWidth + 32.0f);
+            const float meshHeaderInset = showMeshDrawMode && !meshDrawSecondRow ? meshDrawWidth + 6.0f : 0.0f;
+            const bool authoringCameraControls = !editor_project_viewport_input_reserved(editor)
+                && editor.previewMode == core::ScenePreviewMode::Editor;
+            const bool showViewSelect = sceneFits && !projectViewportMaximized
+                && authoringCameraControls
+                && scene_size.x >= headerOccupiedLeft + viewSelectWidth + focusButtonWidth + meshHeaderInset + 22.0f;
             gui::set_cursor({
-                scene_pos.x + scene_size.x - viewSelectWidth - focusButtonWidth - 14.0f,
+                scene_pos.x + scene_size.x - viewSelectWidth - focusButtonWidth - meshHeaderInset - 14.0f,
                 scene_pos.y + 2.0f
             });
             if (showViewSelect)
@@ -192,10 +757,17 @@
             }
             result.scene_input_captured = result.scene_input_captured || editorViewSelect.opened;
             }
-            gui::set_cursor({ scene_pos.x + scene_size.x - focusButtonWidth - 8.0f, scene_pos.y + 2.0f });
-            if (gui::button("Focus", { focusButtonWidth, 20.0f }))
-                handle_scene_tool(editor, ctx.get(), "focus_selection");
-            ctx->set_scene_preview_mode(editor.previewMode);
+            gui::set_cursor({ scene_pos.x + scene_size.x - focusButtonWidth - meshHeaderInset - 8.0f, scene_pos.y + 2.0f });
+            if (sceneFits && !projectViewportMaximized && authoringCameraControls
+                && scene_size.x >= headerOccupiedLeft + focusButtonWidth + meshHeaderInset + 16.0f
+                && gui::button("Focus", { focusButtonWidth, 20.0f }))
+            {
+                if (editor.mainSurface == EditorMainSurface::ForestFactory && !editor.forestTerrainPainting)
+                    focus_forest_factory_preview(ctx.get(), editor);
+                else handle_scene_tool(editor, ctx.get(), "focus_selection");
+            }
+            ctx->set_scene_preview_mode(sceneFits && !editor_project_viewport_input_reserved(editor)
+                ? editor.previewMode : core::ScenePreviewMode::None);
             const int viewportX = (std::max)(0, static_cast<int>(std::floor(result.scene_viewport.position.x)));
             const int viewportY = (std::max)(0, static_cast<int>(std::floor(result.scene_viewport.position.y)));
             const int viewportRight = (std::max)(
@@ -228,23 +800,162 @@
                 }
             }
 #endif
-            if (ctx->action_pressed_safe(input::Action::FrameSelection))
+            const auto render_preview_context_menu = [&]()
+            {
+                auto& menu = editor.outlinerContextMenu;
+                const auto pointer = gui::mouse_position();
+                const auto frame = editor.timeSnapshot.frame_index;
+                const auto generation = editor.projectLifecycle.evidence().generations.selected_project.generation;
+                const auto cameraRevision = previewgrid::camera_revision_for(ctx.get());
+                const bool rightHeld = ctx->is_mouse_button_held_safe(input::MouseButton::MouseRight);
+                const bool inPreview = std::isfinite(pointer.x) && std::isfinite(pointer.y)
+                    && editor_point_in_rect(pointer, result.scene_viewport.position, result.scene_viewport.size);
+                const bool available = sceneFits && editor.mainSurface == EditorMainSurface::Scene
+                    && editor.previewMode == core::ScenePreviewMode::Editor
+                    && !editor_project_viewport_input_reserved(editor) && !modal_visible_now()
+                    && !floating_gui_visible() && editor.openMenu == TopMenu::None
+                    && ctx->has_input_focus_safe();
+                if (rightHeld && !menu.preview_right_held)
+                {
+                    menu.preview_right_candidate = available && inPreview && !result.scene_input_captured
+                        && !ctx->is_mouse_button_held_safe(input::MouseButton::MouseLeft)
+                        && !ctx->is_mouse_button_held_safe(input::MouseButton::MouseMiddle)
+                        && !ctx->is_key_held_safe(input::Key::LeftAlt)
+                        && !ctx->is_key_held_safe(input::Key::RightAlt);
+                    if (menu.preview_right_candidate)
+                    {
+                        menu.kind = EditorState::OutlinerContextMenu::Kind::preview_selection;
+                        menu.scene = editor_scene_identity(editor);
+                        menu.project_generation = generation;
+                        menu.preview_press = pointer;
+                        menu.preview_camera_revision = cameraRevision;
+                        menu.last_frame = frame;
+                    }
+                }
+                const bool boundCurrent = menu.scene == editor_scene_identity(editor)
+                    && menu.project_generation == generation;
+                bool navigating{};
+                for (const auto action : {input::Action::MoveForward,input::Action::MoveBackward,
+                    input::Action::MoveLeft,input::Action::MoveRight,input::Action::MoveUp,input::Action::MoveDown,
+                    input::Action::RollLeft,input::Action::RollRight,input::Action::LookLeft,
+                    input::Action::LookRight,input::Action::LookUp,input::Action::LookDown})
+                    navigating = navigating || ctx->action_held_safe(action);
+                const bool current = available && inPreview && boundCurrent && frame >= menu.last_frame
+                    && frame - menu.last_frame <= 1u;
+                if (!current || navigating || ctx->is_key_held_safe(input::Key::LeftAlt)
+                    || ctx->is_key_held_safe(input::Key::RightAlt)
+                    || ctx->is_mouse_button_held_safe(input::MouseButton::MouseLeft)
+                    || ctx->is_mouse_button_held_safe(input::MouseButton::MouseMiddle)
+                    || cameraRevision != menu.preview_camera_revision
+                    || std::abs(pointer.x-menu.preview_press.x) >= 4.0f
+                    || std::abs(pointer.y-menu.preview_press.y) >= 4.0f)
+                    menu.preview_right_candidate = false;
+                const bool open = !rightHeld && menu.preview_right_held && menu.preview_right_candidate;
+                menu.preview_right_held = rightHeld;
+                if (!rightHeld) menu.preview_right_candidate = false;
+                if (menu.kind != EditorState::OutlinerContextMenu::Kind::preview_selection) return;
+                menu.last_frame = frame;
+                if (open) menu.anchor = pointer;
+                if (!open && !menu.menu.popup.open) return;
+                gui::block_background_for_popup();
+                if (available) gui::clear_modal_input_capture();
+                const std::array commands{gui::MenuItemOptions{
+                    .label="Deselect", .enabled=editor_has_selection(editor), .command_id=1u}};
+                const auto popup = gui::command_menu(menu.menu, commands, gui::CommandMenuOptions{
+                    .owner={.position=menu.anchor,.size={1.0f,1.0f}}, .viewport_size={w,h},
+                    .open_requested=open, .close_requested=!available || !boundCurrent, .dismiss_on_hover_exit=false, .gap=0.0f});
+                result.scene_input_captured = result.scene_input_captured || open || popup.captured;
+                if (popup.activated_id == 1u && commands[0].enabled && available
+                    && menu.scene == editor_scene_identity(editor) && menu.project_generation == generation)
+                {
+                    gui::close_command_menu(menu.menu);
+                    clear_editor_selection(editor);
+                    push_editor_log(editor,"[edit] World selection cleared.");
+                }
+            };
+            render_preview_context_menu();
+            update_forest_brush(ctx,editor,result,modal_visible_now());
+            if (!editor_project_viewport_input_reserved(editor)
+                && ctx->action_pressed_safe(input::Action::FrameSelection)
+                && editor.mainSurface != EditorMainSurface::ForestFactory)
                 handle_scene_tool(editor, ctx.get(), "focus_selection");
-            update_scene_object_interaction(ctx, editor, result);
-            draw_scene_marquee_overlay(editor);
-            publish_editor_canvas2d_scene(ctx.get(), editor);
+            if (!editor_project_viewport_input_reserved(editor)
+                && editor.mainSurface != EditorMainSurface::ForestFactory)
+            {
+                update_scene_object_interaction(ctx, editor, result);
+                draw_scene_marquee_overlay(editor);
+                publish_editor_canvas2d_scene(ctx.get(), editor);
+            }
+            else (void)canvas2d::scene_content::retire(ctx.get());
             publish_editor_preview_markers(ctx.get(), editor);
 
             if (showSceneTimeline)
             {
                 const gui::Vec2 timelinePos{ scene_pos.x, scene_pos.y + scene_size.y + timelineStripGap };
                 gui::panel_rect(timelinePos, { scene_size.x, timelineStripHeight });
-                gui::titlebar_rect(timelinePos, { scene_size.x, timelineStripHeadingHeight });
                 gui::set_cursor({ timelinePos.x + 8.0f, timelinePos.y + 4.0f });
-                gui::label("Timeline");
-                gui::set_cursor({ timelinePos.x + 8.0f, timelinePos.y + timelineStripBodyOffset });
                 render_timeline_time_controls((std::max)(1.0f, scene_size.x - 16.0f), true);
             }
+        }
+        else if(editor.mainSurface == EditorMainSurface::AssetGeneration)
+        {
+            ctx->set_scene_preview_mode(core::ScenePreviewMode::None);
+            ctx->clear_scene_viewport();
+            (void)canvas2d::scene_content::retire(ctx.get());
+            // This workspace owns its full surface. Its native preview is the
+            // only intentional transparent hole; generic document headers and
+            // outer scroll regions belong to the other workspaces below.
+                auto& generation=editor.assetGeneration;
+                const bool reviewReady=editor.modelImportReview&&model_import_review_current(editor)
+                    &&generation.generated_model&&editor.modelImportReview->sourceSha256==generation.generated_model->result.output_sha256;
+                const auto generated=editor_asset_generation::draw(generation,viewport_size.x,viewport_size.y,
+                    bool(editor.assetGenerationPending),editor_asset_generation::DrawPermissions{
+                        .project_open=has_open_project(editor),
+                        .reference_project_current=generation.reference&&editor_asset_generation::current_project(
+                            *generation.reference,asset_generation_project(editor)),
+                        .model_project_current=generation.generated_model&&editor_asset_generation::current_project(
+                            *generation.generated_model,asset_generation_project(editor)),
+                        .model_review_ready=reviewReady});
+                dispatch_asset_generation(editor,ctx,generated.action);
+                if(generated.preview_visible&&editor_asset_generation::prepare_preview(generation))
+                {
+                    if(editor.assetGenerationFocusPending)
+                    {
+                        previewgrid::Vec3 low{1e30f,1e30f,1e30f},high{-1e30f,-1e30f,-1e30f};
+                        for(const auto& marker:generation.preview_markers)
+                        {
+                            const auto a=marker.mesh->minimum(),b=marker.mesh->maximum();
+                            low.x=(std::min)(low.x,a[0]*marker.scale.x);low.y=(std::min)(low.y,a[1]*marker.scale.y);low.z=(std::min)(low.z,a[2]*marker.scale.z);
+                            high.x=(std::max)(high.x,b[0]*marker.scale.x);high.y=(std::max)(high.y,b[1]*marker.scale.y);high.z=(std::max)(high.z,b[2]*marker.scale.z);
+                        }
+                        previewgrid::set_camera_mode(ctx.get(),previewgrid::CameraMode::Editor);
+                        (void)previewgrid::focus_camera(ctx.get(),{(low.x+high.x)*.5f,(low.y+high.y)*.5f,(low.z+high.z)*.5f},
+                            (std::max)(.01f,std::hypot(high.x-low.x,high.y-low.y,high.z-low.z)*.5f));
+                        editor.assetGenerationFocusPending=false;
+                    }
+                    if(previewgrid::set_object_markers(ctx.get(),generation.preview_markers))
+                    {
+                        previewgrid::clear_lighting_frame(ctx.get());
+                        result.scene_viewport=generated.preview;
+                        ctx->set_scene_viewport(core::RenderViewport{
+                            static_cast<int>(generated.preview.position.x),static_cast<int>(generated.preview.position.y),
+                            static_cast<int>(generated.preview.size.x),static_cast<int>(generated.preview.size.y)});
+                        ctx->set_scene_preview_mode(core::ScenePreviewMode::Editor);
+                    }
+                    else
+                    {
+                        previewgrid::clear_object_markers(ctx.get());
+                        gui::panel_rect(generated.preview.position,generated.preview.size);
+                        gui::set_cursor({generated.preview.position.x+8.0f,generated.preview.position.y+8.0f});
+                        gui::wrapped_label("This model exceeds the current preview budget. Its verified output is retained; no scene was changed.",
+                            (std::max)(1.0f,generated.preview.size.x-16.0f));
+                    }
+                }
+                else
+                {
+                    previewgrid::clear_object_markers(ctx.get());
+                    previewgrid::clear_lighting_frame(ctx.get());
+                }
         }
         else
         {
@@ -258,7 +969,8 @@
             ctx->clear_scene_viewport();
             (void)canvas2d::scene_content::retire(ctx.get());
 
-            gui::label(std::string(main_surface_title(editor.mainSurface)));
+            gui::label(editor.mainSurface == EditorMainSurface::Game2D
+                ? (editor.game2DGuiWorkspace ? "UI" : "2D") : std::string(main_surface_title(editor.mainSurface)));
             if (editor.mainSurface == EditorMainSurface::Project
                 && has_open_project(editor))
             {
@@ -299,7 +1011,7 @@
                 }
             }
             const gui::Vec2 centerScrollStart = gui::cursor_position();
-            const float centerWidth = (std::max)(180.0f, centerSurfaceSize.x - 12.0f);
+            const float centerWidth = (std::max)(1.0f, centerSurfaceSize.x - 12.0f);
             const float centerScrollHeight = (std::max)(
                 1.0f,
                 viewport_pos.y + viewport_size.y - centerScrollStart.y - 14.0f);
@@ -314,11 +1026,12 @@
 #if EPOCH_EDITION_PUBLIC
                 false
 #endif
+                || editor.mainSurface == EditorMainSurface::AssetGeneration
                 || (editor.mainSurface == EditorMainSurface::Assets
                     && editor.assetWorkspaceSection == 2u);
             (void)gui::begin_scroll_area(gui::ScrollAreaOptions{
                 .id = centerScrollId,
-                .size = { (std::max)(80.0f, centerSurfaceSize.x), centerScrollHeight },
+                .size = { (std::max)(1.0f, centerSurfaceSize.x), centerScrollHeight },
                 .draw_background = false,
                 .show_scrollbar = !centerHasNestedSourceEditor,
                 .capture_wheel = !centerHasNestedSourceEditor
@@ -328,11 +1041,15 @@
             {
             case EditorMainSurface::Project:
             {
-                gui::label("Project Session");
+                gui::section_heading("Project");
+                draw_project_browser(editor, ctx, centerWidth);
                 const bool projectOpen = has_open_project(editor);
                 if (gui::button(editor.projectCreationOpen ? "Cancel New Project" : "New Project...",
                         {(std::min)(centerWidth, 206.0f), 30.0f}))
+                {
                     editor.projectCreationOpen = !editor.projectCreationOpen;
+                    if (!editor.projectCreationOpen) editor.forestProjectCreationIntent.reset();
+                }
                 if (editor.projectCreationOpen)
                 {
                     constexpr std::string_view kinds[]{"Game", "Software / Tool", "Epoch Editor"};
@@ -347,8 +1064,18 @@
                     if (kind.changed && kind.selected_index)
                         editor.projectCreationKind = *kind.selected_index;
                     gui::wrapped_label("Creates a new project folder using the selected starter. Existing projects are never overwritten.", centerWidth);
+                    if (editor.forestProjectCreationIntent)
+                        gui::wrapped_label("Your current plant will be added after you confirm this new Game project.", centerWidth);
                     if (gui::button("Create Project", {(std::min)(centerWidth, 206.0f), 30.0f}))
                     {
+                        const bool addingPlant = editor.forestProjectCreationIntent.has_value();
+                        auto plantDocument = take_forest_project_creation(editor);
+                        if (addingPlant && !plantDocument)
+                            push_editor_log(editor, "[forest] " + editor.projectStatus);
+                        else
+                        {
+                        const auto previousProjectGeneration = editor.projectLifecycle.evidence()
+                            .generations.selected_project.generation;
                         const auto created = editor_create_project_shell(
                             projectKinds[selectedKind],
                             EditorProjectInputProvision::project_default
@@ -357,39 +1084,31 @@
                         if (created.succeeded)
                         {
                             const auto admitted = editor_admit_project_manifest(created.manifest_path);
-                            if (admitted.succeeded && editor_open_project(ctx, admitted.project_id))
+                            if (admitted.succeeded && admitted.project_id == created.project_id
+                                && editor_open_project(ctx, admitted.project_id))
+                            {
                                 editor.projectCreationOpen = false;
+                                if (plantDocument && finish_forest_project_creation(editor,
+                                        std::move(*plantDocument), admitted.project_id, created.root_path,
+                                        admitted.manifest_path, previousProjectGeneration) > 0u)
+                                {
+                                    (void)save_editor_scene_snapshot(editor);
+                                    apply_editor_surface(EditorMainSurface::Scene, "Add Plant to New Project");
+                                    (void)focus_forest_factory_placement(ctx.get(), editor);
+                                }
+                            }
                             else
                                 editor.projectStatus = "Project created at " + created.root_path
                                     + "; open it with Open Project File. " + admitted.summary;
                         }
                         push_editor_log(editor, "[project] " + editor.projectStatus);
+                        }
                     }
-                }
-
-                const std::array projectSessionActions{
-                    gui::InlineButtonSpec{
-                        .label = projectOpen
-                            ? "Open Another Project File..."
-                            : "Open Project File...",
-                        .width = 206.0f},
-                    gui::InlineButtonSpec{
-                        .label = "Close Project",
-                        .width = 118.0f,
-                        .enabled = projectOpen}
-                };
-                if (const auto action = gui::inline_button_row(
-                        projectSessionActions, 30.0f, 6.0f))
-                {
-                    if (*action == 0u)
-                        (void)open_project_manifest_from_dialog(editor, ctx);
-                    else
-                        (void)editor_close_project(ctx);
                 }
 
                 if (!has_open_project(editor))
                 {
-                    gui::label("No Project Open");
+                gui::section_heading("No project open", gui::SemanticTone::warning);
                     gui::wrapped_label(
                         "Choose New Project to create a starter, or open a project.epoch.json manifest. Opening loads that project authoring session without rewriting its source; Close Project releases the session without deleting files.",
                         centerWidth);
@@ -400,18 +1119,331 @@
                 const auto& projectProfile = active_project_profile(editor);
                 if (editor.projectWorkspaceSection == 0u)
                 {
-                    gui::label("Project Defaults");
-                const std::filesystem::path outputExe = project_output_exe_path(editor.projectRoot);
-                const std::filesystem::path buildLog = project_build_log_path(editor.projectRoot);
-                gui::label(std::string("Active Project: ") + editor.projectName);
-                gui::property_row("[project] Kind", editor.projectKind);
-                gui::property_row("[project] Root", display_project_path(editor.projectRoot), 108.0f);
-                gui::property_row("[project] Manifest", file_ready_summary(editor.projectManifest), 108.0f);
-                gui::property_row("[project] Scene", file_ready_summary(editor.projectScenePath), 108.0f);
-                gui::property_row("[project] Output", file_ready_summary(outputExe.string()), 108.0f);
-                gui::property_row("[project] Build log", file_ready_summary(buildLog.string()), 108.0f);
+                    gui::section_heading("Terrain");
+                    const bool planetBusy = planetary_project_busy(editor);
+                    const bool planetAttached = editor.planetaryAttachment.source_attached();
+                    const gui::InlineButtonRowOptions planetButtons{
+                        .sizing=gui::InlineButtonSizing::FitContent,
+                        .alignment=gui::InlineButtonAlignment::Center,
+                        .wrap=true, .available_width=centerWidth};
+                    if (planetAttached)
+                    {
+                        if (editor.planetaryRadiusSynced != editor.planetarySettings.reference_radius_meters
+                            || editor.planetaryRadiusReferenceSynced != editor.planetarySettings.size_reference_body)
+                        {
+                            editor.planetaryRadiusDraft = epochengine::format_text("{:.9g}", editor.planetarySettings.reference_radius_meters);
+                            editor.planetaryRadiusSynced = editor.planetarySettings.reference_radius_meters;
+                            editor.planetaryRadiusReferenceSynced = editor.planetarySettings.size_reference_body;
+                        }
+                        const auto readPlanetRadius = [&]() -> std::optional<double>
+                        {
+                            double radius{};
+                            const auto parsed=std::from_chars(editor.planetaryRadiusDraft.data(),
+                                editor.planetaryRadiusDraft.data()+editor.planetaryRadiusDraft.size(),radius);
+                            if(parsed.ec!=std::errc{}||parsed.ptr!=editor.planetaryRadiusDraft.data()+editor.planetaryRadiusDraft.size()
+                                ||!std::isfinite(radius)||radius<250.0||radius>100000000.0) return {};
+                            return radius;
+                        };
+                        const auto readPlanetSeed = [&]() -> std::optional<std::uint32_t>
+                        {
+                            std::uint32_t seed{};
+                            const auto parsed = std::from_chars(editor.planetarySeedDraft.data(),
+                                editor.planetarySeedDraft.data() + editor.planetarySeedDraft.size(), seed);
+                            if (parsed.ec != std::errc{}
+                                || parsed.ptr != editor.planetarySeedDraft.data() + editor.planetarySeedDraft.size())
+                                return {};
+                            return seed;
+                        };
+                        const auto integerControl=[&](std::string_view id,std::string_view label,std::string_view unit,
+                            std::uint32_t& value,float minimum,float maximum)
+                        {
+                            gui::wrapped_label(std::string(label)+": "+std::to_string(value)+std::string(unit),centerWidth);
+                            const auto control=gui::slider(gui::SliderOptions{
+                                .id=id,.minimum=minimum,.maximum=maximum,.value=static_cast<float>(value),.step=1.0f,
+                                .size={(std::min)(centerWidth,400.0f),28.0f}});
+                            if(control.changed)value=static_cast<std::uint32_t>(control.value);
+                        };
+                        const bool validPlanetSettings = project_planetary::valid_settings(editor.planetarySettings)
+                            && readPlanetRadius().has_value();
+                        const bool validPlanetSeed = readPlanetSeed().has_value();
+                        if (!validPlanetSeed)
+                            gui::wrapped_label("Enter a whole-number seed from 0 to 4294967295.", centerWidth);
+                        if (!readPlanetRadius())
+                            gui::wrapped_label("Enter a radius from 250 to 100000000 metres. The previous size is retained until the value is valid.", centerWidth);
+                        if (!validPlanetSettings)
+                            gui::wrapped_label("This combination exceeds the terrain limits. Reduce grid detail, tiles or patches, or increase the mesh budget below before saving or building.", centerWidth);
+                        if (!editor.planetaryStatus.empty())
+                            gui::wrapped_label(editor.planetaryStatus, centerWidth);
+                        if (const auto blocked = planetary_generation_block_reason(editor); !blocked.empty())
+                            gui::wrapped_label(blocked, centerWidth);
+                        gui::wrapped_label("Saving settings does not run Build & Generate. The displayed mesh may be from an earlier recipe; generate to apply the requested settings.", centerWidth);
+                        gui::section_heading("Terrain Settings");
+                        gui::wrapped_label("Build & Generate saves the terrain overview. Camera LOD adds detail during exploration; Run opens the project controls.", centerWidth);
+                        if(std::any_of(editor.entities.begin(),editor.entities.end(),[](const auto& entity) {
+                            return entity.category=="Planetary Terrain"&&entity.meshAsset&&!entity.meshAsset->coordinates;
+                        }))
+                            gui::wrapped_label("This saved planet uses the older overview scale. Choose a size and Build & Generate with the updated extension to correct its scale. Existing placement stays until generation succeeds.",centerWidth);
+                        if (!planetBusy)
+                        {
+                            constexpr std::string_view modes[]{"classic", "tiled", "hemisphere", "planet", "universe"};
+                            const auto coverage = gui::select_box(gui::SelectBoxOptions{
+                                .id="planet-coverage", .placeholder="Coverage",
+                                .selected=editor.planetarySettings.mode, .options=modes,
+                                .size={(std::min)(centerWidth, 320.0f), 30.0f}});
+                            if (coverage.changed && coverage.selected_index)
+                            {
+                                editor.planetarySettings.mode = std::string(modes[*coverage.selected_index]);
+                                if (!project_planetary::supports_ocean_surface(editor.planetarySettings))
+                                    editor.planetarySettings.ocean_surface = false;
+                                if (!project_planetary::supports_exploration(editor.planetarySettings))
+                                    editor.planetarySettings.original_sunlight = false;
+                            }
+                            gui::label("Seed (same seed and settings produce the same terrain)");
+                            (void)gui::edit_box(editor.planetarySeedDraft, {(std::min)(centerWidth, 320.0f), 30.0f}, 10u, false);
+                            gui::wrapped_label("Grid detail: "+std::to_string(editor.planetarySettings.cells_per_tile)+" cells",centerWidth);
+                            const auto cells = gui::slider(gui::SliderOptions{
+                                .id="planet-cells", .minimum=2.0f, .maximum=64.0f,
+                                .value=static_cast<float>(editor.planetarySettings.cells_per_tile), .step=1.0f,
+                                .size={(std::min)(centerWidth, 400.0f), 28.0f}});
+                            if (cells.changed) editor.planetarySettings.cells_per_tile = static_cast<std::uint32_t>(cells.value);
+                            gui::wrapped_label("Tiles per side: "+std::to_string(editor.planetarySettings.tiles_per_axis),centerWidth);
+                            const auto tiles = gui::slider(gui::SliderOptions{
+                                .id="planet-tiles", .minimum=1.0f, .maximum=16.0f,
+                                .value=static_cast<float>(editor.planetarySettings.tiles_per_axis), .step=1.0f,
+                                .size={(std::min)(centerWidth, 400.0f), 28.0f}});
+                            if (tiles.changed) editor.planetarySettings.tiles_per_axis = static_cast<std::uint32_t>(tiles.value);
+                            gui::wrapped_label("Flat tile width: "+std::to_string(editor.planetarySettings.tile_span_meters)+" m",centerWidth);
+                            const auto span = gui::slider(gui::SliderOptions{
+                                .id="planet-span", .minimum=1.0f, .maximum=16384.0f,
+                                .value=static_cast<float>(editor.planetarySettings.tile_span_meters), .step=1.0f,
+                                .size={(std::min)(centerWidth, 400.0f), 28.0f}});
+                            if (span.changed) editor.planetarySettings.tile_span_meters = span.value;
+                            gui::wrapped_label("Planet body: "+std::to_string(editor.planetarySettings.body_index),centerWidth);
+                            const auto body = gui::slider(gui::SliderOptions{
+                                .id="planet-body", .minimum=0.0f, .maximum=5.0f,
+                                .value=static_cast<float>(editor.planetarySettings.body_index), .step=1.0f,
+                                .size={(std::min)(centerWidth, 400.0f), 28.0f}});
+                            if (body.changed)
+                            {
+                                editor.planetarySettings.body_index = static_cast<std::uint32_t>(body.value);
+                                if (!project_planetary::supports_ocean_surface(editor.planetarySettings))
+                                    editor.planetarySettings.ocean_surface = false;
+                            }
+                            gui::section_heading("World Size");
+                            gui::wrapped_label("Choose a size separately from terrain detail. Editing the radius sizes the selected body; other worlds keep their relative proportions.", centerWidth);
+                            const std::array sizePresets{
+                                gui::InlineButtonSpec{.label="Small: 2 km",.width=0.0f},
+                                gui::InlineButtonSpec{.label="Walkable: 25 km",.width=0.0f},
+                                gui::InlineButtonSpec{.label="Moon-sized",.width=0.0f},
+                                gui::InlineButtonSpec{.label="Earth-sized",.width=0.0f}};
+                            const auto applyRadius = [&](double radius)
+                            {
+                                editor.planetarySettings.size_reference_body=editor.planetarySettings.body_index;
+                                editor.planetarySettings.reference_radius_meters=radius;
+                                editor.planetaryRadiusDraft=epochengine::format_text("{:.9g}",radius);
+                                editor.planetaryRadiusSynced=radius;
+                                editor.planetaryRadiusReferenceSynced=editor.planetarySettings.size_reference_body;
+                            };
+                            if(const auto selected=gui::inline_button_row(sizePresets,30.0f,6.0f,planetButtons))
+                                applyRadius(std::array{2000.0,25000.0,1737000.0,6371000.0}[*selected]);
+                            gui::label("Radius (metres)");
+                            if(gui::edit_box(editor.planetaryRadiusDraft,{(std::min)(centerWidth,320.0f),30.0f},32u,false).changed)
+                                if(const auto radius=readPlanetRadius())
+                                {
+                                    editor.planetarySettings.size_reference_body=editor.planetarySettings.body_index;
+                                    editor.planetarySettings.reference_radius_meters=*radius;
+                                    editor.planetaryRadiusSynced=*radius;
+                                    editor.planetaryRadiusReferenceSynced=editor.planetarySettings.size_reference_body;
+                                }
+                            const auto sizeSlider=gui::slider(gui::SliderOptions{
+                                .id="planet-radius",.minimum=static_cast<float>(std::log10(250.0)),.maximum=8.0f,
+                                .value=static_cast<float>(std::log10(editor.planetarySettings.reference_radius_meters)),.step=0.001f,
+                                .size={(std::min)(centerWidth,400.0f),28.0f}});
+                            if(sizeSlider.changed)applyRadius(std::clamp(std::pow(10.0,double(sizeSlider.value)),250.0,100000000.0));
+                            gui::wrapped_label(epochengine::format_text("Size reference: body {}. Radius {:.3f} km; diameter {:.3f} km.",
+                                editor.planetarySettings.size_reference_body,editor.planetarySettings.reference_radius_meters/1000.0,
+                                editor.planetarySettings.reference_radius_meters/500.0),centerWidth);
+                            gui::wrapped_label(epochengine::format_text("One full lap: about {:.1f} hours at the base game walk speed of 5.5 m/s, before terrain or stops.",
+                                6.2831853071795864769*editor.planetarySettings.reference_radius_meters/5.5/3600.0),centerWidth);
+                            if(editor.planetarySettings.reference_radius_meters>=100000.0)
+                                gui::wrapped_label("Large sizes can lose fine ground detail with the current renderer. Test the ground view before relying on this size.",centerWidth);
+                            if (project_planetary::supports_ocean_surface(editor.planetarySettings))
+                            {
+                                const std::array oceanActions{
+                                    gui::InlineButtonSpec{
+                                        .label=editor.planetarySettings.ocean_surface
+                                            ? "Ocean surface: On" : "Ocean surface: Off"}};
+                                if (gui::inline_button_row(oceanActions, 30.0f, 6.0f, planetButtons))
+                                {
+                                    editor.planetarySettings.ocean_surface =
+                                        !editor.planetarySettings.ocean_surface;
+                                    editor.planetaryStreamFailed = false;
+                                    editor.planetaryStreamContinue = true;
+                                }
+                                gui::wrapped_label(
+                                    "Ocean On includes Water (FFT Ocean) automatically before saving or generating. Its exact source approval appears if needed. Ocean Off keeps a dry planet without this dependency.",
+                                    centerWidth);
+                            }
+                        }
+                        if (project_planetary::supports_exploration(editor.planetarySettings))
+                        {
+                            if(!planetBusy&&gui::toggle_switch("Original planetary sunlight",
+                                editor.planetarySettings.original_sunlight,{(std::min)(centerWidth,330.0f),28.0f}))
+                                editor.planetaryStatus="Sunlight choice changed. Save Settings, then rebuild Run to apply it.";
+                            gui::wrapped_label("Adds the planet system's moving sun during Run. Your scene lights and ambient lighting stay in place.",centerWidth);
+                            const std::array lodActions{
+                                gui::InlineButtonSpec{.label=editor.planetarySettings.mode=="universe"
+                                    ?(editor.planetarySettings.stream_lod?"Runtime terrain LOD: On":"Runtime terrain LOD: Off")
+                                    :(editor.planetarySettings.stream_lod?"Camera LOD: On":"Camera LOD: Off"), .width=0.0f},
+                                gui::InlineButtonSpec{.label="Retry LOD", .width=0.0f, .enabled=editor.planetaryStreamFailed}};
+                            if (const auto lodAction = gui::inline_button_row(lodActions, 30.0f, 6.0f, planetButtons))
+                            {
+                                if (*lodAction == 0u) editor.planetarySettings.stream_lod = !editor.planetarySettings.stream_lod;
+                                editor.planetaryStreamFailed = false;
+                                editor.planetaryStreamContinue = true;
+                            }
+                            if(editor.planetarySettings.mode=="universe")
+                                gui::wrapped_label("The editor shows a system overview. Run the project to fly, land and stream detail on individual worlds.",centerWidth);
+                            else if (!editor.planetaryStreamStatus.empty()) gui::wrapped_label(editor.planetaryStreamStatus, centerWidth);
+                            if (!planetBusy)
+                            {
+                                const std::array detailPresets{
+                                    gui::InlineButtonSpec{.label="Compact",.width=0.0f},
+                                    gui::InlineButtonSpec{.label="Fast",.width=0.0f},
+                                    gui::InlineButtonSpec{.label="Balanced",.width=0.0f},
+                                    gui::InlineButtonSpec{.label="Fine",.width=0.0f}};
+                                if(const auto profile=gui::inline_button_row(detailPresets,30.0f,6.0f,planetButtons))
+                                {
+                                    constexpr std::array presets{
+                                        project_planetary::DetailPreset::compact,
+                                        project_planetary::DetailPreset::fast,
+                                        project_planetary::DetailPreset::detailed,
+                                        project_planetary::DetailPreset::fine};
+                                    const auto settings=project_planetary::with_detail_preset(editor.planetarySettings,
+                                        presets[*profile]);
+                                    if(settings)
+                                    {
+                                        editor.planetarySettings=*settings;
+                                        editor.planetaryStatus="Detail preset selected. You can adjust its values below, then Save Settings or Build & Generate.";
+                                    }
+                                }
+                                gui::section_heading("Custom Detail and Memory");
+                                gui::wrapped_label("Presets fill in these limits. Custom values work without selecting a preset; the complete settings must fit the mesh budget.",centerWidth);
+                                integerControl("planet-lod-level","Maximum terrain level","",editor.planetarySettings.maximum_level,0.0f,20.0f);
+                                integerControl("planet-lod-leaves","Maximum visible terrain patches","",editor.planetarySettings.maximum_leaves,6.0f,2048.0f);
+                                gui::wrapped_label(epochengine::format_text(
+                                    "Terrain pixel target: {:.1f} px", editor.planetarySettings.patch_pixels), centerWidth);
+                                const auto pixels = gui::slider(gui::SliderOptions{
+                                    .id="planet-lod-pixels", .minimum=32.0f, .maximum=4096.0f,
+                                    .value=static_cast<float>(editor.planetarySettings.patch_pixels), .step=1.0f,
+                                    .size={(std::min)(centerWidth,400.0f),28.0f}});
+                                if (pixels.changed) editor.planetarySettings.patch_pixels = pixels.value;
+                                gui::wrapped_label("Smaller pixel targets request finer terrain. The patch and memory limits still apply.", centerWidth);
+                                gui::wrapped_label(epochengine::format_text(
+                                    "LOD stability: {:.0f}%", editor.planetarySettings.lod_hysteresis * 100.0), centerWidth);
+                                const auto stability = gui::slider(gui::SliderOptions{
+                                    .id="planet-lod-stability", .minimum=0.0f, .maximum=45.0f,
+                                    .value=static_cast<float>(editor.planetarySettings.lod_hysteresis * 100.0), .step=1.0f,
+                                    .size={(std::min)(centerWidth,400.0f),28.0f}});
+                                if (stability.changed) editor.planetarySettings.lod_hysteresis = stability.value / 100.0;
+                            }
+                        }
+                        if (!planetBusy)
+                        {
+                            gui::section_heading("Terrain Memory");
+                            integerControl("planet-lod-memory","Terrain patch cache"," MiB",editor.planetarySettings.resident_megabytes,4.0f,256.0f);
+                            integerControl("planet-snapshot-memory","Mesh snapshot limit"," MiB",editor.planetarySettings.snapshot_megabytes,1.0f,64.0f);
+                            const auto footprint=project_planetary::preview_memory_footprint(editor.planetarySettings,64ull*1024u*1024u);
+                            if(footprint.cpu_upper_bytes)
+                                gui::wrapped_label("Estimated RAM allowance: "+std::to_string(footprint.cpu_upper_bytes/(1024u*1024u))
+                                    +" MiB. Includes cached terrain and mesh replacement; this is an estimate, not measured usage. Renderer memory is extra.",centerWidth);
+                        }
+                        // Act on this frame's completed form, including edits
+                        // that make a previously invalid combination valid.
+                        const bool canApplyTerrain = project_planetary::valid_settings(editor.planetarySettings)
+                            && readPlanetSeed().has_value() && readPlanetRadius().has_value() && !planetBusy;
+                        const std::array planetActions{
+                            gui::InlineButtonSpec{.label="Build & Generate", .width=0.0f,
+                                .enabled=canApplyTerrain && !editor.projectBuildPending && !editor.scriptBuildPending},
+                            gui::InlineButtonSpec{.label="Save Settings", .width=0.0f, .enabled=canApplyTerrain},
+                            gui::InlineButtonSpec{.label="Cancel", .width=0.0f, .enabled=planetBusy}};
+                        const auto planetAction = gui::inline_button_row(
+                            planetActions, 30.0f, 6.0f, planetButtons);
+                        if (planetAction)
+                        {
+                            if (*planetAction == 2u)
+                                cancel_planetary_project_task(editor);
+                            else if (const auto seed = readPlanetSeed(); !seed)
+                                editor.planetaryStatus = "Enter a whole-number seed from 0 to 4294967295.";
+                            else if (!readPlanetRadius())
+                                editor.planetaryStatus = "Enter a valid radius before building or saving. The previous size is retained.";
+                            else if (!project_planetary::valid_settings(editor.planetarySettings))
+                                editor.planetaryStatus = "Settings exceed the current mesh budget. No build or save was started.";
+                            else if (!planetBusy)
+                            {
+                                editor.planetarySettings.seed = *seed;
+                                if (*planetAction == 0u)
+                                {
+                                    if (!editor.projectBuildPending && !editor.scriptBuildPending)
+                                        start_planetary_project_generation(editor);
+                                }
+                                else
+                                {
+                                    request_planetary_feature_action(editor, false);
+                                }
+                            }
+                        }
+                    }
+                    else if (planetBusy)
+                    {
+                        if (gui::inline_button_row(std::array{gui::InlineButtonSpec{
+                                .label="Cancel Package Operation", .width=0.0f}}, 30.0f, 6.0f, planetButtons))
+                            cancel_planetary_project_task(editor);
+                    }
+                    else if (gui::inline_button_row(std::array{gui::InlineButtonSpec{
+                            .label="Add Planetary Terrain...", .width=0.0f, .enabled=!planetBusy}},
+                            30.0f, 6.0f, planetButtons))
+                    {
+                        editor.showPackageManagerModal = true;
+                        open_package_source_review(editor, "research_planetary_terrain");
+                    }
+                    if (!planetAttached)
+                        gui::wrapped_label(editor.planetaryStatus, centerWidth);
+                    if (!editor.planetaryBuildLog.empty())
+                    {
+                        gui::wrapped_label(epochengine::format_text("Build {:.1f}s / Generate {:.1f}s",
+                            editor.planetaryBuildSeconds, editor.planetaryGenerationSeconds), centerWidth);
+                        gui::wrapped_label("Build log: " + editor.planetaryBuildLog.generic_string(), centerWidth);
+                        if (gui::inline_button_row(std::array{gui::InlineButtonSpec{
+                                .label=editor.planetaryLogLines.empty() ? "View Build Log" : "Hide Build Log",
+                                .width=0.0f, .enabled=!planetBusy}}, 30.0f, 6.0f, planetButtons))
+                        {
+                            if (!editor.planetaryLogLines.empty()) editor.planetaryLogLines.clear();
+                            else
+                            {
+                                std::istringstream log{read_text_tail(editor.planetaryBuildLog, 16'000u)};
+                                for (std::string line; std::getline(log, line); )
+                                    editor.planetaryLogLines.push_back(std::move(line));
+                            }
+                        }
+                        if (!editor.planetaryLogLines.empty())
+                            (void)gui::scroll_text_panel(gui::ScrollTextPanelOptions{
+                                .id="planet-build-log", .size={centerWidth,180.0f},
+                                .lines=editor.planetaryLogLines, .max_line_chars=4096u,
+                                .selectable=true, .stick_to_bottom=false, .wrap_lines=true});
+                    }
+                    gui::section_heading("Build & Run");
+                const std::filesystem::path outputExe = project_output_exe_path(editor.projectRoot, editor.projectBuildConfiguration);
+                const std::filesystem::path buildLog = project_build_transcript_for_display(editor);
+                gui::property_row("Project", editor.projectName, 118.0f);
+                gui::property_row("Kind", editor.projectKind);
+                gui::property_row("Root", display_project_path(editor.projectRoot), 108.0f);
+                gui::property_row("Manifest", file_ready_summary(editor.projectManifest), 108.0f);
+                gui::property_row("Scene", file_ready_summary(editor.projectScenePath), 108.0f);
+                gui::property_row("Output", file_ready_summary(outputExe.string()), 108.0f);
+                gui::property_row("Build log", file_ready_summary(buildLog.string()), 108.0f);
                 gui::wrapped_label(
-                    "This surface is the project launcher/control workspace. Save, build, and run happen here or from the centered Run button; logs remain mirrored below.",
+                    "Save, build and run this project. Build output and errors appear in Output.",
                     centerWidth);
                 const auto runChoices = project_run_backend_choices();
                 std::vector<std::string_view> runChoiceLabels;
@@ -430,12 +1462,13 @@
                 if (runBackendSelect.changed && runBackendSelect.selected_index && *runBackendSelect.selected_index < runChoices.size())
                 {
                     editor.projectRunBackend = std::string(runChoices[*runBackendSelect.selected_index].argument);
+                    persist_project_run_settings(editor);
                     push_editor_log(editor, std::string("[project] Project Run backend set to ") + std::string(runChoices[*runBackendSelect.selected_index].label) + ".");
                 }
-                gui::property_row("[project] Run mode", std::string(project_run_backend_label(editor.projectRunBackend)), 108.0f);
-                gui::property_row("[project] Capability policy", projectProfile.renderer_capability.id, 148.0f);
+                gui::property_row("Run mode", std::string(project_run_backend_label(editor.projectRunBackend)), 108.0f);
+                gui::property_row("Capability policy", projectProfile.renderer_capability.id, 148.0f);
                 gui::property_row(
-                    "[project] Run admission",
+                    "Renderer evidence",
                     renderer_admission_summary(
                         renderer_backend_kind(editor.projectRunBackend),
                         projectProfile.renderer_capability),
@@ -443,10 +1476,11 @@
                 if (frame_limit_control("project-run-frame-limit-select", editor.projectRunFrameLimitFps,
                         editor.projectFrameLimitEdit, centerWidth))
                 {
+                    persist_project_run_settings(editor);
                     push_editor_log(editor, "[project] Project Run frame limit set to "
                         + frame_limit_argument(editor.projectRunFrameLimitFps) + " FPS.");
                 }
-                gui::property_row("[project] Frame limit", std::string(frame_limit_label(editor.projectRunFrameLimitFps)), 108.0f);
+                gui::property_row("Frame limit", std::string(frame_limit_label(editor.projectRunFrameLimitFps)), 108.0f);
                 const bool activeProjectIsEngineSandbox = editor.projectId == "sandbox";
                 if (!activeProjectIsEngineSandbox)
                 {
@@ -474,11 +1508,11 @@
                         }
                         push_editor_log(editor, std::string("[project] Project camera style set to ") + std::string(cameraChoices[*cameraSelect.selected_index].label) + ".");
                     }
-                    gui::property_row("[project] Camera style", std::string(project_camera_label(editor.projectCameraMode)), 108.0f);
+                    gui::property_row("Camera style", std::string(project_camera_label(editor.projectCameraMode)), 108.0f);
                 }
                 else
                 {
-                    gui::property_row("[project] Camera style", "Engine engine development mirrors the editor workbench.", 108.0f);
+                    gui::property_row("Camera style", "Engine engine development mirrors the editor workbench.", 108.0f);
                 }
                 const auto inputChoices = input_profile_choices();
                 std::vector<std::string_view> inputChoiceLabels;
@@ -500,7 +1534,7 @@
                     input::set_active_profile(editor.inputProfilePreset);
                     push_editor_log(editor, std::string("[input] Shared profile set to ") + std::string(input_profile_label(editor.inputProfilePreset)) + ".");
                 }
-                gui::property_row("[editor] Camera input", std::string(input_profile_label(editor.inputProfilePreset)), 108.0f);
+                gui::property_row("Camera input", std::string(input_profile_label(editor.inputProfilePreset)), 108.0f);
                 gui::label("New Project Self-Iteration");
                 gui::wrapped_label(
                     "Creation default only. Existing projects are never changed. Enabled kits may propose project-source edits only, require explicit approval, and never auto-connect, listen, bind, serve, or launch a model.",
@@ -515,7 +1549,7 @@
 
                 if (editor.projectWorkspaceSection == 1u)
                 {
-                    gui::label("Input Manager");
+                gui::section_heading("Input");
                     gui::wrapped_label(
                         "These bindings belong to the active project. Edits stay in a validated draft until Apply publishes the canonical source and compiled Library artifact.",
                         centerWidth);
@@ -524,26 +1558,26 @@
                         ? editor.projectInputSettings->snapshot()
                         : editor_project_input_settings::SettingsSnapshot{};
                     gui::property_row(
-                        "[input] Source",
+                        "Source",
                         inputLoaded
                             ? std::string{project_input::canonical_source_path}
                             : std::string{"Not loaded"},
                         132.0f);
                     gui::property_row(
-                        "[input] Profile",
+                        "Profile",
                         projectInput.display_name.empty()
                             ? std::string{"Not declared"}
                             : projectInput.display_name,
                         132.0f);
                     gui::property_row(
-                        "[input] Actions",
+                        "Actions",
                         epochengine::format_text(
                             "{} actions | {} bindings",
                             projectInput.action_count,
                             projectInput.binding_count),
                         132.0f);
                     gui::property_row(
-                        "[input] Draft",
+                        "Draft",
                         inputLoaded
                             ? epochengine::format_text(
                                 "{} | applied r{} | working r{}",
@@ -553,7 +1587,7 @@
                             : std::string{"Unavailable"},
                         132.0f);
                     gui::property_row(
-                        "[input] Validation",
+                        "Validation",
                         editor.projectInputSettingsStatus,
                         132.0f);
                     if (!projectInput.evidence.conflicts.empty())
@@ -573,11 +1607,11 @@
                         const auto physicalControllerSnapshot =
                             controller_input::snapshot();
                         gui::property_row(
-                            "[input] Keyboard",
+                            "Keyboard",
                             "Canonical project bindings sampled live",
                             132.0f);
                         gui::property_row(
-                            "[input] Controller",
+                            "Controller",
                             physicalControllerSnapshot.provider_available
                                 ? epochengine::format_text(
                                     "{} | {} connected | snapshot {}",
@@ -589,13 +1623,13 @@
                                     controller_input::physical_provider_name()),
                             132.0f);
                         gui::property_row(
-                            "[input] Dead zone",
+                            "Dead zone",
                             project_controller_dead_zone_evidence(
                                 projectInput.controller_dead_zone_q15,
                                 projectInput.uniform_controller_dead_zone),
                             132.0f);
 
-                        gui::label("Project Controls");
+                gui::section_heading("Input bindings");
                         const auto recordInputEdit =
                             [&](const editor_project_input_settings::SettingsEvidence& evidence)
                             {
@@ -695,7 +1729,7 @@
                         {
                             gui::label(binding.action_label);
                             gui::property_row(
-                                "[binding] Device",
+                                "Device",
                                 binding.source_label,
                                 132.0f);
                             switch (binding.device)
@@ -945,7 +1979,7 @@
 
                 if (editor.projectWorkspaceSection == 2u)
                 {
-                    gui::label("Audio Settings");
+                gui::section_heading("Audio");
                     const auto projectAudio =
                         editor_project_audio_profile_summary(
                             editor.projectId);
@@ -981,7 +2015,7 @@
 
                 if (editor.projectWorkspaceSection == 3u)
                 {
-                    gui::label("Canvas2D Settings");
+                    gui::section_heading("2D presentation");
                     gui::wrapped_label(
                         "Logical presentation, sampling, density, batching, chunking, and texture budgets for this project.",
                         centerWidth);
@@ -1187,6 +2221,23 @@
                 if (editor.projectWorkspaceSection == 4u)
                 {
                     gui::label("Run + Build");
+                    constexpr std::array<std::string_view, 2> buildConfigurations{"Debug", "Release"};
+                    gui::label("Build configuration");
+                    const auto configurationSelect = gui::select_box(gui::SelectBoxOptions{
+                        .id="project-build-configuration",
+                        .placeholder="Choose Debug or Release",
+                        .selected=editor.projectBuildConfiguration,
+                        .options=buildConfigurations,
+                        .size={(std::min)(centerWidth, 260.0f), 30.0f},
+                        .fit_content=true, .alignment=gui::InlineButtonAlignment::Center,
+                        .enabled=!editor.projectBuildPending && !editor.scriptBuildPending
+                            && !editor.aiContinuousBuildPending && !planetary_project_busy(editor)
+                            && !editor.projectLifecycle.evidence().runtime_active
+                            && !(editor.projectRuntimeSnapshot && editor.projectRuntimeSnapshot->active())});
+                    if (configurationSelect.changed && configurationSelect.selected_index
+                        && *configurationSelect.selected_index < buildConfigurations.size())
+                        (void)select_project_build_configuration(editor,
+                            buildConfigurations[*configurationSelect.selected_index]);
                     gui::wrapped_label(
                         "Save the active project, play the composed runtime in this editor, build a new child artifact generation, or launch the accepted standalone executable.",
                         centerWidth);
@@ -1195,25 +2246,43 @@
                 if (application.allow_project_run)
                 {
                     gui::wrapped_label(
-                        "Play In Editor uses the saved scene in this editor. Build validates a new child artifact generation. Launch owns, focuses, and stops the accepted standalone runtime.",
+                        "Play In Editor uses the saved scene. Build verifies compilation; runtime and renderer behavior are tested separately. Launch opens the accepted standalone program.",
                         centerWidth);
-                    if (gui::button("Play In Editor", {220.0f, 30.0f}))
-                        play_active_context();
-
                     if (editor.projectBuildPending)
                     {
-                        if (gui::button(
-                                "Cancel Project Build",
-                                {220.0f, 30.0f}))
-                        {
-                            (void)cancel_project_build(editor);
-                        }
+                        const std::array busyPlay{gui::InlineButtonSpec{
+                            .label=projectBuildActivity, .width=220.0f, .enabled=false}};
+                        (void)gui::inline_button_row(busyPlay, 30.0f, 0.0f,
+                            gui::InlineButtonRowOptions{.sizing=gui::InlineButtonSizing::FitContent,
+                                .wrap=true, .available_width=centerWidth});
+                        gui::wrapped_label(editor.projectBuildStatus, centerWidth);
                     }
-                    else if (gui::button(
-                        "Build Active Project", {220.0f, 30.0f}))
+                    else if (gui::button("Play In Editor", {220.0f, 30.0f}))
+                        play_active_context();
+
+                    // Keep both controls in fixed slots as a build settles. A
+                    // delayed Cancel click must never land on a new Build.
+                    const bool projectBuildWasPending =
+                        static_cast<bool>(editor.projectBuildPending);
+                    const std::array projectBuildActions{
+                        gui::InlineButtonSpec{
+                            .label="Build Active Project", .width=220.0f,
+                            .enabled=!projectBuildWasPending},
+                        gui::InlineButtonSpec{
+                            .label="Cancel Project Build", .width=220.0f,
+                            .enabled=projectBuildWasPending}};
+                    if (const auto action = gui::inline_button_row(
+                            projectBuildActions, 30.0f, 6.0f,
+                            gui::InlineButtonRowOptions{
+                                .sizing=gui::InlineButtonSizing::FitContent,
+                                .alignment=gui::InlineButtonAlignment::Center,
+                                .wrap=true, .available_width=centerWidth}))
                     {
-                        start_project_build(
-                            editor, false, "Project surface");
+                        if (*action == 0u && !projectBuildWasPending)
+                            start_project_build(
+                                editor, false, "Project surface");
+                        else if (*action == 1u && projectBuildWasPending)
+                            (void)cancel_project_build(editor);
                     }
 
                     const bool runtimeActive =
@@ -1222,13 +2291,13 @@
                     if (runtimeActive)
                     {
                         if (gui::button(
-                                "Focus Standalone Runtime",
+                                "Focus Project Runtime",
                                 {220.0f, 30.0f}))
                         {
                             (void)focus_project_runtime(editor);
                         }
                         if (gui::button(
-                                "Stop Standalone Runtime",
+                                "Stop Project Runtime",
                                 {220.0f, 30.0f}))
                         {
                             (void)stop_project_runtime(
@@ -1245,7 +2314,7 @@
                                 platform::child_process::StopMode::force);
                         }
                     }
-                    else if (gui::button(
+                    else if (!editor.projectBuildPending && gui::button(
                         "Launch Single Context", {220.0f, 30.0f}))
                     {
                         launch_active_project_context();
@@ -1255,7 +2324,7 @@
                 }
                 else
                 {
-                    gui::property_row("[project] Runtime", "Not owned by this dedicated editor", 108.0f);
+                    gui::property_row("Runtime", "Not owned by this dedicated editor", 108.0f);
                 }
                 gui::wrapped_label(editor.projectStatus, centerWidth);
                 gui::wrapped_label(editor.projectBuildStatus, centerWidth);
@@ -1270,7 +2339,7 @@
             }
             case EditorMainSurface::Assets:
             {
-                gui::label("Asset Manager");
+                gui::section_heading("Assets");
                 const std::array workspaceTabs{
                     gui::TabButtonSpec{
                         .id = "assets.workspace.browser",
@@ -1298,8 +2367,10 @@
                         .width = 72.0f,
                         .active = editor.assetWorkspaceSection == 4u}
                 };
-                if (const auto tabs = gui::tab_bar_buttons(
-                        workspaceTabs, 31.0f, 2.0f);
+                if (const auto tabs = gui::responsive_tab_bar_buttons(
+                        {.overflow_id="assets-workspace-tools", .overflow_label="Asset tools",
+                            .tabs=workspaceTabs, .available_width=centerWidth,
+                            .height=31.0f, .gap=2.0f});
                     tabs.selected_index)
                 {
                     editor.assetWorkspaceSection = *tabs.selected_index;
@@ -1307,10 +2378,10 @@
 
                 if (editor.assetWorkspaceSection == 0u)
                 {
-                    gui::label("Project Browser");
-                gui::property_row("[assets] Project", editor.projectName, 120.0f);
+                    gui::section_heading("Files");
+                gui::property_row("Project", editor.projectName, 120.0f);
                 gui::property_row(
-                    "[assets] Folder",
+                    "Folder",
                     editor.assetBrowserFolder.empty()
                         ? std::string{"Project"}
                         : editor.assetBrowserFolder,
@@ -1319,6 +2390,104 @@
                     && gui::button("Up", {54.0f, 28.0f}))
                 {
                     leave_asset_browser_folder(editor);
+                }
+                const gui::InlineButtonRowOptions meshImportLayout{
+                    .sizing=gui::InlineButtonSizing::FitContent,
+                    .alignment=gui::InlineButtonAlignment::Center,
+                    .wrap=true, .available_width=centerWidth};
+                if (!editor.meshImportOpen)
+                {
+                    if (const auto action = gui::inline_button_row(std::array{
+                        gui::InlineButtonSpec{
+                            .label="Add Image...", .width=0.0f,
+                            .enabled=!editor.projectRoot.empty()},
+                        gui::InlineButtonSpec{
+                            .label="Import Model / Mesh...", .width=0.0f,
+                            .enabled=!editor.projectRoot.empty()}}, 30.0f, 6.0f, meshImportLayout))
+                    {
+                        if (*action == 0u) browse_project_image_source(editor, ctx);
+                        else editor.meshImportOpen = true;
+                    }
+                }
+                else
+                {
+                    gui::label("Model or mesh file (.glb / .epoch_mesh)");
+                    (void)gui::edit_box(editor.meshImportPathDraft, {centerWidth, 30.0f}, 32768u, false);
+                    if (editor.modelImportReview && !model_import_review_current(editor))
+                    {
+                        editor.modelImportReview.reset();
+                        editor.projectStatus = "Model review expired after a path or project change. Review the file again.";
+                    }
+                    if (editor.modelImportReview)
+                    {
+                        auto& review = *editor.modelImportReview;
+                        const auto& compiled = review.compiled;
+                        gui::wrapped_label(epochengine::format_text("Add {} model part(s) to {}. Units: metres. One Undo restores the scene.",
+                            compiled.model.primitives.size(),review.projectId),centerWidth);
+                        gui::wrapped_label("Reviewed file SHA-256: "+review.sourceSha256,centerWidth);
+                        if (!review.texturePreviewAttempted)
+                        {
+                            review.texturePreviewAttempted = true;
+                            const auto& mip = compiled.textures.front().artifact.mips.front();
+                            review.texturePreview = gui::register_runtime_surface("model.import.review."+review.sourceSha256,
+                                std::span{reinterpret_cast<const std::uint8_t*>(mip.texels.data()),mip.texels.size()},mip.width,mip.height);
+                        }
+                        if (review.texturePreview.is_valid())
+                        {
+                            const auto& mip = compiled.textures.front().artifact.mips.front();
+                            (void)gui::image_box({.id="model.import.review.texture",.sprite=review.texturePreview,
+                                .size={(std::min)(centerWidth,256.0f),160.0f},
+                                .source_size={static_cast<float>(mip.width),static_cast<float>(mip.height)},
+                                .caption="Base-color texture. 3D rendering is checked after import."});
+                        }
+                    }
+                    const std::array meshActions{
+                        gui::InlineButtonSpec{.label=editor.modelImportReview ? "Approve Import" : "Review / Import", .width=0.0f,
+                            .enabled=!editor.projectRoot.empty() && !editor.meshImportPathDraft.empty()},
+                        gui::InlineButtonSpec{.label="Browse...", .width=0.0f},
+                        gui::InlineButtonSpec{.label="Cancel", .width=0.0f}};
+                    if (const auto action = gui::inline_button_row(meshActions, 30.0f, 6.0f, meshImportLayout))
+                    {
+                        if (*action == 0u)
+                        {
+                            try
+                            {
+                                const std::filesystem::path source{std::u8string{editor.meshImportPathDraft.begin(), editor.meshImportPathDraft.end()}};
+                                auto extension = source.extension().string();
+                                std::transform(extension.begin(),extension.end(),extension.begin(),[](unsigned char c){return static_cast<char>(std::tolower(c));});
+                                bool imported{};
+                                if (editor.modelImportReview) imported = approve_project_model_import(editor);
+                                else if (extension == ".glb") (void)review_project_model(editor,source);
+                                else imported = import_project_mesh(editor,source);
+                                if (imported)
+                                {
+                                    editor.meshImportOpen = false;
+                                    open_editor_surface(EditorMainSurface::Scene, "Import Mesh");
+                                    handle_scene_tool(editor, ctx.get(), "focus_selection");
+                                }
+                            }
+                            catch (...)
+                            {
+                                editor.projectStatus = "Could not read that mesh path. Check the path and try again.";
+                                push_editor_log(editor, "[assets] " + editor.projectStatus);
+                            }
+                        }
+                        else if (*action == 1u)
+                        {
+                            const auto chosen = platform::filesystem::open_file_dialog(
+                                L"Review a model or import a mesh", L"GLB model or Epoch mesh", L"*.glb;*.epoch_mesh",
+                                std::filesystem::path{editor.projectRoot});
+                            if (chosen.accepted)
+                            {
+                                const auto utf8 = chosen.path.generic_u8string();
+                                editor.meshImportPathDraft.assign(utf8.begin(), utf8.end());
+                            }
+                            else if (!chosen.cancelled) editor.projectStatus = chosen.diagnostic;
+                        }
+                        else { editor.modelImportReview.reset(); editor.meshImportOpen = false; }
+                    }
+                    gui::wrapped_label("GLB: Review first, then Approve Import. Existing Epoch meshes import directly. Save Project keeps placement and material references.", centerWidth);
+                    gui::wrapped_label(editor.projectStatus, centerWidth);
                 }
                 draw_asset_category_tabs(editor, true);
                 (void)gui::edit_box(
@@ -1335,7 +2504,8 @@
                 const auto textureForEntry = [&](const EditorBrowserEntry& entry)
                     -> const editor_project_textures::TextureCatalogEntry*
                 {
-                    if (!textureController || entry.kind != "TEXTURE")
+                    if (!textureController
+                        || !project_texture_source_path(entry.path))
                         return nullptr;
                     return project_texture_for_asset_path(
                         *textureController,
@@ -1389,9 +2559,9 @@
                     AssetGridPresentation presentation{};
                     presentation.entry_index = index;
                     presentation.id = asset_graph_id(entry.path);
-                    presentation.label = std::filesystem::path{entry.path}
-                        .filename()
-                        .string();
+                    const auto filenameUtf8 = std::filesystem::path{
+                        std::u8string(entry.path.begin(), entry.path.end())}.filename().generic_u8string();
+                    presentation.label.assign(filenameUtf8.begin(), filenameUtf8.end());
                     presentation.detail = entry.directory
                         ? (entry.child_count_truncated
                             ? epochengine::format_text(
@@ -1428,7 +2598,7 @@
                                 (entry.size + 1023u) / 1024u);
                         }
                     }
-                    else if (entry.kind == "TEXTURE")
+                    else if (entry.kind == "TEXTURE" || entry.kind == "IMAGE")
                     {
                         if (const auto* thumbnail =
                                 project_source_texture_thumbnail(
@@ -1440,7 +2610,8 @@
                                 static_cast<float>(thumbnail->source_width),
                                 static_cast<float>(thumbnail->source_height)};
                             presentation.detail = epochengine::format_text(
-                                "TEXTURE | {}x{} | {} KiB",
+                                "{} | {}x{} | {} KiB",
+                                entry.kind,
                                 thumbnail->source_width,
                                 thumbnail->source_height,
                                 (entry.size + 1023u) / 1024u);
@@ -1553,8 +2724,11 @@
                         }
                         else if (entry.kind == "IMAGE")
                         {
-                            editor.projectTextureStatus =
-                                "PNG/JPEG is visible as a project reference; texture compilation currently accepts BMP, TGA, PPM, and .epoch_texture sources.";
+                            if (project_texture_source_path(entry.path))
+                                import_selected_project_texture(editor, ctx);
+                            else
+                                editor.projectTextureStatus =
+                                    "JPEG is a project reference. Its thumbnail is available on Windows; full texture compilation supports PNG, BMP, TGA and PPM.";
                         }
                         else if (entry.kind == "AUDIO")
                         {
@@ -1577,11 +2751,11 @@
                             editor.assetWorkspaceSection = 4u;
                         }
                         if (std::filesystem::path{
-                                entry.path}
+                                std::u8string(entry.path.begin(), entry.path.end())}
                                 .filename()
-                                .string()
+                                .generic_u8string()
                                 .ends_with(
-                                    ".ascript.cpp"))
+                                    u8".ascript.cpp"))
                         {
                             editor.activeScript =
                                 script_id_from_source_path(
@@ -1660,14 +2834,14 @@
                     }
                 }
                 gui::property_row(
-                    "[assets] Visible",
+                    "Visible",
                     epochengine::format_text(
                         "{} / {}",
                         gridResult.matched_count,
                         presentations.size()),
                     120.0f);
                 gui::property_row(
-                    "[assets] Selected",
+                    "Selected",
                     editor.selectedAssetPath.empty()
                         ? std::string{"(none)"}
                         : editor.selectedAssetPath,
@@ -1812,116 +2986,6 @@
                     draw_project_audio_workspace(
                         editor,
                         (std::min)(centerWidth, 720.0f));
-                }
-                break;
-            }
-            case EditorMainSurface::ForestFactory:
-            {
-                const auto forestPackage = std::find_if(
-                    epochengine::package_registry::kKnownPackages.begin(),
-                    epochengine::package_registry::kKnownPackages.end(),
-                    [](const epochengine::package_registry::PackageDescriptor& package) {
-                        return package.id == epochengine::package_registry::kEngineForestFactoryPackageId;
-                    });
-                const bool plantAssetReady =
-                    ensure_plant_lab_compiled_asset(editor);
-                const auto& plantAsset = editor.plantLabCompiled;
-                const std::filesystem::path manifestPath =
-                    resolve_editor_path(std::filesystem::path{ editor.projectRoot })
-                    / "assets" / "packages" / "engine_forest_factory.package.json";
-                const bool manifestReady = std::filesystem::exists(manifestPath);
-                const std::size_t placedAssets = static_cast<std::size_t>(std::count_if(
-                    editor.entities.begin(),
-                    editor.entities.end(),
-                    [](const EditorEntity& entity)
-                    {
-                        return entity.type == "ForestTrunk"
-                            && entity.name.rfind("ForestAsset_", 0u) == 0u;
-                    }));
-
-                gui::label("Forest Factory");
-                if (!has_open_project(editor))
-                    gui::wrapped_label("Open a project before placing assets. Plant Lab preview remains separate from the project scene.", centerWidth);
-                gui::wrapped_label(
-                    "Browse custom trees and forest configurations authored in Plant Lab, then place or configure them in the active project scene. Placed objects remain available to selection, Focus, save, and Run/Build.",
-                    centerWidth);
-                gui::property_row("[forest] Source designer", "Plant Lab", 148.0f);
-                gui::property_row("[forest] Placed assets", std::to_string(placedAssets), 148.0f);
-                gui::property_row("[forest] Package", forestPackage != epochengine::package_registry::kKnownPackages.end() ? std::string(forestPackage->displayName) : std::string("(missing registry entry)"), 148.0f);
-                gui::property_row("[forest] Manifest", manifestReady ? display_project_path(manifestPath) : std::string("not staged"), 148.0f);
-                gui::property_row(
-                    "[forest] Plant asset",
-                    plantAssetReady
-                        ? editor.plantLabDocument.name
-                        : std::string("compile unavailable"),
-                    148.0f);
-                gui::property_row(
-                    "[forest] Source revision",
-                    plantAssetReady
-                        ? std::to_string(plantAsset.sourceRevision)
-                        : std::string("n/a"),
-                    148.0f);
-                gui::property_row(
-                    "[forest] Content",
-                    plantAssetReady
-                        ? epochengine::format_text(
-                            "{:016x}", plantAsset.sourceContentHash)
-                        : std::string("n/a"),
-                    148.0f);
-                gui::property_row(
-                    "[forest] Preview",
-                    plantAssetReady
-                        ? epochengine::format_text(
-                            "{} segments | {} leaves",
-                            plantAsset.preview.segmentCount,
-                            plantAsset.preview.leafCount)
-                        : editor.plantLabStatus,
-                    148.0f);
-                gui::property_row(
-                    "[forest] Voxel LOD",
-                    plantAssetReady
-                        ? epochengine::format_text(
-                            "{} levels | {} active cells",
-                            plantAsset.voxelLods.levels.size(),
-                            plantAsset.voxelOccupancy.activeCells)
-                        : std::string("unavailable"),
-                    148.0f);
-
-
-                std::array<gui::InlineButtonSpec, 3> placementActions{ {
-                    { "Place Plant", 132.0f },
-                    { "View In 3D", 132.0f },
-                    { "Focus Placed", 142.0f }
-                } };
-                if (auto clicked = gui::inline_button_row(placementActions, 30.0f, 8.0f))
-                {
-                    if (*clicked == 0)
-                    {
-                        if (place_forest_factory_asset(editor) > 0u)
-                            (void)save_editor_scene_snapshot(editor);
-                    }
-                    else
-                    {
-                        apply_editor_surface(EditorMainSurface::Scene, "Forest Factory");
-                        if (*clicked == 2)
-                            handle_scene_tool(editor, ctx.get(), "focus_selection");
-                    }
-                }
-                if (gui::button("Open Package Manager", { 220.0f, 30.0f }))
-                {
-                    editor.showPackageManagerModal = true;
-                    editor.selectedPackageId = std::string(epochengine::package_registry::kEngineForestFactoryPackageId);
-                    editor.packageInstallStatus = manifestReady
-                        ? "Forest Factory project package is already staged."
-                        : "Select Install to stage the Forest Factory project package.";
-                    push_editor_log(editor, "[forest] Package Manager opened for Forest Factory.");
-                }
-                if (gui::button("Stage Forest Factory Package", { 240.0f, 30.0f }))
-                {
-                    if (forestPackage != epochengine::package_registry::kKnownPackages.end())
-                        (void)stage_forest_factory_package_opt_in(editor, *forestPackage);
-                    else
-                        editor.packageInstallStatus = "Forest Factory package registry entry is missing.";
                 }
                 break;
             }
@@ -2267,457 +3331,8 @@
                 break;
             }
             case EditorMainSurface::Timeline:
-            {
-                ensure_timeline_defaults(editor);
-                auto timelineStats = timeline_stats_from_editor(editor);
-                epochengine::timeline::sync_to_simulation(editor.timelineState, timelineStats);
-                epochengine::timeline::clamp_state(editor.timelineState);
-                epochengine::saveload::clamp_streaming_save_config(editor.streamingSaveConfig);
-                editor.streamingSaveStatus.active = editor.streamingSaveConfig.enabled;
-                if (epochengine::saveload::should_capture_checkpoint(
-                    editor.streamingSaveConfig,
-                    editor.streamingSaveStatus,
-                    timelineStats))
-                {
-                    epochengine::saveload::mark_checkpoint_captured(
-                        editor.streamingSaveStatus,
-                        editor.streamingSaveConfig,
-                        timelineStats);
-                    editor.timelineEvents.push_back(epochengine::timeline::make_event_from_stats(
-                        "save",
-                        epochengine::timeline::TimelineEventKind::Checkpoint,
-                        timelineStats,
-                        editor.streamingSaveStatus.last_snapshot_label,
-                        "PersistentLevel",
-                        editor.streamingSaveStatus.last_output_path));
-                    epochengine::timeline::sort_events(editor.timelineEvents);
-                    editor.lastCheckpointRecord = epochengine::saveload::make_checkpoint_record(
-                        editor.streamingSaveConfig,
-                        editor.streamingSaveStatus,
-                        timelineStats,
-                        0u,
-                        editor.timelineEvents.size());
-                    push_editor_log(editor, "[timeline] Auto-staged timeline checkpoint: " + editor.streamingSaveStatus.last_snapshot_label);
-                }
-
-                const std::array timelineSections{
-                    gui::TabButtonSpec{
-                        .id = "timeline.sequence",
-                        .label = "Sequence",
-                        .width = 104.0f,
-                        .active = editor.timelineWorkspaceSection
-                            == TimelineWorkspaceSection::sequence},
-                    gui::TabButtonSpec{
-                        .id = "timeline.checkpoints",
-                        .label = "Checkpoints",
-                        .width = 116.0f,
-                        .active = editor.timelineWorkspaceSection
-                            == TimelineWorkspaceSection::save_restore},
-                    gui::TabButtonSpec{
-                        .id = "timeline.media",
-                        .label = "Media",
-                        .width = 84.0f,
-                        .active = editor.timelineWorkspaceSection
-                            == TimelineWorkspaceSection::media},
-                    gui::TabButtonSpec{
-                        .id = "timeline.diagnostics",
-                        .label = "Diagnostics",
-                        .width = 112.0f,
-                        .active = editor.timelineWorkspaceSection
-                            == TimelineWorkspaceSection::diagnostics}
-                };
-                const auto section = gui::responsive_tab_bar_buttons(
-                    gui::ResponsiveTabBarOptions{
-                        .overflow_id = "timeline-workspace-overflow",
-                        .overflow_label = "Timeline tools",
-                        .tabs = timelineSections,
-                        .available_width = centerWidth,
-                        .overflow_width = 132.0f,
-                        .height = 30.0f,
-                        .gap = 2.0f,
-                        .presentation = gui::TabBarPresentation::Workbench,
-                        .keyboard_navigation = true});
-                if (section.selected_index)
-                {
-                    editor.timelineWorkspaceSection =
-                        static_cast<TimelineWorkspaceSection>(
-                            *section.selected_index);
-                }
-
-                const auto stageTimelineCheckpoint = [&]()
-                {
-                    epochengine::saveload::mark_checkpoint_captured(
-                        editor.streamingSaveStatus,
-                        editor.streamingSaveConfig,
-                        timelineStats);
-                    editor.timelineEvents.push_back(
-                        epochengine::timeline::make_event_from_stats(
-                            "save",
-                            epochengine::timeline::TimelineEventKind::Checkpoint,
-                            timelineStats,
-                            editor.streamingSaveStatus.last_snapshot_label,
-                            "PersistentLevel",
-                            editor.streamingSaveStatus.last_output_path));
-                    epochengine::timeline::sort_events(editor.timelineEvents);
-                    editor.lastCheckpointRecord =
-                        epochengine::saveload::make_checkpoint_record(
-                            editor.streamingSaveConfig,
-                            editor.streamingSaveStatus,
-                            timelineStats,
-                            0u,
-                            editor.timelineEvents.size());
-                    push_editor_log(
-                        editor,
-                        "[timeline] Manual checkpoint evidence staged: "
-                            + editor.streamingSaveStatus.last_snapshot_label);
-                };
-
-                if (editor.timelineWorkspaceSection
-                    == TimelineWorkspaceSection::sequence)
-                {
-                    gui::label("Sequence");
-                    gui::wrapped_label(
-                        "The Timeline drives Epoch's shared simulation clock and visible event keys. Playback changes the editor playhead; Record Gate controls whether visible editor events may be added to the sequence.",
-                        centerWidth);
-                    gui::property_row(
-                        "Playhead",
-                        epochengine::format_text(
-                            "{:.2f}s / {:.2f}s | frame {}",
-                            editor.timelineState.playhead_seconds,
-                            editor.timelineState.duration_seconds,
-                            editor.timelineState.playhead_frame),
-                        118.0f);
-                    gui::property_row(
-                        "Sequence",
-                        epochengine::format_text(
-                            "{} tracks | {} keys | {}",
-                            epochengine::timeline::enabled_track_count(
-                                editor.timelineTracks),
-                            editor.timelineEvents.size(),
-                            editor.timelineState.recording
-                                ? "record gate armed"
-                                : "record gate paused"),
-                        118.0f);
-
-                    render_timeline_time_controls(centerWidth, true);
-                    const std::array sequenceActions{
-                        gui::InlineButtonSpec{
-                            .label = editor.timelineState.recording
-                                ? "Stop Recording"
-                                : "Arm Record Gate",
-                            .width = 142.0f },
-                        gui::InlineButtonSpec{
-                            .label = "Add Checkpoint Key",
-                            .width = 166.0f }
-                    };
-                    if (const auto action = gui::inline_button_row(
-                            sequenceActions, 28.0f, 6.0f))
-                    {
-                        if (*action == 0u)
-                        {
-                            editor.timelineState.recording =
-                                !editor.timelineState.recording;
-                            push_editor_log(
-                                editor,
-                                editor.timelineState.recording
-                                    ? "[timeline] Event recording gate armed."
-                                    : "[timeline] Event recording gate paused.");
-                        }
-                        else
-                        {
-                            stageTimelineCheckpoint();
-                        }
-                    }
-                    if (const auto* nextEvent =
-                            epochengine::timeline::next_event_after(
-                                editor.timelineEvents,
-                                editor.timelineState.playhead_seconds))
-                    {
-                        gui::property_row(
-                            "Next key",
-                            epochengine::timeline::describe_event(*nextEvent),
-                            118.0f);
-                    }
-                    else
-                    {
-                        gui::property_row("Next key", "(none)", 118.0f);
-                    }
-                    for (const auto& track : editor.timelineTracks)
-                    {
-                        gui::property_row(
-                            track.label,
-                            track.enabled ? "Enabled" : "Muted",
-                            118.0f);
-                    }
-                }
-                else if (editor.timelineWorkspaceSection
-                    == TimelineWorkspaceSection::save_restore)
-                {
-                    gui::label("Checkpoint Staging");
-                    gui::wrapped_label(
-                        "Checkpoint keys currently stage reviewable timeline evidence. A complete scene serializer, writer, and restore reader are still required before Epoch can call these recoverable saves.",
-                        centerWidth);
-                    const auto activeSaveProfile =
-                        epochengine::saveload::detect_streaming_save_profile(
-                            editor.streamingSaveConfig);
-                    gui::property_row(
-                        "Mode",
-                        std::string(epochengine::saveload::mode_name(
-                            editor.streamingSaveConfig.mode)),
-                        118.0f);
-                    gui::property_row(
-                        "Profile",
-                        std::string(epochengine::saveload::stream_profile_name(
-                            activeSaveProfile)),
-                        118.0f);
-                    gui::property_row(
-                        "Retention",
-                        epochengine::saveload::describe_retention(
-                            editor.streamingSaveConfig),
-                        118.0f);
-                    gui::property_row(
-                        "Last key",
-                        editor.streamingSaveStatus.last_snapshot_label.empty()
-                            ? std::string{"(none staged)"}
-                            : editor.streamingSaveStatus.last_snapshot_label,
-                        118.0f);
-                    gui::property_row(
-                        "Writer",
-                        "Not connected; evidence remains staged locally",
-                        118.0f);
-                    gui::property_row(
-                        "Restore",
-                        "Unavailable until scene payload round-trip is verified",
-                        118.0f);
-
-                    const std::array streamButtons{
-                        gui::InlineButtonSpec{
-                            .label = editor.streamingSaveConfig.enabled
-                                ? "Pause Stream"
-                                : "Arm Stream",
-                            .width = 118.0f },
-                        gui::InlineButtonSpec{ .label = "Stage Key Now", .width = 116.0f },
-                        gui::InlineButtonSpec{ .label = "Every 15s", .width = 92.0f },
-                        gui::InlineButtonSpec{ .label = "Every 120f", .width = 96.0f },
-                        gui::InlineButtonSpec{ .label = "On Timeline Key", .width = 128.0f }
-                    };
-                    if (const auto action = gui::inline_button_row(
-                            streamButtons, 28.0f, 6.0f))
-                    {
-                        switch (*action)
-                        {
-                        case 0:
-                            editor.streamingSaveConfig.enabled =
-                                !editor.streamingSaveConfig.enabled;
-                            editor.streamingSaveStatus.active =
-                                editor.streamingSaveConfig.enabled;
-                            editor.streamingSaveStatus.message =
-                                editor.streamingSaveConfig.enabled
-                                    ? "Checkpoint evidence staging is armed."
-                                    : "Checkpoint evidence staging is paused.";
-                            push_editor_log(
-                                editor,
-                                editor.streamingSaveConfig.enabled
-                                    ? "[timeline] Checkpoint evidence staging armed."
-                                    : "[timeline] Checkpoint evidence staging paused.");
-                            break;
-                        case 1:
-                            stageTimelineCheckpoint();
-                            break;
-                        case 2:
-                            epochengine::saveload::apply_streaming_save_profile(
-                                editor.streamingSaveConfig,
-                                epochengine::saveload::StreamingSaveProfile::
-                                    EditorInterval15s);
-                            push_editor_log(
-                                editor,
-                                "[timeline] Checkpoint cadence set to 15 seconds.");
-                            break;
-                        case 3:
-                            epochengine::saveload::apply_streaming_save_profile(
-                                editor.streamingSaveConfig,
-                                epochengine::saveload::StreamingSaveProfile::
-                                    EditorFrame120);
-                            push_editor_log(
-                                editor,
-                                "[timeline] Checkpoint cadence set to 120 frames.");
-                            break;
-                        case 4:
-                            epochengine::saveload::apply_streaming_save_profile(
-                                editor.streamingSaveConfig,
-                                epochengine::saveload::StreamingSaveProfile::
-                                    TimelineKeyed);
-                            push_editor_log(
-                                editor,
-                                "[timeline] Checkpoint cadence follows timeline keys.");
-                            break;
-                        default:
-                            break;
-                        }
-                    }
-                    gui::wrapped_label(
-                        editor.streamingSaveStatus.message,
-                        centerWidth);
-                }
-                else if (editor.timelineWorkspaceSection
-                    == TimelineWorkspaceSection::media)
-                {
-                    gui::label("Media Preview");
-                const auto mediaAvailability =
-                    epochengine::media::timeline_preview::
-                        presentation_availability(editor.mediaTimelinePreview);
-                if (mediaAvailability
-                    == epochengine::media::timeline_preview::
-                        PresentationAvailability::no_source)
-                {
-                    gui::wrapped_label(
-                        "No admitted media source. Add a verified project media asset to enable metadata and transport. The Video workspace never substitutes scene geometry or placeholder frames.",
-                        centerWidth);
-                    gui::property_row(
-                        "[media] Source",
-                        "(none admitted)",
-                        132.0f);
-                    gui::property_row(
-                        "[media] Presentation",
-                        "No pixels available",
-                        132.0f);
-                    gui::property_row(
-                        "[media] Transport",
-                        "Disabled until source admission",
-                        132.0f);
-                }
-                else if (const auto& source =
-                    editor.mediaTimelinePreview.source)
-                {
-                    gui::wrapped_label(
-                        "Source metadata is admitted. Pixel presentation remains unavailable until a separately verified decoder frame provider is connected.",
-                        centerWidth);
-                    gui::property_row(
-                        "[media] Source",
-                        source->logical_path,
-                        132.0f);
-                    gui::property_row(
-                        "[media] Provider",
-                        source->provider_revision,
-                        132.0f);
-                    gui::property_row(
-                        "[media] Presentation",
-                        "Metadata only; no decoded frame",
-                        132.0f);
-                    gui::property_row(
-                        "[media] Transport",
-                        epochengine::media::timeline_preview::transport_enabled(
-                                editor.mediaTimelinePreview)
-                            ? "Metadata transport ready"
-                            : "Disabled",
-                        132.0f);
-                }
-
-                }
-                else
-                {
-                    gui::label("Timeline Diagnostics");
-                    gui::wrapped_label(
-                        "Detailed simulation, lane-layout, and checkpoint-contract evidence for debugging. Normal sequencing and checkpoint controls remain in their dedicated sections.",
-                        centerWidth);
-                    render_timeline_time_controls(centerWidth, false);
-                gui::property_row("[timeline] Frame", std::to_string(timelineStats.frame_index), 132.0f);
-                gui::property_row("[timeline] Simulated", format_seconds(timelineStats.simulated_seconds), 132.0f);
-                gui::property_row("[timeline] Fixed step", std::string(format_ms(timelineStats.fixed_dt_seconds)) + " / " + format_rate(timelineStats.fixed_dt_seconds), 132.0f);
-                gui::property_row("[timeline] Step budget", std::to_string(timelineStats.step_budget), 132.0f);
-                gui::property_row("[timeline] Time scale", epochengine::format_text("{:.2f}x", timelineStats.time_scale), 132.0f);
-                gui::property_row("[timeline] Playhead", epochengine::format_text("{:.2f}s / frame {}", editor.timelineState.playhead_seconds, editor.timelineState.playhead_frame), 132.0f);
-                gui::property_row("[timeline] Duration", epochengine::format_text("{:.2f}s", editor.timelineState.duration_seconds), 132.0f);
-                gui::property_row("[timeline] Tracks", epochengine::format_text("{} enabled / {}", epochengine::timeline::enabled_track_count(editor.timelineTracks), editor.timelineTracks.size()), 132.0f);
-                gui::property_row("[timeline] Keys", std::to_string(editor.timelineEvents.size()), 132.0f);
-                const epochengine::timeline::TimelineViewConfig activeTimelineView{
-                    .visible_start_seconds = (std::max)(0.0, editor.timelineState.playhead_seconds - 5.0),
-                    .visible_duration_seconds = 10.0,
-                    .pixel_width = (std::max)(320.0f, centerWidth)
-                };
-                const epochengine::timeline::TimelineLaneLayoutConfig activeLaneLayout{
-                    .pixel_width = (std::max)(320.0f, centerWidth),
-                    .header_width = 132.0,
-                    .lane_height = 24.0,
-                    .lane_gap = 4.0,
-                    .top_padding = 0.0
-                };
-                const auto activeTimelineLanes = epochengine::timeline::make_lane_geometry(
-                    editor.timelineTracks,
-                    activeLaneLayout);
-                const auto activeTimelineMarkers = epochengine::timeline::make_event_markers(
-                    editor.timelineTracks,
-                    editor.timelineEvents,
-                    activeTimelineView,
-                    activeLaneLayout,
-                    editor.timelineState.duration_seconds);
-                gui::property_row(
-                    "[timeline] View",
-                    epochengine::timeline::describe_view(
-                        editor.timelineState,
-                        editor.timelineTracks,
-                        editor.timelineEvents,
-                        activeTimelineView),
-                    132.0f);
-                gui::property_row(
-                    "[timeline] Layout",
-                    epochengine::timeline::describe_lane_layout(activeTimelineLanes, activeTimelineMarkers),
-                    132.0f);
-                const auto activeSaveProfile = epochengine::saveload::detect_streaming_save_profile(editor.streamingSaveConfig);
-                if (const auto* profileDescriptor = epochengine::saveload::find_streaming_save_profile(activeSaveProfile))
-                {
-                    gui::property_row("[timeline] Profile id", std::string(profileDescriptor->id), 132.0f);
-                    gui::property_row("[timeline] Profile detail", std::string(profileDescriptor->summary), 132.0f);
-                }
-                const auto timelineKeyedProfilePlan = epochengine::saveload::make_streaming_save_profile_change_plan(
-                    editor.streamingSaveConfig,
-                    epochengine::saveload::StreamingSaveProfile::TimelineKeyed);
-                gui::property_row("[timeline] Stream mode", std::string(epochengine::saveload::mode_name(editor.streamingSaveConfig.mode)), 132.0f);
-                gui::property_row("[timeline] Save profile", std::string(epochengine::saveload::stream_profile_name(activeSaveProfile)), 132.0f);
-                gui::property_row("[timeline] Profile gate", epochengine::saveload::streaming_save_profile_change_summary(timelineKeyedProfilePlan), 132.0f);
-                gui::property_row("[timeline] Retention", epochengine::saveload::describe_retention(editor.streamingSaveConfig), 132.0f);
-                const auto activeSaveCadence = epochengine::saveload::make_streaming_save_cadence_plan(
-                    editor.streamingSaveConfig,
-                    editor.streamingSaveStatus,
-                    timelineStats);
-                gui::property_row("[timeline] Next capture", epochengine::saveload::streaming_save_cadence_summary(activeSaveCadence), 132.0f);
-                gui::property_row("[timeline] Stream state", epochengine::saveload::describe_streaming_save(editor.streamingSaveConfig, editor.streamingSaveStatus), 132.0f);
-                gui::property_row("[timeline] Last key", editor.streamingSaveStatus.last_snapshot_label.empty() ? std::string("(none staged)") : editor.streamingSaveStatus.last_snapshot_label, 132.0f);
-                gui::property_row("[timeline] Last record", epochengine::saveload::checkpoint_record_summary(editor.lastCheckpointRecord), 132.0f);
-                gui::property_row("[timeline] Target", editor.streamingSaveStatus.last_output_path.empty() ? editor.streamingSaveConfig.target_root : editor.streamingSaveStatus.last_output_path, 132.0f);
-                gui::property_row("[timeline] Manifest", epochengine::saveload::join_stream_path(editor.streamingSaveConfig.target_root, "manifest.timeline.log"), 132.0f);
-                if (editor.lastCheckpointRecord.valid)
-                {
-                    const auto restorePlan = epochengine::saveload::make_checkpoint_restore_plan(
-                        editor.streamingSaveConfig,
-                        editor.lastCheckpointRecord);
-                    const std::array retentionRecords{
-                        editor.lastCheckpointRecord
-                    };
-                    const auto retentionPlan = epochengine::saveload::make_checkpoint_retention_plan(
-                        editor.streamingSaveConfig,
-                        retentionRecords);
-                    gui::property_row(
-                        "[timeline] Writer gate",
-                        epochengine::saveload::checkpoint_writer_approval_summary(epochengine::saveload::StreamingCheckpointWriteApproval{}),
-                        132.0f);
-                    gui::property_row(
-                        "[timeline] Cleanup",
-                        epochengine::saveload::checkpoint_retention_plan_summary(retentionPlan),
-                        132.0f);
-                    gui::property_row(
-                        "[timeline] Scene payload",
-                        restorePlan.scene_payload_path,
-                        132.0f);
-                    gui::property_row(
-                        "[timeline] Restore",
-                        epochengine::saveload::checkpoint_restore_plan_summary(restorePlan),
-                        132.0f);
-                }
-
-                }
+                render_timeline_workspace(editor, centerWidth, render_timeline_time_controls);
                 break;
-            }
 #if EPOCH_EDITION_PUBLIC
             case EditorMainSurface::AISandbox:
             {
@@ -2782,7 +3397,8 @@
                             ? std::string{"Running"}
                             : editor.scriptBuildStatus,
                         .live_threads = epochengine::systems::threading::live_thread_count(),
-                        .hardware_threads = hardwareThreadCount
+                        .hardware_threads = hardwareThreadCount,
+                        .gpu = toolbarResources.gpu
                     },
                     editor.taskScheduler ? &editor.taskScheduler->graph() : nullptr,
                     "Editor Project and Script Tasks");
@@ -2798,14 +3414,13 @@
                 if (!dedicatedGuiEditor)
                 {
                     editor.guiDocumentTab = 0u;
-                    gui::label("Project GUI Placement");
+                    gui::section_heading("GUI placement");
                     const gui::Vec2 documentPosition =
                         gui::cursor_position();
                     const gui::Vec2 documentSize{
                         centerWidth,
-                        (std::max)(
-                            360.0f,
-                            centerScrollHeight - 54.0f)};
+                        (std::max)(1.0f, centerScrollStart.y + centerScrollHeight
+                            - documentPosition.y - 4.0f)};
                     render_gui_document_canvas(
                         editor,
                         documentPosition,
@@ -2842,7 +3457,10 @@
                         }
                     }
                     if (const auto selected =
-                            gui::tab_bar_buttons(tabs);
+                            gui::responsive_tab_bar_buttons({
+                                .overflow_id="gui-document-views", .overflow_label="GUI views",
+                                .tabs=tabs, .available_width=centerWidth,
+                                .height=30.0f, .gap=2.0f});
                         selected.selected_index)
                     {
                         editor.guiDocumentTab =
@@ -2853,9 +3471,8 @@
                         gui::cursor_position();
                     const gui::Vec2 documentSize{
                         centerWidth,
-                        (std::max)(
-                            360.0f,
-                            centerScrollHeight - 82.0f)};
+                        (std::max)(1.0f, centerScrollStart.y + centerScrollHeight
+                            - documentPosition.y - 4.0f)};
                     if (editor.guiDocumentTab < 2u)
                     {
                         render_gui_document_canvas(
@@ -2877,12 +3494,11 @@
                                 {
                                     continue;
                                 }
-                                if (gui::button_selected(
-                                        widget.descriptor.name,
-                                        {centerWidth, 30.0f},
-                                        gui_widget_selected(
-                                            editor,
-                                            widget.handle)))
+                                if (gui::menu_item({
+                                        .label=widget.descriptor.name,
+                                        .size={centerWidth, gui::menu_item_row_height()},
+                                        .tone=gui::SemanticTone::info,
+                                        .selected=gui_widget_selected(editor, widget.handle)}))
                                 {
                                     select_gui_widget(
                                         editor,
@@ -2920,6 +3536,8 @@
         gui::end_window();
 
         constexpr float toolGroupTabHeight = 38.0f;
+        std::array<float, 4> toolGroupTabHeights{
+            toolGroupTabHeight, toolGroupTabHeight, toolGroupTabHeight, toolGroupTabHeight};
         auto tool_group_position = [&](EditorToolDockRegion region) noexcept
         {
             switch (region)
@@ -2953,14 +3571,14 @@
         auto tool_group_content_position = [&](EditorToolDockRegion region) noexcept
         {
             const gui::Vec2 position = tool_group_position(region);
-            return gui::Vec2{ position.x, position.y + toolGroupTabHeight };
+            return gui::Vec2{ position.x, position.y + toolGroupTabHeights[tool_dock_region_index(region)] };
         };
         auto tool_group_content_size = [&](EditorToolDockRegion region) noexcept
         {
             const gui::Vec2 size = tool_group_size(region);
             return gui::Vec2{
                 size.x,
-                (std::max)(0.0f, size.y - toolGroupTabHeight) };
+                (std::max)(0.0f, size.y - toolGroupTabHeights[tool_dock_region_index(region)]) };
         };
         auto tool_pane_label = [&](std::string_view route) noexcept
         {
@@ -2996,15 +3614,27 @@
 
             const gui::Vec2 position = tool_group_position(region);
             const gui::Vec2 size = tool_group_size(region);
-            gui::begin_window(
-                {},
-                position,
-                { size.x, toolGroupTabHeight });
-            gui::set_cursor({ position.x + 3.0f, position.y + 2.0f });
-            const auto tabResult =
-                gui::tab_bar_buttons(tabs, toolGroupTabHeight - 3.0f, 1.0f,
-                    gui::TabBarPresentation::Document, size);
+            const bool paneDragAllowed = !modal_visible_now()
+                && editor.openMenu == TopMenu::None && !floating_gui_visible();
+            if (!paneDragAllowed) reset_pane_title_drag();
+            const bool ownsPaneDrag = !editor.paneTitleDragActive
+                || std::ranges::find(routes, editor.paneTitleDragRoute) != routes.end();
             const std::size_t regionIndex = tool_dock_region_index(region);
+            const gui::ResponsiveTabBarOptions tabOptions{
+                .tabs=tabs, .available_width=(std::max)(1.0f, size.x - 6.0f),
+                .height=toolGroupTabHeight - 3.0f, .gap=1.0f,
+                .presentation=gui::TabBarPresentation::Document,
+                .keyboard_navigation=true,
+                .drag=paneDragAllowed && ownsPaneDrag
+                    ? gui::TabDragOptions{&editor.paneTitleDrag, editor.paneTitleDragRoute, 12.0f}
+                    : gui::TabDragOptions{},
+                .wrap=true};
+            toolGroupTabHeights[regionIndex] = gui::responsive_tab_bar_height(tabOptions) + 4.0f;
+            gui::begin_window({}, position, {size.x, toolGroupTabHeights[regionIndex]});
+            gui::set_cursor({position.x + 3.0f, position.y + 2.0f});
+            // Keep every full title directly selectable and draggable, on measured
+            // rows when the pane narrows. No equal-width clipping or hidden aggregate.
+            const auto tabResult = gui::responsive_tab_bar_buttons(tabOptions);
             directTabRoutes[regionIndex] = routes;
             directTabBounds[regionIndex].clear();
             directTabBounds[regionIndex].reserve(tabResult.items.size());
@@ -3017,10 +3647,12 @@
             }
             directTabStripBounds[regionIndex] = {
                 {position.x + 3.0f, position.y + 2.0f},
-                {(std::max)(1.0f, size.x - 6.0f), toolGroupTabHeight - 3.0f}
+                {(std::max)(1.0f, size.x - 6.0f), toolGroupTabHeights[regionIndex] - 4.0f}
             };
             const std::optional<std::size_t> activationIndex =
-                tabResult.pressed_index
+                tabResult.dragged_index && tabResult.drag.pressed
+                    ? tabResult.dragged_index
+                : tabResult.pressed_index
                     ? tabResult.pressed_index
                     : tabResult.selected_index;
             if (activationIndex && *activationIndex < routes.size())
@@ -3032,6 +3664,7 @@
                 && *tabResult.closed_index < routes.size())
             {
                 const std::string_view closed = routes[*tabResult.closed_index];
+                if (editor.paneTitleDragRoute == closed) reset_pane_title_drag();
                 set_pane_shown(closed, false);
                 push_editor_log(
                     editor,
@@ -3039,16 +3672,12 @@
                     + " hidden. Reopen it from Window.");
                 result.scene_input_captured = true;
             }
-            if (tabResult.pressed_index
-                && *tabResult.pressed_index < routes.size())
+            if (tabResult.dragged_index
+                && *tabResult.dragged_index < routes.size())
             {
                 const std::string_view route =
-                    routes[*tabResult.pressed_index];
-                editor.paneTitleDragActive = true;
-                editor.paneTitleDragRoute.assign(route);
-                editor.paneTitleDragLabel.assign(tool_pane_label(route));
-                editor.paneTitleDragStart = mouse;
-                result.scene_input_captured = true;
+                    routes[*tabResult.dragged_index];
+                capture_pane_title_drag(route, tool_pane_label(route), tabResult);
             }
             gui::end_window();
         };
@@ -3073,37 +3702,37 @@
             {
             case EditorToolPane::WorldOutliner:
                 render_outliner_window(
-                    position, size, OutlinerToolTab::World, active, label);
+                    position, size, OutlinerToolTab::World, label);
                 break;
             case EditorToolPane::AssetBrowser:
                 render_outliner_window(
-                    position, size, OutlinerToolTab::Assets, active, label);
+                    position, size, OutlinerToolTab::Assets, label);
                 break;
             case EditorToolPane::GuiHierarchy:
                 render_outliner_window(
-                    position, size, OutlinerToolTab::Gui, active, label);
+                    position, size, OutlinerToolTab::Gui, label);
                 break;
             case EditorToolPane::ScriptBrowser:
                 render_outliner_window(
-                    position, size, OutlinerToolTab::Scripting, active, label);
+                    position, size, OutlinerToolTab::Scripting, label);
                 break;
             case EditorToolPane::TileMap:
                 render_outliner_window(
-                    position, size, OutlinerToolTab::TileMap, active, label);
+                    position, size, OutlinerToolTab::TileMap, label);
                 break;
             case EditorToolPane::Properties:
                 render_inspector_window(
-                    position, size, InspectorToolTab::Properties, active, label);
+                    position, size, InspectorToolTab::Properties, label);
                 break;
             case EditorToolPane::WorldSettings:
                 render_inspector_window(
-                    position, size, InspectorToolTab::WorldSettings, active, label);
+                    position, size, InspectorToolTab::WorldSettings, label);
                 break;
             case EditorToolPane::AiControls:
                 break; // Retired persistence slot; no separate settings surface.
             case EditorToolPane::AiDevelopment:
                 render_inspector_window(
-                    position, size, InspectorToolTab::AiDevelopment, active, label);
+                    position, size, InspectorToolTab::AiDevelopment, label);
                 break;
             default:
                 break;

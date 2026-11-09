@@ -1,15 +1,16 @@
+<?xml version='1.0' encoding='utf-8'?>
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-  <!-- epoch.build-output-layout/v1 -->
-  <!-- All first-party solution products share one edition-owned build tree. -->
+  <!-- epoch.build-output-layout/v2 -->
+  <!-- Disposable compiler state is separate from edition-owned runnable products. -->
   <PropertyGroup>
     <EpochRepositoryRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\'))</EpochRepositoryRoot>
     <EpochEditionSource>$([System.IO.File]::ReadAllText('$(EpochRepositoryRoot)Engine\include\epoch.edition.hpp'))</EpochEditionSource>
     <EpochOutputEdition>development</EpochOutputEdition>
     <EpochOutputEdition Condition="$(EpochEditionSource.Contains('#define EPOCH_SOURCE_EDITION_PUBLIC 1'))">public</EpochOutputEdition>
-    <EpochBuildRoot Condition="'$(EpochBuildRoot)'==''">$(EpochRepositoryRoot)build\</EpochBuildRoot>
+    <EpochBuildRoot Condition="'$(EpochBuildRoot)'==''">$(EpochRepositoryRoot)Artifacts\</EpochBuildRoot>
     <EpochResolvedBuildRoot>$([MSBuild]::EnsureTrailingSlash('$(EpochBuildRoot)'))</EpochResolvedBuildRoot>
-    <OutDir>$(EpochResolvedBuildRoot)bin\windows\$(EpochOutputEdition)\$(Platform)\$(Configuration)\</OutDir>
-    <IntDir>$(EpochResolvedBuildRoot)obj\msvc\$(EpochOutputEdition)\$(Platform)\$(Configuration)\$(ProjectName)\</IntDir>
+    <OutDir>$(EpochResolvedBuildRoot)Runtime\windows\$(EpochOutputEdition)\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(EpochResolvedBuildRoot)Intermediate\msvc\$(EpochOutputEdition)\$(Platform)\$(Configuration)\$(ProjectName)\</IntDir>
   </PropertyGroup>
   <Target Name="EpochStageSharedRuntimeAssets" AfterTargets="Build" Condition="'$(ConfigurationType)'=='Application'">
     <ItemGroup>
@@ -19,7 +20,7 @@
       <EpochSharedRuntimeAssets Include="$(EpochRepositoryRoot)Engine\assets\vulkan\**\*">
         <AssetDirectory>vulkan\</AssetDirectory>
       </EpochSharedRuntimeAssets>
-    </ItemGroup>
-    <Copy SourceFiles="@(EpochSharedRuntimeAssets)" DestinationFiles="@(EpochSharedRuntimeAssets->'$(OutDir)assets\%(AssetDirectory)%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+      </ItemGroup>
+    <Copy SourceFiles="@(EpochSharedRuntimeAssets)" DestinationFiles="@(EpochSharedRuntimeAssets-&gt;'$(OutDir)assets\%(AssetDirectory)%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
   </Target>
 </Project>

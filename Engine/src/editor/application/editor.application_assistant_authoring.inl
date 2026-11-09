@@ -29,6 +29,13 @@
                 entity.position = { 0.0f, -0.25f, 0.0f };
                 entity.scale = { 12.0f, 0.5f, 12.0f };
             }
+            else if (archetype == "water")
+            {
+                entity.name = make_entity_name(state, "WaterSurface", ordinalOffset);
+                entity.type = "Water";
+                entity.category = "World";
+                entity.position = {0.0f, 0.0f, 0.0f};
+            }
             else if (archetype == "light")
             {
                 entity.name = make_entity_name(state, "PointLight", ordinalOffset);
@@ -459,6 +466,9 @@
             return std::string{question};
         }
 
+        void append_project_assistant_catalog(std::string& prompt,
+            std::vector<std::pair<std::string,std::string>>* bindings = nullptr);
+
         [[nodiscard]] std::string build_project_assistant_chat_prompt(
             const EditorState& editor,
             std::string_view request)
@@ -471,7 +481,12 @@
                 "iteration and not an authoring-plan execution request. Ground the answer "
                 "in the bounded active-project evidence below. Never claim that you changed "
                 "the project, scene, GUI, files, build, or runtime unless the host later "
-                "returns explicit execution evidence.\n";
+                "returns explicit execution evidence. The provider workspace is only its working "
+                "directory, not the Editor project catalog. An empty workspace does not mean "
+                "a listed project is missing. This context performs no filesystem search. "
+                "Project actions use the Editor's reviewed commands; never claim you searched, "
+                "opened or changed a project without its host result.\n";
+            append_project_assistant_catalog(prompt);
             prompt += "Project: ";
             prompt += editor.projectName.empty()
                 ? std::string{"No project selected"}
@@ -637,6 +652,32 @@
         }
 
 #endif
+        void append_project_assistant_catalog(std::string& prompt,
+            std::vector<std::pair<std::string,std::string>>* bindings)
+        {
+            if(bindings)bindings->clear();
+            prompt+="HOST_PROJECT_CATALOG_V1\n";
+            std::size_t count{};
+            for(const auto& profile:editor_project_profiles())
+            {
+                if(count>=64u)break;
+                if(profile.manifest_path.empty()||profile.root_path.empty()
+                    ||(profile.kind!=EditorProjectKind::Game&&profile.kind!=EditorProjectKind::Tool))continue;
+#if EPOCH_EDITION_PUBLIC
+                if(!project_ai_scope_allowed(profile.root_path))continue;
+#endif
+                const ai::McpToolCall openCall{.tool="project.open",
+                    .arguments={{"project",std::string{profile.id}}}};
+                if(!ai::validate_project_tool_arguments(openCall))continue;
+                if(bindings)bindings->emplace_back(profile.id,profile.manifest_path);
+                std::string label{profile.display_name.substr(0u,96u)};
+                for(char& c:label)if(static_cast<unsigned char>(c)<32u)c=' ';
+                prompt+="PROJECT "+std::string{profile.id}+" | "+label+"\n";
+                ++count;
+            }
+            prompt+="END_HOST_PROJECT_CATALOG_V1\n";
+        }
+
         [[nodiscard]] bool prepare_ai_project_script(EditorState& editor)
         {
 #if EPOCH_EDITION_PUBLIC
@@ -1700,6 +1741,7 @@
                 editor.aiAuthoringPlanApplied = true;
                 editor.aiAuthoringSurface = EditorMainSurface::Scene;
                 editor.mainSurface = EditorMainSurface::Scene;
+                editor.workspaceCompanionsPending = true;
                 editor.surfaceSettleFrames = (std::max)(
                     editor.surfaceSettleFrames, 2);
                 editor.aiGoalAttemptedMilestoneSignatures.push_back(
@@ -1731,6 +1773,7 @@
                 editor.aiAuthoringSurface = EditorMainSurface::Game2D;
                 editor.mainSurface = EditorMainSurface::Game2D;
                 editor.outlinerToolTab = OutlinerToolTab::Gui;
+                editor.game2DGuiWorkspace = true;
                 editor.viewportCameraMode = previewgrid::CameraMode::Canvas2D;
             }
             else
@@ -1738,6 +1781,7 @@
                 editor.aiAuthoringSurface = EditorMainSurface::Scene;
                 editor.mainSurface = EditorMainSurface::Scene;
             }
+            editor.workspaceCompanionsPending = true;
             editor.aiAuthoringPlanApplied = true;
             editor.surfaceSettleFrames = (std::max)(
                 editor.surfaceSettleFrames, 2);
@@ -1802,6 +1846,7 @@
             working->mainSurface = editor.mainSurface;
             working->aiAuthoringSurface = editor.aiAuthoringSurface;
             working->outlinerToolTab = editor.outlinerToolTab;
+            working->game2DGuiWorkspace = editor.game2DGuiWorkspace;
             working->viewportCameraMode = editor.viewportCameraMode;
             working->guiDocument = editor.guiDocument
                 ? std::make_unique<authoring::gui::GuiDocument>(*editor.guiDocument) : nullptr;
@@ -1867,6 +1912,8 @@
             editor.aiAuthoringPlanApplied = true;
             editor.aiAuthoringSurface = editor.mainSurface = working.mainSurface;
             editor.outlinerToolTab = working.outlinerToolTab;
+            editor.game2DGuiWorkspace = working.game2DGuiWorkspace;
+            editor.workspaceCompanionsPending = true;
             editor.viewportCameraMode = working.viewportCameraMode;
             editor.aiGoalRunning = editor.aiGoalPlanNextQueued = false;
             editor.aiGoalCompletedMilestones = working.aiGoalCompletedMilestones;

@@ -30,12 +30,15 @@
             editor.aiContinuousBuildStatus = "Queued build: " + std::string(reason);
             push_editor_log(editor, "[ai-build] Queued engine development build: " + std::string(reason));
 
-            editor.aiContinuousBuildPending.emplace(schedule_editor_task(
+            auto submitted = schedule_editor_cancellable_task(
                 editor,
                 "AI Evidence Project Build",
-                [root = editor.projectRoot]() {
-                    return editor_build_project(root);
-                }));
+                [root = editor.projectRoot,
+                 configuration = editor_project_build_configuration(editor.projectRoot).value_or("")](std::stop_token cancellation) {
+                    return editor_build_project(root, cancellation, configuration);
+                });
+            editor.aiContinuousBuildCancellation = submitted.cancellation;
+            editor.aiContinuousBuildPending.emplace(std::move(submitted.completion));
         }
 
         bool save_script_source_editor(EditorState& editor);
@@ -165,7 +168,9 @@
         {
             const auto resolvedPath = resolve_editor_path(path);
             std::error_code ec;
-            return std::filesystem::absolute(resolvedPath, ec).lexically_normal().generic_string();
+            const auto utf8 = std::filesystem::absolute(resolvedPath, ec)
+                .lexically_normal().generic_u8string();
+            return {utf8.begin(), utf8.end()};
         }
 
         bool load_script_source_editor(EditorState& editor, const std::filesystem::path& path, bool force = false)
@@ -265,6 +270,62 @@
             editor.scriptEditorDirty = false;
             editor.scriptEditorStatus = "Saved script source.";
             return true;
+        }
+
+        [[nodiscard]] bool prepare_project_movement_script(EditorState& editor)
+        {
+            namespace fs=std::filesystem;
+            const auto fail=[&](std::string message){editor.scriptBuildStatus=std::move(message);return false;};
+            if(editor.projectRoot.empty()||editor.scriptEditorDirty||editor.scriptBuildPending)
+                return fail("Open a project and save unfinished script edits before choosing the movement script.");
+            try
+            {
+                auto root=resolve_editor_path(fs::path{std::u8string{editor.projectRoot.begin(),editor.projectRoot.end()}});
+                if(!core::path::candidate_data_root().empty())root=editor_resolve_candidate_project_path(root);
+                std::error_code error;
+                root=fs::canonical(root,error);
+                if(error||!fs::is_directory(root))return fail("The active project folder is unavailable.");
+                const auto scripts=root/"scripts";
+                const auto status=fs::symlink_status(scripts,error);
+                if((error&&error!=std::errc::no_such_file_or_directory)
+                    ||(!error&&fs::exists(status)&&(!fs::is_directory(status)||fs::is_symlink(status))))
+                    return fail("The project scripts folder must be an ordinary local directory.");
+                error.clear();fs::create_directories(scripts,error);
+                if(error||fs::canonical(scripts,error)!=scripts||error)return fail("The project scripts folder is unavailable or redirected.");
+                const auto target=scripts/"timeline_translation.ascript.cpp";
+                const auto targetStatus=fs::symlink_status(target,error);
+                if(error&&error!=std::errc::no_such_file_or_directory)return fail("The project movement script cannot be inspected.");
+                if(!error&&fs::exists(targetStatus))
+                {
+                    if(!fs::is_regular_file(targetStatus)||fs::is_symlink(targetStatus))return fail("The movement script must be an ordinary project source file.");
+                }
+                else
+                {
+                    const fs::path starter{editor_resolve_script_source_path("timeline_translation")};
+                    error.clear();const auto bytes=fs::file_size(starter,error);
+                    if(error||!bytes||bytes>8192u||fs::is_symlink(fs::symlink_status(starter)))return fail("The Engine movement-script template is unavailable.");
+                    std::ifstream input(starter,std::ios::binary);
+                    std::string source(static_cast<std::size_t>(bytes),'\0');
+                    if(!input.read(source.data(),static_cast<std::streamsize>(bytes))||input.peek()!=std::char_traits<char>::eof())
+                        return fail("The Engine movement-script template could not be read completely.");
+                    fs::path owned;
+                    for(unsigned attempt{};attempt<16u;++attempt)
+                    {
+                        const auto temporary=scripts/(".epoch-movement-template-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count())+'-'+std::to_string(attempt));
+                        if(platform::filesystem::exclusive_create_and_write(temporary,std::as_bytes(std::span{source}),error)){owned=temporary;break;}
+                    }
+                    if(owned.empty())return fail("Could not stage the project movement template.");
+                    const bool published=platform::filesystem::atomic_publish_new_same_filesystem(owned,target,error);
+                    std::error_code ignored;fs::remove(owned,ignored);
+                    if(!published)return fail("The movement script changed during creation. Existing project source was preserved.");
+                }
+                editor.activeScript="timeline_translation";
+                editor.selectedProjectFile=display_project_path(target);editor.selectedAssetPath=editor.selectedProjectFile;
+                if(!load_script_source_editor(editor,target,false))return fail(editor.scriptEditorStatus);
+                editor.scriptBuildStatus="Project movement script selected. Edit its keys, or Run it to register motion for the selected object.";
+                return true;
+            }
+            catch(...){return fail("The project movement script could not be prepared. Existing source was preserved.");}
         }
 
         [[nodiscard]] bool apply_ai_project_script(EditorState& editor)
@@ -631,12 +692,11 @@
             ProjectCodeWorkspaceDrawResult result{
                 .handled = !editor.projectRoot.empty()};
             auto& state = editor.projectCodeWorkspace;
-            editor.showOutliner = false;
             gui::label("Project Scripts");
             const std::array navigation{
                 gui::SegmentedButtonSpec{
-                    .label = "3D Scene",
-                    .width = 104.0f,
+                    .label = "3D Preview",
+                    .width = 112.0f,
                     .active = false},
                 gui::SegmentedButtonSpec{
                     .label = "Project Scripts",

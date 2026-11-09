@@ -26,7 +26,7 @@
             { TopMenu::Help, "Help", 72.0f, 0.0f }
         }};
 
-        const bool menusBlockedByModal = modal_visible_now();
+        const bool menusBlockedByModal = modal_visible_now() || editor.outlinerContextMenu.menu.popup.open;
         const gui::Vec2 toolbarMouse = gui::mouse_position();
         std::vector<gui::ChromeItemSpec> chromeLeft{};
         chromeLeft.reserve(topMenus.size() + 1u);
@@ -95,15 +95,14 @@
         float desiredMenuWidth = 24.0f;
         for (const auto& item : chromeLeft) desiredMenuWidth += item.preferred_width + 4.0f;
         const float minimumStatusWidth = gui::status_strip_minimum_width({.items = toolbarStatusItems});
-        const std::array resourceMinimumItems{
-            gui::StatusStripItem{toolbarCpuCompact}, gui::StatusStripItem{toolbarRamCompact}};
-        const float minimumResourceWidth = gui::status_strip_preferred_width({.items = resourceMinimumItems});
+        const std::span<const gui::StatusStripItem> resourceMinimumItems{toolbarStatusItems.data(), 4u};
+        const float minimumResourceWidth = gui::status_strip_minimum_width({.items = resourceMinimumItems});
         const float minimumMenuReserve = (std::min)(
             application_label_width + topMenus.front().width + 82.0f + 32.0f,
             (std::max)(106.0f, w - toolbarCommandReserve - minimumResourceWidth));
         // All status labels yield before command menus overflow. Keep every
         // compact status field when possible; at extreme widths retain the
-        // leading CPU/RAM fields and File/More rather than overlap controls.
+        // leading CPU/RAM/GPU/VRAM fields and File/More rather than overlap controls.
         const float menuReserve = (std::min)(desiredMenuWidth,
             (std::max)(minimumMenuReserve, w - toolbarCommandReserve - minimumStatusWidth));
         const float toolbarStatusWidth = gui::status_strip_preferred_width({
@@ -116,7 +115,7 @@
 
         // Only the chrome menu buttons may switch the open application menu.
         // Other panels have already been blocked this frame.
-        gui::allow_background_for_popup();
+        if (!editor.outlinerContextMenu.menu.popup.open) gui::allow_background_for_popup();
         const gui::ChromeBarResult chromeResult =
             gui::chrome_bar(gui::ChromeBarOptions{
                 .id = "editor.primary-chrome",
@@ -144,17 +143,28 @@
                 .zone_gap = 0.0f,
                 .horizontal_padding = 12.0f});
 
-        const auto open_chrome_menu = [&](std::optional<std::size_t> index)
+        const auto chrome_menu_route = [&](std::optional<std::size_t> index) -> TopMenu
         {
             if (menusBlockedByModal || !index || *index == 0u
                 || *index > topMenus.size())
             {
-                return;
+                return TopMenu::None;
             }
-            editor.openMenu = topMenus[*index - 1u].menu;
+            return topMenus[*index - 1u].menu;
         };
-        open_chrome_menu(chromeResult.hovered_left);
-        open_chrome_menu(chromeResult.selected_left);
+        const auto hoveredMenu = chrome_menu_route(chromeResult.hovered_left);
+        const auto selectedMenu = chrome_menu_route(chromeResult.selected_left);
+        if (hoveredMenu != editor.suppressedMenuHover)
+            editor.suppressedMenuHover = TopMenu::None;
+        // Hover navigates an already open menu bar; opening requires a click.
+        if (editor.openMenu != TopMenu::None && hoveredMenu != TopMenu::None
+            && hoveredMenu != editor.suppressedMenuHover)
+            editor.openMenu = hoveredMenu;
+        if (selectedMenu != TopMenu::None)
+        {
+            editor.suppressedMenuHover = TopMenu::None;
+            editor.openMenu = selectedMenu;
+        }
 
         for (std::size_t index = 0; index < topMenus.size(); ++index)
         {
@@ -168,7 +178,7 @@
         }
 
         const bool toolbarControlsBlockedByMenu =
-            editor.openMenu != TopMenu::None;
+            editor.openMenu != TopMenu::None || editor.outlinerContextMenu.menu.popup.open;
         if (toolbarControlsBlockedByMenu)
         {
             result.scene_input_captured = true;
@@ -227,39 +237,24 @@
 
         const float tab_y = toolbar_pos.y + 48.0f;
         std::vector<gui::TabButtonSpec> documentTabs{};
-        std::vector<EditorMainSurface> documentSurfaces{};
-        const auto addDocumentTab = [&](
-            EditorMainSurface surface,
-            std::string_view id,
-            std::string_view label,
-            float width)
+        std::vector<const EditorWorkspaceSpec*> documentWorkspaces{};
+        for(const auto& workspace:kEditorWorkspaceSpecs)
         {
-            if (!editor_application_supports_surface(application, surface))
-                return;
+            if(!editor_workspace_supported(editor,workspace)||!editor_workspace_visible(editor,workspace)) continue;
             documentTabs.push_back(gui::TabButtonSpec{
-                .id = id,
-                .label = label,
-                .width = width,
-                .active = editor.mainSurface == surface,
-                .closable = false,
+                .id = workspace.id,
+                .label = workspace.label,
+                .width = workspace.width,
+                .active = editor_workspace_active(editor,workspace),
+                .closable = true,
                 .dirty = false,
                 .enabled = !toolbarControlsBlockedByMenu
             });
-            documentSurfaces.push_back(surface);
-        };
-
-        addDocumentTab(EditorMainSurface::Scene, "document.world", "World", 72.0f);
-        addDocumentTab(EditorMainSurface::Game2D, "document.game2d", "2D / UI", 86.0f);
-        addDocumentTab(EditorMainSurface::ForestFactory, "document.forest", "Forest Factory", 126.0f);
-        addDocumentTab(EditorMainSurface::PlantLab, "document.plant", "Plant Lab", 92.0f);
-        addDocumentTab(EditorMainSurface::Timeline, "document.timeline", "Timeline", 88.0f);
-        addDocumentTab(EditorMainSurface::Project, "document.project", "Project", 78.0f);
-        addDocumentTab(EditorMainSurface::Assets, "document.assets", "Assets", 76.0f);
-        addDocumentTab(EditorMainSurface::AISandbox, "document.ai_development", "Assistant", 132.0f);
-        addDocumentTab(EditorMainSurface::Systems, "document.systems", "Systems", 86.0f);
+            documentWorkspaces.push_back(&workspace);
+        }
 
         gui::set_cursor({ 16.0f, tab_y });
-        if (const auto documentTabResult =
+        const auto documentTabResult =
                 gui::responsive_tab_bar_buttons(gui::ResponsiveTabBarOptions{
                     .overflow_id = "document-workspace-overflow",
                     .overflow_label = "Workspaces",
@@ -275,53 +270,22 @@
                         && !editor_point_in_rect(toolbarMouse, bottomLeftPosition, bottomLeftSize)
                         && !editor_point_in_rect(toolbarMouse, bottomRightPosition, bottomRightSize)
                 });
-            documentTabResult.selected_index
-            && *documentTabResult.selected_index < documentSurfaces.size())
+        if (documentTabResult.closed_index && *documentTabResult.closed_index < documentWorkspaces.size())
         {
+            const auto& closed = *documentWorkspaces[*documentTabResult.closed_index];
+            close_editor_workspace_tab(closed);
+        }
+        else if (documentTabResult.selected_index
+            && *documentTabResult.selected_index < documentWorkspaces.size())
+        {
+            const auto& workspace = *documentWorkspaces[*documentTabResult.selected_index];
+            if(const auto mode = workspace.gui_workspace)
+                (void)select_editor_2d_workspace(editor, *mode);
             open_editor_surface(
-                documentSurfaces[*documentTabResult.selected_index],
+                workspace.surface,
                 "document tab");
         }
         gui::end_window();
-
-        auto dropdown_anchor_for = [&](TopMenu menu) -> gui::Vec2
-        {
-            for (const auto& item : topMenus)
-                if (item.menu == menu)
-                    return { item.x, toolbar_button_y + toolbar_button_h + 6.0f };
-            return { 14.0f, toolbar_button_y + toolbar_button_h + 6.0f };
-        };
-
-        float dropdownItemWidth = 0.0f;
-        auto menu_item = [&](std::string_view title, auto&& on_click,
-            gui::MenuItemOptions options = {})
-        {
-            options.label = title;
-            options.size = {dropdownItemWidth, 0.0f};
-            if (gui::menu_item(options))
-            {
-                editor.openMenu = TopMenu::None;
-                on_click();
-            }
-        };
-
-        auto dropdown_window_size = [&](float button_width, int item_count) -> gui::Vec2
-        {
-            const float rowsHeight = static_cast<float>((std::max)(0, item_count))
-                * gui::menu_item_row_height();
-            const float height = (std::min)(rowsHeight + 12.0f,
-                (std::max)(1.0f, h - toolbar_button_y - toolbar_button_h - 12.0f));
-            // begin_scroll_area reserves a 2px content gutter even without a
-            // scrollbar, plus its 10px scrollbar when the body is clipped.
-            // Reserve that exact extent outside the measured command rows.
-            const bool scrollable = rowsHeight > (std::max)(1.0f, height - 12.0f) + 1.0f;
-            const float scrollAreaInset = 2.0f + (scrollable ? 10.0f : 0.0f);
-            return {
-                (std::min)(button_width + 12.0f + scrollAreaInset,
-                    (std::max)(1.0f, w - 12.0f)),
-                height
-            };
-        };
 
         auto top_menu_button_bounds = [&](TopMenu menu) -> std::optional<gui::WidgetBounds>
         {
@@ -336,206 +300,135 @@
             return std::nullopt;
         };
 
-        // Every popup uses the same font-measured rows, body size and hit bounds.
-        const auto menuUndo = editor.openMenu == TopMenu::Edit
-            ? resolve_surface_edit(editor, SurfaceEditAction::undo) : SurfaceEditAvailability{};
-        const auto menuRedo = editor.openMenu == TopMenu::Edit
-            ? resolve_surface_edit(editor, SurfaceEditAction::redo) : SurfaceEditAvailability{};
-        const std::string menuUndoLabel = menuUndo.enabled ? "Undo " + menuUndo.operation_label : "Undo";
-        const std::string menuRedoLabel = menuRedo.enabled ? "Redo " + menuRedo.operation_label : "Redo";
-        const int toolsMenuItemCount = application.kind == EditorApplicationKind::GuiEditor
-            ? 5 : 6;
-        const int assetMenuItemCount = 1 + (application.allow_package_management ? 1 : 0)
-            + (application.allow_entity_authoring ? 5 : 0);
-        auto dropdown_item_count = [&](TopMenu menu) -> int
-        {
-            switch (menu)
-            {
-            case TopMenu::File: return 6;
-            case TopMenu::Edit: return 7;
-            case TopMenu::Asset: return assetMenuItemCount;
-            case TopMenu::Window: return windowMenuItemCount;
-            case TopMenu::Tools: return toolsMenuItemCount;
-            case TopMenu::Tasks: case TopMenu::Help: return 2;
-            default: return 0;
-            }
-        };
-
-        auto dropdown_size_for = [&](TopMenu menu) -> gui::Vec2
-        {
-            float width = 0.0f;
-            const auto measure = [&](std::string_view label,
-                std::string_view shortcut = {})
-            {
-                width = (std::max)(width, gui::menu_item_preferred_width(
-                    {.label = label, .shortcut = shortcut}));
-            };
-            switch (menu)
-            {
-            case TopMenu::File:
-                for (const auto label : {"Open Launcher", "Open Project...", "Close Project",
-                        "Save Project", "Settings", "Exit"}) measure(label);
-                break;
-            case TopMenu::Edit:
-                measure(menuUndoLabel, "Ctrl+Z");
-                measure(menuRedoLabel, "Ctrl+Y");
-                measure("Delete Selected", "Del");
-                measure("Deselect", "Esc");
-                for (const auto label : {"Focus Selection", "Reset Camera", "Scene Helpers"})
-                    measure(label);
-                break;
-            case TopMenu::Asset:
-                measure("Open Asset Browser");
-                if (application.allow_package_management) measure("Package Manager...");
-                if (application.allow_entity_authoring)
-                {
-                    for (const auto label : {"Add Static Mesh", "Add Light", "Add Spawn", "Duplicate Selected"})
-                        measure(label);
-                    measure("Delete Selected", "Del");
-                }
-                break;
-            case TopMenu::Window:
-                measure("Reset Editor Layout");
-                if (pane_supported(EditorToolPane::AiChat))
-                    measure(pane_route_is_detached("pane.ai_chat") ? "Return Assistant" : "Assistant");
-                for (std::size_t index = 0; index < toolPaneRoutes.size(); ++index)
-                {
-                    const auto pane = static_cast<EditorToolPane>(index);
-                    if (pane == EditorToolPane::AiChat || !pane_supported(pane)) continue;
-                    measure(pane_route_is_detached(toolPaneRoutes[index])
-                        ? "Return " + std::string(toolPaneLabels[index]) : std::string(toolPaneLabels[index]));
-                }
-                break;
-            case TopMenu::Tools:
-                for (const auto label : {"Canvas Camera", "Editor Camera", "First-Person Camera",
-                        "Reset Preview Camera", "Model Manager...", "Export Logs & Diagnostics..."})
-                    measure(label);
-                measure("Copy Window Screenshot", "F12");
-                break;
-            case TopMenu::Tasks:
-                measure("Open Tasks & Threads"); measure("Tasks Diagnostics"); break;
-            case TopMenu::Help:
-                measure("About Epoch"); measure("Current Project Info"); break;
-            default: return {};
-            }
-            return dropdown_window_size(width, dropdown_item_count(menu));
-        };
-
-        auto dropdown_position_for = [&](TopMenu menu) -> gui::Vec2
-        {
-            const auto anchor = dropdown_anchor_for(menu);
-            const auto size = dropdown_size_for(menu);
-            return {(std::clamp)(anchor.x, 0.0f, (std::max)(0.0f, w - size.x)),
-                (std::clamp)(anchor.y, 0.0f, (std::max)(0.0f, h - size.y))};
-        };
-
-        auto open_dropdown = [&](std::string_view title, TopMenu menu, auto&& body)
-        {
-            if (modal_visible_now())
-                return;
-            if (editor.openMenu != menu)
-                return;
-            const auto pos = dropdown_position_for(menu);
-            const auto size = dropdown_size_for(menu);
-            gui::begin_application_popup_input();
-            gui::begin_top_layer();
-            gui::begin_window({}, pos, size);
-            dropdownItemWidth = (std::max)(0.0f, size.x - 12.0f);
-            (void)gui::begin_scroll_area(gui::ScrollAreaOptions{
-                .id = title, .size = {dropdownItemWidth, (std::max)(1.0f, size.y - 12.0f)},
-                .content_height = static_cast<float>(dropdown_item_count(menu))
-                    * gui::menu_item_row_height()});
-            body();
-            dropdownItemWidth = 0.0f;
-            gui::end_scroll_area();
-            gui::end_window();
-            gui::end_top_layer();
-            gui::end_application_popup_input();
-        };
-
         const gui::Vec2 mouse = toolbarMouse;
-        if (floating_gui_visible())
-            editor.layoutDrag = EditorLayoutDrag::None;
-
-        if (!floating_gui_visible() && editor.openMenu == TopMenu::None && gui::was_mouse_pressed())
+        // Keep the painted 10px layout gap while making its grab target 16px.
+        // Admission and the captured gesture share the same GUI hit geometry.
+        const auto layout_divider_options = [&](EditorLayoutDrag role)
         {
-            if (layout_outliner_visible && editor_point_in_rect(mouse, outliner_split_pos, outliner_split_size))
-                editor.layoutDrag = EditorLayoutDrag::Outliner;
-            else if (layout_inspector_visible && editor_point_in_rect(mouse, inspector_split_pos, inspector_split_size))
-                editor.layoutDrag = EditorLayoutDrag::Inspector;
-            else if (bottom_visible && editor_point_in_rect(mouse, bottom_split_pos, bottom_split_size))
-                editor.layoutDrag = EditorLayoutDrag::Dock;
-            else if (splitBottomColumns
-                && editor_point_in_rect(mouse, bottomColumnsSplitPosition, bottomColumnsSplitSize))
-            {
-                editor.layoutDrag = EditorLayoutDrag::BottomColumns;
-                editor.bottomGridDragOffset = mouse.x - bottomColumnsSplitPosition.x;
-            }
-        }
-        if (!gui::is_mouse_down())
-            editor.layoutDrag = EditorLayoutDrag::None;
-
-        if (!floating_gui_visible() && gui::is_mouse_down())
-        {
-            switch (editor.layoutDrag)
+            gui::DragSurfaceOptions options{
+                .hit_padding = 3.0f, .minimum_hit_extent = 16.0f, .drag_threshold = 0.0f};
+            switch (role)
             {
             case EditorLayoutDrag::Outliner:
-                editor.outlinerSplit = std::clamp(mouse.x / (std::max)(1.0f, w), 0.06f, 0.70f);
-                editor.surfaceSettleFrames = (std::max)(editor.surfaceSettleFrames, 1);
-                break;
+                options.position=outliner_split_pos;options.size=outliner_split_size;
+                options.enabled=layout_outliner_visible;break;
             case EditorLayoutDrag::Inspector:
-                editor.inspectorSplit = std::clamp((w - mouse.x) / (std::max)(1.0f, w), 0.06f, 0.70f);
-                editor.surfaceSettleFrames = (std::max)(editor.surfaceSettleFrames, 1);
-                break;
+                options.position=inspector_split_pos;options.size=inspector_split_size;
+                options.enabled=layout_inspector_visible;break;
             case EditorLayoutDrag::Dock:
-                editor.dockSplit = std::clamp(
-                    (h - mouse.y - splitter_h)
-                        / (std::max)(
-                            1.0f,
-                            h - toolbar_h - splitter_h),
-                    0.08f,
-                    0.80f);
-                editor.surfaceSettleFrames = (std::max)(editor.surfaceSettleFrames, 1);
-                break;
+                options.position=bottom_split_pos;options.size=bottom_split_size;
+                options.enabled=bottom_visible;break;
             case EditorLayoutDrag::BottomColumns:
-                editor.bottomGridSplit = gui_lib::bottom_dock_column_fraction_from_pointer(
-                    bottomColumnOptions, mouse.x - bottom_pos.x, editor.bottomGridDragOffset);
-                editor.surfaceSettleFrames = (std::max)(editor.surfaceSettleFrames, 1);
-                break;
-            case EditorLayoutDrag::None:
-            default:
-                break;
+                options.position=bottomColumnsSplitPosition;options.size=bottomColumnsSplitSize;
+                options.enabled=splitBottomColumns;break;
+            default: options.enabled=false;break;
             }
+            return options;
+        };
+        const auto traceDividerBefore = editor.layoutDrag;
+        const bool traceDividerPendingBefore = editor.layoutDividerDrag.pending;
+        gui::Vec2 traceDividerDelta{};
+        bool traceDividerReleased{};
+        const bool dividerInputBlocked = automationInputReserved || floating_gui_visible() || modal_visible_now()
+            || editor.openMenu != TopMenu::None;
+        if (dividerInputBlocked || editor.layoutDrag == EditorLayoutDrag::None)
+        {
+            editor.layoutDividerDrag = {};
+            if (dividerInputBlocked) editor.layoutDrag = EditorLayoutDrag::None;
+        }
+
+        // Admission uses the queued press origin, not the pointer's later
+        // frame position. Fast Down/Move/Up belongs to the existing drag owner.
+        const auto dividerPress = gui::mouse_press_position();
+        if (!dividerInputBlocked && editor.layoutDrag == EditorLayoutDrag::None && dividerPress)
+        {
+            const auto captureDivider = [&](EditorLayoutDrag role, gui::Vec2 position)
+            {
+                editor.layoutDrag = role;
+                editor.layoutDividerDragOffset = role == EditorLayoutDrag::Dock
+                    ? dividerPress->y - position.y : dividerPress->x - position.x;
+            };
+            if (gui::drag_surface_hit_test(*dividerPress, layout_divider_options(EditorLayoutDrag::Outliner)))
+                captureDivider(EditorLayoutDrag::Outliner, outliner_split_pos);
+            else if (gui::drag_surface_hit_test(*dividerPress, layout_divider_options(EditorLayoutDrag::Inspector)))
+                captureDivider(EditorLayoutDrag::Inspector, inspector_split_pos);
+            else if (gui::drag_surface_hit_test(*dividerPress, layout_divider_options(EditorLayoutDrag::Dock)))
+                captureDivider(EditorLayoutDrag::Dock, bottom_split_pos);
+            else if (gui::drag_surface_hit_test(*dividerPress, layout_divider_options(EditorLayoutDrag::BottomColumns)))
+                captureDivider(EditorLayoutDrag::BottomColumns, bottomColumnsSplitPosition);
+        }
+        if (editor.layoutDrag != EditorLayoutDrag::None)
+        {
+            const auto dividerOptions = layout_divider_options(editor.layoutDrag);
+            if (!dividerOptions.enabled || dividerOptions.size.x <= 0.0f || dividerOptions.size.y <= 0.0f)
+                editor.layoutDividerDrag = {};
+            else
+            {
+                const auto origin = editor.layoutDividerDrag.pending
+                    ? editor.layoutDividerDrag.press_position : dividerPress.value_or(mouse);
+                const auto gesture = gui::drag_surface(editor.layoutDividerDrag, dividerOptions);
+                if (core::cli::trace_menu_button0_rect)
+                { traceDividerDelta=gesture.delta;traceDividerReleased=gesture.released; }
+                if (gesture)
+                {
+                    const gui::Vec2 pointer{origin.x + gesture.delta.x, origin.y + gesture.delta.y};
+                    switch (editor.layoutDrag)
+                    {
+                    case EditorLayoutDrag::Outliner:
+                        editor.outlinerSplit=std::clamp((pointer.x-editor.layoutDividerDragOffset)/(std::max)(1.0f,w),0.06f,0.70f);break;
+                    case EditorLayoutDrag::Inspector:
+                        editor.inspectorSplit=std::clamp((w-pointer.x+editor.layoutDividerDragOffset-right_split_w)/(std::max)(1.0f,w),0.06f,0.70f);break;
+                    case EditorLayoutDrag::Dock:
+                        editor.dockSplit=std::clamp((h-pointer.y+editor.layoutDividerDragOffset-bottom_split_h)
+                            /(std::max)(1.0f,h-toolbar_h-splitter_h),0.08f,0.80f);break;
+                    case EditorLayoutDrag::BottomColumns:
+                        editor.bottomGridSplit=gui_lib::bottom_dock_column_fraction_from_pointer(
+                            bottomColumnOptions,pointer.x-bottom_pos.x,editor.layoutDividerDragOffset);break;
+                    default: break;
+                    }
+                    editor.surfaceSettleFrames=(std::max)(editor.surfaceSettleFrames,1);
+                    result.scene_input_captured=true;
+                }
+            }
+            if (!editor.layoutDividerDrag.pending) editor.layoutDrag=EditorLayoutDrag::None;
         }
         if (editor.layoutDrag != EditorLayoutDrag::None)
             result.scene_input_captured = true;
 
+        if (core::cli::trace_menu_button0_rect)
+        {
+            static thread_local unsigned dividerTraceFrames{};
+            if (dividerTraceFrames < 120u && (dividerPress || gui::is_mouse_down()
+                || traceDividerBefore != EditorLayoutDrag::None || editor.layoutDrag != EditorLayoutDrag::None))
+            {
+                ++dividerTraceFrames;
+                try
+                {
+                    const auto rect = [](gui::Vec2 pos,gui::Vec2 size)
+                    { return std::to_string(pos.x)+","+std::to_string(pos.y)+","+std::to_string(size.x)+","+std::to_string(size.y); };
+                    logger::info("PointerTrace.Divider", "frame=" + std::to_string(dividerTraceFrames)
+                        + " ctx=" + std::to_string(reinterpret_cast<std::uintptr_t>(ctx.get()))
+                        + " role=" + std::to_string(static_cast<unsigned>(traceDividerBefore)) + "," + std::to_string(static_cast<unsigned>(editor.layoutDrag))
+                        + " pending=" + std::to_string(traceDividerPendingBefore) + "," + std::to_string(editor.layoutDividerDrag.pending)
+                        + " press=" + (dividerPress ? std::to_string(dividerPress->x)+","+std::to_string(dividerPress->y) : std::string{"none"})
+                        + " mouse=" + std::to_string(mouse.x)+","+std::to_string(mouse.y)
+                        + " origin=" + std::to_string(editor.layoutDividerDrag.press_position.x)+","+std::to_string(editor.layoutDividerDrag.press_position.y)
+                        + " delta=" + std::to_string(traceDividerDelta.x)+","+std::to_string(traceDividerDelta.y)
+                        + " released=" + std::to_string(traceDividerReleased)
+                        + " blocked_modal_menu_floating=" + std::to_string(dividerInputBlocked)+","+std::to_string(modal_visible_now())
+                            + ","+std::to_string(editor.openMenu!=TopMenu::None)+","+std::to_string(floating_gui_visible())
+                        + " rect_left="+rect(outliner_split_pos,outliner_split_size)
+                        + " rect_right="+rect(inspector_split_pos,inspector_split_size)
+                        + " rect_bottom="+rect(bottom_split_pos,bottom_split_size)
+                        + " rect_columns="+rect(bottomColumnsSplitPosition,bottomColumnsSplitSize)
+                        + " splits="+std::to_string(editor.outlinerSplit)+","+std::to_string(editor.inspectorSplit)
+                            + ","+std::to_string(editor.dockSplit)+","+std::to_string(editor.bottomGridSplit));
+                }
+                catch (...) { /* Diagnostics cannot change layout or input. */ }
+            }
+        }
         if (modal_visible_now())
             editor.openMenu = TopMenu::None;
-
-        if (editor.openMenu != TopMenu::None)
-        {
-            result.scene_input_captured = true;
-            const auto buttonBounds = top_menu_button_bounds(editor.openMenu);
-            const gui::Vec2 dropdownPos = dropdown_position_for(editor.openMenu);
-            const gui::Vec2 dropdownSize = dropdown_size_for(editor.openMenu);
-            const bool inButton = buttonBounds
-                && editor_point_in_rect(mouse, buttonBounds->position, buttonBounds->size);
-            const bool inDropdown = dropdownSize.x > 0.0f
-                && dropdownSize.y > 0.0f
-                && editor_point_in_rect(mouse, dropdownPos, dropdownSize);
-            const gui::Vec2 connectorPos{
-                buttonBounds ? buttonBounds->position.x : dropdownPos.x,
-                toolbar_button_y + toolbar_button_h
-            };
-            const gui::Vec2 connectorSize{
-                (std::max)(dropdownSize.x, buttonBounds ? buttonBounds->size.x : 0.0f),
-                8.0f
-            };
-            const bool inConnector = editor_point_in_rect(mouse, connectorPos, connectorSize);
-            if (!inButton && !inDropdown && !inConnector && !gui::is_mouse_down())
-                editor.openMenu = TopMenu::None;
-        }
 
         enum class PaneDropTarget : std::uint8_t
         {
@@ -559,6 +452,7 @@
             directTabBounds{};
         std::array<std::vector<std::string_view>, toolDockRegionCount>
             directTabRoutes{};
+        editor.paneTitleDragFrame = {};
 
         auto reset_pane_title_drag = [&]() noexcept
         {
@@ -566,7 +460,13 @@
             editor.paneTitleDragRoute.clear();
             editor.paneTitleDragLabel.clear();
             editor.paneTitleDragStart = {};
+            editor.paneTitleDrag = {};
+            editor.paneTitleDragFrame = {};
         };
+        if (editor.paneTitleDragActive
+            && (modal_visible_now() || editor.openMenu != TopMenu::None
+                || floating_gui_visible() || !pane_is_shown(editor.paneTitleDragRoute)))
+            reset_pane_title_drag();
 
         auto direct_tab_group = [&](EditorToolDockRegion region)
         {
@@ -673,31 +573,21 @@
             return true;
         };
 
-        auto handle_pane_title_drag_to_tab = [&](
+        auto capture_pane_title_drag = [&](
             std::string_view route,
             std::string_view label,
-            gui::Vec2 panel_pos,
-            gui::Vec2 panel_size)
+            const gui::TabBarResult& tabs)
         {
-            if (modal_visible_now() || editor.openMenu != TopMenu::None
-                || floating_gui_visible() || editor.paneTitleDragActive)
-            {
-                return;
-            }
-            if (panel_size.x <= 1.0f || panel_size.y <= 1.0f)
-                return;
-
-            const gui::Vec2 titleHitSize{
-                (std::max)(1.0f, panel_size.x - 36.0f),
-                (std::min)(32.0f, panel_size.y)
-            };
-            if (gui::was_mouse_pressed()
-                && editor_point_in_rect(mouse, panel_pos, titleHitSize))
+            if (tabs.drag.pressed)
             {
                 editor.paneTitleDragActive = true;
                 editor.paneTitleDragRoute.assign(route);
                 editor.paneTitleDragLabel.assign(label);
-                editor.paneTitleDragStart = mouse;
+                editor.paneTitleDragStart = tabs.drag_origin;
+            }
+            if (editor.paneTitleDragActive && editor.paneTitleDragRoute == route)
+            {
+                editor.paneTitleDragFrame = tabs.drag;
                 result.scene_input_captured = true;
                 ctx->set_gui_overlay_priority(true);
             }
@@ -726,16 +616,17 @@
 
             result.scene_input_captured = true;
             ctx->set_gui_overlay_priority(true);
-            const float dx = mouse.x - editor.paneTitleDragStart.x;
-            const float dy = mouse.y - editor.paneTitleDragStart.y;
-            constexpr float kDockDragThresholdSq = 12.0f * 12.0f;
-            const bool moved = (dx * dx + dy * dy) >= kDockDragThresholdSq;
+            const bool moved = editor.paneTitleDragFrame.dragging
+                || editor.paneTitleDragFrame.released;
             if (!moved)
             {
-                if (gui::was_mouse_released() || !gui::is_mouse_down())
+                if (!editor.paneTitleDrag.pending || !gui::is_mouse_down())
                     reset_pane_title_drag();
                 return;
             }
+            const gui::Vec2 dragMouse{
+                editor.paneTitleDragStart.x + editor.paneTitleDragFrame.delta.x,
+                editor.paneTitleDragStart.y + editor.paneTitleDragFrame.delta.y};
 
             const auto sourcePane = editor_tool_pane_from_route(
                 editor.paneTitleDragRoute);
@@ -773,7 +664,7 @@
                             .strip_bounds = directTabStripBounds[regionIndex],
                             .tab_bounds = tabBounds.empty() ? nullptr : tabBounds.data(),
                             .tab_count = static_cast<std::uint32_t>(tabBounds.size()),
-                            .pointer = {mouse.x, mouse.y},
+                            .pointer = {dragMouse.x, dragMouse.y},
                             .dragged_tab_size = draggedTabSize,
                             .source_group_id = sourceRegionIndex + 1u,
                             .target_group_id = regionIndex + 1u,
@@ -807,7 +698,7 @@
                         .moving_label = editor.paneTitleDragLabel,
                         .no_op = directLayout.no_op
                     });
-                    if (gui::was_mouse_released())
+                    if (editor.paneTitleDragFrame.released)
                     {
                         const bool accepted = directLayout.no_op
                             || move_pane_to_direct_tab_slot(
@@ -866,9 +757,9 @@
                     .left_context_preview = {},
                     .right_context_preview = {},
                     .floating_preview = {
-                        { mouse.x - floatingPreviewSize.x * 0.5f, mouse.y - 24.0f },
+                        { dragMouse.x - floatingPreviewSize.x * 0.5f, dragMouse.y - 24.0f },
                         floatingPreviewSize },
-                    .pointer = mouse,
+                    .pointer = dragMouse,
                     .guide_extent = 94.0f,
                     .guide_gap = 8.0f,
                     .allow_side_tabs = true,
@@ -882,12 +773,12 @@
             gui::render_dock_guide_overlay(dockGuides, {
                 .moving_label = editor.paneTitleDragLabel,
                 .floating_preview = {
-                    { mouse.x - floatingPreviewSize.x * 0.5f, mouse.y - 24.0f },
+                    { dragMouse.x - floatingPreviewSize.x * 0.5f, dragMouse.y - 24.0f },
                     floatingPreviewSize },
                 .show_floating_preview = hovered == PaneDropTarget::None
             });
 
-            if (gui::was_mouse_released())
+            if (editor.paneTitleDragFrame.released)
             {
                 const std::string route = editor.paneTitleDragRoute;
                 const std::string label = editor.paneTitleDragLabel;

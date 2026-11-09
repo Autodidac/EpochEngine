@@ -35,6 +35,7 @@ export namespace epochengine
         AISandbox,
         Systems,
         PlantLab,
+        AssetGeneration,
         Count
     };
 
@@ -62,6 +63,28 @@ export namespace epochengine
         bool visible{ true };
         bool editor_only{ false };
     };
+
+    // A default viewport may be framed for new content, but an authored camera
+    // must never be treated as the unchanged starter camera merely by its name.
+    [[nodiscard]] inline bool editor_seed_cameras_unchanged(std::span<const EditorSceneSeedEntity> scene,
+        std::span<const EditorSceneSeedEntity> seeds) noexcept
+    {
+        std::size_t actual{},expected{};
+        for(const auto& entity:scene)actual+=entity.type=="Camera";
+        for(const auto& entity:seeds)expected+=entity.type=="Camera";
+        if(actual!=expected||actual>64u)return false;
+        for(const auto& seed:seeds)
+        {
+            if(seed.type!="Camera")continue;
+            std::size_t matches{};
+            for(const auto& camera:scene)
+                if(camera.type=="Camera"&&camera.name==seed.name&&camera.category==seed.category
+                    &&camera.position==seed.position&&camera.rotation==seed.rotation&&camera.scale==seed.scale
+                    &&camera.visible==seed.visible&&camera.editor_only==seed.editor_only)++matches;
+            if(matches!=1u)return false;
+        }
+        return true;
+    }
 
     struct EditorApplicationPanes
     {

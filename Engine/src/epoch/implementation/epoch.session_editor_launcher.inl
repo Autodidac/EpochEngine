@@ -180,10 +180,22 @@
                                 const bool enter_pressed =
                                     ctx->is_key_down_safe(epochengine::input::Key::Enter);
 
-                                ctx->set_scene_preview_mode(core::ScenePreviewMode::Editor);
+                                // Editor viewport owns preview publication, including covered Play.
+                                // Do not transiently re-enable it ahead of the renderer thread.
                                 clear_before_ui_frame(ctx);
                                 gui::begin_frame(ctx, dt, mouse_pos, mouse_left_down);
                                 const auto editor_frame = epochengine::editor_run(ctx);
+                                for (const auto& route : editor_frame.companion_pane_activations)
+                                {
+                                    if (route.empty()) continue;
+                                    if (!mgr.OpenDetachedContextWindow(
+                                            epochengine::core::DetachedContextWindowRequest{
+                                                .gui_route = route,
+                                                .activate_existing_only = true}))
+                                        logger::get(kEditorLog).logf(logger::LogLevel::WARN,
+                                            std::source_location::current(),
+                                            "Companion pane activation is unavailable for route '{}'; no window was created.", route);
+                                }
 
                                 switch (editor_frame.command)
                                 {
@@ -608,6 +620,11 @@
                                 ctx->set_scene_preview_mode(core::ScenePreviewMode::None);
                                 clear_before_ui_frame(ctx);
                                 gui::begin_frame(ctx, dt, mouse_pos, mouse_left_down);
+                                const auto launcherAppearance = epochengine::editor_appearance_preferences(ctx.get());
+                                gui::set_theme_cycle_interval(launcherAppearance.theme_cycle_seconds);
+                                const gui::ScopedTheme launcherTheme{launcherAppearance.theme};
+                                gui::publish_native_window_theme(launcherAppearance.theme);
+                                const gui::ScopedRoundedRectangles launcherRounding{launcherAppearance.rounded_rectangles};
                                 auto choice = menu.update_and_draw(ctx, win, dt, up_pressed, down_pressed, left_pressed, right_pressed, enter_pressed);
                                 gui::end_frame();
                                 ctx->present_safe();

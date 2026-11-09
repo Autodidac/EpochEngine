@@ -68,8 +68,8 @@ function Format-TrackedVersion {
     if ($Major -lt 0 -or $Minor -lt 0 -or $Revision -lt 0) {
         throw 'Epoch version components must be non-negative.'
     }
-    # Preserve immutable historical filenames; new feature lines use semver.
-    if ($Major -eq 0 -and $Minor -le 90) {
+    # Keep the two-digit patch spelling through the 0.91 release line.
+    if ($Major -eq 0 -and $Minor -le 91) {
         return '{0}.{1}.{2:D2}' -f $Major, $Minor, $Revision
     }
     return '{0}.{1}.{2}' -f $Major, $Minor, $Revision
@@ -138,7 +138,8 @@ function Invoke-VersionSelfTest {
     }
     foreach ($case in @(
         @(0, 89, 6, '0.89.06'), @(0, 89, 35, '0.89.35'),
-        @(0, 90, 3, '0.90.03'), @(0, 90, 101, '0.90.101'), @(1, 0, 0, '1.0.0')
+        @(0, 90, 3, '0.90.03'), @(0, 90, 101, '0.90.101'),
+        @(0, 91, 2, '0.91.02'), @(0, 92, 2, '0.92.2'), @(1, 0, 0, '1.0.0')
     )) {
         if ((Format-TrackedVersion $case[0] $case[1] $case[2]) -cne $case[3]) {
             throw 'Historical/canonical version spelling self-test failed.'

@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <memory>
 #include <optional>
 #include <stop_token>
 #include <string>
@@ -1755,6 +1756,8 @@ static int run_contract_entry(int argc, char** argv)
     first.exclusive_group = "contract:exclusive";
     first.display_name = "Child Process Contract";
     first.window_mode = child_process::WindowMode::hidden;
+    first.retirement_guard = std::make_shared<int>(17);
+    const std::weak_ptr<void> ownedGuard = first.retirement_guard;
 #if defined(_WIN32)
     first.expected_executable = selfIdentity;
 #endif
@@ -1766,6 +1769,8 @@ static int run_contract_entry(int argc, char** argv)
     {
         return 3;
     }
+    first.retirement_guard.reset();
+    if (ownedGuard.expired() || child_process::release(launched.handle)) return 33;
     const auto running = child_process::snapshot(launched.handle);
     if (!running || !running->active()
         || running->correlation_key != first.correlation_key
@@ -1784,6 +1789,13 @@ static int run_contract_entry(int argc, char** argv)
     {
         return 5;
     }
+    auto borrowed = first;
+    borrowed.retirement_guard = std::make_shared<int>(23);
+    const std::weak_ptr<void> borrowedGuard = borrowed.retirement_guard;
+    const auto focusedWithGuard = child_process::launch_or_focus(borrowed);
+    borrowed.retirement_guard.reset();
+    if (focusedWithGuard.code != child_process::LaunchCode::focused_existing
+        || !borrowedGuard.expired() || ownedGuard.expired()) return 34;
 
     for (const bool disconnect : {false, true})
     {
@@ -1860,6 +1872,7 @@ static int run_contract_entry(int argc, char** argv)
     {
         return 9;
     }
+    if (!ownedGuard.expired()) return 35;
 
     child_process::LaunchRequest natural = first;
     // Keep ordinary captured launches on their original, unverified path.

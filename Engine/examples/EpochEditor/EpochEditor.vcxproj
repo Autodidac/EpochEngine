@@ -1,5 +1,5 @@
-<?xml version='1.0' encoding='utf-8'?>
-<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" DefaultTargets="Build">
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Release|x64">
       <Configuration>Release</Configuration>
@@ -149,7 +149,7 @@
     <VcpkgTriplet Condition="'$(VcpkgTriplet)'=='' and '$(Platform)'=='Win32'">x86-windows</VcpkgTriplet>
     <VcpkgManifestInstall>true</VcpkgManifestInstall>
     <VcpkgManifestRoot>$(SolutionDir)Engine\</VcpkgManifestRoot>
-    <VcpkgInstalledDir>$(SolutionDir)Engine\vcpkg_installed\</VcpkgInstalledDir>
+    <VcpkgInstalledDir>$(SolutionDir)Artifacts\Dependencies\vcpkg_installed\</VcpkgInstalledDir>
     <VcpkgAutoBootstrap>false</VcpkgAutoBootstrap>
     <VcpkgUseStatic Condition="'$(VcpkgUseStatic)'=='' and ('$(VcpkgTriplet)'=='x64-windows-static' or '$(VcpkgTriplet)'=='x64-windows-static-md' or '$(VcpkgTriplet)'=='x86-windows-static' or '$(VcpkgTriplet)'=='x86-windows-static-md')">true</VcpkgUseStatic>
     <VcpkgUseStatic Condition="'$(VcpkgUseStatic)'==''">false</VcpkgUseStatic>
@@ -169,7 +169,7 @@
     <VcpkgUseStatic Condition="'$(VcpkgUseStatic)'==''">false</VcpkgUseStatic>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64' or ('$(Configuration)|$(Platform)'=='Release|x64' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|x64')">
-    <EpochVcpkgInstallRoot>$(SolutionDir)Engine\vcpkg_installed\$(VcpkgTriplet)\</EpochVcpkgInstallRoot>
+    <EpochVcpkgInstallRoot>$([MSBuild]::EnsureTrailingSlash('$(VcpkgInstalledDir)'))$(VcpkgTriplet)\</EpochVcpkgInstallRoot>
     <EpochVcpkgNestedInstallRoot>$(EpochVcpkgInstallRoot)$(VcpkgTriplet)\</EpochVcpkgNestedInstallRoot>
     <EpochVcpkgInstallRoot Condition="!Exists('$(EpochVcpkgInstallRoot)include\') And Exists('$(EpochVcpkgNestedInstallRoot)include\')">$(EpochVcpkgNestedInstallRoot)</EpochVcpkgInstallRoot>
   </PropertyGroup>

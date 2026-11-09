@@ -98,6 +98,10 @@ namespace epochengine::editor_update_modal
         float detailHeight = 0.0f;
         float footerTop = 0.0f;
         bool showDetails = false;
+        float listWidth = 0.0f;
+        float detailWidth = 0.0f;
+        float detailOffsetX = 0.0f;
+        bool sideBySide = false;
     };
 
     constexpr float kUpdateContentInset = 28.0f;
@@ -123,16 +127,26 @@ namespace epochengine::editor_update_modal
     [[nodiscard]] constexpr PackageManagerBodyLayout measure_package_manager_body(
         const float bodyTop,
         const float contentBottom,
-        const float lineHeight) noexcept
+        const float lineHeight,
+        const float requestedFooterHeight = 76.0f,
+        const float contentWidth = 0.0f) noexcept
     {
-        constexpr float kFooterHeight = 76.0f;
+        const float footerHeight = (std::max)(0.0f, requestedFooterHeight);
         constexpr float kMinimumPanelHeight = 48.0f;
-        constexpr float kMaximumListHeight = 620.0f;
-        constexpr float kMaximumDetailHeight = 360.0f;
         constexpr float kSectionSpacing = 12.0f;
 
         PackageManagerBodyLayout layout{};
-        layout.footerTop = (std::max)(bodyTop, contentBottom - kFooterHeight);
+        layout.listWidth = layout.detailWidth = (std::max)(0.0f, contentWidth);
+        layout.footerTop = (std::max)(bodyTop, contentBottom - footerHeight);
+        if (contentWidth >= 900.0f)
+        {
+            layout.sideBySide = layout.showDetails = true;
+            layout.listWidth = (std::min)(600.0f, contentWidth * 0.44f);
+            layout.detailOffsetX = layout.listWidth + 16.0f;
+            layout.detailWidth = contentWidth - layout.detailOffsetX;
+            layout.listHeight = layout.detailHeight = (std::max)(0.0f, layout.footerTop - bodyTop - 8.0f);
+            return layout;
+        }
         const float panelBudget = (std::max)(
             0.0f,
             layout.footerTop - bodyTop - (std::max)(0.0f, lineHeight)
@@ -144,24 +158,9 @@ namespace epochengine::editor_update_modal
             return layout;
         }
 
-        layout.listHeight = std::clamp(
-            panelBudget * 0.52f,
-            kMinimumPanelHeight,
-            kMaximumListHeight);
-        layout.detailHeight = std::clamp(
-            panelBudget - layout.listHeight,
-            kMinimumPanelHeight,
-            kMaximumDetailHeight);
-
-        const float unused = panelBudget - layout.listHeight - layout.detailHeight;
-        if (unused > 0.0f)
-        {
-            const float listRoom = kMaximumListHeight - layout.listHeight;
-            const float listGrowth = (std::min)(unused, listRoom);
-            layout.listHeight += listGrowth;
-            const float detailRoom = kMaximumDetailHeight - layout.detailHeight;
-            layout.detailHeight += (std::min)(unused - listGrowth, detailRoom);
-        }
+        layout.listHeight = std::clamp(panelBudget * 0.6f,
+            kMinimumPanelHeight, panelBudget - kMinimumPanelHeight);
+        layout.detailHeight = panelBudget - layout.listHeight;
         layout.showDetails = true;
         return layout;
     }

@@ -26,7 +26,28 @@ try {
                 $upstreamTree = & gh api "repos/$($dep.repository)/commits/$($dep.upstream_revision)" --jq '.commit.tree.sha'
                 if ($LASTEXITCODE -ne 0 -or $upstreamTree -ne $dep.upstream_tree) { throw "Pinned portable source identity differs: $($dep.name)" }
             }
-            Write-Output "$($dep.name): $($expected.Count) portable files verified at $($portable.upstream_revision); no full-tree mirror claim."
+            if ($portable.publication_status -eq 'local_unpublished_changes') {
+                if ($dep.publication_status -ne $portable.publication_status -or !$portable.pending_changes) {
+                    throw "Pending portable source status is inconsistent: $($dep.name)"
+                }
+                foreach ($pending in $portable.pending_changes) {
+                    $record = @($portable.files | Where-Object path -eq $pending.path)
+                    if ($record.Count -ne 1 -or $record[0].sha256 -ne $pending.sha256 -or $pending.published_sha256 -notmatch '^[a-f0-9]{64}$') {
+                        throw "Pending portable source identity is inconsistent: $($dep.name)/$($pending.path)"
+                    }
+                }
+                Write-Output "$($dep.name): $($expected.Count) local portable files verified with unpublished changes; published baseline $($portable.upstream_revision) unchanged. No standalone sync/publication claim."
+            } elseif ($portable.pending_source_changes.bundled_only_changes) {
+                foreach ($pending in $portable.pending_source_changes.bundled_only_changes) {
+                    $record = @($portable.files | Where-Object path -eq $pending.path)
+                    if ($record.Count -ne 1 -or $record[0].sha256 -ne $pending.sha256 -or $pending.base_checkpoint_sha256 -notmatch '^[a-f0-9]{64}$') {
+                        throw "Bundled portable source identity is inconsistent: $($dep.name)/$($pending.path)"
+                    }
+                }
+                Write-Output "$($dep.name): $($expected.Count) local portable files verified including bundled-only changes; checkpoint $($portable.upstream_revision) unchanged. Standalone synchronization/publication unverified."
+            } else {
+                Write-Output "$($dep.name): $($expected.Count) portable files verified at $($portable.upstream_revision); no full-tree mirror claim."
+            }
         }
         if ($dep.mode -ne 'exact_mirror') {
             Write-Output "$($dep.name): $($dep.mode); no standalone mirror claim."

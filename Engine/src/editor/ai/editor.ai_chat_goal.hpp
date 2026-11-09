@@ -9,6 +9,8 @@
 
 #include <cstddef>
 #include <string_view>
+#include <string>
+#include <cstdint>
 
 namespace epochengine::editor::ai_chat_goal
 {
@@ -123,4 +125,97 @@ namespace epochengine::editor::ai_chat_goal
             return {Action::set, trim(text.substr(6))};
         return {};
     }
+    // A bounded composition of existing GUI actions. This state grants no
+    // execution authority: every stage still needs its own exact-call approval.
+    struct ToolSequence
+    {
+        unsigned stage{};
+        bool enabled{}, waiting{}, stopped{}, configure_plant{};
+        std::string project_id{}, project_root{};
+        std::uint64_t project_generation{};
+        std::string objective{}, origin_project_id{}, origin_project_root{};
+        std::uint64_t origin_project_generation{};
+        std::string step_request{};
+        unsigned request_stage{};
+        void bind_request(std::string_view request, std::string_view id,
+            std::string_view root, std::uint64_t generation)
+        {
+            objective = request;
+            origin_project_id = id;
+            origin_project_root = root;
+            origin_project_generation = generation;
+        }
+        bool remember_request(std::string_view operation_name, std::string_view request)
+        {
+            if (!enabled || waiting || stopped || request.empty() || operation_name != operation())
+                return false;
+            step_request = request;
+            request_stage = stage;
+            return true;
+        }
+        [[nodiscard]] std::string_view operation() const noexcept
+        {
+            constexpr std::string_view operations[]{"project.create", "forest.configure", "forest.paint", "project.save", "project.run"};
+            if (!enabled || stage >= operation_count()) return {};
+            return operations[stage + (!configure_plant && stage > 0u ? 1u : 0u)];
+        }
+        [[nodiscard]] unsigned operation_count() const noexcept { return configure_plant ? 5u : 4u; }
+        [[nodiscard]] std::string next_request(std::string_view original) const
+        {
+            const auto tool = operation();
+            if (tool.empty()) return {};
+            if (!step_request.empty() && request_stage == stage) return step_request;
+            if (tool == "project.create") return std::string{original};
+            if (tool == "project.save") return "save project";
+            if (tool == "project.run") return "run project";
+            const std::string prefix = tool == "forest.configure"
+                ? "Configure the Plant Lab recipe for the original project goal. Preserve every requested design choice; ask about missing or unsupported species/foliage instead of substituting."
+                : "Paint forest for the original project goal; use its approved plant recipe and specified settings or explicitly requested defaults, and ask for missing radius or density.";
+            return prefix + "\nOriginal project goal: " + std::string{original};
+        }
+        [[nodiscard]] bool matches(std::string_view id, std::string_view root, std::uint64_t generation) const noexcept
+        {
+            return (stage == 0u && project_id.empty()) || (id == project_id && root == project_root && generation == project_generation);
+        }
+        // Explicit resume keeps the next uncompleted stage. A created shell
+        // whose later generation failed must not create another project.
+        [[nodiscard]] bool resume(std::string_view request, std::string_view id,
+            std::string_view root, std::uint64_t generation) noexcept
+        {
+            if (!enabled || waiting || operation().empty() || objective.empty() || request != objective)
+                return false;
+            const bool current = stage == 0u
+                ? id == origin_project_id && root == origin_project_root && generation == origin_project_generation
+                : id == project_id && root == project_root && generation == project_generation;
+            if (!current) return false;
+            stopped = false;
+            return true;
+        }
+        [[nodiscard]] std::string_view local_review_plan() const noexcept
+        {
+            if (!enabled || stopped || waiting) return {};
+            if (operation() == "project.save")
+                return "EPOCH_TOOL_PLAN_V1\nTITLE Save the created project\n"
+                    "SUMMARY Save the verified planet and painted forest in the current project.\n"
+                    "CALL project.save\nEND\n";
+            if (operation() == "project.run")
+                return "EPOCH_TOOL_PLAN_V1\nTITLE Run the saved project\n"
+                    "SUMMARY Build if needed and run the saved planet and forest through the normal project controls.\n"
+                    "CALL project.run\nEND\n";
+            return {};
+        }
+        bool receipt(std::string_view operation_name, bool success, std::string_view id,
+            std::string_view root, std::uint64_t generation)
+        {
+            if (!enabled || stopped || !waiting || operation_name != operation()) return false;
+            waiting = false;
+            if (!success || id.empty() || root.empty() || !matches(id, root, generation))
+            { stopped = true; return false; }
+            if (stage == 0u)
+            { project_id = id; project_root = root; project_generation = generation; }
+            ++stage;
+            return stage < operation_count();
+        }
+    };
+
 }

@@ -955,13 +955,14 @@ namespace epochengine::directxcontext
         {
             if (!detail::render_canvas2d_scene(ctx, state))
             {
+                const auto matchedScene = previewgrid::scene_frame_for(ctx.get());
                 std::vector<detail::DirectXVertex> gridLines{};
                 std::vector<detail::DirectXVertex> solid{};
                 std::vector<detail::DirectXVertex> overlayLines{};
                 gridLines.reserve(128);
                 solid.reserve(256);
                 overlayLines.reserve(256);
-                detail::build_preview_geometry(*ctx, state, gridLines, solid, overlayLines);
+                detail::build_preview_geometry(*ctx, state, matchedScene, gridLines, solid, overlayLines);
                 const D3D11_VIEWPORT previewViewport =
                     detail::scene_viewport_for(*ctx, state);
                 state.immediate->RSSetViewports(1, &previewViewport);
@@ -972,7 +973,7 @@ namespace epochengine::directxcontext
                     state, gridLines, D3D11_PRIMITIVE_TOPOLOGY_LINELIST);
                 detail::draw_vertices(
                     state, solid, D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-                detail::render_engine_arcade_sampled_surface_preview(*ctx, state);
+                detail::render_engine_arcade_sampled_surface_preview(*ctx, state, matchedScene);
                 detail::draw_vertices(
                     state, overlayLines, D3D11_PRIMITIVE_TOPOLOGY_LINELIST);
             }

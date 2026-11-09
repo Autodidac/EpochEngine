@@ -45,6 +45,7 @@ module;
 #include <mutex>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -91,7 +92,8 @@ namespace epochengine::font
     bool FontRenderer::load_font(const std::string& name,
         const std::string& path,
         float size_pt,
-        FontColor color)
+        FontColor color,
+        GlyphCoverage coverage)
     {
         if (loaded_fonts_.contains(name))
             return false;
@@ -100,13 +102,14 @@ namespace epochengine::font
         asset.name = name;
         asset.path = path;
         asset.size_pt = size_pt;
+        asset.coverage = coverage;
 
         std::vector<std::pair<char32_t, BakedGlyph>> baked_glyphs{};
         Texture raw_texture{};
         FontMetrics metrics{};
         std::unordered_map<std::uint64_t, float> kerning_pairs{};
 
-        if (!load_and_bake_font(path, size_pt, baked_glyphs, metrics, kerning_pairs, raw_texture, color))
+        if (!load_and_bake_font(path, size_pt, baked_glyphs, metrics, kerning_pairs, raw_texture, color, coverage))
         {
             logger::error("FontRenderer", epochengine::format_text("Failed to bake font '{}' from '{}'", name, path));
             return false;
@@ -120,8 +123,8 @@ namespace epochengine::font
 
         raw_texture.name = name;
 
-        // One full glyph sheet is at most 1024x1024. The existing 13 GUI ink
-        // variants need at most 4 pages, including their padding/cropping.
+        // One full glyph sheet is at most1024x1024; scoped glyph coverage can
+        // keep specialized inks small without reducing normal text coverage.
         // Keep each texture 2048x2048 and the RGBA page budget bounded at 64 MiB;
         // do not resize an atlas or invalidate already issued glyph handles.
         static std::mutex atlas_mutex;
@@ -303,7 +306,8 @@ namespace epochengine::font
         FontMetrics& out_metrics,
         std::unordered_map<std::uint64_t, float>& out_kerning,
         Texture& out_texture,
-        FontColor color)
+        FontColor color,
+        GlyphCoverage coverage)
     {
         out_glyphs.clear();
         out_kerning.clear();
@@ -312,7 +316,8 @@ namespace epochengine::font
         out_texture.name = ttf_path;
         out_metrics = FontMetrics{};
 
-        if (size_pt <= 0.0f)
+        if (size_pt <= 0.0f ||
+            (coverage != GlyphCoverage::full && coverage != GlyphCoverage::basic_latin))
         {
             logger::error("FontRenderer", epochengine::format_text("Invalid font size '{}' requested for '{}'", size_pt, ttf_path));
             return false;
@@ -375,18 +380,20 @@ namespace epochengine::font
             {0x2500, 0x257F}, // Box Drawing
             {0x2580, 0x259F}  // Block Elements
         } };
+        const auto ranges = coverage == GlyphCoverage::basic_latin
+            ? std::span{ranges_info}.first(1u) : std::span{ranges_info};
 
         std::size_t total_chars = 0;
-        for (const auto& range : ranges_info)
+        for (const auto& range : ranges)
             total_chars += static_cast<std::size_t>(range.second - range.first + 1);
 
         std::vector<stbtt_packedchar> packed_chars(total_chars);
-        std::vector<stbtt_pack_range> pack_ranges(ranges_info.size());
+        std::vector<stbtt_pack_range> pack_ranges(ranges.size());
 
         std::size_t packed_offset = 0;
-        for (std::size_t i = 0; i < ranges_info.size(); ++i)
+        for (std::size_t i = 0; i < ranges.size(); ++i)
         {
-            const auto [first_codepoint, last_codepoint] = ranges_info[i];
+            const auto [first_codepoint, last_codepoint] = ranges[i];
             const int glyph_count = last_codepoint - first_codepoint + 1;
 
             pack_ranges[i].font_size = size_pt;
@@ -448,9 +455,9 @@ namespace epochengine::font
         out_glyphs.reserve(total_chars);
         packed_offset = 0;
 
-        for (std::size_t range_index = 0; range_index < ranges_info.size(); ++range_index)
+        for (std::size_t range_index = 0; range_index < ranges.size(); ++range_index)
         {
-            const auto [first_codepoint, last_codepoint] = ranges_info[range_index];
+            const auto [first_codepoint, last_codepoint] = ranges[range_index];
             const int glyph_count = last_codepoint - first_codepoint + 1;
             const stbtt_packedchar* range_chars = packed_chars.data() + packed_offset;
 

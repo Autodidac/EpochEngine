@@ -1,0 +1,59 @@
+{
+  "id": "forest_temporal_graph",
+  "displayName": "Forest Factory Temporal Graph",
+  "manifestLicense": "LicenseRef-MIT-NoSell",
+  "manifestCopyright": "Copyright (c) 2026 Adam Rushford",
+  "status": "source-staged",
+  "kind": "code-extension",
+  "activation": "package-manager-opt-in",
+  "summary": "Optional Forest Factory temporal graph code extension for reviewed procedural forest material.",
+  "security": {
+    "serverOrListenerAllowed": false,
+    "requiresExplicitNetworkApproval": false,
+    "autoRunAllowed": false,
+    "includeByDefault": false
+  },
+  "source": {
+    "repo": "https://epoch.adamrushford.chatgpt.site/git/EpochEngineExtensions.git",
+    "path": "packages/forest_temporal_graph",
+    "upstreamReference": "https://github.com/Autodidac/Temporal_Parametric_Graph_Lindenmayer_System_Plant_Lab",
+    "provenance": "renderer-neutral C++23 Forest Factory temporal graph source staged in this package"
+  },
+  "engineBoundary": {
+    "epochPackageId": "forest_temporal_graph",
+    "expectedCacheRoot": "cache/packages/forest_temporal_graph",
+    "notes": "Forest Factory is core in EpochEngine; this package is optional extension/reference material."
+  },
+  "script": {
+    "language": "C++23",
+    "path": "scripts/forest_temporal_graph_package.ascript.cpp",
+    "api": "epoch_package_script_api",
+    "mode": "download-stage-build-live-preview",
+    "downloadsSource": true,
+    "compilesSource": true,
+    "livePreview": true,
+    "humanGated": true,
+    "autoRunAllowed": false
+  },
+  "build": {
+    "humanGated": true,
+    "sourceFiles": [
+      "CMakeLists.txt",
+      "include/epoch/extensions/forest_temporal_graph/forest_temporal_graph.hpp",
+      "src/forest_temporal_graph.cpp",
+      "tests/forest_temporal_graph_self_test.cpp"
+    ],
+    "targets": [
+      "epoch_extension_forest_temporal_graph",
+      "epoch_extension_forest_temporal_graph_self_test"
+    ],
+    "commands": [
+      "cmake -S packages/forest_temporal_graph -B cache/packages/forest_temporal_graph/build",
+      "cmake --build cache/packages/forest_temporal_graph/build --target epoch_extension_forest_temporal_graph_self_test",
+      "cache/packages/forest_temporal_graph/build/epoch_extension_forest_temporal_graph_self_test"
+    ]
+  },
+  "notes": [
+    "Stages deterministic temporal graph expansion and branch segment generation for future Forest Factory, voxel occupancy, and renderer adapter outputs."
+  ]
+}

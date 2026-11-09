@@ -36,6 +36,7 @@ module;
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <source_location>
 #include <stdexcept>
 #include <string>
@@ -47,6 +48,7 @@ import core.logger;
 
 export namespace epochengine
 {
+    enum class BitmapSourceChannels : std::uint8_t { rgba, bgra };
     inline std::vector<std::uint8_t> a_argb32ToRgba8(const std::vector<std::uint32_t>& pixels)
     {
         std::vector<std::uint8_t> rgba;
@@ -64,17 +66,25 @@ export namespace epochengine
         return rgba;
     }
 
-    inline bool a_writeBMP(const std::filesystem::path& filepath, const std::vector<std::uint8_t>& pixels, int width, int height, bool flipVertically)
+    inline bool a_writeBMP(const std::filesystem::path& filepath, const std::vector<std::uint8_t>& pixels, int width, int height, bool flipVertically,
+        BitmapSourceChannels sourceChannels = BitmapSourceChannels::rgba)
     {
         if (width <= 0 || height <= 0)
             throw std::runtime_error("a_writeBMP: Invalid dimensions");
 
-        const int channels = 4;
-        const int rowBytes = width * 3;
-        const int padSize = (4 - (rowBytes % 4)) % 4;
-        const int stride = rowBytes + padSize;
+        const auto columns = static_cast<std::uint64_t>(width);
+        const auto rows = static_cast<std::uint64_t>(height);
+        const auto strideBytes = (columns * 3u + 3u) & ~std::uint64_t{3u};
+        if (columns * rows > pixels.size() / 4u
+            || (sourceChannels != BitmapSourceChannels::rgba && sourceChannels != BitmapSourceChannels::bgra)
+            || strideBytes * rows > (std::numeric_limits<std::uint32_t>::max)() - 54u
+            || strideBytes > static_cast<std::uint64_t>((std::numeric_limits<int>::max)()))
+            return false;
 
-        std::vector<std::uint8_t> bmpData(stride * height, 0);
+        const int channels = 4;
+        const int stride = static_cast<int>(strideBytes);
+
+        std::vector<std::uint8_t> bmpData(static_cast<std::size_t>(strideBytes * rows), 0);
 
         for (int y = 0; y < height; ++y)
         {
@@ -84,9 +94,10 @@ export namespace epochengine
 
             for (int x = 0; x < width; ++x)
             {
-                dstRow[x * 3 + 0] = srcRow[x * channels + 2];
-                dstRow[x * 3 + 1] = srcRow[x * channels + 1];
-                dstRow[x * 3 + 2] = srcRow[x * channels + 0];
+                const auto sourceOffset = static_cast<std::size_t>(x) * channels;
+                dstRow[x * 3 + 0] = srcRow[sourceOffset + (sourceChannels == BitmapSourceChannels::bgra ? 0 : 2)];
+                dstRow[x * 3 + 1] = srcRow[sourceOffset + 1];
+                dstRow[x * 3 + 2] = srcRow[sourceOffset + (sourceChannels == BitmapSourceChannels::bgra ? 2 : 0)];
             }
         }
 
@@ -124,7 +135,7 @@ export namespace epochengine
         out.write(reinterpret_cast<const char*>(fileHeader), sizeof(fileHeader));
         out.write(reinterpret_cast<const char*>(infoHeader), sizeof(infoHeader));
         out.write(reinterpret_cast<const char*>(bmpData.data()), static_cast<std::streamsize>(bmpData.size()));
-        return true;
+        return out.good();
     }
 
     inline bool a_writeTGA(const std::filesystem::path& filepath, const std::vector<std::uint8_t>& pixels, int width, int height, bool flipVertically)

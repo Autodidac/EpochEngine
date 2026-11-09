@@ -33,6 +33,8 @@
 module;
 
 #include "../include/core.stl_types.hpp"
+#include <algorithm>
+#include <memory>
 
 export module events.bus;
 
@@ -124,7 +126,10 @@ export namespace epochengine::events
 
     // -------------------------------------------------------------------------
     // Bus: subscribe/emit with zero allocations per emit (handlers stored once).
-    // Meant for engine-internal events, not ABI boundaries.
+    // Meant for engine-internal notifications, not ABI boundaries or a journal.
+    // One owner thread serializes access. Borrowed user data must outlive its
+    // subscription; remove it before retiring that data. Callbacks may emit,
+    // subscribe, unsubscribe or clear on this same bus.
     // -------------------------------------------------------------------------
     class bus
     {
@@ -136,20 +141,59 @@ export namespace epochengine::events
             type_id_t type = 0;
             handler_fn fn = nullptr;
             void* user = nullptr;
+            std::shared_ptr<void> callback{};
+            bool active{true};
         };
+
+        bus() = default;
+        bus(const bus& other) : _handlers(other._handlers) { compact(); }
+        bus& operator=(const bus& other)
+        {
+            if (this == &other) return *this;
+            auto replacement = other._handlers;
+            if (_dispatch_depth == 0u) _handlers = std::move(replacement);
+            else
+            {
+                clear();
+                _handlers.insert(_handlers.end(), replacement.begin(), replacement.end());
+            }
+            return *this;
+        }
 
         // Register a handler for event type E.
         template <class E>
         void subscribe(void* user, void (*fn)(void* user, const E& e) noexcept)
         {
+            if (!fn) return;
+            using Event = std::remove_cvref_t<E>;
             handler h{};
             h.type = id_of<E>();
             h.user = user;
-            h.fn = [fn](void* u, const void* p) noexcept
+            h.callback = std::make_shared<typed_callback<Event>>(typed_callback<Event>{user,fn});
+            h.fn = [](void* stored, const void* p) noexcept
             {
-                fn(u, *static_cast<const E*>(p));
+                const auto& callback = *static_cast<const typed_callback<Event>*>(stored);
+                callback.fn(callback.user, *static_cast<const Event*>(p));
             };
-            _handlers.push_back(h);
+            _handlers.push_back(std::move(h));
+        }
+
+        // Remove matching registrations, including duplicates. Retired payloads
+        // survive until an executing callback returns; other callbacks see the
+        // removal immediately. No callback is invoked by removal.
+        template<class E>
+        std::size_t unsubscribe(void* user, void (*fn)(void*,const E&) noexcept) noexcept
+        {
+            using Event = std::remove_cvref_t<E>;
+            std::size_t removed{};
+            for (auto& h : _handlers)
+            {
+                if (!h.active || h.type != id_of<E>() || h.user != user) continue;
+                const auto& callback = *static_cast<const typed_callback<Event>*>(h.callback.get());
+                if (callback.fn == fn) {h.active=false;++removed;}
+            }
+            if (_dispatch_depth == 0u) compact();
+            return removed;
         }
 
         // Emit event E to all subscribers of E.
@@ -157,18 +201,34 @@ export namespace epochengine::events
         void emit(const E& e) const noexcept
         {
             const type_id_t t = id_of<E>();
-            for (const auto& h : _handlers)
+            const auto count = _handlers.size();
+            ++_dispatch_depth;
+            for (std::size_t index=0; index<count; ++index)
             {
+                // Copy only the small slot and shared payload. A callback may
+                // append/reallocate the vector or retire its own registration.
+                const auto h = _handlers[index];
                 if (h.type == t && h.fn)
-                    h.fn(h.user, &e);
+                    if (h.active) h.fn(h.callback.get(), &e);
             }
+            if (--_dispatch_depth == 0u) compact();
         }
 
-        [[nodiscard]] std::size_t handler_count() const noexcept { return _handlers.size(); }
+        [[nodiscard]] std::size_t handler_count() const noexcept
+        {return static_cast<std::size_t>(std::count_if(_handlers.begin(),_handlers.end(),[](const handler& h){return h.active;}));}
 
-        void clear() noexcept { _handlers.clear(); }
+        void clear() noexcept
+        {
+            if (_dispatch_depth == 0u) _handlers.clear();
+            else for (auto& h : _handlers) h.active=false;
+        }
 
     private:
-        std::vector<handler> _handlers{};
+        template<class E> struct typed_callback final
+        {void* user{};void (*fn)(void*,const E&) noexcept{};};
+        void compact() const noexcept
+        {std::erase_if(_handlers,[](const handler& h){return !h.active;});}
+        mutable std::vector<handler> _handlers{};
+        mutable std::size_t _dispatch_depth{};
     };
 } // namespace epochengine::events

@@ -46,13 +46,13 @@ module;
 #if defined(EPOCH_OVERRIDE_VERSION_MINOR)
 #  define EPOCH_VERSION_MINOR_VALUE EPOCH_OVERRIDE_VERSION_MINOR
 #else
-#  define EPOCH_VERSION_MINOR_VALUE 90
+#  define EPOCH_VERSION_MINOR_VALUE 91
 #endif
 
 #if defined(EPOCH_OVERRIDE_VERSION_REVISION)
 #  define EPOCH_VERSION_REVISION_VALUE EPOCH_OVERRIDE_VERSION_REVISION
 #else
-#  define EPOCH_VERSION_REVISION_VALUE 183
+#  define EPOCH_VERSION_REVISION_VALUE 2
 #endif
 
 #if defined(EPOCH_OVERRIDE_WINDOWS_PACKAGED_VERSION_MAJOR)
@@ -206,10 +206,8 @@ namespace epochengine
         return kEngineName.data();
     }
 
-    // Historical release names remain immutable.  The 0.90 line keeps the
-    // two-digit patch spelling used by the current development series, e.g.
-    // 0.90.02, while later major/minor lines may use ordinary semver spelling.
-    [[nodiscard]] std::array<char, 64> format_version_components(
+    // Keep the two-digit patch spelling through the 0.91 release line.
+    export [[nodiscard]] std::array<char, 64> format_version_components(
         int version_major, int version_minor, int version_revision) noexcept
     {
         std::array<char, 64> buffer{};
@@ -219,7 +217,7 @@ namespace epochengine
         *cursor++ = '.';
         cursor = std::to_chars(cursor, end, version_minor).ptr;
         *cursor++ = '.';
-        if (version_major == 0 && version_minor <= 90
+        if (version_major == 0 && version_minor <= 91
             && version_revision >= 0 && version_revision < 10)
             *cursor++ = '0';
         cursor = std::to_chars(cursor, end, version_revision).ptr;

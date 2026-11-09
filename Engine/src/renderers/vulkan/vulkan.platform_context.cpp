@@ -505,6 +505,7 @@ namespace epochengine::vulkancontext
 
         indexBuffer.reset();
         indexBufferMemory.reset();
+        previewIndicesSequential = false;
         vertexBuffer.reset();
         vertexBufferMemory.reset();
         guiContexts.clear();

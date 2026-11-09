@@ -1,0 +1,62 @@
+{
+  "id": "capability_technique_gallery",
+  "displayName": "Capability Technique Gallery",
+  "manifestLicense": "LicenseRef-MIT-NoSell",
+  "manifestCopyright": "Copyright (c) 2026 Adam Rushford",
+  "status": "source-staged",
+  "kind": "code-extension",
+  "activation": "package-manager-opt-in",
+  "summary": "Renderer-neutral capability catalog and deterministic scene plan covering the OpenGL technique laboratory and Epoch's T0 through T5 execution routes.",
+  "security": {
+    "serverOrListenerAllowed": false,
+    "requiresExplicitNetworkApproval": false,
+    "autoRunAllowed": false,
+    "includeByDefault": false
+  },
+  "source": {
+    "repo": "https://epoch.adamrushford.chatgpt.site/git/EpochEngineExtensions.git",
+    "path": "packages/capability_technique_gallery",
+    "referenceRepo": "https://github.com/Autodidac/tiered_gfx_OpenGL_modular_context_demo",
+    "provenance": "Original renderer-neutral C++23 package catalog derived from the public technique names and capability plan; no OpenGL resource, platform, shader, or asset implementation is copied."
+  },
+  "engineBoundary": {
+    "epochPackageId": "capability_technique_gallery",
+    "expectedCacheRoot": "cache/packages/capability_technique_gallery",
+    "notes": "EpochEngine resolves logical provider contracts and decides whether a staged station can execute. This package never promotes reference-only evidence to engine evidence."
+  },
+  "script": {
+    "language": "C++23",
+    "path": "scripts/capability_technique_gallery_package.ascript.cpp",
+    "api": "epoch_package_script_api",
+    "mode": "local-stage-build-live-preview",
+    "downloadsSource": false,
+    "compilesSource": true,
+    "livePreview": true,
+    "humanGated": true,
+    "autoRunAllowed": false
+  },
+  "build": {
+    "humanGated": true,
+    "sourceFiles": [
+      "CMakeLists.txt",
+      "include/epoch/extensions/capability_technique_gallery/capability_technique_gallery.hpp",
+      "src/capability_technique_gallery.cpp",
+      "tests/capability_technique_gallery_self_test.cpp"
+    ],
+    "targets": [
+      "epoch_extension_capability_technique_gallery",
+      "epoch_extension_capability_technique_gallery_self_test"
+    ],
+    "commands": [
+      "cmake -S packages/capability_technique_gallery -B cache/packages/capability_technique_gallery/build",
+      "cmake --build cache/packages/capability_technique_gallery/build --target epoch_extension_capability_technique_gallery_self_test",
+      "ctest --test-dir cache/packages/capability_technique_gallery/build --output-on-failure"
+    ]
+  },
+  "notes": [
+    "Contains 44 stations corresponding to the reference technique catalog plus explicit T4 ray-query and T5 ray-pipeline architecture stations.",
+    "Reference-only means implemented in the separate OpenGL laboratory, not proven in EpochEngine.",
+    "Deferred techniques remain inactive even when a matching capability profile is supplied.",
+    "No server, listener, download, backend resource owner, or native auto-activation path exists."
+  ]
+}

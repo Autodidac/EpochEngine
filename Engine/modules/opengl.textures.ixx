@@ -156,6 +156,7 @@ export namespace epochengine::opengltextures
 
     struct NativeRenderTextureGPU
     {
+        const void* context_key = nullptr;
         GLuint framebuffer = 0;
         GLuint color = 0;
         GLuint depth = 0;
@@ -214,7 +215,8 @@ export namespace epochengine::opengltextures
         AtlasGpuMap gpu_atlases;
         std::unordered_map<const void*, AtlasGpuMap> context_gpu_atlases;
         std::unordered_map<const void*, std::unique_ptr<epochengine::openglstate::OpenGL4State>> context_gl_states;
-        std::unordered_map<u32, NativeRenderTextureGPU> native_render_textures;
+        std::unordered_map<NativeTextureKey, NativeRenderTextureGPU,
+            NativeTextureKeyHash> native_render_textures;
         std::unordered_map<NativeTextureKey, NativeTextureGPU,
             NativeTextureKeyHash> native_textures;
         std::mutex gpuMutex;
@@ -276,7 +278,7 @@ export namespace epochengine::opengltextures
         const core::Context* ctx)
     {
         const void* key = platform_context_key(platformCtx);
-        if (!key)
+        if (!key || key == platform_context_key(detail::to_platform_context(backend.glState)))
         {
             bind_platform_state(backend.glState, platformCtx, ctx);
             return backend.glState;
@@ -685,7 +687,11 @@ export namespace epochengine::opengltextures
         if (!activate_backend_context(backend, contextGuard, "allocate render texture"))
             return allocation;
 
+        const void* const contextKey = platform_context_key(contextGuard.target());
+        if (!contextKey)
+            return allocation;
         NativeRenderTextureGPU gpu{};
+        gpu.context_key = contextKey;
         gpu.width = (std::max)(desc.width, 1u);
         gpu.height = (std::max)(desc.height, 1u);
         gpu.has_depth = requirements.depth_attachment;
@@ -754,13 +760,12 @@ export namespace epochengine::opengltextures
         allocation.depth_object = gpu.depth;
         allocation.sampler_object = gpu.sampler ? gpu.sampler : gpu.color;
         allocation.ready = true;
+        allocation.context_key = contextKey;
 
         {
             std::lock_guard<std::mutex> gpuLock(backend.gpuMutex);
-            auto& stored = backend.native_render_textures[slot];
-            if (stored.active)
-                delete_native_render_texture_objects(stored);
-            stored = gpu;
+            // Device-local slot numbers are not unique across devices or heads.
+            backend.native_render_textures[NativeTextureKey{contextKey, gpu.color}] = gpu;
         }
 
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -780,11 +785,18 @@ export namespace epochengine::opengltextures
         if (!activate_backend_context(backend, contextGuard, "destroy render texture"))
             return;
 
+        const void* const contextKey = platform_context_key(contextGuard.target());
+        if (!contextKey || contextKey != record.native_context_key)
+            return;
         std::lock_guard<std::mutex> gpuLock(backend.gpuMutex);
-        for (auto it = backend.native_render_textures.begin(); it != backend.native_render_textures.end(); ++it)
+        const auto it = backend.native_render_textures.find(
+            NativeTextureKey{contextKey, record.color_object});
+        if (it != backend.native_render_textures.end())
         {
             NativeRenderTextureGPU& gpu = it->second;
-            if (gpu.framebuffer == record.framebuffer_object || gpu.color == record.color_object)
+            if (gpu.active && gpu.framebuffer == record.framebuffer_object
+                && gpu.depth == record.depth_object
+                && (gpu.sampler ? gpu.sampler : gpu.color) == record.sampler_object)
             {
                 delete_native_render_texture_objects(gpu);
                 backend.native_render_textures.erase(it);
@@ -804,6 +816,17 @@ export namespace epochengine::opengltextures
         if (!activate_backend_context(backend, contextGuard, "begin render texture pass"))
             return false;
 
+        const void* const contextKey = platform_context_key(contextGuard.target());
+        if (!contextKey || contextKey != record.native_context_key)
+            return false;
+        std::lock_guard<std::mutex> gpuLock(backend.gpuMutex);
+        const auto stored = backend.native_render_textures.find(
+            NativeTextureKey{contextKey, record.color_object});
+        if (stored == backend.native_render_textures.end() || !stored->second.active
+            || stored->second.framebuffer != record.framebuffer_object
+            || stored->second.depth != record.depth_object
+            || (stored->second.sampler ? stored->second.sampler : stored->second.color) != record.sampler_object)
+            return false;
         glBindFramebuffer(GL_FRAMEBUFFER, record.framebuffer_object);
         glViewport(0, 0, static_cast<GLsizei>(record.width), static_cast<GLsizei>(record.height));
         glDrawBuffer(GL_COLOR_ATTACHMENT0);
@@ -828,13 +851,15 @@ export namespace epochengine::opengltextures
     inline void end_native_render_texture_pass(
         void* user,
         epochengine::RendererBackendKind,
-        const epochengine::OpenGLFamilyRenderTextureRecord&)
+        const epochengine::OpenGLFamilyRenderTextureRecord& record)
     {
         BackendData& backend = resolve_backend_data(user);
         epochengine::openglcontext::PlatformGL::ScopedContext contextGuard;
         if (!activate_backend_context(backend, contextGuard, "end render texture pass"))
             return;
 
+        if (platform_context_key(contextGuard.target()) != record.native_context_key)
+            return;
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
 
@@ -975,10 +1000,18 @@ export namespace epochengine::opengltextures
             return;
         }
 
-        auto platformCtx = detail::to_platform_context(oglData->glState);
+        // Upload only on the thread that already owns a current context.
+        // A queued CPU-side atlas update can wait for lazy draw admission;
+        // the last initialized window is never permission to steal its WGL/GLX
+        // context from a sibling render thread.
+        const auto platformCtx = epochengine::openglcontext::PlatformGL::get_current();
+        if (!platformCtx.valid()) return;
+        auto currentCtx = core::get_current_render_context();
+        if (currentCtx && currentCtx->type != core::ContextType::OpenGL) return;
+        auto& state = state_for_platform_context(*oglData, platformCtx, currentCtx.get());
         static_cast<void>(upload_atlas_to_gpu_for_context(
             *oglData,
-            oglData->glState,
+            state,
             platformCtx,
             atlas));
     }
@@ -998,10 +1031,15 @@ export namespace epochengine::opengltextures
             return;
         }
 
+        const auto platformCtx = epochengine::openglcontext::PlatformGL::get_current();
+        if (!platformCtx.valid()) return;
+        auto currentCtx = core::get_current_render_context();
+        if (currentCtx && currentCtx->type != core::ContextType::OpenGL) return;
         {
             std::lock_guard<std::mutex> gpuLock(oglData->gpuMutex);
-            auto it = oglData->gpu_atlases.find(&atlas);
-            if (it != oglData->gpu_atlases.end()) {
+            auto& atlases = atlas_map_for_platform_context(*oglData, platformCtx);
+            auto it = atlases.find(&atlas);
+            if (it != atlases.end()) {
                 if (it->second.version == atlas.version && it->second.textureHandle != 0)
                     return;
             }
@@ -1074,6 +1112,12 @@ export namespace epochengine::opengltextures
                 if (it->second.texture) glDeleteTextures(1, &it->second.texture);
                 it = oglData->native_textures.erase(it);
             }
+            for (auto it = oglData->native_render_textures.begin(); it != oglData->native_render_textures.end();)
+            {
+                if (it->first.context_key != retiringKey) { ++it; continue; }
+                delete_native_render_texture_objects(it->second);
+                it = oglData->native_render_textures.erase(it);
+            }
         }
 
         s_generation.fetch_add(1, std::memory_order_relaxed);
@@ -1136,6 +1180,25 @@ export namespace epochengine::opengltextures
         float x{}, y{}, u{}, v{};
     };
     inline constexpr std::size_t sprite_stream_capacity = 512u;
+    inline constexpr std::size_t sprite_stream_initial_sprites = 8192u;
+    inline constexpr std::size_t sprite_stream_max_sprites = 65536u;
+
+    inline void prepare_sprite_frame(
+        epochengine::openglstate::OpenGL4State& state) noexcept
+    {
+        // Called only after native frame admission. Planning a bounded store
+        // does not allocate it: empty GUI layers issue no stream-buffer work.
+        std::size_t capacity = (std::clamp)(state.spriteStreamCapacitySprites,
+            sprite_stream_initial_sprites, sprite_stream_max_sprites);
+        const auto observed = (std::min)(state.guiSpritesSubmitted,
+            static_cast<std::uint64_t>(sprite_stream_max_sprites));
+        while (capacity < observed)
+            capacity = (std::min)(capacity * 2u, sprite_stream_max_sprites);
+        state.spriteStreamCapacitySprites = capacity;
+        state.spriteStreamWriteVertex = 0u;
+        state.spriteStreamFrameAllocated = false;
+        state.spriteStreamFramePrepared = true;
+    }
 
     inline void release_sprite_stream(
         epochengine::openglstate::OpenGL4State& state, bool nativeCurrent) noexcept
@@ -1147,6 +1210,8 @@ export namespace epochengine::opengltextures
         }
         state.spriteStreamVao = state.spriteStreamVbo = 0;
         state.spriteStreamUnavailable = false;
+        state.spriteStreamCapacitySprites = state.spriteStreamWriteVertex = 0u;
+        state.spriteStreamFramePrepared = state.spriteStreamFrameAllocated = false;
     }
 
     [[nodiscard]] inline bool ensure_sprite_stream(
@@ -1206,16 +1271,26 @@ export namespace epochengine::opengltextures
         glUseProgram(pipe.shader);
         glBindVertexArray(pipe.spriteStreamVao);
         glBindBuffer(GL_ARRAY_BUFFER, pipe.spriteStreamVbo);
-        // Orphan the bounded store: never overwrite bytes used by an earlier
-        // draw, including another run in this frame. No fence/spin is added.
-        glBufferData(GL_ARRAY_BUFFER, sizeof(batch.vertices), nullptr, GL_STREAM_DRAW);
-        glBufferSubData(GL_ARRAY_BUFFER, 0,
+        // One lazy orphan per native frame, including both GUI replays and
+        // top-layer batches. Every later run appends into disjoint storage.
+        if (!pipe.spriteStreamFrameAllocated)
+        {
+            glBufferData(GL_ARRAY_BUFFER,
+                static_cast<GLsizeiptr>(pipe.spriteStreamCapacitySprites
+                    * 6u * sizeof(SpriteVertex)), nullptr, GL_STREAM_DRAW);
+            pipe.spriteStreamFrameAllocated = true;
+        }
+        const auto firstVertex = pipe.spriteStreamWriteVertex;
+        glBufferSubData(GL_ARRAY_BUFFER,
+            static_cast<GLsizeiptr>(firstVertex * sizeof(SpriteVertex)),
             static_cast<GLsizeiptr>(batch.vertex_count * sizeof(SpriteVertex)),
             batch.vertices.data());
         glBindTexture(GL_TEXTURE_2D, batch.bound_texture);
         if (pipe.uUVRegionLoc >= 0) glUniform4f(pipe.uUVRegionLoc, 0, 0, 1, 1);
         if (pipe.uTransformLoc >= 0) glUniform4f(pipe.uTransformLoc, 0, 0, 1, 1);
-        glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(batch.vertex_count));
+        glDrawArrays(GL_TRIANGLES, static_cast<GLint>(firstVertex),
+            static_cast<GLsizei>(batch.vertex_count));
+        pipe.spriteStreamWriteVertex += batch.vertex_count;
         ++batch.submissions;
         batch.vertex_count = 0;
     }
@@ -1325,7 +1400,8 @@ export namespace epochengine::opengltextures
         batch.textures.clear();
         batch.vertex_count = 0;
         batch.sprites = batch.submissions = 0;
-        batch.streaming = ensure_sprite_stream(glState);
+        batch.streaming = glState.spriteStreamFramePrepared
+            && !glState.spriteStreamUnavailable;
 
         auto& pipe = epochengine::openglquad::quad_pipeline_state();
         glViewport(0, 0, framebufferWidth, framebufferHeight);
@@ -1459,9 +1535,25 @@ export namespace epochengine::opengltextures
         }
         ++batch.sprites;
         if (batch.streaming)
+        {
+            const auto& pipe = *batch.gl_state;
+            const std::size_t capacityVertices = pipe.spriteStreamCapacitySprites * 6u;
+            if (!ensure_sprite_stream(*batch.gl_state))
+                batch.streaming = false;
+            else if (pipe.spriteStreamWriteVertex + batch.vertex_count + 6u > capacityVertices)
+            {
+                // The next frame can grow within the explicit storage budget.
+                // Keep this frame's completed runs intact and retain every
+                // excess sprite through the existing static-quad path.
+                flush_sprite_batch();
+                batch.streaming = false;
+            }
+        }
+        if (batch.streaming)
             append_streamed_sprite(region, x, y, width, height);
         else
         {
+            glBindVertexArray(batch.gl_state->vao);
             submit_resolved_sprite(region, x, y, width, height,
                 batch.framebuffer_width, batch.framebuffer_height);
             ++batch.submissions;

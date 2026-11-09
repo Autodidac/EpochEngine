@@ -1,0 +1,59 @@
+{
+  "id": "engine_client_listen_server",
+  "displayName": "Client Listen Server",
+  "manifestLicense": "LicenseRef-MIT-NoSell",
+  "manifestCopyright": "Copyright (c) 2026 Adam Rushford",
+  "status": "source-staged",
+  "kind": "network-runtime",
+  "activation": "client-listen-server-opt-in",
+  "summary": "Client-hosted nondedicated or competitive-friendly session option for multiplayer projects that explicitly opt in.",
+  "security": {
+    "serverOrListenerAllowed": true,
+    "requiresExplicitNetworkApproval": true,
+    "autoRunAllowed": false,
+    "includeByDefault": false
+  },
+  "source": {
+    "repo": "https://epoch.adamrushford.chatgpt.site/git/EpochEngineExtensions.git",
+    "path": "packages/engine_client_listen_server",
+    "provenance": "human-gated C++23 listen-server planning source staged in this package"
+  },
+  "engineBoundary": {
+    "epochPackageId": "engine_client_listen_server",
+    "expectedCacheRoot": "cache/packages/engine_client_listen_server",
+    "notes": "Separate from optional authoritative dedicated headless server mode."
+  },
+  "script": {
+    "language": "C++23",
+    "path": "scripts/engine_client_listen_server_package.ascript.cpp",
+    "api": "epoch_package_script_api",
+    "mode": "download-stage-build-manual-run-plan",
+    "downloadsSource": true,
+    "compilesSource": true,
+    "livePreview": false,
+    "humanGated": true,
+    "autoRunAllowed": false
+  },
+  "build": {
+    "humanGated": true,
+    "sourceFiles": [
+      "CMakeLists.txt",
+      "include/epoch/extensions/engine_client_listen_server/engine_client_listen_server.hpp",
+      "src/engine_client_listen_server.cpp",
+      "tests/engine_client_listen_server_self_test.cpp"
+    ],
+    "targets": [
+      "epoch_extension_engine_client_listen_server",
+      "epoch_extension_engine_client_listen_server_self_test"
+    ],
+    "commands": [
+      "cmake -S packages/engine_client_listen_server -B cache/packages/engine_client_listen_server/build",
+      "cmake --build cache/packages/engine_client_listen_server/build --target epoch_extension_engine_client_listen_server_self_test",
+      "cache/packages/engine_client_listen_server/build/epoch_extension_engine_client_listen_server_self_test"
+    ]
+  },
+  "notes": [
+    "Future competitive paths should add client prediction, rollback/rewind, and verifier evidence without making authoritative dedicated the default.",
+    "The staged code plans an approved manual-run listen session but never starts a listener during install."
+  ]
+}

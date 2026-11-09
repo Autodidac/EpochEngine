@@ -7,19 +7,11 @@
 // must be latched before regular controls handle the current input frame.
 namespace epochengine::gui::popup_input {
 
-struct Capture final {
-    bool selection_open_this_frame{};
-    bool current_selection_owner{};
-    bool application_menu_open_this_frame{};
-    bool application_menu_owner{};
-};
+// Included after import epoch.gui.input; the library owns the decision.
+using Capture = gui_lib::input::PopupCapture;
 
-[[nodiscard]] constexpr bool allows_pointer(Capture capture) noexcept {
-    if (capture.selection_open_this_frame && !capture.current_selection_owner)
-        return false;
-    if (capture.application_menu_open_this_frame && !capture.application_menu_owner)
-        return false;
-    return true;
+[[nodiscard]] inline bool allows_pointer(Capture capture) noexcept {
+    return gui_lib::input::popup_allows_pointer(capture);
 }
 
 } // namespace epochengine::gui::popup_input

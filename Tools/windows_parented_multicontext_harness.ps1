@@ -820,7 +820,7 @@ function Get-ContentSampleProbe([string]$ImagePath, $ParentRect, $WindowRecord) 
 $root = (Resolve-Path '.').Path
 . (Join-Path $root 'Tools\build\epoch_package_layout.ps1')
 $edition = Get-EpochSourceEdition -RepoRoot $root
-$runtimeDir = Join-Path $root ("build\bin\windows\{0}\x64\{1}" -f $edition.Directory, $Configuration)
+$runtimeDir = Join-Path $root ("Artifacts\Runtime\windows\{0}\x64\{1}" -f $edition.Directory, $Configuration)
 $exe = Join-Path $runtimeDir 'EpochEditor.exe'
 if (-not (Test-Path $exe)) {
     throw "Missing runtime at $exe"

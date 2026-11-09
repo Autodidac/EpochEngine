@@ -28,7 +28,8 @@ namespace epochengine
                 EditorApplicationSurface::ForestFactory,
                 EditorApplicationSurface::Timeline,
                 EditorApplicationSurface::AISandbox,
-                EditorApplicationSurface::Systems),
+                EditorApplicationSurface::Systems,
+                EditorApplicationSurface::AssetGeneration),
             .panes = {
                 .outliner = true,
                 .inspector = true,

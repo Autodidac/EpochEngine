@@ -1,3 +1,11 @@
+    // Opt-in diagnostic bookkeeping only; never participates in admission.
+    struct PointerFrameTraceState
+    {
+        unsigned frames{};
+        bool active{}, query_logged{}, blocked_logged{};
+    };
+    static thread_local PointerFrameTraceState g_pointerFrameTrace{};
+
 // Epoch feature implementation; included by its owning module only.
 // SPDX-License-Identifier: LicenseRef-MIT-NoSell
     // -----------------------------
@@ -258,6 +266,7 @@
 
         g_frame.ctxShared = ctx;
         g_frame.ctx = rawCtx;
+        g_frame.visitedActiveWidget = nullptr;
         g_frame.deltaTime = dt;
 
         // Constant-time wrap: repeated subtraction can spin for an enormous
@@ -271,17 +280,23 @@
 
         g_frame.caretVisible = g_frame.caretTimer < (kCaretBlinkPeriod * 0.5f);
 
-        bool prevMouseDown = g_frame.mouseDown;
-        bool prevMouseRightDown = g_frame.mouseRightDown;
+        ContextPointerButtonState leftButton{.down = !rawCtx && g_frame.mouseDown};
+        ContextPointerButtonState rightButton{.down = !rawCtx && g_frame.mouseRightDown};
         if (rawCtx)
         {
             if (const auto it = g_contextMouseDownStates.find(rawCtx); it != g_contextMouseDownStates.end())
-                prevMouseDown = it->second;
+                leftButton = it->second;
             if (const auto it = g_contextRightMouseDownStates.find(rawCtx); it != g_contextRightMouseDownStates.end())
-                prevMouseRightDown = it->second;
+                rightButton = it->second;
         }
-        bool currentMouseDown = mouse_down;
-        bool currentMouseRightDown = prevMouseRightDown;
+        bool prevMouseDown = leftButton.down;
+        bool prevMouseRightDown = rightButton.down;
+        // Once this context receives queued button edges, they own both held
+        // and released state until context cleanup. A stale platform sample
+        // must not invent a release or another press after Up/cancellation.
+        // Contexts without queued edges retain the sampler-only fallback.
+        bool currentMouseDown = leftButton.queued_edge_owned ? leftButton.down : mouse_down;
+        bool currentMouseRightDown = rightButton.down;
         Vec2 currentMousePos = mouse_pos;
         g_frame.mouseWheelDelta = 0;
 
@@ -302,8 +317,20 @@
             }
         }
 
+        std::size_t traceDown{}, traceUp{}, traceMove{}, traceFocusLoss{};
+        if (core::cli::trace_menu_button0_rect)
+            for (const auto& event : g_frame.events)
+            {
+                traceDown += event.type == EventType::MouseDown;
+                traceUp += event.type == EventType::MouseUp;
+                traceMove += event.type == EventType::MouseMove;
+                traceFocusLoss += event.type == EventType::FocusLost;
+            }
         const bool nativeContext = rawCtx && (rawCtx->get_hwnd() || rawCtx->windowData);
         const bool keyboardAllowed = !nativeContext || rawCtx->has_input_focus_safe();
+        g_frame.keyboardFocusCancelled = !keyboardAllowed
+            || std::ranges::any_of(g_frame.events, [](const InputEvent& event) noexcept
+            { return event.type == EventType::FocusLost; });
         const bool pointerAllowed = keyboardAllowed
             && (!nativeContext || rawCtx->has_pointer_input_safe());
         const bool wheelAllowed = !nativeContext || rawCtx->has_hover_scroll_safe();
@@ -313,6 +340,8 @@
             prevMouseRightDown = false;
             currentMouseDown = false;
             currentMouseRightDown = false;
+            leftButton.down = false;
+            rightButton.down = false;
             if (rawCtx)
                 g_contextPressedButtonKeys[rawCtx] = 0;
         }
@@ -324,16 +353,28 @@
             case EventType::MouseMove: currentMousePos = evt.mouse_pos; break;
             case EventType::MouseDown:
                 if (evt.mouse_button == 1)
+                {
                     currentMouseRightDown = true;
+                    rightButton.queued_edge_owned = true;
+                }
                 else
+                {
                     currentMouseDown = true;
+                    leftButton.queued_edge_owned = true;
+                }
                 currentMousePos = evt.mouse_pos;
                 break;
             case EventType::MouseUp:
                 if (evt.mouse_button == 1)
+                {
                     currentMouseRightDown = false;
+                    rightButton.queued_edge_owned = true;
+                }
                 else
+                {
                     currentMouseDown = false;
+                    leftButton.queued_edge_owned = true;
+                }
                 currentMousePos = evt.mouse_pos;
                 break;
             case EventType::MouseWheel:
@@ -368,8 +409,8 @@
         {
             if (g_frame.justPressed)
                 g_contextPressedButtonKeys[rawCtx] = 0;
-            g_contextMouseDownStates[rawCtx] = currentMouseDown;
-            g_contextRightMouseDownStates[rawCtx] = currentMouseRightDown;
+            g_contextMouseDownStates[rawCtx] = {currentMouseDown, leftButton.queued_edge_owned};
+            g_contextRightMouseDownStates[rawCtx] = {currentMouseRightDown, rightButton.queued_edge_owned};
         }
 
         reset_frame();
@@ -377,11 +418,37 @@
         // closed halfway through painting. A closing click must never fall
         // through to widgets rendered after the dropdown.
         g_frame.selectPopupCapturedThisFrame = any_select_box_open(g_frame.ctx);
+        g_pointerFrameTrace.active = core::cli::trace_menu_button0_rect
+            && g_pointerFrameTrace.frames < 120u
+            && (traceDown || traceUp || traceFocusLoss || mouse_down
+                || prevMouseDown || prevMouseRightDown || currentMouseDown || currentMouseRightDown);
+        g_pointerFrameTrace.query_logged = g_pointerFrameTrace.blocked_logged = false;
+        if (g_pointerFrameTrace.active)
+        {
+            ++g_pointerFrameTrace.frames;
+            try
+            {
+                epochengine::logger::info("PointerTrace.Gui", "frame=" + std::to_string(g_pointerFrameTrace.frames)
+                    + " ctx=" + std::to_string(reinterpret_cast<std::uintptr_t>(rawCtx))
+                    + " sampled_left=" + std::to_string(mouse_down)
+                    + " previous=" + std::to_string(prevMouseDown) + "," + std::to_string(prevMouseRightDown)
+                    + " queued=" + std::to_string(leftButton.queued_edge_owned) + "," + std::to_string(rightButton.queued_edge_owned)
+                    + " held=" + std::to_string(currentMouseDown) + "," + std::to_string(currentMouseRightDown)
+                    + " edges=" + std::to_string(g_frame.justPressed) + "," + std::to_string(g_frame.justReleased)
+                    + " events_down_up_move_focus=" + std::to_string(traceDown) + "," + std::to_string(traceUp)
+                        + "," + std::to_string(traceMove) + "," + std::to_string(traceFocusLoss)
+                    + " focus_pointer=" + std::to_string(keyboardAllowed) + "," + std::to_string(pointerAllowed)
+                    + " point=" + std::to_string(currentMousePos.x) + "," + std::to_string(currentMousePos.y)
+                    + " selection_capture=" + std::to_string(g_frame.selectPopupCapturedThisFrame));
+            }
+            catch (...) { /* Diagnostics cannot change input. */ }
+        }
         for (auto& [key, state] : g_selectBoxStates) {
             (void)key;
             if (state.owner == rawCtx)
                 state.visited_this_frame = false;
         }
+        reset_edit_box_visits(rawCtx);
     }
 
     static void render_pending_select_popups() noexcept;
@@ -397,6 +464,14 @@
             }
         }
         render_pending_select_popups();
+        retire_hidden_edit_boxes(g_frame.ctx);
+        // A text/document owner that was not rendered or dispatched in this
+        // context's frame is hidden. Release only its input claim; retain its
+        // text history/caret and every other context's active control.
+        if (const auto active = g_contextActiveWidgets.find(g_frame.ctx);
+            active != g_contextActiveWidgets.end()
+            && active->second != g_frame.visitedActiveWidget)
+            active->second = nullptr;
         flush_queued_draws();
         g_frame.ctxShared.reset();
         g_frame.ctx = nullptr;
@@ -421,9 +496,88 @@
         g_frame.topLayerDepth = 0;
     }
 
+    ScopedInputSuppression::ScopedInputSuppression(bool suppress) noexcept
+        : gate_{g_frame.modalInput, suppress}, active_{suppress}
+    {
+        if (!active_) return;
+        events_.swap(g_frame.events);
+        wheel_ = g_frame.mouseWheelDelta;
+        mouseDown_ = g_frame.mouseDown;
+        previousMouseDown_ = g_frame.prevMouseDown;
+        mouseRightDown_ = g_frame.mouseRightDown;
+        previousMouseRightDown_ = g_frame.prevMouseRightDown;
+        justPressed_ = g_frame.justPressed;
+        justReleased_ = g_frame.justReleased;
+        rightJustPressed_ = g_frame.rightJustPressed;
+        rightJustReleased_ = g_frame.rightJustReleased;
+        g_frame.mouseWheelDelta = 0;
+        g_frame.mouseDown = g_frame.prevMouseDown = false;
+        g_frame.mouseRightDown = g_frame.prevMouseRightDown = false;
+        g_frame.justPressed = g_frame.justReleased = false;
+        g_frame.rightJustPressed = g_frame.rightJustReleased = false;
+    }
+
+    ScopedInputSuppression::~ScopedInputSuppression() noexcept
+    {
+        if (!active_) return;
+        events_.swap(g_frame.events);
+        g_frame.mouseWheelDelta = wheel_;
+        g_frame.mouseDown = mouseDown_;
+        g_frame.prevMouseDown = previousMouseDown_;
+        g_frame.mouseRightDown = mouseRightDown_;
+        g_frame.prevMouseRightDown = previousMouseRightDown_;
+        g_frame.justPressed = justPressed_;
+        g_frame.justReleased = justReleased_;
+        g_frame.rightJustPressed = rightJustPressed_;
+        g_frame.rightJustReleased = rightJustReleased_;
+    }
+
     Vec2 mouse_position() noexcept
     {
         return g_frame.mousePos;
+    }
+
+    std::optional<Vec2> mouse_press_position() noexcept
+    {
+        const auto trace_query = [&](bool admitted, std::string_view reason) noexcept
+        {
+            if (!g_pointerFrameTrace.active
+                || (g_pointerFrameTrace.query_logged && (admitted || g_pointerFrameTrace.blocked_logged))) return;
+            g_pointerFrameTrace.query_logged = true;
+            g_pointerFrameTrace.blocked_logged |= !admitted;
+            try
+            {
+                epochengine::logger::info("PointerTrace.Query", "frame=" + std::to_string(g_pointerFrameTrace.frames)
+                    + " ctx=" + std::to_string(reinterpret_cast<std::uintptr_t>(g_frame.ctx))
+                    + " admitted=" + std::to_string(admitted) + " reason=" + std::string{reason}
+                    + " consumed=" + std::to_string(g_frame.mousePressConsumed)
+                    + " pointer_allowed=" + std::to_string(g_frame.pointerInputAllowed)
+                    + " selection=" + std::to_string(g_frame.selectPopupCapturedThisFrame) + "," + std::to_string(g_frame.selectPopupOwnsInput)
+                    + " menu=" + std::to_string(g_frame.menuPopupBlocksBackground) + "," + std::to_string(g_frame.menuPopupOwnsInput)
+                    + " modal_allows=" + std::to_string(point_in_modal_input_capture(g_frame.mousePos))
+                    + " clip=" + std::to_string(g_frame.insideWindow) + ":"
+                        + std::to_string(g_frame.contentMin.x) + "," + std::to_string(g_frame.contentMin.y)
+                        + "," + std::to_string(g_frame.contentMax.x) + "," + std::to_string(g_frame.contentMax.y));
+            }
+            catch (...) { /* Diagnostics cannot change input. */ }
+        };
+        if (!g_frame.ctx || g_frame.mousePressConsumed)
+        { trace_query(false, g_frame.ctx ? "consumed" : "no_context"); return {}; }
+        bool queuedPress = false;
+        for (const auto& event : g_frame.events)
+        {
+            if (event.type != EventType::MouseDown || event.mouse_button != 0)
+                continue;
+            queuedPress = true;
+            if (std::isfinite(event.mouse_pos.x) && std::isfinite(event.mouse_pos.y)
+                && point_in_modal_input_capture(event.mouse_pos))
+            { trace_query(true, "queued_down"); return event.mouse_pos; }
+        }
+        if (!queuedPress && left_press_available()
+            && std::isfinite(g_frame.mousePos.x) && std::isfinite(g_frame.mousePos.y))
+        { trace_query(true, "sampled_press"); return g_frame.mousePos; }
+        trace_query(false, queuedPress ? "queued_down_blocked" : "no_press");
+        return {};
     }
 
     bool is_mouse_down() noexcept
@@ -431,19 +585,12 @@
         return g_frame.mouseDown && point_in_modal_input_capture(g_frame.mousePos);
     }
 
-    DragSurfaceResult drag_surface(
-        DragSurfaceState& state,
+    bool drag_surface_hit_test(Vec2 position,
         const DragSurfaceOptions& options) noexcept
     {
-        DragSurfaceResult result{};
         if (!g_frame.ctx || !options.enabled
             || options.size.x <= 0.0f || options.size.y <= 0.0f)
-        {
-            if (!g_frame.mouseDown)
-                state = {};
-            return result;
-        }
-
+            return false;
         const float padding = (std::max)(0.0f, options.hit_padding);
         const float minimumExtent = (std::max)(1.0f, options.minimum_hit_extent);
         const float hitWidth = (std::max)(
@@ -455,52 +602,100 @@
         const Vec2 hitPosition{
             options.position.x - (hitWidth - options.size.x) * 0.5f,
             options.position.y - (hitHeight - options.size.y) * 0.5f};
-        result.hovered = point_in_rect(
-                g_frame.mousePos,
+        return point_in_rect(
+                position,
                 hitPosition.x,
                 hitPosition.y,
                 hitWidth,
                 hitHeight)
-            && point_in_active_clip(g_frame.mousePos);
+            && point_in_active_clip(position);
+    }
 
-        if (!state.pending && result.hovered && left_press_available())
+    DragSurfaceResult drag_surface(
+        DragSurfaceState& state,
+        const DragSurfaceOptions& options) noexcept
+    {
+        DragSurfaceResult result{};
+        if (!g_frame.ctx || !options.enabled
+            || options.size.x <= 0.0f || options.size.y <= 0.0f)
         {
-            state.press_position = g_frame.mousePos;
-            state.pending = true;
-            state.dragging = false;
-            result.pressed = true;
-        }
-
-        if (!state.pending)
+            if (!g_frame.mouseDown) state = {};
             return result;
-
-        result.delta = {
-            g_frame.mousePos.x - state.press_position.x,
-            g_frame.mousePos.y - state.press_position.y};
-        const float threshold = (std::max)(0.0f, options.drag_threshold);
-        if (g_frame.mouseDown && !state.dragging
-            && result.delta.x * result.delta.x
-                + result.delta.y * result.delta.y
-                >= threshold * threshold)
-        {
-            state.dragging = true;
         }
-        result.dragging = state.dragging && g_frame.mouseDown;
-        if (result.dragging)
+        result.hovered = drag_surface_hit_test(g_frame.mousePos, options);
+
+        if (!point_in_modal_input_capture(g_frame.mousePos)
+            || (!state.pending && g_frame.mousePressConsumed)
+            || (g_frame.mouseReleaseConsumed && !g_frame.mouseDown))
+        {
+            state = {};
+            return result;
+        }
+
+        gui_lib::input::PointerDragState owned{
+            {state.press_position.x, state.press_position.y}, state.pending, state.dragging};
+        const auto advance = [&](Vec2 position, bool down, bool pressed,
+            bool released, bool cancelled = false)
+        {
+            const auto update = gui_lib::input::update_pointer_drag(owned, {
+                .position = {position.x, position.y}, .down = down,
+                .pressed = pressed, .released = released,
+                .press_allowed = !g_frame.mousePressConsumed
+                    && drag_surface_hit_test(position, options),
+                .cancelled = cancelled}, options.drag_threshold);
+            result.delta = {update.delta.x, update.delta.y};
+            result.pressed |= update.pressed;
+            result.dragging = update.dragging;
+            result.released |= update.released;
+        };
+
+        // Button clicks retain their existing stationary-edge contract. Drags
+        // additionally need the admitted press origin and intermediate motion,
+        // even when Down/Move/Up all arrive before the next GUI frame.
+        // Focus filtering may remove its cancellation event but retain a later
+        // release. A reset previous-held state cancels the old gesture before
+        // admitting any real fresh press remaining in this queue.
+        if (!g_frame.prevMouseDown && !g_frame.events.empty()) owned = {};
+        bool down = owned.pending;
+        bool sawPress = false;
+        bool sawRelease = false;
+        for (const auto& event : g_frame.events)
+        {
+            if (event.type == EventType::FocusLost)
+            {
+                advance(event.mouse_pos, false, false, false, true);
+                down = false;
+            }
+            else if (event.type == EventType::MouseDown && event.mouse_button == 0)
+            {
+                sawPress = true;
+                down = true;
+                advance(event.mouse_pos, true, true, false);
+            }
+            else if (event.type == EventType::MouseUp && event.mouse_button == 0)
+            {
+                sawRelease = true;
+                down = false;
+                advance(event.mouse_pos, false, false, true);
+            }
+            else if (event.type == EventType::MouseMove && owned.pending)
+                advance(event.mouse_pos, down, false, false);
+            if (result.released) break;
+        }
+        if (!result.released)
+            advance(g_frame.mousePos, g_frame.mouseDown,
+                g_frame.justPressed && !sawPress, g_frame.justReleased && !sawRelease);
+        state = {{owned.press_position.x, owned.press_position.y}, owned.pending, owned.dragging};
+        if (result.dragging || result.released)
             g_frame.mousePressConsumed = true;
-
-        if (g_frame.justReleased)
-        {
-            result.released = state.dragging;
-            if (result.released && left_release_available())
-                consume_left_release();
-            state = {};
-        }
-        else if (!g_frame.mouseDown)
-        {
-            state = {};
-        }
+        if (result.released)
+            g_frame.mouseReleaseConsumed = true;
         return result;
+    }
+
+    bool is_mouse_over_content_clip() noexcept
+    {
+        return point_in_active_clip(g_frame.mousePos);
     }
 
     bool was_mouse_pressed() noexcept
@@ -527,6 +722,8 @@
     {
         return right_release_available();
     }
+    bool select_box_popup_open() noexcept
+    { return any_select_box_open(g_frame.ctx); }
     bool keyboard_input_captured() noexcept
     {
         // A modal owns the complete interaction channel, not only pointer

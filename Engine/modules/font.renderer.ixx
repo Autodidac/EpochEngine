@@ -62,6 +62,11 @@ namespace epochengine::font
     export inline constexpr std::size_t kFontAtlasMaximumPages = 4u;
     export inline constexpr std::uint32_t kFontAtlasPageExtent = 2048u;
     export [[nodiscard]] bool font_atlas_capacity_contract();
+    export enum class GlyphCoverage : std::uint8_t
+    {
+        full,
+        basic_latin
+    };
     export struct Vec2
     {
         float x{};
@@ -96,6 +101,7 @@ namespace epochengine::font
         int atlas_index = -1;
         FontMetrics metrics{};
         std::unordered_map<std::uint64_t, float> kerning_pairs{};
+        GlyphCoverage coverage{GlyphCoverage::full};
 
         [[nodiscard]] float get_kerning(char32_t left, char32_t right) const noexcept
         {
@@ -127,7 +133,8 @@ namespace epochengine::font
         bool load_font(const std::string& name,
             const std::string& path,
             float size_pt,
-            FontColor color = {});
+            FontColor color = {},
+            GlyphCoverage coverage = GlyphCoverage::full);
 
         [[nodiscard]] const FontAsset* get_font(const std::string& name) const noexcept;
 
@@ -155,7 +162,8 @@ namespace epochengine::font
             FontMetrics& out_metrics,
             std::unordered_map<std::uint64_t, float>& out_kerning,
             Texture& out_texture,
-            FontColor color);
+            FontColor color,
+            GlyphCoverage coverage);
 
         logger::Logger* logger_{};
         std::unordered_map<std::string, FontAsset> loaded_fonts_;

@@ -1,17 +1,16 @@
 // Epoch feature implementation; included by editor.core application owner only.
 // SPDX-License-Identifier: LicenseRef-MIT-NoSell
         if (layout_outliner_visible && outliner_split_size.x > 1.0f && outliner_split_size.y > 1.0f)
-            gui::splitter_bar(outliner_split_pos, outliner_split_size, outlinerSplitHovered, editor.layoutDrag == EditorLayoutDrag::Outliner);
+            gui::splitter_bar(outliner_split_pos, outliner_split_size, outlinerSplitHovered, editor.layoutDrag == EditorLayoutDrag::Outliner, !dividerInputBlocked);
         if (layout_inspector_visible && inspector_split_size.x > 1.0f && inspector_split_size.y > 1.0f)
-            gui::splitter_bar(inspector_split_pos, inspector_split_size, inspectorSplitHovered, editor.layoutDrag == EditorLayoutDrag::Inspector);
+            gui::splitter_bar(inspector_split_pos, inspector_split_size, inspectorSplitHovered, editor.layoutDrag == EditorLayoutDrag::Inspector, !dividerInputBlocked);
         if (bottom_visible && bottom_split_size.x > 1.0f && bottom_split_size.y > 1.0f)
-            gui::splitter_bar(bottom_split_pos, bottom_split_size, bottomSplitHovered, editor.layoutDrag == EditorLayoutDrag::Dock);
+            gui::splitter_bar(bottom_split_pos, bottom_split_size, bottomSplitHovered, editor.layoutDrag == EditorLayoutDrag::Dock, !dividerInputBlocked);
         if (splitBottomColumns && bottomColumnsSplitSize.x > 1.0f && bottomColumnsSplitSize.y > 1.0f)
-            gui::splitter_bar(bottomColumnsSplitPosition, bottomColumnsSplitSize, bottomColumnsSplitHovered, editor.layoutDrag == EditorLayoutDrag::BottomColumns);
+            gui::splitter_bar(bottomColumnsSplitPosition, bottomColumnsSplitSize, bottomColumnsSplitHovered, editor.layoutDrag == EditorLayoutDrag::BottomColumns, !dividerInputBlocked);
 
         auto render_console_tool_pane = [&](
             EditorToolDockRegion region,
-            std::string_view pane_route,
             std::string_view pane_label)
         {
         const gui::Vec2 console_render_pos =
@@ -25,16 +24,12 @@
             console_render_size,
             true,
             false);
-        handle_pane_title_drag_to_tab(
-            pane_route,
-            pane_label,
-            console_render_pos,
-            console_render_size);
 
         if (editor.dockStatusTab == EditorWorkspaceTab::Scripts)
             editor.dockStatusTab = EditorWorkspaceTab::Output;
 
         constexpr std::array outputFilterValues{
+            EditorWorkspaceTab::Output,
             EditorWorkspaceTab::Output,
             EditorWorkspaceTab::Project,
             EditorWorkspaceTab::Assets,
@@ -44,64 +39,95 @@
         constexpr std::array<std::string_view, outputFilterValues.size()>
             outputFilterLabels{
                 "All",
+                "General",
                 "Project",
                 "Assets",
-                "AI Output",
+                "Automation",
                 "Systems"
             };
-        constexpr std::array<float, outputFilterValues.size()>
-            outputFilterWidths{ 58.0f, 74.0f, 70.0f, 90.0f, 78.0f };
-
         auto outputFilterSpec = [&](std::size_t index) {
             return gui::SegmentedButtonSpec{
                 outputFilterLabels[index],
-                outputFilterWidths[index],
-                editor.dockStatusTab == outputFilterValues[index]
+                0.0f,
+                index == 1u ? editor.outputGeneralOnly
+                    : !editor.outputGeneralOnly && editor.dockStatusTab == outputFilterValues[index]
             };
         };
         auto applyOutputFilter = [&](std::size_t index) {
             if (index < outputFilterValues.size())
+            {
                 editor.dockStatusTab = outputFilterValues[index];
+                editor.outputGeneralOnly = index == 1u;
+                editor.outputShowDetails = false;
+            }
         };
 
-        if (console_render_size.x >= 424.0f)
+        std::array filters{
+            outputFilterSpec(0u),
+            outputFilterSpec(1u),
+            outputFilterSpec(2u),
+            outputFilterSpec(3u),
+            outputFilterSpec(4u),
+            outputFilterSpec(5u)
+        };
+        const float outputFilterWidth = (std::max)(1.0f, console_render_size.x - 16.0f);
+        for (std::size_t first = 0u; first < filters.size();)
         {
-            const std::array filters{
-                outputFilterSpec(0u),
-                outputFilterSpec(1u),
-                outputFilterSpec(2u),
-                outputFilterSpec(3u),
-                outputFilterSpec(4u)
-            };
-            if (const auto selected =
-                    gui::segmented_button_row(filters, 27.0f, 3.0f))
-            {
-                applyOutputFilter(*selected);
-            }
+            std::size_t count = 1u;
+            while (first + count < filters.size()
+                && gui::segmented_button_row_width(
+                    std::span<const gui::SegmentedButtonSpec>{filters}.subspan(first, count + 1u), 3.0f) <= outputFilterWidth)
+                ++count;
+            if (count == 1u && gui::segmented_button_row_width(
+                std::span<const gui::SegmentedButtonSpec>{filters}.subspan(first, 1u), 3.0f) > outputFilterWidth)
+                filters[first].width = outputFilterWidth;
+            if (const auto selected = gui::segmented_button_row(
+                std::span<const gui::SegmentedButtonSpec>{filters}.subspan(first, count), 27.0f, 3.0f))
+                applyOutputFilter(first + *selected);
+            first += count;
         }
-        else
-        {
-            const std::array primaryFilters{
-                outputFilterSpec(0u),
-                outputFilterSpec(1u),
-                outputFilterSpec(2u)
-            };
-            if (const auto selected =
-                    gui::segmented_button_row(primaryFilters, 27.0f, 3.0f))
-            {
-                applyOutputFilter(*selected);
-            }
 
-            const std::array secondaryFilters{
-                outputFilterSpec(3u),
-                outputFilterSpec(4u)
-            };
-            if (const auto selected =
-                    gui::segmented_button_row(secondaryFilters, 27.0f, 3.0f))
-            {
-                applyOutputFilter(*selected + 3u);
-            }
+        const float outputContentWidth = (std::max)(1.0f, console_render_size.x - 24.0f);
+        const bool canShowOutputDetails = !editor.outputGeneralOnly
+            && editor.dockStatusTab != EditorWorkspaceTab::Output;
+        const auto outputSearchPosition = gui::cursor_position();
+        const bool inlineOutputDetails = canShowOutputDetails && outputContentWidth >= 200.0f;
+        if (gui::edit_box(editor.outputSearch,
+            {inlineOutputDetails ? outputContentWidth - 96.0f : outputContentWidth, 26.0f},
+            256u, false, gui::TextInputKeyboardPolicy::focused, false, "Search Output...").changed)
+            editor.outputShowDetails = false;
+        if (canShowOutputDetails)
+        {
+            if (inlineOutputDetails)
+                gui::set_cursor({outputSearchPosition.x + outputContentWidth - 88.0f, outputSearchPosition.y});
+            if (gui::button_selected("Details", {88.0f, 26.0f}, editor.outputShowDetails))
+                editor.outputShowDetails = !editor.outputShowDetails;
+            if (inlineOutputDetails)
+                gui::set_cursor({outputSearchPosition.x, outputSearchPosition.y + 30.0f});
         }
+
+        const auto renderOutputMessages = [&]()
+        {
+            const auto outputCursor = gui::cursor_position();
+            const float outputHeight = (std::max)(1.0f,
+                console_render_pos.y + console_render_size.y - outputCursor.y - 12.0f);
+            const std::string outputPanelId = epochengine::format_text(
+                "editor-output-log.{}.{}.{}.{}",
+                editor.projectId.empty() ? "no-project" : editor.projectId,
+                editor_main_surface_index(editor.mainSurface),
+                static_cast<unsigned>(editor.dockStatusTab), editor.outputGeneralOnly);
+            const auto outputScroll = gui::scroll_text_panel(gui::ScrollTextPanelOptions{
+                .id = outputPanelId,
+                .size = {outputContentWidth, outputHeight},
+                .lines = filtered_editor_output(editor),
+                .incremental_line_measurements = true,
+                .max_line_chars = 0,
+                .selectable = true,
+                .stick_to_bottom = editor.outputFollowTail,
+                .scroll_to_end_generation = editor.outputScrollToEndGeneration,
+                .show_scroll_to_end = true});
+            editor.outputFollowTail = outputScroll.at_end;
+        };
 
         auto dockLine = [](std::string_view label, std::string_view value) {
             std::string line{ label };
@@ -138,7 +164,10 @@
         }
 
         constexpr bool showDockEditorControls = false;
-        switch (editor.dockStatusTab)
+        if (!editor.outputShowDetails || editor.outputGeneralOnly
+            || editor.dockStatusTab == EditorWorkspaceTab::Output)
+            renderOutputMessages();
+        else switch (editor.dockStatusTab)
         {
         case EditorWorkspaceTab::Project:
         {
@@ -146,8 +175,8 @@
             if (!activeProfile)
                 activeProfile = &editor_default_project_profile();
 
-            const std::filesystem::path outputExe = project_output_exe_path(editor.projectRoot);
-            const std::filesystem::path buildLog = project_build_log_path(editor.projectRoot);
+            const std::filesystem::path outputExe = project_output_exe_path(editor.projectRoot, editor.projectBuildConfiguration);
+            const std::filesystem::path buildLog = project_build_log_path(editor.projectRoot, editor.projectBuildConfiguration);
 
             const std::vector<std::string> dockLines{
                 dockLine("[project] Active", activeProfile->display_name),
@@ -291,7 +320,7 @@
         case EditorWorkspaceTab::AI:
         {
             const std::vector<std::string> dockLines{
-                "Assistant",
+                "Automation",
                 dockLine("Provider", ai::active_provider_summary()),
                 dockLine("Model", ai::active_model_name().empty()
                     ? "None selected" : ai::active_model_name()),
@@ -313,7 +342,6 @@
                 : std::size_t{ 6 });
             const std::size_t liveThreadCount = epochengine::systems::threading::live_thread_count();
             const std::string supportTier = recommended_support_tier(ctx, hardwareThreadCount);
-            const auto eventRenderDebug = epochengine::render_event_debug::snapshot();
 
             const std::vector<std::string> dockLines{
                 dockLine("[systems] Renderer", renderer_name(ctx)),
@@ -330,19 +358,6 @@
                 dockLine("[visual] Profile", std::string(epochengine::visuals::active_profile_name())),
                 dockLine("[visual] Parity gate", std::string(epochengine::visuals::parity_gate())),
                 dockLine("[renderer] Resource spine", renderer_resource_spine_summary(ctx)),
-                dockLine("[renderer] Event path", std::string(epochengine::render_event_debug::path_name(eventRenderDebug.path))),
-                dockLine("[renderer] Event fallback", std::string(epochengine::render_event_debug::fallback_name(eventRenderDebug.fallback))),
-                dockLine("[renderer] Dirty regions", std::to_string(eventRenderDebug.dirty_regions)),
-                dockLine("[renderer] Dirty coverage", epochengine::format_text("{:.2f}%", eventRenderDebug.dirty_coverage_percent)),
-                dockLine("[renderer] Event render time", epochengine::format_text("{} us", eventRenderDebug.render_time_us)),
-                dockLine("[renderer] A/B benchmark",
-                    eventRenderDebug.selective.samples == 0u || eventRenderDebug.full_baseline.samples == 0u
-                        ? std::string("off/warming")
-                        : epochengine::format_text(
-                            "Selective {:.1f} us avg / Full {:.1f} us avg / {:.2f}x",
-                            eventRenderDebug.selective.average_time_us,
-                            eventRenderDebug.full_baseline.average_time_us,
-                            eventRenderDebug.average_speedup)),
                 dockLine("[renderer] Proof stages", renderer_capability_proof_stage_status(ctx)),
                 dockLine("[rtt] Descriptor", renderer_sampled_rtt_descriptor_status(ctx)),
                 dockLine("[rtt] Graph", renderer_sampled_rtt_graph_status(ctx)),
@@ -364,27 +379,7 @@
         }
         case EditorWorkspaceTab::Output:
         default:
-            {
-                const gui::Vec2 outputCursor = gui::cursor_position();
-                const float outputHeight = (std::max)(72.0f, console_render_pos.y + console_render_size.y - outputCursor.y - 12.0f);
-                const std::string outputPanelId = epochengine::format_text(
-                    "editor-output-log.{}.{}",
-                    editor.projectId.empty() ? "no-project" : editor.projectId,
-                    editor_main_surface_index(editor.mainSurface));
-                const gui::ScrollTextPanelResult outputScroll =
-                    gui::scroll_text_panel(gui::ScrollTextPanelOptions{
-                    .id = outputPanelId,
-                    .size = { (std::max)(180.0f, console_render_size.x - 24.0f), outputHeight },
-                    .lines = editor.logLines,
-                    .max_line_chars = 1024,
-                    .selectable = true,
-                    .stick_to_bottom = editor.outputFollowTail,
-                    .scroll_to_end_generation =
-                        editor.outputScrollToEndGeneration,
-                    .show_scroll_to_end = true
-                });
-                editor.outputFollowTail = outputScroll.at_end;
-            }
+            renderOutputMessages();
             break;
         }
         if (dockUsesOuterScroll)
@@ -401,7 +396,7 @@
                 return;
             const std::string_view label =
                 toolPaneLabels[tool_pane_index(*pane)];
-            render_console_tool_pane(region, route, label);
+            render_console_tool_pane(region, label);
         };
         render_active_console_in_region(EditorToolDockRegion::Left);
         render_active_console_in_region(EditorToolDockRegion::Right);

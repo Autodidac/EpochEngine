@@ -5,12 +5,12 @@ $edition = Get-EpochSourceEdition -RepoRoot $repo
 if ($edition.Id -notin @('epoch.public.github.v1', 'epoch.development.site.v1')) {
     throw 'Physical source edition was not recognized.'
 }
-$packageRoot = Join-Path $repo 'build\packages'
+$packageRoot = Join-Path $repo 'Artifacts\Packages'
 $output = Get-EpochPackageOutputRoot -RepoRoot $repo -Edition $edition.Directory -Version '0.90.183'
 if ($output -cne (Join-Path (Join-Path $packageRoot $edition.Directory) 'v0.90.183')) {
     throw 'Default package output is not shared and edition-specific.'
 }
-foreach ($foreign in @($repo, $packageRoot, (Join-Path $repo 'build\packages-other\v0.90.183'), (Join-Path $packageRoot '..\escape'))) {
+foreach ($foreign in @($repo, $packageRoot, (Join-Path $repo 'Artifacts\Packages-other\v0.90.183'), (Join-Path $packageRoot '..\escape'))) {
     $rejected = $false
     try { Assert-EpochPackagePath -LiteralPath $foreign -PackageRoot $packageRoot | Out-Null }
     catch { $rejected = $true }

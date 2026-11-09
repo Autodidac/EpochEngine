@@ -52,6 +52,10 @@
                 project_texture_source_path(editor.selectedProjectFile);
             const std::array sourceActions{
                 gui::InlineButtonSpec{
+                    .label = "Add Image...",
+                    .width = 0.0f,
+                    .enabled = !editor.projectRoot.empty()},
+                gui::InlineButtonSpec{
                     .label = "Create Editable",
                     .width = 126.0f},
                 gui::InlineButtonSpec{
@@ -67,9 +71,13 @@
             {
                 if (*action == 0u)
                 {
-                    create_starter_project_texture(editor, ctx);
+                    browse_project_image_source(editor, ctx);
                 }
                 else if (*action == 1u)
+                {
+                    create_starter_project_texture(editor, ctx);
+                }
+                else if (*action == 2u)
                 {
                     import_selected_project_texture(editor, ctx);
                 }
@@ -1081,8 +1089,9 @@
                     value = addressValues[*selected];
                 }
             };
-            drawAddress("Address U", editor.textureAddressU);
-            drawAddress("Address V", editor.textureAddressV);
+            gui::wrapped_label("When the image reaches an edge: Clamp holds the edge colour, Repeat tiles the image, and Mirror flips each new tile.", width);
+            drawAddress("Horizontal image edges", editor.textureAddressU);
+            drawAddress("Vertical image edges", editor.textureAddressV);
 
             gui::label("Alpha");
             const std::array alphaTabs{

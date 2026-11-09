@@ -156,6 +156,12 @@
             }
         }
 
+        static void advance_editor_timeline(EditorState& editor)
+        {
+            ensure_timeline_defaults(editor);
+            epochengine::timeline::sync_to_simulation(editor.timelineState,timeline_stats_from_editor(editor));
+        }
+
         struct SurfaceCanvas
         {
             int width = 0;
@@ -694,3 +700,456 @@
             return claimed.compare_exchange_strong(expected, true, std::memory_order_acq_rel);
         }
 
+        static void render_timeline_workspace(EditorState& editor, float centerWidth,
+            const auto& render_timeline_time_controls)
+        {
+            const gui::InlineButtonRowOptions timelineActionLayout{
+                .sizing=gui::InlineButtonSizing::FitContent,
+                .alignment=gui::InlineButtonAlignment::Center,
+                .wrap=true, .available_width=centerWidth};
+            auto timelineStats = timeline_stats_from_editor(editor);
+            epochengine::saveload::clamp_streaming_save_config(editor.streamingSaveConfig);
+            editor.streamingSaveStatus.active = editor.streamingSaveConfig.enabled;
+            if (epochengine::saveload::should_capture_checkpoint(
+                editor.streamingSaveConfig,
+                editor.streamingSaveStatus,
+                timelineStats))
+            {
+                epochengine::saveload::mark_checkpoint_captured(
+                    editor.streamingSaveStatus,
+                    editor.streamingSaveConfig,
+                    timelineStats);
+                editor.timelineEvents.push_back(epochengine::timeline::make_event_from_stats(
+                    "save",
+                    epochengine::timeline::TimelineEventKind::Checkpoint,
+                    timelineStats,
+                    editor.streamingSaveStatus.last_snapshot_label,
+                    "PersistentLevel",
+                    editor.streamingSaveStatus.last_output_path));
+                epochengine::timeline::sort_events(editor.timelineEvents);
+                editor.lastCheckpointRecord = epochengine::saveload::make_checkpoint_record(
+                    editor.streamingSaveConfig,
+                    editor.streamingSaveStatus,
+                    timelineStats,
+                    0u,
+                    editor.timelineEvents.size());
+                push_editor_log(editor, "[timeline] Auto-staged timeline checkpoint: " + editor.streamingSaveStatus.last_snapshot_label);
+            }
+
+            const std::array timelineSections{
+                gui::TabButtonSpec{
+                    .id = "timeline.sequence",
+                    .label = "Sequence",
+                    .width = 104.0f,
+                    .active = editor.timelineWorkspaceSection
+                        == TimelineWorkspaceSection::sequence},
+                gui::TabButtonSpec{
+                    .id = "timeline.checkpoints",
+                    .label = "Checkpoints",
+                    .width = 116.0f,
+                    .active = editor.timelineWorkspaceSection
+                        == TimelineWorkspaceSection::save_restore},
+                gui::TabButtonSpec{
+                    .id = "timeline.media",
+                    .label = "Media",
+                    .width = 84.0f,
+                    .active = editor.timelineWorkspaceSection
+                        == TimelineWorkspaceSection::media},
+                gui::TabButtonSpec{
+                    .id = "timeline.diagnostics",
+                    .label = "Diagnostics",
+                    .width = 112.0f,
+                    .active = editor.timelineWorkspaceSection
+                        == TimelineWorkspaceSection::diagnostics}
+            };
+            const auto section = gui::responsive_tab_bar_buttons(
+                gui::ResponsiveTabBarOptions{
+                    .overflow_id = "timeline-workspace-overflow",
+                    .overflow_label = "Timeline tools",
+                    .tabs = timelineSections,
+                    .available_width = centerWidth,
+                    .overflow_width = 132.0f,
+                    .height = 30.0f,
+                    .gap = 2.0f,
+                    .presentation = gui::TabBarPresentation::Workbench,
+                    .keyboard_navigation = true});
+            if (section.selected_index)
+            {
+                editor.timelineWorkspaceSection =
+                    static_cast<TimelineWorkspaceSection>(
+                        *section.selected_index);
+            }
+
+            const auto stageTimelineCheckpoint = [&]()
+            {
+                epochengine::saveload::mark_checkpoint_captured(
+                    editor.streamingSaveStatus,
+                    editor.streamingSaveConfig,
+                    timelineStats);
+                editor.timelineEvents.push_back(
+                    epochengine::timeline::make_event_from_stats(
+                        "save",
+                        epochengine::timeline::TimelineEventKind::Checkpoint,
+                        timelineStats,
+                        editor.streamingSaveStatus.last_snapshot_label,
+                        "PersistentLevel",
+                        editor.streamingSaveStatus.last_output_path));
+                epochengine::timeline::sort_events(editor.timelineEvents);
+                editor.lastCheckpointRecord =
+                    epochengine::saveload::make_checkpoint_record(
+                        editor.streamingSaveConfig,
+                        editor.streamingSaveStatus,
+                        timelineStats,
+                        0u,
+                        editor.timelineEvents.size());
+                push_editor_log(
+                    editor,
+                    "[timeline] Manual checkpoint evidence staged: "
+                        + editor.streamingSaveStatus.last_snapshot_label);
+            };
+
+            if (editor.timelineWorkspaceSection
+                == TimelineWorkspaceSection::sequence)
+            {
+                gui::section_heading("Timeline");
+                gui::wrapped_label(
+                    "Play, pause or scrub the sequence. Enable recording to add keys as you edit.",
+                    centerWidth);
+                gui::property_row(
+                    "Playhead",
+                    epochengine::format_text(
+                        "{:.2f}s / {:.2f}s | frame {}",
+                        editor.timelineState.playhead_seconds,
+                        editor.timelineState.duration_seconds,
+                        editor.timelineState.playhead_frame),
+                    118.0f);
+                gui::property_row(
+                    "Sequence",
+                    epochengine::format_text(
+                        "{} tracks | {} keys | {}",
+                        epochengine::timeline::enabled_track_count(
+                            editor.timelineTracks),
+                        editor.timelineEvents.size(),
+                        editor.timelineState.recording
+                            ? "Recording keys"
+                            : "Not recording"),
+                    118.0f);
+
+                render_timeline_time_controls(centerWidth, true);
+                const std::array sequenceActions{
+                    gui::InlineButtonSpec{
+                        .label = editor.timelineState.recording
+                            ? "Stop Recording"
+                            : "Record Keys",
+                        .width = 0.0f },
+                    gui::InlineButtonSpec{
+                        .label = "Add Checkpoint Key",
+                        .width = 0.0f }
+                };
+                if (const auto action = gui::inline_button_row(
+                        sequenceActions, 28.0f, 6.0f, timelineActionLayout))
+                {
+                    if (*action == 0u)
+                    {
+                        editor.timelineState.recording =
+                            !editor.timelineState.recording;
+                        push_editor_log(
+                            editor,
+                            editor.timelineState.recording
+                                ? "[timeline] Event recording gate armed."
+                                : "[timeline] Event recording gate paused.");
+                    }
+                    else
+                    {
+                        stageTimelineCheckpoint();
+                    }
+                }
+                if (const auto* nextEvent =
+                        epochengine::timeline::next_event_after(
+                            editor.timelineEvents,
+                            editor.timelineState.playhead_seconds))
+                {
+                    gui::property_row(
+                        "Next key",
+                        epochengine::timeline::describe_event(*nextEvent),
+                        118.0f);
+                }
+                else
+                {
+                    gui::property_row("Next key", "(none)", 118.0f);
+                }
+                for (const auto& track : editor.timelineTracks)
+                {
+                    gui::property_row(
+                        track.label,
+                        track.enabled ? "Enabled" : "Muted",
+                        118.0f);
+                }
+            }
+            else if (editor.timelineWorkspaceSection
+                == TimelineWorkspaceSection::save_restore)
+            {
+                gui::section_heading("Checkpoint keys", gui::SemanticTone::warning);
+                gui::wrapped_label(
+                    "These keys record checkpoint information only. Loading a saved world from them is not implemented.",
+                    centerWidth);
+                const auto activeSaveProfile =
+                    epochengine::saveload::detect_streaming_save_profile(
+                        editor.streamingSaveConfig);
+                gui::property_row(
+                    "Mode",
+                    std::string(epochengine::saveload::mode_name(
+                        editor.streamingSaveConfig.mode)),
+                    118.0f);
+                gui::property_row(
+                    "Profile",
+                    std::string(epochengine::saveload::stream_profile_name(
+                        activeSaveProfile)),
+                    118.0f);
+                gui::property_row(
+                    "Retention",
+                    epochengine::saveload::describe_retention(
+                        editor.streamingSaveConfig),
+                    118.0f);
+                gui::property_row(
+                    "Last key",
+                    editor.streamingSaveStatus.last_snapshot_label.empty()
+                        ? std::string{"(none staged)"}
+                        : editor.streamingSaveStatus.last_snapshot_label,
+                    118.0f);
+                gui::property_row(
+                    "Writer",
+                    "Not connected; evidence remains staged locally",
+                    118.0f);
+                gui::property_row(
+                    "Restore",
+                    "Unavailable until scene payload round-trip is verified",
+                    118.0f);
+
+                const std::array streamButtons{
+                    gui::InlineButtonSpec{
+                        .label = editor.streamingSaveConfig.enabled
+                            ? "Pause Stream"
+                            : "Arm Stream",
+                        .width = 118.0f },
+                    gui::InlineButtonSpec{ .label = "Stage Key Now", .width = 116.0f },
+                    gui::InlineButtonSpec{ .label = "Every 15s", .width = 92.0f },
+                    gui::InlineButtonSpec{ .label = "Every 120f", .width = 96.0f },
+                    gui::InlineButtonSpec{ .label = "On Timeline Key", .width = 128.0f }
+                };
+                if (const auto action = gui::inline_button_row(
+                        streamButtons, 28.0f, 6.0f, timelineActionLayout))
+                {
+                    switch (*action)
+                    {
+                    case 0:
+                        editor.streamingSaveConfig.enabled =
+                            !editor.streamingSaveConfig.enabled;
+                        editor.streamingSaveStatus.active =
+                            editor.streamingSaveConfig.enabled;
+                        editor.streamingSaveStatus.message =
+                            editor.streamingSaveConfig.enabled
+                                ? "Checkpoint evidence staging is armed."
+                                : "Checkpoint evidence staging is paused.";
+                        push_editor_log(
+                            editor,
+                            editor.streamingSaveConfig.enabled
+                                ? "[timeline] Checkpoint evidence staging armed."
+                                : "[timeline] Checkpoint evidence staging paused.");
+                        break;
+                    case 1:
+                        stageTimelineCheckpoint();
+                        break;
+                    case 2:
+                        epochengine::saveload::apply_streaming_save_profile(
+                            editor.streamingSaveConfig,
+                            epochengine::saveload::StreamingSaveProfile::
+                                EditorInterval15s);
+                        push_editor_log(
+                            editor,
+                            "[timeline] Checkpoint cadence set to 15 seconds.");
+                        break;
+                    case 3:
+                        epochengine::saveload::apply_streaming_save_profile(
+                            editor.streamingSaveConfig,
+                            epochengine::saveload::StreamingSaveProfile::
+                                EditorFrame120);
+                        push_editor_log(
+                            editor,
+                            "[timeline] Checkpoint cadence set to 120 frames.");
+                        break;
+                    case 4:
+                        epochengine::saveload::apply_streaming_save_profile(
+                            editor.streamingSaveConfig,
+                            epochengine::saveload::StreamingSaveProfile::
+                                TimelineKeyed);
+                        push_editor_log(
+                            editor,
+                            "[timeline] Checkpoint cadence follows timeline keys.");
+                        break;
+                    default:
+                        break;
+                    }
+                }
+                gui::wrapped_label(
+                    editor.streamingSaveStatus.message,
+                    centerWidth);
+            }
+            else if (editor.timelineWorkspaceSection
+                == TimelineWorkspaceSection::media)
+            {
+                gui::section_heading("Media");
+            const auto mediaAvailability =
+                epochengine::media::timeline_preview::
+                    presentation_availability(editor.mediaTimelinePreview);
+            if (mediaAvailability
+                == epochengine::media::timeline_preview::
+                    PresentationAvailability::no_source)
+            {
+                gui::wrapped_label(
+                    "No admitted media source. Add a verified project media asset to enable metadata and transport. The Video workspace never substitutes scene geometry or placeholder frames.",
+                    centerWidth);
+                gui::property_row(
+                    "Source",
+                    "(none admitted)",
+                    132.0f);
+                gui::property_row(
+                    "Presentation",
+                    "No pixels available",
+                    132.0f);
+                gui::property_row(
+                    "Transport",
+                    "Disabled until source admission",
+                    132.0f);
+            }
+            else if (const auto& source =
+                editor.mediaTimelinePreview.source)
+            {
+                gui::wrapped_label(
+                    "Source metadata is admitted. Pixel presentation remains unavailable until a separately verified decoder frame provider is connected.",
+                    centerWidth);
+                gui::property_row(
+                    "Source",
+                    source->logical_path,
+                    132.0f);
+                gui::property_row(
+                    "Provider",
+                    source->provider_revision,
+                    132.0f);
+                gui::property_row(
+                    "Presentation",
+                    "Metadata only; no decoded frame",
+                    132.0f);
+                gui::property_row(
+                    "Transport",
+                    epochengine::media::timeline_preview::transport_enabled(
+                            editor.mediaTimelinePreview)
+                        ? "Metadata transport ready"
+                        : "Disabled",
+                    132.0f);
+            }
+
+            }
+            else
+            {
+                gui::section_heading("Timeline diagnostics");
+                gui::wrapped_label(
+                    "Detailed simulation, lane-layout, and checkpoint-contract evidence for debugging. Normal sequencing and checkpoint controls remain in their dedicated sections.",
+                    centerWidth);
+                render_timeline_time_controls(centerWidth, false);
+            gui::property_row("Frame", std::to_string(timelineStats.frame_index), 132.0f);
+            gui::property_row("Simulated", format_seconds(timelineStats.simulated_seconds), 132.0f);
+            gui::property_row("Fixed step", std::string(format_ms(timelineStats.fixed_dt_seconds)) + " / " + format_rate(timelineStats.fixed_dt_seconds), 132.0f);
+            gui::property_row("Step budget", std::to_string(timelineStats.step_budget), 132.0f);
+            gui::property_row("Time scale", epochengine::format_text("{:.2f}x", timelineStats.time_scale), 132.0f);
+            gui::property_row("Playhead", epochengine::format_text("{:.2f}s / frame {}", editor.timelineState.playhead_seconds, editor.timelineState.playhead_frame), 132.0f);
+            gui::property_row("Duration", epochengine::format_text("{:.2f}s", editor.timelineState.duration_seconds), 132.0f);
+            gui::property_row("Tracks", epochengine::format_text("{} enabled / {}", epochengine::timeline::enabled_track_count(editor.timelineTracks), editor.timelineTracks.size()), 132.0f);
+            gui::property_row("Keys", std::to_string(editor.timelineEvents.size()), 132.0f);
+            const epochengine::timeline::TimelineViewConfig activeTimelineView{
+                .visible_start_seconds = (std::max)(0.0, editor.timelineState.playhead_seconds - 5.0),
+                .visible_duration_seconds = 10.0,
+                .pixel_width = (std::max)(320.0f, centerWidth)
+            };
+            const epochengine::timeline::TimelineLaneLayoutConfig activeLaneLayout{
+                .pixel_width = (std::max)(320.0f, centerWidth),
+                .header_width = 132.0,
+                .lane_height = 24.0,
+                .lane_gap = 4.0,
+                .top_padding = 0.0
+            };
+            const auto activeTimelineLanes = epochengine::timeline::make_lane_geometry(
+                editor.timelineTracks,
+                activeLaneLayout);
+            const auto activeTimelineMarkers = epochengine::timeline::make_event_markers(
+                editor.timelineTracks,
+                editor.timelineEvents,
+                activeTimelineView,
+                activeLaneLayout,
+                editor.timelineState.duration_seconds);
+            gui::property_row(
+                "View",
+                epochengine::timeline::describe_view(
+                    editor.timelineState,
+                    editor.timelineTracks,
+                    editor.timelineEvents,
+                    activeTimelineView),
+                132.0f);
+            gui::property_row(
+                "Layout",
+                epochengine::timeline::describe_lane_layout(activeTimelineLanes, activeTimelineMarkers),
+                132.0f);
+            const auto activeSaveProfile = epochengine::saveload::detect_streaming_save_profile(editor.streamingSaveConfig);
+            if (const auto* profileDescriptor = epochengine::saveload::find_streaming_save_profile(activeSaveProfile))
+            {
+                gui::property_row("Profile id", std::string(profileDescriptor->id), 132.0f);
+                gui::property_row("Profile detail", std::string(profileDescriptor->summary), 132.0f);
+            }
+            const auto timelineKeyedProfilePlan = epochengine::saveload::make_streaming_save_profile_change_plan(
+                editor.streamingSaveConfig,
+                epochengine::saveload::StreamingSaveProfile::TimelineKeyed);
+            gui::property_row("Stream mode", std::string(epochengine::saveload::mode_name(editor.streamingSaveConfig.mode)), 132.0f);
+            gui::property_row("Save profile", std::string(epochengine::saveload::stream_profile_name(activeSaveProfile)), 132.0f);
+            gui::property_row("Profile gate", epochengine::saveload::streaming_save_profile_change_summary(timelineKeyedProfilePlan), 132.0f);
+            gui::property_row("Retention", epochengine::saveload::describe_retention(editor.streamingSaveConfig), 132.0f);
+            const auto activeSaveCadence = epochengine::saveload::make_streaming_save_cadence_plan(
+                editor.streamingSaveConfig,
+                editor.streamingSaveStatus,
+                timelineStats);
+            gui::property_row("Next capture", epochengine::saveload::streaming_save_cadence_summary(activeSaveCadence), 132.0f);
+            gui::property_row("Stream state", epochengine::saveload::describe_streaming_save(editor.streamingSaveConfig, editor.streamingSaveStatus), 132.0f);
+            gui::property_row("Last key", editor.streamingSaveStatus.last_snapshot_label.empty() ? std::string("(none staged)") : editor.streamingSaveStatus.last_snapshot_label, 132.0f);
+            gui::property_row("Last record", epochengine::saveload::checkpoint_record_summary(editor.lastCheckpointRecord), 132.0f);
+            gui::property_row("Target", editor.streamingSaveStatus.last_output_path.empty() ? editor.streamingSaveConfig.target_root : editor.streamingSaveStatus.last_output_path, 132.0f);
+            gui::property_row("Manifest", epochengine::saveload::join_stream_path(editor.streamingSaveConfig.target_root, "manifest.timeline.log"), 132.0f);
+            if (editor.lastCheckpointRecord.valid)
+            {
+                const auto restorePlan = epochengine::saveload::make_checkpoint_restore_plan(
+                    editor.streamingSaveConfig,
+                    editor.lastCheckpointRecord);
+                const std::array retentionRecords{
+                    editor.lastCheckpointRecord
+                };
+                const auto retentionPlan = epochengine::saveload::make_checkpoint_retention_plan(
+                    editor.streamingSaveConfig,
+                    retentionRecords);
+                gui::property_row(
+                    "Writer gate",
+                    epochengine::saveload::checkpoint_writer_approval_summary(epochengine::saveload::StreamingCheckpointWriteApproval{}),
+                    132.0f);
+                gui::property_row(
+                    "Cleanup",
+                    epochengine::saveload::checkpoint_retention_plan_summary(retentionPlan),
+                    132.0f);
+                gui::property_row(
+                    "Scene payload",
+                    restorePlan.scene_payload_path,
+                    132.0f);
+                gui::property_row(
+                    "Restore",
+                    epochengine::saveload::checkpoint_restore_plan_summary(restorePlan),
+                    132.0f);
+            }
+
+            }
+        }

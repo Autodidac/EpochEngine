@@ -16,6 +16,7 @@ export module editor.systems_panel;
 
 import systems.registry;
 import taskgraph.dotsystem;
+import platform.work_admission;
 
 export namespace epochengine::editor_systems_panel
 {
@@ -38,6 +39,7 @@ export namespace epochengine::editor_systems_panel
         std::string script_build{};
         std::size_t live_threads{};
         std::size_t hardware_threads{};
+        platform::work_admission::GpuResourceSample gpu{};
     };
 
     class Panel final

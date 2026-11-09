@@ -44,6 +44,7 @@ module;
 #include <fstream>
 #include <iterator>
 #include <mutex>
+#include <map>
 #include <optional>
 #include <regex>
 #include <source_location>
@@ -54,6 +55,7 @@ module;
 
 #include <openssl/evp.h>
 #include "../../include/updater.runtime_identity.hpp"
+#include "updater.handoff_script.hpp"
 
 #if defined(_WIN32)
 #ifndef WIN32_LEAN_AND_MEAN
@@ -425,21 +427,14 @@ namespace epochengine::updater
             if (text.empty())
                 return {};
 
-            {
-                static const std::regex k_semver(
-                    R"((\d+)\s*\.\s*(\d+)\s*\.\s*(\d+))",
-                    std::regex::optimize);
-
-                std::smatch match;
-                if (std::regex_search(text, match, k_semver))
+            const auto format = [](const std::string& major, const std::string& minor,
+                                   const std::string& revision)
                 {
-                    return std::to_string(parse_int_or_zero(match[1].str()))
-                        + "."
-                        + std::to_string(parse_int_or_zero(match[2].str()))
-                        + "."
-                        + std::to_string(parse_int_or_zero(match[3].str()));
-                }
-            }
+                    const auto buffer = epochengine::format_version_components(
+                        parse_int_or_zero(major), parse_int_or_zero(minor),
+                        parse_int_or_zero(revision));
+                    return std::string{buffer.data()};
+                };
 
             const auto parse_defined_component = [&](const char* macro_name) -> std::string
                 {
@@ -460,12 +455,15 @@ namespace epochengine::updater
 
             if (!defined_major.empty() && !defined_minor.empty() && !defined_revision.empty())
             {
-                return std::to_string(parse_int_or_zero(defined_major))
-                    + "."
-                    + std::to_string(parse_int_or_zero(defined_minor))
-                    + "."
-                    + std::to_string(parse_int_or_zero(defined_revision));
+                // A version example in a module comment must not override the macros.
+                return format(defined_major, defined_minor, defined_revision);
             }
+
+            static const std::regex k_semver(
+                R"((\d+)\s*\.\s*(\d+)\s*\.\s*(\d+))", std::regex::optimize);
+            std::smatch match;
+            if (std::regex_search(text, match, k_semver))
+                return format(match[1].str(), match[2].str(), match[3].str());
 
             const auto parse_named_component = [&](const char* name) -> std::string
                 {
@@ -486,11 +484,7 @@ namespace epochengine::updater
 
             if (!major.empty() && !minor.empty() && !revision.empty())
             {
-                return std::to_string(parse_int_or_zero(major))
-                    + "."
-                    + std::to_string(parse_int_or_zero(minor))
-                    + "."
-                    + std::to_string(parse_int_or_zero(revision));
+                return format(major, minor, revision);
             }
 
             return canonicalize_semver(text);
@@ -978,7 +972,10 @@ namespace epochengine::updater
         const UpdateChannel& channel,
         const std::filesystem::path& target_binary,
         bool silent_worker,
-        const PreparedSourceArchive& prepared_source);
+        const PreparedSourceArchive& prepared_source,
+        const std::string& public_source_url,
+        const std::string& public_source_sha256,
+        const std::string& public_source_version);
 #endif
 
     void cleanup_previous_update_artifacts()
@@ -992,11 +989,143 @@ namespace epochengine::updater
         // packaged runtime folder depending on how Epoch was started.
     }
 
+    struct BinaryHandoff
+    {
+        std::filesystem::path helper;
+        std::filesystem::path manifest;
+        std::filesystem::path work;
+        std::string manifest_sha256;
+    };
+
+    [[nodiscard]] std::optional<BinaryHandoff> prepare_binary_handoff(
+        const std::filesystem::path& target, const std::filesystem::path& source,
+        const bool include_payload = false,
+        const std::filesystem::path& repository_assets = {})
+    {
+        BinaryHandoff result{};
+        result.helper = system_detail::make_temp_script_path("binary_handoff");
+        result.helper.replace_extension(".ps1");
+        result.manifest = result.helper;
+        result.manifest.replace_extension(".tsv");
+        result.work = target.parent_path() / (".epoch-update-" + result.helper.stem().string());
+        std::map<std::string, std::filesystem::path> files;
+        std::error_code ec;
+        const auto add_tree = [&](const std::filesystem::path& root, const std::string& prefix)
+        {
+            if (!std::filesystem::exists(root, ec)) return !ec;
+            for (std::filesystem::recursive_directory_iterator it(root, ec), end; it != end && !ec; it.increment(ec))
+            {
+                if (it->is_symlink(ec)) return false;
+                if (it->is_regular_file(ec))
+                    files[prefix + it->path().lexically_relative(root).generic_string()] = it->path();
+            }
+            return !ec;
+        };
+        if (include_payload)
+        {
+            for (std::filesystem::directory_iterator it(source.parent_path(), ec), end; it != end && !ec; it.increment(ec))
+            {
+                const auto name = it->path().filename().string();
+                if (name.ends_with(".dll") || name.ends_with(".manifest") || name.ends_with(".so")
+                    || name.find(".so.") != std::string::npos || name == "epoch-distribution.json")
+                {
+                    if (it->is_symlink(ec) || !it->is_regular_file(ec)) return std::nullopt;
+                    files[name] = it->path();
+                }
+            }
+            if (ec || !add_tree(source.parent_path() / "lib", "lib/")
+                || !add_tree(source.parent_path() / "assets", "assets/")
+                || (!repository_assets.empty() && !add_tree(repository_assets, "assets/")))
+            {
+                system_detail::log_error("Runtime handoff refused an unreadable or linked payload tree.");
+                return std::nullopt;
+            }
+        }
+        // The executable is committed last; all support files are staged and backed
+        // up before the first installed byte changes. Non-payload user data is absent.
+        files.erase(target.filename().generic_string());
+        std::filesystem::create_directories(result.manifest.parent_path(), ec);
+        if (ec) return std::nullopt;
+        std::ofstream manifest(result.manifest, std::ios::binary);
+        const auto add_file = [&](const std::filesystem::path& path, const std::string& relative)
+        {
+            const auto source_text = path.string();
+            if (source_text.find_first_of("\t\r\n") != std::string::npos
+                || relative.find_first_of("\t\r\n") != std::string::npos) return false;
+            const auto digest = system_detail::sha256_file_hex(path);
+            if (!digest) return false;
+            manifest << source_text << '\t' << relative << '\t' << *digest << '\n';
+            return bool(manifest);
+        };
+        for (const auto& [relative, path] : files)
+            if (!add_file(path, relative)) return std::nullopt;
+        if (!add_file(source, target.filename().generic_string())) return std::nullopt;
+        manifest.close();
+        if (!manifest) return std::nullopt;
+        const auto manifest_digest = system_detail::sha256_file_hex(result.manifest);
+        if (!manifest_digest) return std::nullopt;
+        result.manifest_sha256 = *manifest_digest;
+#if defined(_WIN32)
+        std::ofstream helper(result.helper, std::ios::binary);
+        helper << handoff_script::windows;
+        helper.close();
+        if (!helper) return std::nullopt;
+#endif
+        return result;
+    }
+
+#if defined(_WIN32)
+    void append_binary_stage(std::ostream& out, const BinaryHandoff& handoff,
+        const std::filesystem::path& target, const std::filesystem::path&)
+    {
+        out << "set \"EPOCH_UPDATE_ROOT=" << target.parent_path().string() << "\"\r\n"
+            << "set \"EPOCH_UPDATE_WORK=" << handoff.work.string() << "\"\r\n"
+            << "set \"EPOCH_UPDATE_PLAN=" << handoff.manifest.string() << "\"\r\n"
+            << "set \"EPOCH_UPDATE_PLAN_SHA256=" << handoff.manifest_sha256 << "\"\r\n"
+            << "set \"EPOCH_UPDATE_MODE=stage\"\r\n"
+            << "powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \""
+            << handoff.helper.string() << "\"\r\n"
+            << "if errorlevel 1 exit /b 1\r\n";
+    }
+
+    void append_binary_commit(std::ostream& out, const BinaryHandoff& handoff)
+    {
+        out << "set \"EPOCH_UPDATE_MODE=commit\"\r\n"
+            << "powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \""
+            << handoff.helper.string() << "\"\r\n"
+            << "if errorlevel 1 exit /b 1\r\n"
+            << ">> \"%LOG%\" echo [INFO] Runtime installed; rollback files and recovery journal retained in %EPOCH_UPDATE_WORK%.\r\n";
+    }
+#else
+    void append_binary_stage(std::ostream& out, const BinaryHandoff& handoff,
+        const std::filesystem::path& target, const std::filesystem::path&)
+    {
+        out << handoff_script::posix
+            << "EPOCH_UPDATE_ROOT=" << system_detail::quote_shell_arg(target.parent_path().string()) << "\n"
+            << "EPOCH_UPDATE_WORK=" << system_detail::quote_shell_arg(handoff.work.string()) << "\n"
+            << "EPOCH_UPDATE_PLAN=" << system_detail::quote_shell_arg(handoff.manifest.string()) << "\n"
+            << "EPOCH_UPDATE_PLAN_SHA256=" << system_detail::quote_shell_arg(handoff.manifest_sha256) << "\n"
+            << "if ! epoch_stage_payload; then\n"
+            << "  echo '[ERROR] Payload staging failed; installed version was preserved.' >> \"$LOG\"\n"
+            << "  exit 1\nfi\n";
+    }
+
+    void append_binary_commit(std::ostream& out, const BinaryHandoff&)
+    {
+        out << "if ! epoch_install_payload; then\n"
+            << "  echo '[ERROR] Runtime replacement failed; rollback evidence is retained.' >> \"$LOG\"\n"
+            << "  exit 1\nfi\n"
+            << "echo \"[INFO] Runtime installed; rollback files and recovery journal retained in $EPOCH_UPDATE_WORK.\" >> \"$LOG\"\n";
+    }
+#endif
+
     bool replace_binary_from_script(
         const std::filesystem::path& target_binary,
         const std::filesystem::path& new_binary,
         const UpdateHandoffMode handoff_mode = UpdateHandoffMode::LaunchImmediately)
     {
+        const auto handoff = prepare_binary_handoff(target_binary, new_binary);
+        if (!handoff) return false;
 #if defined(_WIN32)
         const auto script_path = handoff_mode == UpdateHandoffMode::StageForRestart
             ? system_detail::staged_update_handoff_script_path()
@@ -1034,27 +1163,10 @@ namespace epochengine::updater
             << "> \"%LOG%\" echo [INFO] Binary replacement started\r\n"
             << ">> \"%LOG%\" echo [INFO] TARGET=%TARGET%\r\n"
             << ">> \"%LOG%\" echo [INFO] NEWBIN=%NEWBIN%\r\n"
-            << "for /L %%I in (1,1,60) do (\r\n"
-            << "  del /F /Q \"%TARGET%\" >nul 2>&1\r\n"
-            << "  if exist \"%TARGET%\" (\r\n"
-            << "    >> \"%LOG%\" echo [INFO] Waiting for target unlock attempt %%I\r\n"
-            << "    timeout /t 1 >nul\r\n"
-            << "  ) else (\r\n"
-            << "    goto target_ready\r\n"
-            << "  )\r\n"
-            << ")\r\n"
-            << ">> \"%LOG%\" echo [ERROR] Timed out waiting for target executable to unlock.\r\n"
-            << "exit /b 1\r\n"
-            << ":target_ready\r\n"
-            << "copy /Y \"%NEWBIN%\" \"%TARGET%\" >nul\r\n"
-            << "if errorlevel 1 (\r\n"
-            << "  >> \"%LOG%\" echo [ERROR] Failed to copy replacement executable into place.\r\n"
-            << "  exit /b 1\r\n"
-            << ")\r\n"
-            << "if not exist \"%TARGET%\" (\r\n"
-            << "  >> \"%LOG%\" echo [ERROR] Replacement executable is still missing after copy.\r\n"
-            << "  exit /b 1\r\n"
-            << ")\r\n"
+            ;
+        append_binary_stage(bat, *handoff, target_binary, new_binary);
+        append_binary_commit(bat, *handoff);
+        bat
             << ">> \"%LOG%\" echo [INFO] Replacement executable copied successfully.\r\n"
             << "set \"EPOCH_POST_UPDATE_STARTUP_DELAY_MS=3000\"\r\n"
             << "start \"\" \"%TARGET%\"\r\n"
@@ -1097,14 +1209,10 @@ namespace epochengine::updater
             << "#!/bin/sh\n"
             << "TARGET=" << system_detail::quote_shell_arg(target_binary.string()) << "\n"
             << "NEWBIN=" << system_detail::quote_shell_arg(new_binary.string()) << "\n"
-            << "i=0\n"
-            << "while [ $i -lt 20 ]; do\n"
-            << "  rm -f \"$TARGET\"\n"
-            << "  mv \"$NEWBIN\" \"$TARGET\" 2>/dev/null && break\n"
-            << "  i=$((i+1))\n"
-            << "  sleep 1\n"
-            << "done\n"
-            << "chmod +x \"$TARGET\"\n"
+            << "LOG=" << system_detail::quote_shell_arg(system_detail::update_handoff_log_path_for(target_binary).string()) << "\n";
+        append_binary_stage(sh, *handoff, target_binary, new_binary);
+        append_binary_commit(sh, *handoff);
+        sh
             << "EPOCH_POST_UPDATE_STARTUP_DELAY_MS=3000 \"$TARGET\" &\n"
             << "rm -f \"$0\"\n";
 
@@ -1138,6 +1246,8 @@ namespace epochengine::updater
             system_detail::log_error("Packaged replacement refused a missing, malformed, foreign-edition or wrong-version runtime identity.");
             return false;
         }
+        const auto handoff = prepare_binary_handoff(target_binary, extracted_binary, true);
+        if (!handoff) return false;
 #if defined(_WIN32)
         const auto target_dir = target_binary.parent_path();
         const auto script_path = handoff_mode == UpdateHandoffMode::StageForRestart
@@ -1186,39 +1296,10 @@ namespace epochengine::updater
             << "  >> \"%LOG%\" echo [ERROR] Extracted runtime binary is missing.\r\n"
             << "  exit /b 1\r\n"
             << ")\r\n"
-            << "for /L %%I in (1,1,60) do (\r\n"
-            << "  del /F /Q \"%TARGETEXE%\" >nul 2>&1\r\n"
-            << "  if exist \"%TARGETEXE%\" (\r\n"
-            << "    >> \"%LOG%\" echo [INFO] Waiting for runtime unlock attempt %%I\r\n"
-            << "    timeout /t 1 >nul\r\n"
-            << "  ) else (\r\n"
-            << "    goto exe_ready\r\n"
-            << "  )\r\n"
-            << ")\r\n"
-            << ">> \"%LOG%\" echo [ERROR] Timed out waiting for target runtime executable to unlock.\r\n"
-            << "exit /b 1\r\n"
-            << ":exe_ready\r\n"
-            << "copy /Y \"%NEWEXE%\" \"%TARGETEXE%\" >nul\r\n"
-            << "if errorlevel 1 (\r\n"
-            << "  >> \"%LOG%\" echo [ERROR] Failed to copy packaged runtime executable into place.\r\n"
-            << "  exit /b 1\r\n"
-            << ")\r\n"
-            << "robocopy \"%EXTRACTED%\" \"%TARGETDIR%\" *.dll *.manifest /NFL /NDL /NJH /NJS /NC /NS >nul\r\n"
-            << "if errorlevel 8 (\r\n"
-            << "  >> \"%LOG%\" echo [ERROR] DLL/runtime payload robocopy failed with errorlevel %%ERRORLEVEL%%.\r\n"
-            << "  exit /b 1\r\n"
-            << ")\r\n"
-            << "if exist \"%EXTRACTED%\\epoch-distribution.json\" (\r\n"
-            << "  copy /Y \"%EXTRACTED%\\epoch-distribution.json\" \"%TARGETDIR%\\epoch-distribution.json\" >nul\r\n"
-            << "  if errorlevel 1 exit /b 1\r\n"
-            << ") else (\r\n"
-            << "  del /F /Q \"%TARGETDIR%\\epoch-distribution.json\" >nul 2>&1\r\n"
-            << ")\r\n"
-            << "if exist \"%EXTRACTED%\\assets\" robocopy \"%EXTRACTED%\\assets\" \"%TARGETDIR%\\assets\" /E /NFL /NDL /NJH /NJS /NC /NS >nul\r\n"
-            << "if errorlevel 8 (\r\n"
-            << "  >> \"%LOG%\" echo [ERROR] Asset robocopy failed with errorlevel %%ERRORLEVEL%%.\r\n"
-            << "  exit /b 1\r\n"
-            << ")\r\n"
+            ;
+        append_binary_stage(bat, *handoff, target_binary, extracted_binary);
+        append_binary_commit(bat, *handoff);
+        bat
             << ">> \"%LOG%\" echo [INFO] Packaged runtime files copied successfully.\r\n"
             << "rmdir /S /Q \"%PACKAGE_ROOT%\" >nul 2>&1\r\n"
             << "del /F /Q \"%ARCHIVE%\" >nul 2>&1\r\n"
@@ -1301,33 +1382,10 @@ namespace epochengine::updater
             << "  exit 1\n"
             << "fi\n"
             << "mkdir -p \"$TARGETDIR\"\n"
-            << "i=0\n"
-            << "while [ $i -lt 60 ]; do\n"
-            << "  cp -f \"$NEWEXE\" \"$TARGETEXE\" 2>/dev/null || true\n"
-            << "  if [ -f \"$TARGETEXE\" ]; then\n"
-            << "    break\n"
-            << "  fi\n"
-            << "  i=$((i+1))\n"
-            << "  if [ $i -eq 1 ] || [ $((i % 10)) -eq 0 ]; then\n"
-            << "    echo \"[INFO] Waiting for packaged runtime handoff attempt $i.\" >> \"$LOG\"\n"
-            << "  fi\n"
-            << "  sleep 1\n"
-            << "done\n"
-            << "if [ ! -f \"$TARGETEXE\" ]; then\n"
-            << "  echo \"[ERROR] Timed out waiting to copy the packaged runtime executable.\" >> \"$LOG\"\n"
-            << "  exit 1\n"
-            << "fi\n"
-            << "chmod +x \"$TARGETEXE\" 2>/dev/null || true\n"
-            << "find \"$EXTRACTED\" -maxdepth 1 -type f \\( -name '*.so' -o -name '*.so.*' -o -name '*.dll' -o -name '*.manifest' \\) -exec cp -f {} \"$TARGETDIR\" \\; 2>/dev/null || true\n"
-            << "if [ -f \"$EXTRACTED/epoch-distribution.json\" ]; then\n"
-            << "  cp -f \"$EXTRACTED/epoch-distribution.json\" \"$TARGETDIR/epoch-distribution.json\" || exit 1\n"
-            << "else\n"
-            << "  rm -f \"$TARGETDIR/epoch-distribution.json\" || exit 1\n"
-            << "fi\n"
-            << "if [ -d \"$EXTRACTED/assets\" ]; then\n"
-            << "  mkdir -p \"$TARGETDIR/assets\"\n"
-            << "  cp -R \"$EXTRACTED/assets/.\" \"$TARGETDIR/assets/\" 2>/dev/null || true\n"
-            << "fi\n"
+            ;
+        append_binary_stage(sh, *handoff, target_binary, extracted_binary);
+        append_binary_commit(sh, *handoff);
+        sh
             << "echo \"[INFO] Packaged runtime files copied successfully.\" >> \"$LOG\"\n"
             << "rm -rf \"$PACKAGE_ROOT\"\n"
             << "rm -f \"$ARCHIVE\"\n"
@@ -1371,6 +1429,8 @@ namespace epochengine::updater
         const std::filesystem::path& package_archive)
     {
         const auto built_binary = system_detail::resolve_runtime_binary_path(built_runtime_dir, target_binary);
+        const auto handoff = prepare_binary_handoff(target_binary, built_binary, true, system_detail::source_manifest_root(source_root) / "assets");
+        if (!handoff) return false;
         if (!std::filesystem::exists(built_binary))
         {
             system_detail::log_error("Source replacement aborted because the built runtime binary is missing.");
@@ -1411,38 +1471,10 @@ namespace epochengine::updater
             << ">> \"%LOG%\" echo [INFO] TARGETEXE=%TARGETEXE%\r\n"
             << ">> \"%LOG%\" echo [INFO] BUILTEXE=%BUILTEXE%\r\n"
             << ">> \"%LOG%\" echo [INFO] BUILTDIR=%BUILTDIR%\r\n"
-            << "for /L %%I in (1,1,60) do (\r\n"
-            << "  del /F /Q \"%TARGETEXE%\" >nul 2>&1\r\n"
-            << "  if exist \"%TARGETEXE%\" (\r\n"
-            << "    >> \"%LOG%\" echo [INFO] Waiting for runtime unlock attempt %%I\r\n"
-            << "    timeout /t 1 >nul\r\n"
-            << "  ) else (\r\n"
-            << "    goto exe_ready\r\n"
-            << "  )\r\n"
-            << ")\r\n"
-            << ">> \"%LOG%\" echo [ERROR] Timed out waiting for target runtime executable to unlock.\r\n"
-            << "exit /b 1\r\n"
-            << ":exe_ready\r\n"
-            << "copy /Y \"%BUILTEXE%\" \"%TARGETEXE%\" >nul\r\n"
-            << "if errorlevel 1 (\r\n"
-            << "  >> \"%LOG%\" echo [ERROR] Failed to copy source-built runtime executable into place.\r\n"
-            << "  exit /b 1\r\n"
-            << ")\r\n"
-            << "robocopy \"%BUILTDIR%\" \"%TARGETDIR%\" *.dll *.manifest /NFL /NDL /NJH /NJS /NC /NS >nul\r\n"
-            << "if errorlevel 8 (\r\n"
-            << "  >> \"%LOG%\" echo [ERROR] Source DLL/runtime payload robocopy failed with errorlevel %%ERRORLEVEL%%.\r\n"
-            << "  exit /b 1\r\n"
-            << ")\r\n"
-            << "if exist \"%SRCASSETS%\" robocopy \"%SRCASSETS%\" \"%DSTASSETS%\" /E /NFL /NDL /NJH /NJS /NC /NS >nul\r\n"
-            << "if errorlevel 8 (\r\n"
-            << "  >> \"%LOG%\" echo [ERROR] Source asset robocopy failed with errorlevel %%ERRORLEVEL%%.\r\n"
-            << "  exit /b 1\r\n"
-            << ")\r\n"
-            << "if exist \"%REPOASSETS%\" robocopy \"%REPOASSETS%\" \"%DSTASSETS%\" /E /NFL /NDL /NJH /NJS /NC /NS >nul\r\n"
-            << "if errorlevel 8 (\r\n"
-            << "  >> \"%LOG%\" echo [ERROR] Source repository asset robocopy failed with errorlevel %%ERRORLEVEL%%.\r\n"
-            << "  exit /b 1\r\n"
-            << ")\r\n"
+            ;
+        append_binary_stage(bat, *handoff, target_binary, built_binary);
+        append_binary_commit(bat, *handoff);
+        bat
             << ">> \"%LOG%\" echo [INFO] Source runtime files copied successfully.\r\n"
             << "del /F /Q \"%ARCHIVE%\" >nul 2>&1\r\n"
             << "set \"EPOCH_UPDATER_SHELL_AUTO_COMMAND=\"\r\n"
@@ -1506,39 +1538,10 @@ namespace epochengine::updater
             << "  echo \"[ERROR] Built runtime binary is missing.\" >> \"$LOG\"\n"
             << "  exit 1\n"
             << "fi\n"
-            << "i=0\n"
-            << "while [ $i -lt 60 ]; do\n"
-            << "  cp -f \"$BUILTEXE\" \"$TARGETEXE\" 2>/dev/null || true\n"
-            << "  if [ -f \"$TARGETEXE\" ]; then\n"
-            << "    break\n"
-            << "  fi\n"
-            << "  i=$((i+1))\n"
-            << "  if [ $i -eq 1 ] || [ $((i % 10)) -eq 0 ]; then\n"
-            << "    echo \"[INFO] Waiting for source runtime handoff attempt $i.\" >> \"$LOG\"\n"
-            << "  fi\n"
-            << "  sleep 1\n"
-            << "done\n"
-            << "if [ ! -f \"$TARGETEXE\" ]; then\n"
-            << "  echo \"[ERROR] Timed out waiting to copy the rebuilt runtime executable.\" >> \"$LOG\"\n"
-            << "  exit 1\n"
-            << "fi\n"
-            << "chmod +x \"$TARGETEXE\" 2>/dev/null || true\n"
-            << "find \"$BUILTDIR\" -maxdepth 1 -type f \\( -name '*.so' -o -name '*.so.*' -o -name '*.dll' -o -name '*.manifest' \\) -exec cp -f {} \"$TARGETDIR\" \\; 2>/dev/null || true\n"
-            << "if [ -d \"$BUILTDIR/lib\" ]; then\n"
-            << "  mkdir -p \"$TARGETDIR/lib\"\n"
-            << "  if ! cp -R \"$BUILTDIR/lib/.\" \"$TARGETDIR/lib/\"; then\n"
-            << "    echo \"[ERROR] Failed to copy rebuilt Linux runtime libraries.\" >> \"$LOG\"\n"
-            << "    exit 1\n"
-            << "  fi\n"
-            << "fi\n"
-            << "if [ -d \"$SRCASSETS\" ]; then\n"
-            << "  mkdir -p \"$DSTASSETS\"\n"
-            << "  cp -R \"$SRCASSETS/.\" \"$DSTASSETS/\" 2>/dev/null || true\n"
-            << "fi\n"
-            << "if [ -d \"$REPOASSETS\" ]; then\n"
-            << "  mkdir -p \"$DSTASSETS\"\n"
-            << "  cp -R \"$REPOASSETS/.\" \"$DSTASSETS/\" 2>/dev/null || true\n"
-            << "fi\n"
+            ;
+        append_binary_stage(sh, *handoff, target_binary, built_binary);
+        append_binary_commit(sh, *handoff);
+        sh
             << "echo \"[INFO] Source runtime files copied successfully.\" >> \"$LOG\"\n"
             << "rm -f \"$ARCHIVE\"\n"
             << "rm -f \"$ACTIVE\" \"$CANCEL\"\n"
@@ -1804,68 +1807,27 @@ namespace epochengine::updater
 
     [[nodiscard]] bool download_source_archive_with_fallbacks(
         const std::string& primary_url,
-        const std::filesystem::path& final_path)
+        const std::filesystem::path& final_path,
+        system_detail::ResolvedSourceArchive& source)
     {
+        source = {};
         if (!PUBLIC_DISTRIBUTION || primary_url != PROJECT_SOURCE_URL())
         {
             system_detail::log_error("Source download refused a different edition or repository.");
             return false;
         }
-        std::vector<std::string> urls;
-        if (!primary_url.empty())
-            urls.push_back(primary_url);
-
-        for (const auto& fallback_url : PROJECT_SOURCE_FALLBACK_URLS())
+        source = system_detail::resolve_public_source_archive();
+        if (!source.found)
         {
-            if (fallback_url.empty())
-                continue;
-
-            bool duplicate = false;
-            for (const auto& existing_url : urls)
-            {
-                if (system_detail::lower_ascii(existing_url)
-                    == system_detail::lower_ascii(fallback_url))
-                {
-                    duplicate = true;
-                    break;
-                }
-            }
-
-            if (!duplicate)
-                urls.push_back(fallback_url);
+            system_detail::log_error("The signed Public release has no unique matching source archive.");
+            return false;
         }
-
-        for (const auto& url : urls)
-        {
-            if (url != PROJECT_SOURCE_URL())
-            {
-                system_detail::log_error("Source fallback refused a different edition or repository.");
-                return false;
-            }
-            system_detail::log_info("Source snapshot download URL: " + url);
-            if (download_update_file_atomic(url, final_path))
-            {
-                const auto expected =
-                    system_detail::download_expected_sha256(url == PROJECT_SOURCE_URL()
-                        ? PROJECT_SOURCE_CHECKSUM_URL() : url + ".sha256");
-                if (expected
-                    && system_detail::verify_sha256(final_path, *expected))
-                {
-                    system_detail::log_info(
-                        "Source snapshot SHA-256 verified.");
-                    return true;
-                }
-
-                std::error_code remove_ec;
-                std::filesystem::remove(final_path, remove_ec);
-                system_detail::log_error(
-                    "Source snapshot SHA-256 verification failed for: " + url);
-            }
-
-            system_detail::log_error("Source snapshot download failed from: " + url);
-        }
-
-        system_detail::log_error("Source snapshot download failed from all configured URLs.");
+        if (download_update_file_atomic(source.url, final_path)
+            && system_detail::verify_sha256(final_path, source.expected_sha256)) return true;
+        std::error_code ec;
+        std::filesystem::remove(final_path, ec);
+        source = {};
+        system_detail::log_error("Public source download or signed SHA-256 verification failed.");
         return false;
     }
 
@@ -2244,6 +2206,7 @@ namespace epochengine::updater
         std::error_code ec;
         const fs::path cache_root = system_detail::project_source_cache_root();
         PreparedSourceArchive authorized_source{};
+        system_detail::ResolvedSourceArchive public_source{};
         fs::path archive_path{};
         if (channel.source_url.empty())
         {
@@ -2288,7 +2251,7 @@ namespace epochengine::updater
         if (!channel.source_url.empty())
         {
             system_detail::log_info("Downloading project source code snapshot into cache: " + cache_root.string());
-            if (!download_source_archive_with_fallbacks(channel.source_url, archive_path))
+            if (!download_source_archive_with_fallbacks(channel.source_url, archive_path, public_source))
             {
                 cleanup_authorized_source();
                 result.status_message = "Project source code download failed: source archive download did not complete.";
@@ -2307,15 +2270,12 @@ namespace epochengine::updater
             return result;
         }
 
-        fs::path extracted_root = system_detail::first_subdirectory(staging_dir);
-        if (extracted_root.empty())
-            extracted_root = staging_dir;
-
-        if (!system_detail::source_tree_matches_edition(extracted_root))
+        const fs::path extracted_root = system_detail::source_snapshot_root(staging_dir);
+        if (!system_detail::source_snapshot_matches(extracted_root, public_source.version))
         {
             fs::remove_all(staging_dir, ec);
             cleanup_authorized_source();
-            result.status_message = "Source download refused: the archive edition does not match this installed engine.";
+            result.status_message = "Source download refused: root, edition or signed source version does not match.";
             system_detail::log_error(result.status_message);
             return result;
         }
@@ -2611,7 +2571,9 @@ namespace epochengine::updater
                SOURCE_VERSION_FILE_NAME() == "Engine/modules/epoch.version.ixx" &&
                (!SOURCE_UPDATE_FALLBACK_ENABLED ||
                    (PUBLIC_DISTRIBUTION
-                       ? PROJECT_SOURCE_URL().ends_with(PROJECT_SOURCE_ARCHIVE_EXTENSION())
+                       ? PROJECT_SOURCE_URL() == PROJECT_RELEASE_INTEGRITY_URL()
+                           && PROJECT_SOURCE_CHECKSUM_URL().empty()
+                           && PROJECT_SOURCE_ARCHIVE_EXTENSION() == ".zip"
                        : AUTHORIZED_SOURCE_DISTRIBUTION_ENABLED && PROJECT_SOURCE_URL().empty())) &&
                !system_detail::prefer_source_release(
                    {.ok=true, .remote="0.90.177", .update_available=true},
@@ -2949,11 +2911,18 @@ namespace epochengine::updater
             effective_silent_worker
             || !system_detail::env_flag_enabled("EPOCH_UPDATER_SHOW_WORKER_CONSOLE");
 
+        const auto public_source = PUBLIC_DISTRIBUTION
+            ? system_detail::resolve_public_source_archive() : system_detail::ResolvedSourceArchive{};
+        if (PUBLIC_DISTRIBUTION && !public_source.found)
+        {
+            system_detail::log_error("Source worker requires a matching signed Public source archive.");
+            return false;
+        }
         if (!launch_source_update_worker(
                 channel,
                 target_binary,
                 hide_worker_window,
-                prepared_source))
+                prepared_source, public_source.url, public_source.expected_sha256, public_source.version))
             return false;
 
         if (effective_silent_worker)
@@ -3004,6 +2973,7 @@ namespace epochengine::updater
                 "Authorized source snapshot " + prepared_source.source_version
                 + " (" + prepared_source.commit + ") is ready for the Linux build worker.");
         }
+        system_detail::ResolvedSourceArchive public_source{};
         const auto cleanup_prepared_source = [&]()
             {
                 if (!prepared_source.cleanup_root.empty())
@@ -3087,7 +3057,7 @@ namespace epochengine::updater
                 "Downloading latest "
                 + system_detail::describe_source_archive(channel.source_url)
                 + ".");
-            if (!download_source_archive_with_fallbacks(channel.source_url, archive_path))
+            if (!download_source_archive_with_fallbacks(channel.source_url, archive_path, public_source))
                 return false;
         }
 
@@ -3097,8 +3067,12 @@ namespace epochengine::updater
             return false;
         }
 
-        const std::filesystem::path extracted_root =
-            system_detail::first_subdirectory(staging_dir);
+        const std::filesystem::path extracted_root = system_detail::source_snapshot_root(staging_dir);
+        if (!system_detail::source_snapshot_matches(extracted_root, public_source.version))
+        {
+            system_detail::log_error("Source snapshot root, edition or signed version is invalid.");
+            return false;
+        }
 
         if (!extracted_root.empty())
         {

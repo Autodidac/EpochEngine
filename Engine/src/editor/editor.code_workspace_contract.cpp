@@ -21,11 +21,24 @@ module;
 
 module editor.code_workspace;
 
+#if !defined(EPOCH_EDITOR_CODE_WORKSPACE_CONTRACT_MAIN)
+import core.logger;
+#endif
+
 namespace epochengine::editor_code_workspace
 {
     namespace
     {
         namespace fs = std::filesystem;
+
+        void contract_diagnostic(const std::string_view reason)
+        {
+#if !defined(EPOCH_EDITOR_CODE_WORKSPACE_CONTRACT_MAIN)
+            logger::error("Editor.CodeWorkspace.Contract", std::string{reason});
+#else
+            (void)reason;
+#endif
+        }
 
         struct Fixture final
         {
@@ -292,10 +305,11 @@ namespace epochengine::editor_code_workspace
                 return false;
             }
             const DocumentSnapshot changed = *controller.active_document();
-            if (!controller.save(
-                    changed.handle,
-                    request.authority,
-                    changed.revision)
+            const OperationResult saved = controller.save(
+                changed.handle, request.authority, changed.revision);
+            if (!saved)
+                contract_diagnostic(saved.reason);
+            if (!saved
                 || fixture.read("Scripts/bom.ascript.cpp")
                     != "\xEF\xBB\xBF" "saved \xe7\x95\x8c\n")
             {
@@ -373,6 +387,8 @@ namespace epochengine::editor_code_workspace
                 return false;
             const OperationResult saved = controller.save(
                 changed.handle, request.authority, changed.revision);
+            if (!saved)
+                contract_diagnostic(saved.reason);
             if (!saved
                 || fixture.read("Scripts/alpha.ascript.cpp")
                     != "updated \xe2\x9c\x93\n"
@@ -905,18 +921,25 @@ namespace epochengine::editor_code_workspace
                 "Engine/src/reviewed.cpp",
                 "int reviewed = 1;\n"))
         {
+            contract_diagnostic("subcontract=fixture_initialization; result=fail");
             return false;
         }
-        return utf8_contract()
-            && tabs_edit_selection_and_viewport_contract(fixture)
-            && bom_roundtrip_contract(fixture)
-            && stale_and_atomic_save_contract(fixture)
-            && reload_and_isolation_contract(fixture)
-            && stable_tabs_and_session_contract(fixture)
-            && find_replace_and_revert_contract(fixture)
-            && bounded_undo_redo_contract(fixture)
-            && diagnostics_contract(fixture)
-            && path_refusal_contract(fixture);
+        const auto checked = [](const std::string_view name, const bool passed)
+        {
+            if (!passed)
+                contract_diagnostic("subcontract=" + std::string{name} + "; result=fail");
+            return passed;
+        };
+        return checked("utf8", utf8_contract())
+            && checked("tabs_edit_selection_and_viewport", tabs_edit_selection_and_viewport_contract(fixture))
+            && checked("bom_roundtrip", bom_roundtrip_contract(fixture))
+            && checked("stale_and_atomic_save", stale_and_atomic_save_contract(fixture))
+            && checked("reload_and_isolation", reload_and_isolation_contract(fixture))
+            && checked("stable_tabs_and_session", stable_tabs_and_session_contract(fixture))
+            && checked("find_replace_and_revert", find_replace_and_revert_contract(fixture))
+            && checked("bounded_undo_redo", bounded_undo_redo_contract(fixture))
+            && checked("diagnostics", diagnostics_contract(fixture))
+            && checked("path_refusal", path_refusal_contract(fixture));
     }
 }
 

@@ -1,0 +1,2 @@
+# Preserve the reviewed upstream subset's exact provenance bytes.
+packages/planetary_terrain/upstream/EpochPlanet-0.2.3/** -text whitespace=cr-at-eol

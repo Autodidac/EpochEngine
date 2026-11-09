@@ -14,8 +14,10 @@ constexpr bool VK_TRUE=true;
 namespace mock {
 inline int next=100,allocations{},failAt=-1,waits{},resets{},submits{},presents{},recreates{};
 inline int signal{},presentWait{},submittedFence{},waitedFence{},acquireSemaphore{};
+inline int uniformUpdates{},commandRecords{};
 inline unsigned image=2;
 inline bool invalidReuse{},idle{};
+inline bool invalidDescriptorFree{};
 inline std::unordered_set<int> live,pending;
 inline std::unordered_map<unsigned,int> imageWait;
 struct Delete {void operator()(int* p)const {if(p){live.erase(*p);delete p;}}};
@@ -34,6 +36,7 @@ struct PresentInfoKHR {unsigned waitSemaphoreCount{},swapchainCount{};const Sema
 const SwapchainKHR* pSwapchains{};const unsigned* pImageIndices{};};
 }
 namespace mock {inline vk::Result acquireResult=vk::Result::eSuccess,presentResult=vk::Result::eSuccess;}
+namespace previewgrid { inline int scene_frame_for(const void*) { return 77; } }
 struct Device {
  auto createSemaphoreUnique(vk::SemaphoreCreateInfo){
   if(mock::allocations++==mock::failAt)return std::pair{vk::Result::eErrorUnknown,vk::UniqueSemaphore{}};
@@ -63,29 +66,40 @@ struct Queue {
  }
 };
 struct Resource {void reset(){};void clear(){};};
+struct DescriptorPoolResource {bool live=true;void reset(){live=false;}};
+struct DescriptorSetsResource {
+ DescriptorPoolResource* pool;bool live=true;
+ void clear(){if(live&&!pool->live)mock::invalidDescriptorFree=true;live=false;}
+};
 struct Application {
  static constexpr unsigned kMaxFramesInFlight=2;
  Device backing;Device* device=&backing;Queue graphicsQueue,presentQueue;
  std::vector<int> swapChainImages{1,2,3};std::vector<vk::UniqueSemaphore> renderFinishedSemaphores;
  std::vector<std::unique_ptr<int>> imageAvailableSemaphores,inFlightFences,commandBuffers;
  std::unique_ptr<int> swapChain=std::make_unique<int>(42),commandPool;
- bool presentModeReady=true,resize{},stopped{};unsigned currentFrame{},nextImageCount=2;int cam{};
+ bool presentModeReady=true,resize{},stopped{};unsigned currentFrame{},nextImageCount=2;int cam{},previewSceneFrame{};
  std::unordered_map<int,int> guiContexts;
  Resource framebuffers,depthImageView,depthImage,depthImageMemory,arcadeScreenPipeline,
  solidGraphicsPipeline,graphicsPipeline,pipelineLayout,renderPass,swapChainImageViews,
- descriptorPool,descriptorSets,uniformBuffers,uniformBuffersMemory,uniformBuffersMapped;
+ uniformBuffers,uniformBuffersMemory,uniformBuffersMapped;
+ DescriptorPoolResource descriptorPool;
+ DescriptorSetsResource descriptorSets{&descriptorPool};
  Application(){for(int i=0;i<2;++i){imageAvailableSemaphores.push_back(std::make_unique<int>(10+i));
  inFlightFences.push_back(std::make_unique<int>(20+i));}for(int i=0;i<3;++i)commandBuffers.push_back(std::make_unique<int>(30+i));}
  void assert_thread_affinity(){} bool consume_framebuffer_resize_intent(){return std::exchange(resize,false);}
  bool prepareCanvas2D(){return true;}void set_framebuffer_resize_intent(bool v){resize=v;}
- void request_render_stop(){stopped=true;}void updateUniformBuffer(unsigned,int){}
- void updateGuiUniformBuffer(unsigned){}void recordCommandBuffer(unsigned){}
+ const void* bound_context(){return this;}
+ void request_render_stop(){stopped=true;}void updateUniformBuffer(unsigned,int){
+  if(previewSceneFrame!=77)throw std::runtime_error("Uniform update has no matched packet");
+  ++mock::uniformUpdates;
+ }
+ void updateGuiUniformBuffer(unsigned){}void recordCommandBuffer(unsigned){++mock::commandRecords;}
  void destroyArcadeRenderTarget(){}void reset_gui_swapchain_state(int){}
  void createPresentSyncObjects();void cleanupSwapChain();void drawFrame();
  // Fake swapchain/device boundary; production cleanup and allocator run unchanged.
  void recreateSwapChain(){++mock::recreates;mock::idle=true;mock::pending.clear();
  cleanupSwapChain();swapChain=std::make_unique<int>(43);swapChainImages.resize(nextImageCount);
- createPresentSyncObjects();}
+ createPresentSyncObjects();descriptorPool.live=true;descriptorSets.live=true;}
 };
 ALLOCATOR
 CLEANUP
@@ -106,11 +120,13 @@ int main(){
   CHECK(mock::waitedFence==mock::submittedFence&&mock::acquireSemaphore==10+static_cast<int>(frame));
   CHECK(!mock::invalidReuse);
  }
+ CHECK(mock::uniformUpdates==4&&mock::commandRecords==4);
  const auto oldPool=mock::live;const int oldSubmits=mock::submits,oldResets=mock::resets;
  const unsigned oldFrame=app.currentFrame;
  mock::acquireResult=vk::Result::eErrorOutOfDateKHR;mock::image=99;app.drawFrame();
  CHECK(mock::submits==oldSubmits&&mock::resets==oldResets&&app.currentFrame==oldFrame);
  CHECK(mock::recreates==1&&mock::idle&&app.renderFinishedSemaphores.size()==2&&mock::live.size()==2);
+ CHECK(!mock::invalidDescriptorFree);
  for(int old:oldPool)CHECK(!mock::live.contains(old));
  mock::acquireResult=vk::Result::eSuccess;mock::image=1;app.drawFrame();
  CHECK(mock::signal==*app.renderFinishedSemaphores[1]&&!mock::invalidReuse);

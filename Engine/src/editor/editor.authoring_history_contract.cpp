@@ -2,6 +2,8 @@
 // Epoch system notes (auto-checked):
 // Epoch Editor: keep editor state and source changes within their owning workflows.
 
+#include <compare>
+
 import editor.authoring_history;
 
 int main()

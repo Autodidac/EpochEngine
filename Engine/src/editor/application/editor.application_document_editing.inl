@@ -18,6 +18,23 @@
             std::optional<editor_authoring_history::HistoryPlan> history{};
         };
 
+        [[nodiscard]] bool editor_project_viewport_covered(const EditorState& state) noexcept
+        {
+            // These IDs belong to the admitted child lease; detach clears them.
+            return state.mainSurface == EditorMainSurface::Scene
+                && state.projectRuntimeInEditor && state.projectRuntimeProcess.valid()
+                && state.projectRuntimeWindow != 0u && state.projectRuntimeWindowProcess != 0u
+                && state.projectRuntimeAttachmentError.empty();
+        }
+
+        [[nodiscard]] bool editor_project_viewport_input_reserved(const EditorState& state) noexcept
+        {
+            // A build reads the authored scene; a live project owns its runtime
+            // copy. Keep authoring stable until the build or owned process retires,
+            // including the interval before a hosted window is attached.
+            return state.projectRuntimeProcess.valid() || state.projectBuildPending.has_value();
+        }
+
         [[nodiscard]] constexpr std::string_view surface_edit_action_name(
             SurfaceEditAction action) noexcept
         {
@@ -46,9 +63,9 @@
             {
             case EditorMainSurface::Scene: return Surface::world;
             case EditorMainSurface::Game2D:
-                return state.outlinerToolTab == OutlinerToolTab::Gui
+                return state.game2DGuiWorkspace
                     ? Surface::gui_canvas
-                    : Surface::systems;
+                    : Surface::tilemap_canvas;
             case EditorMainSurface::Assets: return Surface::assets;
             case EditorMainSurface::Project: return Surface::project;
             case EditorMainSurface::ForestFactory: return Surface::forest_factory;
@@ -96,6 +113,11 @@
                 if (action == SurfaceEditAction::redo) return CommandId::plant_redo;
                 if (action == SurfaceEditAction::focus_selection)
                     return CommandId::plant_focus_element;
+            }
+            if (surface == Surface::tilemap_canvas)
+            {
+                if (action == SurfaceEditAction::undo) return CommandId::tilemap_undo;
+                if (action == SurfaceEditAction::redo) return CommandId::tilemap_redo;
             }
             if (surface == Surface::code_editor)
             {
@@ -153,6 +175,8 @@
             kGuiHistoryBranch{2u};
         inline constexpr editor_authoring_history::BranchId
             kPlantHistoryBranch{3u};
+        inline constexpr editor_authoring_history::BranchId
+            kTileMapHistoryBranch{4u};
         inline constexpr std::uint64_t kCodeHistoryBranchMask =
             0x8000000000000000ull;
 
@@ -181,8 +205,47 @@
             case Property::BranchSpreadDegrees: return "Change branch spread";
             case Property::GrowthDurationSeconds: return "Change growth duration";
             case Property::GrowthTimeSeconds: return "Change growth time";
+            case Property::LeafSizeMeters: return "Change leaf size";
+            case Property::LeafSitesPerBranch: return "Change leaf count";
+            case Property::PreviewMode: return "Change plant dimension";
+            case Property::BarkTileIndex: return "Change bark style";
+            case Property::BarkTexture: return "Change bark texture";
+            case Property::FoliageTexture: return "Change foliage texture";
             }
             return "Change plant property";
+        }
+
+        [[nodiscard]] std::optional<editor_authoring_history::BranchSnapshot>
+        tilemap_authoring_history_branch(const EditorState& state)
+        {
+#if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
+            if (state.tileMapWorkspace && state.tileMapWorkspace->has_document())
+            {
+                const auto& document = *state.tileMapWorkspace->document();
+                const auto handle = document.handle();
+                const auto metrics = document.metrics();
+                const auto cursor = static_cast<std::size_t>(metrics.applied_operation_count);
+                const auto retained = static_cast<std::size_t>(metrics.operation_count);
+                // Read bounded journal metadata, not a deep copy of every cell
+                // delta in history. Bind the current document handle/generation.
+                return editor_authoring_history::BranchSnapshot{
+                    .id = kTileMapHistoryBranch,
+                    .kind = editor_authoring_history::BranchKind::tilemap_document,
+                    .generation = (static_cast<std::uint64_t>(handle.generation) << 32u)
+                        | (static_cast<std::uint64_t>(handle.index) + 1u),
+                    .revision = (std::max)(std::uint64_t{1u}, document.revision().sequence),
+                    .cursor = cursor,
+                    .retained_entries = retained,
+                    .label = "Tile Map",
+                    .undo_label = cursor == 0u ? std::string{} : "Tile Map edit",
+                    .redo_label = cursor >= retained ? std::string{} : "Tile Map edit",
+                    .available = true,
+                    .writable = true};
+            }
+#else
+            (void)state;
+#endif
+            return std::nullopt;
         }
 
         [[nodiscard]] std::vector<editor_authoring_history::BranchSnapshot>
@@ -294,6 +357,9 @@
                     .writable = true});
             }
 
+            if (const auto tileMap = tilemap_authoring_history_branch(state))
+                branches.push_back(*tileMap);
+
             const auto code =
                 state.projectCodeWorkspace.controller.snapshot();
             if (code.configured)
@@ -327,11 +393,17 @@
             if (state.mainSurface == EditorMainSurface::Scene)
                 return kWorldHistoryBranch;
             if (state.mainSurface == EditorMainSurface::Game2D
-                && state.outlinerToolTab == OutlinerToolTab::Gui)
+                && state.game2DGuiWorkspace)
             {
                 return kGuiHistoryBranch;
             }
-            if (state.mainSurface == EditorMainSurface::PlantLab)
+            if (state.mainSurface == EditorMainSurface::Game2D
+                && !state.game2DGuiWorkspace)
+            {
+                return kTileMapHistoryBranch;
+            }
+            if (state.mainSurface == EditorMainSurface::PlantLab
+                || state.mainSurface == EditorMainSurface::ForestFactory)
                 return kPlantHistoryBranch;
             if (state.mainSurface == EditorMainSurface::Assets
                 && state.assetWorkspaceSection == 2u)
@@ -412,6 +484,12 @@
                         : "No editor document has an edit to redo.";
                     return result;
                 }
+                if (plan.kind == editor_authoring_history::BranchKind::world_document
+                    && editor_project_viewport_input_reserved(state))
+                {
+                    result.reason = "Scene editing is paused while the project builds or runs. Stop it before editing.";
+                    return result;
+                }
                 result.history = plan;
                 result.operation_label = plan.operation_label;
                 switch (plan.kind)
@@ -428,6 +506,10 @@
                     result.command = action == SurfaceEditAction::undo
                         ? CommandId::plant_undo : CommandId::plant_redo;
                     break;
+                case editor_authoring_history::BranchKind::tilemap_document:
+                    result.command = action == SurfaceEditAction::undo
+                        ? CommandId::tilemap_undo : CommandId::tilemap_redo;
+                    break;
                 case editor_authoring_history::BranchKind::code_document:
                     result.command = action == SurfaceEditAction::undo
                         ? CommandId::code_undo : CommandId::code_redo;
@@ -441,6 +523,11 @@
                 return result;
             }
             const Surface surface = edit_surface_for_action(state, action);
+            if (surface == Surface::world && editor_project_viewport_input_reserved(state))
+            {
+                result.reason = "Scene editing is paused while the project builds or runs. Stop it before editing.";
+                return result;
+            }
             const auto command = command_for_surface_edit(surface, action);
             if (!command)
             {
@@ -585,6 +672,21 @@
                     return true;
                 }
                 return false;
+            case CommandId::tilemap_undo:
+            case CommandId::tilemap_redo:
+#if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
+                if (state.tileMapWorkspace && state.tileMapWorkspace->has_document())
+                {
+                    const bool changed = static_cast<bool>(available.command == CommandId::tilemap_undo
+                        ? state.tileMapWorkspace->undo() : state.tileMapWorkspace->redo());
+                    state.tileMapStatus = std::string(state.tileMapWorkspace->status());
+                    if (changed && available.history)
+                        finish_authoring_history_transition(state, *available.history);
+                    push_editor_log(state, "[edit] " + state.tileMapStatus);
+                    return changed;
+                }
+#endif
+                return false;
             case CommandId::code_undo:
             case CommandId::code_redo:
                 if (available.history)
@@ -644,17 +746,24 @@
         [[nodiscard]] std::optional<epochengine::ray::RayDesc> screen_point_to_world_ray(
             const core::Context* ctx,
             const gui::WidgetBounds& viewport,
-            const gui::Vec2& mouse) noexcept
+            const gui::Vec2& mouse,
+            const std::array<double,3>& coordinateOrigin = {}) noexcept
         {
             if (!ctx || viewport.size.x <= 1.0f || viewport.size.y <= 1.0f)
                 return std::nullopt;
 
             const auto camera = epochengine::previewgrid::camera_for(ctx);
-            const epochengine::render_math::Float3 eye{ camera.eye.x, camera.eye.y, camera.eye.z };
-            const epochengine::render_math::Float3 target{ camera.target.x, camera.target.y, camera.target.z };
-            const auto forward = epochengine::render_math::normalize(
-                epochengine::render_math::subtract(target, eye),
-                { 0.0f, -0.35f, -1.0f });
+            const auto absoluteEye=epochengine::previewgrid::camera_world_eye(camera);
+            std::array<float,3> localEye{};
+            for(std::size_t axis=0;axis<3u;++axis)
+            {
+                const auto value=absoluteEye[axis]-coordinateOrigin[axis];
+                if(!std::isfinite(value)||std::abs(value)>(std::numeric_limits<float>::max)())return {};
+                localEye[axis]=static_cast<float>(value);
+            }
+            const epochengine::render_math::Float3 eye{localEye[0],localEye[1],localEye[2]};
+            const auto direction=epochengine::previewgrid::camera_forward(camera);
+            const epochengine::render_math::Float3 forward{direction.x,direction.y,direction.z};
             const epochengine::scene_interaction::ScreenPoint screen{ mouse.x, mouse.y };
             const epochengine::scene_interaction::ScreenViewport screenViewport{
                 viewport.position.x,
@@ -692,14 +801,128 @@
                 1u);
         }
 
+        [[nodiscard]] std::optional<std::array<double,3>> forest_brush_surface_direction(
+            const std::array<double,3>& origin,const std::array<double,3>& direction,double radius) noexcept
+        {
+            if(!std::isfinite(radius)||radius<=0)return {};
+            double a{},b{},c=-radius*radius;
+            for(std::size_t axis=0;axis<3;++axis)
+            {a+=direction[axis]*direction[axis];b+=origin[axis]*direction[axis];c+=origin[axis]*origin[axis];}
+            const double discriminant=b*b-a*c;
+            if(!(a>0)||!std::isfinite(discriminant)||discriminant<0)return {};
+            double distance=(-b-std::sqrt(discriminant))/a;
+            if(distance<0)distance=(-b+std::sqrt(discriminant))/a;
+            if(!std::isfinite(distance)||distance<0)return {};
+            std::array<double,3> center{};double square{};
+            for(std::size_t axis=0;axis<3;++axis)
+            {center[axis]=origin[axis]+direction[axis]*distance;square+=center[axis]*center[axis];}
+            if(!(square>0)||!std::isfinite(square))return {};
+            for(auto& value:center)value/=std::sqrt(square);
+            return center;
+        }
+
+        // Forest gestures never enter ordinary object picking/dragging. Each
+        // spaced stamp uses the existing terrain worker and region transaction.
+        void update_forest_brush(const std::shared_ptr<core::Context>& ctx,
+            EditorState& state, EditorFrameResult& frame, bool modalVisible)
+        {
+            const bool held=ctx->is_mouse_button_held_safe(input::MouseButton::MouseLeft);
+            const bool pressed=held&&!state.forestBrushHeld;
+            state.forestBrushHeld=held;
+            if(!held)
+            {state.forestBrushLastDirection.reset();state.forestBrushTerrain=scene::kInvalidSceneObjectId;return;}
+            if(state.mainSurface!=EditorMainSurface::ForestFactory||!state.forestTerrainPainting
+                ||frame.scene_input_captured||modalVisible||!ctx->has_input_focus_safe()
+                ||state.projectBuildPending||state.projectRuntimeProcess.valid()
+                ||ctx->is_mouse_button_held_safe(input::MouseButton::MouseRight)
+                ||ctx->is_mouse_button_held_safe(input::MouseButton::MouseMiddle)
+                ||ctx->is_key_held_safe(input::Key::LeftAlt)||ctx->is_key_held_safe(input::Key::RightAlt))
+            {state.forestBrushTerrain=scene::kInvalidSceneObjectId;state.forestBrushLastDirection.reset();return;}
+            int x{},y{};ctx->get_mouse_position_safe(x,y);
+            const gui::Vec2 pointer{static_cast<float>(x),static_cast<float>(y)};
+            const auto& viewport=frame.scene_viewport;
+            if(pointer.x<viewport.position.x||pointer.y<viewport.position.y
+                ||pointer.x>=viewport.position.x+viewport.size.x||pointer.y>=viewport.position.y+viewport.size.y)return;
+            if(pressed)
+            {
+                state.forestBrushLastDirection.reset();
+                auto selected=editor_entity_index(state,state.selectedEntityId);
+                if(selected&&state.entities[*selected].forestRegion)
+                    selected=editor_entity_index(state,state.entities[*selected].forestRegion->terrain_object_id);
+                if(selected&&state.entities[*selected].category=="Planetary Terrain")
+                    state.forestBrushTerrain=state.entities[*selected].sceneObjectId;
+                else
+                {
+                    const auto planet=std::find_if(state.entities.begin(),state.entities.end(),
+                        [](const auto& entity){return entity.category=="Planetary Terrain";});
+                    if(planet!=state.entities.end())state.forestBrushTerrain=planet->sceneObjectId;
+                }
+            }
+            const auto selected=editor_entity_index(state,state.forestBrushTerrain);
+            if(!selected||state.forestSurfacePending||!ensure_plant_lab_compiled_asset(state))return;
+            const auto& planet=state.entities[*selected];
+            if(!editor_planetary_stream_identity_matches(state,planet))return;
+            refresh_editor_planetary_body_inventory(state,planet);
+            const auto& policy=*state.planetaryMeshPolicy;
+            auto bodyId=policy.settings.body_index;
+            if(state.planetaryBodySelection&&state.planetaryBodySelection->entity==planet.sceneObjectId)
+                bodyId=state.planetaryBodySelection->body;
+            const auto body=std::find_if(policy.generated_bodies.begin(),policy.generated_bodies.end(),
+                [&](const auto& value){return value.id==bodyId;});
+            if(body==policy.generated_bodies.end())return;
+            const auto pivot=scene::world_position(planet.position,planet.positionAnchor);
+            if(!pivot)return;
+            const auto transform=previewgrid::make_precise_mesh_transform(*pivot,
+                {planet.scale[0],planet.scale[1],planet.scale[2]},
+                {planet.rotation[0],planet.rotation[1],planet.rotation[2]});
+            if(!transform)return;
+            const auto camera=previewgrid::camera_for(ctx.get());
+            const auto eye=previewgrid::camera_world_eye(camera);
+            const auto ray=screen_point_to_world_ray(ctx.get(),viewport,pointer,eye);
+            if(!ray)return;
+            const std::array<double,3> worldOrigin{eye[0]+ray->origin.x,eye[1]+ray->origin.y,eye[2]+ray->origin.z};
+            const std::array<double,3> worldDirection{ray->direction.x,ray->direction.y,ray->direction.z};
+            std::array<double,3> origin{},direction{};
+            for(std::size_t axis=0;axis<3;++axis)
+            {
+                for(std::size_t row=0;row<3;++row)
+                {
+                    origin[axis]+=transform->rotation[row*3+axis]*(worldOrigin[row]-transform->position[row]);
+                    direction[axis]+=transform->rotation[row*3+axis]*worldDirection[row];
+                }
+                origin[axis]=origin[axis]/transform->scale[axis]-body->center_meters[axis]
+                    +policy.generated_mesh->coordinates.source_origin_meters[axis];
+                direction[axis]/=transform->scale[axis];
+            }
+            // Ray/sphere only locates the brush. The provider resolves actual
+            // terrain elevation and rejects underwater roots before committing.
+            const auto hit=forest_brush_surface_direction(origin,direction,body->radius_meters);
+            if(!hit)return;
+            const auto& center=*hit;
+            if(state.forestBrushLastDirection)
+            {
+                double chord{};
+                for(std::size_t axis=0;axis<3;++axis)
+                {const auto d=center[axis]-(*state.forestBrushLastDirection)[axis];chord+=d*d;}
+                const auto spacing=(std::max)(0.25,state.forestArea.radiusMeters);
+                if(chord*body->radius_meters*body->radius_meters<spacing*spacing)return;
+            }
+            state.forestPlacementCamera=camera;
+            const auto ordinal=static_cast<std::size_t>(std::count_if(state.entities.begin(),state.entities.end(),
+                [](const auto& entity){return entity.category=="ForestFactory"&&entity.type=="ForestTrunk";}));
+            if(begin_forest_surface_placement(state,planet,ordinal,state.forestArea,center))
+                state.forestBrushLastDirection=center;
+        }
+
         [[nodiscard]] std::optional<epochengine::previewgrid::Vec3> screen_point_to_world_plane(
             const core::Context* ctx,
             const gui::WidgetBounds& viewport,
             const gui::Vec2& mouse,
             epochengine::previewgrid::Vec3 planePoint,
-            epochengine::previewgrid::Vec3 planeNormal) noexcept
+            epochengine::previewgrid::Vec3 planeNormal,
+            const std::array<double, 3>& coordinateOrigin = {}) noexcept
         {
-            const auto ray = screen_point_to_world_ray(ctx, viewport, mouse);
+            const auto ray = screen_point_to_world_ray(ctx, viewport, mouse, coordinateOrigin);
             if (!ray)
                 return std::nullopt;
 
@@ -725,13 +948,35 @@
         }
 
         [[nodiscard]] epochengine::previewgrid::Vec3 scene_drag_plane_normal(
-            const core::Context* ctx) noexcept
+            const core::Context* ctx, bool vertical = false) noexcept
         {
+            if (!vertical) return {0.0f, 1.0f, 0.0f};
             const auto camera = epochengine::previewgrid::camera_for(ctx);
-            if (camera.projection == epochengine::render_camera::ProjectionKind::orthographic)
-                return epochengine::previewgrid::normalize(
-                    epochengine::previewgrid::subtract(camera.target, camera.eye));
-            return { 0.0f, 1.0f, 0.0f };
+            auto normal = epochengine::previewgrid::camera_forward(camera);
+            normal.y = 0.0f;
+            return epochengine::previewgrid::dot(normal, normal) > 1.0e-6f
+                ? epochengine::previewgrid::normalize(normal)
+                : epochengine::previewgrid::Vec3{0.0f, 0.0f, 1.0f};
+        }
+
+        void anchor_scene_group_drag(const core::Context* ctx, EditorState& editor,
+            const gui::WidgetBounds& viewport, gui::Vec2 mouse, bool vertical)
+        {
+            editor.sceneDragStartMouse = mouse;
+            editor.sceneDragStartPosition = editor.entities[editor.sceneDragEntity].position;
+            editor.sceneDragVertical = vertical;
+            editor.sceneDragHorizontalAxis = 0u;
+            editor.sceneDragStartPositions.clear();
+            editor.sceneDragStartPositions.reserve(editor.selectedEntityIds.size());
+            for (const auto id : editor.selectedEntityIds)
+                if (const auto index = editor_entity_index(editor, id))
+                    editor.sceneDragStartPositions.emplace_back(id, editor.entities[*index].position);
+            const auto& position = editor.sceneDragStartPosition;
+            const auto hit = screen_point_to_world_plane(ctx, viewport, mouse,
+                {position[0], position[1], position[2]}, scene_drag_plane_normal(ctx, vertical),
+                editor.entities[editor.sceneDragEntity].positionAnchor.value_or(std::array<double, 3>{}));
+            editor.sceneDragHasPlaneHit = hit.has_value();
+            if (hit) editor.sceneDragStartHit = {hit->x, hit->y, hit->z};
         }
 
         [[nodiscard]] std::optional<scene::SceneObjectId> pick_editor_scene_entity(
@@ -740,9 +985,10 @@
             const gui::WidgetBounds& viewport,
             const gui::Vec2& mouse) noexcept
         {
-            const auto queryRay = screen_point_to_world_ray(ctx, viewport, mouse);
-            if (!queryRay || !ensure_editor_scene_interaction(state))
+            if (!ensure_editor_scene_interaction(state))
                 return std::nullopt;
+            const auto queryRay=screen_point_to_world_ray(ctx,viewport,mouse,state.sceneInteractionOrigin);
+            if(!queryRay)return {};
 
             const auto selection = state.sceneInteraction.trace(
                 *queryRay,
@@ -754,7 +1000,8 @@
         [[nodiscard]] std::optional<gui::Vec2> project_editor_world_to_screen(
             const core::Context* ctx,
             const gui::WidgetBounds& viewport,
-            const std::array<float, 3>& position) noexcept
+            const std::array<float, 3>& position,
+            const std::optional<std::array<double, 3>>& positionAnchor = {}) noexcept
         {
             if (!ctx || viewport.size.x <= 1.0f || viewport.size.y <= 1.0f)
                 return std::nullopt;
@@ -763,12 +1010,31 @@
             const float aspect = viewport.size.x / viewport.size.y;
             const auto projection = epochengine::previewgrid::projection_for(
                 ctx, aspect, camera);
-            const auto view = epochengine::previewgrid::look_at(
-                camera.eye, camera.target, camera.up);
+            auto eye = camera.eye;
+            auto target = camera.target;
+            epochengine::previewgrid::Vec3 projectedPosition{position[0], position[1], position[2]};
+            if (positionAnchor || camera.navigationValid)
+            {
+                const auto absolutePosition = scene::world_position(position, positionAnchor);
+                if (!absolutePosition) return std::nullopt;
+                const auto absoluteEye = epochengine::previewgrid::camera_world_eye(camera);
+                std::array<float, 3> relative{};
+                for (std::size_t axis = 0u; axis < relative.size(); ++axis)
+                {
+                    const double value = (*absolutePosition)[axis] - absoluteEye[axis];
+                    if (!std::isfinite(value)
+                        || std::abs(value) > (std::numeric_limits<float>::max)()) return std::nullopt;
+                    relative[axis] = static_cast<float>(value);
+                }
+                eye = {};
+                target = epochengine::previewgrid::camera_forward(camera);
+                projectedPosition = {relative[0], relative[1], relative[2]};
+            }
+            const auto view = epochengine::previewgrid::look_at(eye, target, camera.up);
             const auto mvp = epochengine::previewgrid::multiply(projection, view);
             const auto clip = epochengine::previewgrid::transform_point(
                 mvp,
-                { position[0], position[1], position[2] });
+                projectedPosition);
             if (!std::isfinite(clip.w) || clip.w <= 0.0001f)
                 return std::nullopt;
 
@@ -812,7 +1078,7 @@
                 if (!entity.visible || is_screen_space_gui_entity(entity))
                     continue;
                 const auto projected = project_editor_world_to_screen(
-                    ctx, viewport, entity.position);
+                    ctx, viewport, entity.position, entity.positionAnchor);
                 if (!projected
                     || projected->x < left || projected->x > right
                     || projected->y < top || projected->y > bottom)
@@ -936,6 +1202,11 @@
 
             if (result.scene_input_captured)
             {
+                // A new GUI/runtime owner ends an already-moved gesture. Keep
+                // its preview pose in the existing single Undo transaction;
+                // never start or advance an object drag under captured input.
+                if (editor.sceneDragActive && editor.sceneDragMoved)
+                    (void)commit_scene_group_drag(editor);
                 editor.sceneDragActive = false;
                 editor.sceneDragStartPositions.clear();
                 editor.sceneDragHasPlaneHit = false;
@@ -981,21 +1252,10 @@
                     : std::nullopt;
                 if (picked && pickedId)
                 {
-                    if (shiftHeld)
                     {
-                        toggle_editor_entity_selection(editor, *picked);
-                        result.scene_input_captured = true;
-                        push_editor_log(
-                            editor,
-                            epochengine::format_text(
-                                "[scene] Selection now contains {} object(s).",
-                                editor.selectedEntityIds.size()));
-                    }
-                    else
-                    {
-                        if (!editor_entity_selected(editor, *pickedId))
+                        if (!shiftHeld && !editor_entity_selected(editor, *pickedId))
                             select_editor_entity(editor, *picked);
-                        else
+                        else if (!shiftHeld)
                         {
                             editor.selectedEntity = *picked;
                             editor.selectedEntityId = *pickedId;
@@ -1005,39 +1265,9 @@
                         editor.sceneDragActive = true;
                         editor.sceneDragEntity = *picked;
                         editor.sceneDragEntityId = *pickedId;
-                        editor.sceneDragStartMouse = mouse;
-                        editor.sceneDragStartPosition = editor.entities[*picked].position;
-                        editor.sceneDragStartPositions.clear();
-                        editor.sceneDragStartPositions.reserve(
-                            editor.selectedEntityIds.size());
-                        for (const scene::SceneObjectId id : editor.selectedEntityIds)
-                        {
-                            if (const auto index = editor_entity_index(editor, id))
-                            {
-                                editor.sceneDragStartPositions.emplace_back(
-                                    id, editor.entities[*index].position);
-                            }
-                        }
-
-                        const auto startHit = screen_point_to_world_plane(
-                            ctx.get(),
-                            viewport,
-                            mouse,
-                            {
-                                editor.sceneDragStartPosition[0],
-                                editor.sceneDragStartPosition[1],
-                                editor.sceneDragStartPosition[2]
-                            },
-                            scene_drag_plane_normal(ctx.get()));
-                        editor.sceneDragHasPlaneHit = startHit.has_value();
-                        if (startHit)
-                        {
-                            editor.sceneDragStartHit = {
-                                startHit->x,
-                                startHit->y,
-                                startHit->z
-                            };
-                        }
+                        editor.sceneDragMoved = false;
+                        editor.sceneDragPendingToggle = shiftHeld;
+                        anchor_scene_group_drag(ctx.get(), editor, viewport, mouse, shiftHeld);
                         result.scene_input_captured = true;
                     }
                 }
@@ -1058,9 +1288,24 @@
             }
 
             if (editor.sceneDragActive && leftHeld && !rightHeld && !middleHeld && !altHeld
-                && editor.sceneDragEntity < editor.entities.size())
+                && editor.sceneDragEntity < editor.entities.size()
+                && (editor.sceneDragMoved
+                    || std::abs(mouse.x - editor.sceneDragStartMouse.x) >= 4.0f
+                    || std::abs(mouse.y - editor.sceneDragStartMouse.y) >= 4.0f))
             {
                 result.scene_input_captured = true;
+                if (!editor.sceneDragMoved && editor.sceneDragPendingToggle
+                    && !editor_entity_selected(editor, editor.sceneDragEntityId))
+                {
+                    add_editor_entity_selection(editor, editor.sceneDragEntity);
+                    editor.sceneDragStartPositions.emplace_back(editor.sceneDragEntityId,
+                        editor.entities[editor.sceneDragEntity].position);
+                }
+                editor.sceneDragMoved = true;
+                // Switching constraints starts from the current pose: no jump
+                // back to the press origin and still only one history commit.
+                if (editor.sceneDragVertical != shiftHeld)
+                    anchor_scene_group_drag(ctx.get(), editor, viewport, mouse, shiftHeld);
 
                 const float dx = mouse.x - editor.sceneDragStartMouse.x;
                 const float dy = mouse.y - editor.sceneDragStartMouse.y;
@@ -1078,7 +1323,8 @@
                             editor.sceneDragStartPosition[1],
                             editor.sceneDragStartPosition[2]
                         },
-                        scene_drag_plane_normal(ctx.get()));
+                        scene_drag_plane_normal(ctx.get(), editor.sceneDragVertical),
+                        editor.entities[editor.sceneDragEntity].positionAnchor.value_or(std::array<double, 3>{}));
                     if (currentHit)
                     {
                         delta = {
@@ -1113,11 +1359,28 @@
                     delta = epochengine::previewgrid::add(
                         epochengine::previewgrid::scale(right, dx * dragScale),
                         epochengine::previewgrid::scale(forward, -dy * dragScale));
+                    if (editor.sceneDragVertical) delta = {0.0f, -dy * dragScale, 0.0f};
                     haveDelta = true;
                 }
 
-                if (haveDelta)
+                if (haveDelta && std::isfinite(delta.x) && std::isfinite(delta.y) && std::isfinite(delta.z))
                 {
+                    if (editor.sceneDragVertical) delta.x = delta.z = 0.0f;
+                    else
+                    {
+                        delta.y = 0.0f;
+                        if (editor.sceneDragHorizontalAxis == 0u && (delta.x != 0.0f || delta.z != 0.0f))
+                        {
+                            const auto camera = epochengine::previewgrid::camera_for(ctx.get());
+                            const auto right = epochengine::previewgrid::cross(
+                                epochengine::previewgrid::subtract(camera.target, camera.eye), camera.up);
+                            editor.sceneDragHorizontalAxis = std::abs(delta.x) == std::abs(delta.z)
+                                ? (std::abs(right.x) >= std::abs(right.z) ? 1u : 2u)
+                                : (std::abs(delta.x) > std::abs(delta.z) ? 1u : 2u);
+                        }
+                        if (editor.sceneDragHorizontalAxis == 1u) delta.z = 0.0f;
+                        else if (editor.sceneDragHorizontalAxis == 2u) delta.x = 0.0f;
+                    }
                     for (const auto& [id, startPosition] : editor.sceneDragStartPositions)
                     {
                         if (const auto index = editor_entity_index(editor, id))
@@ -1136,7 +1399,12 @@
             if (!leftHeld && editor.sceneDragActive)
             {
                 const std::size_t movedCount = editor.sceneDragStartPositions.size();
-                if (commit_scene_group_drag(editor))
+                if (editor.sceneDragPendingToggle && !editor.sceneDragMoved)
+                {
+                    if (const auto picked = editor_entity_index(editor, editor.sceneDragEntityId))
+                        toggle_editor_entity_selection(editor, *picked);
+                }
+                else if (editor.sceneDragMoved && commit_scene_group_drag(editor))
                 {
                     push_editor_log(
                         editor,

@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 4.4)
 
 set(CMAKE_CXX_SCAN_FOR_MODULES ON)
 
-project(EpochGui VERSION 0.90.0 LANGUAGES CXX)
+project(EpochGui VERSION 0.90.2 LANGUAGES CXX)
 
 option(EPOCHGUI_ENABLE_ROUNDED_RECT "Build the optional EpochGui rounded-rectangle geometry module." OFF)
 
@@ -40,6 +40,7 @@ set(EPOCHGUI_MODULE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}" CACHE PATH "Directory con
 
 set(EPOCHGUI_MODULES
     "${EPOCHGUI_MODULE_ROOT}/modules/epoch.gui.ixx"
+    "${EPOCHGUI_MODULE_ROOT}/modules/epoch.gui.command_menu.ixx"
     "${EPOCHGUI_MODULE_ROOT}/modules/epoch.gui.font.ixx"
     "${EPOCHGUI_MODULE_ROOT}/modules/epoch.gui.image.ixx"
     "${EPOCHGUI_MODULE_ROOT}/modules/epoch.gui.tile_workspace.ixx"
@@ -47,6 +48,10 @@ set(EPOCHGUI_MODULES
 )
 
 set(EPOCHGUI_PUBLIC_HEADERS
+    "${EPOCHGUI_SOURCE_ROOT}/include/gui/chat_composer_layout.hpp"
+    "${EPOCHGUI_SOURCE_ROOT}/include/gui/circle_raster.hpp"
+    "${EPOCHGUI_SOURCE_ROOT}/include/gui/status_strip_layout.hpp"
+    "${EPOCHGUI_SOURCE_ROOT}/include/gui/utf8_text_layout.hpp"
     "${EPOCHGUI_SOURCE_ROOT}/include/gui/dockable_window.hpp"
     "${EPOCHGUI_SOURCE_ROOT}/include/gui/dock_layout.hpp"
     "${EPOCHGUI_SOURCE_ROOT}/include/gui/floating_window.hpp"
@@ -73,6 +78,7 @@ set(EPOCHGUI_SOURCES
     "${EPOCHGUI_SOURCE_ROOT}/src/epochgui/node_graph_workspace.cpp"
     "${EPOCHGUI_SOURCE_ROOT}/src/epochgui/panel_host.cpp"
     "${EPOCHGUI_SOURCE_ROOT}/src/epochgui/popup_layout.cpp"
+    "${EPOCHGUI_SOURCE_ROOT}/src/epochgui/gui.command_menu.cpp"
     "${EPOCHGUI_SOURCE_ROOT}/src/epochgui/gui.scrollbar_layout.cpp"
     "${EPOCHGUI_SOURCE_ROOT}/src/epochgui/gui.text_layout.cpp"
     "${EPOCHGUI_SOURCE_ROOT}/src/epochgui/system_workspace.cpp"
@@ -133,9 +139,22 @@ source_group(TREE "${EPOCHGUI_MODULE_ROOT}/modules" PREFIX "Module Files" FILES 
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(EpochGuiCommandMenuTests tests/gui.command_menu_tests.cpp)
+    target_link_libraries(EpochGuiCommandMenuTests PRIVATE EpochGui)
+    target_compile_features(EpochGuiCommandMenuTests PRIVATE cxx_std_23)
+    add_test(NAME EpochGui.CommandMenu COMMAND EpochGuiCommandMenuTests)
+
     add_executable(EpochGuiPortableHelpersTests tests/gui.portable_helpers_tests.cpp)
     target_link_libraries(EpochGuiPortableHelpersTests PRIVATE EpochGui)
     add_test(NAME EpochGui.PortableHelpers COMMAND EpochGuiPortableHelpersTests)
+    add_executable(EpochGuiChatComposerLayoutTests tests/chat_composer_layout_tests.cpp)
+    target_link_libraries(EpochGuiChatComposerLayoutTests PRIVATE EpochGui)
+    if(MSVC)
+        target_compile_options(EpochGuiChatComposerLayoutTests PRIVATE /UNDEBUG)
+    else()
+        target_compile_options(EpochGuiChatComposerLayoutTests PRIVATE -UNDEBUG)
+    endif()
+    add_test(NAME EpochGui.ChatComposerLayout COMMAND EpochGuiChatComposerLayoutTests)
     add_executable(EpochGuiTextLayoutTests tests/gui.text_layout_tests.cpp)
     target_link_libraries(EpochGuiTextLayoutTests PRIVATE EpochGui)
     target_compile_features(EpochGuiTextLayoutTests PRIVATE cxx_std_23)
@@ -150,6 +169,11 @@ if(BUILD_TESTING)
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/rounded_corner_raster_tests.cpp"
     )
     target_compile_features(EpochGuiRoundedCornerRasterTests PRIVATE cxx_std_23)
+    if(MSVC)
+        target_compile_options(EpochGuiRoundedCornerRasterTests PRIVATE /UNDEBUG)
+    else()
+        target_compile_options(EpochGuiRoundedCornerRasterTests PRIVATE -UNDEBUG)
+    endif()
     target_include_directories(EpochGuiRoundedCornerRasterTests PRIVATE
         "${EPOCHGUI_SOURCE_ROOT}/include"
     )
@@ -159,6 +183,11 @@ if(BUILD_TESTING)
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/circle_raster_tests.cpp"
     )
     target_compile_features(EpochGuiCircleRasterTests PRIVATE cxx_std_23)
+    if(MSVC)
+        target_compile_options(EpochGuiCircleRasterTests PRIVATE /UNDEBUG)
+    else()
+        target_compile_options(EpochGuiCircleRasterTests PRIVATE -UNDEBUG)
+    endif()
     target_include_directories(EpochGuiCircleRasterTests PRIVATE
         "${EPOCHGUI_SOURCE_ROOT}/include"
     )

@@ -8,6 +8,8 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+import json,time
+from Tests.support.cpp import compile_and_run
 
 from Tools.source.owned_source_text import read_owned_source
 
@@ -16,6 +18,76 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class BackendSurfaceInput(unittest.TestCase):
+    def test_native_close_edges_retain_target_capture_and_error_evidence(self):
+        routing = read_owned_source(ROOT / 'Engine/src/renderers/host/implementation/host.window_interaction.inl')
+        helper = '    inline void trace_native_close_dispatch(' + routing.split(
+            '    inline void trace_native_close_dispatch(', 1)[1].split('    struct MouseFocusEvidence', 1)[0]
+        dispatch = read_owned_source(ROOT / 'Engine/src/renderers/host/implementation/host.native_dispatch.inl')
+        for name in ('ParentProc', 'ChildProc'):
+            procedure = dispatch.split('LRESULT CALLBACK MultiContextManager::' + name + '(', 1)[1]
+            self.assertLess(procedure.index('trace_native_close_dispatch("' + name + '"'),
+                            procedure.index('route_context_close_shortcut('))
+        code = r'''
+#include <cstdint>
+#include <stdexcept>
+#include <string>
+#include <vector>
+using HWND=void*;using DWORD=std::uint32_t;using UINT=std::uint32_t;using WPARAM=std::uintptr_t;
+constexpr UINT WM_MOUSEMOVE=0x200,WM_NCLBUTTONDOWN=0xa1,WM_SYSCOMMAND=0x112,WM_CLOSE=0x10;
+constexpr WPARAM HTCLOSE=20,HTCAPTION=2,SC_CLOSE=0xf060,SC_MINIMIZE=0xf020;
+constexpr int GA_ROOT=2;constexpr bool FALSE=false;
+HWND handle(std::uintptr_t value){return reinterpret_cast<HWND>(value);}
+DWORD lastError=77;unsigned queries{},loggerCalls{};bool valid=true,enabled=true,throwLog=false;
+std::vector<std::string> records;
+DWORD GetLastError(){return lastError;}void SetLastError(DWORD value){lastError=value;}
+DWORD GetWindowThreadProcessId(HWND,DWORD* process){++queries;lastError=81;*process=321;return 123;}
+HWND GetAncestor(HWND,int){++queries;lastError=82;return handle(2);}
+DWORD GetCurrentThreadId(){++queries;lastError=83;return 456;}
+HWND GetCapture(){++queries;lastError=84;return handle(3);}
+HWND GetFocus(){++queries;lastError=85;return handle(4);}
+HWND GetForegroundWindow(){++queries;lastError=86;return handle(5);}
+bool IsWindow(HWND){++queries;lastError=87;return valid;}
+bool IsWindowEnabled(HWND){++queries;lastError=88;return enabled;}
+namespace epochengine::logger {void info(const char* channel,const std::string& text){
+ ++loggerCalls;lastError=99;if(std::string{channel}!="NativeFocusTiming")throw std::runtime_error("wrong channel");
+ if(throwLog)throw std::runtime_error("logger failed");records.push_back(text);
+}}
+ACTUAL_HELPER
+#define CHECK(x) do{if(!(x))return __LINE__;}while(false)
+int main(){
+ trace_native_close_dispatch("ParentProc",handle(1),WM_MOUSEMOVE,0);
+ trace_native_close_dispatch("ParentProc",handle(1),WM_NCLBUTTONDOWN,HTCAPTION);
+ trace_native_close_dispatch("ParentProc",handle(1),WM_SYSCOMMAND,SC_MINIMIZE);
+ CHECK(queries==0&&loggerCalls==0&&lastError==77);
+ trace_native_close_dispatch("ParentProc",handle(1),WM_NCLBUTTONDOWN,HTCLOSE);
+ CHECK(records.size()==1&&lastError==77);
+ CHECK(records[0].find("owner=ParentProc phase=caption-close.press hwnd=1 root=2")!=std::string::npos);
+ CHECK(records[0].find("owner_thread=123 caller_thread=456 process=321 capture=3 focus=4 foreground=5")!=std::string::npos);
+ CHECK(records[0].find("target_valid=1 target_enabled=1 root_enabled=1")!=std::string::npos);
+ trace_native_close_dispatch("ChildProc",handle(6),WM_SYSCOMMAND,SC_CLOSE|2);
+ CHECK(records.size()==2&&records[1].find("phase=system-close.command hwnd=6")!=std::string::npos&&lastError==77);
+ trace_native_close_dispatch("ParentProc",handle(1),WM_CLOSE,0);
+ CHECK(records.size()==3&&records[2].find("phase=close.request")!=std::string::npos&&lastError==77);
+ valid=enabled=false;trace_native_close_dispatch("ChildProc",handle(6),WM_CLOSE,0);
+ CHECK(records.size()==4&&records[3].find("target_valid=0 target_enabled=0 root_enabled=0")!=std::string::npos&&lastError==77);
+ throwLog=true;lastError=66;trace_native_close_dispatch("ParentProc",handle(1),WM_CLOSE,0);
+ CHECK(loggerCalls==5&&records.size()==4&&lastError==66);throwLog=false;
+ for(unsigned i=0;i<100;++i)trace_native_close_dispatch("ParentProc",handle(1),WM_CLOSE,0);
+ CHECK(loggerCalls==64&&records.size()==63&&lastError==66);
+ const auto before=queries;trace_native_close_dispatch("ChildProc",handle(6),WM_CLOSE,0);
+ CHECK(queries==before&&loggerCalls==64&&lastError==66);
+ return 0;
+}
+'''.replace('ACTUAL_HELPER', helper)
+        report = ROOT / 'Artifacts/Reports/editor-close-sequence-nov01' / str(time.time_ns())
+        report.mkdir(parents=True)
+        source = report / 'consumer.cpp'
+        source.write_text(code, encoding='utf-8')
+        records = compile_and_run(self, source, report, windows_flags=('/WX',), run_timeout=10)
+        (report / 'result.json').write_text(json.dumps({
+            'scope': 'Actual native close-edge logger; mocked native query/logger ports, no window or runtime',
+            'configurations': records, 'pass': True}, indent=2), encoding='utf-8')
+
     def test_actual_surface_dimensions_and_input_adapter_admission(self):
         sdl = read_owned_source(ROOT / 'Engine/src/renderers/sdl/core.context_sdl.cpp')
         refresh = sdl.split('    void refresh_dimensions(', 1)[1].split(
@@ -44,6 +116,11 @@ class BackendSurfaceInput(unittest.TestCase):
         evidence = 'struct SdlInputEvidence' + sdl.split('struct SdlInputEvidence', 1)[1].split('    SdlInputEvidence s_inputEvidence', 1)[0]
         routing_source = read_owned_source(ROOT / 'Engine/src/renderers/host/implementation/host.window_interaction.inl')
         focus_helper = '    struct MouseFocusEvidence' + routing_source.split('    struct MouseFocusEvidence',1)[1].split('    inline void push_gui_mouse_event',1)[0]
+        focus_helper=focus_helper.replace('using NativeFocusClock = std::chrono::steady_clock;', 'using NativeFocusClock = FocusClockPort;')
+        dispatch=(ROOT/'Engine/src/renderers/host/implementation/host.native_dispatch.inl').read_text(encoding='utf-8')
+        for name in ('ParentProc','ChildProc'):
+            start=dispatch.index('LRESULT CALLBACK MultiContextManager::'+name+'(')
+            self.assertLess(dispatch.index('const NativeFocusDispatchTrace focusDispatch',start),dispatch.index('switch (msg)',start))
         forward = 'inline void forward_gui_input_message(' + routing_source.split(
             'inline void forward_gui_input_message(', 1)[1].split(
             '    epochengine::platform::window_adapter::NativeInputResult backend_input_callback', 1)[0]
@@ -53,6 +130,9 @@ class BackendSurfaceInput(unittest.TestCase):
         code = r'''
 #include <algorithm>
 #include <atomic>
+#include <chrono>
+#include <stdexcept>
+#include <vector>
 #include <cstdint>
 #include <memory>
 #include <new>
@@ -142,8 +222,13 @@ MultiContextManager* activeManager{};
 MultiContextManager* GetActiveMultiContextManager(){return activeManager;}
 ADAPTER
 }
+unsigned GetLastError();void SetLastError(unsigned);
+bool attachedQueue=false;bool traceThrows=false;unsigned loggerWhileAttached{};
+std::vector<std::string>timingRecords;unsigned timingWarnings{};
 namespace epochengine::logger {
 inline unsigned failures{};
+void info(const char*,const std::string& text){if(attachedQueue)++loggerWhileAttached;timingRecords.push_back(text);SetLastError(4321);if(traceThrows)throw std::runtime_error("recording logger");}
+void warn(const char* category,const std::string& text){++timingWarnings;info(category,text);}
 void error(const char*,const std::string&){++failures;}
 }
 namespace epochengine::sdlcontext::state {
@@ -187,7 +272,8 @@ SFML_DIMENSIONS
 }
 using UINT=unsigned;using WPARAM=std::uintptr_t;using LPARAM=std::intptr_t;
 enum {WM_LBUTTONDOWN,WM_RBUTTONDOWN,WM_MOUSEMOVE,WM_LBUTTONUP,WM_RBUTTONUP,
-WM_MOUSEWHEEL,WM_KEYDOWN,WM_SYSKEYDOWN,WM_CHAR,WM_SYSCHAR,WM_KEYUP,WM_SYSKEYUP};
+WM_MOUSEWHEEL,WM_KEYDOWN,WM_SYSKEYDOWN,WM_CHAR,WM_SYSCHAR,WM_KEYUP,WM_SYSKEYUP,
+WM_SETFOCUS,WM_KILLFOCUS,WM_ACTIVATE,WM_NCACTIVATE,WM_MOUSEACTIVATE,WM_NCHITTEST,WM_CAPTURECHANGED,WM_CANCELMODE};
 namespace epochengine::core::cli {bool trace_sdl_input=false;bool trace_menu_button0_rect=false;}
 INPUT_EVIDENCE
 #define GET_WHEEL_DELTA_WPARAM(w) static_cast<short>((w)>>16)
@@ -196,7 +282,9 @@ namespace routing_mock {int focus{},owner{},events{},fallback{},button{},wheel{}
 epochengine::gui::EventType type{};}
 using DWORD=unsigned;
 DWORD lastError=77;bool focusFails=false;HWND currentFocus=handle(8);
-bool needsAttachment=false,attachedQueue=false,attachSucceeds=true,targetEnabled=true,childRelation=true;
+bool needsAttachment=false,attachSucceeds=true,targetEnabled=true,childRelation=true;
+std::int64_t focusTicks{};std::int64_t setFocusDelay=2000,attachDelay=3000,detachDelay=5000;
+struct FocusClockPort{using time_point=std::chrono::steady_clock::time_point;static time_point now()noexcept{return time_point{std::chrono::microseconds{focusTicks}};}};
 DWORD foregroundPid=100;int attaches=0,detaches=0;
 constexpr bool TRUE=true;constexpr DWORD ERROR_INVALID_PARAMETER=87;
 DWORD GetCurrentProcessId(){return 100;}
@@ -205,6 +293,7 @@ HWND GetForegroundWindow(){return handle(2);}
 bool IsChild(HWND,HWND){return childRelation;}
 bool AttachThreadInput(DWORD from,DWORD to,bool value){
 if(from!=42||to!=13)return false;
+focusTicks+=value?attachDelay:detachDelay;
 if(value){++attaches;attachedQueue=attachSucceeds;return attachSucceeds;}
 ++detaches;attachedQueue=false;return true;}
 
@@ -214,7 +303,7 @@ HWND GetFocus(){return currentFocus;}
 HWND GetParent(HWND){return handle(2);}constexpr int GA_ROOT=2;
 HWND GetAncestor(HWND,int){return handle(2);}
 bool IsWindowEnabled(HWND){lastError=999;return targetEnabled && !focusFails;}
-HWND SetFocus(HWND target){++routing_mock::focus; if(focusFails || (needsAttachment && !attachedQueue)){lastError=87;return nullptr;}
+HWND SetFocus(HWND target){focusTicks+=setFocusDelay;++routing_mock::focus; if(focusFails || (needsAttachment && !attachedQueue)){lastError=87;return nullptr;}
 const auto old=currentFocus;currentFocus=target;return old;}
 FOCUS_HELPER
 void remember_gui_input_owner(HWND){++routing_mock::owner;}
@@ -299,7 +388,35 @@ int main(){
     focus_gui_mouse_target(handle(4));
     CHECK(attaches==2 && detaches==1);
     targetEnabled=true;needsAttachment=false;
-    epochengine::core::cli::trace_menu_button0_rect=false;focusFails=false;
+    CHECK(mouseFocusEvidence.initialFocusMs==2.0);
+    CHECK(loggerWhileAttached==0&&!nativeFocusTraceDeferred);
+    // Actual per-call measurements and last-error fidelity, including logger failure.
+    targetEnabled=true;focusFails=false;needsAttachment=true;currentFocus=nullptr;
+    focus_gui_mouse_target(handle(4));
+    CHECK(mouseFocusEvidence.initialFocusMs==2.0&&mouseFocusEvidence.attachMs==3.0);
+    CHECK(mouseFocusEvidence.retryFocusMs==2.0&&mouseFocusEvidence.detachMs==5.0);
+    CHECK(mouseFocusEvidence.detached&&loggerWhileAttached==0&&!nativeFocusTraceDeferred);
+    traceThrows=true;needsAttachment=false;lastError=66;focus_gui_mouse_target(handle(3));
+    CHECK(lastError==66&&currentFocus==handle(3));traceThrows=false;
+    timingRecords.clear();nativeFocusTraceRecords=0;nativeFocusSlowWarnings=0;nativeFocusHitTests=0;
+    {lastError=9;NativeFocusDispatchTrace sample{"ParentProc",handle(2),WM_ACTIVATE};CHECK(lastError==9);focusTicks+=20000;lastError=19;}
+    CHECK(lastError==19&&timingRecords.size()==2&&timingRecords.back().find("elapsed_ms=20.000000")!=std::string::npos);
+    CHECK(timingRecords.front().find("dispatch.begin")!=std::string::npos&&timingRecords.back().find("dispatch.end")!=std::string::npos);
+    const auto recordCount=timingRecords.size();
+    {NativeFocusDispatchTrace ordinary{"ChildProc",handle(3),WM_MOUSEMOVE};focusTicks+=1000;}
+    CHECK(timingRecords.size()==recordCount);
+    for(unsigned i{};i<20;++i){NativeFocusDispatchTrace hit{"ChildProc",handle(3),WM_NCHITTEST};}
+    CHECK(nativeFocusHitTests==8&&timingRecords.size()==recordCount+16);
+    for(unsigned i{};i<200;++i){NativeFocusDispatchTrace bounded{"DockableProc",handle(3),WM_SETFOCUS};}
+    CHECK(nativeFocusTraceRecords==120&&timingRecords.size()==120);
+    epochengine::core::cli::trace_menu_button0_rect=false;timingRecords.clear();timingWarnings=0;nativeFocusSlowWarnings=0;
+    {NativeFocusDispatchTrace off{"ParentProc",handle(2),WM_ACTIVATE};focusTicks+=1000;}
+    CHECK(timingRecords.empty());
+    for(unsigned i{};i<12;++i){lastError=4;NativeFocusDispatchTrace slow{"ChildProc",handle(3),WM_MOUSEMOVE};focusTicks+=60000;lastError=8;}
+    CHECK(lastError==8&&timingWarnings==8&&timingRecords.size()==8);
+    timingRecords.clear();nativeFocusSlowWarnings=0;setFocusDelay=60000;lastError=77;
+    focus_gui_mouse_target(handle(3));CHECK(lastError==77&&timingRecords.size()==1&&timingRecords.back().find("set-focus-initial.end")!=std::string::npos);
+    setFocusDelay=2000;timingRecords.clear();
     auto ctx=std::make_shared<epochengine::core::Context>();
     // At a 150% monitor setting SDL can already report physical client-space.
     // A second division by display scale shrinks the layout and enlarges UI.
@@ -377,34 +494,10 @@ int main(){
         if os.name != 'nt':
             # The test executes the Windows adapter's real conditional path.
             self.skipTest('Installed MSVC CPU lane')
-        toolsets = sorted(Path('C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC').glob('*'))
-        kitroot = Path('C:/Program Files (x86)/Windows Kits/10')
-        kits = sorted((kitroot / 'Include').glob('*'))
-        if not toolsets or not kits:
-            self.skipTest('Installed MSVC/SDK required')
-        parent = (ROOT / 'build/contract-tests').resolve()
-        parent.mkdir(parents=True, exist_ok=True)
-        scratch = Path(tempfile.mkdtemp(prefix='backend-surface-input-', dir=parent))
-        try:
-            source = scratch / 'contract.cpp'
-            source.write_text(code, encoding='utf-8')
-            toolset, kit = toolsets[-1], kits[-1]
-            binary = scratch / 'contract.exe'
-            args = [str(toolset / 'bin/Hostx64/x64/cl.exe'), '/nologo', '/std:c++latest', '/EHsc', '/WX',
-                '/I' + str(toolset / 'include'), '/I' + str(kit / 'ucrt'), '/I' + str(kit / 'shared'),
-                '/I' + str(kit / 'um'), '/Fo' + str(scratch / 'contract.obj'), '/Fe' + str(binary),
-                str(source), '/link', '/LIBPATH:' + str(toolset / 'lib/x64'),
-                '/LIBPATH:' + str(kitroot / 'Lib' / kit.name / 'um/x64'),
-                '/LIBPATH:' + str(kitroot / 'Lib' / kit.name / 'ucrt/x64')]
-            compiled = subprocess.run(args, cwd=scratch, capture_output=True, text=True, timeout=90)
-            self.assertEqual(compiled.returncode, 0, compiled.stdout + compiled.stderr)
-            executed = subprocess.run([str(binary)], cwd=scratch, capture_output=True, text=True, timeout=10)
-            lines = code.splitlines()
-            failure = lines[executed.returncode - 1] if 0 < executed.returncode <= len(lines) else ''
-            self.assertEqual(executed.returncode, 0, 'Actual surface/input CPU contract: ' + failure)
-        finally:
-            self.assertTrue(scratch.resolve().is_relative_to(parent))
-            shutil.rmtree(scratch)
+        report=ROOT/'Artifacts/Reports/native-focus-timing-oct30'/str(time.time_ns());report.mkdir(parents=True)
+        source=report/'consumer.cpp';source.write_text(code,encoding='utf-8')
+        records=compile_and_run(self,source,report,windows_flags=('/WX',),compile_timeout=90,run_timeout=10)
+        (report/'result.json').write_text(json.dumps({'scope':'Actual focus helper/native timing scope and input admission; deterministic clock and native/logger ports, no window/model','configurations':records},indent=2),encoding='utf-8')
 
     def test_sdl_binds_shared_adapter_after_publishing_live_identity(self):
         source = read_owned_source(ROOT / 'Engine/src/renderers/sdl/core.context_sdl.cpp')

@@ -14,6 +14,12 @@
         const bool modelConsentPending = editor.aiMethodSelection < 0 &&
             editor.aiDeferredRequestKind != AiDeferredRequestKind::None
             && !epochengine::ai::is_model_use_confirmed();
+        const auto idleReloadLease = editor.aiDeferredModelLease;
+        const bool idleReloadConsentPending = editor.aiDeferredRequestKind != AiDeferredRequestKind::None
+            && idleReloadLease && !idleReloadLease->idleReloadModel.empty()
+            && !idleReloadLease->idleReloadApproved;
+        const bool idleReloadConsentCurrent = idleReloadConsentPending
+            && idleReloadLease->idle_reload_matches(ai::native_runtime::snapshot(false));
         if (modelConsentPending)
             (void)poll_ai_model_inventory(editor);
         const bool consentInventoryPending =
@@ -43,15 +49,26 @@
             gui::ConsoleWindowActionSpec{.label = "Save, Build + Run", .width = 180.0f, .activate_on_press = true},
             gui::ConsoleWindowActionSpec{.label = "Discard", .width = 88.0f, .activate_on_press = true}
         };
+        static const auto projectToolRegistry = ai::make_epoch_project_tool_registry();
+        const auto* proposedTool = projectToolRegistry.find(editor.aiToolPlan.plan.call.tool);
+        const std::string_view proposedToolLabel = proposedTool
+            ? std::string_view{proposedTool->title} : std::string_view{"Unavailable Tool"};
         const std::array toolActions{
             gui::ConsoleWindowActionSpec{
                 .label =
-                    editor.aiToolPlan.plan.call.tool == "project.run"
+                    editor.aiToolPlan.plan.call.tool == "package.install"
+                        ? "Review Package"
+                        : editor.aiToolPlan.plan.call.tool == "terrain.generate"
+                            ? "Approve Terrain"
+                            : editor.aiToolPlan.plan.call.tool == "package.catalog"
+                                ? "Find Packages"
+                                : editor.aiToolPlan.plan.call.tool == "project.run"
                         ? "Approve Project Run"
                         : editor.aiToolPlan.plan.call.tool == "project.test"
                             ? "Approve Project Test"
-                            : "Approve Tool",
+                            : proposedToolLabel,
                 .width = 184.0f,
+                .enabled = proposedTool && proposedTool->available,
                 .activate_on_press = true},
             gui::ConsoleWindowActionSpec{
                 .label = "Discard",
@@ -76,6 +93,13 @@
                 .label = "Not Now",
                 .width = 92.0f,
                 .activate_on_press = true}
+        };
+        const std::array idleReloadActions{
+            gui::ConsoleWindowActionSpec{
+                .label = "Approve Reload", .width = 150.0f,
+                .enabled = idleReloadConsentCurrent, .activate_on_press = true},
+            gui::ConsoleWindowActionSpec{
+                .label = "Cancel Request", .width = 150.0f, .activate_on_press = true}
         };
         const std::array intentClarificationActions{
             gui::ConsoleWindowActionSpec{
@@ -111,15 +135,34 @@
                 .label="Restore Saved Set", .width=166.0f,
                 .activate_on_press=true, .tone=gui::SemanticTone::neutral}
         };
+        const bool modelRecoveryCurrent = editor.aiMethodSelection == 0
+            && !editor.aiToolAwaitingReply && !chat.pending && !chat.worker.joinable()
+            && chat.queuedInput.empty()
+            && editor.aiToolModelRecovery.request == editor.aiToolBoundRequest
+            && editor.aiToolModelRecovery.current(editor_ai_project_model_recovery::current_binding(
+                editor, chat.completionGeneration));
+        const std::array modelRecoveryActions{
+            gui::ConsoleWindowActionSpec{
+                .label = editor.aiToolModelRecovery.resident ? "Prepare Local Retry" : "Choose Local Model",
+                .width = 166.0f, .enabled = !modelChoiceState.busy && chat.input.empty()
+                    && chat.draftReferenceImages.empty() && chat.draftReferenceFiles.empty(),
+                .activate_on_press = true, .tone = gui::SemanticTone::info},
+            gui::ConsoleWindowActionSpec{
+                .label = "Not Now", .width = 88.0f, .activate_on_press = true}
+        };
         // Popover content is rendered above the composer; no separate toolbar
         // consumes the conversation's vertical space.
 #if EPOCH_EDITION_PUBLIC
         constexpr bool engineWorkActive = false;
         constexpr bool selfCodingPaused = false;
         constexpr bool showEngineTask = false;
-        constexpr std::string_view aiChatModeTitle = "Assistant";
+        constexpr bool manualChatQueueAllowed = true;
+        constexpr std::string_view aiChatModeTitle = "Assistant Chat";
 #endif
         const std::span<const gui::ConsoleWindowActionSpec> messageActions =
+            idleReloadConsentPending
+            ? std::span<const gui::ConsoleWindowActionSpec>{idleReloadActions}
+            :
             editor.aiAuthoringApplyPending
             ? std::span<const gui::ConsoleWindowActionSpec>{applyJobActions}
             : editor.aiIntentClarificationPending
@@ -137,17 +180,15 @@
             ? std::span<const gui::ConsoleWindowActionSpec>{planActions}
             : modelConsentPending
                 ? std::span<const gui::ConsoleWindowActionSpec>{consentActions}
+            : modelRecoveryCurrent
+                ? std::span<const gui::ConsoleWindowActionSpec>{modelRecoveryActions}
             : modelChoiceButtonsVisible
                 ? std::span<const gui::ConsoleWindowActionSpec>{modelChoiceActions}
             : std::span<const gui::ConsoleWindowActionSpec>{};
         const gui::Vec2 chat_render_size{
             (std::max)(0.0f, availableChatSize.x),
             (std::max)(0.0f, availableChatSize.y) };
-        // AI Chat is rendered only in its selected dock region. Its title
-        // remains draggable independently of the Assistant workbench.
-        handle_pane_title_drag_to_tab(
-            "pane.ai_chat", aiChatModeTitle,
-            chat_render_pos, chat_render_size);
+        // Its visible dock tab owns dragging; the inner title is hidden.
         // Consecutive token deltas form selectable, wrapped conversation blocks.
         const auto voiceOwner=static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(&editor));
         // Start discovery during editor use, rather than on the first voice
@@ -201,6 +242,7 @@
         // The operator has ONE chronological agentic transcript. Host calls,
         // tool results and raw tokens live under their owning request; the
         // Details toggle expands those disclosures IN PLACE.
+        chat.prepare_tool_displays();
         const auto& displayedChatLines = chat.lines;
         const auto chatLineRoles = ai_chat_message_roles(displayedChatLines);
         const auto chatRetryableLines = chat.retryable_lines();
@@ -237,8 +279,9 @@
             && editor.aiDeferredRequestKind == AiDeferredRequestKind::None;
         const bool chatWorking = chat.pending || chat.worker.joinable()
             || codexBusy || engineWorkActive;
-        const bool chatCanQueue = chatCanAccept && !chatWorking;
-        const bool chatStopAvailable = chatWorking || chat.requestRetirementFailed
+        const bool chatCanQueue = chatCanAccept && !chatWorking && manualChatQueueAllowed;
+        const bool chatStopAvailable = editor_automation_input_reserved(editor, chat)
+            || chatWorking || chat.requestRetirementFailed
             || !chat.queuedInput.empty()
             || editor.aiDeferredRequestKind != AiDeferredRequestKind::None;
         const auto queuedModelIdentity = [&]() -> std::string
@@ -529,10 +572,11 @@
             .composer_placeholder = "What should we create?",
             .input_keyboard_policy = gui::TextInputKeyboardPolicy::focused,
             .show_send_button = true,
-            .send_button_enabled = chatCanQueue || chatStopAvailable || selfCodingPaused
+            .send_button_enabled = (chatCanQueue || chatStopAvailable || selfCodingPaused
                 || (engineWorkActive && !chat.input.empty())
                 || epochengine::editor::ai_chat_goal::parse(chat.input).action
-                    != epochengine::editor::ai_chat_goal::Action::none,
+                    != epochengine::editor::ai_chat_goal::Action::none)
+                && (manualChatQueueAllowed || chatStopAvailable || selfCodingPaused || engineWorkActive),
             .send_button_width = 30.0f,
             .send_button_label = (!chat.input.empty() || !chat.draftReferenceFiles.empty()) ? ">"
                 : chatStopAvailable ? "X"
@@ -557,49 +601,6 @@
             (void)append_ai_chat_attachment(chat, std::filesystem::path{std::u8string{file.begin(), file.end()}});
         if (r.model_picker_dismissed)
             editor.aiChatModelPickerOpen = false;
-        const auto stopCurrentWork = [&]()
-            {
-                epochengine::ai::voice_runtime::stop(voiceOwner);
-                editor.aiVoiceSession.cancel();
-                editor.aiVoiceConversation = false;
-                editor.aiProjectScriptRepairQueued = false;
-                if (editor.aiProjectScriptRunAfterBuild)
-                    (void)cancel_script_build(editor);
-                // Cancellation is request-level: do not unload weights.
-                // Cancel both live inference and not-yet-dispatched turns.
-                const bool hadQueuedRequest = !chat.queuedInput.empty();
-                if (hadQueuedRequest)
-                {
-                    if (chat.input.empty()) chat.input = chat.queuedDraftText;
-                    chat.restore_reference_images(chat.queuedReferenceImages);
-                    chat.queuedInput.clear();
-                    chat.queuedInputAt = {};
-                    chat.queuedBlockReported.clear();
-                    editor.aiChatQueuedMethodSelection = -1;
-                    editor.aiChatQueuedModel.clear();
-                }
-                bool hadDeferredRequest = false;
-                if (editor.aiDeferredRequestKind == AiDeferredRequestKind::Chat)
-                {
-                    hadDeferredRequest = true;
-                    if (chat.input.empty()) chat.input = editor.aiDeferredDisplay;
-                    editor.aiDeferredRequestKind = AiDeferredRequestKind::None;
-                    editor.aiDeferredDispatchQueued = false;
-                    editor.aiDeferredPrompt.clear();
-                    editor.aiDeferredDisplay.clear();
-                    editor.aiDeferredModelLease.reset();
-                }
-                // Interrupt the active transport immediately instead of waiting
-                // for the session controller to reach its next host stage.
-                const bool hadPendingModelRequest = chat.cancel_pending();
-#if EPOCH_EDITION_PUBLIC
-                constexpr bool hadPendingCodexTurn = false;
-#endif
-                if (hadPendingModelRequest || hadPendingCodexTurn)
-                    chat.append_status("STOP requested; waiting for the active transport to retire. Model remains loaded.");
-                else if (hadQueuedRequest || hadDeferredRequest)
-                    chat.append_status("STOP: queued request cancelled before dispatch; draft preserved. Model remains loaded.");
-            };
         if (r.model_picker_action_index)
         {
             editor.aiChatModelPickerOpen = false;
@@ -880,6 +881,84 @@
         }
         if (messageActionIndex)
         {
+            if (modelRecoveryCurrent && messageActions.data() == modelRecoveryActions.data())
+            {
+                auto& recovery = editor.aiToolModelRecovery;
+                if (*messageActionIndex != 0u)
+                    recovery = {};
+                else if (!recovery.current(editor_ai_project_model_recovery::current_binding(editor, chat.completionGeneration))
+                    || recovery.request != editor.aiToolBoundRequest || !chat.input.empty()
+                    || !chat.draftReferenceImages.empty() || !chat.draftReferenceFiles.empty())
+                {
+                    recovery = {};
+                    chat.append_status("The project, model choice or draft changed. Review a fresh retry request; nothing was sent.");
+                }
+                else
+                {
+                    const auto resident = ai::native_runtime::snapshot(true);
+                    if (recovery.resident && !editor_ai_project_model_recovery::target_ready_native(recovery, resident))
+                    {
+                        recovery.resident = false;
+                        chat.append_status("The suggested local model is no longer ready or its role changed. Choose Local Model to review loading; no request was sent.");
+                    }
+                    else if (recovery.resident && (!ai::native_runtime::use_loaded(recovery.target_model)
+                        || !select_native_chat_transport(editor)))
+                        chat.append_status("Could not select that resident model. The original request is retained; nothing was resent.");
+                    else
+                    {
+                        const auto target = recovery.target_model;
+                        const bool selectingResident = recovery.resident;
+                        // This is an explicit user choice, separate from Send.
+                        // Preserve the original reference bytes alongside it.
+                        chat.restore_reference_images(chat.activeReferenceImages);
+                        chat.restore_reference_files(chat.activeReferenceFiles);
+                        chat.input = "/tool " + recovery.request;
+                        recovery = {};
+                        if (selectingResident)
+                        {
+                            ++editor.aiChatUserModelSelectionRevision;
+                            chat.append_status("Selecting " + target
+                                + " without reloading weights. The same request is in the composer. Check Ready to chat and the displayed Send-to model, then press Send. No inference or tool action has started.");
+                        }
+                        else
+                        {
+                            editor.showAiModelManagerModal = true;
+                            editor.aiModelManagerTab = 0;
+                            chat.append_status("The original request is in the composer. Select and approve a local model in Model Manager, then review and Send. Nothing was loaded or sent automatically.");
+                        }
+                    }
+                }
+            }
+            else if (idleReloadConsentPending)
+            {
+                if (*messageActionIndex == 0u)
+                {
+                    if (idleReloadLease->approve_idle_reload(ai::native_runtime::snapshot(false)))
+                    {
+                        editor.aiDeferredDispatchQueued = true;
+                        chat.append_status("Operator approved reloading " + idleReloadLease->idleReloadModel
+                            + " for this exact queued request. Tool and source permissions are unchanged.");
+                    }
+                    else chat.append_status("Reload approval expired; no model was started. Cancel or choose the model explicitly.");
+                }
+                else
+                {
+                    if (chat.input.empty()) chat.input = idleReloadLease->retainedDraft.empty()
+                        ? editor.aiDeferredDisplay : idleReloadLease->retainedDraft;
+                    if (editor.aiDeferredRequestKind == AiDeferredRequestKind::Authoring)
+                        editor.aiAuthoringAwaitingReply = false;
+                    editor.aiDeferredRequestKind = AiDeferredRequestKind::None;
+                    editor.aiDeferredDispatchQueued = false;
+                    editor.aiDeferredPrompt.clear();
+                    editor.aiDeferredDisplay.clear();
+                    idleReloadLease->idleReloadCancellation.request_stop();
+                    editor.aiDeferredModelLease.reset();
+                    if (editor.aiAuthoringPlanForGoal) editor.aiGoalRunning = false;
+                    editor.aiAuthoringStatus = "Reload cancelled; request not sent. Draft retained.";
+                    chat.append_status(editor.aiAuthoringStatus);
+                }
+            }
+            else
             if (editor.aiAuthoringApplyPending)
             {
                 editor.aiAuthoringApplyCancelled = true;

@@ -270,6 +270,9 @@ std::expected<Result, core::Error> run_windows(const Request& request, std::stop
         return std::unexpected(error);
     }
 
+    if (request.on_started) {
+        try { request.on_started(process.dwProcessId); } catch (...) {}
+    }
     Result result;
     std::jthread stdout_reader([&](std::stop_token token) { read_pipe(stdout_read, result.stdout_text, request.max_output_bytes, token); });
     std::jthread stderr_reader([&](std::stop_token token) { read_pipe(stderr_read, result.stderr_text, request.max_output_bytes, token); });

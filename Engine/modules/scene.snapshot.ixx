@@ -50,8 +50,17 @@ export namespace epochengine::scene
     using Vec3 = std::array<float, 3>;
     using SceneObjectId = std::uint64_t;
 
-    inline constexpr std::uint32_t kSceneDocumentFormatVersion = 3u;
+    inline constexpr std::uint32_t kSceneDocumentFormatVersion = 8u;
     inline constexpr SceneObjectId kInvalidSceneObjectId = 0u;
+    inline constexpr Vec3 kDefaultAmbientLight{0.16f, 0.18f, 0.22f};
+
+    [[nodiscard]] inline bool valid_scene_ambient(const Vec3& ambient) noexcept
+    {
+        return std::all_of(ambient.begin(), ambient.end(), [](float channel) noexcept
+        {
+            return std::isfinite(channel) && channel >= 0.0f;
+        });
+    }
 
     enum class SceneTextureFilter : std::uint8_t
     {
@@ -174,6 +183,110 @@ export namespace epochengine::scene
         return hash == kInvalidSceneObjectId ? 1u : hash;
     }
 
+    struct SceneMeshCoordinates final
+    {
+        double meters_per_unit{1.0};
+        // Imported asset basis/provenance. Authored object position remains
+        // independent; consumers must not add this origin to its transform.
+        std::array<double, 3> source_origin_meters{};
+
+        [[nodiscard]] bool valid() const noexcept
+        {
+            return std::isfinite(meters_per_unit)
+                && meters_per_unit > 0.0 && meters_per_unit <= 1.0e12
+                && std::all_of(source_origin_meters.begin(), source_origin_meters.end(),
+                    [](double value) noexcept
+                    {
+                        return std::isfinite(value) && std::abs(value) <= 1.0e15;
+                    });
+        }
+
+        friend bool operator==(
+            const SceneMeshCoordinates&, const SceneMeshCoordinates&) noexcept = default;
+    };
+
+    struct SceneMeshSnapshot final
+    {
+        std::string logical_path{};
+        std::array<std::uint64_t, 4> artifact_key{};
+        std::uint32_t vertex_count{}, index_count{};
+        std::optional<SceneMeshCoordinates> coordinates{};
+        [[nodiscard]] bool valid() const noexcept
+        {
+            return valid_scene_asset_path(logical_path)
+                && logical_path.back() != '/'
+                && (logical_path.starts_with("Assets/") || logical_path.starts_with("Library/"))
+                && std::any_of(artifact_key.begin(), artifact_key.end(), [](auto word) { return word != 0u; })
+                // These are reference-format ceilings, not permission to load
+                // geometry. Artifact decoding and frame residency still need
+                // their caller's explicit byte/count budgets.
+                && vertex_count >= 3u && vertex_count <= 1'048'576u
+                && index_count >= 3u && index_count <= 6'291'456u && index_count % 3u == 0u
+                && (!coordinates || coordinates->valid());
+        }
+        friend bool operator==(const SceneMeshSnapshot&, const SceneMeshSnapshot&) noexcept = default;
+    };
+
+    [[nodiscard]] inline std::optional<Vec3> mesh_render_scale(
+        const Vec3& authored_scale,
+        const std::optional<SceneMeshSnapshot>& mesh) noexcept
+    {
+        const SceneMeshCoordinates* coordinates = mesh && mesh->coordinates
+            ? &*mesh->coordinates : nullptr;
+        if (coordinates && !coordinates->valid())
+            return std::nullopt;
+        const double metersPerUnit = coordinates ? coordinates->meters_per_unit : 1.0;
+        Vec3 result{};
+        for (std::size_t axis = 0u; axis < result.size(); ++axis)
+        {
+            const double value = static_cast<double>(authored_scale[axis]) * metersPerUnit;
+            if (!std::isfinite(value)
+                || std::abs(value) > static_cast<double>((std::numeric_limits<float>::max)()))
+                return std::nullopt;
+            result[axis] = static_cast<float>(value);
+            if (authored_scale[axis] != 0.0f && result[axis] == 0.0f)
+                return std::nullopt;
+        }
+        return result;
+    }
+
+    // Per-instance region provenance travels through the ordinary scene object
+    // transaction. A region is the group sharing region_id; no second scene store.
+    struct SceneForestRegionInstance final
+    {
+        std::uint64_t region_id{}, terrain_object_id{}, seed{}, plant_genome{}, plant_revision{}, plant_hash{};
+        std::uint32_t body_index{}, candidate_index{}, candidate_count{};
+        double radius_meters{}, density_per_square_meter{}, body_radius_meters{};
+        std::array<double,3> center_direction{};
+        std::array<double,3> body_local_root_meters{}, radial_up{0,1,0};
+        std::array<double,3> admitted_body_center_meters{}, mesh_source_origin_meters{};
+        std::array<std::uint64_t,4> terrain_artifact_key{};
+        std::string provider_content_hash{}, recipe{}, plant_source{};
+        [[nodiscard]] bool valid() const noexcept
+        {
+            const auto length=std::hypot(center_direction[0],center_direction[1],center_direction[2]);
+            const auto upLength=std::hypot(radial_up[0],radial_up[1],radial_up[2]);
+            const auto rootLength=std::hypot(body_local_root_meters[0],body_local_root_meters[1],body_local_root_meters[2]);
+            const auto bounded=[](const auto& values){return std::all_of(values.begin(),values.end(),
+                [](double value){return std::isfinite(value)&&std::abs(value)<=1e15;});};
+            return std::isfinite(upLength)&&std::abs(upLength-1.0)<1e-8
+                && bounded(body_local_root_meters)&&std::isfinite(rootLength)&&rootLength>0
+                && bounded(admitted_body_center_meters)&&bounded(mesh_source_origin_meters)
+                && region_id && terrain_object_id && plant_genome && plant_revision && plant_hash
+                && body_index<=5u && candidate_count>0u && candidate_count<=64u && candidate_index<candidate_count
+                && std::isfinite(radius_meters) && radius_meters>=0.25 && radius_meters<=1000.0
+                && std::isfinite(density_per_square_meter) && density_per_square_meter>0 && density_per_square_meter<=1.0
+                && std::isfinite(body_radius_meters) && body_radius_meters>radius_meters && body_radius_meters<=1e10
+                && std::isfinite(length) && std::abs(length-1.0)<1e-8
+                && std::any_of(terrain_artifact_key.begin(),terrain_artifact_key.end(),[](auto value){return value!=0u;})
+                && provider_content_hash.size()==64u
+                && std::all_of(provider_content_hash.begin(),provider_content_hash.end(),[](char c){return (c>='0'&&c<='9')||(c>='a'&&c<='f');})
+                && !recipe.empty() && recipe.size()<=1024u && valid_scene_asset_path(plant_source)
+                && plant_source.size()<=4096u;
+        }
+        friend bool operator==(const SceneForestRegionInstance&,const SceneForestRegionInstance&) = default;
+    };
+
     struct SceneObjectSnapshot
     {
         SceneObjectId id{ kInvalidSceneObjectId };
@@ -186,7 +299,37 @@ export namespace epochengine::scene
         bool visible = true;
         bool editor_only = false;
         std::optional<SceneTextureMaterialSnapshot> texture_material{};
+        std::optional<SceneMeshSnapshot> mesh_asset{};
+        // Optional exact instance pivot. Position stays an editable local delta;
+        // this never changes the asset's source/provenance coordinate frame.
+        std::optional<std::array<double, 3>> position_anchor{};
+        std::optional<SceneForestRegionInstance> forest_region{};
     };
+
+    [[nodiscard]] inline std::optional<std::array<double, 3>> world_position(
+        const Vec3& position,
+        const std::optional<std::array<double, 3>>& anchor = {}) noexcept
+    {
+        std::array<double, 3> result{};
+        for (std::size_t axis = 0u; axis < result.size(); ++axis)
+        {
+            if (!std::isfinite(position[axis]))
+                return std::nullopt;
+            const double base = anchor ? (*anchor)[axis] : 0.0;
+            if (!std::isfinite(base) || (anchor && std::abs(base) > 1.0e15))
+                return std::nullopt;
+            result[axis] = base + static_cast<double>(position[axis]);
+            if (!std::isfinite(result[axis]) || (anchor && std::abs(result[axis]) > 1.0e15))
+                return std::nullopt;
+        }
+        return result;
+    }
+
+    [[nodiscard]] inline std::optional<std::array<double, 3>> world_position(
+        const SceneObjectSnapshot& object) noexcept
+    {
+        return world_position(object.position, object.position_anchor);
+    }
 
     struct SceneTimelineKey
     {
@@ -213,6 +356,7 @@ export namespace epochengine::scene
         std::vector<std::string> packages{};
         std::vector<SceneObjectSnapshot> objects{};
         std::vector<SceneTimelineKey> timeline_keys{};
+        Vec3 ambient{kDefaultAmbientLight};
     };
 
     struct SceneDocumentLimits final
@@ -237,11 +381,13 @@ export namespace epochengine::scene
         bool object_ids_valid{};
         bool object_ids_unique{};
         bool materials_valid{};
+        bool meshes_valid{};
         bool object_names_unique{};
         bool transforms_valid{};
         bool timeline_valid{};
         bool packages_valid{};
         bool runtime_references_valid{};
+        bool environment_valid{};
 
         [[nodiscard]] constexpr explicit operator bool() const noexcept
         {
@@ -251,11 +397,13 @@ export namespace epochengine::scene
                 && object_ids_valid
                 && object_ids_unique
                 && materials_valid
+                && meshes_valid
                 && object_names_unique
                 && transforms_valid
                 && timeline_valid
                 && packages_valid
-                && runtime_references_valid;
+                && runtime_references_valid
+                && environment_valid;
         }
     };
 
@@ -314,6 +462,7 @@ export namespace epochengine::scene
         const SceneDocumentLimits& limits = {}) noexcept
     {
         SceneDocumentValidation result{};
+        result.environment_valid = valid_scene_ambient(snapshot.ambient);
         result.identity_valid = !snapshot.scene_id.empty()
             && snapshot.revision != 0u
             && (requirement != SceneDocumentRequirement::runnable
@@ -334,6 +483,7 @@ export namespace epochengine::scene
         result.object_ids_valid = true;
         result.object_ids_unique = true;
         result.materials_valid = true;
+        result.meshes_valid = true;
         result.object_names_unique = true;
         result.transforms_valid = true;
         result.timeline_valid = true;
@@ -357,12 +507,19 @@ export namespace epochengine::scene
                 && !object.name.empty()
                 && object_names.insert(object.name).second;
             result.transforms_valid = result.transforms_valid
-                && finite_scene_vec3(object.position)
+                && world_position(object).has_value()
                 && finite_scene_vec3(object.rotation)
                 && finite_scene_vec3(object.scale)
                 && object.scale[0] > 0.0f
                 && object.scale[1] > 0.0f
                 && object.scale[2] > 0.0f;
+            if (object.forest_region)
+                result.meshes_valid = result.meshes_valid && object.forest_region->valid();
+            if (object.mesh_asset)
+            {
+                result.strings_bounded = result.strings_bounded && bounded(object.mesh_asset->logical_path);
+                result.meshes_valid = result.meshes_valid && object.mesh_asset->valid();
+            }
             if (object.texture_material)
             {
                 result.strings_bounded = result.strings_bounded

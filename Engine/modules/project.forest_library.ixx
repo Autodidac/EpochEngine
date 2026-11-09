@@ -37,7 +37,9 @@ export namespace epochengine::project_forests
         identity_collision,
         ambiguous_artifact,
         not_found,
-        allocation_failure
+        allocation_failure,
+        verified_key_required,
+        rebuild_required
     };
 
     [[nodiscard]] constexpr std::string_view forest_library_code_name(
@@ -45,6 +47,7 @@ export namespace epochengine::project_forests
     {
         switch (code)
         {
+        case ForestLibraryCode::rebuild_required: return "rebuild_required";
         case ForestLibraryCode::ready: return "ready";
         case ForestLibraryCode::unchanged: return "unchanged";
         case ForestLibraryCode::invalid_library: return "invalid_library";
@@ -73,6 +76,8 @@ export namespace epochengine::project_forests
         case ForestLibraryCode::not_found: return "not_found";
         case ForestLibraryCode::allocation_failure:
             return "allocation_failure";
+        case ForestLibraryCode::verified_key_required:
+            return "verified_key_required";
         }
         return "unknown";
     }
@@ -222,6 +227,11 @@ export namespace epochengine::project_forests
         [[nodiscard]] PublishedForestAsset publish(
             std::string_view logicalPath,
             const forest::ForestAssetDocument& document) noexcept;
+        // Explicit host publication compiles and binds the complete v2 payload.
+        // Generic resolution does not infer approval from its self-description.
+        [[nodiscard]] PublishedForestAsset publish_materialized(
+            std::string_view logicalPath,
+            const forest::ForestAssetDocument& document) noexcept;
         [[nodiscard]] LoadedForestSource load_source(
             std::string_view logicalPath) noexcept;
         [[nodiscard]] LoadedForestArtifact load_exact(
@@ -229,8 +239,29 @@ export namespace epochengine::project_forests
             const project_assets::AssetContentHash& artifactKey) noexcept;
         [[nodiscard]] LoadedForestArtifact load_latest(
             std::string_view logicalPath) noexcept;
+        // The locator must come from an approved host publication, never from
+        // a model or an untrusted artifact's own metadata. It binds exact bytes,
+        // project, asset, source revision and source content identity.
+        [[nodiscard]] LoadedForestArtifact load_materialized_exact(
+            std::string_view logicalPath,
+            const ForestArtifactLocator& approvedPublication) noexcept;
+        // Explicitly select an already published materialized result. The
+        // source is replayed before committing its bounded reference. Failure
+        // preserves the previous reference and never republishes source/assets.
+        [[nodiscard]] ForestLibraryCode select_materialized(
+            std::string_view logicalPath,
+            const ForestArtifactLocator& publishedArtifact) noexcept;
+        // A saved reference is only a hint. Cold loading replays current source
+        // and compares the exact artifact envelope; it grants no new authority
+        // and is not a compiler-free path. Generic/v1 resolution is unchanged.
+        [[nodiscard]] LoadedForestArtifact load_selected_materialized(
+            std::string_view logicalPath) noexcept;
 
     private:
+        [[nodiscard]] PublishedForestAsset publish_impl(
+            std::string_view logicalPath,
+            const forest::ForestAssetDocument& document,
+            bool materialized) noexcept;
         [[nodiscard]] PublishedForestAsset reject_publish(
             ForestLibraryCode code) noexcept;
         [[nodiscard]] LoadedForestSource reject_source(

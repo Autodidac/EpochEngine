@@ -4,6 +4,7 @@ from pathlib import Path
 import importlib.util
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -54,7 +55,9 @@ class ProjectSourceEdition(unittest.TestCase):
             'Engine/CMakeLists.txt': b'cmake_minimum_required(VERSION 4.4)\n',
         }
         if public:
-            files[public_gate.WORKFLOW] = (ROOT / 'Tools/build/public_ci_workflow.yml').read_bytes()
+            template = ROOT / 'Tools/build/public_ci_workflow.yml'
+            files[public_gate.WORKFLOW] = (template if template.is_file()
+                                          else ROOT / public_gate.WORKFLOW).read_bytes()
             files['Tools/build/verify_public_source.py'] = (ROOT / 'Tools/build/verify_public_source.py').read_bytes()
         for name, data in files.items():
             path = root / name
@@ -150,8 +153,10 @@ class ProjectSourceEdition(unittest.TestCase):
             include.mkdir()
             (include / 'updater.distribution.hpp').write_bytes((ROOT / 'Engine/include/updater.distribution.hpp').read_bytes())
             edition = read_owned_source(ROOT / 'Engine/include/epoch.edition.hpp', encoding='utf-8')
-            if public:
-                edition = edition.replace('#define EPOCH_SOURCE_EDITION_PUBLIC 0', '#define EPOCH_SOURCE_EDITION_PUBLIC 1')
+            edition, count = re.subn(r'^#define EPOCH_SOURCE_EDITION_PUBLIC [01]$',
+                                    f'#define EPOCH_SOURCE_EDITION_PUBLIC {int(public)}',
+                                    edition, flags=re.M)
+            self.assertEqual(count, 1)
             (include / 'epoch.edition.hpp').write_text(edition, encoding='utf-8')
             code = self.scratch / ('preflight-public.cpp' if public else 'preflight-development.cpp')
             code.write_text('#include <filesystem>\n#include <fstream>\n#include <iterator>\n#include <string>\n'

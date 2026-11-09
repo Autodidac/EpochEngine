@@ -32,11 +32,13 @@ The original repository history is retained. First-party source, including the
 owner-authorized migrated implementation, is MPL-2.0. Historical release licenses
 remain unchanged. Current source version is 0.1.0; no release artifacts or native runtime acceptance are claimed.
 
-Reviewed EpochGui source dependency: `f83b2f15385598b8efbb028a6f391ca637e07634` (0.90.0).
-Reviewed Demo source dependency: `a01214e3666ef7fc657c270d9cbd208de50064bc` (0.6.0).
+Local working EpochGui dependency: `28d81396a4b1e782264712d97bbe7c8aefc05748` (unpublished input-ownership checkpoint). Published0.90.1 remains unchanged at `7d5d5514a1443c0ef340a626fa163569858ca362`. Use an explicit local `EPOCHGUI_ROOT`; release validation is pending.
+Reviewed Demo source dependency: `4ae2233a5da36d636a4f6a4af4dc6df852ca9430` (0.7.0).
 All ten Windows Demo composition/configuration builds and CPU contracts pass.
-The Media-owned optional composition check and native runtime acceptance remain
-separate; this source graph is not a binary-release acceptance claim.
+The Media-owned optional composition now builds with these exact dependencies
+on Windows x64 in Debug and Release. Its six CPU contracts pass in both modes.
+Interactive Media window acceptance remains separate; this source graph is not
+a new binary-release acceptance claim.
 
 ## Commercial use and giving back
 

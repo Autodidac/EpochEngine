@@ -1,6 +1,23 @@
         template <typename PumpFunc>
         int RunContextSessionLoop(MultiContextManager& mgr, PumpFunc&& pump_events, SessionMode startup_mode)
         {
+            // One owner for this process's interface/game session, including
+            // backend replacements. Status/render reads never start a driver.
+            struct SessionGpuTelemetry final
+            {
+                bool active = epochengine::platform::work_admission::start_gpu_telemetry();
+                void stop() noexcept
+                {
+                    if (!active) return;
+                    active = false;
+                    if (!epochengine::platform::work_admission::stop_gpu_telemetry(50u))
+                    {
+                        try { logger::warn(kEngineLog, "GPU telemetry retirement is pending; its cancelled driver worker remains process-owned."); }
+                        catch (...) {} // Shutdown reporting cannot prevent exit.
+                    }
+                }
+                ~SessionGpuTelemetry() noexcept { stop(); }
+            } gpuTelemetry;
             // The launcher is an interface, not an editor or game. Opening it
             // must not initialize hardware audio or the physical controller
             // runtime. Services are initialized once on demand by an editor or
@@ -220,7 +237,11 @@
                 if (!editorSnapshot.valid)
                     return fail_restore("replacement editor state snapshot was invalid");
 
-                if (!epochengine::editor_restore_context_snapshot(targetCtx.get(), editorSnapshot))
+                const bool plantLabApplication = guiRoute == "application.plant_lab";
+                const bool restored = plantLabApplication
+                    ? epochengine::editor_restore_plant_lab_preview(targetCtx, editorSnapshot)
+                    : epochengine::editor_restore_context_snapshot(targetCtx.get(), editorSnapshot);
+                if (!restored)
                     return fail_restore("replacement editor state restore failed");
 
                 unload_active_scene(targetSession);
@@ -228,7 +249,6 @@
                 targetSession.mode = SessionMode::Editor;
                 targetSession.return_mode = SessionMode::Menu;
                 targetCtx->clear_scene_viewport();
-                targetCtx->set_scene_preview_mode(core::ScenePreviewMode::Editor);
 
                 if (routedPanelRestore)
                 {
@@ -236,8 +256,10 @@
                     {
                         epochengine::editor_set_context_selection_status(
                             sourceContext,
-                            std::string{ "Detached " } + std::string{ guiRoute }
-                                + " panel cloned editor state; source editor remains active.");
+                            plantLabApplication
+                                ? std::string{"Opened Plant Lab preview; source editor/project remains active."}
+                                : std::string{ "Detached " } + std::string{ guiRoute }
+                                    + " panel cloned editor state; source editor remains active.");
                     }
                     pendingEditorSwitchSnapshots.erase(pendingIt);
                     return PendingEditorRestoreStatus::restored;
@@ -302,6 +324,8 @@
                     running = false;
                     break;
                 }
+                if (epoch_editor_perf::stage_trace_enabled())
+                    epoch_editor_perf::current_frame_watch().mark(epoch_editor_perf::FrameStage::session_pump);
                 if (!pump())
                 {
                     logger::get(startup_mode == SessionMode::Editor ? kEditorLog : kEngineLog).log(
@@ -312,8 +336,12 @@
                     break;
                 }
 
+                if (epoch_editor_perf::stage_trace_enabled())
+                    epoch_editor_perf::current_frame_watch().mark(epoch_editor_perf::FrameStage::session_controller);
                 static_cast<void>(
                     epochengine::controller_input::poll_physical_input());
+                if (epoch_editor_perf::stage_trace_enabled())
+                    epoch_editor_perf::current_frame_watch().mark(epoch_editor_perf::FrameStage::session_update);
 
                 if (!mgr.IsRunning())
                 {
@@ -663,7 +691,6 @@
 #endif
 
                     targetCtx->clear_scene_viewport();
-                    targetCtx->set_scene_preview_mode(core::ScenePreviewMode::Editor);
                 };
 
                 auto focus_context_window = [&](const std::shared_ptr<Context>& targetCtx)
@@ -1007,7 +1034,6 @@
                     }
 
                     targetCtx->clear_scene_viewport();
-                    targetCtx->set_scene_preview_mode(core::ScenePreviewMode::Editor);
                     focus_context_window(targetCtx);
 
                     epochengine::editor_set_context_selection_status(
@@ -1172,6 +1198,9 @@
                             }
 
                             pendingRestoreStatus = restore_pending_editor_switch_snapshot(ctx, session, win->guiRoute);
+                            if (pendingRestoreStatus == PendingEditorRestoreStatus::restored
+                                && win->guiRoute == "application.plant_lab")
+                                win->guiRoute.clear(); // Full application, not a detached tool pane.
                             if (pendingRestoreStatus == PendingEditorRestoreStatus::restored)
                             {
                                 session.shared_camera_bootstrap_applied = true;
@@ -1285,6 +1314,8 @@
                             session.simulation.set_time_scale(control.time_scale);
                             session.simulation.set_max_steps_per_frame(control.max_steps_per_frame);
                             session.simulation.set_fixed_dt_seconds(control.fixed_dt_seconds);
+                            if (control.step_once)
+                                session.simulation.request_single_step();
                             session.simulation.tick(dt);
 
                             const auto stepBudget = session.simulation.step_budget();
@@ -1297,6 +1328,7 @@
                         auto publish_time_snapshot = [&]()
                         {
                             const auto stats = session.simulation.stats();
+                            (void)ctx->publish_simulation_sample_time(stats.simulated_seconds);
                             epochengine::editor_set_time_snapshot(ctx.get(), epochengine::EditorTimeSnapshot{
                                 .frame_index = stats.frame_index,
                                 .simulated_steps = stats.simulated_steps,
@@ -1372,7 +1404,8 @@
                                 if (opened)
                                 {
                                     stash_editor_switch_snapshot(requestedType, ctx, route);
-                                    epochengine::editor_mark_context_panel_detached(route, true);
+                                    if (route != "application.plant_lab")
+                                        epochengine::editor_mark_context_panel_detached(route, true);
                                 }
                                 const std::string logLine = opened
                                     ? std::string{ routeMeta.open_success }
@@ -1487,12 +1520,24 @@
                             const bool mouse_middle_down =
                                 ctx->is_mouse_button_held_safe(epochengine::input::MouseButton::MouseMiddle);
 
-                            ctx->set_scene_preview_mode(core::ScenePreviewMode::Editor);
+                            // Editor viewport owns preview publication, including covered Play.
+                            // Do not transiently re-enable it ahead of the renderer thread.
                             clear_before_ui_frame(ctx);
                             epoch_editor_perf::current_frame_watch().mark(
                                 epoch_editor_perf::FrameStage::gui_begin);
                             gui::begin_frame(ctx, dt, mouse_pos, mouse_left_down);
                             const auto editor_frame = epochengine::editor_run(ctx);
+                            for (const auto& route : editor_frame.companion_pane_activations)
+                            {
+                                if (route.empty()) continue;
+                                if (!mgr.OpenDetachedContextWindow(
+                                        epochengine::core::DetachedContextWindowRequest{
+                                            .gui_route = route,
+                                            .activate_existing_only = true}))
+                                    logger::get(kEditorLog).logf(logger::LogLevel::WARN,
+                                        std::source_location::current(),
+                                        "Companion pane activation is unavailable for route '{}'; no window was created.", route);
+                            }
                             epoch_editor_perf::current_frame_watch().mark(
                                 epoch_editor_perf::FrameStage::host_after_editor);
 
@@ -1557,8 +1602,6 @@
                                         || ctx->is_key_held_safe(epochengine::input::Key::RightAlt);
                                     const bool shiftHeld = ctx->is_key_held_safe(epochengine::input::Key::LeftShift)
                                         || ctx->is_key_held_safe(epochengine::input::Key::RightShift);
-                                    const bool controlHeld = ctx->is_key_held_safe(epochengine::input::Key::LeftControl)
-                                        || ctx->is_key_held_safe(epochengine::input::Key::RightControl);
                                     const auto navigationGestures =
                                         epochengine::previewgrid::resolve_camera_navigation_gestures(
                                             altHeld, mouse_left_down, mouse_middle_down, mouse_right_down);
@@ -1571,9 +1614,7 @@
                                     const bool flying = navigationGestures.flying
                                         && (mouse_in_scene || look_state.flying);
                                     const bool keyboardNavigation = flying;
-                                    const float navigationMultiplier = shiftHeld
-                                        ? 4.0f
-                                        : (controlHeld ? 0.25f : 1.0f);
+                                    const float navigationMultiplier = shiftHeld ? 4.0f : 1.0f;
                                     const float forwardInput = !keyboardNavigation ? 0.0f :
                                         (ctx->action_held_safe(epochengine::input::Action::MoveForward) ? 1.0f : 0.0f)
                                         - (ctx->action_held_safe(epochengine::input::Action::MoveBackward) ? 1.0f : 0.0f);
@@ -1589,6 +1630,9 @@
                                     const float pitchInput = !keyboardNavigation ? 0.0f :
                                         (ctx->action_held_safe(epochengine::input::Action::LookUp) ? 1.0f : 0.0f)
                                         - (ctx->action_held_safe(epochengine::input::Action::LookDown) ? 1.0f : 0.0f);
+                                    const float rollInput = !keyboardNavigation ? 0.0f :
+                                        (ctx->action_held_safe(epochengine::input::Action::RollRight) ? 1.0f : 0.0f)
+                                        - (ctx->action_held_safe(epochengine::input::Action::RollLeft) ? 1.0f : 0.0f);
 
                                     if (ctx->action_pressed_safe(epochengine::input::Action::ResetCamera))
                                         epochengine::previewgrid::reset_camera(ctx.get());
@@ -1636,7 +1680,7 @@
                                         upInput,
                                         yawInput,
                                         pitchInput,
-                                        navigationMultiplier);
+                                        navigationMultiplier, rollInput);
 
                                     look_state.last_mouse = mouse_pos;
                                     look_state.orbiting = orbiting;
@@ -1740,7 +1784,8 @@
                                 if (opened)
                                 {
                                     stash_editor_switch_snapshot(requestedType, ctx, route);
-                                    epochengine::editor_mark_context_panel_detached(route, true);
+                                    if (route != "application.plant_lab")
+                                        epochengine::editor_mark_context_panel_detached(route, true);
                                 }
                                 const std::string logLine = opened
                                     ? std::string{ routeMeta.open_success }
@@ -2041,6 +2086,11 @@
                             ctx->set_scene_preview_mode(core::ScenePreviewMode::None);
                             clear_before_ui_frame(ctx);
                             gui::begin_frame(ctx, dt, mouse_pos, mouse_left_down);
+                            const auto launcherAppearance = epochengine::editor_appearance_preferences(ctx.get());
+                            gui::set_theme_cycle_interval(launcherAppearance.theme_cycle_seconds);
+                            const gui::ScopedTheme launcherTheme{launcherAppearance.theme};
+                            gui::publish_native_window_theme(launcherAppearance.theme);
+                            const gui::ScopedRoundedRectangles launcherRounding{launcherAppearance.rounded_rectangles};
                             std::optional<epochengine::menu::Choice> choice{};
                             std::optional<EditorApplicationKind> pendingEditorApplication{};
                             bool loadingMinimumElapsed = false;
@@ -2079,7 +2129,6 @@
                                         ? std::string{ "loading" }
                                         : std::string{ "ready" };
                                 gui::begin_top_layer();
-                                gui::push_theme(gui::ThemeVariant::ClassicLauncher);
                                 gui::begin_window("", { 0.0f, 0.0f }, {
                                     static_cast<float>(transitionWidth),
                                     static_cast<float>(transitionHeight)
@@ -2107,7 +2156,6 @@
                                     .reserve_action_row = false
                                 });
                                 gui::end_window();
-                                gui::pop_theme();
                                 gui::end_top_layer();
                             }
                             else
@@ -2535,10 +2583,15 @@
                     running = false;
                 }
 
+                if (epoch_editor_perf::stage_trace_enabled())
+                    epoch_editor_perf::current_frame_watch().mark(epoch_editor_perf::FrameStage::session_wait);
                 if (running)
                     wait_for_session_frame(sessionFrameLimiter, mgr, snapshot);
             }
 
+            if (epoch_editor_perf::stage_trace_enabled())
+                epoch_editor_perf::current_frame_watch().mark(epoch_editor_perf::FrameStage::idle);
+            gpuTelemetry.stop();
             // Signal an owned model loader before renderer/context retirement.
             // A load is not a chat request and otherwise lives until static
             // service destruction, after GPU/context cleanup has begun.

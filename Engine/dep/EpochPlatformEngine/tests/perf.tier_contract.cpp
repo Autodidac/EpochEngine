@@ -2,6 +2,7 @@
 // A standalone dependency consumer. No Engine, renderer, GUI or model service.
 #include "core.stl_types.hpp"
 #include <string_view>
+#include <limits>
 import core.env;
 import core.log;
 import perf.tier;
@@ -60,6 +61,14 @@ int main()
     VERIFY(core::env::set("EPOCH_TIER", "invalid"));
     VERIFY(tier_from_env() == tier::editor_120);
 
+    VERIFY(frame_pacing_policy{}.target_hz == 30.0);
+    for (const bool project : {false, true})
+    {
+        const auto startup = select_frame_pacing_policy(frame_pacing_mode::uncapped, 0.0, false, project);
+        VERIFY(startup.mode == frame_pacing_mode::target_hz && startup.target_hz == 30.0);
+        const auto selected = select_frame_pacing_policy(frame_pacing_mode::target_hz, 120.0, true, project);
+        VERIFY(selected.target_hz == 120.0);
+    }
     const auto unlimited = target_hz_policy(0.0);
     const auto foreground = resolve_frame_pacing_with_capabilities(
         unlimited, frame_activity::foreground, {true, true});
@@ -87,6 +96,13 @@ int main()
     VERIFY(with_frame_pacing_override(target_hz_policy(120.0), selected).target_hz == 0.0);
     selected.clear();
     VERIFY(!selected.snapshot().explicit_selection);
+    for(const double invalid : {-1.0, std::numeric_limits<double>::quiet_NaN(),
+        std::numeric_limits<double>::infinity()})
+    {
+        selected.publish(frame_pacing_mode::target_hz, invalid);
+        VERIFY(selected.snapshot().target_hz == 30.0);
+    }
+    selected.clear();
     frame_limiter limiter;
     limiter.set_plan(foreground);
     limiter.wait_for_next_frame(); // Actual uncapped path returns without a deadline wait.
@@ -110,6 +126,15 @@ int main()
     VERIFY(parse_frame_limit_value(" 5000\t", manual) && manual == 5000.0);
     VERIFY(parse_frame_limit_value("0", manual) && manual == 0.0);
     VERIFY(parse_frame_limit_value("59.94", manual) && manual == 59.94);
+    for (const double high : {1500.0, 5000.0})
+    {
+        selected.publish(frame_pacing_mode::target_hz, high);
+        const auto policy = with_frame_pacing_override(target_hz_policy(120.0), selected);
+        const auto plan = resolve_frame_pacing_with_capabilities(policy,
+            frame_activity::foreground, {true, false});
+        VERIFY(policy.target_hz == high && plan.configured_hz == high
+            && plan.effective_hz == high && plan.cpu_deadline_wait);
+    }
     for (const auto invalid : {"", "-1", "nan", "inf", "1e999", "120garbage", "1 20"})
     {
         const double before = manual;

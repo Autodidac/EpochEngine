@@ -8,6 +8,171 @@ The canonical plan and tier definitions are in
 
 ## Evidence Policy
 
+November7 depth repair: planetary depth fitting now receives viewport aspect.
+Offscreen triangles crossing the eye plane are clipped against the view sides
+before contributing depth bounds. True visible eye-plane crossings retain the
+conservative near plane. The prior owner reproduces a false5cm near plane;
+actual-module Debug/Release red/green checks cover all sides, intersections,
+precise/nonuniform transforms and resize identity. Native close-approach
+terrain/water wireframe acceptance remains open. This changes depth fitting,
+not frame order or the hidden-wire prepass.
+
+The optional planner's broader orbital attention passes rectangular viewport
+coverage and existing streaming checks in both modes at the same leaf budget.
+Near-ground peripheral coverage and runtime smooth-transition integration remain
+unfinished. Whole-cut replacement still causes visible popping; high render FPS
+alone is not evidence of smooth refinement.
+
+November1 publication repair verifies the complete encoded provider output with
+64KiB scratch rather than decoding and validating the just-built geometry again.
+Matched Release replay retains identical mesh, patch, frame and stream bytes at
+changed camera/water times; median provider time0.757 to0.611s. Cache/path safety,
+four-worker scheduling, detail and budgets are unchanged. Native flight latency
+and repeated whole-mesh GPU staging still need acceptance.
+
+Initial bounded procedural clouds now exist in the optional compiled Planet Run
+path. Seeded closed cloud geometry is immutable; wind follows simulation time and
+body transforms. CPU D/R tests cover geometry, budgets, cancellation, time/session
+restoration and host placement. Precise matrix meshes now transform lighting
+normals with inverse-transpose scale/rotation, retaining the legacy Euler path.
+Full Engine/native appearance is pending; static Editor cloud previews,
+volumetric rendering and conservative cloud occlusion remain unfinished.
+
+November 7 cloud integration: `asset.cloud_volume` owns a bounded, nonnegative
+light-extinction recipe and CPU sampling contract. Optional `planet.clouds`
+produces that recipe through the v5 project snapshot; older snapshots retain
+their exact geometric-cloud compatibility. Existing projects need an explicitly
+reviewed package-source update and regeneration to obtain v5 density data.
+The host does not invent missing recipes from old cloud meshes.
+
+`opengl.cloud_volume` implements an analytic density raymarch with scene-depth
+clipping, bounded samples, half-resolution accumulation and depth-aware
+composition before helpers/GUI. GPU resources remain context-owned; cloud time
+can advance or reverse without rebuilding opaque geometry. Focused module,
+shader and Debug/Release CPU checks pass. Complete Engine builds and native
+appearance, occlusion, resize and GPU timing remain pending. Other native
+density backends are not implemented. This is not a general 3D texture API or a
+completed cross-renderer shader graph.
+
+The analytic recipe does not allocate an editable voxel weather grid. Future
+voxel-backed clouds must reuse `voxel.field`/`voxel.storage` with an explicit
+conversion to nonnegative extinction: occupancy and `voxel.sdf` distance are
+not automatically opacity or collision. That work remains open. No cloud layer
+currently authorizes terrain occlusion or removal; keep fallback terrain ready.
+
+November1 mixed-backend Run evidence separates scene drawing from presentation:
+the OpenGL parent logs zero scene triangles while its Vulkan project is attached,
+and resumes scene drawing after child retirement. The operator still reports
+flicker and an uncapped Vulkan desktop stall; neither is accepted as repaired.
+External attachment now applies the same child/sibling clipping styles as normal
+engine-created native contexts, and restores the exact original styles on detach.
+Actual-owner Debug/Release contracts and dependency validation pass. Native pixel
+acceptance remains open; no WGL fallback, frame cap or GPU setting change is used
+as a claimed fix. Both owned processes retired normally in that run.
+
+November1 LOD allocation accepts optional body-local forward/up and aspect ratio.
+From orbit it favors a broad central region. Near the surface it smoothly blends
+toward three bounded surface queries: forward, 45 degrees down in the rolled
+camera frame, and radial down toward the body centre. Earth's transition runs
+from 100 km to 5 km ground clearance. Each march has a 16,384-step ceiling and
+a conservative height-field derivative bound; exhaustion retains fallback
+screen-error priority. These queries allocate refinement, not collision authority.
+Six coarse roots, the balanced full-body cut and all memory limits remain.
+No-up callers retain their original output. Exact v9 receipts echo orientation;
+legacy providers retain v8. Camera turns, roll and resize retarget the existing
+job. At 384 leaves, D/R CPU tests improve lower-view detail in 20/24 near cases
+and radial detail in all 24, trading at most one centre level. Twelve orbital
+cases retain broad coverage; threshold continuity and legacy output are tested.
+Combined Debug/Release builds and full pure contracts pass. Native approach
+latency and fine-ground quality remain unaccepted; this is not occlusion proof.
+Provider jobs refill four bounded slots in deterministic commit order. Measured
+worker activity is separate from parent Editor task counters. Verification and
+transport remain part of measured latency; more threads do not remove those costs.
+Within each provider step, cache validation and wanted-patch decoding now share
+one bounded scheduler wave. Each path is still checked immediately before read;
+all existing entries must validate before obsolete files can be removed. Matched
+D/R export tests preserve every mesh, receipt and hierarchy byte. Alternating
+Release warm pairs improve median1.083 to0.788 seconds at the same four workers.
+This measures the provider, not complete native frame or camera latency.
+
+Fine planetary snapshots use camera-local metre coordinates instead of normalized
+global floats. The source frame stays transient; persisted authoring coordinates
+remain unchanged. Actual wet LOD20 passes shared geometry validation at about0.4m
+cell spacing under the existing budgets. This does not prove terrain-editing or
+the combined ocean/vegetation visual target. Initial cloud geometry does not
+establish that target; declarative
+visibility-pass markers cannot be used to claim opaque coverage. Any future cloud
+occlusion must be conservative, exclude translucent coverage and keep fallback
+terrain ready when the view is exposed.
+
+October31 planetary Play repairs keep the render origin transient. The saved
+project pose and the provider's double-precision LOD camera stay unchanged. The
+host subtracts one common origin before converting mesh positions to floats;
+camera, lighting and geometry travel in one immutable publication. A rejected
+or incomplete geometry publication keeps its last complete geometry and reports
+the refusal, while an origin-safe camera update can still advance navigation.
+Framed geometry omits unused legacy edge buffers; the 128 MiB limit remains.
+Ordinary editor
+views retain their existing path. Renderer consumers hold the selected packet
+for their whole render turn, including Vulkan's buffers and draw counts.
+
+Vulkan preview uploads now compare actual immutable geometry, wireframe eye and
+the baked surface transform instead of packet revision alone. Camera uniforms
+still update each frame. Failed uploads cannot commit the reuse key. CPU tests
+prove repeated revision-only packets reuse buffers; native performance parity
+remains open, so a faster second run does not establish this repair's benefit.
+
+Preview publication normalizes indexed triangles to the existing clockwise
+exterior convention using the source face/vertex normals. Source artifacts and
+UVs stay unchanged; already-clockwise meshes keep their order. Ambiguous tangent
+or cancelling normal evidence retains the existing clockwise convention. This
+is not automatic repair of arbitrary inconsistent imported normals.
+
+Each indexed mesh uses one source front-face convention. Reliable surface normals
+establish it once before emission; nearly tangent skirt normals cannot flip single
+triangles. Entirely ambiguous normals keep the existing clockwise fallback. Source
+artifact bytes/UVs stay unchanged; reflected transforms retain their parity correction.
+OpenGL solid, textured and wireframe passes enable back-face culling. Wireframe
+uses the same triangles for its depth and polygon-line passes, rather than an
+uncullable list of every mesh edge. The preview scope restores winding, cull mode
+and polygon mode before GUI replay. DirectX, Software, Raylib, SDL, SFML and
+Vulkan reuse the shared camera-facing triangle-edge visitor; helper gizmos remain
+separate overlays. Non-OpenGL hidden-surface wire occlusion is still unverified.
+The wire packet owns one combined line stream, helper lines and depth triangles;
+there is no unused second full mesh-line stream. Admission counts shared source
+artifacts once and still counts separately retained geometry. The128MiB ceiling
+is unchanged. If a large indexed mesh's bounding box crosses the camera plane,
+depth fitting checks its referenced vertices before choosing a near plane. Real
+geometry crossings keep the conservative near plane. Native acceptance is separate
+from these source/module tests.
+The thin, axis-aligned Spawn solid has its actual emitted depth bounds; its
+authored Y scale and rotation do not describe that proxy. Unsupported solid
+primitives still use the conservative floor. The checked saved-planet scene now
+uses24-bit target depth and a fitted near plane, removing the observed overview
+seam strips. This is not acceptance of every primitive or close-camera gesture.
+Bounded OpenGL evidence queries the current framebuffer's depth attachment using
+the core-profile attachment API, not the removed GL_DEPTH_BITS query.
+Actual module tests cover all six planetary mesh faces, CW imports, reflection,
+UVs and source identity; recording tests verify both OpenGL passes and restoration.
+Combined build and native acceptance belong to the active pass.
+
+Optional planetary Water clips wave edges against the terrain triangles actually
+drawn, rather than projecting shoreline crossings back onto an analytic sphere.
+This keeps coarse water/ground boundaries on their source faces. CPU checks cover
+coarse shoreline positions, skirts and parent interpolation. Native refined-mesh
+acceptance remains open; invalid generated faces are refused, not admitted by
+relaxing the shared mesh validator. Provider failures retain their stage, exit and
+exact local request in the existing build log, excluding environment values.
+
+Bounded OpenGL submission evidence counts actual mesh draw calls, submitted
+triangles and upload bytes per frame (wire depth and line passes count separately).
+These are workload counters, not measured GPU execution time or visible triangle
+counts. Six one-second samples and two thirty-second samples avoid an unbounded
+log stream. The displayed NVIDIA utilization remains whole-device usage; other
+applications and GPU clock changes can affect it. Rising utilization alone does
+not prove an allocation leak. Normalized mesh storage precision, editable terrain,
+coherent planetary ocean/vegetation and native LOD transitions remain open.
+
 Capability states are strict:
 
 - `Present`: native implementation exists and relevant validation evidence has
@@ -34,6 +199,100 @@ to an API brand.
 
 The compatibility floor targets GTX 1660-era hardware and equivalent APIs. Newer
 features must be individually capability-gated.
+
+## Windows OpenGL presentation
+
+Acceptance is incomplete: the October31 mixed six-backend fixed30 run caused an
+operator-reported desktop lock. Single-Editor VSync/normal-close and CPU/build
+proof do not accept that path. Graphics probes are stopped during the ownership
+repair; the current evidence and next gate live in `Changes/active_pass.md`.
+
+WGL still creates and activates Windows OpenGL contexts. The historical native
+path draws a back buffer and calls `SwapBuffers`; it was not an EpochGui feature
+and did not originate in Linux parity work. That path remains available.
+
+`opengl.native_present` chooses once per native context, with that context
+current. Automatic selection uses DXGI only for NVIDIA contexts with GL3
+framebuffer operations, the two required NV interop extensions, their entrypoints
+and a double-buffered drawable. Other contexts keep native presentation;
+non-Windows defaults are unchanged. Windows diagnostics may set
+`EPOCH_OPENGL_PRESENTATION=auto|dxgi|wgl`. Invalid requests or unsupported forced
+DXGI fail explicitly. A selected bridge never silently retries through WGL.
+
+The bridge copies the finished color frame without CPU readback, then unlocks
+the shared resource before DXGI presentation. It preserves GL read/draw bindings,
+default read selection, scissor and sRGB state. Resize unregisters and releases
+the old back buffer before replacement. VSync uses DXGI SyncInterval1;
+non-VSync uses0 while the existing host limiter retains its configured policy.
+Occlusion does not publish a first-present success. The native presentation
+timing includes the complete handoff rather than claiming a `SwapBuffers` call.
+
+The initial opt-in Release Editor passed an upright30FPS visual check, normal
+close and a bounded foreground120FPS responsiveness check on RTX5080 per the
+operator. Production automatic selection has separate CPU and integration gates;
+do not transfer that native verdict to changed source or every GPU. Exact receipts
+and remaining resize/VSync/multicontext checks belong in `Changes/active_pass.md`.
+
+## October30 GUI submission repair — source and CPU proof
+
+Current operator direction is conventional full-frame scene rendering. Source
+removes the OpenGL cached/partial scene path, its exclusive damage bookkeeping,
+and software whole-frame skip/reuse logic. Combined Debug/Release builds and full
+pure contracts pass; the same Release still lagged in the operator's actual 120
+retry. Native responsiveness and GUI/image acceptance remain open. The proposed
+multi-frame animation cache was cancelled. Asset/font/texture residency and GUI command snapshots remain
+separate; central events, temporal simulation and jobs remain required.
+Neuromorphic rendering is future work and does not establish present capability.
+
+`platform.work_admission` keeps GPU driver calls on one explicitly started
+session worker. Status/UI/render reads only copy its cached result; CPU/RAM
+sampling is independent. Refresh waits one second after completion. Results
+older than five seconds, or queries lasting over five seconds, are unavailable.
+Stop invalidates late results and precedes graphics teardown. A bounded stop
+joins only a returned thread; an unreturning driver retains its joinable owner
+and DLL until process exit. No detached worker can access destroyed state.
+Telemetry-OFF builds create no driver worker.
+
+Windows host observations cache DWM/DPI/window state for100ms and invalidate on
+native events, resize or handle changes. WindowData logical dimensions are read
+coherently under the registry mutex; native calls happen after releasing it.
+Other Context dimension races remain open. First-paint invalidation is queued,
+without synchronously entering the native owner from the WGL thread.
+
+These repairs pass actual CPU owner tests and combined Debug/Release builds.
+The operator's October30 model-free test remains a negative desktop result:
+30/60FPS responsive,120FPS lag. Fast draw/present wall times do not prove
+compositor responsiveness; pacing wall time does not measure thread CPU usage.
+Do not mark desktop stability or native parity accepted from these source fixes.
+
+OpenGL uses its existing two-frame completion bound for foreground uncapped
+submissions. Capped/VSync modes retire prior fences without creating new ones.
+This does not impose an FPS ceiling or prove desktop responsiveness. Uncapped
+native acceptance remains stopped; the new presentation route does not waive it.
+
+The sprite streamer now appends each texture run to a different part of one
+context-owned buffer. It requests fresh storage once per native frame, shared
+by the existing GUI replays and top layer. Empty GUI frames request none.
+Storage starts at8192sprites and grows from the previous workload to a maximum
+of65536sprites (6MiB per context). Excess sprites use the existing immediate
+quad path; the storage budget never drops content. Frame/queue/overlay order,
+atlas-version ordering and context-owned cleanup remain unchanged.
+
+Actual CPU recording checks preserve geometry and ordering across both passes,
+overflow, missing capabilities and two contexts. For5630sprites in182runs,
+buffer-store API requests fall from182 to1; vertex payload and182draws remain
+the same. These are recorded API calls, not measured driver allocations or GPU
+performance. The earlier uncapped retest still froze Windows; the operator
+stopped native probes. Desktop responsiveness and native parity remain open.
+
+October28 planetary unit integration preserves optional canonical mesh units
+through scene history/save/runtime and applies the same conversion to focus,
+picking, camera inverses and ordinary runtime geometry/light frames. Shared3D
+camera extent supports the larger overview without changing Canvas2D limits.
+Actual-owner Debug/Release checks and Windows OpenGL25km native generation,
+reopen, embedded Run and landed LOD1–15 pass. Ground material fidelity, patch-local
+double precision, smooth transitions, huge-world and other-backend acceptance
+remain open. Evidence: `Artifacts/Reports/planet-size-integration-oct28/`.
 
 ## Backend Summary
 
@@ -77,7 +336,7 @@ order.
 | Frame pacing/present policy | Partial | `perf.tier` resolves explicit target-Hz, VSync, and uncapped requests plus foreground/background/minimized policy into one configured/effective plan. Both managed host loops apply that plan before the unchanged backend frame body and retain the shared deadline limiter when native pacing is unavailable or cannot honor a CPU-paced target. OpenGL, DirectX/D3D11, and SDL3 own native VSync enable/disable; SFML3 owns native VSync and target-Hz; Raylib3 owns native target-Hz/uncapped; Vulkan requests FIFO for VSync and Immediate then Mailbox then FIFO for non-VSync, applies changes only through pre-acquire swapchain recreation, and reports native pacing active only after the selected mode is accepted; Software truthfully remains shared-CPU-only. Deterministic 60/120, uncapped, 30-Hz background, 10-Hz minimized, native-success/fallback, present-mode selection, and pending/accepted lifecycle contracts plus MSVC Debug/Release builds pass. Linux background focus classification remains unclaimed, and no native timing/pixel evidence is added. |
 | Frame clear/present | Partial | `render.context_frame` resolves one overflow-safe clipped editor viewport, top-left and bottom-left coordinates, normalized viewport, projection aspect, protected overlay/capture order, and deterministic semantic signature. OpenGL, SDL3, SFML3, Raylib3, Vulkan, DirectX/D3D11, and Software consume the shared plan through their existing viewport/scissor/projection paths without changing queue, overlay, capture, or present boundaries. SDL3's registered and standalone paths now share one native capture-before-present result, release failed capture reservations for a bounded retry, and publish first-present evidence before the managed host marks the backend ready; MSVC Debug/Release builds and `context.sdl_first_present_readiness` pass. SDL3 launcher, replay-backed loading, editor, resize, and clean close remain accepted; native all-context resize/GUI/modal/replacement pixels remain regression-sensitive and unproved by this build-only parity slice. |
 | Editor scene lines/helpers | Present | Grid, markers, camera, and helper geometry exist across active editor lanes. |
-| Event-driven 3D scene reuse | Partial | OpenGL editor 3D scene owns a persistent color/depth cache, stable marker-change frames, conservative previous/current bound projection, scissored regional reconstruction, automatic dense/global fallback, and v0.90.23 live CACHED/PARTIAL/FULL diagnostics with an optional dirty-region overlay and conventional-path A/B toggle. v0.90.24 adds a bounded weighted neuromorphic invalidation network that may conservatively promote sparse reconstruction to full redraw under dense activity or activation-budget pressure; it never suppresses real invalidation. v0.90.27 adds an independent vacated-region diagnostic overlay/count for previous object bounds; cleanup remains mandatory regardless of overlay state. v0.90.28 adds an alternating selective/full-baseline benchmark using the same persistent cache/present path, synchronized GPU-complete timing, accumulated/average per-lane metrics, and a script-hosted selected-object oscillator for repeatable motion. v0.90.29 moves light damage into the renderer-neutral lighting core: ambient/directional edits remain global, while point/spot edits publish previous/current bounded influence volumes consumed by the OpenGL partial renderer; other full-frame backends remain correct and can consume the same damage contract when they gain partial framebuffer reuse. Software full-frame reuse now wakes on scene-content revision. Vulkan retains revision-driven geometry buffer rebuild only; partial framebuffer reuse and cross-backend parity remain unproved. |
+| Cached/partial scene rendering | Removed; build/contract proof | October30 operator direction selects the existing OpenGL conventional path and removes software whole-frame skip/reuse. Scene framebuffer caches, exclusive pending-damage queues, cache diagnostics, overlays and the SELECTIVE/FULL benchmark are removed. Protected queue/GUI/scene/presentation order remains. Focused CPU checks and combined Debug/Release builds/full pure contracts pass. The combined actual 120 retry still lagged; native image/responsiveness acceptance remains open. Ordinary resources, immutable GUI snapshots and Canvas2D derived raster/texture preparation remain; see [full-frame policy](event_render.md). |
 | Editor scene solids | Partial | OpenGL, SDL3, SFML3, DirectX, and Software have accepted current orientation. Raylib and Vulkan have correction candidates awaiting operator eye proof. |
 | Procedural forest preview | Partial | `ForestAssetDocument` compiles one deterministic morphology sample, renderer-neutral preview geometry, voxel LOD plan, and bounded occupancy. Plant Lab edits, publishes, and reopens one project-owned source/immutable Library pair; Forest Factory places that exact revision and package staging records matching source/compiler evidence. Authored branch count and node spacing affect morphology. Production projection admits finite nonzero segments from their actual length and endpoint radii, then renders oriented tapered eight-sided trunks/branches with a root-only trunk start cap and terminal-only branch end caps; leaf clusters retain deterministic orientation. A separate indexed `forest.preview_mesh` contract proves topology, taper, cap orientation, bounds, logical materials, leaf cards, determinism, budgets, and invalid-segment refusal. Editor and runtime publish through the common solid/selection stream consumed by OpenGL, SDL3, SFML3, Raylib3, Vulkan, DirectX/D3D11, and Software. Native pixels, resize, teardown, repeated-switch proof, sparse voxel materialization, and production indexed mesh/impostor consumption remain open. |
 | Canvas2D planning/runtime | Partial | `render.canvas2d` proves project settings, camera/viewport mapping, logical sprite materials, deterministic quad batching, tile descriptors, immutable submissions, offscreen/final-compose plans, diagnostics, and editor policy persistence. `render.canvas2d_cpu` proves deterministic RGBA8 reference output. `render.canvas2d_runtime` now owns immutable scene/frame/raster reuse for OpenGL and the other active backend adapters; a revision-only publication advances generation and frame evidence while deterministically retaining identical content and Canvas2D hashes. `render.canvas2d_presentation` proves full-frame identity, byte-derived artifact keys, bounded residency, explicit image/surface packets, and staged native dispatch. `project.texture_library`, `project.texture_pipeline`, snapshot format 3, and the Assets controller prove serialized Library persistence, authenticated reopen, semantic material restoration, and owned editor resource closure. Earlier approved OpenGL capture matches T0-CPU across 1,178,872 pixels with zero error; this session-parity repair adds no new native-pixel claim. SDL3, SFML3, Raylib3, Vulkan, DirectX/D3D11, and Software adapters build in Debug/Release; their live pixels/switch cycles and the Assets interaction automation remain unproved. |
@@ -91,7 +350,7 @@ order.
 | Lighting | Partial | `render.lighting` owns stable directional/point/spot lights, bounded frames, environment state, metrics, Euler conversion, and reference raster evaluation. Editor and project previews publish shared lighting frames but still use truthful reference-solid shading. Native light buffers, shaders, PBR, and shadows are Missing. |
 | CPU ray/spatial queries | Partial | `render.ray` owns validated AABB, sphere, triangle, scene, and voxel-DDA reference queries with explicit status/metrics. Editor selection consumes persistent scene identity through that query spine. Hardware ray query/RT are Missing. |
 | Picking and Focus | Present | Editor picking resolves through persistent scene IDs and shared ray queries; Focus changes the active preview camera across presenting child contexts. Higher-tier GPU picking remains optional work, not the accepted baseline. |
-| Physics | Partial | `physics.manager`, `physics.solver2d`, and `project.actor2d_runtime` prove stable bodies, deterministic fixed-step AABB/circle collision, layers/masks, bounded static maps, stable contacts, pause/reset, snapshots, map collision, and renderer-neutral actor publication. Authored one-way/slope collision, editor controls, and live acceptance-project proof remain incomplete. |
+| Physics | Partial | `physics.manager`, `physics.solver2d`, and `project.actor2d_runtime` prove stable bodies, deterministic fixed-step AABB/circle collision, layers/masks, bounded static maps, stable contacts, pause/reset, snapshots, map collision, and renderer-neutral actor publication. Authored one-way/slope/custom-box collision, staged editor controls, and exact source/Library/runtime restoration are build-proven (v0.89.23). Native control interaction and the full playable-project acceptance remain unverified. |
 | Audio | Partial | Logical clips/sources/buses/listener/scheduling, deterministic stereo mixing, a physical-device boundary, and generation-checked project playback sessions are contract-proven. The optional SDL3 device remains renderer-independent across context replacement; decoded project assets, authored cue bindings, editor controls, and approved live physical-output proof remain incomplete. |
 | Sparse voxel/water | Partial | Deterministic sparse voxel storage and explicit-time analytic water queries/projection exist. Generation/residency, mesh/render resources, buoyancy, and native presentation are Missing. |
 | Text and GUI | Partial | Engine GUI rendering and expanded EpochGui portable control primitives exist. Engine-wide integration, professional docking, complete text behavior, and portable profile exclusion remain work. |
@@ -107,6 +366,25 @@ and retains its premultiplied clipped-blit contract. This is source/build
 evidence only and adds no pixel claim.
 
 ## Sampled RTT Evidence
+
+RTT is shared Engine infrastructure, not an Arcade subsystem. Logical resources
+and pass ordering belong to `render.device` and `render.graph`; each backend/head
+owns its native allocations and synchronization. Arcade supplies the game and
+cabinet/screen content. Native handles are local to their creating device/context
+and must never be treated as cross-driver image identities.
+
+November1/2 ownership repair: the generic OpenGL hook registry now keys RTTs by
+context and native color texture, rather than a device-local slot. Actual-owner
+Debug/Release CPU tests cover two devices sharing slot1, repeated native IDs in
+different contexts, wrong-context refusal, forged framebuffer records and
+independent context retirement. Receipt:
+`Artifacts/Reports/rtt-context-ownership-nov02/552150f4251e/result.json`.
+This is not native multihead or playable-cabinet acceptance. The generic hooks
+are exercised by contracts; live backends still have separate Arcade screen
+paths. Wiring those consumers to the central service, binding compiled graphs to
+their creating device, and proving resize/context-loss/game input remain open.
+The resource-residency generation ledger does not automatically validate raw
+device-local graph handles.
 
 | Backend lane | Descriptor | Graph | Native adapter | Live allocation | Presentation | Scene surface | Overall |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -249,6 +527,103 @@ processing follow the playable 2D loop.
 
 Shared contracts define intent and ownership. Backend-specific types never become
 world, authoring, material-document, or project identity.
+
+## Shared preview geometry and lighting updates
+
+The shared preview solid path now retains immutable geometry in its existing
+marker publication. Unchanged markers can reuse transformed/shaded vertices
+while another body moves. The key includes the mesh content, transform, display
+state, exact light/environment data and eye position when shading depends on it.
+Backends acquire the shared geometry at their existing draw sites; frame and
+overlay order are unchanged. Context retirement cannot publish a stale rebuild.
+Additional cache construction/retention has a128MiB working-set admission check,
+including old geometry and retained source artifacts. Larger already-admitted
+legacy frames use the existing uncached path; this is not a bound on all renderer
+memory or an FPS ceiling.
+
+This reduces repeated CPU work. It does not provide GPU indexed residency,
+native lighting, smooth terrain geomorph, or complete ground-world precision.
+Cold geometry and view-dependent lighting still cost work when the view changes.
+The planetary project runtime now sends this CPU preparation to its existing
+task scheduler, matching the Editor's prepare/commit boundary. Each context
+retains at most one in-flight display request. The frame owner only commits a
+complete packet and keeps the last complete terrain navigable while work runs.
+Body, water/cloud visibility and wireframe changes invalidate stale work;
+project shutdown cancels and joins it before releasing its source snapshots.
+The renderer can read a packet while the scene owner is still updating it.
+A delayed geometry commit therefore carries the latest camera and cloud view
+inside that same atomic publication. It does not expose the worker's old camera
+and then wait for a second update to catch up. Camera-only progress made after source
+capture is preserved by the existing two-argument commit as well. The shared
+rebase math keeps the live view in the new packet's coordinate origin; unchanged
+poses retain their fitted depth range. Moving views use conservative clipping
+until their own fit arrives. Actual-module Debug tests reproduce the old backward
+camera jump and pass with the repair; matching main builds and native movement
+acceptance remain in the active pass.
+Metric terrain export subtracts a body-local origin before narrowing positions
+to floats. Near the planet this remains the camera position. A sufficiently
+distant camera uses the shared bounded-origin policy in `project.planetary_snapshot`,
+so an ordinary planet does not move outside the mesh codec's position limits.
+The provider opts in through admitted source marker `epoch.planet.stream-origin.v2`;
+the host checks the same policy. Older providers still require the exact camera
+origin. Mesh units, water-origin metadata and coordinate restoration remain
+unchanged; the codec still rejects invalid geometry. Actual provider/codec and
+host-admission checks pass Debug/Release. Matching main/native acceptance remains
+in the active pass; this is not support for arbitrarily large bodies.
+Cooperative cancellation invalidates the retained request even if display policy
+has already switched back, so the same desired frame can be retried. A genuine
+input/admission refusal remains deduplicated. Bounded timing records distinguish
+committed, cancelled, superseded, preparation-refused and commit-refused results.
+Large mixed terrain/textured frames use the same compact joined untextured
+stream as untextured frames. They keep each required textured UV/material stream,
+without also retaining an untextured per-marker copy of the joined terrain.
+Admission counts actual joined/textured capacity, scratch and retained snapshots
+under the existing128MiB working-set ceiling. Tiny legacy frames keep their
+existing per-marker reuse policy. This saves CPU memory; GPU submission bytes
+and the backend draw order are unchanged.
+Pending wireframe requests are acknowledged after publication or refusal,
+rather than being rejected merely because CPU preparation is still queued.
+The existing terrain stream worker also returns its exact source generation only
+after final source and recipe verification. Runtime completion compares that
+receipt with its admitted root, manifest and package hash; it does not repeat the
+full disk inventory/hash on the frame owner. Missing or stale evidence retains
+the previous terrain and reports source refusal separately from memory pressure.
+This is bounded asynchronous verification, not an atomic filesystem lease.
+Bounded runtime evidence separates scheduler wait, CPU preparation, owner commit
+and total latency. Provider worker counts describe a separate generation stage;
+they do not measure display preparation or GPU upload. Actual-module CPU replay
+and cancellation/retirement proof are under
+`Artifacts/Reports/runtime-planetary-publication-nov07/`. Matching native camera
+travel, peak memory and hitch acceptance remain required; this does not claim
+faster total generation or remove the backend's existing mesh uploads.
+Native75's30FPS control sequence passes with four provider workers and no mixed
+frame refusal. A separate actual47-file warm package check measured172.428ms for
+the removed owner verification; this cost was outside the display-phase timings.
+Source-receipt mutation/cancellation/retry evidence is under
+`Artifacts/Reports/planet-source-admission76-nov07/`. Matching76 Development
+Debug/Release and audited Public Release/full contracts pass. Native76 rebuilt
+and docked the saved planet/forest at30FPS, reached LOD20 on four provider workers,
+and completed orbit/land/pause/resume without source or memory refusal. Five
+sampled display commits took0.975–2.591ms; provider work still took455–531ms.
+Receipt: `Artifacts/Reports/native-combined76-nov07/result.json`. These are bounded
+observations, not a percentile study, high-speed travel or all-backend acceptance.
+CPU equivalence/allocation/lifetime tests and separate Debug/Release measurements
+are in `Artifacts/Reports/runtime-preview-controls-oct28/`; native FPS requires
+its own matched project/backend evidence.
+The earlier CPU-reuse checkpoint passed Development Debug/Release Editor builds
+and full contracts. Those receipts do not accept the new asynchronous publication
+change. That earlier Windows Release OpenGL embedded-project/control smoke passed; landing still
+exposes a ground-geometry defect. This does not establish a native rendering
+speedup, ground precision, or fidelity to the original planetary demonstration.
+
+Lighting source publication and geometry revisions remain separate from authoring
+commands/history. October30 removes the exclusive per-context pending-damage
+queues and their OpenGL partial-redraw consumer. Generic `render.lighting`
+diff/coalescing primitives remain independently exercised by lighting, ambient
+and planetary contracts. No retained pending-damage admission or live OpenGL
+neuromorphic bridge is claimed. Combined Debug/Release builds/full pure contracts
+pass; native responsiveness and image acceptance remain open after the failed 120 retry;
+see [full-frame policy](event_render.md).
 
 ## Deferred Renderer Work
 

@@ -19,14 +19,127 @@ namespace
         };
     }
 
+    inline void trace_native_close_dispatch(const char* owner, HWND hwnd,
+        UINT message, WPARAM key) noexcept
+    {
+        const char* phase = message == WM_NCLBUTTONDOWN && key == HTCLOSE
+            ? "caption-close.press"
+            : message == WM_SYSCOMMAND && (key & 0xfff0u) == SC_CLOSE
+                ? "system-close.command" : message == WM_CLOSE ? "close.request" : nullptr;
+        if (!phase) return;
+        // Close edges are rare. Keep their own budget so startup/focus traffic
+        // cannot consume the evidence needed to diagnose a lost first click.
+        static thread_local unsigned records{};
+        if (records >= 64u) return;
+        ++records;
+        const DWORD preservedError = ::GetLastError();
+        try
+        {
+            DWORD process{};
+            const DWORD ownerThread = ::GetWindowThreadProcessId(hwnd, &process);
+            const HWND root = ::GetAncestor(hwnd, GA_ROOT);
+            const auto identity = [](HWND window) {
+                return std::to_string(reinterpret_cast<std::uintptr_t>(window));
+            };
+            const std::string text = std::string{"owner="} + owner + " phase=" + phase
+                + " hwnd=" + identity(hwnd) + " root=" + identity(root)
+                + " owner_thread=" + std::to_string(ownerThread)
+                + " caller_thread=" + std::to_string(::GetCurrentThreadId())
+                + " process=" + std::to_string(process)
+                + " capture=" + identity(::GetCapture())
+                + " focus=" + identity(::GetFocus())
+                + " foreground=" + identity(::GetForegroundWindow())
+                + " target_valid=" + std::to_string(::IsWindow(hwnd) != FALSE)
+                + " target_enabled=" + std::to_string(::IsWindowEnabled(hwnd) != FALSE)
+                + " root_enabled=" + std::to_string(!root || ::IsWindowEnabled(root) != FALSE);
+            epochengine::logger::info("NativeFocusTiming", text);
+        }
+        catch (...) { /* Diagnostics cannot change native close dispatch. */ }
+        ::SetLastError(preservedError);
+    }
+
     struct MouseFocusEvidence
     {
-        DWORD callerThread{}, error{}, initialError{}, attachError{};
+        DWORD callerThread{}, error{}, initialError{}, attachError{}, detachError{};
         bool attached{}, detached{};
         HWND target{}, before{}, previous{}, after{}, parent{}, root{};
         bool targetEnabled{}, parentEnabled{};
+        double initialFocusMs{}, attachMs{}, retryFocusMs{}, detachMs{};
     };
     static thread_local MouseFocusEvidence mouseFocusEvidence{};
+    using NativeFocusClock = std::chrono::steady_clock;
+    static thread_local unsigned nativeFocusTraceRecords{}, nativeFocusSlowWarnings{}, nativeFocusHitTests{};
+    static thread_local bool nativeFocusTraceDeferred{};
+
+    inline void trace_native_focus(const char* phase, HWND hwnd, UINT message,
+        double elapsedMs, DWORD nativeError = 0u, bool permitTrace = true,
+        const char* owner = "focus") noexcept
+    {
+        if (nativeFocusTraceDeferred) return;
+        const DWORD preservedError = ::GetLastError();
+        const bool trace = permitTrace && epochengine::core::cli::trace_menu_button0_rect
+            && nativeFocusTraceRecords < 120u;
+        const bool slow = elapsedMs > 50.0 && nativeFocusSlowWarnings < 8u;
+        if (trace || slow)
+        {
+            if (trace) ++nativeFocusTraceRecords;
+            if (slow) ++nativeFocusSlowWarnings;
+            try
+            {
+                const std::string text = std::string{"owner="} + owner + " phase=" + phase
+                    + " hwnd=" + std::to_string(reinterpret_cast<std::uintptr_t>(hwnd))
+                    + " thread=" + std::to_string(::GetCurrentThreadId())
+                    + " message=" + std::to_string(message)
+                    + " elapsed_ms=" + std::to_string(elapsedMs)
+                    + " native_error=" + std::to_string(nativeError);
+                if (slow) epochengine::logger::warn("NativeFocusTiming", text);
+                else epochengine::logger::info("NativeFocusTiming", text);
+            }
+            catch (...) { /* Diagnostics cannot change native dispatch. */ }
+        }
+        ::SetLastError(preservedError);
+    }
+
+    struct NativeFocusDispatchTrace final
+    {
+        const char* owner;
+        HWND hwnd;
+        UINT message;
+        bool observed{}, permitTrace{true};
+        NativeFocusClock::time_point began{};
+
+        NativeFocusDispatchTrace(const char* name, HWND window, UINT msg) noexcept
+            : owner{name}, hwnd{window}, message{msg}
+        {
+            const DWORD preservedError = ::GetLastError();
+            observed = msg == WM_SETFOCUS || msg == WM_KILLFOCUS || msg == WM_ACTIVATE
+                || msg == WM_NCACTIVATE || msg == WM_MOUSEACTIVATE || msg == WM_NCHITTEST
+                || msg == WM_CAPTURECHANGED || msg == WM_CANCELMODE
+                || msg == WM_LBUTTONDOWN || msg == WM_RBUTTONDOWN;
+            if (observed)
+            {
+                // Hit testing can repeat while merely hovering. Leave the
+                // remaining shared budget for actual activation/button edges.
+                if (msg == WM_NCHITTEST)
+                {
+                    permitTrace = nativeFocusHitTests < 8u;
+                    if (permitTrace && epochengine::core::cli::trace_menu_button0_rect)
+                        ++nativeFocusHitTests;
+                }
+                trace_native_focus("dispatch.begin",hwnd,message,0.0,0u,permitTrace,owner);
+            }
+            began = NativeFocusClock::now();
+            ::SetLastError(preservedError);
+        }
+        ~NativeFocusDispatchTrace() noexcept
+        {
+            const DWORD preservedError = ::GetLastError();
+            const double elapsed = std::chrono::duration<double,std::milli>(
+                NativeFocusClock::now()-began).count();
+            trace_native_focus("dispatch.end",hwnd,message,elapsed,preservedError,observed && permitTrace,owner);
+            ::SetLastError(preservedError);
+        }
+    };
 
     inline void focus_gui_mouse_target(HWND hwnd) noexcept
     {
@@ -35,15 +148,20 @@ namespace
         evidence.target = hwnd;
         evidence.callerThread = ::GetCurrentThreadId();
         evidence.before = ::GetFocus();
+        trace_native_focus("set-focus-initial.begin",hwnd,0u,0.0);
+        const auto focusStarted = NativeFocusClock::now();
         ::SetLastError(0);
         evidence.previous = ::SetFocus(hwnd);
         evidence.error = ::GetLastError();
+        evidence.initialFocusMs = std::chrono::duration<double,std::milli>(
+            NativeFocusClock::now()-focusStarted).count();
         evidence.after = ::GetFocus();
         evidence.parent = ::GetParent(hwnd);
         evidence.root = ::GetAncestor(hwnd, GA_ROOT);
         evidence.targetEnabled = ::IsWindowEnabled(hwnd) != FALSE;
         evidence.parentEnabled = !evidence.parent || ::IsWindowEnabled(evidence.parent) != FALSE;
         evidence.initialError = evidence.error;
+        trace_native_focus("set-focus-initial.end",hwnd,0u,evidence.initialFocusMs,evidence.error);
         if (evidence.error == ERROR_INVALID_PARAMETER && evidence.after != hwnd
             && evidence.targetEnabled && evidence.parentEnabled)
         {
@@ -58,27 +176,55 @@ namespace
                 && ownerPid == ::GetCurrentProcessId() && foregroundPid == ownerPid
                 && foreground == evidence.root && ::IsChild(foreground, hwnd) != FALSE)
             {
+                trace_native_focus("attach-input.begin",hwnd,0u,0.0);
+                const auto attachStarted = NativeFocusClock::now();
+                const bool previousTraceDeferred = nativeFocusTraceDeferred;
+                nativeFocusTraceDeferred = true;
                 ::SetLastError(0);
                 evidence.attached = ::AttachThreadInput(ownerThread, foregroundThread, TRUE) != FALSE;
                 evidence.attachError = ::GetLastError();
+                evidence.attachMs = std::chrono::duration<double,std::milli>(
+                    NativeFocusClock::now()-attachStarted).count();
                 if (evidence.attached)
                 {
                     struct InputQueueAttachment
                     {
                         DWORD owner, foreground;
                         bool& detached;
+                        double& elapsedMs;
+                        DWORD& error;
                         ~InputQueueAttachment() noexcept
-                        { detached = ::AttachThreadInput(owner, foreground, FALSE) != FALSE; }
+                        {
+                            const auto began = NativeFocusClock::now();
+                            detached = ::AttachThreadInput(owner, foreground, FALSE) != FALSE;
+                            error = ::GetLastError();
+                            elapsedMs = std::chrono::duration<double,std::milli>(
+                                NativeFocusClock::now()-began).count();
+                            ::SetLastError(error);
+                        }
                     };
                     {
-                        InputQueueAttachment attachment{ownerThread, foregroundThread, evidence.detached};
+                        InputQueueAttachment attachment{ownerThread, foregroundThread,
+                            evidence.detached,evidence.detachMs,evidence.detachError};
+                        const auto retryStarted = NativeFocusClock::now();
                         ::SetLastError(0);
                         evidence.previous = ::SetFocus(hwnd);
                         evidence.error = ::GetLastError();
+                        evidence.retryFocusMs = std::chrono::duration<double,std::milli>(
+                            NativeFocusClock::now()-retryStarted).count();
                     }
                     // Detachment must not turn an apparent acquisition into
                     // silently accepted input; the existing focus gate remains.
                     evidence.after = ::GetFocus();
+                }
+                // No logger work while the native queues are attached, including
+                // re-entrant focus dispatch. Publish timings only after detach.
+                nativeFocusTraceDeferred = previousTraceDeferred;
+                trace_native_focus("attach-input.end",hwnd,0u,evidence.attachMs,evidence.attachError);
+                if (evidence.attached)
+                {
+                    trace_native_focus("set-focus-retry.end",hwnd,0u,evidence.retryFocusMs,evidence.error);
+                    trace_native_focus("detach-input.end",hwnd,0u,evidence.detachMs,evidence.detachError);
                 }
             }
         }
@@ -98,6 +244,11 @@ namespace
         bool screenCoordinates = false,
         int mouseButton = 0) noexcept
     {
+        static thread_local unsigned pointerTraceRecords{};
+        static thread_local DWORD pointerTraceMoveTime{};
+        static thread_local bool pointerTraceHeld{};
+        if (type == epochengine::gui::EventType::MouseDown && mouseButton == 0) pointerTraceHeld = true;
+        if (type == epochengine::gui::EventType::MouseUp && mouseButton == 0) pointerTraceHeld = false;
         if (!ctx)
             return;
 
@@ -168,6 +319,38 @@ namespace
             };
         }
 
+        if (epochengine::core::cli::trace_menu_button0_rect && pointerTraceRecords < 120u)
+        {
+            const DWORD now = static_cast<DWORD>(::GetMessageTime());
+            const bool edge = type == epochengine::gui::EventType::MouseDown || type == epochengine::gui::EventType::MouseUp;
+            if (edge || (pointerTraceHeld && now - pointerTraceMoveTime >= 40u))
+            {
+                ++pointerTraceRecords;
+                if (!edge) pointerTraceMoveTime = now;
+                const DWORD savedError = ::GetLastError();
+                try
+                {
+                    INPUT_MESSAGE_SOURCE source{};
+                    const bool known = ::GetCurrentInputMessageSource(&source) != FALSE;
+                    RECT client{};const bool clientKnown = ::GetClientRect(hwnd,&client) != FALSE;
+                    epochengine::logger::info("PointerTrace.Native", "record="+std::to_string(pointerTraceRecords)
+                        + " ctx="+std::to_string(reinterpret_cast<std::uintptr_t>(ctx))
+                        + " hwnd="+std::to_string(reinterpret_cast<std::uintptr_t>(hwnd))
+                        + " context_hwnd="+std::to_string(reinterpret_cast<std::uintptr_t>(ctx->get_hwnd()))
+                        + " type_button="+std::to_string(static_cast<unsigned>(type))+","+std::to_string(mouseButton)
+                        + " message_ms="+std::to_string(now)
+                        + " source_known_origin_device="+std::to_string(known)+","+std::to_string(static_cast<unsigned>(source.originId))+","+std::to_string(static_cast<unsigned>(source.deviceType))
+                        + " message_left="+std::to_string((::GetKeyState(VK_LBUTTON)&0x8000)!=0)
+                        + " raw="+std::to_string(GET_X_LPARAM(lParam))+","+std::to_string(GET_Y_LPARAM(lParam))
+                        + " local="+std::to_string(mousePosition.x)+","+std::to_string(mousePosition.y)
+                        + " client_known_size="+std::to_string(clientKnown)+","+std::to_string(client.right-client.left)+","+std::to_string(client.bottom-client.top)
+                        + " capture="+std::to_string(reinterpret_cast<std::uintptr_t>(::GetCapture()))
+                        + " focus_pointer="+std::to_string(ctx->has_input_focus_safe())+","+std::to_string(ctx->has_pointer_input_safe()));
+                }
+                catch (...) { /* Diagnostics cannot change native delivery. */ }
+                ::SetLastError(savedError);
+            }
+        }
         epochengine::gui::push_input_for_context(ctx, epochengine::gui::InputEvent{
             .type = type,
             .mouse_pos = mousePosition,
@@ -281,15 +464,137 @@ namespace
     constexpr auto kRenderThreadStartupStepDelay = std::chrono::milliseconds(250);
 
     std::mutex g_externalAttachmentsMutex;
+    struct ExternalProcessPresentation final
+    {
+        std::shared_ptr<epochengine::platform::window_adapter::INativeWindowAttachment> attachment;
+        std::weak_ptr<epochengine::core::Context> viewport_context;
+        bool in_viewport{};
+        bool visible{};
+    };
     std::unordered_map<const epochengine::core::WindowData*,
-        std::shared_ptr<epochengine::platform::window_adapter::INativeWindowAttachment>> g_externalAttachments;
+        ExternalProcessPresentation> g_externalAttachments;
 
-    [[nodiscard]] std::shared_ptr<epochengine::platform::window_adapter::INativeWindowAttachment> external_attachment(
+    [[nodiscard]] ExternalProcessPresentation external_presentation(
         const epochengine::core::WindowData* window)
     {
         std::scoped_lock lock(g_externalAttachmentsMutex);
         const auto found = g_externalAttachments.find(window);
-        return found == g_externalAttachments.end() ? nullptr : found->second;
+        return found == g_externalAttachments.end() ? ExternalProcessPresentation{} : found->second;
+    }
+
+    [[nodiscard]] std::shared_ptr<epochengine::platform::window_adapter::INativeWindowAttachment> external_attachment(
+        const epochengine::core::WindowData* window)
+    {
+        return external_presentation(window).attachment;
+    }
+
+    [[nodiscard]] bool place_external_viewport_attachment(
+        HWND parent, const ExternalProcessPresentation& presentation)
+    {
+        // Opt-in, finite diagnostic evidence for foreign-window waits. The
+        // ordinary presentation path does not sample a clock or format text.
+        static thread_local unsigned traceRecords{};
+        struct PlacementTrace final
+        {
+            using Clock = std::chrono::steady_clock;
+            bool enabled{};
+            unsigned record{};
+            const char* outcome{"identity_refused"};
+            Clock::time_point last{};
+            std::array<double, 5> milliseconds{};
+            std::size_t stage{};
+            void mark() noexcept
+            {
+                if (!enabled || stage >= milliseconds.size()) return;
+                const auto now = Clock::now();
+                milliseconds[stage++] = std::chrono::duration<double, std::milli>{now - last}.count();
+                last = now;
+            }
+            ~PlacementTrace() noexcept
+            {
+                if (!enabled) return;
+                mark();
+                try
+                {
+                    epochengine::logger::info("Context.ExternalViewport",
+                        "record=" + std::to_string(record) + " stages=" + std::to_string(stage)
+                        + " outcome=" + outcome
+                        + " identity_ms=" + std::to_string(milliseconds[0])
+                        + " layout_ms=" + std::to_string(milliseconds[1])
+                        + " placement_ms=" + std::to_string(milliseconds[2])
+                        + " z_order_ms=" + std::to_string(milliseconds[3])
+                        + " verification_ms=" + std::to_string(milliseconds[4]));
+                }
+                catch (...) {} // Optional diagnostics cannot change attachment admission.
+            }
+        } trace;
+        if (epochengine::core::cli::trace_menu_button0_rect && traceRecords < 32u)
+        {
+            trace.enabled = true;
+            trace.record = ++traceRecords;
+            trace.last = PlacementTrace::Clock::now();
+        }
+        const auto& attachment = presentation.attachment;
+        if (!presentation.in_viewport || !attachment || !attachment->attached())
+            return false;
+        trace.mark();
+        const HWND child = reinterpret_cast<HWND>(attachment->window().value);
+        const auto hide = [&]()
+        {
+            if (::IsWindowVisible(child)) (void)::ShowWindowAsync(child, SW_HIDE);
+            return true;
+        };
+        const auto context = presentation.viewport_context.lock();
+        trace.outcome = "hidden_context_or_overlay";
+        // The admitted child owns this viewport while the Editor's preview
+        // is suppressed. Parent scene rendering is deliberately None then;
+        // using it as child visibility would hide/show the child every frame.
+        // The presentation lease, overlay and actual viewport own visibility.
+        if (!context || !presentation.visible || context->gui_overlay_priority())
+            return hide();
+        const HWND owner = static_cast<HWND>(context->native_window);
+        RECT ownerClient{}, parentClient{};
+        POINT origin{};
+        trace.outcome = "hidden_owner_geometry";
+        if (!owner || !::IsWindowVisible(owner) || !::IsChild(parent, owner)
+            || !::GetClientRect(owner, &ownerClient) || !::GetClientRect(parent, &parentClient)
+            || !::ClientToScreen(owner, &origin) || !::ScreenToClient(parent, &origin))
+            return hide();
+        const auto viewport = context->scene_viewport();
+        const int logicalWidth = (std::max)(1, context->width);
+        const int logicalHeight = (std::max)(1, context->height);
+        // GUI bounds are logical client coordinates. Convert to the actual
+        // native client before translating a docked backend into its parent.
+        const auto scaled = [](std::int64_t value, int logical, int physical)
+        { return static_cast<int>(std::clamp(value, std::int64_t{}, static_cast<std::int64_t>(logical))
+            * static_cast<std::int64_t>(physical) / logical); };
+        const auto clipped = [](std::int64_t value, std::int64_t extent)
+        { return static_cast<int>(std::clamp(value, std::int64_t{}, (std::max)(std::int64_t{}, extent))); };
+        const int left = clipped(static_cast<std::int64_t>(origin.x)
+            + scaled(viewport.x, logicalWidth, static_cast<int>(ownerClient.right)), parentClient.right);
+        const int top = clipped(static_cast<std::int64_t>(origin.y)
+            + scaled(viewport.y, logicalHeight, static_cast<int>(ownerClient.bottom)), parentClient.bottom);
+        const int right = clipped(static_cast<std::int64_t>(origin.x)
+            + scaled(static_cast<std::int64_t>(viewport.x) + viewport.width, logicalWidth,
+                static_cast<int>(ownerClient.right)), parentClient.right);
+        const int bottom = clipped(static_cast<std::int64_t>(origin.y)
+            + scaled(static_cast<std::int64_t>(viewport.y) + viewport.height, logicalHeight,
+                static_cast<int>(ownerClient.bottom)), parentClient.bottom);
+        trace.outcome = "hidden_empty_viewport";
+        if (right <= left || bottom <= top) return hide();
+        trace.mark();
+        trace.outcome = "placement_refused";
+        if (!attachment->place(left, top, right - left, bottom - top)) return false;
+        trace.mark();
+        // This is a sibling over the scene only, not another grid tile. Do not
+        // activate it while arranging or cover the Editor's native caption.
+        if (::GetWindow(parent, GW_CHILD) != child)
+            (void)::SetWindowPos(child, HWND_TOP, 0, 0, 0, 0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
+        trace.mark();
+        const bool current = attachment->placement_current();
+        trace.outcome = current ? "placed" : "placement_verification_refused";
+        return current;
     }
 
     [[nodiscard]] bool release_external_attachment(const epochengine::core::WindowData* window)
@@ -299,7 +604,7 @@ namespace
             std::scoped_lock lock(g_externalAttachmentsMutex);
             const auto found = g_externalAttachments.find(window);
             if (found == g_externalAttachments.end()) return false;
-            attachment = std::move(found->second);
+            attachment = std::move(found->second.attachment);
             g_externalAttachments.erase(found);
         }
         attachment->restore();
@@ -445,6 +750,9 @@ namespace
         auto& drag = epochengine::core::Drag();
         if (!drag.dragging || drag.draggedWindow != hwnd) return;
         const HWND parent = drag.originalParent;
+        if (g_activeManager)
+            if (auto* window = g_activeManager->findWindowByHWND(hwnd))
+                window->proxyChildNativeGeneration.fetch_add(1, std::memory_order_acq_rel);
         restore_native_drag_opacity(drag);
         // Clear before releasing capture: WM_CAPTURECHANGED can re-enter.
         drag = {};
@@ -471,13 +779,6 @@ namespace
         return true;
     }
 
-    [[nodiscard]] inline bool should_draw_opengl_startup_placeholder(
-        const epochengine::core::WindowData* window) noexcept
-    {
-        return window
-            && window->type == epochengine::core::ContextType::OpenGL
-            && !window->firstPresentComplete.load(std::memory_order_acquire);
-    }
     // Some Windows SDK setups don't expose WGL_ARB_create_context declarations here.
     // Provide local fallbacks so this TU can request modern core contexts without extra headers.
 #if !defined(WGL_CONTEXT_MAJOR_VERSION_ARB)
@@ -773,6 +1074,79 @@ namespace
         return adjusted;
     }
 
+    // Epoch proxy shells belong to the UI owner; SDL/SFML child HWNDs belong
+    // to their renderer. Reuse that renderer's existing pre-frame queue, and
+    // reject work superseded by a later native transaction or retirement.
+    template<class Command>
+    [[nodiscard]] inline bool queue_proxy_child_if_foreign(
+        HWND child, HWND parent, Command command) noexcept
+    {
+        auto* window = g_activeManager ? g_activeManager->findWindowByHWND(child) : nullptr;
+        if (!window || (window->type != epochengine::core::ContextType::SDL
+                && window->type != epochengine::core::ContextType::SFML)
+            || window->hwndChild.load(std::memory_order_acquire) != child
+            || window->host_hwnd == child)
+            return false;
+
+        DWORD process{};
+        const DWORD owner = ::GetWindowThreadProcessId(child, &process);
+        if (owner && owner == ::GetCurrentThreadId()) return false;
+        if (!owner || process != ::GetCurrentProcessId()) return true;
+        DWORD parentProcess{};
+        const DWORD parentOwner = parent ? ::GetWindowThreadProcessId(parent, &parentProcess) : 0u;
+        if (parent && (!parentOwner || parentProcess != process)) return true;
+        const HWND host = window->host_hwnd;
+        const auto generation = window->proxyChildNativeGeneration.load(std::memory_order_acquire);
+        try
+        {
+            window->ownerThreadCommandQueue.enqueue(
+                [window, child, parent, host, owner, process, parentOwner, generation,
+                 command = std::move(command)]() mutable
+                {
+                    if (!window->running.load(std::memory_order_acquire)
+                        || window->get_should_close()
+                        || window->retirementQueued.load(std::memory_order_acquire)
+                        || window->hwndChild.load(std::memory_order_acquire) != child
+                        || window->host_hwnd != host
+                        || window->proxyChildNativeGeneration.load(std::memory_order_acquire) != generation
+                        || ::GetCurrentThreadId() != owner)
+                        return;
+                    DWORD observedProcess{};
+                    if (::GetWindowThreadProcessId(child, &observedProcess) != owner
+                        || observedProcess != process)
+                        return;
+                    if (parent && (::GetWindowThreadProcessId(parent, &observedProcess) != parentOwner
+                            || observedProcess != process))
+                        return;
+                    command();
+                });
+        }
+        catch (...)
+        {
+            window->set_backend_lifecycle(epochengine::core::BackendLifecycleState::failed);
+            window->running.store(false, std::memory_order_release);
+            try { epochengine::logger::error(kLogSys, "Proxy child work could not be queued; the backend is retiring without a foreign-thread native mutation."); }
+            catch (...) {}
+        }
+        return true;
+    }
+
+    inline void show_proxy_child_window(HWND child, int mode) noexcept
+    {
+        if (queue_proxy_child_if_foreign(child, nullptr,
+                [child, mode]() { ::ShowWindow(child, mode); }))
+            return;
+        ::ShowWindow(child, mode);
+    }
+
+    inline void focus_proxy_child_window(HWND child) noexcept
+    {
+        if (queue_proxy_child_if_foreign(child, nullptr,
+                [child]() { ::SetFocus(child); }))
+            return;
+        ::SetFocus(child);
+    }
+
     inline void dock_host_window_to_parent(
         HWND hwnd,
         HWND parent,
@@ -783,6 +1157,10 @@ namespace
         bool asynchronous = true) noexcept
     {
         if (!hwnd || !parent || ::IsWindow(parent) == FALSE)
+            return;
+        if (queue_proxy_child_if_foreign(hwnd, parent,
+                [=]() { dock_host_window_to_parent(hwnd, parent, desiredScreenX,
+                    desiredScreenY, clientW, clientH, false); }))
             return;
 
         const HWND currentParent = ::GetParent(hwnd);
@@ -1148,6 +1526,32 @@ namespace
         ::RestoreDC(hdc, savedDc);
     }
 
+    [[nodiscard]] inline bool invalidates_native_window_observation(UINT message) noexcept
+    {
+        switch (message)
+        {
+        case WM_ACTIVATE: case WM_SETFOCUS: case WM_KILLFOCUS:
+        case WM_SIZE: case WM_SHOWWINDOW: case WM_WINDOWPOSCHANGED:
+        case WM_DPICHANGED: case WM_DISPLAYCHANGE: case WM_DWMCOMPOSITIONCHANGED:
+        case WM_DESTROY: case WM_NCDESTROY:
+            return true;
+        default: return false;
+        }
+    }
+
+    struct NativeWindowObservationInvalidation final
+    {
+        epochengine::core::MultiContextManager* manager{};
+        NativeWindowObservationInvalidation(epochengine::core::MultiContextManager* owner,
+            UINT message) noexcept
+            : manager{invalidates_native_window_observation(message) ? owner : nullptr} {}
+        ~NativeWindowObservationInvalidation() noexcept
+        {
+            if (manager && manager == epochengine::core::GetActiveMultiContextManager())
+                manager->invalidate_native_window_state();
+        }
+    };
+
     inline void remember_gui_input_owner(HWND hwnd) noexcept
     {
         if (hwnd && ::IsWindow(hwnd) != FALSE)
@@ -1434,6 +1838,9 @@ namespace
     {
         if (!child || !parent)
             return;
+        if (queue_proxy_child_if_foreign(child, parent,
+                [=]() { apply_child_fill_layout(child, parent, clientW, clientH); }))
+            return;
 
         LONG_PTR style = ::GetWindowLongPtrW(child, GWL_STYLE);
         style &= ~(WS_POPUP | WS_OVERLAPPEDWINDOW);
@@ -1621,6 +2028,8 @@ namespace
         if (!is_sfml_proxy_candidate(window))
             return;
 
+        window->proxyChildNativeGeneration.fetch_add(1, std::memory_order_acq_rel);
+
         window->isFloating = true;
         position_top_level_shell(
             window->host_hwnd,
@@ -1635,7 +2044,7 @@ namespace
         else
         {
             const HWND child = window->hwndChild.load(std::memory_order_acquire);
-            ::SetFocus(child ? child : window->host_hwnd);
+            focus_proxy_child_window(child ? child : window->host_hwnd);
         }
     }
 
@@ -1649,6 +2058,8 @@ namespace
     {
         if (!is_sfml_proxy_candidate(window) || !parent || ::IsWindow(parent) == FALSE)
             return;
+
+        window->proxyChildNativeGeneration.fetch_add(1, std::memory_order_acq_rel);
 
         window->isFloating = false;
 #if defined(_DEBUG)
@@ -1674,12 +2085,12 @@ namespace
                 clientH);
             apply_child_fill_layout(window->hwndChild, window->host_hwnd, clientW, clientH);
             ::ShowWindow(window->host_hwnd, SW_SHOWNA);
-            ::ShowWindow(window->hwndChild, SW_SHOWNA);
+            show_proxy_child_window(window->hwndChild, SW_SHOWNA);
             window->set_size(clientW, clientH);
             if (proxy_drag_owns_host(window))
             {
                 const HWND child = window->hwndChild.load(std::memory_order_acquire);
-                ::SetFocus(child ? child : window->host_hwnd);
+                focus_proxy_child_window(child ? child : window->host_hwnd);
             }
         }
         else
@@ -1691,7 +2102,7 @@ namespace
                 desiredScreenY,
                 clientW,
                 clientH);
-            ::ShowWindow(window->hwndChild, SW_SHOWNA);
+            show_proxy_child_window(window->hwndChild, SW_SHOWNA);
             if (window->host_hwnd
                 && window->host_hwnd != window->hwndChild
                 && ::IsWindow(window->host_hwnd) != FALSE)
@@ -1707,7 +2118,7 @@ namespace
             }
             window->set_size(clientW, clientH);
             if (proxy_drag_owns_host(window))
-                ::SetFocus(window->hwndChild);
+                focus_proxy_child_window(window->hwndChild);
         }
 
 #if defined(_DEBUG)
@@ -1861,6 +2272,13 @@ namespace
         if (msg != WM_SYSKEYDOWN || key != VK_F4
             || (static_cast<std::uintptr_t>(flags) & (std::uintptr_t{1} << 29u)) == 0)
             return false;
+        // A native modal disables its owner. Direct shortcut delivery to that
+        // owner must not retire its context or fall through to DefWindowProc.
+        if (::IsWindowEnabled(hwnd) == FALSE)
+            return true;
+        if (const HWND root = ::GetAncestor(hwnd, GA_ROOT);
+            root && ::IsWindowEnabled(root) == FALSE)
+            return true;
         // Holding the shortcut must not cascade through every context.
         if ((static_cast<std::uintptr_t>(flags) & (std::uintptr_t{1} << 30u)) != 0)
             return true;
@@ -1933,6 +2351,8 @@ namespace
         using epochengine::platform::window_adapter::NativeInputAction;
         const auto hwnd = reinterpret_cast<HWND>(message.window.value);
         const auto msg = static_cast<UINT>(message.message);
+        const NativeWindowObservationInvalidation nativeObservation{
+            epochengine::core::GetActiveMultiContextManager(),msg};
         const auto wp = static_cast<WPARAM>(message.key);
         const auto lp = static_cast<LPARAM>(message.flags);
         switch (action)
@@ -1982,6 +2402,9 @@ namespace
 
     LRESULT CALLBACK DockableProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, UINT_PTR, DWORD_PTR dw)
     {
+        const NativeFocusDispatchTrace focusDispatch{"DockableProc",hwnd,msg};
+        const NativeWindowObservationInvalidation nativeObservation{
+            epochengine::core::GetActiveMultiContextManager(),msg};
         if (route_context_close_shortcut(hwnd, msg, wp, lp)) return 0;
         auto* ctx = reinterpret_cast<SubCtx*>(dw);
 
@@ -2192,6 +2615,8 @@ namespace
     }
 
     inline void dock_host_window_to_parent(HWND, HWND, int, int, int, int) noexcept {}
+    inline void show_proxy_child_window(HWND child, int mode) noexcept { ::ShowWindow(child, mode); }
+    inline void focus_proxy_child_window(HWND child) noexcept { ::SetFocus(child); }
     inline void apply_child_fill_layout(HWND, HWND, int, int) noexcept {}
     inline void move_detached_top_level_shell(HWND, int, int, int, int) noexcept {}
     inline void sync_drag_offset_to_host_window(HWND) noexcept {}

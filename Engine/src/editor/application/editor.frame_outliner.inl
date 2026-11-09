@@ -4,7 +4,6 @@
             gui::Vec2 pane_pos,
             gui::Vec2 pane_size,
             OutlinerToolTab pane_tab,
-            std::string_view pane_route,
             std::string_view pane_label)
         {
         if (pane_size.x > 1.0f && pane_size.y > 1.0f)
@@ -13,27 +12,123 @@
         // The dock tab already owns the visible title; avoid a second title
         // taking content height and causing duplicate headings.
         gui::begin_window(pane_label, pane_pos, pane_size, true, false);
-        handle_pane_title_drag_to_tab(
-            pane_route, pane_label, pane_pos, pane_size);
         const gui::Vec2 outlinerScrollStart = gui::cursor_position();
+        enum class OutlinerCommand : std::uint64_t
+        {
+            deselect=1u, cube, ground, light, water, four_cubes, eight_cubes,
+            spawn, camera, open_world, focus, undo, redo, duplicate, erase, ambient
+        };
+        const auto route_selected_hierarchy_action =
+            [&](editor_hierarchy::Action action) -> bool
+        {
+            const editor_hierarchy::NodeId selectedNode =
+                editor.worldHierarchy.node_for_entity(
+                    editor.selectedEntityId);
+            const editor_hierarchy::Route route =
+                editor.worldHierarchy.route(action, selectedNode);
+            if (!route)
+            {
+                editor.worldHierarchyStatus =
+                    "Hierarchy action rejected: "
+                    + std::string(editor_hierarchy::code_name(route.code));
+                return false;
+            }
+            editor.worldHierarchyStatus = "Hierarchy synchronized.";
+            return true;
+        };
+
+        const auto prepare_outliner_context_menu = [&]()
+        {
+            if (pane_tab != OutlinerToolTab::World) return;
+            auto& menu = editor.outlinerContextMenu;
+            if (menu.kind == EditorState::OutlinerContextMenu::Kind::preview_selection) return;
+            const auto frame = editor.timeSnapshot.frame_index;
+            const auto project = editor.projectLifecycle.evidence().generations.selected_project.generation;
+            if (menu.scene != editor_scene_identity(editor) || menu.project_generation != project
+                || frame < menu.last_frame || frame - menu.last_frame > 1u
+                || editor.openMenu != TopMenu::None || modal_visible_now() || floating_gui_visible()
+                || !ctx->has_input_focus_safe() || gui::was_mouse_right_pressed())
+            {
+                gui::close_command_menu(menu.menu);
+                menu.open_requested = false;
+            }
+            menu.last_frame = frame;
+            if (menu.menu.popup.open)
+            {
+                gui::block_background_for_popup();
+                result.scene_input_captured = true;
+            }
+        };
+        prepare_outliner_context_menu();
         const float outlinerScrollHeight = (std::max)(
-            48.0f,
+            1.0f,
             pane_pos.y + pane_size.y - outlinerScrollStart.y - 4.0f);
+        if (pane_tab != OutlinerToolTab::World)
         (void)gui::begin_scroll_area(gui::ScrollAreaOptions{
             .id = "world-outliner-body",
-            .size = { (std::max)(80.0f, pane_size.x - 12.0f), outlinerScrollHeight },
-            .draw_background = true,
+            .size = { (std::max)(1.0f, pane_size.x - 12.0f), outlinerScrollHeight },
+            .draw_background = false,
             .show_scrollbar = true
         });
-        const float outlinerWidth = (std::max)(150.0f, pane_size.x - 18.0f);
+        // Reserve the existing scroll owner's gutter instead of forcing a
+        // minimum wider than the pane. Narrow detached panes share this path.
+        const float outlinerWidth = (std::max)(1.0f,
+            pane_size.x - (pane_tab == OutlinerToolTab::World ? 12.0f : 28.0f));
+        const float paneLabelWidth = (std::clamp)(outlinerWidth * 0.30f, 76.0f, 112.0f);
+        const gui::InlineButtonRowOptions paneActionLayout{
+            .sizing = gui::InlineButtonSizing::FitContent,
+            .alignment = gui::InlineButtonAlignment::Center,
+            .wrap = true};
+        const auto paneAction = [&](std::string_view label)
+        {
+            const std::array actions{gui::InlineButtonSpec{.label = label}};
+            return gui::inline_button_row(actions, 28.0f, 6.0f, paneActionLayout).has_value();
+        };
+        const auto containsNoCase = [](
+            std::string_view value, std::string_view query) noexcept
+        {
+            const auto equal = [](char left, char right) noexcept
+            {
+                return std::tolower(static_cast<unsigned char>(left))
+                    == std::tolower(static_cast<unsigned char>(right));
+            };
+            return query.empty() || std::search(value.begin(), value.end(),
+                query.begin(), query.end(), equal) != value.end();
+        };
 
         if (editor.outlinerToolTab == OutlinerToolTab::World)
         {
-        gui::label(std::string("Scene: ") + editor.activeWorld);
-        gui::label(std::string("Entities: ") + std::to_string(editor.entities.size()));
-        gui::label(std::string("Selected: ") + std::to_string(editor.selectedEntityIds.size()));
-        gui::property_row("[outliner] Root", display_project_path(editor.projectRoot), 84.0f);
-        gui::property_row("[outliner] Scene file", file_ready_summary(editor.projectScenePath), 104.0f);
+        const gui::Vec2 outlinerToolbarOrigin = gui::cursor_position();
+        const float outlinerToolExtent = (std::min)(28.0f, outlinerWidth * 0.25f);
+        const float outlinerToolGap = (std::min)(4.0f, outlinerWidth * 0.0625f);
+        const auto outlinerMenuButton = [&](std::string_view label, gui::ButtonIcon icon,
+            float x, EditorState::OutlinerContextMenu::Kind kind, bool enabled)
+        {
+            gui::set_cursor({x, outlinerToolbarOrigin.y});
+            const std::array items{gui::InlineButtonSpec{.label=label,
+                .width=outlinerToolExtent,.enabled=enabled,.icon=icon,.tooltip=label}};
+            if (gui::inline_button_row(items,28.0f,0.0f,gui::InlineButtonRowOptions{
+                    .sizing=gui::InlineButtonSizing::FitContent,
+                    .available_width=outlinerToolExtent}))
+            {
+                auto& menu=editor.outlinerContextMenu;
+                menu.kind=kind;
+                menu.anchor={x,outlinerToolbarOrigin.y+30.0f};
+                menu.scene=editor_scene_identity(editor);
+                menu.project_generation=editor.projectLifecycle.evidence().generations.selected_project.generation;
+                menu.open_requested=true;
+            }
+        };
+        outlinerMenuButton("Create object",gui::ButtonIcon::add,outlinerToolbarOrigin.x,
+            EditorState::OutlinerContextMenu::Kind::create,application.allow_entity_authoring);
+        gui::set_cursor({outlinerToolbarOrigin.x+outlinerToolExtent+outlinerToolGap,outlinerToolbarOrigin.y});
+        (void)gui::edit_box(editor.worldHierarchyFilter,
+            {(std::max)(1.0f,outlinerWidth-2.0f*(outlinerToolExtent+outlinerToolGap)),28.0f},
+            160u,false,gui::TextInputKeyboardPolicy::focused,false,"Filter objects...");
+        outlinerMenuButton("More actions",gui::ButtonIcon::more,
+            outlinerToolbarOrigin.x+outlinerWidth-outlinerToolExtent,
+            EditorState::OutlinerContextMenu::Kind::actions,true);
+        gui::set_cursor({outlinerToolbarOrigin.x,outlinerToolbarOrigin.y+34.0f});
 
         std::vector<editor_hierarchy::EntityRecord> hierarchyEntities{};
         hierarchyEntities.reserve(editor.entities.size());
@@ -47,7 +142,9 @@
                 .category = entity.category,
                 .order = static_cast<std::uint64_t>(index),
                 .visible = entity.visible,
-                .locked = !application.allow_entity_authoring});
+                .locked = !application.allow_entity_authoring,
+                .parent_id = entity.forestRegion && editor_entity_index(editor,entity.forestRegion->terrain_object_id)
+                    ? entity.forestRegion->terrain_object_id : 0u});
         }
         const editor_hierarchy::Result hierarchyRefresh =
             editor.worldHierarchy.refresh(
@@ -84,156 +181,57 @@
             }
             else
             {
-                editor.worldHierarchyStatus = "Hierarchy synchronized.";
+                if (editor.worldHierarchyStatus.empty()
+                    || editor.worldHierarchyStatus.starts_with("Hierarchy refresh rejected:")
+                    || editor.worldHierarchyStatus.starts_with("Hierarchy filter rejected:"))
+                    editor.worldHierarchyStatus = "Hierarchy synchronized.";
             }
         }
 
-        const auto route_selected_hierarchy_action =
-            [&](editor_hierarchy::Action action) -> bool
-        {
-            const editor_hierarchy::NodeId selectedNode =
-                editor.worldHierarchy.node_for_entity(
-                    editor.selectedEntityId);
-            const editor_hierarchy::Route route =
-                editor.worldHierarchy.route(action, selectedNode);
-            if (!route)
-            {
-                editor.worldHierarchyStatus =
-                    "Hierarchy action rejected: "
-                    + std::string(editor_hierarchy::code_name(route.code));
-                return false;
-            }
-            return true;
-        };
-
-        if (application.allow_entity_authoring)
-        {
-            const bool worldSurfaceActive = workspace_command_surface(editor)
-                == editor_workspace_commands::Surface::world;
-            const std::array outlinerWorldButtons{
-                gui::InlineButtonSpec{ .label = "+ Cube", .width = 72.0f, .enabled = worldSurfaceActive },
-                gui::InlineButtonSpec{ .label = "+ Ground", .width = 86.0f, .enabled = worldSurfaceActive },
-                gui::InlineButtonSpec{ .label = "+ Light", .width = 72.0f, .enabled = worldSurfaceActive }
-            };
-            if (const auto action = gui::inline_button_row(outlinerWorldButtons, 26.0f, 5.0f))
-            {
-                switch (*action)
-                {
-                case 0: add_entity(editor, "cube"); break;
-                case 1: add_entity(editor, "ground"); break;
-                case 2: add_entity(editor, "light"); break;
-                default: break;
-                }
-            }
-            const std::array outlinerBatchButtons{
-                gui::InlineButtonSpec{ .label = "+ 4 Cubes", .width = 88.0f, .enabled = worldSurfaceActive },
-                gui::InlineButtonSpec{ .label = "+ 8 Cubes", .width = 88.0f, .enabled = worldSurfaceActive }
-            };
-            if (const auto action = gui::inline_button_row(
-                    outlinerBatchButtons, 26.0f, 5.0f))
-            {
-                (void)add_cube_batch(editor, *action == 0u ? 4u : 8u);
-            }
-
-            const std::array outlinerRuntimeButtons{
-                gui::InlineButtonSpec{ .label = "+ Spawn", .width = 78.0f, .enabled = worldSurfaceActive },
-                gui::InlineButtonSpec{ .label = "+ Camera", .width = 88.0f, .enabled = worldSurfaceActive }
-            };
-            if (const auto action = gui::inline_button_row(outlinerRuntimeButtons, 26.0f, 5.0f))
-            {
-                switch (*action)
-                {
-                case 0: add_entity(editor, "spawn"); break;
-                case 1: add_entity(editor, "camera"); break;
-                default: break;
-                }
-            }
-
-            const std::array worldHistoryButtons{
-                gui::InlineButtonSpec{ .label = "Undo", .width = 70.0f, .enabled = worldSurfaceActive && editor.sceneDocument.can_undo() },
-                gui::InlineButtonSpec{ .label = "Redo", .width = 70.0f, .enabled = worldSurfaceActive && editor.sceneDocument.can_redo() }
-            };
-            if (const auto action = gui::inline_button_row(
-                    worldHistoryButtons, 26.0f, 5.0f))
-            {
-                if (*action == 0u)
-                    (void)execute_surface_edit(editor, ctx.get(), SurfaceEditAction::undo);
-                else
-                    (void)execute_surface_edit(editor, ctx.get(), SurfaceEditAction::redo);
-            }
-
-            const bool hasSelection = editor_has_selection(editor);
-            const std::array outlinerMutationButtons{
-                gui::InlineButtonSpec{ .label = "Duplicate", .width = 96.0f, .enabled = worldSurfaceActive && hasSelection },
-                gui::InlineButtonSpec{ .label = "Delete", .width = 74.0f, .enabled = worldSurfaceActive && hasSelection }
-            };
-            if (const auto action = gui::inline_button_row(
-                    outlinerMutationButtons, 26.0f, 5.0f))
-            {
-                if (*action == 0u
-                    && route_selected_hierarchy_action(
-                        editor_hierarchy::Action::duplicate_entity))
-                    (void)execute_surface_edit(editor, ctx.get(), SurfaceEditAction::duplicate_selection);
-                else if (*action == 1u
-                    && route_selected_hierarchy_action(
-                        editor_hierarchy::Action::delete_entity))
-                    (void)execute_surface_edit(editor, ctx.get(), SurfaceEditAction::delete_selection);
-            }
-            const std::array outlinerSelectionButtons{
-                gui::InlineButtonSpec{ .label = "Focus", .width = 70.0f, .enabled = worldSurfaceActive && hasSelection },
-                gui::InlineButtonSpec{ .label = "Deselect", .width = 86.0f, .enabled = hasSelection }
-            };
-            if (const auto action = gui::inline_button_row(
-                    outlinerSelectionButtons, 26.0f, 5.0f))
-            {
-                if (*action == 0u
-                    && route_selected_hierarchy_action(
-                        editor_hierarchy::Action::focus))
-                    (void)execute_surface_edit(editor, ctx.get(), SurfaceEditAction::focus_selection);
-                else if (*action == 1u
-                    && route_selected_hierarchy_action(
-                        editor_hierarchy::Action::deselect))
-                    clear_editor_selection(editor);
-            }
-        }
-        else
-        {
-            gui::property_row("[outliner] Authoring", "Owned by this dedicated application scene", 92.0f);
-            const bool hasSelection = editor_has_selection(editor);
-            const std::array selectionActions{
-                gui::InlineButtonSpec{ .label = "Focus", .width = 70.0f, .enabled = hasSelection },
-                gui::InlineButtonSpec{ .label = "Deselect", .width = 86.0f, .enabled = hasSelection }
-            };
-            if (const auto action = gui::inline_button_row(
-                    selectionActions, 26.0f, 5.0f))
-            {
-                if (*action == 0u
-                    && route_selected_hierarchy_action(
-                        editor_hierarchy::Action::focus))
-                    handle_scene_tool(editor, ctx.get(), "focus_selection");
-                else if (*action == 1u
-                    && route_selected_hierarchy_action(
-                        editor_hierarchy::Action::deselect))
-                    clear_editor_selection(editor);
-            }
-        }
-
-        gui::label("Hierarchy filter");
-        (void)gui::edit_box(
-            editor.worldHierarchyFilter,
-            {outlinerWidth, 28.0f},
-            160u,
-            false);
-
-        const float hierarchyRowHeight = 30.0f;
-        const float hierarchyViewportHeight = (std::clamp)(
-            outlinerScrollHeight * 0.55f, 112.0f, 420.0f);
+        const float hierarchyRowHeight = gui::menu_item_row_height() + 2.0f;
         const editor_hierarchy::Snapshot hierarchySnapshot =
             editor.worldHierarchy.snapshot();
+        const std::string_view hierarchyEmptyText = editor.worldHierarchyFilter.empty()
+            ? "No objects. Use + to create one."
+            : "No objects match this search.";
+        const bool planetaryObjectPresent=std::any_of(editor.entities.begin(),editor.entities.end(),
+            [](const auto& entity){return entity.visible&&entity.category=="Planetary Terrain"&&entity.meshAsset.has_value();});
+        std::size_t generatedBodyRows = 0u;
+        if (editor.planetaryMeshPolicy)
+        {
+            for (const auto& entity : editor.entities)
+            {
+                if (!entity.visible || !editor_planetary_stream_identity_matches(editor, entity))
+                    continue;
+                const auto matchingBodies = std::count_if(
+                    editor.planetaryMeshPolicy->generated_bodies.begin(),
+                    editor.planetaryMeshPolicy->generated_bodies.end(),
+                    [&](const auto& body) { return containsNoCase(body.name, editor.worldHierarchyFilter); });
+                if (matchingBodies > 0)
+                    generatedBodyRows += 1u + static_cast<std::size_t>(matchingBodies);
+            }
+        }
+        const std::string_view bodyRestoreText = planetaryObjectPresent
+                && (!editor.planetaryMeshPolicy || editor.planetaryMeshPolicy->generated_bodies.empty())
+            ? editor_planetary_restore_progress(editor) : std::string_view{};
+        const std::string_view bodyInventoryText = planetaryObjectPresent
+                && (!editor.planetaryMeshPolicy || editor.planetaryMeshPolicy->generated_bodies.empty())
+            ? (bodyRestoreText.empty()
+                ? std::string_view{"Body inventory unavailable. Review Planetary source, then Build & Generate."}
+                : bodyRestoreText) : std::string_view{};
+        const float hierarchyRowsHeight = hierarchySnapshot.visible_rows == 0u
+            ? gui::measure_wrapped_label_height(hierarchyEmptyText, (std::max)(1.0f, outlinerWidth - 12.0f))
+            : static_cast<float>(hierarchySnapshot.visible_rows) * hierarchyRowHeight;
+        const float hierarchyStatusHeight = editor.worldHierarchyStatus != "Hierarchy synchronized."
+            ? gui::measure_wrapped_label_height(editor.worldHierarchyStatus, outlinerWidth) : 0.0f;
+        const float bodyInventoryHeight = bodyInventoryText.empty()
+            ? 0.0f : gui::measure_wrapped_label_height(bodyInventoryText, outlinerWidth);
+        const float hierarchyViewportHeight = (std::max)(1.0f,
+            pane_pos.y+pane_size.y-gui::cursor_position().y-4.0f);
         const float hierarchyContentHeight = (std::max)(
             hierarchyViewportHeight,
-            static_cast<float>(hierarchySnapshot.visible_rows)
-                * hierarchyRowHeight);
+            hierarchyRowsHeight + static_cast<float>(generatedBodyRows) * hierarchyRowHeight
+                + hierarchyStatusHeight + bodyInventoryHeight);
 
         if (editor.selectedEntityId != editor.worldHierarchyScrollSelection)
         {
@@ -270,6 +268,9 @@
         const gui::Vec2 hierarchyOrigin = gui::cursor_position();
         const std::span<const editor_hierarchy::RowView> hierarchyRows =
             editor.worldHierarchy.rows();
+        if (hierarchySnapshot.visible_rows == 0u)
+            gui::wrapped_label(hierarchyEmptyText,
+                (std::max)(1.0f, outlinerWidth - 12.0f));
         if (hierarchyLayout)
         {
             for (const editor_hierarchy::LayoutRow& layoutRow
@@ -282,26 +283,18 @@
                 gui::set_cursor({
                     hierarchyOrigin.x,
                     hierarchyOrigin.y + layoutRow.top});
-                std::string label(row.depth * 2u, ' ');
-                if (row.group)
-                {
-                    label += row.has_children
-                        ? (row.expanded ? "[-] " : "[+] ")
-                        : "    ";
-                }
-                else
-                {
-                    label += row.selected ? "> " : "  ";
-                }
-                label += row.label;
-                if (!row.detail.empty())
-                    label += "  |  " + row.detail;
-                if (row.locked)
-                    label += "  [locked]";
-
-                if (!gui::button(
-                        label,
-                        {outlinerWidth - 12.0f, hierarchyRowHeight - 2.0f}))
+                const std::string_view label = row.group && row.depth == 0u
+                    ? (editor.projectName.empty() ? std::string_view{"Scene"} : std::string_view{editor.projectName})
+                    : std::string_view{row.label};
+                if (!gui::menu_item({
+                        .label = label,
+                        .shortcut = row.locked ? std::string_view{"Locked"} : std::string_view{},
+                        .size = {(std::max)(1.0f, outlinerWidth - 12.0f), hierarchyRowHeight - 2.0f},
+                        .indicator = row.has_children ? gui::MenuItemIndicator::Disclosure : gui::MenuItemIndicator::None,
+                        .checked = row.has_children ? row.expanded : row.selected,
+                        .tone = gui::SemanticTone::neutral,
+                        .selected = row.selected,
+                        .indentation = static_cast<float>(row.depth)*14.0f}))
                 {
                     continue;
                 }
@@ -317,9 +310,12 @@
                             + std::string(editor_hierarchy::code_name(
                                 toggled.code));
                     }
+                    else editor.worldHierarchyStatus = "Hierarchy synchronized.";
                     continue;
                 }
 
+                if (row.has_children)
+                    (void)editor.worldHierarchy.toggle_expanded(row.node_id);
                 const editor_hierarchy::Route routed =
                     editor.worldHierarchy.route(
                         editor_hierarchy::Action::select,
@@ -336,6 +332,7 @@
                         editor, routed.targets.front()))
                 {
                     select_editor_entity(editor, *index);
+                    editor.worldHierarchyStatus = "Hierarchy synchronized.";
                     (void)editor.worldHierarchy.synchronize_selection(
                         routed.targets.front());
                     editor.worldHierarchyScrollSelection =
@@ -348,58 +345,106 @@
         }
         gui::set_cursor({
             hierarchyOrigin.x,
-            hierarchyOrigin.y + hierarchyContentHeight});
+            hierarchyOrigin.y + hierarchyRowsHeight});
+        std::size_t generatedBodyRow = 0u;
+        if(editor.planetaryMeshPolicy&&!editor.planetaryMeshPolicy->generated_bodies.empty())
+        {
+            for(std::size_t index=0;index<editor.entities.size();++index)
+            {
+                const auto& entity=editor.entities[index];
+                if(!entity.visible||!editor_planetary_stream_identity_matches(editor,entity))continue;
+                const auto& bodies=editor.planetaryMeshPolicy->generated_bodies;
+                if (std::none_of(bodies.begin(), bodies.end(), [&](const auto& body) {
+                        return containsNoCase(body.name, editor.worldHierarchyFilter); }))
+                    continue;
+                gui::set_cursor({hierarchyOrigin.x,
+                    hierarchyOrigin.y + hierarchyRowsHeight + static_cast<float>(generatedBodyRow++) * hierarchyRowHeight});
+                gui::label("Generated bodies");
+                for(const auto& body:bodies)
+                {
+                    if (!containsNoCase(body.name, editor.worldHierarchyFilter))
+                        continue;
+                    gui::set_cursor({hierarchyOrigin.x,
+                        hierarchyOrigin.y + hierarchyRowsHeight + static_cast<float>(generatedBodyRow++) * hierarchyRowHeight});
+                    const bool child=body.parent>=0&&std::any_of(bodies.begin(),bodies.end(),[&](const auto& parent){return parent.id==static_cast<std::uint32_t>(body.parent);});
+                    const bool selected=editor.selectedEntityId==entity.sceneObjectId&&editor.planetaryBodySelection
+                        &&editor.planetaryBodySelection->entity==entity.sceneObjectId
+                        &&editor.planetaryBodySelection->mesh_key==entity.meshAsset->artifact_key
+                        &&editor.planetaryBodySelection->body==body.id;
+                    if(gui::menu_item({.label=body.name,.shortcut=child?"Satellite":"Body",
+                        .size={(std::max)(1.0f,outlinerWidth-12.0f),hierarchyRowHeight-2.0f},
+                        .indicator=gui::MenuItemIndicator::Radio,.checked=selected,.selected=selected,
+                        .indentation=child?14.0f:0.0f}))
+                    {
+                        if(select_editor_planetary_body(editor,index,body.id))
+                        {
+                            editor.worldHierarchyStatus="Hierarchy synchronized.";
+                            (void)editor.worldHierarchy.synchronize_selection(entity.sceneObjectId);
+                            editor.worldHierarchyScrollSelection=entity.sceneObjectId;
+                            handle_scene_tool(editor,ctx.get(),"focus_selection");
+                        }
+                        else editor.worldHierarchyStatus="Body selection refused: its project, source or mesh changed. Reload the project before retrying.";
+                    }
+                }
+            }
+        }
+        gui::set_cursor({hierarchyOrigin.x,
+            hierarchyOrigin.y + hierarchyRowsHeight + static_cast<float>(generatedBodyRows) * hierarchyRowHeight});
+        if (editor.worldHierarchyStatus != "Hierarchy synchronized.")
+            gui::wrapped_label(editor.worldHierarchyStatus, outlinerWidth);
+        if (!bodyInventoryText.empty())
+            gui::wrapped_label(bodyInventoryText, outlinerWidth);
+        gui::set_cursor({hierarchyOrigin.x, hierarchyOrigin.y + hierarchyContentHeight});
         gui::end_scroll_area();
-        gui::property_row(
-            "Hierarchy",
-            editor.worldHierarchyStatus,
-            84.0f);
+
         }
         else if (editor.outlinerToolTab == OutlinerToolTab::Assets)
         {
             if (editor.mainSurface == EditorMainSurface::Assets)
             {
-                gui::label("Asset Navigator");
+                gui::section_heading("Browse Assets");
                 gui::property_row(
                     "Project",
-                    editor.projectName,
-                    70.0f);
+                    editor.projectName, paneLabelWidth);
                 gui::property_row(
                     "Folder",
                     editor.assetBrowserFolder.empty()
                         ? std::string{"Project"}
-                        : editor.assetBrowserFolder,
-                    70.0f);
+                        : editor.assetBrowserFolder, paneLabelWidth);
 
                 const std::array assetSections{
                     gui::TabButtonSpec{
                         .id = "outliner.asset_browser",
                         .label = "Browse",
-                        .width = 64.0f,
+                        .width = 0.0f,
                         .active = editor.assetWorkspaceSection == 0u},
                     gui::TabButtonSpec{
                         .id = "outliner.asset_textures",
                         .label = "Textures",
-                        .width = 72.0f,
+                        .width = 0.0f,
                         .active = editor.assetWorkspaceSection == 1u},
                     gui::TabButtonSpec{
                         .id = "outliner.asset_scripts",
                         .label = "Scripts",
-                        .width = 64.0f,
+                        .width = 0.0f,
                         .active = editor.assetWorkspaceSection == 2u},
                     gui::TabButtonSpec{
                         .id = "outliner.asset_graph",
                         .label = "Graph",
-                        .width = 58.0f,
+                        .width = 0.0f,
                         .active = editor.assetWorkspaceSection == 3u},
                     gui::TabButtonSpec{
                         .id = "outliner.asset_audio",
                         .label = "Audio",
-                        .width = 62.0f,
+                        .width = 0.0f,
                         .active = editor.assetWorkspaceSection == 4u}
                 };
-                if (const auto section = gui::tab_bar_buttons(
-                        assetSections, 27.0f, 1.0f);
+                if (const auto section = gui::responsive_tab_bar_buttons({
+                        .overflow_id = "outliner.asset_sections",
+                        .tabs = assetSections,
+                        .available_width = outlinerWidth,
+                        .overflow_width = 84.0f,
+                        .height = 29.0f});
                     section.selected_index)
                 {
                     editor.assetWorkspaceSection =
@@ -408,13 +453,14 @@
 
                 if (editor.assetWorkspaceSection == 0u)
                 {
+                    gui::label("Find a file");
                     (void)gui::edit_box(
                         editor.assetSearch,
                         {outlinerWidth, 28.0f},
                         96u,
                         false);
                     if (!editor.assetBrowserFolder.empty()
-                        && gui::button("Up One Folder", {128.0f, 26.0f}))
+                        && paneAction("Up One Folder"))
                     {
                         leave_asset_browser_folder(editor);
                     }
@@ -423,18 +469,24 @@
                         editor.projectRoot,
                         editor.assetBrowserFolder,
                         512u);
+                    std::size_t visibleAssets = 0u;
                     for (const auto& entry : entries)
                     {
-                        if (!asset_category_visible(
-                                editor.assetCategory, entry.kind))
+                        if (!asset_category_visible(editor.assetCategory, entry.kind)
+                            || (!containsNoCase(entry.label, editor.assetSearch)
+                                && !containsNoCase(entry.path, editor.assetSearch)))
                         {
                             continue;
                         }
-                        if (gui::button_selected(
-                                entry.label,
-                                {outlinerWidth, 27.0f},
-                                editor.selectedProjectFile
-                                    == entry.path))
+                        ++visibleAssets;
+                        if (gui::menu_item({
+                                .label = entry.label,
+                                .shortcut = entry.directory ? std::string_view{"Folder"} : std::string_view{entry.kind},
+                                .size = {outlinerWidth, 29.0f},
+                                .indicator = gui::MenuItemIndicator::Radio,
+                                .checked = editor.selectedProjectFile == entry.path,
+                                .tone = entry.directory ? gui::SemanticTone::info : gui::SemanticTone::neutral,
+                                .selected = editor.selectedProjectFile == entry.path}))
                         {
                             if (entry.directory)
                             {
@@ -474,33 +526,36 @@
                             }
                         }
                     }
+                    if (visibleAssets == 0u)
+                        gui::wrapped_label(editor.projectRoot.empty()
+                            ? "Open or create a project to browse its files."
+                            : "No files match this folder and search.", outlinerWidth);
                 }
 
                 gui::property_row(
                     "Selected",
                     editor.selectedAssetPath.empty()
                         ? std::string{"None"}
-                        : editor.selectedAssetPath,
-                    70.0f);
+                        : editor.selectedAssetPath, paneLabelWidth);
                 gui::end_scroll_area();
                 gui::end_window();
                 return;
             }
-            gui::label(std::string("Assets: ") + editor.projectName);
-            gui::property_row("Root", display_project_path(editor.projectRoot), 64.0f);
+            gui::section_heading("Browse Assets");
+            gui::property_row("Root", display_project_path(editor.projectRoot), paneLabelWidth);
             gui::property_row(
                 "Folder",
                 editor.assetBrowserFolder.empty()
                     ? std::string{"Project"}
-                    : editor.assetBrowserFolder,
-                64.0f);
+                    : editor.assetBrowserFolder, paneLabelWidth);
             if (!editor.assetBrowserFolder.empty()
-                && gui::button("Up", {54.0f, 26.0f}))
+                && paneAction("Up One Folder"))
             {
                 leave_asset_browser_folder(editor);
             }
 
             draw_asset_category_tabs(editor, false);
+            gui::label("Find a file");
             (void)gui::edit_box(
                 editor.assetSearch,
                 {outlinerWidth, 28.0f},
@@ -526,8 +581,7 @@
                         metrics.decoded_bytes / 1024u
                             + (metrics.decoded_bytes % 1024u != 0u
                                 ? 1u
-                                : 0u)),
-                    76.0f);
+                                : 0u)), paneLabelWidth);
                 draw_project_texture_catalog(
                     editor,
                     ctx,
@@ -545,24 +599,6 @@
 
             draw_texture_application_controls(editor, outlinerWidth);
 
-            const auto containsNoCase = [](
-                std::string_view value,
-                std::string_view query) noexcept
-            {
-                if (query.empty())
-                    return true;
-                const auto equal = [](char left, char right) noexcept
-                {
-                    return std::tolower(
-                        static_cast<unsigned char>(left))
-                        == std::tolower(
-                            static_cast<unsigned char>(right));
-                };
-                return std::search(
-                    value.begin(), value.end(),
-                    query.begin(), query.end(),
-                    equal) != value.end();
-            };
             const auto entries = collect_asset_manager_entries(
                 editor.projectRoot,
                 editor.assetBrowserFolder,
@@ -580,10 +616,14 @@
                     continue;
                 }
                 ++visibleCount;
-                if (gui::button_selected(
-                        entry.label,
-                        {outlinerWidth, 27.0f},
-                        editor.selectedProjectFile == entry.path))
+                if (gui::menu_item({
+                        .label = entry.label,
+                        .shortcut = entry.directory ? std::string_view{"Folder"} : std::string_view{entry.kind},
+                        .size = {outlinerWidth, 29.0f},
+                        .indicator = gui::MenuItemIndicator::Radio,
+                        .checked = editor.selectedProjectFile == entry.path,
+                        .tone = entry.directory ? gui::SemanticTone::info : gui::SemanticTone::neutral,
+                        .selected = editor.selectedProjectFile == entry.path}))
                 {
                     if (entry.directory)
                     {
@@ -595,7 +635,9 @@
                     if (entry.kind == "IMAGE")
                     {
                         editor.projectTextureStatus =
-                            "PNG/JPEG is visible as a project reference; texture compilation currently accepts BMP, TGA, PPM, and .epoch_texture sources.";
+                            project_texture_source_path(entry.path)
+                                ? "PNG can be compiled as a project texture with Open / Import."
+                                : "JPEG is a project reference with a Windows thumbnail; full texture compilation supports PNG, BMP, TGA and PPM.";
                     }
                     if (entry.kind == "SCRIPT")
                     {
@@ -612,8 +654,11 @@
             gui::property_row(
                 "Visible",
                 epochengine::format_text(
-                    "{} / {}", visibleCount, entries.size()),
-                64.0f);
+                    "{} / {}", visibleCount, entries.size()), paneLabelWidth);
+            if (visibleCount == 0u)
+                gui::wrapped_label(editor.projectRoot.empty()
+                    ? "Open or create a project to browse its files."
+                    : "No files match this folder and search.", outlinerWidth);
         }
         else if (editor.outlinerToolTab == OutlinerToolTab::Gui)
         {
@@ -639,57 +684,42 @@
                 editor.guiAuthoringSection = 1u;
             }
 
-            gui::label(
-                fullGuiAuthoring
-                    ? "GUI Editor"
-                    : "GUI Placement");
-            gui::property_row(
-                "Revision",
-                std::to_string(guiMetrics.revision_sequence),
-                76.0f);
+            gui::section_heading(fullGuiAuthoring ? "GUI Document" : "GUI Overlay");
             gui::property_row(
                 "Widgets",
-                std::to_string(widgetCount),
-                76.0f);
+                std::to_string(widgetCount), paneLabelWidth);
             gui::property_row(
-                "Source",
+                "File",
                 editor.guiDocumentSourcePath.empty()
                     ? std::string{"Unsaved GUI document"}
-                    : editor.guiDocumentSourcePath,
-                58.0f);
+                    : std::filesystem::path{editor.guiDocumentSourcePath}.filename().string(), paneLabelWidth);
 
             if (fullGuiAuthoring)
             {
+                gui::section_heading("Project and Document");
                 const bool projectOpen =
                     has_open_project(editor);
                 gui::property_row(
                     "Project",
                     projectOpen
                         ? editor.projectName
-                        : std::string{"No project open"},
-                    72.0f);
-                const float projectOpenWidth =
-                    (std::max)(96.0f, outlinerWidth * 0.61f);
-                const float projectCloseWidth =
-                    (std::max)(
-                        76.0f,
-                        outlinerWidth - projectOpenWidth - 4.0f);
+                        : std::string{"No project open"}, paneLabelWidth);
                 const std::array projectActions{
                     gui::InlineButtonSpec{
                         .label = projectOpen
                             ? "Open Another..."
                             : "Open Project...",
-                        .width = projectOpenWidth},
+                        .width = 0.0f},
                     gui::InlineButtonSpec{
                         .label = "Close",
-                        .width = projectCloseWidth,
+                        .width = 0.0f,
                         .enabled = projectOpen}
                 };
                 if (const auto action =
                         gui::inline_button_row(
                             projectActions,
                             27.0f,
-                            4.0f))
+                            4.0f, paneActionLayout))
                 {
                     if (*action == 0u)
                     {
@@ -706,16 +736,16 @@
                 const std::array newOpenActions{
                     gui::InlineButtonSpec{
                         .label = "New Blank",
-                        .width = outlinerWidth * 0.48f},
+                        .width = 0.0f},
                     gui::InlineButtonSpec{
                         .label = "Open GUI...",
-                        .width = outlinerWidth * 0.48f}
+                        .width = 0.0f}
                 };
                 if (const auto action =
                         gui::inline_button_row(
                             newOpenActions,
                             27.0f,
-                            4.0f))
+                            4.0f, paneActionLayout))
                 {
                     if (*action == 0u)
                     {
@@ -732,22 +762,26 @@
 
                 const std::array saveReloadActions{
                     gui::InlineButtonSpec{
-                        .label = "Save GUI",
-                        .width = outlinerWidth * 0.48f,
-                        .enabled = projectOpen},
+                        .label = projectOpen ? "Save GUI" : "Save GUI...",
+                        .width = 0.0f},
                     gui::InlineButtonSpec{
                         .label = "Reload",
                         .width = outlinerWidth * 0.48f,
-                        .enabled = projectOpen}
+                        .enabled = projectOpen || (!editor.guiDocumentSourcePath.empty()
+                            && std::filesystem::path{editor.guiDocumentSourcePath}.is_absolute())}
                 };
                 if (const auto action =
                         gui::inline_button_row(
                             saveReloadActions,
                             27.0f,
-                            4.0f))
+                            4.0f, paneActionLayout))
                 {
                     if (*action == 0u)
                     {
+                        if(!projectOpen)
+                            (void)save_gui_document_from_dialog(editor);
+                        else
+                        {
                         (void)project_gui_document_layout(
                             editor);
                         const bool sceneSaved =
@@ -759,11 +793,12 @@
                             sceneSaved && guiSaved
                                 ? "[gui] Project GUI and placement projection saved."
                                 : "[gui] Save requires an open project with scene and GUI destinations.");
+                        }
                     }
                     else
                     {
-                        (void)reload_project_gui_document(
-                            editor);
+                        if(projectOpen) (void)reload_project_gui_document(editor);
+                        else (void)reload_standalone_gui_document(editor);
                     }
                 }
 
@@ -803,16 +838,16 @@
                         .label = editor.guiDocumentReplaceArmed
                             ? "Confirm Apply"
                             : "Apply Template",
-                        .width = outlinerWidth * 0.54f},
+                        .width = 0.0f},
                     gui::InlineButtonSpec{
                         .label = "Save Template...",
-                        .width = outlinerWidth * 0.42f}
+                        .width = 0.0f}
                 };
                 if (const auto action =
                         gui::inline_button_row(
                             templateActions,
                             27.0f,
-                            4.0f))
+                            4.0f, paneActionLayout))
                 {
                     if (*action == 0u)
                     {
@@ -823,8 +858,7 @@
                     }
                     else
                     {
-                        (void)save_gui_template_from_dialog(
-                            editor);
+                        (void)save_gui_document_from_dialog(editor,true);
                     }
                 }
             }
@@ -833,12 +867,12 @@
                 const std::array placementActions{
                     gui::InlineButtonSpec{
                         .label = "Save Placement",
-                        .width = outlinerWidth * 0.62f,
+                        .width = 0.0f,
                         .enabled =
                             has_open_project(editor)},
                     gui::InlineButtonSpec{
                         .label = "Reload",
-                        .width = outlinerWidth * 0.34f,
+                        .width = 0.0f,
                         .enabled =
                             has_open_project(editor)}
                 };
@@ -846,7 +880,7 @@
                         gui::inline_button_row(
                             placementActions,
                             27.0f,
-                            4.0f))
+                            4.0f, paneActionLayout))
                 {
                     if (*action == 0u)
                     {
@@ -877,16 +911,17 @@
             if (fullGuiAuthoring)
             {
                 const std::array sections{
-                    gui::TabButtonSpec{ .id = "gui.widgets", .label = "Widgets", .width = 76.0f, .active = editor.guiAuthoringSection == 0u },
-                    gui::TabButtonSpec{ .id = "gui.layout", .label = "Layout", .width = 70.0f, .active = editor.guiAuthoringSection == 1u },
-                    gui::TabButtonSpec{ .id = "gui.hierarchy", .label = "Hierarchy", .width = 86.0f, .active = editor.guiAuthoringSection == 2u },
-                    gui::TabButtonSpec{ .id = "gui.flow", .label = "Flow", .width = 54.0f, .active = editor.guiAuthoringSection == 3u }
+                    gui::TabButtonSpec{ .id = "gui.widgets", .label = "Widgets", .width = 0.0f, .active = editor.guiAuthoringSection == 0u },
+                    gui::TabButtonSpec{ .id = "gui.layout", .label = "Layout", .width = 0.0f, .active = editor.guiAuthoringSection == 1u },
+                    gui::TabButtonSpec{ .id = "gui.hierarchy", .label = "Hierarchy", .width = 0.0f, .active = editor.guiAuthoringSection == 2u },
+                    gui::TabButtonSpec{ .id = "gui.flow", .label = "Flow", .width = 0.0f, .active = editor.guiAuthoringSection == 3u }
                 };
-                if (const auto tabs =
-                        gui::tab_bar_buttons(
-                            sections,
-                            29.0f,
-                            1.0f);
+                if (const auto tabs = gui::responsive_tab_bar_buttons({
+                            .overflow_id = "outliner.gui_sections",
+                            .tabs = sections,
+                            .available_width = outlinerWidth,
+                            .overflow_width = 84.0f,
+                            .height = 29.0f});
                     tabs.selected_index)
                 {
                     editor.guiAuthoringSection =
@@ -896,14 +931,15 @@
             else
             {
                 const std::array placementSections{
-                    gui::TabButtonSpec{ .id = "gui.placement", .label = "Placement", .width = 92.0f, .active = editor.guiAuthoringSection == 1u },
-                    gui::TabButtonSpec{ .id = "gui.hierarchy", .label = "Hierarchy", .width = 92.0f, .active = editor.guiAuthoringSection == 2u }
+                    gui::TabButtonSpec{ .id = "gui.placement", .label = "Placement", .width = 0.0f, .active = editor.guiAuthoringSection == 1u },
+                    gui::TabButtonSpec{ .id = "gui.hierarchy", .label = "Hierarchy", .width = 0.0f, .active = editor.guiAuthoringSection == 2u }
                 };
-                if (const auto tabs =
-                        gui::tab_bar_buttons(
-                            placementSections,
-                            29.0f,
-                            1.0f);
+                if (const auto tabs = gui::responsive_tab_bar_buttons({
+                            .overflow_id = "outliner.gui_placement",
+                            .tabs = placementSections,
+                            .available_width = outlinerWidth,
+                            .overflow_width = 84.0f,
+                            .height = 29.0f});
                     tabs.selected_index)
                 {
                     editor.guiAuthoringSection =
@@ -916,20 +952,20 @@
             const std::array documentHistoryActions{
                 gui::InlineButtonSpec{
                     .label = "Undo",
-                    .width = 62.0f,
+                    .width = 0.0f,
                     .enabled = guiDocument && guiDocument->can_undo()},
                 gui::InlineButtonSpec{
                     .label = "Redo",
-                    .width = 62.0f,
+                    .width = 0.0f,
                     .enabled = guiDocument && guiDocument->can_redo()},
                 gui::InlineButtonSpec{
                     .label = "Delete",
-                    .width = 70.0f,
+                    .width = 0.0f,
                     .enabled = guiDocument
                         && selected_gui_widget(editor).has_value()}
             };
             if (const auto action = gui::inline_button_row(
-                    documentHistoryActions, 27.0f, 4.0f))
+                    documentHistoryActions, 27.0f, 4.0f, paneActionLayout))
             {
                 if (*action == 0u)
                     (void)undo_gui_document(editor);
@@ -939,10 +975,8 @@
                     (void)remove_selected_gui_widget(editor, *guiDocument);
             }
 
-            if (editor_has_selection(editor)
-                && gui::button(
-                    "Deselect Widget",
-                    {outlinerWidth, 27.0f}))
+            if (selected_gui_widget(editor)
+                && paneAction("Deselect Widget"))
             {
                 clear_editor_selection(editor);
                 push_editor_log(editor, "[edit] GUI widget deselected.");
@@ -950,37 +984,38 @@
 
             if (fullGuiAuthoring && editor.guiAuthoringSection == 0u)
             {
+                gui::section_heading("Add Widgets");
                 const std::array primaryActions{
-                    gui::InlineButtonSpec{ .label = "+ Panel", .width = 72.0f },
-                    gui::InlineButtonSpec{ .label = "+ Button", .width = 76.0f },
-                    gui::InlineButtonSpec{ .label = "+ Text", .width = 64.0f }
+                    gui::InlineButtonSpec{ .label = "+ Panel", .width = 0.0f},
+                    gui::InlineButtonSpec{ .label = "+ Button", .width = 0.0f},
+                    gui::InlineButtonSpec{ .label = "+ Text", .width = 0.0f}
                 };
                 if (const auto action = gui::inline_button_row(
-                        primaryActions, 26.0f, 4.0f))
+                        primaryActions, 26.0f, 4.0f, paneActionLayout))
                 {
                     constexpr std::array<std::string_view, 3> archetypes{
                         "gui_panel", "gui_button", "gui_text"};
                     add_entity(editor, archetypes[*action]);
                 }
                 const std::array visualActions{
-                    gui::InlineButtonSpec{ .label = "+ Image", .width = 72.0f },
-                    gui::InlineButtonSpec{ .label = "+ Image Button", .width = 116.0f },
-                    gui::InlineButtonSpec{ .label = "+ Tabs", .width = 68.0f }
+                    gui::InlineButtonSpec{ .label = "+ Image", .width = 0.0f},
+                    gui::InlineButtonSpec{ .label = "+ Image Button", .width = 0.0f},
+                    gui::InlineButtonSpec{ .label = "+ Tabs", .width = 0.0f}
                 };
                 if (const auto action = gui::inline_button_row(
-                        visualActions, 26.0f, 4.0f))
+                        visualActions, 26.0f, 4.0f, paneActionLayout))
                 {
                     constexpr std::array<std::string_view, 3> archetypes{
                         "gui_image", "gui_image_button", "gui_tabs"};
                     add_entity(editor, archetypes[*action]);
                 }
                 const std::array inputActions{
-                    gui::InlineButtonSpec{ .label = "+ Input", .width = 72.0f },
-                    gui::InlineButtonSpec{ .label = "+ Slider", .width = 72.0f },
-                    gui::InlineButtonSpec{ .label = "+ Scroll", .width = 76.0f }
+                    gui::InlineButtonSpec{ .label = "+ Input", .width = 0.0f},
+                    gui::InlineButtonSpec{ .label = "+ Slider", .width = 0.0f},
+                    gui::InlineButtonSpec{ .label = "+ Scroll", .width = 0.0f}
                 };
                 if (const auto action = gui::inline_button_row(
-                        inputActions, 26.0f, 4.0f))
+                        inputActions, 26.0f, 4.0f, paneActionLayout))
                 {
                     constexpr std::array<std::string_view, 3> archetypes{
                         "gui_input", "gui_slider", "gui_scroll"};
@@ -1003,21 +1038,19 @@
                     const EditorEntity current =
                         editor.entities[*selected];
                     gui::property_row(
-                        "Selected", current.name, 72.0f);
+                        "Selected", current.name, paneLabelWidth);
                     gui::property_row(
                         "Position",
                         epochengine::format_text(
                             "{:.2f}, {:.2f}",
                             current.position[0],
-                            current.position[1]),
-                        72.0f);
+                            current.position[1]), paneLabelWidth);
                     gui::property_row(
                         "Size",
                         epochengine::format_text(
                             "{:.2f} x {:.2f}",
                             current.scale[0],
-                            current.scale[1]),
-                        72.0f);
+                            current.scale[1]), paneLabelWidth);
                     const auto commitTransform = [&](
                         float dx,
                         float dy,
@@ -1037,13 +1070,13 @@
                             "Edit GUI widget layout");
                     };
                     const std::array moveActions{
-                        gui::InlineButtonSpec{ .label = "Left", .width = 62.0f },
-                        gui::InlineButtonSpec{ .label = "Right", .width = 62.0f },
-                        gui::InlineButtonSpec{ .label = "Up", .width = 54.0f },
-                        gui::InlineButtonSpec{ .label = "Down", .width = 62.0f }
+                        gui::InlineButtonSpec{ .label = "Left", .width = 0.0f},
+                        gui::InlineButtonSpec{ .label = "Right", .width = 0.0f},
+                        gui::InlineButtonSpec{ .label = "Up", .width = 0.0f},
+                        gui::InlineButtonSpec{ .label = "Down", .width = 0.0f}
                     };
                     if (const auto action = gui::inline_button_row(
-                            moveActions, 26.0f, 4.0f))
+                            moveActions, 26.0f, 4.0f, paneActionLayout))
                     {
                         constexpr std::array<std::array<float, 2>, 4> deltas{{
                             {-0.10f, 0.0f},
@@ -1058,13 +1091,13 @@
                             0.0f);
                     }
                     const std::array sizeActions{
-                        gui::InlineButtonSpec{ .label = "Width -", .width = 76.0f },
-                        gui::InlineButtonSpec{ .label = "Width +", .width = 76.0f },
-                        gui::InlineButtonSpec{ .label = "Height -", .width = 80.0f },
-                        gui::InlineButtonSpec{ .label = "Height +", .width = 80.0f }
+                        gui::InlineButtonSpec{ .label = "Width -", .width = 0.0f},
+                        gui::InlineButtonSpec{ .label = "Width +", .width = 0.0f},
+                        gui::InlineButtonSpec{ .label = "Height -", .width = 0.0f},
+                        gui::InlineButtonSpec{ .label = "Height +", .width = 0.0f}
                     };
                     if (const auto action = gui::inline_button_row(
-                            sizeActions, 26.0f, 4.0f))
+                            sizeActions, 26.0f, 4.0f, paneActionLayout))
                     {
                         constexpr std::array<std::array<float, 2>, 4> deltas{{
                             {-0.10f, 0.0f},
@@ -1083,30 +1116,28 @@
                     const std::array materialActions{
                         gui::InlineButtonSpec{
                             .label = "Assign Image",
-                            .width = 106.0f,
+                            .width = 0.0f,
                             .enabled = imageWidget},
                         gui::InlineButtonSpec{
                             .label = "Clear Image",
-                            .width = 96.0f,
+                            .width = 0.0f,
                             .enabled = imageWidget},
                         gui::InlineButtonSpec{
                             .label = "Focus",
-                            .width = 64.0f}
+                            .width = 0.0f}
                     };
                     if (const auto action = gui::inline_button_row(
-                            materialActions, 26.0f, 4.0f))
+                            materialActions, 26.0f, 4.0f, paneActionLayout))
                     {
                         if (*action == 0u)
                         {
                             assign_selected_project_texture(editor);
-                            editor.guiContentEditorEntityId =
-                                scene::kInvalidSceneObjectId;
+                            editor.guiContentEditorWidget = {};
                         }
                         else if (*action == 1u)
                         {
                             clear_selected_project_texture(editor);
-                            editor.guiContentEditorEntityId =
-                                scene::kInvalidSceneObjectId;
+                            editor.guiContentEditorWidget = {};
                         }
                         else
                             handle_scene_tool(
@@ -1127,7 +1158,6 @@
                         {
                             hydrate_gui_content_editor(
                                 editor,
-                                current.sceneObjectId,
                                 *widget);
                             gui::label("Content");
                             const auto contentKind =
@@ -1195,8 +1225,7 @@
                                 "Action",
                                 editor.guiActionEditor.empty()
                                     ? std::string{"(none)"}
-                                    : editor.guiActionEditor,
-                                62.0f);
+                                    : editor.guiActionEditor, paneLabelWidth);
                             (void)gui::edit_box(
                                 editor.guiActionEditor,
                                 {outlinerWidth, 28.0f},
@@ -1206,16 +1235,13 @@
                                 "Tooltip",
                                 editor.guiTooltipEditor.empty()
                                     ? std::string{"(none)"}
-                                    : editor.guiTooltipEditor,
-                                62.0f);
+                                    : editor.guiTooltipEditor, paneLabelWidth);
                             (void)gui::edit_box(
                                 editor.guiTooltipEditor,
                                 {outlinerWidth, 28.0f},
                                 1'024u,
                                 false);
-                            if (gui::button(
-                                    "Apply Content",
-                                    {128.0f, 27.0f}))
+                            if (paneAction("Apply Content"))
                             {
                                 const bool changed =
                                     apply_gui_content_editor(
@@ -1252,12 +1278,12 @@
                                     const std::array imageActions{
                                         gui::InlineButtonSpec{
                                             .label = "Use Selected",
-                                            .width = 108.0f,
+                                            .width = 0.0f,
                                             .enabled =
                                                 selectedTexture != nullptr},
                                         gui::InlineButtonSpec{
                                             .label = "Open Texture",
-                                            .width = 108.0f,
+                                            .width = 0.0f,
                                             .enabled =
                                                 selectedTexture != nullptr}
                                     };
@@ -1265,7 +1291,7 @@
                                             gui::inline_button_row(
                                                 imageActions,
                                                 27.0f,
-                                                4.0f))
+                                                4.0f, paneActionLayout))
                                     {
                                         if (*imageAction == 0u
                                             && selectedTexture)
@@ -1599,35 +1625,30 @@
                                     };
                                 auto layout = widget->descriptor.layout;
                                 layout.flow = values[*flow];
-                                const auto changed =
-                                    guiDocument->update_layout(
-                                        widget->handle,
-                                        std::move(layout));
-                                editor.guiDocumentStatus = changed
-                                    ? "Widget layout flow updated."
-                                    : "Widget layout flow was unchanged.";
+                                (void)commit_gui_layout_edit(
+                                    editor, widget->handle, std::move(layout));
                             }
 
                             gui::label("Appearance");
                             const std::array appearanceActions{
                                 gui::InlineButtonSpec{
                                     .label = "Neutral",
-                                    .width = 72.0f},
+                                    .width = 0.0f},
                                 gui::InlineButtonSpec{
                                     .label = "Accent",
-                                    .width = 68.0f},
+                                    .width = 0.0f},
                                 gui::InlineButtonSpec{
                                     .label = "Alert",
-                                    .width = 58.0f},
+                                    .width = 0.0f},
                                 gui::InlineButtonSpec{
                                     .label = "Clear",
-                                    .width = 58.0f}
+                                    .width = 0.0f}
                             };
                             if (const auto appearance =
                                     gui::inline_button_row(
                                         appearanceActions,
                                         25.0f,
-                                        3.0f))
+                                        3.0f, paneActionLayout))
                             {
                                 auto style = widget->descriptor.style;
                                 if (*appearance == 0u)
@@ -1801,16 +1822,6 @@
                                 }
                                 std::vector<gui::TabButtonSpec> tabButtons{};
                                 tabButtons.reserve(pageHandles.size());
-                                const float tabWidth = pageHandles.empty()
-                                    ? 80.0f
-                                    : (std::clamp)(
-                                        (outlinerWidth
-                                            - static_cast<float>(
-                                                pageHandles.size() - 1u))
-                                            / static_cast<float>(
-                                                pageHandles.size()),
-                                        68.0f,
-                                        118.0f);
                                 const bool documentDirty =
                                     guiDocument->revision().sequence
                                         != editor.guiDocumentSavedRevision;
@@ -1821,7 +1832,7 @@
                                     tabButtons.push_back({
                                         .id = pageIds[pageIndex],
                                         .label = pageLabels[pageIndex],
-                                        .width = tabWidth,
+                                        .width = 0.0f,
                                         .active = content
                                             && content->selected_page
                                                 == pageHandles[pageIndex],
@@ -1830,10 +1841,12 @@
                                         .dirty = documentDirty});
                                 }
                                 const gui::TabBarResult tabResult =
-                                    gui::tab_bar_buttons(
-                                        tabButtons,
-                                        29.0f,
-                                        1.0f);
+                                    gui::responsive_tab_bar_buttons({
+                                        .overflow_id = "outliner.gui_pages",
+                                        .tabs = tabButtons,
+                                        .available_width = outlinerWidth,
+                                        .overflow_width = 84.0f,
+                                        .height = 29.0f});
                                 if (tabResult.selected_index
                                     && *tabResult.selected_index
                                         < pageHandles.size())
@@ -1886,9 +1899,7 @@
                                     {outlinerWidth, 27.0f},
                                     64u,
                                     false);
-                                if (gui::button(
-                                        "Add Tab Page",
-                                        {112.0f, 27.0f}))
+                                if (paneAction("Add Tab Page"))
                                 {
                                     std::string label =
                                         editor.newGuiTabName.empty()
@@ -1929,38 +1940,24 @@
             }
             else if (editor.guiAuthoringSection == 2u)
             {
-                std::optional<authoring::gui::WidgetHandle>
-                    selectedWidget{};
-                if (guiDocument)
-                {
-                    const auto selectedMapping =
-                        editor.guiDocumentWidgets.find(
-                            editor.selectedEntityId);
-                    if (selectedMapping
-                        != editor.guiDocumentWidgets.end()
-                        && guiDocument->widget(
-                            selectedMapping->second))
-                    {
-                        selectedWidget = selectedMapping->second;
-                    }
-                }
+                const auto selectedWidget = selected_gui_widget(editor);
 
                 const std::array hierarchyActions{
                     gui::InlineButtonSpec{
                         .label = "Duplicate",
-                        .width = 88.0f,
+                        .width = 0.0f,
                         .enabled = selectedWidget.has_value()},
                     gui::InlineButtonSpec{
                         .label = "Delete",
-                        .width = 68.0f,
+                        .width = 0.0f,
                         .enabled = selectedWidget.has_value()},
                     gui::InlineButtonSpec{
                         .label = "Focus",
-                        .width = 64.0f,
+                        .width = 0.0f,
                         .enabled = selectedWidget.has_value()}
                 };
                 if (const auto action = gui::inline_button_row(
-                        hierarchyActions, 26.0f, 4.0f))
+                        hierarchyActions, 26.0f, 4.0f, paneActionLayout))
                 {
                     if (*action == 0u)
                     {
@@ -2032,21 +2029,21 @@
                             const std::array structureActions{
                                 gui::InlineButtonSpec{
                                     .label = "Move Up",
-                                    .width = 78.0f,
+                                    .width = 0.0f,
                                     .enabled = position > 0u},
                                 gui::InlineButtonSpec{
                                     .label = "Move Down",
-                                    .width = 92.0f,
+                                    .width = 0.0f,
                                     .enabled = position + 1u
                                         < parentView->children.size()},
                                 gui::InlineButtonSpec{
                                     .label = "To Root",
-                                    .width = 72.0f,
+                                    .width = 0.0f,
                                     .enabled = selectedView->parent
                                         != editor.guiDocumentRoot},
                                 gui::InlineButtonSpec{
                                     .label = "Nest",
-                                    .width = 58.0f,
+                                    .width = 0.0f,
                                     .enabled =
                                         nestingTarget.has_value()}
                             };
@@ -2054,7 +2051,7 @@
                                     gui::inline_button_row(
                                         structureActions,
                                         26.0f,
-                                        4.0f))
+                                        4.0f, paneActionLayout))
                             {
                                 authoring::gui::MutationResult changed{};
                                 if (*structure == 0u)
@@ -2117,56 +2114,13 @@
                 }
                 else
                 {
-                    struct HierarchyRow final
+                    const auto hierarchy = gui_hierarchy_projection(editor);
+                    if (!hierarchy)
+                        gui::wrapped_label("The GUI hierarchy has no valid canvas root.", outlinerWidth);
+                    static const std::vector<editor_hierarchy::GuiHierarchyRow> emptyHierarchyRows{};
+                    const auto& hierarchyRows = hierarchy ? hierarchy->rows : emptyHierarchyRows;
+                    for (const auto& row : hierarchyRows)
                     {
-                        authoring::gui::WidgetHandle handle{};
-                        std::uint32_t depth{};
-                    };
-                    std::vector<HierarchyRow> rows{};
-                    std::vector<HierarchyRow> stack{};
-                    const auto root =
-                        guiDocument->widget(
-                            editor.guiDocumentRoot);
-                    if (root)
-                    {
-                        rows.reserve(
-                            guiDocument->metrics().active_widgets);
-                        stack.reserve(
-                            guiDocument->metrics().active_widgets);
-                        for (auto child =
-                                root->children.rbegin();
-                             child != root->children.rend();
-                             ++child)
-                        {
-                            stack.push_back({*child, 0u});
-                        }
-                    }
-                    while (!stack.empty())
-                    {
-                        const HierarchyRow row = stack.back();
-                        stack.pop_back();
-                        rows.push_back(row);
-                        const auto view =
-                            guiDocument->widget(row.handle);
-                        if (!view)
-                            continue;
-                        for (auto child =
-                                view->children.rbegin();
-                             child != view->children.rend();
-                             ++child)
-                        {
-                            stack.push_back({
-                                *child,
-                                row.depth + 1u});
-                        }
-                    }
-
-                    for (const HierarchyRow& row : rows)
-                    {
-                        const auto view =
-                            guiDocument->widget(row.handle);
-                        if (!view)
-                            continue;
                         const auto mapped = std::find_if(
                             editor.guiDocumentWidgets.begin(),
                             editor.guiDocumentWidgets.end(),
@@ -2181,36 +2135,17 @@
                             static_cast<std::size_t>(
                                 row.depth) * 2u,
                             ' ');
-                        label += view->descriptor.name;
-                        label += " | ";
-                        label += authoring::gui::widget_kind_name(
-                            view->descriptor.kind);
-                        if (!hasProxy)
-                            label += " | document";
-
-                        if (gui::button_selected(
-                                label,
-                                {outlinerWidth, 27.0f},
-                                selectedWidget
-                                    && *selectedWidget
-                                        == row.handle))
+                        label += row.name;
+                        if (gui::menu_item({
+                                .label = label,
+                                .shortcut = hasProxy ? authoring::gui::widget_kind_name(row.kind) : "Document",
+                                .size = {outlinerWidth, 29.0f},
+                                .indicator = gui::MenuItemIndicator::Radio,
+                                .checked = selectedWidget && *selectedWidget == row.handle,
+                                .tone = hasProxy ? gui::SemanticTone::neutral : gui::SemanticTone::info,
+                                .selected = selectedWidget && *selectedWidget == row.handle}))
                         {
-                            if (hasProxy)
-                            {
-                                const auto entityIndex =
-                                    editor_entity_index(
-                                        editor,
-                                        mapped->first);
-                                if (entityIndex)
-                                    select_editor_entity(
-                                        editor,
-                                        *entityIndex);
-                            }
-                            else
-                            {
-                                editor.guiDocumentStatus =
-                                    "Document-owned widget selected in the hierarchy; scene projection is not available yet.";
-                            }
+                            (void)select_gui_hierarchy_widget(editor, row.handle);
                         }
                     }
                 }
@@ -2338,18 +2273,8 @@
                             break;
                         }
 
-                        bool selected = false;
-                        const auto mapped = std::find_if(
-                            editor.guiDocumentWidgets.begin(),
-                            editor.guiDocumentWidgets.end(),
-                            [&](const auto& entry)
-                            {
-                                return entry.second == widget.handle
-                                    && entry.first
-                                        == editor.selectedEntityId;
-                            });
-                        selected = mapped
-                            != editor.guiDocumentWidgets.end();
+                        const bool selected = gui_widget_selected(
+                            editor, widget.handle);
                         const std::uint64_t id =
                             graphNodeId(widget.handle);
                         graphNodes.push_back({
@@ -2429,20 +2354,19 @@
                             "{} nodes | {} edges | revision {}",
                             graphNodes.size(),
                             graphEdges.size(),
-                            guiMetrics.revision_sequence),
-                        58.0f);
+                            guiMetrics.revision_sequence), paneLabelWidth);
                     bool fitGraph = false;
                     bool resetGraph = false;
                     const std::array graphViewActions{
                         gui::InlineButtonSpec{
                             .label = "Fit",
-                            .width = 54.0f},
+                            .width = 0.0f},
                         gui::InlineButtonSpec{
                             .label = "Reset View",
-                            .width = 92.0f}
+                            .width = 0.0f}
                     };
                     if (const auto action = gui::inline_button_row(
-                            graphViewActions, 27.0f, 4.0f))
+                            graphViewActions, 27.0f, 4.0f, paneActionLayout))
                     {
                         fitGraph = *action == 0u;
                         resetGraph = *action == 1u;
@@ -2474,33 +2398,9 @@
                             });
                         if (selectedHandle != graphHandles.end())
                         {
-                            const auto mapped = std::find_if(
-                                editor.guiDocumentWidgets.begin(),
-                                editor.guiDocumentWidgets.end(),
-                                [&](const auto& entry)
-                                {
-                                    return entry.second
-                                        == selectedHandle->second;
-                                });
-                            if (mapped
-                                != editor.guiDocumentWidgets.end())
-                            {
-                                const auto entityIndex =
-                                    editor_entity_index(
-                                        editor, mapped->first);
-                                if (entityIndex)
-                                {
-                                    select_editor_entity(
-                                        editor, *entityIndex);
-                                    editor.guiDocumentStatus =
-                                        "Graph node selected for GUI editing.";
-                                }
-                            }
-                            else
-                            {
+                            if (select_gui_widget(editor, selectedHandle->second))
                                 editor.guiDocumentStatus =
-                                    "The selected graph node is document-owned and has no scene proxy.";
-                            }
+                                    "Graph node selected for GUI editing.";
                         }
                     }
                     if (graphResult.connection)
@@ -2606,8 +2506,7 @@
                     }
                     gui::property_row(
                         "Actions",
-                        std::to_string(actionCount),
-                        72.0f);
+                        std::to_string(actionCount), paneLabelWidth);
                     const auto selected = editor_entity_index(
                         editor, editor.selectedEntityId);
                     const bool editableSelection = selected
@@ -2615,19 +2514,19 @@
                     const std::array graphActions{
                         gui::InlineButtonSpec{
                             .label = "Edit Node",
-                            .width = 86.0f,
+                            .width = 0.0f,
                             .enabled = editableSelection},
                         gui::InlineButtonSpec{
                             .label = "Duplicate",
-                            .width = 84.0f,
+                            .width = 0.0f,
                             .enabled = editableSelection},
                         gui::InlineButtonSpec{
                             .label = "Delete",
-                            .width = 66.0f,
+                            .width = 0.0f,
                             .enabled = editableSelection}
                     };
                     if (const auto action = gui::inline_button_row(
-                            graphActions, 27.0f, 4.0f))
+                            graphActions, 27.0f, 4.0f, paneActionLayout))
                     {
                         if (*action == 0u)
                             editor.guiAuthoringSection = 1u;
@@ -2650,27 +2549,8 @@
                                         + widget.descriptor.interaction.action,
                                     {outlinerWidth, 27.0f}))
                             {
-                                const auto mapped = std::find_if(
-                                    editor.guiDocumentWidgets.begin(),
-                                    editor.guiDocumentWidgets.end(),
-                                    [&](const auto& entry)
-                                    {
-                                        return entry.second
-                                            == widget.handle;
-                                    });
-                                if (mapped
-                                    == editor.guiDocumentWidgets.end())
-                                {
-                                    continue;
-                                }
-                                const auto entityIndex =
-                                    editor_entity_index(
-                                        editor, mapped->first);
-                                if (!entityIndex)
-                                    continue;
-                                select_editor_entity(
-                                    editor, *entityIndex);
-                                editor.guiAuthoringSection = 1u;
+                                if (select_gui_widget(editor, widget.handle))
+                                    editor.guiAuthoringSection = 1u;
                             }
                         }
                     }
@@ -2685,23 +2565,22 @@
             {
                 const auto map = tileMap->snapshot();
                 const auto metrics = tileMap->metrics();
-                gui::property_row("Source", std::string(tileMap->logical_path()), 66.0f);
+                gui::property_row("Source", std::string(tileMap->logical_path()), paneLabelWidth);
                 gui::property_row(
                     "Extent",
                     epochengine::format_text(
                         "{} x {} tiles",
                         map.descriptor.extent_tiles.x,
-                        map.descriptor.extent_tiles.y),
-                    66.0f);
-                gui::property_row("Layers", std::to_string(map.layers.size()), 66.0f);
-                gui::property_row("Palette", std::to_string(map.palette.size()), 66.0f);
+                        map.descriptor.extent_tiles.y), paneLabelWidth);
+                gui::property_row("Layers", std::to_string(map.layers.size()), paneLabelWidth);
+                gui::property_row("Palette", std::to_string(map.palette.size()), paneLabelWidth);
 
                 const std::array mapHistoryActions{
-                    gui::InlineButtonSpec{.label = "Save", .width = 70.0f},
-                    gui::InlineButtonSpec{.label = "Undo", .width = 70.0f},
-                    gui::InlineButtonSpec{.label = "Redo", .width = 70.0f}};
+                    gui::InlineButtonSpec{.label = "Save", .width = 0.0f},
+                    gui::InlineButtonSpec{.label = "Undo", .width = 0.0f},
+                    gui::InlineButtonSpec{.label = "Redo", .width = 0.0f}};
                 if (const auto action = gui::inline_button_row(
-                        mapHistoryActions, 26.0f, 4.0f))
+                        mapHistoryActions, 26.0f, 4.0f, paneActionLayout))
                 {
                     if (*action == 0u)
                     {
@@ -2766,8 +2645,7 @@
                     epochengine::format_text(
                         "{} mutations | {} painted",
                         metrics.mutations,
-                        metrics.painted_cells),
-                    66.0f);
+                        metrics.painted_cells), paneLabelWidth);
                 gui::wrapped_label(editor.tileMapStatus, outlinerWidth);
             }
             else
@@ -2780,9 +2658,9 @@
         {
             const std::string activeSource =
                 editor_resolve_script_source_path(editor.activeScript, editor.projectRoot);
-            if (gui::button(
-                    "Open Large Script Editor",
-                    {outlinerWidth, 30.0f}))
+            gui::section_heading("Scripts");
+            if (editor.mainSurface != EditorMainSurface::Assets
+                && paneAction("Open Script Editor"))
             {
                 const std::string normalizedActiveSource =
                     display_project_path(activeSource);
@@ -2809,17 +2687,15 @@
             }
             if (editor.mainSurface == EditorMainSurface::Assets)
             {
-                gui::label("Script Navigator");
                 gui::property_row(
                     "Active",
-                    editor.activeScript,
-                    66.0f);
+                    editor.activeScript, paneLabelWidth);
                 gui::property_row(
                     "State",
                     editor.scriptEditorDirty
                         ? std::string{"Modified"}
-                        : editor.scriptEditorStatus,
-                    66.0f);
+                        : editor.scriptEditorStatus, paneLabelWidth);
+                gui::label("New script name");
                 (void)gui::edit_box(
                     editor.newScriptName,
                     {outlinerWidth, 28.0f},
@@ -2828,16 +2704,16 @@
                 const std::array scriptNavigatorActions{
                     gui::InlineButtonSpec{
                         .label = "New",
-                        .width = 66.0f},
+                        .width = 0.0f},
                     gui::InlineButtonSpec{
                         .label = "Save",
-                        .width = 66.0f},
+                        .width = 0.0f},
                     gui::InlineButtonSpec{
                         .label = "Build",
-                        .width = 72.0f}
+                        .width = 0.0f}
                 };
                 if (const auto action = gui::inline_button_row(
-                        scriptNavigatorActions, 27.0f, 4.0f))
+                        scriptNavigatorActions, 27.0f, 4.0f, paneActionLayout))
                 {
                     if (*action == 0u)
                         create_project_script_starter(editor);
@@ -2851,12 +2727,16 @@
 
                 const auto scripts =
                     collect_script_browser_entries(editor.projectRoot);
+                if (scripts.empty())
+                    gui::wrapped_label("No scripts yet. Enter a name and choose New.", outlinerWidth);
                 for (const auto& entry : scripts)
                 {
-                    if (gui::button_selected(
-                            entry.label,
-                            {outlinerWidth, 28.0f},
-                            editor.scriptEditorPath == entry.path))
+                    if (gui::menu_item({
+                            .label = entry.label,
+                            .size = {outlinerWidth, 29.0f},
+                            .indicator = gui::MenuItemIndicator::Radio,
+                            .checked = editor.scriptEditorPath == entry.path,
+                            .selected = editor.scriptEditorPath == entry.path}))
                     {
                         editor.activeScript =
                             script_id_from_source_path(
@@ -2874,16 +2754,17 @@
                 gui::end_window();
                 return;
             }
-            gui::label(std::string("Script: ") + editor.activeScript);
-            gui::property_row("Source", display_project_path(activeSource), 64.0f);
+            gui::property_row("Active", editor.activeScript, paneLabelWidth);
+            gui::property_row("Source", display_project_path(activeSource), paneLabelWidth);
+            gui::label("New script name");
             (void)gui::edit_box(editor.newScriptName, { outlinerWidth, 28.0f }, 64, false);
 
             const std::array scriptActions{
-                gui::InlineButtonSpec{ .label = "Create", .width = 76.0f },
-                gui::InlineButtonSpec{ .label = "Save", .width = 68.0f },
-                gui::InlineButtonSpec{ .label = "Build", .width = 72.0f }
+                gui::InlineButtonSpec{ .label = "Create", .width = 0.0f},
+                gui::InlineButtonSpec{ .label = "Save", .width = 0.0f},
+                gui::InlineButtonSpec{ .label = "Build", .width = 0.0f}
             };
-            if (const auto action = gui::inline_button_row(scriptActions, 26.0f, 4.0f))
+            if (const auto action = gui::inline_button_row(scriptActions, 26.0f, 4.0f, paneActionLayout))
             {
                 if (*action == 0)
                 {
@@ -2908,10 +2789,17 @@
             }
 
             const auto scripts = collect_script_browser_entries(editor.projectRoot);
+            if (scripts.empty())
+                gui::wrapped_label("No scripts yet. Enter a name and choose Create.", outlinerWidth);
             for (const auto& entry : scripts)
             {
                 const bool selected = editor.scriptEditorPath == entry.path;
-                if (gui::button_selected(entry.label, { outlinerWidth, 26.0f }, selected))
+                if (gui::menu_item({
+                        .label = entry.label,
+                        .size = {outlinerWidth, 29.0f},
+                        .indicator = gui::MenuItemIndicator::Radio,
+                        .checked = selected,
+                        .selected = selected}))
                 {
                     editor.activeScript = script_id_from_source_path(std::filesystem::path{ entry.path });
                     editor.selectedProjectFile = entry.path;
@@ -2929,7 +2817,123 @@
             gui::wrapped_label(editor.scriptEditorStatus, outlinerWidth);
             gui::wrapped_label(editor.scriptBuildStatus, outlinerWidth);
         }
-        gui::end_scroll_area();
+        if (pane_tab != OutlinerToolTab::World)
+            gui::end_scroll_area();
+        const auto render_outliner_context_menu = [&]()
+        {
+            if (pane_tab != OutlinerToolTab::World) return;
+            auto& menu = editor.outlinerContextMenu;
+            const auto pointer = gui::mouse_position();
+            const bool ownerAvailable = editor.openMenu == TopMenu::None
+                && !modal_visible_now() && !floating_gui_visible() && ctx->has_input_focus_safe();
+            const bool rightOpen = ownerAvailable && gui::was_mouse_right_pressed()
+                && std::isfinite(pointer.x) && std::isfinite(pointer.y)
+                && pointer.x >= pane_pos.x && pointer.x < pane_pos.x + pane_size.x
+                && pointer.y >= outlinerScrollStart.y && pointer.y < pane_pos.y + pane_size.y;
+            if (menu.kind == EditorState::OutlinerContextMenu::Kind::preview_selection && !rightOpen) return;
+            const bool open = rightOpen || (ownerAvailable && menu.open_requested);
+            menu.open_requested = false;
+            if (rightOpen)
+            {
+                menu.kind = EditorState::OutlinerContextMenu::Kind::selection;
+                menu.anchor = pointer;
+                menu.scene = editor_scene_identity(editor);
+                menu.project_generation = editor.projectLifecycle.evidence().generations.selected_project.generation;
+            }
+            if (!open && !menu.menu.popup.open) return;
+            gui::block_background_for_popup();
+            if (ownerAvailable) gui::clear_modal_input_capture();
+            const bool worldSurfaceActive = workspace_command_surface(editor)
+                == editor_workspace_commands::Surface::world;
+            const bool canAuthor = application.allow_entity_authoring && worldSurfaceActive;
+            const bool hasSelection = editor_has_selection(editor);
+            const auto id=[](OutlinerCommand command){return static_cast<std::uint64_t>(command);};
+            const std::array createCommands{
+                gui::MenuItemOptions{.label="Cube",.enabled=canAuthor,.command_id=id(OutlinerCommand::cube)},
+                gui::MenuItemOptions{.label="Ground",.enabled=canAuthor,.command_id=id(OutlinerCommand::ground)},
+                gui::MenuItemOptions{.label="Point Light",.enabled=canAuthor,.command_id=id(OutlinerCommand::light)},
+                gui::MenuItemOptions{.label="Water",.enabled=canAuthor,.command_id=id(OutlinerCommand::water)},
+                gui::MenuItemOptions{.label="4 Cubes",.enabled=canAuthor,.separator_before=true,.command_id=id(OutlinerCommand::four_cubes)},
+                gui::MenuItemOptions{.label="8 Cubes",.enabled=canAuthor,.command_id=id(OutlinerCommand::eight_cubes)},
+                gui::MenuItemOptions{.label="Spawn",.enabled=canAuthor,.separator_before=true,.command_id=id(OutlinerCommand::spawn)},
+                gui::MenuItemOptions{.label="Camera",.enabled=canAuthor,.command_id=id(OutlinerCommand::camera)},
+                gui::MenuItemOptions{.label="Open 3D Preview",.enabled=!worldSurfaceActive,.separator_before=true,.command_id=id(OutlinerCommand::open_world)}};
+            const std::array actionCommands{
+                gui::MenuItemOptions{.label="Focus",.enabled=worldSurfaceActive&&hasSelection,.command_id=id(OutlinerCommand::focus)},
+                gui::MenuItemOptions{.label="Deselect",.enabled=hasSelection,.command_id=id(OutlinerCommand::deselect)},
+                gui::MenuItemOptions{.label="Undo",.enabled=canAuthor&&editor.sceneDocument.can_undo(),.separator_before=true,.command_id=id(OutlinerCommand::undo)},
+                gui::MenuItemOptions{.label="Redo",.enabled=canAuthor&&editor.sceneDocument.can_redo(),.command_id=id(OutlinerCommand::redo)},
+                gui::MenuItemOptions{.label="Duplicate",.enabled=canAuthor&&hasSelection,.separator_before=true,.command_id=id(OutlinerCommand::duplicate)},
+                gui::MenuItemOptions{.label="Delete",.enabled=canAuthor&&hasSelection,.command_id=id(OutlinerCommand::erase)},
+                gui::MenuItemOptions{.label="Ambient Lighting",.separator_before=true,.command_id=id(OutlinerCommand::ambient)}};
+            const std::array selectionCommands{gui::MenuItemOptions{
+                .label="Deselect",.enabled=hasSelection,.command_id=id(OutlinerCommand::deselect)}};
+            const std::span<const gui::MenuItemOptions> commands = menu.kind==EditorState::OutlinerContextMenu::Kind::create
+                ? std::span<const gui::MenuItemOptions>{createCommands}
+                : menu.kind==EditorState::OutlinerContextMenu::Kind::actions
+                    ? std::span<const gui::MenuItemOptions>{actionCommands}
+                    : std::span<const gui::MenuItemOptions>{selectionCommands};
+            const auto popup = gui::command_menu(menu.menu, commands, gui::CommandMenuOptions{
+                .owner = {.position = menu.anchor, .size = {1.0f, 1.0f}},
+                .viewport_size = {w, h}, .open_requested = open,
+                .close_requested = !ownerAvailable, .dismiss_on_hover_exit = false, .gap = 0.0f});
+            result.scene_input_captured = result.scene_input_captured || open || popup.captured;
+            const auto activated = std::find_if(commands.begin(),commands.end(),[&](const auto& command){
+                return popup.activated_id && command.command_id==*popup.activated_id && command.enabled;});
+            if (activated!=commands.end() && ownerAvailable
+                && menu.scene == editor_scene_identity(editor)
+                && menu.project_generation == editor.projectLifecycle.evidence().generations.selected_project.generation)
+            {
+                gui::close_command_menu(menu.menu);
+                switch (static_cast<OutlinerCommand>(activated->command_id))
+                {
+                case OutlinerCommand::cube:add_entity(editor,"cube");break;
+                case OutlinerCommand::ground:add_entity(editor,"ground");break;
+                case OutlinerCommand::light:add_entity(editor,"light");break;
+                case OutlinerCommand::water:add_entity(editor,"water");break;
+                case OutlinerCommand::four_cubes:(void)add_cube_batch(editor,4u);break;
+                case OutlinerCommand::eight_cubes:(void)add_cube_batch(editor,8u);break;
+                case OutlinerCommand::spawn:add_entity(editor,"spawn");break;
+                case OutlinerCommand::camera:add_entity(editor,"camera");break;
+                case OutlinerCommand::open_world:open_editor_surface(EditorMainSurface::Scene,"3D Objects");break;
+                case OutlinerCommand::undo:(void)execute_surface_edit(editor,ctx.get(),SurfaceEditAction::undo);break;
+                case OutlinerCommand::redo:(void)execute_surface_edit(editor,ctx.get(),SurfaceEditAction::redo);break;
+                case OutlinerCommand::duplicate:
+                    if(route_selected_hierarchy_action(editor_hierarchy::Action::duplicate_entity))
+                        (void)execute_surface_edit(editor,ctx.get(),SurfaceEditAction::duplicate_selection);
+                    break;
+                case OutlinerCommand::erase:
+                    if(route_selected_hierarchy_action(editor_hierarchy::Action::delete_entity))
+                        (void)execute_surface_edit(editor,ctx.get(),SurfaceEditAction::delete_selection);
+                    break;
+                case OutlinerCommand::focus:
+                    if(route_selected_hierarchy_action(editor_hierarchy::Action::focus))
+                    {
+                        if(application.allow_entity_authoring)
+                            (void)execute_surface_edit(editor,ctx.get(),SurfaceEditAction::focus_selection);
+                        else handle_scene_tool(editor,ctx.get(),"focus_selection");
+                    }
+                    break;
+                case OutlinerCommand::deselect:
+                    if(route_selected_hierarchy_action(editor_hierarchy::Action::deselect))
+                    {
+                        clear_editor_selection(editor);
+                        push_editor_log(editor,"[edit] World selection cleared.");
+                    }
+                    break;
+                case OutlinerCommand::ambient:
+                {
+                    constexpr std::string_view route="pane.world_settings";
+                    set_pane_shown(route,true);
+                    if(!pane_route_is_detached(route))set_active_pane(pane_dock_region(route),route);
+                    else for(auto& pending:result.companion_pane_activations)
+                        if(pending.empty()){pending.assign(route);break;}
+                    break;
+                }
+                }
+            }
+        };
+        render_outliner_context_menu();
         gui::end_window();
         }
         };

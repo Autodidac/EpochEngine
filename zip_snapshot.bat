@@ -40,27 +40,61 @@ if (-not [string]::Equals([System.IO.Path]::GetExtension($zipPath), '.zip',
     throw 'Output filename must end in .zip.'
 }
 
-# Directory names are excluded at ANY depth, case-insensitively.
-# Keep two explicitly documented exceptions: Engine/src/build is C++ source,
-# and Engine/docs/build contains project documentation.
+# Legacy generated directory names are excluded at any depth. Build source
+# folders are kept; generated build roots are pruned by exact relative path.
 $skipDirectoryNames = [System.Collections.Generic.HashSet[string]]::new(
     [System.StringComparer]::OrdinalIgnoreCase)
 @(
     '.git', '.vs', '.idea',
     'Debug', 'Release', 'ReleaseWithDebugInfo', 'RelWithDebInfo', 'MinSizeRel',
-    'x64', 'x86', 'out', 'build', 'build_clang', 'build_gcc', 'built',
+    'x64', 'x86', 'out', 'build_clang', 'build_gcc', 'built',
     'vcpkg_installed', 'bin', 'backup', 'app1',
     'Cpp20_Ultimate_Project_Updater', 'atlas_dump',
     'CMakeFiles', 'ipch', 'obj', '.cache', '__pycache__', 'node_modules'
 ) | ForEach-Object { [void]$skipDirectoryNames.Add($_) }
+
+# Match the canonical source packer's checkout-root boundaries. Prune these
+# before inspecting descendants, including VM disks and compiler module caches.
+$skipRootDirectoryNames = [System.Collections.Generic.HashSet[string]]::new(
+    [System.StringComparer]::OrdinalIgnoreCase)
+@(
+    '.codex', '.agents', 'build', 'Artifacts', 'addons', 'Projects', 'cache', 'logs', 'ai'
+) | ForEach-Object { [void]$skipRootDirectoryNames.Add($_) }
 
 # Path-specific generated data; do NOT globally exclude 'workspace' or 'api'.
 $skipDirectoryPaths = [System.Collections.Generic.HashSet[string]]::new(
     [System.StringComparer]::OrdinalIgnoreCase)
 @(
     'Engine/examples/EpochEditor/workspace',
-    'Engine/docs/api'
+    'Engine/docs/api',
+    'Engine/Bin', 'Engine/build', 'Engine/built', 'Engine/src/build/cache'
 ) | ForEach-Object { [void]$skipDirectoryPaths.Add($_) }
+
+# Apply the component's existing four-file distribution hold, as the canonical
+# source packer does. Code and approved training data remain ordinary source.
+$skipFilePaths = [System.Collections.Generic.HashSet[string]]::new(
+    [System.StringComparer]::Ordinal)
+$componentRelative = 'Engine/dep/EpochSelfCoding'
+$componentRoot = [System.IO.Path]::Combine($root, $componentRelative)
+if ([System.IO.Directory]::Exists($componentRoot)) {
+    $policy = [System.IO.File]::ReadAllText(
+        [System.IO.Path]::Combine($componentRoot, 'data_distribution.json')) | ConvertFrom-Json
+    $expectedHeld = [System.Collections.Generic.HashSet[string]]::new(
+        [System.StringComparer]::Ordinal)
+    @('anchors', 'bootstrap', 'bootstrap_anchors', 'seed') | ForEach-Object {
+        [void]$expectedHeld.Add('assets/ai/native/training/' + $_ + '.jsonl')
+    }
+    $held = @($policy.held_paths)
+    if ($policy.schema -cne 'epoch.self-coding-data-distribution.v1' -or $held.Count -ne 4) {
+        throw 'Invalid private component data distribution policy.'
+    }
+    foreach ($name in $held) {
+        if ($name -isnot [string] -or -not $expectedHeld.Contains($name) -or
+            -not $skipFilePaths.Add($componentRelative + '/' + $name)) {
+            throw 'Private seed hold changes require explicit distribution review.'
+        }
+    }
+}
 
 # File types that should never be included in a SOURCE snapshot.
 # Do NOT exclude *.cmake: the project has real CMake source/configuration files.
@@ -151,23 +185,29 @@ try {
                     $directoryCount++
                 }
 
-                foreach ($path in [System.IO.Directory]::EnumerateFileSystemEntries($directory)) {
+                foreach ($item in ([System.IO.DirectoryInfo]::new($directory)).EnumerateFileSystemInfos()) {
+                    $path = $item.FullName
                     # The staging and final archives MUST NOT zip themselves.
                     if ([string]::Equals($path, $tempZip, $comparison) -or
                         [string]::Equals($path, $zipPath, $comparison)) { continue }
 
                     $relative = $path.Substring($root.Length).Replace('\', '/')
                     $leaf = [System.IO.Path]::GetFileName($path)
-                    $attributes = [System.IO.File]::GetAttributes($path)
-                    $isDirectory = ($attributes -band [System.IO.FileAttributes]::Directory) -ne 0
+                    $isDirectory = $item -is [System.IO.DirectoryInfo]
+                    if ($isDirectory -and
+                        (($relative.IndexOf('/') -lt 0 -and $skipRootDirectoryNames.Contains($leaf)) -or
+                         $skipDirectoryPaths.Contains($relative))) {
+                        $skippedDirectoryCount++
+                        continue
+                    }
+                    if (-not $isDirectory -and $skipFilePaths.Contains($relative)) {
+                        $skippedFileCount++
+                        continue
+                    }
                     if ($isDirectory) {
                         $excludedName = $skipDirectoryNames.Contains($leaf) -or
                             $leaf.StartsWith('cmake-build-', $comparison)
-                        if ([string]::Equals($relative, 'Engine/src/build', $comparison) -or
-                            [string]::Equals($relative, 'Engine/docs/build', $comparison)) {
-                            $excludedName = $false
-                        }
-                        if ($excludedName -or $skipDirectoryPaths.Contains($relative)) {
+                        if ($excludedName) {
                             $skippedDirectoryCount++
                             continue
                         }
@@ -175,6 +215,8 @@ try {
                         $skippedFileCount++
                         continue
                     }
+
+                    $attributes = $item.Attributes
 
                     # Junctions/symlinks cannot be safely followed in a portable source ZIP.
                     # Report failure instead of silently making a partial archive or looping.

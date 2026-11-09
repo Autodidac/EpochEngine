@@ -40,6 +40,7 @@ module;
 #include <cassert>
 #include <cctype>
 #include <cmath>
+#include <chrono>
 #include <cstdio>
 #include <cstdint>
 #include <cstdlib>
@@ -52,6 +53,8 @@ module;
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <set>
+#include <nlohmann/json.hpp>
 #include <cstring>
 #include <span>
 #include <stop_token>
@@ -127,6 +130,7 @@ module editor.core;
 
 import core.logger;
 import core.path;
+import core.env;
 import ai.project_profile;
 import authoring.tilemap;
 import authoring.texture;
@@ -275,7 +279,7 @@ namespace
         }
     }};
 
-    constexpr std::array<EditorScriptProfile, 7> kScriptProfiles{{
+    constexpr std::array<EditorScriptProfile, 8> kScriptProfiles{{
         {
             "rotate_all_entities",
             "Rotate All Entities",
@@ -338,6 +342,15 @@ namespace
             "Prime a generated software/tool project shell",
             "Expected in generated tool projects; create a new project shell if missing.",
             "Starter script surface for generated software and utility projects."
+        },
+        {
+            "timeline_translation",
+            "Project Timeline Movement Starter",
+            "Engine/src/scripts/script.timeline_translation.cpp",
+            "Copy into the active project's scripts folder, then select a movable scene object",
+            "Register copied translation keys from project-owned C++ source",
+            "Uses the versioned script host and central timeline sample time. Prior script DLLs may unload safely.",
+            "Project source owns the movement keys; Play, Reverse and seek sample the same copied track."
         }
     }};
 
@@ -352,6 +365,80 @@ namespace epochengine
         const fs::path data = core::path::candidate_data_root();
         return data.empty() ? fs::path{}
             : candidate_project_path(data, requested, allow_root);
+    }
+
+    EditorProjectAdmissionResult editor_inspect_runtime_project_manifest(
+        std::string_view manifest_path, std::string_view expected_project_id,
+        std::string& project_root, std::string& scene_path)
+    {
+        EditorProjectAdmissionResult result{};
+        project_root.clear();
+        scene_path.clear();
+        try
+        {
+            if (expected_project_id.empty() || manifest_path.empty())
+            { result.summary = "Generated project identity and manifest are required."; return result; }
+            const fs::path requested{manifest_path};
+            const fs::path data = core::path::candidate_data_root();
+            const auto selected = data.empty() ? fs::canonical(requested)
+                : candidate_project_path(data, requested);
+            if (selected.empty() || selected.filename() != "project.epoch.json"
+                || fs::is_symlink(fs::symlink_status(requested)) || !fs::is_regular_file(selected))
+            { result.summary = "Generated project manifest is unavailable or redirected."; return result; }
+            const auto parsed = parse_manifest_project_profile(selected, &result.summary);
+            const auto edition = inspect_json_string_field(read_text_file(selected), "engine_edition");
+            if (!parsed || parsed->id != expected_project_id
+                || edition.state != JsonStringFieldState::present
+                || edition.value != updater::distribution::edition_id)
+            { result.summary = "Generated project manifest identity or edition does not match this executable."; return result; }
+            const auto root = fs::canonical(selected.parent_path());
+            const auto scene = fs::canonical(fs::path{parsed->scene_path});
+            const auto relative = scene.lexically_relative(root);
+            if (relative.empty() || relative.is_absolute() || *relative.begin() == ".."
+                || !fs::is_regular_file(scene))
+            { result.summary = "Generated project scene must be a file inside its own project."; return result; }
+            result.succeeded = true;
+            result.project_id = parsed->id;
+            result.manifest_path = selected.generic_string();
+            result.summary = "Generated project manifest verified.";
+            project_root = root.generic_string();
+            scene_path = scene.generic_string();
+        }
+        catch (...) { result.summary = "Generated project files could not be verified."; }
+        return result;
+    }
+
+    EditorProjectAdmissionResult editor_inspect_project_manifest_identity(
+        std::string_view manifest_path, std::string_view expected_project_id,
+        std::string_view expected_project_root)
+    {
+        EditorProjectAdmissionResult result{};
+        try
+        {
+            if (manifest_path.empty() || expected_project_id.empty()
+                || expected_project_root.empty())
+            { result.summary = "Project manifest, identity and root are required."; return result; }
+            const fs::path requested{manifest_path};
+            const fs::path data = core::path::candidate_data_root();
+            const auto selected = data.empty() ? fs::canonical(requested)
+                : candidate_project_path(data, requested);
+            if (selected.empty() || selected.filename() != "project.epoch.json"
+                || fs::is_symlink(fs::symlink_status(requested))
+                || !fs::is_regular_file(selected))
+            { result.summary = "Project manifest is unavailable or redirected."; return result; }
+            const auto expectedRoot = fs::canonical(fs::path{expected_project_root});
+            const auto parsed = parse_manifest_project_profile(selected, &result.summary);
+            if (!parsed || parsed->id != expected_project_id
+                || fs::canonical(fs::path{parsed->root_path}) != expectedRoot
+                || fs::canonical(selected.parent_path()) != expectedRoot)
+            { result.summary = "Project manifest is malformed or no longer matches the active project identity and root."; return result; }
+            result.succeeded = true;
+            result.project_id = parsed->id;
+            result.manifest_path = selected.generic_string();
+            result.summary = "Current project manifest identity verified.";
+        }
+        catch (...) { result.summary = "Current project manifest identity could not be verified."; }
+        return result;
     }
 
     EditorProjectAdmissionResult editor_admit_project_manifest(
@@ -470,6 +557,16 @@ namespace epochengine
         result.succeeded = true;
         result.summary = admissionSummary;
         return result;
+    }
+
+    void editor_refresh_project_profiles() noexcept
+    {
+        invalidate_project_profile_cache();
+    }
+
+    std::filesystem::path editor_projects_root() noexcept
+    {
+        return resolve_projects_root();
     }
 
     std::span<const EditorProjectProfile> editor_project_profiles() noexcept
@@ -2564,17 +2661,298 @@ namespace epochengine
             .summary =
                 "All project audio cues decoded and the verified Library artifact is current."};
     }
+    [[nodiscard]] static std::optional<std::string> read_project_build_configuration_manifest(
+        const fs::path& root)
+    {
+        const fs::path manifest = root / "project.epoch.json";
+        std::error_code error;
+        const auto status = fs::symlink_status(manifest, error);
+        if (error || !fs::is_regular_file(status) || fs::is_symlink(status)
+            || fs::hard_link_count(manifest, error) != 1u || error) return std::nullopt;
+        const auto bytes = fs::file_size(manifest, error);
+        if (error || bytes == 0u || bytes > 1024u * 1024u) return std::nullopt;
+        auto text = read_text_file(manifest);
+        return text.size() == bytes ? std::optional<std::string>{std::move(text)} : std::nullopt;
+    }
+
+    std::optional<std::string> editor_project_build_configuration(std::string_view project_root)
+    {
+        const fs::path root = resolve_project_root_path(fs::path{project_root});
+        if (root.empty()) return std::nullopt;
+        std::error_code error;
+        if (!fs::exists(root / "project.epoch.json", error) && !error) return std::string{"Release"};
+        const auto text = read_project_build_configuration_manifest(root);
+        if (!text) return std::nullopt;
+        const auto manifest = parse_project_build_configuration_manifest(*text);
+        if (!manifest) return std::nullopt;
+        const auto field = manifest->find("build_configuration");
+        if (field == manifest->end()) return std::string{"Release"};
+        if (!field->is_string()) return std::nullopt;
+        auto configuration = field->get<std::string>();
+        return editor_project_build_configuration_supported(configuration)
+            ? std::optional<std::string>{std::move(configuration)} : std::nullopt;
+    }
+
+    bool editor_set_project_build_configuration(
+        std::string_view project_root, std::string_view configuration,
+        std::string& diagnostic)
+    {
+        diagnostic = "Choose Debug or Release for an admitted project.";
+        if (!editor_project_build_configuration_supported(configuration)
+            || !find_project_profile_by_root(project_root)) return false;
+        const fs::path root = resolve_project_root_path(fs::path{project_root});
+        if (root.empty()) return false;
+        const fs::path manifest = root / "project.epoch.json";
+        const auto original = read_project_build_configuration_manifest(root);
+        if (!original) { diagnostic = "Project manifest is missing, aliased or unreadable."; return false; }
+        const auto parsed = parse_project_build_configuration_manifest(*original);
+        if (!parsed) { diagnostic = "Project manifest is malformed or contains duplicate or nested-only build settings."; return false; }
+        const auto edition = parsed->find("engine_edition");
+        if (edition == parsed->end() || !edition->is_string()
+            || edition->get<std::string>() != updater::distribution::edition_id)
+        { diagnostic = "Save this project's matching-edition source before changing its build configuration."; return false; }
+        const auto updated = project_build_configuration_manifest_text(*original, configuration);
+        if (!updated) { diagnostic = "Project build_configuration must be one root-level JSON string in a valid manifest without duplicate keys."; return false; }
+        if (*updated == *original) { diagnostic = "Project build configuration is already " + std::string{configuration} + "."; return true; }
+        const fs::path temporary = root / "project.epoch.json.build-settings.write";
+        std::error_code error;
+        const auto bytes = std::span<const std::byte>{
+            reinterpret_cast<const std::byte*>(updated->data()), updated->size()};
+        if (!platform::filesystem::exclusive_create_and_write(temporary, bytes, error))
+        { diagnostic = "Project build settings could not create its temporary manifest."; return false; }
+        if (read_project_build_configuration_manifest(root) != original
+            || !platform::filesystem::atomic_replace_same_filesystem(temporary, manifest, error))
+        {
+            std::error_code cleanup;
+            (void)fs::remove(temporary, cleanup);
+            diagnostic = "Project manifest changed during settings publication; retry after it settles.";
+            return false;
+        }
+        diagnostic = "Project build configuration saved: " + std::string{configuration} + ".";
+        return true;
+    }
+
+    [[nodiscard]] static bool valid_project_run_settings(const EditorProjectRunSettings& settings)
+    {
+        const auto& backend = settings.backend;
+        return (backend == "opengl" || backend == "vulkan" || backend == "directx"
+                || backend == "raylib" || backend == "sdl" || backend == "sfml")
+            && std::isfinite(settings.frame_limit_fps) && settings.frame_limit_fps >= 0.0;
+    }
+
+    std::optional<EditorProjectRunSettings> editor_project_run_settings(std::string_view project_root)
+    {
+        const auto root = resolve_project_root_path(fs::path{project_root});
+        if (root.empty()) return {};
+        const auto original = read_project_build_configuration_manifest(root);
+        if (!original) return {};
+        const auto document = parse_project_build_configuration_manifest(*original);
+        if (!document) return {};
+        EditorProjectRunSettings settings;
+        if (const auto field = document->find("run_backend"); field != document->end())
+        {
+            if (!field->is_string()) return {};
+            settings.backend = field->get<std::string>();
+        }
+        if (const auto field = document->find("run_frame_limit_fps"); field != document->end())
+        {
+            if (!field->is_number()) return {};
+            settings.frame_limit_fps = field->get<double>();
+        }
+        return valid_project_run_settings(settings) ? std::optional{settings} : std::nullopt;
+    }
+
+    bool editor_set_project_run_settings(std::string_view project_root,
+        const EditorProjectRunSettings& settings, std::string& diagnostic)
+    {
+        diagnostic = "Choose a supported project backend and a finite, nonnegative frame limit.";
+        if (!valid_project_run_settings(settings) || !find_project_profile_by_root(project_root)) return false;
+        const auto root = resolve_project_root_path(fs::path{project_root});
+        if (root.empty()) return false;
+        const auto original = read_project_build_configuration_manifest(root);
+        if (!original) { diagnostic = "Project manifest is missing, aliased or unreadable; Run settings were not saved."; return false; }
+        auto document = parse_project_build_configuration_manifest(*original);
+        if (!document) { diagnostic = "Project manifest is malformed; Run settings were not saved."; return false; }
+        const auto edition = document->find("engine_edition");
+        if (edition == document->end() || !edition->is_string()
+            || edition->get<std::string>() != updater::distribution::edition_id)
+        { diagnostic = "Save this project's matching-edition source before changing its Run settings."; return false; }
+        (*document)["run_backend"] = settings.backend;
+        (*document)["run_frame_limit_fps"] = settings.frame_limit_fps;
+        const auto updated = document->dump(2) + "\n";
+        if (updated != *original)
+        {
+            const auto temporary = root / "project.epoch.json.run-settings.write";
+            std::error_code error;
+            const auto bytes = std::as_bytes(std::span{updated.data(), updated.size()});
+            if (!platform::filesystem::exclusive_create_and_write(temporary, bytes, error))
+            { diagnostic = "Run settings could not create their temporary manifest; retry after it settles."; return false; }
+            if (read_project_build_configuration_manifest(root) != original
+                || !platform::filesystem::atomic_replace_same_filesystem(temporary, root / "project.epoch.json", error))
+            {
+                std::error_code cleanup;
+                (void)fs::remove(temporary, cleanup);
+                diagnostic = "Run settings could not be published; the existing manifest was retained. Retry after it settles.";
+                return false;
+            }
+        }
+        if (editor_project_run_settings(project_root) != settings)
+        { diagnostic = "Run settings changed before readback; review the saved project and retry."; return false; }
+        diagnostic = "Project Run settings saved.";
+        return true;
+    }
+
+    EditorProjectCreationResult editor_stage_engine_arcade_project(std::string_view project_root)
+    {
+        EditorProjectCreationResult result{};
+        result.summary = "Choose an admitted project before adding Engine Arcade.";
+        try
+        {
+            static std::mutex publicationMutex;
+            std::scoped_lock lock(publicationMutex);
+            const auto* profile = find_project_profile_by_root(project_root);
+            if (project_root.empty() || !profile) return result;
+            const fs::path root = resolve_project_root_path(fs::path{project_root});
+            const fs::path manifest = root / "project.epoch.json";
+            // Existing components must be real project-owned paths. This is
+            // conservative path admission, not OS confinement.
+            const auto admitted = [&](const fs::path& path)
+            {
+                std::error_code error;
+                if (!root.is_absolute() || !project_path_below(path, root, true)
+                    || fs::weakly_canonical(path, error) != path.lexically_normal() || error)
+                    return false;
+                fs::path observed;
+                for (const auto& part : path)
+                {
+                    observed /= part;
+                    const auto status = fs::symlink_status(observed, error);
+                    if (error == std::errc::no_such_file_or_directory) { error.clear(); continue; }
+                    if (error || fs::is_symlink(status)) return false;
+                    if (fs::is_regular_file(status)
+                        && (fs::hard_link_count(observed, error) != 1u || error)) return false;
+                }
+                return true;
+            };
+            if (root.empty() || !admitted(root) || !admitted(manifest)) return result;
+            const auto original = read_project_build_configuration_manifest(root);
+            if (!original) return result;
+            auto selected = parse_project_build_configuration_manifest(*original);
+            if (!selected || selected->value("id", std::string{}) != profile->id
+                || selected->value("engine_edition", std::string{}) != updater::distribution::edition_id)
+            { result.summary = "The selected project identity or source edition changed; no Arcade payload was written."; return result; }
+            auto packages = selected->find("engine_asset_packages");
+            if (packages == selected->end())
+                (*selected)["engine_asset_packages"] = nlohmann::ordered_json::array();
+            packages = selected->find("engine_asset_packages");
+            std::set<std::string> packageIds;
+            if (!packages->is_array() || packages->size() > 256u)
+            { result.summary = "Project engine_asset_packages must be a bounded string list."; return result; }
+            for (const auto& package : *packages)
+            {
+                if (!package.is_string()) return result;
+                const auto id = package.get<std::string>();
+                if (id.empty() || id.size() > 256u || !packageIds.insert(id).second) return result;
+            }
+            const bool alreadySelected = packageIds.contains("engine_arcade");
+            if (!alreadySelected)
+            {
+                if (packages->size() == 256u) return result;
+                packages->push_back("engine_arcade");
+            }
+            const std::string updated = alreadySelected ? *original : selected->dump(2) + "\n";
+            const std::string scriptApiInclude =
+                "#if __has_include(<scripting.epoch_api.h>)\n#  include <scripting.epoch_api.h>\n"
+                "#elif __has_include(<include/scripting.epoch_api.h>)\n#  include <include/scripting.epoch_api.h>\n"
+                "#else\n#  error \"Epoch script API header not found. Add Engine/include (preferred) or Engine/ to your include paths.\"\n#endif\n\n";
+            const ProjectShellSpec spec{.kind = EditorProjectKind::Game,
+                .project_id = std::string(profile->id),
+                .scene_identity = "project:" + std::string(profile->id) + ":engine_arcade",
+                .world_name = "Engine Arcade"};
+            auto packageManifest = nlohmann::ordered_json::parse(make_engine_arcade_package_manifest_text());
+            packageManifest["scene_asset"] = "Assets/Scenes/EngineArcade.epoch";
+            const std::array<std::pair<fs::path, std::string>, 3> payload{{
+                {root / "Assets/packages/engine_arcade.package.json", packageManifest.dump(2) + "\n"},
+                {root / "scripts/engine_arcade_scene.ascript.cpp", make_engine_arcade_script_text(scriptApiInclude)},
+                {root / "Assets/Scenes/EngineArcade.epoch", make_project_world_scene_text(spec, "game", true)}
+            }};
+            std::array<bool, 3> missing{}, published{};
+            std::error_code error;
+            for (std::size_t index = 0u; index < payload.size(); ++index)
+            {
+                const auto& [path, text] = payload[index];
+                if (text.empty() || !admitted(path)) return result;
+                const auto status = fs::symlink_status(path, error);
+                missing[index] = error == std::errc::no_such_file_or_directory || (!error && !fs::exists(status));
+                if (missing[index]) { error.clear(); continue; }
+                if (error || !fs::is_regular_file(status) || fs::file_size(path, error) != text.size()
+                    || error || read_text_file(path) != text)
+                { result.summary = "An existing Arcade asset was edited or conflicts with this payload; it was preserved."; return result; }
+            }
+            const auto rollbackPublished = [&]()
+            {
+                for (std::size_t index = 0u; index < payload.size(); ++index)
+                    if (published[index] && admitted(payload[index].first)
+                        && read_text_file(payload[index].first) == payload[index].second)
+                        (void)fs::remove(payload[index].first, error);
+            };
+            for (std::size_t index = 0u; index < payload.size(); ++index)
+            {
+                if (!missing[index]) continue;
+                const auto& [path, text] = payload[index];
+                fs::create_directories(path.parent_path(), error);
+                fs::path temporary = path; temporary += ".epoch-arcade.write";
+                const auto bytes = std::span<const std::byte>{reinterpret_cast<const std::byte*>(text.data()), text.size()};
+                if (error || !admitted(path) || !admitted(temporary)
+                    || !platform::filesystem::exclusive_create_and_write(temporary, bytes, error))
+                { rollbackPublished(); result.summary = "Arcade payload publication could not start; existing files were preserved."; return result; }
+                if (!platform::filesystem::atomic_publish_new_same_filesystem(temporary, path, error))
+                { (void)fs::remove(temporary, error); rollbackPublished(); return result; }
+                published[index] = true;
+            }
+            if (!admitted(root) || !admitted(manifest)
+                || read_project_build_configuration_manifest(root) != original)
+            { rollbackPublished(); result.summary = "Project manifest changed during Arcade staging; retry after it settles."; return result; }
+            if (updated != *original)
+            {
+                const fs::path temporary = root / "project.epoch.json.arcade.write";
+                const auto bytes = std::span<const std::byte>{reinterpret_cast<const std::byte*>(updated.data()), updated.size()};
+                if (!admitted(temporary)
+                    || !platform::filesystem::exclusive_create_and_write(temporary, bytes, error))
+                { rollbackPublished(); return result; }
+                if (!admitted(root) || !admitted(manifest)
+                    || read_project_build_configuration_manifest(root) != original
+                    || !platform::filesystem::atomic_replace_same_filesystem(temporary, manifest, error))
+                { (void)fs::remove(temporary, error); rollbackPublished(); return result; }
+            }
+            result.succeeded = true;
+            result.project_id = std::string(profile->id);
+            result.root_path = root.generic_string();
+            result.manifest_path = manifest.generic_string();
+            result.default_script_path = payload[1].first.generic_string();
+            result.summary = "Engine Arcade added: project assets and adapter script are ready. The current scene and startup script were preserved; run Engine Arcade Scene explicitly to select a mini-runtime.";
+        }
+        catch (...) { result.summary = "Engine Arcade could not verify the selected project; existing source was preserved."; }
+        return result;
+    }
+
     EditorProjectBuildResult editor_build_project(std::string_view project_root)
     {
-        return editor_build_project(project_root, {});
+        const auto configuration = editor_project_build_configuration(project_root);
+        if (!configuration) return {false, "Project build configuration must be Debug or Release."};
+        return editor_build_project(project_root, {}, *configuration);
     }
 
     EditorProjectBuildResult editor_build_project(
         std::string_view project_root,
-        std::stop_token cancellation)
+        std::stop_token cancellation,
+        std::string_view configuration)
     {
         if (project_root.empty())
             return {false, "No active project root selected."};
+        if (!editor_project_build_configuration_supported(configuration)
+            || editor_project_build_configuration(project_root) != configuration)
+            return {false, "Project build configuration is invalid or changed before dispatch."};
         if (cancellation.stop_requested())
             return {false, "Project build cancelled before preflight.", {}, {}, true};
 
@@ -2587,8 +2965,7 @@ namespace epochengine
 #else
             generated_project_linux_build_script_path(root);
 #endif
-        const fs::path logPath = generated_project_build_log_path(root);
-        const fs::path outputPath = generated_project_output_path(root);
+        const fs::path outputPath = generated_project_output_path(root, configuration);
 
         static std::mutex generatedProjectBuildMutex;
         static std::uint64_t generatedProjectBuildSequence{};
@@ -2599,8 +2976,37 @@ namespace epochengine
                 false,
                 "Another generated project build is already running. Wait for that build to finish before pressing Run again.",
                 outputPath.generic_string(),
-                logPath.generic_string()};
+                {}};
         }
+        if (const auto active = platform::child_process::active_in_group("epoch.project.build");
+            active && active->active())
+        {
+            (void)platform::child_process::focus(active->handle);
+            return {false, "An existing project build is still active; no second attempt was started.",
+                outputPath.generic_string()};
+        }
+
+        if (generatedProjectBuildSequence == (std::numeric_limits<std::uint64_t>::max)())
+            return {false, "Project build sequence is exhausted.", outputPath.generic_string()};
+        const auto attemptStarted = std::chrono::steady_clock::now();
+        const fs::path logPath = reserve_generated_project_build_transcript(root, configuration,
+            ++generatedProjectBuildSequence);
+        if (logPath.empty())
+            return {false, "Project build could not reserve its transcript. No build was started.", outputPath.generic_string()};
+        const auto finish = [&](EditorProjectBuildResult result) {
+            result.log_path = logPath.generic_string();
+            std::error_code error;
+            if (fs::is_regular_file(logPath, error) && !error && fs::hard_link_count(logPath, error) == 1u
+                && !error && fs::weakly_canonical(logPath, error) == logPath && !error)
+            {
+                std::ofstream transcript{logPath, std::ios::binary | std::ios::app};
+                transcript << "\n=== Epoch build result | succeeded=" << result.succeeded
+                    << " | cancelled=" << result.cancelled << " | elapsed_seconds="
+                    << std::chrono::duration<double>(std::chrono::steady_clock::now() - attemptStarted).count()
+                    << " ===\n" << result.summary << '\n';
+            }
+            return result;
+        };
 
         std::error_code ec;
         if (!fs::exists(scriptPath, ec) || ec)
@@ -2610,40 +3016,40 @@ namespace epochengine
                 const auto ensured = editor_ensure_project_shell(profile->id);
                 if (!ensured.succeeded)
                 {
-                    return {
+                    return finish({
                         false,
                         ensured.summary,
                         outputPath.generic_string(),
-                        logPath.generic_string()};
+                        logPath.generic_string()});
                 }
             }
             else
             {
-                return {
+                return finish({
                     false,
                     "Missing generated build script: " + scriptPath.generic_string()
                         + ". Create a generated project shell first.",
                     outputPath.generic_string(),
-                    logPath.generic_string()};
+                    logPath.generic_string()});
             }
         }
 
         if (!repair_generated_windows_child_project_build_files(root))
         {
-            return {
+            return finish({
                 false,
                 "Generated project build files could not be repaired before build.",
                 outputPath.generic_string(),
-                logPath.generic_string()};
+                logPath.generic_string()});
         }
         if (cancellation.stop_requested())
         {
-            return {
+            return finish({
                 false,
                 "Project build cancelled after preflight.",
                 outputPath.generic_string(),
                 logPath.generic_string(),
-                true};
+                true});
         }
 
         platform::child_process::LaunchRequest request{};
@@ -2658,11 +3064,11 @@ namespace epochengine
             || systemRootSize <= 1u)
         {
             std::free(systemRootValue);
-            return {
+            return finish({
                 false,
                 "Project build could not resolve the Windows PowerShell host.",
                 outputPath.generic_string(),
-                logPath.generic_string()};
+                logPath.generic_string()});
         }
         const fs::path systemRoot{systemRootValue};
         std::free(systemRootValue);
@@ -2676,23 +3082,13 @@ namespace epochengine
             "-File",
             fs::absolute(scriptPath).string(),
             "-Configuration",
-            "Debug",
+            std::string{configuration},
             "-Platform",
             "x64"};
 #else
         request.executable = "/bin/bash";
-        request.arguments = {fs::absolute(scriptPath).string()};
+        request.arguments = {fs::absolute(scriptPath).string(), std::string{configuration}};
 #endif
-        if (generatedProjectBuildSequence
-            == (std::numeric_limits<std::uint64_t>::max)())
-        {
-            return {
-                false,
-                "Project build sequence is exhausted.",
-                outputPath.generic_string(),
-                logPath.generic_string()};
-        }
-        ++generatedProjectBuildSequence;
         request.working_directory = root;
         request.correlation_key = "epoch.project.build:"
             + root.filename().string() + ":"
@@ -2700,16 +3096,19 @@ namespace epochengine
         request.exclusive_group = "epoch.project.build";
         request.display_name = "Epoch Project Build";
         request.window_mode = platform::child_process::WindowMode::hidden;
+        request.merged_output_path = logPath;
+        request.append_output = true;
+        request.disconnect_standard_input = true;
 
         const platform::child_process::LaunchResult launched =
             platform::child_process::launch_or_focus(request);
         if (launched.code != platform::child_process::LaunchCode::started)
         {
-            return {
+            return finish({
                 false,
                 "Project build process could not start: " + launched.message,
                 outputPath.generic_string(),
-                logPath.generic_string()};
+                logPath.generic_string()});
         }
 
         const platform::child_process::WaitResult waited =
@@ -2717,29 +3116,29 @@ namespace epochengine
         (void)platform::child_process::release(launched.handle);
         if (waited.code == platform::child_process::WaitCode::cancelled)
         {
-            return {
+            return finish({
                 false,
                 "Project build cancelled; the owned process tree was stopped.",
                 outputPath.generic_string(),
                 logPath.generic_string(),
-                true};
+                true});
         }
         if (waited.code != platform::child_process::WaitCode::exited
             || !waited.process || !waited.process->exit_code_valid)
         {
-            return {
+            return finish({
                 false,
                 "Project build process failed: " + waited.message,
                 outputPath.generic_string(),
-                logPath.generic_string()};
+                logPath.generic_string()});
         }
 
         const fs::path resolvedOutputPath =
-            generated_project_existing_output_path(root);
+            generated_project_existing_output_path(root, configuration);
         const bool succeeded = waited.process->exit_code == 0
             && fs::exists(resolvedOutputPath, ec)
             && !ec;
-        return {
+        return finish({
             succeeded,
             succeeded
                 ? "Built generated child project to "
@@ -2748,7 +3147,7 @@ namespace epochengine
                     + std::to_string(waited.process->exit_code)
                     + ". See " + logPath.generic_string() + " for details.",
             (succeeded ? resolvedOutputPath : outputPath).generic_string(),
-            logPath.generic_string()};
+            logPath.generic_string()});
     }
     EditorScriptBuildResult editor_build_script(std::string_view script_name)
     {

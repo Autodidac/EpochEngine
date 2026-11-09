@@ -9,7 +9,7 @@ EPOCH_OUTPUT_EDITION="development"
 if grep -q '^#define EPOCH_SOURCE_EDITION_PUBLIC 1[[:space:]]*$' "${SCRIPT_DIR}/include/epoch.edition.hpp"; then
   EPOCH_OUTPUT_EDITION="public"
 fi
-EPOCH_DEFAULT_BUILD_ROOT="${EPOCH_REPOSITORY_ROOT}/build/cmake/linux/${EPOCH_OUTPUT_EDITION}"
+EPOCH_DEFAULT_BUILD_ROOT="${EPOCH_REPOSITORY_ROOT}/Artifacts/Intermediate/cmake/linux/${EPOCH_OUTPUT_EDITION}"
 
 
 if [[ $# -lt 1 ]]; then
@@ -46,6 +46,6 @@ case "$COMPILER_CHOICE" in
 esac
 
 BUILD_DIR="${EPOCH_BUILD_ROOT:-${EPOCH_DEFAULT_BUILD_ROOT}}/${COMPILER_NAME}-${BUILD_TYPE}"
-INSTALL_PREFIX="${EPOCH_REPOSITORY_ROOT}/build/install/linux/${EPOCH_OUTPUT_EDITION}/${COMPILER_NAME}-${BUILD_TYPE}"
+INSTALL_PREFIX="${EPOCH_REPOSITORY_ROOT}/Artifacts/Install/linux/${EPOCH_OUTPUT_EDITION}/${COMPILER_NAME}-${BUILD_TYPE}"
 
 cmake --install "$BUILD_DIR" --config "$BUILD_TYPE" --prefix "$INSTALL_PREFIX"

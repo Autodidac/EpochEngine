@@ -780,16 +780,15 @@
                     const std::size_t version_offset = binary_prefix.size();
                     const std::size_t version_length =
                         asset.name.size() - binary_prefix.size() - binary_suffix.size();
-                    const std::string remote_version =
-                        extract_version_string(asset.name.substr(version_offset, version_length));
-                    if (remote_version.empty())
+                    const std::string remote_version = asset.name.substr(version_offset, version_length);
+                    if (remote_version.empty() || extract_version_string(remote_version) != remote_version)
                     {
                         continue;
                     }
 
                     const auto expected_digest = core::sha256::from_hex(asset.sha256);
                     if (!expected_digest
-                        || extract_version_string(release.version) != remote_version
+                        || release.version != remote_version
                         || release.tag != "v" + remote_version
                         || !PROJECT_RELEASE_DOWNLOAD_ALLOWED(asset.url)
                         || (!asset.checksum_url.empty()
@@ -810,6 +809,59 @@
             }
 
             return resolved;
+        }
+
+        struct ResolvedSourceArchive
+        {
+            std::string version;
+            std::string url;
+            std::string expected_sha256;
+            bool found{ false };
+        };
+
+        [[nodiscard]] inline ResolvedSourceArchive select_public_source_archive(
+            const std::vector<IntegrityReleaseInfo>& releases)
+        {
+            if (!PUBLIC_DISTRIBUTION) return {};
+            std::string latest;
+            for (const auto& release : releases)
+            {
+                const auto version = extract_version_string(release.version);
+                if (version != release.version || version.empty()) return {};
+                if (latest.empty() || compare_versions(latest, version) < 0) latest = version;
+            }
+            if (latest.empty()) return {};
+            const auto name = "epoch_source_v" + latest + ".zip";
+            const auto url = std::string{ GITHUB_BASE }
+                + "Autodidac/EpochEngine/releases/download/v" + latest + "/" + name;
+            ResolvedSourceArchive selected{};
+            for (const auto& release : releases)
+            {
+                if (release.version != latest) continue;
+                if (release.tag != "v" + latest) return {};
+                for (const auto& asset : release.assets)
+                {
+                    if (asset.name != name) continue;
+                    const auto digest = core::sha256::from_hex(asset.sha256);
+                    if (selected.found || asset.url != url || !digest
+                        || !PROJECT_RELEASE_DOWNLOAD_ALLOWED(asset.url)) return {};
+                    selected = { latest, url, core::sha256::hex(*digest), true };
+                }
+            }
+            return selected; // No older-release, tar, unsigned-checksum or foreign fallback.
+        }
+
+        [[nodiscard]] inline ResolvedSourceArchive resolve_public_source_archive()
+        {
+            if (!PUBLIC_DISTRIBUTION) return {};
+            const auto path = make_temp_download_path("source_integrity").replace_extension(".json");
+            if (!download_file(PROJECT_RELEASE_INTEGRITY_URL(), path.string())) return {};
+            const auto document = read_text_file(path);
+            std::error_code ec;
+            std::filesystem::remove(path, ec);
+            const auto payload = verified_release_integrity_payload(document);
+            return payload ? select_public_source_archive(parse_release_integrity_payload(*payload))
+                : ResolvedSourceArchive{};
         }
 
         [[nodiscard]] inline bool text_matches_ci_job(

@@ -1,0 +1,59 @@
+{
+  "id": "voxel_planetoid_lod",
+  "displayName": "Voxel Planetoid LOD Extension",
+  "manifestLicense": "LicenseRef-MIT-NoSell",
+  "manifestCopyright": "Copyright (c) 2026 Adam Rushford",
+  "status": "source-staged",
+  "kind": "code-extension",
+  "activation": "package-manager-opt-in",
+  "summary": "Renderer-neutral voxel/chunk planetoid LOD code extension staged for reviewed package import.",
+  "security": {
+    "serverOrListenerAllowed": false,
+    "requiresExplicitNetworkApproval": false,
+    "autoRunAllowed": false,
+    "includeByDefault": false
+  },
+  "source": {
+    "repo": "https://epoch.adamrushford.chatgpt.site/git/EpochEngineExtensions.git",
+    "path": "packages/voxel_planetoid_lod",
+    "prototypeArchiveSha256": "BCACE57C2ED881C0AE0D5B4B48F8757E80BE08135031CA29EAA3DE2CFE9B69F1",
+    "provenance": "renderer-neutral C++23 planetoid field and LOD chunk policy staged from reviewed prototype concepts"
+  },
+  "engineBoundary": {
+    "epochPackageId": "voxel_planetoid_lod",
+    "expectedCacheRoot": "cache/packages/voxel_planetoid_lod",
+    "notes": "Use as reference for voxel LOD and chunk streaming after API-boundary review."
+  },
+  "script": {
+    "language": "C++23",
+    "path": "scripts/voxel_planetoid_lod_package.ascript.cpp",
+    "api": "epoch_package_script_api",
+    "mode": "local-archive-stage-build-live-preview",
+    "downloadsSource": false,
+    "compilesSource": true,
+    "livePreview": true,
+    "humanGated": true,
+    "autoRunAllowed": false
+  },
+  "build": {
+    "humanGated": true,
+    "sourceFiles": [
+      "CMakeLists.txt",
+      "include/epoch/extensions/voxel_planetoid_lod/voxel_planetoid_lod.hpp",
+      "src/voxel_planetoid_lod.cpp",
+      "tests/voxel_planetoid_lod_self_test.cpp"
+    ],
+    "targets": [
+      "epoch_extension_voxel_planetoid_lod",
+      "epoch_extension_voxel_planetoid_lod_self_test"
+    ],
+    "commands": [
+      "cmake -S packages/voxel_planetoid_lod -B cache/packages/voxel_planetoid_lod/build",
+      "cmake --build cache/packages/voxel_planetoid_lod/build --target epoch_extension_voxel_planetoid_lod_self_test",
+      "cache/packages/voxel_planetoid_lod/build/epoch_extension_voxel_planetoid_lod_self_test"
+    ]
+  },
+  "notes": [
+    "Stages deterministic field sampling, chunk key selection, and LOD shell planning without backend-specific upload code."
+  ]
+}

@@ -11,7 +11,7 @@ fi
 
 # Only this helper's fixed owned output roots. Never delete the caller's cwd,
 # a custom EPOCH_BUILD_ROOT, retained legacy outputs, projects or other editions.
-for relative in "build/cmake/linux/${EDITION}" "build/install/linux/${EDITION}"; do
+for relative in "Artifacts/Intermediate/cmake/linux/${EDITION}"; do
   target="${REPOSITORY_ROOT}/${relative}"
   if [[ -e "$target" || -L "$target" ]]; then
     physical="$(realpath -e -- "$target")"

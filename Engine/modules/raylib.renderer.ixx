@@ -107,7 +107,7 @@ namespace epochengine::raylibrenderer
             return static_cast<std::uint8_t>(value * 255.0f + 0.5f);
         }
 
-        inline void log_no_context_refusal(const char* operation) noexcept
+        inline void log_no_context_refusal(const char* operation, const char* reason) noexcept
         {
             std::uint32_t observed = s_canvasNoContextRefusals.load(
                 std::memory_order_relaxed);
@@ -127,7 +127,7 @@ namespace epochengine::raylibrenderer
                     "Raylib.Canvas2D",
                     std::string{"Raylib3 Canvas2D "}
                         + (operation ? operation : "operation")
-                        + " refused because its owner GL context is not current.");
+                        + " refused: " + (reason ? reason : "context unavailable") + ".");
             }
             catch (...)
             {
@@ -195,11 +195,15 @@ namespace epochengine::raylibrenderer
             const canvas2d::presentation::NativePresentationPacket& packet)
         {
             auto* const binding = static_cast<PresentationBinding*>(user);
-            if (!binding || !static_cast<bool>(*binding)
-                || !binding->device->native_presentation_context_available(
+            if (!binding || !static_cast<bool>(*binding))
+            {
+                log_no_context_refusal("presentation", "presentation binding is missing");
+                return false;
+            }
+            if (const char* reason = binding->device->native_presentation_context_refusal(
                     binding->owner))
             {
-                log_no_context_refusal("presentation");
+                log_no_context_refusal("presentation", reason);
                 return false;
             }
 
@@ -376,10 +380,14 @@ namespace epochengine::raylibrenderer
                 canvas2d::presentation::PresentationSurface surface)
             {
                 std::scoped_lock lock(mutex);
-                if (!presenter
-                    || !device.native_presentation_context_available(binding.owner))
+                if (!presenter)
                 {
-                    log_no_context_refusal("scene preparation");
+                    log_no_context_refusal("scene preparation", "presenter is unavailable");
+                    return false;
+                }
+                if (const char* reason = device.native_presentation_context_refusal(binding.owner))
+                {
+                    log_no_context_refusal("scene preparation", reason);
                     return false;
                 }
 

@@ -29,6 +29,7 @@
  *                                              *
  ***********************************************/
 #pragma once
+#include <stdint.h>
 
 #ifdef _WIN32
 #  define EPOCH_SCRIPT_EXPORT extern "C" __declspec(dllexport)
@@ -54,3 +55,24 @@ struct EpochScriptHost
     int (*attach_cube_oscillators)(void* user_data, unsigned count,
         int axis, float amplitude, float frequency_hz);
 };
+
+// A separate entry symbol prevents a new script from reading past an old host.
+// Legacy run_script(EpochScriptHost*) and its exact structure remain unchanged.
+struct EpochScriptTranslationKey
+{
+    double seconds;
+    double offset[3];
+};
+struct EpochScriptHostV2
+{
+    uint32_t abi_version;
+    uint32_t struct_size;
+    EpochScriptHost* legacy;
+    void* user_data;
+    // Host/user_data are borrowed only during this synchronous entry. Scripts
+    // must not retain them or invoke these callbacks from additional threads.
+    // Copies at most 256 finite, ordered keys during run_script_v2. The host
+    // binds the selected entity/project/scene and commits only on entry success.
+    int (*copy_selected_translation_track)(void*,const EpochScriptTranslationKey*,uint32_t);
+};
+enum { EPOCH_SCRIPT_HOST_ABI_V2=2 };

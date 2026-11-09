@@ -38,6 +38,8 @@ import project.texture_resources;
 import project.texture_source;
 import render.canvas2d;
 import render.canvas2d_scene;
+import render.device;
+import render.texture_artifact;
 import scene.snapshot;
 
 namespace epochengine::editor_project_textures
@@ -94,10 +96,13 @@ namespace epochengine::editor_project_textures
             auto rootIt = root.begin();
             for (; rootIt != root.end(); ++rootIt, ++candidateIt)
             {
-                if (candidateIt == candidate.end()
-                    || !path_component_equal(
-                        candidateIt->string(),
-                        rootIt->string()))
+                if (candidateIt == candidate.end())
+                    return false;
+                const auto candidateUtf8 = candidateIt->generic_u8string();
+                const auto rootUtf8 = rootIt->generic_u8string();
+                if (!path_component_equal(
+                        {candidateUtf8.begin(), candidateUtf8.end()},
+                        {rootUtf8.begin(), rootUtf8.end()}))
                 {
                     return false;
                 }
@@ -124,7 +129,8 @@ namespace epochengine::editor_project_textures
                 if (component == ".." || component == ".")
                     return std::nullopt;
             }
-            return std::string{"Assets/"} + relative.generic_string();
+            const auto utf8 = relative.generic_u8string();
+            return std::string{"Assets/"} + std::string{utf8.begin(), utf8.end()};
         }
 
         [[nodiscard]] std::string lowercase_extension(
@@ -146,7 +152,8 @@ namespace epochengine::editor_project_textures
             const fs::path& source)
         {
             const std::string extension = lowercase_extension(source);
-            return extension == ".ppm"
+            return extension == ".png"
+                || extension == ".ppm"
                 || extension == ".bmp"
                 || extension == ".tga";
         }
@@ -1579,6 +1586,37 @@ namespace epochengine::editor_project_textures
             ? std::optional<scene::SceneTextureMaterialSnapshot>{
                 std::move(material)}
             : std::nullopt;
+    }
+
+    ResolvedTextureMaterial ProjectTextureController::resolve_scene_material(
+        const scene::SceneTextureMaterialSnapshot& material) noexcept
+    {
+        if (!valid() || !material.valid()) return {};
+        try
+        {
+            const auto restored = pipeline_.restore_exact(material.logical_path, content_hash(material),
+                texture_artifact::TransferUsage::base_color);
+            if (!restored) return {};
+            auto artifact = pipeline_.resources().validated_artifact(pipeline_.registry(), restored.logical);
+            if (!artifact) return {};
+            const auto* compiled = artifact.artifact();
+            const auto expectedColor = material.color_space == scene::SceneTextureColorSpace::srgb
+                ? asset::texture::ColorSpace::srgb : asset::texture::ColorSpace::linear;
+            if (!compiled || compiled->identity.profile.color_space != expectedColor) return {};
+            const auto filter = material.filter == scene::SceneTextureFilter::nearest
+                ? FilterMode::nearest : FilterMode::linear;
+            const auto address = [](scene::SceneTextureAddress value) noexcept
+            {
+                return value == scene::SceneTextureAddress::repeat ? AddressMode::repeat
+                    : value == scene::SceneTextureAddress::mirrored_repeat ? AddressMode::mirrored_repeat
+                    : AddressMode::clamp_to_edge;
+            };
+            return {.material=material,.logical=restored.logical,.artifact=std::move(artifact),
+                .sampler={.min_filter=filter,.mag_filter=filter,
+                    .address_u=address(material.address_u),.address_v=address(material.address_v),
+                    .maximum_anisotropy=1.0f,.mipmapped=false}};
+        }
+        catch (...) { return {}; }
     }
 
     SceneTextureLeaseResult

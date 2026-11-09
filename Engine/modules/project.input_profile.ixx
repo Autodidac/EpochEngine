@@ -9,6 +9,7 @@ module;
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -1047,6 +1048,33 @@ export namespace epochengine::project_input
         std::uint64_t project_key_{};
         StoreMetrics metrics_{};
     };
+
+    enum class RuntimeFallbackPolicy : std::uint8_t
+    {
+        require_source_or_artifact,
+        allow_legacy_default
+    };
+
+    struct RuntimeProfileRequest final
+    {
+        std::string project_id{};
+        std::filesystem::path project_root{};
+        std::string logical_path{};
+        RuntimeFallbackPolicy fallback{
+            RuntimeFallbackPolicy::require_source_or_artifact};
+    };
+
+    struct PreparedRuntimeProfile final
+    {
+        std::optional<CompiledInputProfile> artifact{};
+        bool compiled_from_source{};
+        bool restored_from_artifact{};
+        bool legacy_fallback{};
+        std::string diagnostic{};
+    };
+
+    [[nodiscard]] PreparedRuntimeProfile prepare_runtime_profile(
+        const RuntimeProfileRequest& request) noexcept;
 
     enum class ContractFailure : std::uint8_t
     {

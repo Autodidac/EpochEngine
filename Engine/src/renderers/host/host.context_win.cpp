@@ -106,7 +106,6 @@ import perf.tier;
 import platform.budgets;
 import platform.work_admission;
 import render.context_frame;
-import render.event_debug;
 
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
 import opengl.context;
@@ -352,6 +351,45 @@ namespace epochengine::core
             title += L" ";
             title += std::to_wstring(static_cast<long long>(index) + 1);
             return title;
+        }
+
+        // Once per owned creation; observe only, never change an icon.
+        void log_native_window_icon_identity(HWND hwnd, std::string_view phase)
+        {
+            DWORD process{};
+            const DWORD thread = hwnd ? ::GetWindowThreadProcessId(hwnd, &process) : 0u;
+            if (thread != ::GetCurrentThreadId() || process != ::GetCurrentProcessId()) return;
+            wchar_t className[256]{};
+            (void)::GetClassNameW(hwnd, className, static_cast<int>(std::size(className)));
+            const auto executable = ::GetModuleHandleW(nullptr);
+            const auto bits = [](const auto handle) { return reinterpret_cast<std::uintptr_t>(handle); };
+            auto& log = epochengine::logger::get(kLogSys);
+            log.logf(logger::LogLevel::INFO, std::source_location::current(),
+                "Native icon identity [{}]: hwnd=0x{:x} ownerThread={} process={} parent=0x{:x} root=0x{:x} class={} executable=0x{:x} windowModule=0x{:x} classModule=0x{:x} resource={}",
+                phase, bits(hwnd), thread, process, bits(::GetParent(hwnd)),
+                bits(::GetAncestor(hwnd, GA_ROOT)), epochengine::text::narrow_utf8(className), bits(executable),
+                static_cast<std::uintptr_t>(::GetWindowLongPtrW(hwnd, GWLP_HINSTANCE)),
+                static_cast<std::uintptr_t>(::GetClassLongPtrW(hwnd, GCLP_HMODULE)), IDI_EPOCH_EDITOR);
+            struct Observation { std::string_view label; HICON icon; };
+            const std::array observations{
+                Observation{"expected", ::LoadIconW(executable, MAKEINTRESOURCEW(IDI_EPOCH_EDITOR))},
+                Observation{"classBig", reinterpret_cast<HICON>(::GetClassLongPtrW(hwnd, GCLP_HICON))},
+                Observation{"classSmall", reinterpret_cast<HICON>(::GetClassLongPtrW(hwnd, GCLP_HICONSM))},
+                Observation{"windowBig", reinterpret_cast<HICON>(::SendMessageW(hwnd, WM_GETICON, ICON_BIG, 0))},
+                Observation{"windowSmall", reinterpret_cast<HICON>(::SendMessageW(hwnd, WM_GETICON, ICON_SMALL, 0))},
+                Observation{"windowSmall2", reinterpret_cast<HICON>(::SendMessageW(hwnd, WM_GETICON, ICON_SMALL2, 0))}
+            };
+            for (const auto& observation : observations)
+            {
+                ICONINFO info{};
+                const bool valid = observation.icon && ::GetIconInfo(observation.icon, &info) != FALSE;
+                log.logf(logger::LogLevel::INFO, std::source_location::current(),
+                    "Native icon identity [{}]: hwnd=0x{:x} source={} handle=0x{:x} valid={}",
+                    phase, bits(hwnd), observation.label, bits(observation.icon), valid);
+                // GetIconInfo creates bitmap copies; borrowed HICONs stay owned.
+                if (info.hbmColor) (void)::DeleteObject(info.hbmColor);
+                if (info.hbmMask && info.hbmMask != info.hbmColor) (void)::DeleteObject(info.hbmMask);
+            }
         }
 
         void ResolveClientSize(HWND hwnd, int& width, int& height) noexcept
@@ -623,6 +661,8 @@ namespace epochengine::core
     {
         if (!running.load(std::memory_order_acquire))
             return false;
+        if (request.activate_existing_only && uiThreadId == 0)
+            return false;
 
         s_activeInstance = this;
         g_activeManager = this;
@@ -707,6 +747,76 @@ namespace epochengine::core
 
         s_activeInstance = this;
         g_activeManager = this;
+
+        if (request.activate_existing_only)
+        {
+            if (request.gui_route.empty()) return false;
+            DWORD foregroundProcess{};
+            ::GetWindowThreadProcessId(::GetForegroundWindow(), &foregroundProcess);
+            // An explicit view change may raise its own companions, but a
+            // delayed/background request must not activate another application.
+            if (foregroundProcess != ::GetCurrentProcessId()) return false;
+            HWND target{}, top{};
+            DWORD targetThread{};
+            bool ownerFocusQueued{};
+            {
+                std::scoped_lock lock(windowsMutex);
+                for (const auto& window : windows)
+                {
+                    if (!window || window->guiRoute != request.gui_route
+                        || !window->running.load(std::memory_order_acquire)
+                        || window->get_should_close()
+                        || window->retirementQueued.load(std::memory_order_acquire))
+                        continue;
+                    target = owner_thread_dock_handle(window.get());
+                    if (!target) return false;
+                    DWORD targetProcess{};
+                    targetThread = ::GetWindowThreadProcessId(target, &targetProcess);
+                    if (targetThread == 0 || targetProcess != ::GetCurrentProcessId()) return false;
+                    top = ::GetAncestor(target, GA_ROOT);
+                    if (!top || ::IsWindow(top) == FALSE) return false;
+                    if (targetThread != ::GetCurrentThreadId())
+                    {
+                        // Native/backend owner work stays bound to its existing
+                        // queue lifetime. Nothing reads WindowData after unlock.
+                        window->ownerThreadCommandQueue.enqueue(
+                            [owner = window.get(), target, route = request.gui_route]()
+                            {
+                                DWORD queuedForegroundProcess{};
+                                ::GetWindowThreadProcessId(::GetForegroundWindow(), &queuedForegroundProcess);
+                                if (owner->guiRoute == route
+                                    && owner->running.load(std::memory_order_acquire)
+                                    && !owner->get_should_close()
+                                    && !owner->retirementQueued.load(std::memory_order_acquire)
+                                    && queuedForegroundProcess == ::GetCurrentProcessId()
+                                    && ::IsWindow(target) != FALSE
+                                    && ::GetWindowThreadProcessId(target, nullptr) == ::GetCurrentThreadId())
+                                    focus_gui_mouse_target(target);
+                            });
+                        ownerFocusQueued = true;
+                    }
+                    break;
+                }
+            }
+            if (!target || !top) return false;
+            // Native activation can synchronously dispatch window handlers.
+            // Never hold the context registry lock across those callbacks.
+            DWORD liveProcess{};
+            ::GetWindowThreadProcessId(::GetForegroundWindow(), &foregroundProcess);
+            if (::IsWindow(target) == FALSE || ::IsWindow(top) == FALSE
+                || foregroundProcess != ::GetCurrentProcessId()
+                || ::GetWindowThreadProcessId(target, &liveProcess) != targetThread
+                || liveProcess != ::GetCurrentProcessId()) return false;
+            if (::IsIconic(top)) ::ShowWindow(top, SW_RESTORE);
+            if (::IsWindow(top) == FALSE) return false;
+            ::BringWindowToTop(top);
+            ::SetForegroundWindow(top);
+            if (!ownerFocusQueued && ::IsWindow(target) != FALSE
+                && ::GetWindowThreadProcessId(target, &liveProcess) == targetThread
+                && liveProcess == ::GetCurrentProcessId())
+                focus_gui_mouse_target(target);
+            return true;
+        }
 
         const int clientW = clamp_positive(request.width);
         const int clientH = clamp_positive(request.height);
@@ -814,6 +924,7 @@ namespace epochengine::core
         }
 
         std::shared_ptr<Context> ctx;
+        int backendIndex = 0;
         {
             std::unique_lock lock(g_backendsMutex);
             auto it = g_backends.find(request.type);
@@ -839,12 +950,14 @@ namespace epochengine::core
                 if (freeIt != backendSlot.duplicates.end())
                 {
                     ctx = *freeIt;
+                    backendIndex = static_cast<int>(freeIt - backendSlot.duplicates.begin()) + 1;
                 }
                 else
                 {
                     auto dup = CloneContext(*backendSlot.master);
                     backendSlot.duplicates.push_back(dup);
                     ctx = std::move(dup);
+                    backendIndex = static_cast<int>(backendSlot.duplicates.size());
                 }
             }
         }
@@ -855,6 +968,11 @@ namespace epochengine::core
             ::DestroyWindow(hwnd);
             return false;
         }
+
+        // Pane identity remains in guiRoute; native captions identify the live
+        // backend slot just like contexts created during initial startup.
+        title = backend::BuildChildWindowTitle(request.type, backendIndex);
+        ::SetWindowTextW(hwnd, title.c_str());
 
         ctx->type = request.type;
         ctx->hwnd = hwnd;
@@ -890,6 +1008,7 @@ namespace epochengine::core
             std::scoped_lock lock(windowsMutex);
             windows.emplace_back(std::move(winPtr));
         }
+        backend::log_native_window_icon_identity(hwnd, "detached");
 
         if (rawWin)
         {
@@ -1134,7 +1253,8 @@ namespace epochengine::core
             }
 
             RECT want{ 0, 0, clientW, clientH };
-            const DWORD style = WS_OVERLAPPEDWINDOW | WS_VISIBLE | WS_CLIPCHILDREN;
+            const DWORD style = WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN
+                | (cli::defer_window_show ? 0u : WS_VISIBLE);
             ::AdjustWindowRect(&want, style, FALSE);
             const int outerWidth = want.right - want.left;
             const int outerHeight = want.bottom - want.top;
@@ -1287,7 +1407,7 @@ namespace epochengine::core
                         windowTitle.c_str(),
                         (parent
                             ? (WS_CHILD | WS_CLIPSIBLINGS | WS_CLIPCHILDREN)
-                            : (WS_OVERLAPPEDWINDOW | WS_VISIBLE)),
+                            : (WS_OVERLAPPEDWINDOW | (cli::defer_window_show ? 0u : WS_VISIBLE))),
                         initialX, initialY, initialWidth, initialHeight,
                         parent,
                         nullptr,
@@ -1331,6 +1451,7 @@ namespace epochengine::core
                         windows.emplace_back(std::move(winPtr));
                     }
 
+                    backend::log_native_window_icon_identity(hwnd, "startup");
                     created.push_back(hwnd);
                     createdTitles.push_back(narrowTitle);
                 }
@@ -1690,7 +1811,8 @@ namespace epochengine::core
         const std::uintptr_t nativeWindow,
         const std::uint64_t processId,
         std::string route,
-        const RoutedPanelDockTarget dockTarget)
+        const RoutedPanelDockTarget dockTarget,
+        const std::shared_ptr<Context>& viewportContext)
     {
         const HWND hwnd = reinterpret_cast<HWND>(nativeWindow);
         if (!running.load(std::memory_order_acquire)
@@ -1711,6 +1833,14 @@ namespace epochengine::core
         {
             return false;
         }
+        if (viewportContext)
+        {
+            std::scoped_lock lock(windowsMutex);
+            const auto owner = std::ranges::find_if(windows, [&](const auto& window)
+            { return window && window->context == viewportContext
+                && window->running.load(std::memory_order_acquire) && window->backend_ready(); });
+            if (owner == windows.end() || external_attachment(owner->get())) return false;
+        }
 
         {
             std::scoped_lock lock(windowsMutex);
@@ -1723,9 +1853,12 @@ namespace epochengine::core
             if (existing != windows.end())
             {
                 const auto attachment = external_attachment(existing->get());
+                const auto presentation = external_presentation(existing->get());
                 return attachment && attachment->process_id() == observedProcessId
                     && attachment->host().value == reinterpret_cast<std::uintptr_t>(parent) && (*existing)->guiRoute == route
-                    && (*existing)->backend_ready() && attachment->placement_current();
+                    && (*existing)->backend_ready() && attachment->placement_current()
+                    && presentation.in_viewport == static_cast<bool>(viewportContext)
+                    && (!viewportContext || presentation.viewport_context.lock() == viewportContext);
             }
         }
 
@@ -1738,7 +1871,7 @@ namespace epochengine::core
         window->running.store(true, std::memory_order_release);
         window->guiRoute = std::move(route);
         window->titleNarrow =
-            "Sandbox Candidate | PID " + std::to_string(processId);
+            "Epoch Context | PID " + std::to_string(processId);
         window->dockTargetPreference.store(
             static_cast<std::uint8_t>(dockTarget),
             std::memory_order_release);
@@ -1750,7 +1883,9 @@ namespace epochengine::core
         {
             std::scoped_lock lock(windowsMutex, g_externalAttachmentsMutex);
             windows.reserve(windows.size() + 1);
-            g_externalAttachments.emplace(admittedWindow, attachment);
+            g_externalAttachments.emplace(admittedWindow, ExternalProcessPresentation{
+                .attachment = attachment, .viewport_context = viewportContext,
+                .in_viewport = static_cast<bool>(viewportContext)});
             // Capacity is reserved and unique_ptr movement is noexcept: a
             // foreign HWND is never published without its ownership record.
             windows.emplace_back(std::move(window));
@@ -1769,6 +1904,27 @@ namespace epochengine::core
         }
         RemoveWindow(hwnd);
         return false;
+    }
+
+    bool MultiContextManager::UpdateExternalProcessWindowViewport(
+        const std::uintptr_t nativeWindow, const std::uint64_t processId,
+        const std::string_view route, const bool visible)
+    {
+        if (uiThreadId == 0 || ::GetCurrentThreadId() != uiThreadId
+            || !IsExternalProcessWindowAttached(nativeWindow, processId, route)) return false;
+        ExternalProcessPresentation presentation;
+        {
+            std::scoped_lock lock(windowsMutex, g_externalAttachmentsMutex);
+            const auto found = std::ranges::find_if(windows, [&](const auto& window)
+            { return window && reinterpret_cast<std::uintptr_t>(window->hwnd) == nativeWindow
+                && window->guiRoute == route; });
+            if (found == windows.end()) return false;
+            const auto record = g_externalAttachments.find(found->get());
+            if (record == g_externalAttachments.end() || !record->second.in_viewport) return false;
+            record->second.visible = visible;
+            presentation = record->second;
+        }
+        return place_external_viewport_attachment(parent, presentation);
     }
 
     bool MultiContextManager::IsExternalProcessWindowAttached(
@@ -2281,8 +2437,27 @@ namespace epochengine::core
                 return !liveHwnd || ::IsWindow(liveHwnd) == FALSE;
             });
 
+        std::vector<WindowData*> viewportWindows;
+        std::erase_if(dockedWindows, [&](WindowData* window)
+        {
+            if (!external_presentation(window).in_viewport) return false;
+            viewportWindows.push_back(window);
+            return true;
+        });
+        const auto placeViewportWindows = [&]()
+        {
+            for (auto* window : viewportWindows)
+                if (!place_external_viewport_attachment(parent, external_presentation(window)))
+                {
+                    window->set_backend_lifecycle(BackendLifecycleState::failed);
+                    window->running.store(false, std::memory_order_release);
+                }
+        };
         if (dockedWindows.empty())
+        {
+            placeViewportWindows();
             return;
+        }
 
 
         std::stable_sort(
@@ -2357,7 +2532,7 @@ namespace epochengine::core
             if (!backend_window_exposable(&win))
             {
                 if (win.hwndChild && ::IsWindow(win.hwndChild) != FALSE)
-                    ::ShowWindow(win.hwndChild, SW_HIDE);
+                    show_proxy_child_window(win.hwndChild, SW_HIDE);
                 if (win.host_hwnd && ::IsWindow(win.host_hwnd) != FALSE)
                     ::ShowWindow(win.host_hwnd, SW_HIDE);
                 continue;
@@ -2394,11 +2569,11 @@ namespace epochengine::core
                 else if (uses_visible_proxy_host(&win))
                 {
                     ::ShowWindow(win.host_hwnd, SW_SHOWNA);
-                    ::ShowWindow(win.hwndChild, SW_SHOWNA);
+                    show_proxy_child_window(win.hwndChild, SW_SHOWNA);
                 }
                 else
                 {
-                    ::ShowWindow(win.hwndChild, SW_SHOWNA);
+                    show_proxy_child_window(win.hwndChild, SW_SHOWNA);
                     ::ShowWindow(win.host_hwnd, SW_HIDE);
                 }
                 continue;
@@ -2506,6 +2681,16 @@ namespace epochengine::core
             redraw_window_tree(liveHwnd);
             hide_associated_host_window(&win, liveHwnd, parent);
         }
+        placeViewportWindows();
+    }
+
+    MultiContextManager::~MultiContextManager() noexcept
+    {
+        // The renderer keeps WindowData references until its thread returns.
+        // Exception unwinding must retire those threads before member teardown.
+        // An unused manager must not drain another manager's global registry.
+        if (s_activeInstance == this || g_activeManager == this)
+            StopAll();
     }
 
     void MultiContextManager::StopAll()

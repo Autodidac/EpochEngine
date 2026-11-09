@@ -10,10 +10,12 @@
 #include "ai.backend_runtime_runtime_host.hpp"
 #include "ai.backend_host_request.hpp"
 #include "native/ai.backend_model_profile_import.hpp"
+#include "native/ai.backend_model_native_model_manager.hpp"
 
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <cctype>
 #include <limits>
 #include <iterator>
@@ -27,6 +29,7 @@
 #include <mutex>
 #include <optional>
 #include <regex>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <utility>
@@ -42,10 +45,114 @@ extern "C" void core_log_write(std::uint32_t, const char*, const char*);
 #endif
 
 namespace epochengine::ai::native_runtime {
+SharedRuntimeEnvironment capture_shared_runtime_environment(
+    const std::filesystem::path& installed_server,
+    std::span<const std::filesystem::path> dependency_directories) {
+    SharedRuntimeEnvironment out;
+    try {
+        const auto paths = native_storage::defaults();
+        out.weights_root = native_shared_inputs::validate_path(paths.model_cache, true,
+            !paths.shared_model_inputs_bound || paths.shared_native_inputs_disabled);
+        out.weights_bound = true;
+        out.environment.emplace_back(native_shared_inputs::cache_variable,
+            native_shared_inputs::utf8(out.weights_root));
+        // Empty SDK bindings are intentional disabled/read-only native mode.
+        out.environment.emplace_back("EPOCH_AI_QWEN_FLASH_SERVER", "");
+        out.environment.emplace_back(native_shared_inputs::directories_variable, "");
+        out.environment.emplace_back(native_shared_inputs::disabled_variable, "1");
+        const auto config = epoch_ai::core::Config::from_environment();
+        auto server = installed_server.empty() ? config.qwen_flash_server : installed_server;
+        if (!server.empty()) server = native_shared_inputs::validate_path(server, false);
+        std::error_code cache_error;
+        if (paths.shared_native_inputs_disabled
+            || !std::filesystem::is_directory(out.weights_root, cache_error) || cache_error) {
+            out.diagnostic = "Shared native weights unavailable; model-free child only";
+            return out;
+        }
+        if (server.empty() && !config.shared_model_inputs_bound) {
+#ifdef _WIN32
+            constexpr auto executable = "llama-server.exe";
+#else
+            constexpr auto executable = "llama-server";
+#endif
+            // Both editions borrow the installed user SDK, not a child copy.
+            server = paths.data_root / "runtimes" / "qwen-flash" / "bin" / executable;
+            std::error_code server_error;
+            if (!std::filesystem::is_regular_file(server, server_error) || server_error)
+                server = out.weights_root.parent_path() / "native" / "runtimes" / "qwen-flash" / "bin" / executable;
+        }
+        if (server.empty()) { out.diagnostic = "Native SDK unavailable; use the parent Model Manager"; return out; }
+        // An explicit invalid path must never downgrade to discovery/download.
+        if (!installed_server.empty() || !config.qwen_flash_server.empty())
+            server = native_shared_inputs::validate_path(server, false);
+        else {
+            std::error_code error;
+            if (!std::filesystem::is_regular_file(server, error) || error) {
+                out.diagnostic = "Native SDK unavailable; model-free child only"; return out;
+            }
+            server = native_shared_inputs::validate_path(server, false);
+        }
+        if (!epoch_ai::model::QwenFlashRuntime::installed_backend_verified(server)) {
+            out.diagnostic = "Installed native SDK metadata is not admitted; model-free child only"; return out;
+        }
+        out.executable = server;
+        out.dependency_directories.push_back(server.parent_path());
+        const auto append = [&](const std::filesystem::path& directory) {
+            auto admitted = native_shared_inputs::validate_path(directory, true);
+            if (std::ranges::none_of(out.dependency_directories, [&](const auto& existing) {
+                    return native_shared_inputs::same_path(existing, admitted); }))
+                out.dependency_directories.push_back(std::move(admitted));
+        };
+        if (!dependency_directories.empty()) {
+            for (const auto& directory : dependency_directories) append(directory);
+        } else if (!config.shared_runtime_dependency_directories.empty()) {
+            for (const auto& directory : config.shared_runtime_dependency_directories) append(directory);
+        }
+#ifdef _WIN32
+        else if (const auto cuda = native_shared_inputs::environment("CUDA_PATH"); cuda && !cuda->empty()) {
+            // The selected CUDA SDK is a named launch input, never a scan of
+            // arbitrary PATH entries. Admit only its real cuBLAS directory.
+            const auto root = native_shared_inputs::validate_path(native_shared_inputs::path_from_utf8(*cuda), true);
+            for (const auto& directory : {root / "bin" / "x64", root / "bin"}) {
+                std::error_code error;
+                const bool cublas = std::filesystem::is_regular_file(directory / "cublas64_13.dll", error)
+                    || std::filesystem::is_regular_file(directory / "cublas64_12.dll", error);
+                if (cublas) { append(directory); break; }
+            }
+        }
+#endif
+        const auto encoded = native_shared_inputs::encode_directories(out.dependency_directories);
+        for (auto&& variable : native_shared_inputs::runtime_search_environment(out.dependency_directories))
+            out.environment.push_back(std::move(variable));
+        out.environment[1].second = native_shared_inputs::utf8(server);
+        out.environment[2].second = encoded;
+        out.environment[3].second = "0";
+        out.ready = true;
+        out.diagnostic = "Shared immutable native inputs bound; GPU ownership remains separately leased";
+    } catch (const std::exception& error) {
+        out.weights_bound = false; out.ready = false;
+        out.diagnostic = error.what();
+    }
+    return out;
+}
+namespace detail {
+struct AssetStagePermitOwner final {
+    std::shared_ptr<std::atomic<std::uint64_t>> generation;
+    AssetStagePermit permit;
+    explicit AssetStagePermitOwner(std::uint64_t id)
+        : generation(std::make_shared<std::atomic<std::uint64_t>>(id)),
+          permit(generation, id, std::this_thread::get_id()) {}
+    void invalidate() noexcept { generation->store(0u, std::memory_order_release); }
+    ~AssetStagePermitOwner() { invalidate(); }
+};
+}
 namespace {
 struct Service;
 std::atomic<Service*> existing_service{nullptr};
+thread_local bool on_native_operation_thread{};
 void update_metadata(Service&);
+void poll_idle_models(Service&);
+void phase(std::string);
 
 // Persist the last completed load stage in Epoch's existing rotating logs.
 // The in-memory Model Manager status vanishes on a Windows access violation;
@@ -53,16 +160,68 @@ void update_metadata(Service&);
 void trace_load_stage(std::string message) {
     core_log_write(2u, "Epoch.AI.Native", message.c_str());
 }
+
+struct RequestGenerationMetrics final {
+    std::optional<std::uint64_t> output_tokens{};
+    std::optional<double> rate{};
+};
+
+[[nodiscard]] RequestGenerationMetrics request_generation_metrics(
+    const epoch_ai::runtime::json& raw, double observed_generation_ms) {
+    RequestGenerationMetrics result;
+    if (!raw.is_object()) return result;
+    const auto unsigned_field = [](const auto& object, const char* name)
+        -> std::optional<std::uint64_t> {
+        if (!object.is_object()) return std::nullopt;
+        const auto field = object.find(name);
+        if (field == object.end() || !field->is_number_unsigned()) return std::nullopt;
+        return field->template get<std::uint64_t>();
+    };
+    const auto positive_field = [](const auto& object, const char* name)
+        -> std::optional<double> {
+        if (!object.is_object()) return std::nullopt;
+        const auto field = object.find(name);
+        if (field == object.end() || !field->is_number()) return std::nullopt;
+        return metrics::positive_finite(field->template get<double>());
+    };
+    if (const auto usage = raw.find("usage"); usage != raw.end()) {
+        result.output_tokens = unsigned_field(*usage, "completion_tokens");
+        if (!result.output_tokens) result.output_tokens = unsigned_field(*usage, "output_tokens");
+    }
+    std::optional<double> reportedRate;
+    if (const auto timings = raw.find("timings"); timings != raw.end()) {
+        if (!result.output_tokens) result.output_tokens = unsigned_field(*timings, "predicted_n");
+        if (const auto duration = positive_field(*timings, "predicted_ms"))
+            observed_generation_ms = *duration;
+        reportedRate = positive_field(*timings, "predicted_per_second");
+    }
+    result.rate = metrics::generation_rate(reportedRate,
+        result.output_tokens.value_or(0u), observed_generation_ms);
+    return result;
+}
+
 struct Service final {
     std::mutex state_mutex{};
     std::mutex host_mutex{};
+    std::mutex work_mutex{};
     std::unique_ptr<epoch_ai::runtime::RuntimeHost> host{};
     std::jthread work{};
     std::atomic_bool busy{false};
     std::atomic_bool stopping{false};
+    std::stop_source shutdown_source{};
     std::atomic_bool loaded{false};
     std::atomic_bool enabled{false};
+    std::atomic<std::uint64_t> preference_generation{1u};
+    std::atomic<std::uint64_t> asset_generation{1u};
+    std::shared_ptr<idle::RetirementClaim> asset_quarantine_claim{};
     std::string model{};
+    struct IdleResume final {
+        std::shared_ptr<const epoch_ai::model::NativeResidency> captured;
+        std::string model, error;
+        std::uint64_t generation{};
+        bool pending{};
+    } idle_resume;
+    std::shared_ptr<idle::RetirementClaim> idle_reload_quarantine;
     std::string last_response_model{};
     std::string last_response_role{};
     std::string phase{"Ready. Select a native model."};
@@ -77,12 +236,38 @@ struct Service final {
     std::atomic<epoch_ai::runtime::RuntimeHost*> published_host{nullptr};
     std::jthread monitor{};
     Service();
+    template<class F> bool start_work(F&& operation) {
+        std::jthread previous;
+        {
+            std::scoped_lock lock{work_mutex};
+            if (stopping.load(std::memory_order_acquire)) return false;
+            std::jthread next(std::forward<F>(operation));
+            previous.swap(work);
+            work.swap(next);
+        }
+        // The previous worker may still be publishing its completion.
+        // Its destructor joins without holding the worker publication lock.
+        return true;
+    }
+    [[nodiscard]] std::stop_source work_cancellation() {
+        std::scoped_lock lock{work_mutex};
+        return work.get_stop_source();
+    }
+    void join_work() {
+        std::jthread active;
+        {
+            std::scoped_lock lock{work_mutex};
+            active.swap(work);
+        }
+        if (active.joinable()) active.join();
+    }
     void request_shutdown() noexcept {
         stopping.store(true, std::memory_order_release);
+        shutdown_source.request_stop();
         enabled.store(false);
         // A readiness wait belongs to work, not an inference/chat worker.
         // Signal it BEFORE joining the monitor or retiring renderer contexts.
-        work.request_stop();
+        work_cancellation().request_stop();
         monitor.request_stop();
     }
     void finish_shutdown() {
@@ -90,11 +275,12 @@ struct Service final {
         if (monitor.joinable()) monitor.join();
         // Join while the phase, journal, atomics and their mutex still exist.
         // Member destruction would otherwise destroy them before the jthread.
-        if (work.joinable()) work.join();
+        join_work();
         published_host.store(nullptr, std::memory_order_release);
         // Destroy owned processes/providers while status, journals and mutexes
         // still exist, rather than in reverse-order member destruction.
         host.reset();
+        asset_quarantine_claim.reset();
         loaded.store(false, std::memory_order_release);
         busy.store(false, std::memory_order_release);
     }
@@ -112,6 +298,7 @@ std::string string_field(const epoch_ai::runtime::json& value, const char* key) 
 ModelTuning model_tuning_from_json(const epoch_ai::runtime::json& item) {
     ModelTuning tuning{};
     if (!item.is_object()) return tuning;
+    tuning.idle_timeout_minutes = item.value("idle_timeout_minutes", tuning.idle_timeout_minutes);
     tuning.runtime_policy = item.value("runtime_policy", tuning.runtime_policy);
     tuning.gpu_layers = item.value("gpu_layers", tuning.gpu_layers);
     tuning.gpu_layer_count_hint = item.value("gpu_layer_count_hint", tuning.gpu_layer_count_hint);
@@ -141,7 +328,8 @@ ModelTuning model_tuning_from_json(const epoch_ai::runtime::json& item) {
     return tuning;
 }
 epoch_ai::runtime::json model_tuning_json(const ModelTuning& tuning) {
-    return {{"runtime_policy", tuning.runtime_policy},
+    return {{"idle_timeout_minutes", tuning.idle_timeout_minutes},
+        {"runtime_policy", tuning.runtime_policy},
         {"gpu_layers", tuning.gpu_layers},
         {"gpu_layer_count_hint", tuning.gpu_layer_count_hint},
         {"context_tokens", tuning.context_tokens}, {"parallel_slots", tuning.parallel_slots},
@@ -245,7 +433,8 @@ TrainingState training_state(const epoch_ai::runtime::json& value) {
                     .uri = "qwenflash://" + id, .runtime = runtime,
                     .role = "foundation", .expected_bytes = estimated,
                     .gpu_offload_percent = gpu_target,
-                    .tuning = model_tuning_from_json(manifest)});
+                    .tuning = model_tuning_from_json(manifest),
+                    .behavior = epoch_ai::model::behavior_for(manifest)});
             } catch (const std::exception&) {
                 // A corrupt profile is isolated to that model, never the editor.
                 ++invalid;
@@ -340,10 +529,14 @@ void update_metadata(Service& s) {
             .cached_bytes=cache.value("cached_bytes",std::uint64_t{}),.expected_bytes=cache.value("expected_bytes",std::uint64_t{}),
             .gpu_offload_percent=item.value("gpu_offload_percent",70u),
             .effective_gpu_layers=string_field(item,"effective_gpu_layers"),
-            .tuning=model_tuning_from_json(item)};
+            .tuning=model_tuning_from_json(item),
+            .behavior=epoch_ai::model::behavior_for(item)};
         // The runtime may have fallen back from 76K to 64K/32K (or another
         // configured context). The model profile is only an aspiration.
         const auto runtime_state=item.value("runtime_state", epoch_ai::runtime::json::object());
+        entry.owned_process_id = runtime_state.value("owned_process_id", std::uint64_t{});
+        entry.idle_seconds = runtime_state.value("idle_seconds", std::uint64_t{});
+        entry.idle_status = string_field(runtime_state, "idle_status");
         if (entry.active && runtime_state.is_object() && runtime_state.contains("image_input")
             && runtime_state.at("image_input").is_boolean()) {
             entry.image_input_known=true;
@@ -429,9 +622,56 @@ void update_metadata(Service& s) {
         next.roles.push_back({.id=role,.label=role,.uri=model.get<std::string>(),.role="assignment"});
     std::scoped_lock lock{s.state_mutex};s.metadata=std::move(next);
 }
+void poll_idle_models(Service& s) {
+    if (!s.published_host.load(std::memory_order_acquire) || s.stopping.load()) return;
+    bool expected = false;
+    if (!s.busy.compare_exchange_strong(expected, true)) return;
+    struct ReleaseBusy { Service& s; ~ReleaseBusy(){ s.busy.store(false); } } release{s};
+    std::unique_lock host_lock{s.host_mutex, std::try_to_lock};
+    if (!host_lock.owns_lock() || s.stopping.load()) return;
+    Service::IdleResume resume;
+    const auto retired = s.host->retire_idle_native_models(idle::Clock::now(),
+        [&](std::string_view id) {
+            phase("Unloading idle model " + std::string{id});
+            bool eligible{};
+            { std::scoped_lock lock{s.state_mutex};
+                eligible = s.enabled.load() && s.loaded.load() && s.model == id;
+                if (eligible) { resume.model = id; resume.generation = s.preference_generation.load(); } }
+            if (eligible) {
+                try { const auto saved = s.host->capture_native_residency(id);
+                    if (saved) resume.captured = *saved;
+                    else resume.error = saved.error().message; }
+                catch (const std::exception& failure) { resume.error = failure.what(); }
+                catch (...) { resume.error = "Unknown exact-model capture failure"; }
+                trace_load_stage(resume.captured
+                    ? "Exact idle reload captured: " + resume.model
+                    : "Exact idle reload capture refused for " + resume.model + ": " + resume.error);
+            }
+        });
+    for (const auto& outcome : retired) {
+        const auto id = string_field(outcome, "model");
+        if (outcome.value("retired", false)) {
+            { std::scoped_lock lock{s.state_mutex};
+                if (s.model == id) {
+                    s.loaded.store(false);
+                    const bool current = resume.model == id
+                        && resume.generation == s.preference_generation.load() && s.enabled.load();
+                    const bool retained = current && resume.captured;
+                    s.idle_resume = current ? std::move(resume) : Service::IdleResume{};
+                    s.enabled.store(retained);
+                } }
+            phase("Idle model unloaded: " + id + ". Conversations, settings and candidates are preserved.");
+            trace_load_stage("Confirmed idle retirement: " + id);
+        } else {
+            phase("Idle model unload failed: " + id + ". " + string_field(outcome, "error"));
+        }
+    }
+}
 Service::Service() : monitor([this](std::stop_token stop){
     while(!stop.stop_requested()) {
-        try {update_metadata(*this);} catch(const std::exception& error) {
+        try {
+            poll_idle_models(*this); update_metadata(*this);
+        } catch(const std::exception& error) {
             std::scoped_lock lock{state_mutex};metadata.inventory_error=error.what();
         } catch(...) {
             std::scoped_lock lock{state_mutex};metadata.inventory_error="Model inventory refresh failed";
@@ -491,30 +731,258 @@ epoch_ai::runtime::RuntimeHost& ensure_host(Service& s) {
     }
     return *s.host;
 }
+AssetStageOutcome execute_asset_stage(Service& s, const AssetStageCallback& callback,
+    const std::shared_ptr<idle::RetirementClaim>& claim,
+    std::stop_token caller_stop, std::stop_token queue_stop) {
+    AssetStageOutcome out; out.workers_retired = true;
+    std::stop_source stage_stop;
+    std::stop_callback caller_cancel(caller_stop, [&] { stage_stop.request_stop(); });
+    std::stop_callback queue_cancel(queue_stop, [&] { stage_stop.request_stop(); });
+    std::shared_ptr<const epoch_ai::model::NativeResidency> saved;
+    std::uint64_t captured_generation{};
+    bool previous_loaded{}, previous_enabled{}, flags_suspended{};
+    std::unique_lock host_lock{s.host_mutex};
+    auto* host = s.host.get(); // Do not construct a runtime/catalog for a model-free stage.
+    const auto current = [&] {
+        return !s.stopping.load(std::memory_order_acquire)
+            && s.preference_generation.load(std::memory_order_acquire) == captured_generation
+            && (!saved || (host && host->native_residency_settings_match(*saved)));
+    };
+    try {
+        if (stage_stop.stop_requested() || s.stopping.load()) {
+            out.code = AssetStageCode::cancelled;
+            out.diagnostic = "Asset stage cancelled before model retirement";
+            return out;
+        }
+        if (host) {
+            auto captured = host->capture_native_residency();
+            if (!captured) {
+                out.diagnostic = captured.error().message;
+                return out; // Every resident owner is verified before any eviction.
+            }
+            saved = *captured;
+            out.suspended_ids = saved->ids();
+            out.suspended_process_ids = saved->process_ids();
+            out.recovery_ids = out.suspended_ids;
+        }
+        // Construct all callback authority before changing residency.
+        detail::AssetStagePermitOwner authority{s.asset_generation.fetch_add(1u) + 1u};
+        {
+            std::scoped_lock lock{s.state_mutex};
+            captured_generation = s.preference_generation.load();
+            previous_loaded = s.loaded.load(); previous_enabled = s.enabled.load();
+            auto selected_id = s.model;
+            if (selected_id.starts_with("qwenflash://")) selected_id.erase(0u, 12u);
+            if (previous_loaded && std::find(out.suspended_ids.begin(), out.suspended_ids.end(), selected_id) == out.suspended_ids.end()) {
+                out.diagnostic = "Native residency changed before handoff; no model was evicted";
+                return out;
+            }
+            s.enabled.store(false); s.loaded.store(false); flags_suspended = true;
+        }
+        bool retired = true;
+        if (saved) {
+            phase("Retiring coding models for the asset stage");
+            const auto suspension = host->suspend_native_residency(*saved, *claim);
+            if (!suspension) {
+                out.code = AssetStageCode::retirement_failed;
+                out.diagnostic = suspension.error().message; retired = false;
+            }
+        }
+        if (retired && !stage_stop.stop_requested() && !s.stopping.load()) {
+            phase("Running the owned asset stage; coding models are suspended");
+            out.stage_started = true;
+            host_lock.unlock(); // No native callbacks or long asset work under host/storage locks.
+            try {
+                const auto completed = callback(stage_stop.get_token(), authority.permit);
+                out.stage_succeeded = completed.succeeded;
+                out.workers_retired = completed.workers_retired;
+                out.code = completed.succeeded ? AssetStageCode::completed
+                    : stage_stop.stop_requested() ? AssetStageCode::cancelled : AssetStageCode::stage_failed;
+            } catch (...) {
+                out.workers_retired = false; out.code = AssetStageCode::workers_unretired;
+                out.diagnostic = "Asset callback threw; child retirement is unknown";
+            }
+            authority.invalidate();
+            host_lock.lock();
+        } else if (retired) out.code = AssetStageCode::cancelled;
+    } catch (...) {
+        if (!host_lock.owns_lock()) host_lock.lock();
+        out.code = out.stage_started ? AssetStageCode::workers_unretired : AssetStageCode::retirement_failed;
+        out.workers_retired = !out.stage_started;
+        out.diagnostic = "Native asset handoff failed; exact recovery identities were retained";
+    }
+    if (flags_suspended) {
+        if (!out.workers_retired) {
+            // Unknown GPU residency is not permission to reload over it. Keep
+            // the existing gate claimed until explicit owned service shutdown.
+            { std::scoped_lock lock{s.state_mutex}; s.asset_quarantine_claim = claim; }
+            out.code = AssetStageCode::workers_unretired;
+            out.diagnostic = "Asset worker retirement is unverified; coding restoration is quarantined";
+        } else if (!current()) {
+            out.code = AssetStageCode::superseded;
+            out.diagnostic = "Operator selection/settings or shutdown changed; stale coding restoration was skipped";
+        } else {
+            try {
+                phase("Restoring the previous coding model configuration");
+                const auto restored = saved ? host->restore_native_residency(*saved, *claim,
+                    std::chrono::steady_clock::now() + std::chrono::seconds{180},
+                    s.shutdown_source.get_token(), current) : std::expected<void, epoch_ai::core::Error>{};
+                if (!restored) {
+                    out.code = current() ? AssetStageCode::restoration_failed : AssetStageCode::superseded;
+                    out.diagnostic = restored.error().message;
+                } else {
+                    std::scoped_lock lock{s.state_mutex};
+                    if (s.preference_generation.load() == captured_generation && !s.stopping.load()) {
+                        s.loaded.store(previous_loaded); s.enabled.store(previous_enabled);
+                        out.restored = true;
+                    } else out.code = AssetStageCode::superseded;
+                }
+            } catch (...) {
+                out.code = AssetStageCode::restoration_failed;
+                out.diagnostic = "Exact coding configuration restoration failed; saved preferences were not changed";
+            }
+        }
+        if (host && saved) {
+            const auto library = host->native_model_library();
+            for (const auto& item : library.value("models", epoch_ai::runtime::json::array())) {
+                const auto id = string_field(item, "id");
+                if (item.value("active", false)
+                    && std::find(out.suspended_ids.begin(), out.suspended_ids.end(), id) != out.suspended_ids.end()) {
+                    out.restored_ids.push_back(id);
+                    out.restored_process_ids.push_back(item.value("runtime_state", epoch_ai::runtime::json::object())
+                        .value("owned_process_id", std::uint64_t{}));
+                    std::erase(out.recovery_ids, id);
+                }
+            }
+        }
+    }
+    host_lock.unlock();
+    update_metadata(s);
+    if (out.diagnostic.empty()) out.diagnostic = out.restored
+        ? "Asset stage settled; the previous coding configuration was restored"
+        : "Asset stage did not change coding residency";
+    phase(out.diagnostic);
+    return out;
+}
+
+template<bool WithHost = true, typename F>
+void start_admitted_work(Service& s, std::string label, F action,
+    std::function<void()> settled = {}) {
+    try {
+        phase(std::move(label));
+        // This is the existing sole native-operation worker. The asset path
+        // already owns busy+retirement and must acquire host only AFTER claim.
+        if (!s.start_work([fn=std::move(action), settled=std::move(settled)](std::stop_token stop) mutable {
+            auto& current=service();
+            on_native_operation_thread = true;
+            try {
+                if constexpr (WithHost) {
+                    if (!stop.stop_requested()) {
+                        std::scoped_lock host_lock{current.host_mutex};
+                        auto& host=ensure_host(current); fn(host, stop);
+                    }
+                } else fn(current, stop);
+            } catch(const std::exception& e) { phase(std::string{"Native backend error: "}+e.what()); }
+            catch(...) { phase("Native backend: unknown error"); }
+            on_native_operation_thread = false;
+            current.busy.store(false,std::memory_order_release);
+            if (settled) settled();
+        })) throw std::runtime_error("Native service is shutting down");
+    } catch (...) { s.busy.store(false,std::memory_order_release); throw; }
+}
 template<typename F> bool queue(std::string label,F action) {
     auto& s=service();
     if (s.stopping.load(std::memory_order_acquire)) return false;
+    { std::scoped_lock lock{s.state_mutex}; if (s.idle_reload_quarantine) return false; }
     if(s.busy.exchange(true,std::memory_order_acq_rel)) return false;
-    phase(std::move(label));
-    // Only replacing the prior completed jthread; no UI-frame blocking.
-    s.work=std::jthread([fn=std::move(action)](std::stop_token stop) mutable {
-        auto& current=service();
-        try { if(!stop.stop_requested()) {
-            std::scoped_lock host_lock{current.host_mutex};
-            auto& host=ensure_host(current);
-            fn(host, stop);
-        }} catch(const std::exception& e) { phase(std::string{"Native backend error: "}+e.what()); }
-        catch(...) { phase("Native backend: unknown error"); }
-        current.busy.store(false,std::memory_order_release);
-    });
-    return true;
+    s.preference_generation.fetch_add(1u, std::memory_order_acq_rel);
+    { std::scoped_lock lock{s.state_mutex};
+        const bool revoked = s.idle_resume.captured || s.idle_resume.pending;
+        s.idle_resume = {};
+        if (revoked) s.idle_resume.error = "Idle reload consent expired after a model setting or selection change.";
+    }
+    try {
+        start_admitted_work(s, std::move(label), std::move(action));
+        return true;
+    } catch (...) {
+        phase("Native operation could not start");
+        return false;
+    }
 }
 } // namespace
+AssetStageOutcome run_asset_stage(AssetStageCallback callback, std::stop_token cancellation,
+    std::chrono::seconds queue_timeout) {
+    if (!callback || queue_timeout <= std::chrono::seconds::zero()
+        || queue_timeout > std::chrono::hours{1})
+        return {.diagnostic = "A bounded asset callback and queue timeout are required"};
+    auto& s = service();
+    if (on_native_operation_thread)
+        return {.diagnostic = "Asset handoff cannot recursively wait on the native worker"};
+    struct Completion {
+        std::mutex mutex; std::condition_variable condition;
+        bool done{}; AssetStageOutcome value;
+    };
+    auto completion = std::make_shared<Completion>();
+    const auto deadline = std::chrono::steady_clock::now() + queue_timeout;
+    for (;;) {
+        if (cancellation.stop_requested() || s.stopping.load())
+            return {.code = AssetStageCode::cancelled, .workers_retired = true,
+                .diagnostic = "Asset stage cancelled while waiting for coding work"};
+        { std::scoped_lock lock{s.state_mutex};
+            if (s.asset_quarantine_claim)
+                return {.code = AssetStageCode::workers_unretired,
+                    .diagnostic = "An earlier asset worker still has unverified retirement; no new work started"}; }
+        if (std::chrono::steady_clock::now() >= deadline)
+            return {.diagnostic = "Asset stage stayed queued behind protected coding work"};
+        bool expected = false;
+        if (s.busy.compare_exchange_strong(expected, true)) {
+            try {
+                auto claim = std::make_shared<idle::RetirementClaim>();
+                if (*claim) {
+                    start_admitted_work<false>(s, "Waiting for the owned asset handoff",
+                        [completion, claim, callback = std::move(callback), cancellation](Service& current, std::stop_token stop) mutable {
+                            AssetStageOutcome outcome;
+                            try { outcome = execute_asset_stage(current, callback, claim, cancellation, stop); }
+                            catch (...) {
+                                // Conservative fallback still retains the gate; never forget a possibly live worker.
+                                { std::scoped_lock lock{current.state_mutex}; current.asset_quarantine_claim = claim; }
+                                outcome.code = AssetStageCode::workers_unretired;
+                            }
+                            claim.reset(); // Before announcing queue completion or admitting another LLM.
+                            { std::scoped_lock lock{completion->mutex}; completion->value = std::move(outcome); }
+                        }, [completion] {
+                            { std::scoped_lock lock{completion->mutex}; completion->done = true; }
+                            completion->condition.notify_one();
+                        });
+                    break;
+                }
+                // Queued coding owns leases before host_mutex. Release busy
+                // and let it drain; never wait for those leases under host lock.
+                s.busy.store(false);
+            } catch (...) {
+                s.busy.store(false);
+                return {.diagnostic = "The existing native worker could not admit the asset stage"};
+            }
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds{10});
+    }
+    // Do not return while the callback may still refer to the caller's result.
+    // Its existing process owner enforces the stage bound and Stop token.
+    std::unique_lock lock{completion->mutex};
+    completion->condition.wait(lock, [&] { return completion->done; });
+    return std::move(completion->value);
+}
+
 
 Snapshot snapshot(bool include_inventory) {
     auto& s=service(); std::scoped_lock lock{s.state_mutex};
     auto value=include_inventory?s.metadata:Snapshot{};value.busy=s.busy.load();value.loaded=s.loaded.load();value.selected=s.enabled.load();
     value.model=s.model;value.last_response_model=s.last_response_model;
+    value.idle_reload_available = s.idle_resume.captured && !s.idle_resume.pending
+        && s.idle_resume.generation == s.preference_generation.load() && s.model == s.idle_resume.model;
+    value.idle_reload_pending = s.idle_resume.pending;
+    value.idle_reload_generation = s.idle_resume.generation;
+    value.idle_reload_error = s.idle_resume.error;
     value.last_response_role=s.last_response_role;
     value.phase=s.phase;value.recent_events=s.events;
     value.output_sequence=s.sequence;
@@ -556,48 +1024,51 @@ std::vector<ActivityBlock> activities_since(std::uint64_t last_seen) {
 bool selected() noexcept { return service().enabled.load(std::memory_order_acquire); }
 bool select_for_epoch_requests(bool enabled) {
     auto& s=service();
-    if(enabled && !s.loaded.load()) return false;
-    s.enabled.store(enabled,std::memory_order_release);
+    std::stop_source cancelled_reload{std::nostopstate};
+    {
+        std::scoped_lock lock{s.state_mutex};
+        if(enabled && !s.loaded.load()) return false;
+        s.preference_generation.fetch_add(1u, std::memory_order_acq_rel);
+        if (s.idle_resume.pending) cancelled_reload = s.work_cancellation();
+        s.idle_resume = {};
+        s.enabled.store(enabled,std::memory_order_release);
+    }
+    cancelled_reload.request_stop();
     phase(enabled?"Assistant uses Local Models":"Local model available; the previous provider remains selected");
     return true;
 }
+
 bool refresh() {
     auto& s = service();
     if (s.stopping.load(std::memory_order_acquire)) return false;
     if (s.busy.exchange(true, std::memory_order_acq_rel)) return false;
-    phase("Scanning registered native model profiles (read-only)");
-    s.work = std::jthread([](std::stop_token stop) {
-        auto& current = service();
-        try {
-            if (!stop.stop_requested()) {
+    try {
+        start_admitted_work<false>(s, "Scanning registered native model profiles (read-only)",
+            [](Service& current, std::stop_token stop) {
+                if (stop.stop_requested()) return;
                 // A live host has authoritative resident/cache data. It was
                 // initialized by a prior explicit request; reuse it. Otherwise,
                 // inventory discovery never instantiates a RuntimeHost.
                 if (current.published_host.load(std::memory_order_acquire)) {
                     update_metadata(current);
                     phase("Native model inventory refreshed; loaded models unchanged.");
-                } else {
-                    auto scanned = discover_offline_native_inventory(
-                        native_storage::defaults().data_root, stop);
-                    if (!stop.stop_requested()) {
-                        const auto count = scanned.models.size();
-                        {
-                            std::scoped_lock lock{current.state_mutex};
-                            current.metadata = std::move(scanned);
-                        }
-                        phase("Found " + std::to_string(count) +
-                            " registered native models. Cache and residency are checked when loaded.");
-                    }
+                    return;
                 }
-            }
-        } catch (const std::exception& error) {
-            phase(std::string{"Native model inventory scan failed: "} + error.what());
-        } catch (...) {
-            phase("Native model inventory scan failed; live runtime unchanged.");
-        }
-        current.busy.store(false, std::memory_order_release);
-    });
-    return true;
+                auto scanned = discover_offline_native_inventory(native_storage::defaults().data_root, stop);
+                if (stop.stop_requested()) return;
+                const auto count = scanned.models.size();
+                {
+                    std::scoped_lock lock{current.state_mutex};
+                    current.metadata = std::move(scanned);
+                }
+                phase("Found " + std::to_string(count) +
+                    " registered native models. Cache and residency are checked when loaded.");
+            });
+        return true;
+    } catch (...) {
+        phase("Native model inventory scan could not start");
+        return false;
+    }
 }
 bool set_gpu_offload(std::string id, std::uint32_t percent) {
     if (id.empty() || percent > 100u) return false;
@@ -616,7 +1087,7 @@ bool save_model_tuning(std::string id, ModelTuning tuning) {
     return queue("Saving native model options for " + id,
         [id=std::move(id), tuning=std::move(tuning)](auto& host, std::stop_token) {
             const auto result = host.set_native_model_tuning(id, model_tuning_json(tuning));
-            phase(result ? "Saved " + id + " runtime options; unload/reload to apply."
+            phase(result ? "Saved " + id + " runtime options; idle timeout applies now, unload/reload to apply other options."
                 : "Model options NOT saved: " + result.error().message);
         });
 }
@@ -660,39 +1131,13 @@ bool benchmark_model(std::string id, std::string prompt) {
                     measurement.first_token_ms=
                         std::chrono::duration<double,std::milli>(*first_token-started).count();
                 }
-                const auto usage=result->raw.is_object()
-                    ? result->raw.value("usage",epoch_ai::runtime::json::object())
-                    : epoch_ai::runtime::json::object();
-                const auto timings=result->raw.is_object()
-                    ? result->raw.value("timings",epoch_ai::runtime::json::object())
-                    : epoch_ai::runtime::json::object();
-                std::optional<std::uint64_t> reportedTokens;
-                if (usage.is_object()) {
-                    const auto count=usage.find("completion_tokens");
-                    if (count!=usage.end() && count->is_number_unsigned())
-                        reportedTokens=count->template get<std::uint64_t>();
-                }
-                double decodeMs{};
-                if (timings.is_object()) {
-                    const auto count=timings.find("predicted_n");
-                    if (!reportedTokens && count!=timings.end() && count->is_number_unsigned())
-                        reportedTokens=count->template get<std::uint64_t>();
-                    const auto duration=timings.find("predicted_ms");
-                    if (duration!=timings.end() && duration->is_number()) {
-                        const double candidate=duration->template get<double>();
-                        if (std::isfinite(candidate) && candidate > 0.0)
-                            decodeMs=candidate;
-                    }
-                }
-                if (decodeMs <= 0.0 && first_token)
-                    decodeMs=std::chrono::duration<double,std::milli>(
-                        finished-*first_token).count();
-                if (reportedTokens && *reportedTokens <= UINT32_MAX) {
-                    measurement.output_tokens=static_cast<std::uint32_t>(*reportedTokens);
-                    if (const auto rate=metrics::tokens_per_second(*reportedTokens,decodeMs)) {
-                        measurement.tps_known=true;
-                        measurement.output_tps=*rate;
-                    }
+                const auto telemetry = request_generation_metrics(result->raw, first_token
+                    ? std::chrono::duration<double,std::milli>(finished-*first_token).count() : 0.0);
+                if (telemetry.output_tokens && *telemetry.output_tokens <= UINT32_MAX)
+                    measurement.output_tokens=static_cast<std::uint32_t>(*telemetry.output_tokens);
+                if (telemetry.rate) {
+                    measurement.tps_known=true;
+                    measurement.output_tps=*telemetry.rate;
                 }
             } else {
                 measurement.status=stop.stop_requested() ? "Cancelled" : result.error().message;
@@ -705,10 +1150,30 @@ bool benchmark_model(std::string id, std::string prompt) {
     return accepted;
 }
 
-bool register_model(std::string id,std::string path) {
+std::filesystem::path model_install_cache_root() noexcept {
+    try {
+        const auto paths = native_storage::defaults();
+        if (paths.shared_model_inputs_bound || paths.shared_native_inputs_disabled
+            || paths.model_cache.empty() || !paths.model_cache.is_absolute()
+            || paths.model_cache.lexically_normal() != paths.model_cache
+            || paths.model_cache == paths.model_cache.root_path()) return {};
+        return paths.model_cache;
+    } catch (...) { return {}; }
+}
+bool register_model(std::string id,std::string path,bool only_if_absent) {
     if(id.empty()||path.empty())return false;
-    return queue("Registering native model",[id=std::move(id),path=std::move(path)](auto& host,std::stop_token){
-        const auto result=host.register_native_model({{"id",id},{"display_name",id},{"source","local-gguf"},{"local_path",path}});
+    return queue("Registering native model",[id=std::move(id),path=std::move(path),only_if_absent](auto& host,std::stop_token){
+        epoch_ai::runtime::json spec{{"id",id},{"display_name",id},{"source","local-gguf"},
+            {"local_path",path},{"only_if_absent",only_if_absent}};
+        if (only_if_absent) {
+            spec["context_tokens"] = 8192u;
+            spec["context_reserve_tokens"] = 1024u;
+            spec["parallel_slots"] = 1u;
+            spec["speculative_enabled"] = false;
+            spec["runtime_policy"] = "recommended";
+            spec["gpu_layers"] = "auto";
+        }
+        const auto result=host.register_native_model(spec);
         phase(result?"Model registered: "+id:"Model registration failed: "+result.error().message);
     });
 }
@@ -819,8 +1284,108 @@ bool prepare(std::string id) {
         phase("Ready to chat: "+id);
     });
 }
+bool reload_idle_selected(std::string_view approved_model,
+    std::uint64_t approved_generation, std::stop_token request_stop) {
+    auto& s = service();
+    if (request_stop.stop_requested() || s.stopping.load()) return false;
+    Service::IdleResume saved;
+    {
+        std::scoped_lock lock{s.state_mutex};
+        if (approved_model.empty() || approved_model != s.idle_resume.model
+            || approved_generation != s.idle_resume.generation) return false;
+        if (s.idle_resume.pending) return true;
+        if (!s.enabled.load() || s.loaded.load() || !s.idle_resume.captured
+            || s.idle_resume.generation != s.preference_generation.load()
+            || s.model != s.idle_resume.model) return false;
+        bool expected = false;
+        if (!s.busy.compare_exchange_strong(expected, true)) return false;
+        saved = s.idle_resume;
+        s.idle_resume.captured.reset(); // One attempt, including failure/cancel.
+        s.idle_resume.pending = true;
+    }
+    try { start_admitted_work(s, "Reloading the selected cached model for the queued request",
+        [saved = std::move(saved), request_stop](auto& host, std::stop_token worker_stop) {
+            auto& current = service();
+            std::stop_source stop;
+            std::stop_callback request_cancel(request_stop, [&] { stop.request_stop(); });
+            std::stop_callback worker_cancel(worker_stop, [&] { stop.request_stop(); });
+            const auto still_current = [&] {
+                std::scoped_lock lock{current.state_mutex};
+                return !stop.stop_requested() && !current.stopping.load()
+                    && current.enabled.load() && current.model == saved.model
+                    && current.preference_generation.load() == saved.generation;
+            };
+            std::string error;
+            bool attempted{};
+            std::shared_ptr<idle::RetirementClaim> claim;
+            try {
+                claim = std::make_shared<idle::RetirementClaim>();
+                if (!*claim || !still_current()) error = "Cached reload cancelled or another model owns protected work.";
+                else if (!host.native_residency_settings_match(*saved.captured))
+                    error = "Cached reload refused: selection, profile or model risk metadata changed.";
+                else {
+                    const auto library = host.native_model_library();
+                    std::uint64_t weights{};
+                    bool found{}, active{};
+                    for (const auto& model : library.value("models", epoch_ai::runtime::json::array()))
+                        if (string_field(model, "id") == saved.model) {
+                            found = true; active = model.value("active", false);
+                            const auto cache = model.value("cache", epoch_ai::runtime::json::object());
+                            weights = cache.value("expected_bytes", cache.value("cached_bytes", std::uint64_t{}));
+                        }
+                    if (!found || active) error = "Cached reload target changed; no model was started.";
+                    else if (safe_to_start_another_model(weights, error)) {
+                        attempted = true;
+                        const auto restored = host.restore_native_residency(*saved.captured, *claim,
+                            std::chrono::steady_clock::now() + std::chrono::seconds{180}, stop.get_token(), still_current);
+                        if (!restored) error = restored.error().message;
+                        if (!still_current() || !host.native_residency_settings_match(*saved.captured))
+                            error = "Cached reload cancelled or superseded; queued request was not sent.";
+                    }
+                }
+            } catch (const std::exception& failure) { error = "Cached reload failed: " + std::string{failure.what()}; }
+            catch (...) { error = "Cached reload failed with an unknown backend error."; }
+            bool published{};
+            { std::scoped_lock lock{current.state_mutex};
+                const bool unchanged = current.preference_generation.load() == saved.generation
+                    && current.model == saved.model && current.enabled.load() && !current.stopping.load();
+                if (unchanged) {
+                    current.idle_resume.pending = false;
+                    current.idle_resume.error = error;
+                    published = error.empty() && !stop.stop_requested();
+                    current.loaded.store(published);
+                }
+            }
+            if (!published && attempted) {
+                // Only the previously-retired captured slot was started here.
+                // Other resident slots and their conversations remain untouched.
+                try { host.unload_native_model(saved.model); }
+                catch (...) {
+                    error = "Cached reload cleanup failed; owned retirement is unconfirmed. Restart Epoch before more model work.";
+                    std::scoped_lock lock{current.state_mutex};
+                    current.idle_reload_quarantine = claim;
+                    current.idle_resume.error = error;
+                }
+            }
+            phase(published ? "Selected cached model ready; queued request may continue."
+                : (error.empty() ? "Cached reload superseded; request retained." : error + " Request retained; use Model Manager to retry."));
+        }); }
+    catch (...) {
+        std::scoped_lock lock{s.state_mutex};
+        s.idle_resume.pending = false;
+        s.idle_resume.error = "Cached reload worker could not start. Request retained; use Model Manager to retry.";
+        return false;
+    }
+    return true;
+}
 void cancel_setup() {
-    auto& current=service();current.work.request_stop();
+    auto& current=service();current.preference_generation.fetch_add(1u);
+    { std::scoped_lock lock{current.state_mutex};
+        const bool idle = current.idle_resume.captured || current.idle_resume.pending;
+        current.idle_resume = {};
+        if (idle) current.idle_resume.error = "Cached reload cancelled. Its one-shot consent was revoked.";
+    }
+    current.work_cancellation().request_stop();
     if(auto* host=current.published_host.load(std::memory_order_acquire))host->cancel_native_installation();
     phase("Cancelling native setup; completed cache bytes are retained");
 }
@@ -949,8 +1514,11 @@ bool load(std::string id, bool select_for_requests) {
         // Apply the same RAM admission to a direct load and a saved set.
         // Re-selecting a resident model never triggers a new load restriction.
         const auto library = host.native_model_library();
+        bool requires_explicit_selection = model_behavior::classify_text(id).flagged();
         for (const auto& model : library.value("models", epoch_ai::runtime::json::array())) {
-            if (string_field(model,"id") != id || model.value("active",false)) continue;
+            if (string_field(model,"id") != id) continue;
+            requires_explicit_selection = requires_explicit_selection || epoch_ai::model::behavior_for(model).flagged();
+            if (model.value("active",false)) continue;
             const auto cache=model.value("cache",epoch_ai::runtime::json::object());
             const auto weights=cache.value("expected_bytes",std::uint64_t{})
                 ? cache.value("expected_bytes",std::uint64_t{})
@@ -965,7 +1533,7 @@ bool load(std::string id, bool select_for_requests) {
             // the composer queued forever while the machine is idle. Preserve
             // an existing foundation when loading a second/third model.
             const bool establishFoundation = detail::should_establish_foundation(
-                s.loaded.load(std::memory_order_acquire), select_for_requests);
+                s.loaded.load(std::memory_order_acquire), select_for_requests, requires_explicit_selection);
             if (establishFoundation) {
                 const auto native_uri=std::string{"qwenflash://"}+id;
                 auto foundation=host.set_foundation_model(native_uri);
@@ -983,7 +1551,7 @@ bool load(std::string id, bool select_for_requests) {
             // any external operator-assigned roles. Importantly, 27B remains
             // eligible for AI Engine Dev even if Flash was loaded first.
             std::string assigned_role;
-            if (!establishFoundation) {
+            if (!establishFoundation && !requires_explicit_selection) {
                 const auto role_models = host.architecture().value(
                     "role_models", epoch_ai::runtime::json::object());
                 const auto params = named_parameter_billions(id);
@@ -1014,6 +1582,10 @@ bool load(std::string id, bool select_for_requests) {
                         if (host.assign_model_role("reviewer", "qwenflash://" + id))
                             assigned_role = "middle";
                 }
+            }
+            if (requires_explicit_selection && !select_for_requests) {
+                phase("Loaded labelled variant: " + id + ". No automatic roles assigned. Choose Load & Use to select it explicitly.");
+                return;
             }
             phase("Ready to chat: " + id +
                 (establishFoundation ? ". Foundation selected and chat dispatch enabled."
@@ -1181,6 +1753,15 @@ bool load_set(std::vector<std::string> ids) {
         // the strongest resident to escalation merely because it uses more RAM;
         // easy work can use smaller responders without making them the coder.
         auto response_order = ids;
+        std::erase_if(response_order, [&](const auto& id) {
+            const auto* entry = find_entry(id);
+            return model_behavior::classify_text(id).flagged()
+                || (entry && epoch_ai::model::behavior_for(*entry).flagged());
+        });
+        if (response_order.empty()) {
+            phase("Model group loaded. Labelled variants remain unassigned; select one explicitly with Load & Use.");
+            return;
+        }
         std::stable_sort(response_order.begin(), response_order.end(),
             [&](const auto& a, const auto& b) {
                 const auto small = named_parameter_billions(a);
@@ -1360,6 +1941,8 @@ bool unload(std::string id) {
 Result complete_host_request(std::string_view request_json,
     std::uint32_t timeout_seconds, std::stop_token cancellation, const StreamObserver& observer) {
     auto& s=service();
+    WorkLease protected_request;
+    if (!protected_request.admitted()) return {false,"Idle unload is in progress; no request was dispatched"};
     if(!s.enabled.load()||!s.loaded.load())return {false,"Native model is not loaded and selected"};
     const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds{timeout_seconds};
     const auto startedAt = std::chrono::steady_clock::now();
@@ -1371,6 +1954,9 @@ Result complete_host_request(std::string_view request_json,
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
     if(cancellation.stop_requested() || s.stopping.load())return {false,"Native request cancelled"};
+    // Recheck a queued request after the host lock; an old UI residency snapshot
+    // must never dispatch into a worker claimed by idle retirement.
+    if(!s.enabled.load()||!s.loaded.load())return {false,"Native model unloaded before dispatch; select or load a model to retry"};
     try {
         auto& host=ensure_host(s);
         // Independent of the bounded/normalized chat view. Keep exact provider
@@ -1452,26 +2038,19 @@ Result complete_host_request(std::string_view request_json,
             retain({{"kind", "failed"}, {"error", error.what()}});
             throw;
         }
+        completed.canonical_model_key = epoch_ai::model::host_model_selection_key(*response, {});
         retain({{"kind", "complete"}, {"host_response", completed.message}});
         // Only the model/provider's reported completion-token count can be
         // used for t/s. Never interpret stream bytes or events as tokens.
-        const auto usage = response->raw.is_object()
-            ? response->raw.value("usage", epoch_ai::model::json::object())
-            : epoch_ai::model::json::object();
-        if (usage.is_object() && usage.contains("completion_tokens")
-            && usage.at("completion_tokens").is_number_unsigned())
+        const auto telemetry = request_generation_metrics(response->raw,
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now()
+                - firstOutputAt.value_or(startedAt)).count());
+        if (telemetry.output_tokens && *telemetry.output_tokens <= UINT32_MAX)
+            completed.completion_tokens = static_cast<std::uint32_t>(*telemetry.output_tokens);
+        if (telemetry.rate)
         {
-            completed.completion_tokens = usage.at("completion_tokens")
-                .get<std::uint32_t>();
-            const double generationSeconds =
-                std::chrono::duration<double>(std::chrono::steady_clock::now()
-                    - firstOutputAt.value_or(startedAt)).count();
-            if (completed.completion_tokens > 0u && generationSeconds > 0.0)
-            {
-                completed.generation_tps =
-                    static_cast<double>(completed.completion_tokens) / generationSeconds;
-                completed.generation_tps_known = true;
-            }
+            completed.generation_tps = *telemetry.rate;
+            completed.generation_tps_known = true;
         }
         return completed;
     }catch(const std::exception& e){phase(std::string{"Native request failed: "}+e.what());return {false,e.what()};}

@@ -7,7 +7,9 @@ module;
 #include <filesystem>
 #include <fstream>
 #include <string>
+#include <string_view>
 #include <system_error>
+#include "updater.handoff_script.hpp"
 
 module updater.system;
 
@@ -17,11 +19,159 @@ import updater.source_access;
 #if defined(_WIN32)
 namespace epochengine::updater
 {
+    [[nodiscard]] std::string_view source_archive_digest_script() noexcept
+    {
+        return R"epoch(
+if ($expectedSourceSha -cnotmatch '^[0-9a-f]{64}$') { throw 'Signed source digest is invalid.' }
+$actualSourceSha = (Get-FileHash -LiteralPath $sourceArchive -Algorithm SHA256).Hash.ToLowerInvariant()
+if ($actualSourceSha -cne $expectedSourceSha) { throw 'Source snapshot signed SHA-256 verification failed.' }
+Write-Step 'INFO' 'Source snapshot signed SHA-256 verified.'
+)epoch";
+    }
+
+    [[nodiscard]] std::string_view source_snapshot_admission_script() noexcept
+    {
+        return R"epoch(
+$sourceCandidates = @()
+if ((Test-Path -LiteralPath (Join-Path $stagingDir 'Engine.sln') -PathType Leaf) -and
+    (Test-Path -LiteralPath (Join-Path $stagingDir 'Engine/vcpkg.json') -PathType Leaf)) {
+    $sourceCandidates = @($stagingDir)
+} else {
+    $sourceCandidates = @(Get-ChildItem -LiteralPath $stagingDir -Directory -Force | Where-Object {
+        -not ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) -and
+        (Test-Path -LiteralPath (Join-Path $_.FullName 'Engine.sln') -PathType Leaf) -and
+        (Test-Path -LiteralPath (Join-Path $_.FullName 'Engine/vcpkg.json') -PathType Leaf)
+    } | Select-Object -ExpandProperty FullName)
+}
+if ($sourceCandidates.Count -ne 1) { throw 'Source archive has no unique complete root.' }
+$admittedRoot = $sourceCandidates[0]
+$markerFile = Join-Path $admittedRoot 'Engine/include/epoch.edition.hpp'
+if (-not (Test-Path -LiteralPath $markerFile -PathType Leaf)) { throw 'Source edition marker is missing.' }
+$markerText = [IO.File]::ReadAllText($markerFile)
+$markerDefines = [regex]::Matches($markerText, '(?m)^#define EPOCH_SOURCE_EDITION_PUBLIC ([01])\r?$')
+if ($markerText.Length -gt 4096 -or $markerDefines.Count -ne 1 -or
+    $markerDefines[0].Groups[1].Value -cne $expectedEdition) { throw 'Source edition mismatch.' }
+if (-not [string]::IsNullOrEmpty($expectedPublicSourceVersion)) {
+    $projection = Get-Item -LiteralPath (Join-Path $admittedRoot 'source-projection.json') -ErrorAction Stop
+    if ($projection.PSIsContainer -or $projection.Length -gt 4194304 -or
+        ($projection.Attributes -band [IO.FileAttributes]::ReparsePoint) -or
+        (Test-Path -LiteralPath (Join-Path $admittedRoot 'Engine/dep/EpochSelfCoding'))) {
+        throw 'Public source projection identity is missing or private content is present.'
+    }
+    $versionReader = Join-Path $admittedRoot 'Tools/build/get_epoch_version.ps1'
+    $versionModule = Join-Path $admittedRoot 'Engine/modules/epoch.version.ixx'
+    $sourceVersion = & $versionReader -VersionModule $versionModule
+    if ($sourceVersion -cne $expectedPublicSourceVersion) { throw 'Source differs from signed version.' }
+}
+Move-Item -LiteralPath $admittedRoot -Destination $sourceRoot -Force
+if (Test-Path -LiteralPath $stagingDir) { Remove-Item -LiteralPath $stagingDir -Recurse -Force }
+)epoch";
+    }
+
+    [[nodiscard]] std::string_view source_runtime_handoff_script() noexcept
+    {
+        return R"epoch(
+$transactionScript = Join-Path $runDir 'source-handoff.ps1'
+[IO.File]::WriteAllText($transactionScript, $transactionBody)
+$env:EPOCH_UPDATE_ROOT = $targetDir
+$env:EPOCH_UPDATE_WORK = Join-Path $targetDir '.epoch-source-handoff'
+$env:EPOCH_UPDATE_PLAN = Join-Path $runDir 'source-handoff.tsv'
+$env:LOG = $handoffLog
+
+function Invoke-SourceHandoff([string]$Mode) {
+    $env:EPOCH_UPDATE_MODE = $Mode
+    & $transactionScript -Attempts 1
+    if ($LASTEXITCODE -ne 0) { throw ('Source runtime handoff failed during ' + $Mode + '.') }
+}
+
+if (Test-Path -LiteralPath $env:EPOCH_UPDATE_WORK) {
+    $previous = Get-Item -LiteralPath $env:EPOCH_UPDATE_WORK -Force
+    if (!$previous.PSIsContainer -or ($previous.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+        throw 'Unexpected source runtime handoff path.'
+    }
+    foreach ($name in 'state', 'journal.tsv', 'backup') {
+        $entry = Get-Item -LiteralPath (Join-Path $previous.FullName $name) -Force -ErrorAction SilentlyContinue
+        if ($entry -and ($entry.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+            throw 'Linked source runtime recovery data refused.'
+        }
+    }
+    $statePath = Join-Path $previous.FullName 'state'
+    $state = if ([IO.File]::Exists($statePath)) { [IO.File]::ReadAllText($statePath) } else { '' }
+    if ($state -in 'committing', 'rolling_back') {
+        Invoke-SourceHandoff 'recover'
+    } elseif ($state -notin '', 'staged', 'rolled_back', 'complete') {
+        throw 'Unknown source runtime handoff state. Preserve it for recovery.'
+    }
+    [IO.Directory]::Move($previous.FullName, $previous.FullName + '-' + [Guid]::NewGuid().ToString('N'))
+}
+
+Test-Cancel
+$payload = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)
+function Add-SourcePayloadTree([string]$Root, [string]$Prefix) {
+    if (!(Test-Path -LiteralPath $Root)) { return }
+    $directory = Get-Item -LiteralPath $Root -Force
+    if (!$directory.PSIsContainer -or ($directory.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+        throw 'Source runtime payload tree is not a regular directory.'
+    }
+    foreach ($item in Get-ChildItem -LiteralPath $directory.FullName -Force) {
+        if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Linked source runtime payload refused.' }
+        $relative = $Prefix + $item.Name
+        if ($item.PSIsContainer) { Add-SourcePayloadTree $item.FullName ($relative + '/') }
+        else { $payload[$relative] = $item.FullName }
+    }
+}
+foreach ($item in Get-ChildItem -LiteralPath $builtDir -File -Force) {
+    if ($item.Extension -in '.dll', '.manifest' -or $item.Name -ieq 'epoch-distribution.json') {
+        if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Linked source runtime payload refused.' }
+        $payload[$item.Name] = $item.FullName
+    }
+}
+Add-SourcePayloadTree (Join-Path $builtDir 'lib') 'lib/'
+Add-SourcePayloadTree $builtAssetsDir 'assets/'
+Add-SourcePayloadTree $sourceRepoAssetsDir 'assets/'
+$exeName = [IO.Path]::GetFileName($targetExe)
+[void]$payload.Remove($exeName)
+$payload[$exeName] = $builtExe
+$manifest = foreach ($relative in @($payload.Keys | Where-Object { $_ -ine $exeName } | Sort-Object) + @($exeName)) {
+    $path = $payload[$relative]
+    if ($path -match '[\t\r\n]' -or $relative -match '[\t\r\n]' -or
+        ((Get-Item -LiteralPath $path -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+        throw 'Invalid source runtime payload entry.'
+    }
+    $digest = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+    $path + "`t" + $relative + "`t" + $digest
+}
+[IO.File]::WriteAllLines($env:EPOCH_UPDATE_PLAN, [string[]]$manifest)
+$env:EPOCH_UPDATE_PLAN_SHA256 = (Get-FileHash -LiteralPath $env:EPOCH_UPDATE_PLAN -Algorithm SHA256).Hash.ToLowerInvariant()
+Invoke-SourceHandoff 'stage'
+
+Write-Handoff 'INFO' 'Waiting for runtime handoff.'
+for ($attempt = 1; $attempt -le 600; ++$attempt) {
+    Test-Cancel
+    try {
+        if ([IO.File]::Exists($targetExe)) {
+            $probe = [IO.File]::Open($targetExe, [IO.FileMode]::Open, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
+            $probe.Dispose()
+        }
+        break
+    } catch [IO.IOException], [UnauthorizedAccessException] {
+        if ($attempt -eq 600) { throw 'Timed out waiting for target runtime executable to unlock.' }
+        Start-Sleep -Seconds 1
+    }
+}
+Test-Cancel
+Invoke-SourceHandoff 'commit'
+)epoch";
+    }
+
     [[nodiscard]] bool launch_source_update_worker(
         const UpdateChannel& channel,
         const std::filesystem::path& target_binary,
         const bool silent_worker,
-        const PreparedSourceArchive& prepared_source)
+        const PreparedSourceArchive& prepared_source,
+        const std::string& public_source_url,
+        const std::string& public_source_sha256,
+        const std::string& public_source_version)
     {
         const bool has_prepared_source =
             prepared_source.ok && !prepared_source.archive_path.empty();
@@ -52,6 +202,21 @@ namespace epochengine::updater
             return false;
         }
 
+        const auto expected_public_url = std::string{ GITHUB_BASE }
+            + "Autodidac/EpochEngine/releases/download/v" + public_source_version
+            + "/epoch_source_v" + public_source_version + ".zip";
+        if ((PUBLIC_DISTRIBUTION && (public_source_version.empty()
+                || public_source_url != expected_public_url
+                || public_source_sha256.size() != 64u
+                || public_source_sha256.find_first_not_of("0123456789abcdef") != std::string::npos))
+            || (!PUBLIC_DISTRIBUTION && (!public_source_url.empty()
+                || !public_source_sha256.empty() || !public_source_version.empty())))
+        {
+            cleanup_prepared_source();
+            system_detail::log_error("Source worker refused missing or foreign signed source admission.");
+            return false;
+        }
+
         const auto msbuild = system_detail::find_msbuild_path();
         if (msbuild.empty())
         {
@@ -65,7 +230,7 @@ namespace epochengine::updater
         const auto run_dir = system_detail::source_run_dir(target_binary, run_token);
         const std::string archive_identity = has_prepared_source
             ? prepared_source.archive_path.string()
-            : channel.source_url;
+            : public_source_url;
         const auto archive_path = system_detail::source_archive_path(target_binary, archive_identity, run_token);
         const auto staging_dir = system_detail::source_staging_dir(target_binary, run_token);
         const auto final_dir = system_detail::source_final_dir(target_binary, run_token);
@@ -79,7 +244,6 @@ namespace epochengine::updater
         const auto built_binary = system_detail::source_runtime_binary_path(final_dir, target_binary);
         const auto manifest_root = system_detail::source_manifest_root(final_dir);
         const auto solution = system_detail::source_solution_path(final_dir);
-        const auto target_assets_dir = target_dir / "assets";
         const auto built_assets_dir = built_runtime_dir / "assets";
         const auto source_repo_assets_dir = manifest_root / "assets";
         const auto managed_tools_root = system_detail::source_run_tools_root(target_binary, run_token);
@@ -164,9 +328,10 @@ namespace epochengine::updater
             << "$ErrorActionPreference = 'Stop'\n"
             << "$ProgressPreference = 'SilentlyContinue'\n"
             << "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12\n"
-            << "$sourceUrl = '" << esc(channel.source_url) << "'\n"
-            << "$sourceChecksumUrl = '" << esc(channel.source_url == PROJECT_SOURCE_URL()
-                ? PROJECT_SOURCE_CHECKSUM_URL() : channel.source_url + ".sha256") << "'\n"
+            << "$sourceUrl = '" << esc(public_source_url) << "'\n"
+            << "$expectedSourceSha = '" << esc(public_source_sha256) << "'\n"
+            << "$expectedPublicSourceVersion = '" << esc(public_source_version) << "'\n"
+            << "$expectedEdition = '" << (PUBLIC_DISTRIBUTION ? "1" : "0") << "'\n"
             << "$preparedSourceArchive = '" << esc(prepared_source.archive_path.string()) << "'\n"
             << "$preparedSourceCleanupRoot = '" << esc(prepared_source.cleanup_root.string()) << "'\n"
             << "$sourceFallbackUrls = @(\n";
@@ -182,7 +347,7 @@ namespace epochengine::updater
             << "$workRoot = '" << esc(work_root.string()) << "'\n"
             << "$runDir = '" << esc(run_dir.string()) << "'\n"
             << "$sourceArchive = '" << esc(archive_path.string()) << "'\n"
-            << "$sourceChecksum = $sourceArchive + '.sha256'\n"
+            << "$sourceChecksum = $sourceArchive + '.sha256' # obsolete-sidecar cleanup only\n"
             << "$stagingDir = '" << esc(staging_dir.string()) << "'\n"
             << "$sourceRoot = '" << esc(final_dir.string()) << "'\n"
             << "$manifestRoot = '" << esc(manifest_root.string()) << "'\n"
@@ -193,7 +358,6 @@ namespace epochengine::updater
             << "$activeRunPath = '" << esc(active_run_path.string()) << "'\n"
             << "$targetExe = '" << esc(target_binary.string()) << "'\n"
             << "$targetDir = '" << esc(target_dir.string()) << "'\n"
-            << "$targetAssetsDir = '" << esc(target_assets_dir.string()) << "'\n"
             << "$builtDir = '" << esc(built_runtime_dir.string()) << "'\n"
             << "$builtExe = '" << esc(built_binary.string()) << "'\n"
             << "$builtAssetsDir = '" << esc(built_assets_dir.string()) << "'\n"
@@ -882,47 +1046,18 @@ namespace epochengine::updater
             << "} else {\n"
             << "  Write-Step 'INFO' 'Downloading latest " << PROJECT_SOURCE_ARCHIVE_LABEL() << ".'\n"
             << "  Invoke-DownloadWithFallback $sourceUrl $sourceFallbackUrls $sourceArchive 'Source snapshot download'\n"
-            << "  Invoke-DownloadWithFallback $sourceChecksumUrl @() $sourceChecksum 'Source snapshot checksum download'\n"
-            << "  $sourceChecksumText = (Get-Content -LiteralPath $sourceChecksum -Raw).Trim()\n"
-            << "  $expectedSourceSha = (($sourceChecksumText -split '\\s+')[0]).ToLowerInvariant()\n"
-            << "  if ($expectedSourceSha -notmatch '^[0-9a-f]{64}$') {\n"
-            << "    throw 'Source snapshot checksum metadata is invalid.'\n"
-            << "  }\n"
-            << "  $actualSourceSha = (Get-FileHash -LiteralPath $sourceArchive -Algorithm SHA256).Hash.ToLowerInvariant()\n"
-            << "  if ($actualSourceSha -ne $expectedSourceSha) {\n"
-            << "    throw 'Source snapshot SHA-256 verification failed.'\n"
-            << "  }\n"
-            << "  Write-Step 'INFO' 'Source snapshot SHA-256 verified.'\n"
+            << source_archive_digest_script()
             << "}\n"
             << "Test-Cancel\n"
             << "Expand-Archive -LiteralPath $sourceArchive -DestinationPath $stagingDir -Force\n"
             << "Test-Cancel\n"
-            << "$extractedRoot = Get-ChildItem -LiteralPath $stagingDir -Directory | Select-Object -First 1\n"
-            << "if ($null -ne $extractedRoot) {\n"
-            << "  Move-Item -LiteralPath $extractedRoot.FullName -Destination $sourceRoot -Force\n"
-            << "} else {\n"
-            << "  New-Item -ItemType Directory -Path $sourceRoot -Force | Out-Null\n"
-            << "  Copy-Item -Path (Join-Path $stagingDir '*') -Destination $sourceRoot -Recurse -Force\n"
-            << "}\n"
-            << "Remove-Item -LiteralPath $stagingDir -Recurse -Force -ErrorAction SilentlyContinue\n";
+            << source_snapshot_admission_script();
             }();
 
         [&]()
             {
         ps
             << "$manifestFile = Join-Path $manifestRoot 'vcpkg.json'\n"
-            << "if (-not (Test-Path -LiteralPath $manifestFile)) {\n"
-            << "  $nestedRoot = Get-ChildItem -LiteralPath $sourceRoot -Directory -ErrorAction SilentlyContinue | Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName 'Engine\\vcpkg.json') } | Select-Object -First 1\n"
-            << "  if ($null -ne $nestedRoot) {\n"
-            << "    $repairRoot = $sourceRoot + '.nested.' + [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()\n"
-            << "    $nestedName = $nestedRoot.Name\n"
-            << "    Move-Item -LiteralPath $sourceRoot -Destination $repairRoot -Force\n"
-            << "    Move-Item -LiteralPath (Join-Path $repairRoot $nestedName) -Destination $sourceRoot -Force\n"
-            << "    Remove-Item -LiteralPath $repairRoot -Recurse -Force -ErrorAction SilentlyContinue\n"
-            << "    $manifestFile = Join-Path $manifestRoot 'vcpkg.json'\n"
-            << "    Write-Step 'INFO' 'Repaired nested source snapshot root.'\n"
-            << "  }\n"
-            << "}\n"
             << "if (-not (Test-Path -LiteralPath $manifestFile)) {\n"
             << "  throw ('Downloaded source snapshot did not contain Engine\\vcpkg.json at: ' + $manifestFile)\n"
             << "}\n"
@@ -992,45 +1127,8 @@ namespace epochengine::updater
             << "}\n"
             << "Write-Step 'INFO' ('Built runtime ready at: ' + $builtExe)\n"
             << "Write-Handoff 'INFO' ('Built runtime ready at: ' + $builtExe)\n"
-            << "Write-Handoff 'INFO' 'Waiting for runtime handoff.'\n"
-            << "for ($attempt = 1; $attempt -le 600; ++$attempt) {\n"
-            << "  Test-Cancel\n"
-            << "  try {\n"
-            << "    if (Test-Path -LiteralPath $targetExe) {\n"
-            << "      Remove-Item -LiteralPath $targetExe -Force -ErrorAction Stop\n"
-            << "    }\n"
-            << "  }\n"
-            << "  catch {\n"
-            << "  }\n"
-            << "  if (-not (Test-Path -LiteralPath $targetExe)) {\n"
-            << "    break\n"
-            << "  }\n"
-            << "  if ($attempt -eq 1 -or ($attempt % 15) -eq 0) {\n"
-            << "    Write-Handoff 'INFO' ('Waiting for target runtime unlock attempt ' + $attempt + '.')\n"
-            << "  }\n"
-            << "  Start-Sleep -Seconds 1\n"
-            << "}\n"
-            << "if (Test-Path -LiteralPath $targetExe) {\n"
-            << "  throw 'Timed out waiting for target runtime executable to unlock.'\n"
-            << "}\n"
-            << "Test-Cancel\n"
-            << "Copy-Item -LiteralPath $builtExe -Destination $targetExe -Force\n"
-            << "Get-ChildItem -LiteralPath $builtDir -File | Where-Object { $_.Extension -in '.dll', '.manifest' } | ForEach-Object {\n"
-            << "  Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $targetDir $_.Name) -Force\n"
-            << "}\n";
-            }();
-
-        [&]()
-            {
-        ps
-            << "if (Test-Path -LiteralPath $builtAssetsDir) {\n"
-            << "  New-Item -ItemType Directory -Path $targetAssetsDir -Force | Out-Null\n"
-            << "  Copy-Item -Path (Join-Path $builtAssetsDir '*') -Destination $targetAssetsDir -Recurse -Force\n"
-            << "}\n"
-            << "if (Test-Path -LiteralPath $sourceRepoAssetsDir) {\n"
-            << "  New-Item -ItemType Directory -Path $targetAssetsDir -Force | Out-Null\n"
-            << "  Copy-Item -Path (Join-Path $sourceRepoAssetsDir '*') -Destination $targetAssetsDir -Recurse -Force\n"
-            << "}\n"
+            << "$transactionBody = @'\n" << handoff_script::windows << "\n'@\n"
+            << source_runtime_handoff_script()
             << "Write-Handoff 'INFO' 'Source runtime files copied successfully.'\n"
             << "Remove-Item -LiteralPath $sourceArchive -Force -ErrorAction SilentlyContinue\n"
             << "Remove-Item -LiteralPath $sourceChecksum -Force -ErrorAction SilentlyContinue\n"

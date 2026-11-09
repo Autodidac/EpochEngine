@@ -67,6 +67,9 @@
     <Filter Include="Internal Headers\ai\native">
       <UniqueIdentifier>{f0bb8a22-3e2f-e57b-2a77-2acf00ffd5d9}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Internal Headers\assets">
+      <UniqueIdentifier>{e01ea3c3-f802-f569-3858-3ab74039af03}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Internal Headers\editor">
       <UniqueIdentifier>{9c3782c5-8cde-53fd-1bb5-09532cdc9dbc}</UniqueIdentifier>
     </Filter>
@@ -427,6 +430,12 @@
     <Filter Include="Source Files\updater">
       <UniqueIdentifier>{adcf2b3c-a32d-c38a-cfdd-221d013c918a}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\voxel">
+      <UniqueIdentifier>{b83fd311-3574-d2d2-c50e-a927fdeb962b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\water">
+      <UniqueIdentifier>{a689bc16-3d11-af6e-6ed5-59394d2b1c7d}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai.model.hpp">
@@ -543,6 +552,9 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)include\core.utf8.hpp">
       <Filter>Public Headers\core</Filter>
     </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\ai\editor.ai_project_model_recovery.hpp">
+      <Filter>Internal Headers\editor\ai</Filter>
+    </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\ai\editor.ai_file_scope.hpp">
       <Filter>Internal Headers\editor\ai</Filter>
     </ClInclude>
@@ -552,7 +564,22 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)include\updater.runtime_identity.hpp">
       <Filter>Public Headers\updater</Filter>
     </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\updater\updater.handoff_script.hpp">
+      <Filter>Internal Headers\updater</Filter>
+    </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai.native_runtime.hpp">
+      <Filter>Internal Headers\ai</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai.model_behavior.hpp">
+      <Filter>Internal Headers\ai</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_models_candidate_catalog.hpp">
+      <Filter>Internal Headers\ai\native</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai.asset_stage_fwd.hpp">
+      <Filter>Internal Headers\ai</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai.native_idle_policy.hpp">
       <Filter>Internal Headers\ai</Filter>
     </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_model_profile_import.hpp">
@@ -826,6 +853,9 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\updater.config.ixx">
       <Filter>Module Files\updater</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\updater.platform_policy.ixx">
+      <Filter>Module Files\updater</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\engine.updater.ixx">
       <Filter>Module Files\engine</Filter>
     </ClCompile>
@@ -874,6 +904,9 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\gui.engine.ixx">
       <Filter>Module Files\gui</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\gui.frame_limit_control.ixx">
+      <Filter>Module Files\gui</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\taskgraph.dotsystem.ixx">
       <Filter>Module Files\taskgraph</Filter>
     </ClCompile>
@@ -895,7 +928,13 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.state.ixx">
       <Filter>Module Files\opengl</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.native_present.ixx">
+      <Filter>Module Files\opengl</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.capture.ixx">
+      <Filter>Module Files\opengl</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.cloud_volume.ixx">
       <Filter>Module Files\opengl</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.preview.ixx">
@@ -1195,6 +1234,9 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\opengl\opengl.context_process_impl.cpp">
       <Filter>Source Files\renderers\opengl</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\opengl\opengl.native_present.cpp">
+      <Filter>Source Files\renderers\opengl</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\opengl\opengl.context_detail.cpp">
       <Filter>Source Files\renderers\opengl</Filter>
     </ClCompile>
@@ -1254,21 +1296,6 @@
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\voxel.field.ixx">
       <Filter>Module Files\voxel</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\modules\epoch.gui.ixx">
-      <Filter>Build Metadata</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\modules\epoch.gui.image.ixx">
-      <Filter>Build Metadata</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\modules\epoch.gui.tile_workspace.ixx">
-      <Filter>Build Metadata</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\modules\epoch.gui.rounded_rect.ixx">
-      <Filter>Build Metadata</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\modules\epoch.gui.input.ixx">
-      <Filter>Build Metadata</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.assert.ixx">
       <Filter>Module Files\core</Filter>
@@ -1360,22 +1387,13 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\updater\updater.source_worker_win.cpp">
       <Filter>Source Files\updater</Filter>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\src\epochgui\image.cpp">
-      <Filter>Build Metadata</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\src\epochgui\hierarchy_tree.cpp">
-      <Filter>Build Metadata</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\src\epochgui\rounded_rect.cpp">
-      <Filter>Build Metadata</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\src\epochgui\text_editor.cpp">
-      <Filter>Build Metadata</Filter>
-    </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\src\epochgui\tile_workspace.cpp">
-      <Filter>Build Metadata</Filter>
-    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\epochgui\gui.engine.cpp">
+      <Filter>Source Files\epochgui</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\epochgui\gui.docking_adapter.cpp">
+      <Filter>Source Files\epochgui</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\epochgui\gui.clipboard.cpp">
       <Filter>Source Files\epochgui</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\scripts\scripting.compiler_engine.cpp">
@@ -1387,6 +1405,9 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\epochgui\font.renderer.cpp">
       <Filter>Source Files\epochgui</Filter>
     </ClCompile>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\assets\image.decode.hpp">
+      <Filter>Internal Headers\assets</Filter>
+    </ClInclude>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\assets\image.stb.cpp">
       <Filter>Source Files\assets</Filter>
     </ClCompile>
@@ -1416,6 +1437,9 @@
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\forest.preview_mesh.ixx">
       <Filter>Module Files\forest</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\forest\forest.preview_mesh.cpp">
+      <Filter>Source Files\forest</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\package.registry.ixx">
       <Filter>Module Files\package</Filter>
@@ -1501,6 +1525,9 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.preview_grid.ixx">
       <Filter>Module Files\render</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\render\render.preview_camera.cpp">
+      <Filter>Source Files\render</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.lighting.ixx">
       <Filter>Module Files\render</Filter>
     </ClCompile>
@@ -1575,6 +1602,12 @@
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.systems_workspace.ixx">
       <Filter>Module Files\editor</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.asset_generation.ixx">
+      <Filter>Module Files\editor</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.asset_generation.cpp">
+      <Filter>Source Files\editor</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.task_scheduler.ixx">
       <Filter>Module Files\editor</Filter>
@@ -1749,6 +1782,9 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\authoring.texture.ixx">
       <Filter>Module Files\authoring</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\authoring.texture_detail.ixx">
+      <Filter>Module Files\authoring</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\asset.tilemap_artifact.ixx">
       <Filter>Module Files\asset</Filter>
     </ClCompile>
@@ -1757,6 +1793,18 @@
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.contracts.ixx">
       <Filter>Module Files\project</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\asset.cloud_volume.ixx">
+      <Filter>Module Files\asset</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.planetary_runtime.ixx">
+      <Filter>Module Files\project</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.planetary_snapshot.ixx">
+      <Filter>Module Files\project</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.planetary_snapshot.cpp">
+      <Filter>Source Files\project</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.lifecycle.ixx">
       <Filter>Module Files\project</Filter>
@@ -1815,6 +1863,15 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.sprite_animation.ixx">
       <Filter>Module Files\project</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.motion_track.ixx">
+      <Filter>Module Files\project</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.motion_track.cpp">
+      <Filter>Source Files\project</Filter>
+    </ClCompile>
+    <None Include="$(MSBuildThisFileDirectory)src\scripts\script.timeline_translation.cpp">
+      <Filter>Source Files\scripts</Filter>
+    </None>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.tilemap_source.ixx">
       <Filter>Module Files\project</Filter>
     </ClCompile>
@@ -1829,6 +1886,9 @@
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\voxel.storage.ixx">
       <Filter>Module Files\voxel</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\water.wave.ixx">
+      <Filter>Module Files\water</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\water.system.ixx">
       <Filter>Module Files\water</Filter>
@@ -1977,6 +2037,9 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\authoring\texture\authoring.texture_document.cpp">
       <Filter>Source Files\authoring\texture</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\authoring\texture\authoring.texture_residency.cpp">
+      <Filter>Source Files\authoring\texture</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\assets\tilemap\asset.tilemap_artifact.cpp">
       <Filter>Source Files\assets\tilemap</Filter>
     </ClCompile>
@@ -1997,9 +2060,6 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <None Include="$(MSBuildThisFileDirectory)src\forest\forest.preview_mesh_contract.cpp">
-      <Filter>Source Files\forest</Filter>
-    </None>
     <None Include="$(MSBuildThisFileDirectory)src\physics\physics.manager_contract.cpp">
       <Filter>Source Files\physics</Filter>
     </None>
@@ -2024,11 +2084,6 @@
     <None Include="$(MSBuildThisFileDirectory)src\simulation\simulation.neuromorphic_contract.cpp">
       <Filter>Source Files\simulation</Filter>
     </None>
-  </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.event_debug.ixx">
-      <Filter>Module Files\render</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.application_asset_audio.inl">
@@ -2193,9 +2248,6 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)src\authoring\texture\implementation\authoring.texture_binary_codec.inl">
       <Filter>Implementation Files\authoring\texture\implementation</Filter>
     </ClInclude>
-    <ClInclude Include="$(MSBuildThisFileDirectory)src\authoring\texture\implementation\authoring.texture_residency.inl">
-      <Filter>Implementation Files\authoring\texture\implementation</Filter>
-    </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\implementation\editor.scene_commands.inl">
       <Filter>Implementation Files\editor\implementation</Filter>
     </ClInclude>
@@ -2261,5 +2313,25 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\host\implementation\host.native_dispatch.inl">
       <Filter>Implementation Files\renderers\host\implementation</Filter>
     </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\voxel\voxel.sdf_contract.cpp">
+      <Filter>Source Files\voxel</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\water\water.system.cpp">
+      <Filter>Source Files\water</Filter>
+    </ClCompile>
+    <None Include="$(MSBuildThisFileDirectory)src\water\water.system_contract.cpp">
+      <Filter>Source Files\water</Filter>
+    </None>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\water.surface.ixx">
+      <Filter>Module Files\water</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\water\water.surface.cpp">
+      <Filter>Source Files\water</Filter>
+    </ClCompile>
+    <None Include="$(MSBuildThisFileDirectory)src\water\water.surface_contract.cpp">
+      <Filter>Source Files\water</Filter>
+    </None>
   </ItemGroup>
 </Project>

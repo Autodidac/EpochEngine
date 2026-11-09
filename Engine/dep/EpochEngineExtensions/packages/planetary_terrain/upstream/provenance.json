@@ -1,0 +1,65 @@
+{
+  "schema": "epoch-reviewed-upstream-subset/v1",
+  "source_project": "EpochPlanet",
+  "version": "0.2.3",
+  "source_identity": "Operator-supplied EpochPlanet-0.2.3-source. Retained owners preserve supplied hashes; explicitly adapted world, terrain and simulation owners record original_sha256 and local_changes separately.",
+  "license": "MIT for supplied newly-written replacement owners; preserve included upstream LICENSE and THIRD_PARTY.md",
+  "files": {
+    "src/core/world.cpp": {
+      "sha256": "42660f67b4a7e0e2955b5cf207e604ea185415cf352bc99d373f323edb0f3f9e",
+      "bytes": 8261,
+      "original_sha256": "09d713cef6bcc518d951444e601deeea30d1dfffa5260864146a5433fc591f15",
+      "local_changes": "Optional validated WorldConfig scales body radii, terrain amplitudes, atmosphere and orbital distances together, preserving default constructor output and original gravity/orbit periods. Geography-scale sampling retains proportional color and normal thresholds."
+    },
+    "src/core/terrain.cpp": {
+      "sha256": "cb493aefd866ad810fa3ba052169a7858dcd7e7b45baaf3985593982695651c0",
+      "bytes": 30444,
+      "original_sha256": "dc6e2a9b5509592540aad6683a8d569880d004d9ddc0e637ad6794e53432b7e8",
+      "local_changes": "One shared planner offers explicit selected-body planning with existing screen-error/balance-closure priority; legacy all-world order/signature are preserved. Optional world size scales geometric normal stencils, minimum skirts and geographic vegetation eligibility without adding a second mesher. An additive explicit ocean-surface planner overload scores the closest rendered ground or sea surface only for admitted wet requests; original terrain-only overloads, mesh generation, gravity and landing samples remain unchanged. Optional validated TerrainView adds a conservative full-height patch envelope and an explicit in-view queue tier while retaining complete balanced coarse coverage and unchanged no-view ordering; it is detail priority, not renderer occlusion. A bounded double-precision procedural camera-ray march prioritizes its actual visible-surface hit, with a derived height-field Lipschitz bound, 5cm target tolerance, a bounded 16384-step budget for grazing rays, and conservative no-hit/exhaustion fallback. The ray-hit ancestry receives at most two extra detail levels under the same maximum level, balanced coverage and fixed leaf budget. This is refinement only, not a collision query. An optional camera-up field enables forward, exactly 45-degree camera-down with roll, and radial-nadir refinement rays near the visible ground or sea surface. Each ray retains its 16384-step limit (49152 aggregate per selected body). Only actual hit ancestry may bypass view-cone exclusion. A cubic smooth altitude weight trades the three-hit attention for a broad central region of quarter vertical-FOV radius with a smooth outer taper; the queue combines continuous attention and bounded monotonic screen-error priority, retaining the existing at-most-two-level screen-error bias. Near bound is clamp(radius*0.002,25m,5000m); far is max(near*4,clamp(radius*0.02,250m,100000m)). At or above far no focus rays run and off-screen nadir/down branches receive no special refinement. Legacy no-up ordering and scores, fixed leaf and memory budgets, maximum level and complete 2:1-balanced coverage remain unchanged."
+    },
+    "src/core/simulation.cpp": {
+      "sha256": "b1176da7b5e862c8ec3551a88759c4a8e925b597a389672d288e9732eb688c26",
+      "bytes": 16553,
+      "original_sha256": "bd19a624a3dba4fe063357c3d406b3c227f7af52db38dcaec6b5d5d4d753a034",
+      "local_changes": "Optional physical world size is preserved through construction/state/restore, dry landing and geometric gravity/collision/carrier thresholds. Player height1.8m, base walk5.5m/s and original gravity/time periods remain separate metric settings. Legacy state validation/output stays unchanged for default size. Optional explicit flight roll appended to existing look basis; zero-roll defaults and walking horizon semantics retained. An explicit constructor body scope limits selection, gravity, collision and automatic carrier changes to the admitted Planet body; the unrestricted Universe constructor remains unchanged."
+    },
+    "include/epoch/planet/simulation.hpp": {
+      "sha256": "02b4fa7585efff10be847d10f6d3c9e97a8d707b52e9b106ba140097dadce08a",
+      "bytes": 3867,
+      "original_sha256": "48678490573cabcd19e9e4ad6f051feb4d6fb3693ec6d08dfadd4bc05f14c87b",
+      "local_changes": "Optional WorldConfig constructor and session field preserve the physical world across restore; default member values retain the original world. Optional explicit flight roll appended to existing look basis; zero-roll defaults and walking horizon semantics retained. An optional immutable body-scope constructor argument restricts the existing simulation for selected Planet projects without replacing its tick or world algorithms."
+    },
+    "include/epoch/planet/math.hpp": {
+      "sha256": "3361981ae24293a4f63a64f30cbb9ab69281847beb2dabc0c32c393fa7e88e6b",
+      "bytes": 4317
+    },
+    "include/epoch/planet/world.hpp": {
+      "sha256": "07b1ac00992bb8aa6b5790194bb754a282ced79a661b24ce8e2dee6552d03620",
+      "bytes": 2710,
+      "original_sha256": "0b38a942cc78ed0a1ac4e11cef04f0db5a9e5137b4a4ffa8409e47372a29c7c1",
+      "local_changes": "WorldConfig reference-body/radius overload and proportional geography metadata; legacy constructors and static sun-radius declaration preserved. Radius250..100000000m is an input bound, not a certified ground-detail range."
+    },
+    "include/epoch/planet/terrain.hpp": {
+      "sha256": "5f92730a7ad35d340a4f755b4aeedb4b8cbc6b6bda634c29375d8d27e18294f9",
+      "bytes": 4233,
+      "original_sha256": "1050a62a579fba74e1b1cf1dab54499590969490499f0b0e5b3be18a3a21ad31",
+      "local_changes": "Explicit selected-body planning declaration; existing all-world plan_terrain API retained. An additive explicit ocean-surface planner overload scores the closest rendered ground or sea surface only for admitted wet requests; original terrain-only overloads, mesh generation, gravity and landing samples remain unchanged. Optional validated TerrainView adds a conservative full-height patch envelope and an explicit in-view queue tier while retaining complete balanced coarse coverage and unchanged no-view ordering; it is detail priority, not renderer occlusion. An optional camera-up field enables forward, exactly 45-degree camera-down with roll, and radial-nadir refinement rays near the visible ground or sea surface. Each ray retains its 16384-step limit (49152 aggregate per selected body). Only actual hit ancestry may bypass view-cone exclusion. A cubic smooth altitude weight trades the three-hit attention for a broad central region of quarter vertical-FOV radius with a smooth outer taper; the queue combines continuous attention and bounded monotonic screen-error priority, retaining the existing at-most-two-level screen-error bias. Near bound is clamp(radius*0.002,25m,5000m); far is max(near*4,clamp(radius*0.02,250m,100000m)). At or above far no focus rays run and off-screen nadir/down branches receive no special refinement. Legacy no-up ordering and scores, fixed leaf and memory budgets, maximum level and complete 2:1-balanced coverage remain unchanged."
+    },
+    "LICENSE": {
+      "sha256": "6d6d21b1c522147dc3f42c901cc48606f87814857e721adf6a59a587ee3b5c53",
+      "bytes": 1440
+    },
+    "THIRD_PARTY.md": {
+      "sha256": "c28b7a730257447dcafd5831e15262eeeca57e4f5fef4e935afc34f78b9f5488",
+      "bytes": 2891
+    }
+  },
+  "excluded": [
+    "legacy/",
+    "src/core/voxel_terrain.cpp",
+    "include/epoch/planet/voxel_terrain.hpp",
+    "src/core/streamer.cpp and its worker pool",
+    "application/renderer/platform/UI and their loops"
+  ],
+  "boundary": "One retained upstream ABI/algorithm owner with adapted camera-priority and optional physical-size contracts. Facades are not a completed implementation-module conversion. Original application, renderer, platform loops and worker pool remain excluded. Engine host owns scheduling, memory admission, package approval and camera/render mapping. Default producer mesh/JSON/cache/stream and exploration-session versions remain unchanged; custom size uses typed versioned receipts and immutable cache identity. The additive terrain.frame file reports exact export scale/origin/key/counts without changing the mesh codec. These CPU libraries and input bounds do not prove native ground fidelity, smooth geomorph or large-world editing."
+}

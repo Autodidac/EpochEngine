@@ -8,15 +8,17 @@ import tempfile
 import unittest
 from unittest.mock import patch
 from Tools.build import audit_epoch_linux_package as audit
+from Tools.build.audit_epoch_runtime_provenance import audit_windows_runtime
 from Tools.build import verify_public_source as guard
 ROOT = Path(__file__).resolve().parents[2]
 
 class LinuxPackageDelivery(unittest.TestCase):
-    def fixture(self, folder, extra=None, marker_edition='epoch.public.github.v1'):
+    def fixture(self, folder, extra=None, marker_edition='epoch.public.github.v1',
+                runtime_body=b''):
         version='0.90.183'; prefix='epoch_linux_x64_v'+version
         archive=Path(folder)/(prefix+'.tar.gz')
         elf=bytearray(20);elf[:6]=b'\x7fELF\x02\x01';elf[18:20]=b'\x3e\x00'
-        files={'epoch':bytes(elf),'assets/fonts/Roboto-Regular.ttf':b'fixture',
+        files={'epoch':bytes(elf)+runtime_body,'assets/fonts/Roboto-Regular.ttf':b'fixture',
             'LICENSE':b'fixture','THIRD_PARTY_NOTICES.txt':b'fixture',
             'THIRD_PARTY_COMPONENTS.json':b'[]',
             'epoch-distribution.json':json.dumps({'schema':'epoch.distribution.v1',
@@ -51,10 +53,32 @@ class LinuxPackageDelivery(unittest.TestCase):
             data['runtime_smoke']='not_run';receipt.write_text(json.dumps(data))
             with self.assertRaises(ValueError):audit.audit(archive)
 
-    def test_only_reviewed_three_artifact_upload_is_admitted(self):
-        workflow=(ROOT/'Tools/build/public_ci_workflow.yml').read_bytes().replace(b'\r\n',b'\n')
+    def test_public_runtime_rejects_private_build_paths_in_both_formats(self):
+        parent=ROOT/'build/contract-tests'
+        parent.mkdir(parents=True,exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=parent,prefix='runtime-provenance-') as folder:
+            private=b'/mnt/c/' + b'Users/Local Builder/release/lib/ossl-modules'
+            with self.assertRaisesRegex(ValueError, 'Private build path'):
+                audit.audit(self.fixture(folder,runtime_body=private))
+            hosted=b'/home/' + b'runner/work/epoch/Engine/a.ixx'
+            audit.audit(self.fixture(folder,runtime_body=hosted))
+            runtime=Path(folder)/'EpochEditor.exe'
+            runtime.write_bytes(b'MZ\x00EpochEditor.pdb\x00Engine/modules/render.ixx')
+            audit_windows_runtime(Path(folder))
+            dependency=Path(folder)/'driver.dll'
+            # Odd alignment and a scanner chunk boundary should not hide a PDB path.
+            private_pdb='C:' + '\\'.join(('', 'Users', 'Local Builder', 'release', 'driver.pdb'))
+            dependency.write_bytes(b'\x00'*(1024*1024-3)+private_pdb.encode('utf-16-le'))
+            with self.assertRaisesRegex(ValueError, 'driver.dll') as error:
+                audit_windows_runtime(Path(folder))
+            self.assertNotIn('Local Builder', str(error.exception))
+
+    def test_only_reviewed_platform_artifact_uploads_are_admitted(self):
+        template = ROOT/'Tools/build/public_ci_workflow.yml'
+        workflow=(template if template.is_file() else ROOT/guard.WORKFLOW).read_bytes().replace(b'\r\n',b'\n')
         guard.verify_workflow(workflow)
         for old,new in ((b'contents: read',b'contents: write'),
+                        (b'epoch_win10_x64_v${{ steps.package.outputs.version }}.zip\n',b'**\n'),
                         (b'epoch_linux_x64_v${{ steps.package.outputs.version }}.tar.gz\n',b'**\n'),
                         (b'include-hidden-files: false',b'include-hidden-files: true')):
             altered=workflow.replace(old,new)
@@ -63,6 +87,8 @@ class LinuxPackageDelivery(unittest.TestCase):
             with patch.object(guard,'WORKFLOW_SHA256',guard.source_digest(guard.WORKFLOW,altered)):
                 with self.assertRaises(RuntimeError):guard.verify_workflow(altered)
         self.assertNotIn(b'-SkipRuntimeSmoke',workflow)
+        self.assertIn(b'cmake --build --preset windows-msvc-both-release',workflow)
+        self.assertIn(b'./Tools/build/stage_epoch_windows_release.ps1',workflow)
         self.assertIn(b'clang Release -- -DBUILD_TESTING=ON',workflow)
         self.assertIn(b'LIBGL_ALWAYS_SOFTWARE=1 xvfb-run',workflow)
 

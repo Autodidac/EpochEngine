@@ -553,9 +553,52 @@ namespace epochengine::project_gui_runtime
         {
             return false;
         }
-        const auto kind = artifact_.widgets[focused_].kind;
-        return kind == asset::gui::WidgetKind::text_input
-            || kind == asset::gui::WidgetKind::slider;
+        const auto& widget = artifact_.widgets[focused_];
+        return widget.enabled && widget.focusable;
+    }
+    RuntimeCode RuntimeSession::clear_focus() noexcept
+    {
+        if (!valid())
+            return reject(RuntimeCode::invalid_artifact);
+        if (focused_ == asset::gui::invalid_widget_index)
+            return RuntimeCode::no_change;
+        if (events_.size() >= limits_.maximum_pending_events)
+            return reject(RuntimeCode::action_limit_exceeded);
+        try
+        {
+            const auto emitted = emit({.kind = EventKind::focus_changed});
+            if (emitted != RuntimeCode::ready) return emitted;
+            focused_ = asset::gui::invalid_widget_index;
+            ++metrics_.focus_changes;
+            return RuntimeCode::ready;
+        }
+        catch (...) { return reject(RuntimeCode::allocation_failure); }
+    }
+    RuntimeCode RuntimeSession::activate_focused() noexcept
+    {
+        if (!valid())
+            return reject(RuntimeCode::invalid_artifact);
+        if (focused_ >= artifact_.widgets.size())
+            return RuntimeCode::no_change;
+        const auto& widget = artifact_.widgets[focused_];
+        if (!runtime_visible(focused_))
+            return reject(RuntimeCode::hidden_widget);
+        if (!widget.enabled)
+            return reject(RuntimeCode::disabled_widget);
+        if (!widget.focusable || (widget.kind != asset::gui::WidgetKind::button
+            && widget.kind != asset::gui::WidgetKind::image_button))
+            return reject(RuntimeCode::wrong_widget_kind);
+        if (events_.size() >= limits_.maximum_pending_events)
+            return reject(RuntimeCode::action_limit_exceeded);
+        try
+        {
+            const auto emitted = emit({.kind = EventKind::activated,
+                .widget = widget.id, .action = widget.action});
+            if (emitted == RuntimeCode::ready)
+                ++metrics_.actions_emitted;
+            return emitted;
+        }
+        catch (...) { return reject(RuntimeCode::allocation_failure); }
     }
     RuntimeCode RuntimeSession::focus(asset::gui::WidgetId widget) noexcept
     {
@@ -573,9 +616,15 @@ namespace epochengine::project_gui_runtime
             return RuntimeCode::no_change;
         if (events_.size() >= limits_.maximum_pending_events)
             return reject(RuntimeCode::action_limit_exceeded);
-        focused_ = *index;
-        ++metrics_.focus_changes;
-        return emit({.kind = EventKind::focus_changed, .widget = source.id});
+        try
+        {
+            const auto emitted = emit({.kind = EventKind::focus_changed, .widget = source.id});
+            if (emitted != RuntimeCode::ready) return emitted;
+            focused_ = *index;
+            ++metrics_.focus_changes;
+            return RuntimeCode::ready;
+        }
+        catch (...) { return reject(RuntimeCode::allocation_failure); }
     }
 
     RuntimeCode RuntimeSession::focus_next(bool reverse) noexcept

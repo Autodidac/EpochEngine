@@ -59,6 +59,7 @@ namespace epochengine::gui_lib
         bool movable{ true };
         bool resizable{ true };
         bool closable{ true };
+        bool constrain_to_viewport{};
     };
 
     struct FloatingWindowInput

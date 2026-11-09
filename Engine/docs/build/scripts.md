@@ -1,5 +1,38 @@
 # Local Build Scripts And Release Packaging
 
+All new generated output belongs under the repository's `Artifacts/` folder.
+Opening either the repository or `Engine/` in VS Code uses presets and leaves
+source folders free of compiler output.
+
+| Folder | Contents | Safe to discard after builds stop? |
+|---|---|---|
+| `Artifacts/Intermediate/` | Object files, module caches and CMake configure trees | Yes; the next build recreates them. |
+| `Artifacts/Runtime/` | Runnable programs, libraries and staged assets | Keep the builds you use. |
+| `Artifacts/Install/` | Installed/staged distributions | Keep until their purpose is finished. |
+| `Artifacts/Dependencies/` | Installed third-party build dependencies | Keep while building; removing them requires reinstalling dependencies. |
+| `Artifacts/Packages/` | Release packages | Keep published and pending delivery artifacts. |
+| `Artifacts/Reports/` | Test, cleanup and diagnostic evidence | Keep evidence required by the active pass. |
+
+MSVC uses `Intermediate/msvc/<edition>/<platform>/<configuration>/<project>`
+and `Runtime/windows/<edition>/<platform>/<configuration>`. Managed CMake trees
+use `Intermediate/cmake/<lane>` and put runnable outputs under
+`Runtime/cmake/<lane>`; multi-configuration generators append the configuration.
+Custom external CMake build roots retain their explicit output convention.
+Retained older candidate source keeps its declared v1 layout; new source uses v2.
+Do not move an existing CMake cache: it contains absolute paths. Reconfigure it
+at the new location, then discard the obsolete cache after validation.
+
+Preview compiler cleanup from the repository root:
+
+```powershell
+powershell -NoProfile -File Tools/build/clean_epoch_intermediates.ps1
+```
+
+Add `-Remove` to remove only `Artifacts/Intermediate`. Add `-LegacyMSVC` to
+target only the old root `build/obj` instead. The command refuses active build
+processes, tracked files and redirected paths, and keeps a receipt under Reports.
+It never targets projects, candidate source, Runtime, Install or Packages.
+
 The helper scripts under `Engine/` are optional, but they are still the fastest
 repeatable path for local builds when you want the tree, output folders, and
 docs flow to stay predictable.
@@ -22,7 +55,7 @@ Run from `Engine/`:
 What it does:
 
 - configures from the `Engine/` source root
-- builds into out-of-tree locations under `build/cmake/linux/<edition>/`, or under
+- builds into out-of-tree locations under `Artifacts/Intermediate/cmake/linux/<edition>/`, or under
   `EPOCH_BUILD_ROOT` when a native-filesystem build root is required
 - enables module scanning flags
 - uses vcpkg by default on Windows, Linux, and WSL when `VCPKG_ROOT` or a
@@ -67,7 +100,7 @@ cd Engine
 ./run.sh [gcc|clang] [Debug|Release] [-- <runtime args>]
 ```
 
-This launches the `epoch` runtime from the matching `build/cmake/linux/<edition>/<Compiler>-<Config>` output
+This launches the `epoch` runtime from the matching `Artifacts/Runtime/cmake/linux/<edition>/<Compiler>-<Config>` output
 directory.
 
 ## `install.sh`
@@ -77,7 +110,7 @@ cd Engine
 ./install.sh [gcc|clang] [Debug|Release]
 ```
 
-Installs into `build/install/linux/<edition>/<Compiler>-<Config>`.
+Installs into `Artifacts/Install/linux/<edition>/<Compiler>-<Config>`.
 
 ## `clean.sh`
 
@@ -86,8 +119,8 @@ cd Engine
 ./clean.sh
 ```
 
-Removes only this edition's `build/cmake/linux/<edition>` and
-`build/install/linux/<edition>` after resolving and checking their exact paths.
+Removes only this edition's `Artifacts/Intermediate/cmake/linux/<edition>`
+after resolving and checking its exact path. It keeps Runtime and Install.
 It leaves other editions, custom build roots, retained legacy outputs and project
 source untouched. Verified removal of obsolete pre-migration data is a separate
 operator-approved cleanup step.
@@ -231,47 +264,48 @@ Version numbers do **not** belong in commit titles.
 by `GetEngineVersion()`. Hosted and local staging must consume that result
 instead of reconstructing a version string independently.
 
-`Engine/modules/engine.version.ixx` is a thin compatibility module, but its
-text is also the source-version endpoint used by published updaters. Keep its
-three source identity macros in lockstep with `epoch.version.ixx`; packaged
-version overrides remain release-staging inputs rather than source metadata.
+`Engine/modules/engine.version.ixx` is a thin compatibility module. Keep its
+three source identity macros in lockstep with `epoch.version.ixx`. The Public
+source-version endpoint reads `epoch.version.ixx` from GitHub. Development
+reads the Site's source-version endpoint. Packaged version overrides remain
+release-staging inputs.
 
 
-EpochEngine source is independently published on GitHub by operator authorization.
-Source delivery through the ChatGPT Site is restricted. The public Site must not
-advertise or anonymously serve its smart-Git repository, source archives,
-commit/tree browser, or mutable source aliases. Approved source access requires
-a server-side user entitlement and an authenticated, short-lived download; a
-client-only gate or static shared secret is not acceptable. EpochGui remains an
-independent public smart-Git repository at
-`https://epoch.adamrushford.chatgpt.site/git/EpochGuiCurrent.git`.
-The old `EpochGui.git` mirror and its unrelated history remain preserved.
+Public EpochEngine source and runtime packages are published on
+[GitHub](https://github.com/Autodidac/EpochEngine). Publish the audited Public
+source projection with the public repository's ancestry. Verify that the
+archive and its Git tree contain no private source or private history.
+
+Development source and runtime packages use the separate owner-authenticated
+Site. Keep its smart-Git repository, commit/tree browser, source archives,
+runtime downloads and mutable aliases behind server-side authorization. Use
+short-lived authenticated downloads where the Site issues them. Keep
+administrative credentials out of source, manifests, logs and documentation.
 
 Hosted repositories and source archives must be full committed-source
 snapshots. Freeze the reviewed publishable working set into one commit before
 hosting it; never expose transient uncommitted state or trim source to match a
-runtime/updater-shell payload. The standalone EpochGui repository must be
-byte-for-byte equivalent to `Engine/dep/EpochGui` at the corresponding release.
+runtime/updater-shell payload. Verify each standalone dependency commit against
+its admitted source manifest and the corresponding engine pin.
 Preserve original stable checkpoint `ad6c416d930b348a61bc37ceb7d4522742be084a`
 in history. The operator-authorized `multicontext-base-stable` branch mirrors
 main by fast-forward; do not rewrite its ancestry, recreate it from a runtime
 archive or substitute the v0.89.06 tag.
 
-Epoch-owned update publication is Site-native. Publish release/build manifests
-under `/api/epoch/` and immutable versioned runtime assets under
-`/downloads/releases/vX.Y.Z/` or a signed key-revision subpath. Every runtime
-asset must have a companion
-`.sha256` object whose first token is the 64-character digest. Runtime reads
-require no credential; source reads require server authorization; administrative
-writes remain protected by a hosted secret that must never enter source,
-manifests, logs, or documentation. Do not proxy these Epoch-owned routes to
-GitHub. Development and the authorized Windows/Linux release line are
-`v0.90.35`; exact admission receipts live in `Changes/2026-10-10-release.md`.
-The signed Site API remains the updater authority; the operator also authorizes
-matching GitHub release assets. Keep all historical releases immutable, including
-Windows/Linux v0.90.33 at f33d3d6758abf402747870df4f8887e7887a2035 and macOS
-v0.89.30. Publish Windows ZIP and Linux tar.gz runtime forms, with a checksum
-sidecar for every public object and live post-deploy digest verification.
+Public update discovery uses the signed GitHub release integrity document.
+Development source updates use the authenticated Site. Use the owner download
+for Development runtime packages while its automatic runtime acquisition is
+disabled. Verify that each updater refuses the other edition's payload.
+Keep historical releases immutable. Publish Windows ZIP and Linux tar.gz
+runtime forms with checksum sidecars, then read back the live commit, asset
+digest, edition and version from the owning channel.
+
+Build the Public release artifacts from the audited Public commit on GitHub
+Actions using its pinned Windows and Linux jobs. The package checks refuse
+personal build paths in the executable and bundled libraries, including paths
+recorded by the compiler, linker, or a dependency build. A local build may
+pass contracts and still be unsuitable for distribution. Verify the exact
+returned packages and sign their hashes for the GitHub updater.
 
 The updater contract stays binary-first:
 
@@ -285,9 +319,7 @@ Install/update type matrix:
   `epoch_win10_x64_vX.Y.Z.zip` asset
 - packaged Linux and WSL runtime installs use the newest matching
   `epoch_linux_x64_vX.Y.Z.tar.gz` asset
-- public and source-checkout installs consume the same packaged runtime lane;
-  private source synchronization remains a separate authenticated development
-  operation and never supersedes an available public package
+- Public and Development installs each stay on their own distribution channel
 - WSL is treated as Linux for release-asset naming; do not publish a separate
   WSL-only runtime asset unless the runtime/package layout actually diverges
 - updater-shell packages are bootstrap installers only and must keep their own
@@ -397,9 +429,9 @@ Before publishing a Linux/WSL2 asset:
 - when static Raylib is unavailable because of the Linux GLAD ABI boundary,
   prove the active OpenGL, SDL, and software editor lanes instead; do not ship
   a Raylib-linked archive that crashes other renderer selections at startup
-- keep the packaged versioned Linux runtime asset, for example
-  `epoch_linux_x64_vX.Y.Z.tar.gz`, and its private reviewed source authority
-  aligned to the same commit, not just the same version string
+- bind the versioned Linux runtime asset, for example
+  `epoch_linux_x64_vX.Y.Z.tar.gz`, to the exact reviewed source commit for its
+  edition
 - verify the packaged Linux artifact starts the main runtime path by default
   instead of accidentally shipping an updater-shell-only bootstrap
 - do not quietly reuse an older Linux artifact after source has changed
@@ -444,8 +476,8 @@ before finishing:
 - non-maximized startup must survive the startup settle pass with the same
   visible top-row child contract, not a briefly visible extra SDL/SFML wrapper
 - closing one visible child pane early must not kill the parent editor
-- a proof run must come from `build/bin/windows/<edition>/x64/Debug` or
-  `build/bin/windows/<edition>/x64/Release` with assets present
+- a proof run must come from `Artifacts/Runtime/windows/<edition>/x64/Debug` or
+  `Artifacts/Runtime/windows/<edition>/x64/Release` with assets present
 - if the same pass touches Linux/WSL2/WSLg behavior, document whether that path
   was also revalidated or still needs follow-up
 - for README proof refreshes after `v0.84.35`, the normal Windows six-context

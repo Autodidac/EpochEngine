@@ -25,7 +25,7 @@
                         chat.append_status("Specify the objective after 'Project goal:'. No goal was changed.");
                         return true;
                     }
-                    if (editor.aiAuthoringApplyPending)
+                    if (editor.aiAuthoringApplyPending || !editor.aiToolExecution.empty() || editor.aiPackageRequest)
                     {
                         chat.append_status("A project change is being applied. Wait until it finishes before replacing the goal.");
                         return true;
@@ -34,6 +34,11 @@
                         const bool changed = !editor.aiGoalActive
                             || editor.aiGoal != goalCommand.objective;
                         invalidate_ai_goal_work();
+                        editor.aiGoalTools = {};
+                        editor.aiGoalTools.enabled = epochengine::ai::planet_forest_project_request(goalCommand.objective);
+                        editor.aiGoalTools.bind_request(goalCommand.objective, editor.projectId, editor.projectRoot,
+                            editor.projectLifecycle.evidence().generations.selected_project.generation);
+                        editor.aiGoalPackageReceipt.reset();
                         editor.aiGoal.assign(goalCommand.objective);
                         editor.aiGoalDraft = editor.aiGoal;
                         editor.aiGoalActive = true;
@@ -65,6 +70,80 @@
                 case epochengine::editor::ai_chat_goal::Action::resume:
                     if (!editor.aiGoalActive)
                         chat.append_status("No project goal is active. Say 'Project goal: <objective>' to create one.");
+                    else if (editor.aiGoalTools.enabled)
+                    {
+                        if (editor.aiAuthoringApplyPending || !editor.aiToolExecution.empty() || editor.aiPackageRequest
+                            || editor.projectBuildPending || editor.scriptBuildPending || editor.forestSurfacePending
+                            || editor.assetGenerationPending || editor.aiToolTestPending || planetary_project_busy(editor)
+                            || editor.projectRuntimeProcess.valid()
+                            || (editor.projectRuntimeSnapshot && editor.projectRuntimeSnapshot->active())
+                            || (chat.pending && (chat.pendingRequestKind != AiDeferredRequestKind::Tooling
+                                || editor.aiToolBoundRequest != editor.aiGoalTools.next_request(editor.aiGoal))))
+                        {
+                            chat.append_status("Wait for the active host or unrelated model operation to retire before resuming this goal. Nothing was retried.");
+                            return true;
+                        }
+                        auto resumed = editor.aiGoalTools;
+                        const auto generation = editor.projectLifecycle.evidence().generations.selected_project.generation;
+                        if (!resumed.resume(editor.aiGoal, editor.projectId, editor.projectRoot, generation)
+                            || (!editor.aiToolBoundRequest.empty()
+                                && editor.aiToolBoundRequest != resumed.next_request(editor.aiGoal))
+                            || (editor.aiGoalTools.stopped
+                                && (editor.aiToolSceneRevision != editor.sceneDocumentRevision
+                                    || editor.aiToolGuiRevision != (editor.guiDocument ? editor.guiDocument->revision().sequence : 0u)
+                                    || (editor.aiToolPlantRecipeBound && !ai_forest_recipe_binding_current(editor)))))
+                        {
+                            editor.aiToolPlan = {};
+                            editor.aiToolPlanApplied = false;
+                            editor.aiQueuedMessageActionIndex.reset();
+                            editor.aiGoalRunning = editor.aiGoalPlanNextQueued = false;
+                            chat.append_status("The goal is complete, its request/project changed, or the failed step already changed project data. Inspect the existing result and start a fresh request; completed mutations will not be replayed.");
+                            return true;
+                        }
+                        const auto request = resumed.next_request(editor.aiGoal);
+                        ai::ToolPlanParseResult retry{};
+                        if (editor.aiToolPlan && editor.aiToolPlan.plan.call.tool == resumed.operation()
+                            && editor.aiToolBoundRequest == request
+                            && ai::project_tool_selection_matches(editor.aiToolProjectId, editor.aiToolProjectRoot,
+                                editor.aiToolProjectGeneration, editor.projectId, editor.projectRoot, generation)
+                            && editor.aiToolSceneRevision == editor.sceneDocumentRevision
+                            && editor.aiToolGuiRevision == (editor.guiDocument ? editor.guiDocument->revision().sequence : 0u)
+                            && (!editor.aiToolPlantRecipeBound || ai_forest_recipe_binding_current(editor)))
+                        {
+                            std::string packet = "EPOCH_TOOL_PLAN_V1\nTITLE Retry current goal step\nSUMMARY Request fresh approval for the retained exact operation.\nCALL "
+                                + editor.aiToolPlan.plan.call.tool;
+                            for (const auto& argument : editor.aiToolPlan.plan.call.arguments)
+                                packet += " " + argument.name + "=" + argument.value;
+                            retry = admit_ai_project_tool_reply(request, packet + "\nEND\n");
+                        }
+                        invalidate_ai_goal_work();
+                        editor.aiQueuedMessageActionIndex.reset();
+                        editor.aiToolPlanApplied = false;
+                        editor.aiToolModelRecovery = {};
+                        editor.aiIntentClarificationPending = false;
+                        editor.aiIntentClarificationResumeIntent = AiChatIntent::Ambiguous;
+                        editor.aiIntentClarificationRequest.clear();
+                        editor.aiIntentClarificationQuestion.clear();
+                        editor.aiGoalPackageReceipt.reset();
+                        editor.aiGoalForestReceipt = false;
+                        editor.aiGoalTools = std::move(resumed);
+                        editor.aiGoalRunning = static_cast<bool>(retry) || editor.aiMethodSelection == 0;
+                        editor.aiGoalPlanNextQueued = !retry && editor.aiGoalRunning;
+                        if (!editor.aiGoalRunning) editor.aiGoalTools.stopped = true;
+                        if (retry)
+                        {
+                            editor.aiToolPlan = std::move(retry);
+                            editor.aiToolRequest = editor.aiToolBoundRequest = request;
+                            editor.aiToolStatus = "Ready for new approval: retry " + editor.aiToolPlan.plan.call.tool;
+                            for (const auto& argument : editor.aiToolPlan.plan.call.arguments)
+                                editor.aiToolStatus += " " + argument.name + "=" + argument.value;
+                            chat.append_status(editor.aiToolStatus + ". No operation or model request was sent; completed goal steps are retained.");
+                        }
+                        else
+                            chat.append_status(editor.aiGoalRunning
+                                ? "Goal resumed at its uncompleted step. One fresh Native model proposal is queued and will need approval; completed steps will not repeat."
+                                : "This goal needs a fresh proposal. Select Native and resume again, or send the current step explicitly; no Codex or external request was sent.");
+                    }
                     else
                     {
                         editor.aiGoalRunning = true;
@@ -137,6 +216,21 @@
                         resumed.append(input);
                         return dispatch_ai_intent(AiChatIntent::EngineSource, resumed, true);
                     }
+                    if (resumeIntent == AiChatIntent::ProjectAuthoring
+                        && !ai::project_lifecycle_request_tool(input).empty())
+                    {
+                        // An explicit project action in the human answer
+                        // corrects a question that entered the scene-authoring
+                        // lane. Keep its original settings and constraints, but
+                        // use the existing project-tool protocol and approval.
+                        std::string corrected{input};
+                        corrected += "\nOriginal project request: " + resumed;
+                        for (const auto& [question, answer] : editor.aiProjectClarifications)
+                            corrected += "\nPrior clarification (" + question + "): " + answer;
+                        editor.aiProjectClarifications.clear();
+                        editor.aiIntentClarificationQuestion.clear();
+                        return dispatch_ai_intent(AiChatIntent::ProjectTooling, corrected, true);
+                    }
                     if (resumeIntent == AiChatIntent::ProjectAuthoring)
                     {
                         editor.aiProjectClarifications.emplace_back(
@@ -204,7 +298,34 @@
                     chat.append_status(editor.aiAuthoringStatus);
                     return true;
                 }
+                if (classify_ai_intent(editor.aiAuthoringRequest) == AiChatIntent::ProjectTooling)
+                {
+                    editor.aiToolRequest = editor.aiAuthoringRequest;
+                    return request_ai_tool_plan();
+                }
                 return request_ai_authoring_plan(false);
+            }
+            if (const std::string retry = ai_lower_text(input);
+                retry.starts_with("retry the same ") && !editor.aiToolPlan
+                && chat.latestCompletionRequestKind == AiDeferredRequestKind::Tooling
+                && !editor.aiToolBoundRequest.empty()
+                && ai::project_lifecycle_request_tool(editor.aiToolBoundRequest) == "project.create")
+            {
+                // Retain the typed failed-tool owner, not the generic scene
+                // authoring fallback for a natural-language correction.
+                const auto generation = editor.projectLifecycle.evidence().generations.selected_project.generation;
+                if (!ai::project_tool_selection_matches(editor.aiToolProjectId, editor.aiToolProjectRoot,
+                        editor.aiToolProjectGeneration, editor.projectId, editor.projectRoot, generation))
+                {
+                    chat.append_status("The project selection changed after the failed tool request. Start a fresh project request; nothing was retried.");
+                    return true;
+                }
+                if (editor_ai_source_intent::requires_engine_source(input))
+                    return dispatch_ai_intent(AiChatIntent::EngineSource, input);
+                std::string corrected = editor.aiToolBoundRequest;
+                corrected += "\nUser correction: ";
+                corrected.append(input);
+                return dispatch_ai_intent(AiChatIntent::ProjectTooling, corrected, true);
             }
             // The header button is now only an explicit one-shot override.
             // Normal messages are routed by intent automatically.
@@ -238,10 +359,34 @@
             && !editor.aiAuthoringAwaitingReply
             && !editor.aiAuthoringApplyPending
             && !goalPlanAwaitingApproval
+            && !editor.aiToolAwaitingReply
+            && !(editor.aiToolPlan && !editor.aiToolPlanApplied)
+            && editor.aiToolExecution.empty()
+            && !editor.aiPackageRequest
+            && !editor.aiGoalTools.waiting
+            && !editor.aiIntentClarificationPending
             && !source_model_slot_busy(editor, chat)
             && !ai_source_native_work_active(editor, chat))
         {
-            (void)request_ai_authoring_plan(true);
+            if (!editor.aiGoalTools.enabled)
+                (void)request_ai_authoring_plan(true);
+            else
+            {
+                auto& sequence = editor.aiGoalTools;
+                const auto generation = editor.projectLifecycle.evidence().generations.selected_project.generation;
+                if (sequence.stopped || sequence.operation().empty()
+                    || !sequence.matches(editor.projectId, editor.projectRoot, generation))
+                {
+                    editor.aiGoalRunning = editor.aiGoalPlanNextQueued = false;
+                    chat.append_status("Project goal paused: its project changed, an operation failed, or all reviewed stages completed.");
+                }
+                else
+                {
+                    editor.aiToolRequest = sequence.next_request(editor.aiGoal);
+                    editor.aiGoalPlanNextQueued = false;
+                    if (!request_ai_tool_plan()) editor.aiGoalRunning = false;
+                }
+            }
         }
 
         // A message may wait while any selected model is being prepared, but
@@ -303,6 +448,16 @@
         };
         const bool queuedProviderReady = queue::ready_to_dispatch(
             queuedStatus, std::chrono::steady_clock::now());
+        // This admits only intent routing into the deferred approval owner,
+        // never inference. A cached idle model must not leave Send waiting for
+        // the very reload approval that the deferred request still needs to show.
+        const bool queuedIdleReloadConsentReady = queuedTransport == queue::Transport::native
+            && queuedNative.selected && !queuedNative.loaded && !queuedNative.busy
+            && queuedNative.idle_reload_available;
+        const bool queuedImageHostAction = ai::image_generation_request(chat.queuedInput)
+            || (editor.aiToolPlan&&!editor.aiToolPlanApplied
+                &&editor.aiToolPlan.plan.call.tool=="asset.image.generate"
+                &&ai_chat_confirmation(chat.queuedInput).has_value());
         // Never leave a queued turn parked silently after a provider/model
         // change. Preserve the draft rather than dispatching on an unintended
         // model, or waiting an hour while the CPU/GPU sit idle.
@@ -324,8 +479,11 @@
             && !editor.aiAuthoringApplyPending
             && !editor.aiAuthoringAwaitingReply
             && !ai_source_native_work_active(editor, chat);
-        const auto queuedBlock = queue::dispatch_block_reason(queuedStatus,
-            queuedMethodMatches, queuedModelMatches, std::chrono::steady_clock::now());
+        const auto queuedBlock = queuedTransport == queue::Transport::native
+            && queuedMethodMatches && queuedModelMatches && !queuedNative.idle_reload_error.empty()
+                ? std::string_view{queuedNative.idle_reload_error}
+                : queue::dispatch_block_reason(queuedStatus,
+                    queuedMethodMatches, queuedModelMatches, std::chrono::steady_clock::now());
         // One actionable diagnosis per state change, after a short grace
         // period. Do not claim a queued prompt is generating or alter weights.
         if (!chat.queuedInput.empty() && chat.queuedInputAt != std::chrono::steady_clock::time_point{}
@@ -343,7 +501,7 @@
             }
         }
         if (queueOwnerReady && queuedMethodMatches
-            && queuedModelMatches && queuedProviderReady)
+            && queuedModelMatches && (queuedProviderReady || queuedIdleReloadConsentReady || queuedImageHostAction))
         {
             if (auto queued = chat.take_queued_input())
             {

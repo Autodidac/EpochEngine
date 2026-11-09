@@ -8,6 +8,11 @@ import posixpath
 import re
 import tarfile
 
+if __package__:
+    from .audit_epoch_runtime_provenance import audit_binary
+else:
+    from audit_epoch_runtime_provenance import audit_binary
+
 
 def audit(archive):
     archive = Path(archive)
@@ -16,7 +21,10 @@ def audit(archive):
         raise ValueError("Invalid Linux runtime archive name")
     version = match[1]
     with archive.open('rb') as source:
-        digest = hashlib.file_digest(source, 'sha256').hexdigest()
+        hasher = hashlib.sha256()
+        for block in iter(lambda: source.read(1024 * 1024), b''):
+            hasher.update(block)
+        digest = hasher.hexdigest()
     expected = digest + '  ' + archive.name
     if Path(str(archive)+'.sha256').read_text(encoding='ascii').strip() != expected:
         raise ValueError("Archive checksum mismatch")
@@ -67,6 +75,10 @@ def audit(archive):
                 header = package.extractfile(member).read(20)
                 if len(header)!=20 or header[:6] != b'\x7fELF\x02\x01' or header[18:20] != b'\x3e\x00':
                     raise ValueError("Runtime is not an ELF x86-64 binary")
+            if (receipt['edition'] == 'epoch.public.github.v1' and member.isfile()
+                    and (member.name == prefix+'/epoch' or path.parts[1:2] == ('lib',))):
+                with package.extractfile(member) as stream:
+                    audit_binary(stream, member.name)
             if member.name == prefix+'/epoch-distribution.json':
                 if member.size > 4096: raise ValueError("Oversized edition marker")
                 identity = json.load(package.extractfile(member))

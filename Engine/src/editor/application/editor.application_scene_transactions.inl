@@ -23,7 +23,10 @@
                     .scale = source.scale,
                     .visible = source.visible,
                     .editorOnly = source.editor_only,
-                    .textureMaterial = source.texture_material
+                    .textureMaterial = source.texture_material,
+                    .meshAsset = source.mesh_asset,
+                    .positionAnchor = source.position_anchor,
+                    .forestRegion = source.forest_region
                 });
             }
             state.sceneDocumentRevision = projection.snapshot.revision;
@@ -87,7 +90,10 @@
                 .scale = entity.scale,
                 .visible = entity.visible,
                 .editor_only = entity.editorOnly,
-                .texture_material = entity.textureMaterial
+                .texture_material = entity.textureMaterial,
+                .mesh_asset = entity.meshAsset,
+                .position_anchor = entity.positionAnchor,
+                .forest_region = entity.forestRegion
             };
         }
 
@@ -136,6 +142,8 @@
                     "Scene transaction '{}' rejected (code {}).",
                     label,
                     static_cast<unsigned>(committed.code));
+                if (committed.code == epochengine::authoring::scene::ResultCode::invalid_transform)
+                    state.projectStatus += " Check finite transforms. Terrain with attached trees requires positive, proportional scale changes; uneven scaling would shear the trees.";
                 push_editor_log(state, "[scene] " + state.projectStatus);
                 return false;
             }
@@ -150,6 +158,42 @@
                 return false;
             }
             return true;
+        }
+
+        [[nodiscard]] std::optional<scene::Vec3> parse_editor_ambient_channels(
+            const std::array<std::string, 3>& channels) noexcept
+        {
+            scene::Vec3 ambient{};
+            for (std::size_t index = 0u; index < ambient.size(); ++index)
+            {
+                const auto& text = channels[index];
+                const auto parsed = std::from_chars(
+                    text.data(), text.data() + text.size(), ambient[index]);
+                if (parsed.ec != std::errc{} || parsed.ptr != text.data() + text.size())
+                    return {};
+            }
+            return scene::valid_scene_ambient(ambient)
+                ? std::optional<scene::Vec3>{ambient} : std::nullopt;
+        }
+
+        [[nodiscard]] bool set_editor_scene_ambient(
+            EditorState& state, const scene::Vec3& ambient)
+        {
+            if (!scene::valid_scene_ambient(ambient))
+            {
+                state.projectStatus = "Ambient RGB channels must be finite and nonnegative.";
+                return false;
+            }
+            if (!state.sceneDocument.initialized()
+                && !rebuild_editor_scene_document(state, "Initialize scene environment"))
+                return false;
+            auto settings = state.sceneDocument.project_settings();
+            if (settings.ambient == ambient)
+                return true;
+            settings.ambient = ambient;
+            const std::array<authoring::scene::SceneOperation, 1> operations{
+                authoring::scene::ProjectSettingsChangedOperation{settings}};
+            return apply_editor_scene_transaction(state, operations, "Edit ambient lighting");
         }
 
         [[nodiscard]] bool create_editor_scene_entity(
@@ -192,6 +236,15 @@
             const authoring::scene::SceneObjectDescriptor& next)
         {
             namespace document = authoring::scene;
+            if (current.descriptor.texture_material != next.texture_material)
+                operations.emplace_back(document::TextureMaterialComponentChangedOperation{
+                    .object = current.handle, .value = next.texture_material});
+            if (current.descriptor.mesh_asset != next.mesh_asset
+                || current.descriptor.position_anchor != next.position_anchor
+                || current.descriptor.forest_region != next.forest_region)
+                operations.emplace_back(document::GeometryComponentChangedOperation{
+                    .object = current.handle, .mesh_asset = next.mesh_asset,
+                    .position_anchor = next.position_anchor, .forest_region = next.forest_region});
             if (current.descriptor.metadata != next.metadata)
             {
                 operations.emplace_back(document::ObjectMetadataChangedOperation{
@@ -250,7 +303,8 @@
         [[nodiscard]] bool create_editor_scene_entities(
             EditorState& state,
             std::vector<EditorEntity> entities,
-            std::string_view label)
+            std::string_view label,
+            const std::function<bool()>& beforeCommit = {})
         {
             if (entities.empty())
                 return true;
@@ -310,7 +364,24 @@
                 if (!selected)
                     selected = candidate;
             }
-            return apply_editor_scene_transaction(state, operations, label, selected);
+            if (beforeCommit && !beforeCommit())
+                return false;
+            if(!apply_editor_scene_transaction(state, operations, label, selected))return false;
+            // Preserve the admitted immutable payload across the document mirror
+            // projection; each instance still has its own persistent mesh reference.
+            for(auto& projected:state.entities)
+                if(projected.meshAsset)
+                    for(const auto& created:entities)
+                        if(created.meshAsset==projected.meshAsset&&created.meshSnapshot
+                            &&created.meshSnapshot->key().words==projected.meshAsset->artifact_key
+                            &&created.meshSnapshot->vertices().size()==projected.meshAsset->vertex_count
+                            &&created.meshSnapshot->indices().size()==projected.meshAsset->index_count)
+                        {
+                            projected.meshSnapshot=created.meshSnapshot;
+                            projected.meshLoadAttempted=true;
+                            break;
+                        }
+            return true;
         }
 
         [[nodiscard]] bool synchronize_editor_scene_category(
@@ -512,6 +583,18 @@
 
         [[nodiscard]] bool undo_editor_scene(EditorState& state)
         {
+            // A queued brush stamp must not commit after the user's Undo and
+            // appear to restore the very area they just removed.
+            if(state.forestSurfacePending)
+            {
+                if(state.taskScheduler)(void)state.taskScheduler->cancel(state.forestSurfaceCancellation);
+                state.forestSurfacePlacement.reset();
+                state.forestBrushTerrain=scene::kInvalidSceneObjectId;
+                state.forestBrushLastDirection.reset();
+            }
+            if (const auto grouped = try_grouped_gui_world_history(
+                    state, {1u}, editor_authoring_history::Direction::undo))
+                return *grouped;
             const auto result = state.sceneDocument.undo();
             if (!result)
                 return false;
@@ -520,6 +603,9 @@
 
         [[nodiscard]] bool redo_editor_scene(EditorState& state)
         {
+            if (const auto grouped = try_grouped_gui_world_history(
+                    state, {1u}, editor_authoring_history::Direction::redo))
+                return *grouped;
             const auto result = state.sceneDocument.redo();
             if (!result)
                 return false;
@@ -562,7 +648,10 @@
                 .scale = entity.scale,
                 .visible = entity.visible,
                 .editor_only = entity.editorOnly,
-                .texture_material = entity.textureMaterial
+                .texture_material = entity.textureMaterial,
+                .mesh_asset = entity.meshAsset,
+                .position_anchor = entity.positionAnchor,
+                .forest_region = entity.forestRegion
             };
         }
 
@@ -578,7 +667,10 @@
                 .scale = entity.scale,
                 .visible = entity.visible,
                 .editorOnly = entity.editor_only,
-                .textureMaterial = entity.texture_material
+                .textureMaterial = entity.texture_material,
+                .meshAsset = entity.mesh_asset,
+                .positionAnchor = entity.position_anchor,
+                .forestRegion = entity.forest_region
             };
         }
 
@@ -595,4 +687,3 @@
                 .editorOnly = entity.editor_only
             };
         }
-

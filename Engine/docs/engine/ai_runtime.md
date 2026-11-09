@@ -1,5 +1,70 @@
 # Epoch native AI runtime
 
+## Shared downloaded weights — October28
+
+Public and Development share one weight cache:
+`%LOCALAPPDATA%/EpochEngine/AI/model-cache` on Windows. Linux uses the matching
+`EpochEngine/AI/model-cache` below XDG data home or `~/.local/share`.
+`ai.epoch_native_storage.hpp` owns this default. The two editions still keep
+separate conversations, approvals, model selections, workspaces and learning
+state. A shared model file does not grant Public access to Development source
+or private state, and no weights enter source/release archives by default.
+
+The operator's two Flash repositories were fully SHA256-verified before cleanup.
+They were duplicate copies of one three-shard model plus its vision projection,
+not three model versions. One canonical repository remains. Legacy Development
+and Public weight paths are compatibility links, so saved paths still resolve
+without copying the payload again. About74.3GiB was recovered. Settings and
+saved work were untouched. Evidence:
+`Artifacts/Reports/shared-flash-cache-oct28/`.
+The shared-path and separate-state contract passes actual Debug/Release
+consumers with both physical edition markers. Integrated Development Debug and
+Release builds and full contracts now pass, including child binding and ownership
+(`e6139aea…968091` / `27c125d4…f089de`). The operator confirms the folders now show about
+74 GiB. Cache size must count each physical payload once, including when snapshot
+links and legacy aliases reach it; the actual-owner accounting tests pass.
+
+Never remove a numbered GGUF shard as though it were an old version. Admit a
+complete set, reuse its actual cache identity and verify inactive ownership
+before a user-authorized migration. Discover known legacy weight locations
+without copying private profiles or downloading a second complete set.
+
+### Editor and project model ownership
+
+One user-level weight store serves the Editor, generated projects and candidate
+previews. A private child home is for its settings and conversations; it must not
+become another model download location. The trusted parent captures the shared
+inputs before preparing that private home. The child borrows the existing SDK
+and admitted library paths. Missing inputs lead back to the parent Model Manager;
+they do not trigger child downloads, runtime copies or alternate-cache searches.
+A model-free project can still launch when no model or SDK is installed.
+These are input and lifecycle rules, not OS confinement or a new shared server.
+
+Sharing files does not share a conversation or prove that memory was freed.
+The native manager's ownership lease covers all its resident model processes,
+and another application must wait until those processes retire. Merely pausing
+inference does not release the weights or attention cache. Preserve active jobs,
+selection and actual loaded settings. Never kill another application's model to
+claim the lease.
+
+The existing `run_asset_stage` transaction has passed one real headless 9B test:
+the old worker retired before the callback, the actual loaded configuration was
+restored in a new worker, one completion returned `OK`, and all owned processes
+retired. The saved profile remained unchanged and no weights or SDK were copied.
+Receipt: `Artifacts/Reports/native-asset-handoff-runtime-oct28/`.
+The subsequent real shared-user roundtrip also passes against the final Release:
+parent model retires, an owned headless child loads the same existing 9B file and
+SDK with separate private state, the child retires, and the parent restores its
+exact loaded configuration. A separate CPU process first proves that the lease
+is busy under the original live model. Original profile bytes are unchanged;
+two tiny completions total 34 input / 4 output tokens, with no paid calls. Total
+runtime was 11.891 seconds, all owned processes retired, and no model/SDK copies
+were created. Receipt: `shared-child-roundtrip/` below the same report root.
+This does not yet prove automatic Editor → project → Editor handoff. That requires
+the project lifecycle to request ownership, preserve the coding session, and
+restore it only after the child model workers have retired. Projects with AI
+disabled must not evict the Editor's models. Native GUI acceptance remains open.
+
 The operator owns the incorporated backend and authorizes Epoch source ownership.
 Implementation and private headers live under Engine/src/ai/native, lifecycle
 integration under ai.native_runtime, and model-worker resources under
@@ -93,3 +158,17 @@ Validate identical prompt/output lengths, prompt latency and measured decode
 tokens separately. Full GPU KV tuning, precise GGUF layer/KV metadata sizing and
 same-prompt hardware benchmarks remain acceptance work.
 
+
+## Model Manager redesign — October26 operator references
+
+Use the supplied LM Studio and Bionic screenshots as layout references, not as backend capability evidence or instructions to copy their system prompt. Keep one Model Manager with a readable model library and selected-model details; allow resizing and independent scrolling, with compact, consistently aligned action buttons. Preserve explicit local/provider/Codex selection and show the destination before Send.
+
+Group settings into Info, Load and Inference. Within them use clear sections: Context and performance; Generation; Reasoning; Memory; Speculative decoding; Advanced. Include short help descriptions and units. Distinguish saved defaults from live settings; explain when reload is required and never reload during an active task. Show model identity, quantization/file size, supported versus actually loaded context, image/projector status, resource estimates and measured usage. Do not use project-package models as if they were host Assistant installations.
+
+Automatic hardware settings is the intended simple default, with manual overrides available. Auto must compute within known model limits, usable RAM/VRAM after renderer and other residents, KV/cache/intermediate costs, task needs and response reserve. Show the resolved settings and reason. Do not equate largest context, highest GPU percentage or most threads with fastest performance. Current runtime automatic policy does NOT yet automatically size context: saved context remains explicit (normally81920). Adding an Auto label without implementing/admitting that policy is not acceptance. Never silently shrink an active coding session or its admitted source.
+
+Existing controls to retain and make readable: GPU automatic fit/exact layers, context/slots/reserve/compaction, decode and batch CPU threads, logical/physical batch sizes, Flash Attention, K/V cache formats and placement, prompt/expert/host memory budgets and compatible draft-model settings. Add requested generation/reasoning/memory controls only through verified backend options and profile persistence: temperature, optional response limit, stop strings, supported thinking/budget, seed, sampling/penalties, mmap/keep-resident,20-minute idle timeout, cache checkpoints, RoPE overrides and speculative decoding. Unsupported items must be unavailable with a reason, not cosmetic switches. Show experimental status only where justified. Advanced argument overrides must not defeat process ownership, paths, approval or network boundaries.
+
+Context overflow must preserve task/source integrity: visible compaction/checkpoint or a reported limit, never silently discard code from the middle merely because a reference UI offers that mode. Keep model-specific settings separate from conversation/system instructions and prevent prompt text from granting tool or own-source permissions.
+
+Acceptance: normal/compressed windows, keyboard/focus/scroll, selectable readable values, draft cancel/save/reload, saved/live differences, Auto/manual transitions, unsupported options, insufficient memory, idle expiry and a real27B image/file request with correct image receipt. Screenshots alone and CPU fixtures do not establish native GUI acceptance.

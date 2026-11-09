@@ -19,8 +19,8 @@ export namespace epochengine::gui_lib
     inline constexpr std::string_view library_name = "EpochGui";
     inline constexpr int version_major = 0;
     inline constexpr int version_minor = 90;
-    inline constexpr int version_revision = 0;
-    inline constexpr std::string_view version_string = "0.90.0";
+    inline constexpr int version_revision = 2;
+    inline constexpr std::string_view version_string = "0.90.2";
 
     enum class SemanticTone : std::uint8_t
     {
@@ -105,10 +105,10 @@ export namespace epochengine::gui_lib
     // specific model routing and message contents remain outside this module.
     namespace chat_surface
     {
-        inline constexpr float message_gap = 20.0f;
+        inline constexpr float message_gap = 8.0f;
         inline constexpr float message_inset_x = 19.0f;
-        inline constexpr float message_inset_y = 15.0f;
-        inline constexpr float run_header_height = 30.0f;
+        inline constexpr float message_inset_y = 8.0f;
+        inline constexpr float run_header_height = 24.0f;
         inline constexpr float run_details_padding = 12.0f;
         inline constexpr float composer_radius = 20.0f;
         inline constexpr float user_bubble_radius = 15.0f;
@@ -167,6 +167,7 @@ export namespace epochengine::gui_lib
         bool movable{ true };
         bool resizable{ true };
         bool closable{ true };
+        bool constrain_to_viewport{};
     };
 
     struct FloatingWindowInput
@@ -1485,7 +1486,7 @@ export namespace epochengine::gui_lib
             {
                 layout.close_button = Rect{
                     {button.position.x + button.size.x - closeExtent,
-                     button.position.y + (button.size.y - closeExtent) * 0.5f},
+                     button.position.y},
                     {closeExtent, closeExtent}};
             }
             layout.active = active;

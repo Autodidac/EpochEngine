@@ -105,6 +105,8 @@ namespace epochengine::core
         int width{ 720 };
         int height{ 440 };
         bool start_docked{ false };
+        // Resolve an existing routed pane only; never create or reparent one.
+        bool activate_existing_only{ false };
     };
 
     export enum class RoutedPanelDockTarget : std::uint8_t
@@ -165,6 +167,7 @@ namespace epochengine::core
     export class MultiContextManager
     {
     public:
+        ~MultiContextManager() noexcept;
         static void ShowConsole();
 
         bool Initialize(
@@ -197,7 +200,13 @@ namespace epochengine::core
             std::uintptr_t native_window,
             std::uint64_t process_id,
             std::string route,
-            RoutedPanelDockTarget dock_target);
+            RoutedPanelDockTarget dock_target,
+            const std::shared_ptr<Context>& viewport_context = {});
+        // A viewport attachment does not consume a context-grid slot. Refresh
+        // only its admitted lease; hidden editor surfaces keep the child owned.
+        [[nodiscard]] bool UpdateExternalProcessWindowViewport(
+            std::uintptr_t native_window, std::uint64_t process_id,
+            std::string_view route, bool visible);
         // Re-observe an existing native attachment; never create/reparent a
         // window or infer rendered pixels from a live process/window identity.
         [[nodiscard]] bool IsExternalProcessWindowAttached(
@@ -249,10 +258,18 @@ namespace epochengine::core
         WindowData* findWindowByContext(const std::shared_ptr<core::Context>& ctx);
         const WindowData* findWindowByContext(const std::shared_ptr<core::Context>& ctx) const;
 
+        // Native messages invalidate render-thread observations without waiting
+        // on the registry mutex or making compositor calls in a window procedure.
+        void invalidate_native_window_state() noexcept
+        {
+            nativeWindowStateGeneration.fetch_add(1u, std::memory_order_release);
+        }
+
     private:
         std::vector<std::unique_ptr<WindowData>> windows;
         std::atomic<bool> running{ false };
         std::atomic<std::uint32_t> contextReplacementHolds{ 0 };
+        std::atomic_uint64_t nativeWindowStateGeneration{ 0 };
         mutable std::recursive_mutex windowsMutex;
         DWORD uiThreadId = 0;
 
@@ -275,6 +292,7 @@ namespace epochengine::core
     export class MultiContextManager
     {
     public:
+        ~MultiContextManager() noexcept;
         using ResizeCallback = std::function<void(int, int)>;
         using RenderCommand = std::function<void()>;
 
@@ -304,7 +322,10 @@ namespace epochengine::core
             std::uintptr_t,
             std::uint64_t,
             std::string,
-            RoutedPanelDockTarget) { return false; }
+            RoutedPanelDockTarget,
+            const std::shared_ptr<Context>& = {}) { return false; }
+        [[nodiscard]] bool UpdateExternalProcessWindowViewport(
+            std::uintptr_t, std::uint64_t, std::string_view, bool) { return false; }
         [[nodiscard]] bool IsExternalProcessWindowAttached(
             std::uintptr_t, std::uint64_t, std::string_view) const noexcept { return false; }
         void RemoveExternalProcessWindow(std::uintptr_t, bool = false) {}
@@ -376,6 +397,10 @@ namespace epochengine::core
     {
     }
     export void HandleX11Configure(::Window window, int width, int height);
+    // SDK-owned button events return through the manager's existing X11 queue.
+    // button uses X11 numbers; zero carries wheel_delta in 1/120-line units.
+    export void QueueX11PointerInput(HWND window, int button, bool pressed,
+        int x, int y, int wheel_delta = 0) noexcept;
     export void RequestActiveParentLayout() noexcept;
 
 #else
@@ -383,6 +408,7 @@ namespace epochengine::core
     export class MultiContextManager
     {
     public:
+        ~MultiContextManager() noexcept = default;
         using ResizeCallback = std::function<void(int, int)>;
         using RenderCommand = std::function<void()>;
 
@@ -397,7 +423,10 @@ namespace epochengine::core
             std::uintptr_t,
             std::uint64_t,
             std::string,
-            RoutedPanelDockTarget) { return false; }
+            RoutedPanelDockTarget,
+            const std::shared_ptr<Context>& = {}) { return false; }
+        [[nodiscard]] bool UpdateExternalProcessWindowViewport(
+            std::uintptr_t, std::uint64_t, std::string_view, bool) { return false; }
         [[nodiscard]] bool IsExternalProcessWindowAttached(
             std::uintptr_t, std::uint64_t, std::string_view) const noexcept { return false; }
         void RemoveExternalProcessWindow(std::uintptr_t, bool = false) {}

@@ -46,7 +46,8 @@
                 return false;
 
 #if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
-            if (state.outlinerToolTab == OutlinerToolTab::TileMap
+            if ((state.mainSurface == EditorMainSurface::Game2D
+                    ? !state.game2DGuiWorkspace : state.outlinerToolTab == OutlinerToolTab::TileMap)
                 && (state.tileMapWorkspace
                     || state.mainSurface == EditorMainSurface::Game2D))
             {
@@ -144,7 +145,8 @@
                     .scale = source.scale,
                     .visible = source.visible,
                     .editorOnly = source.editor_only,
-                    .textureMaterial = source.texture_material
+                    .textureMaterial = source.texture_material,
+                    .meshAsset = source.mesh_asset
                 });
             }
 
@@ -197,22 +199,36 @@
             return root / (project_artifact_stem(projectRoot) + ".vcxproj");
         }
 
-        [[nodiscard]] std::filesystem::path project_output_exe_path(std::string_view projectRoot)
+        [[nodiscard]] std::filesystem::path project_output_exe_path(
+            std::string_view projectRoot, std::string_view configuration = "Debug")
         {
+            if (!editor_project_build_configuration_supported(configuration)) return {};
             const std::filesystem::path root = resolve_editor_path(std::filesystem::path{ projectRoot });
-            return root / "build" / "bin" / "windows" / "Debug" / "x64" / (project_artifact_stem(projectRoot) + ".exe");
+#if defined(_WIN32)
+            return root / "Artifacts" / "Runtime" / "windows" / configuration / "x64" / (project_artifact_stem(projectRoot) + ".exe");
+#else
+            return root / "Artifacts" / "Runtime" / "linux" / configuration / "x64" / project_artifact_stem(projectRoot);
+#endif
         }
 
-        [[nodiscard]] std::vector<std::filesystem::path> project_output_exe_candidates(std::string_view projectRoot)
+        [[nodiscard]] std::vector<std::filesystem::path> project_output_exe_candidates(
+            std::string_view projectRoot, std::string_view configuration = "Debug")
         {
+            if (!editor_project_build_configuration_supported(configuration)) return {};
             const std::filesystem::path root = resolve_editor_path(std::filesystem::path{ projectRoot });
-            const std::filesystem::path outputDir = root / "build" / "bin" / "windows" / "Debug" / "x64";
+#if defined(_WIN32)
+            const std::filesystem::path outputDir = root / "Artifacts" / "Runtime" / "windows" / configuration / "x64";
+#else
+            const std::filesystem::path outputDir = root / "Artifacts" / "Runtime" / "linux" / configuration / "x64";
+#endif
             std::vector<std::filesystem::path> candidates;
             const auto add_candidate = [&](std::string name) {
                 if (name.empty())
                     return;
+#if defined(_WIN32)
                 if (!name.ends_with(".exe"))
                     name += ".exe";
+#endif
                 const auto path = outputDir / name;
                 for (const auto& candidate : candidates)
                 {
@@ -223,27 +239,41 @@
             };
 
             add_candidate(project_artifact_stem(projectRoot));
-            add_candidate(root.filename().string());
-            add_candidate("EpochEngine");
-            add_candidate("EpochEditor");
             return candidates;
         }
 
-        [[nodiscard]] std::filesystem::path project_existing_output_exe_path(std::string_view projectRoot)
+        [[nodiscard]] std::filesystem::path project_existing_output_exe_path(
+            std::string_view projectRoot, std::string_view configuration = "Debug")
         {
             std::error_code ec;
-            for (const auto& candidate : project_output_exe_candidates(projectRoot))
+            for (const auto& candidate : project_output_exe_candidates(projectRoot, configuration))
             {
                 if (std::filesystem::exists(candidate, ec) && !ec)
                     return candidate;
                 ec.clear();
             }
-            return project_output_exe_path(projectRoot);
+            return project_output_exe_path(projectRoot, configuration);
         }
 
-        [[nodiscard]] std::filesystem::path project_build_log_path(std::string_view projectRoot)
+        [[nodiscard]] std::filesystem::path project_build_log_path(
+            std::string_view projectRoot, std::string_view configuration = "Debug")
         {
-            return resolve_editor_path(std::filesystem::path{ projectRoot }) / "build" / "logs" / "build-debug-x64.log";
+            if (!editor_project_build_configuration_supported(configuration)) return {};
+#if defined(_WIN32)
+            const auto filename = configuration == "Release" ? "build-release-x64.log" : "build-debug-x64.log";
+#else
+            const auto filename = configuration == "Release" ? "build-linux-release.log" : "build-linux-debug.log";
+#endif
+            return resolve_editor_path(std::filesystem::path{ projectRoot }) / "Artifacts" / "Reports" / filename;
+        }
+
+        [[nodiscard]] std::filesystem::path project_build_transcript_for_display(const EditorState& editor)
+        {
+            const auto& retained = editor.projectBuildTranscript;
+            if (retained.project == editor.projectLifecycle.evidence().generations.selected_project
+                && retained.configuration == editor.projectBuildConfiguration && !retained.path.empty())
+                return std::filesystem::path{retained.path};
+            return project_build_log_path(editor.projectRoot, editor.projectBuildConfiguration);
         }
 
         [[nodiscard]] std::filesystem::path project_notes_path(std::string_view projectRoot)
@@ -313,7 +343,7 @@
             out << "- Manifest: " << editor.projectManifest << "\n";
             out << "- Scene: " << editor.projectScenePath << "\n";
             out << "- Active script: " << editor.activeScript << "\n";
-            out << "- Build log: " << resolve_editor_path(project_build_log_path(editor.projectRoot)).generic_string() << "\n";
+            out << "- Build log: " << resolve_editor_path(project_build_transcript_for_display(editor)).generic_string() << "\n";
         }
 
         [[nodiscard]] std::string ai_build_path_stamp(const std::filesystem::path& path)

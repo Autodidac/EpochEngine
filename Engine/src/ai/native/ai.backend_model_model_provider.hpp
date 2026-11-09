@@ -10,7 +10,9 @@
 #include <stop_token>
 #include <optional>
 #include <vector>
+#include <utility>
 #include <nlohmann/json.hpp>
+#include "../ai.model_behavior.hpp"
 #include "ai.backend_core_error.hpp"
 
 namespace epoch_ai::model {
@@ -68,6 +70,30 @@ struct ModelResponse {
     std::string model;
 };
 
+// The provider's reported name may be a GGUF filename or an API alias. Keep it
+// for diagnostics; routing evidence uses the selection captured by the host.
+inline void retain_host_model_selection(ModelResponse& response, std::string_view selected) {
+    if (!response.raw.is_object())
+        response.raw = json{{"provider_payload", std::move(response.raw)}};
+    response.raw["epoch_host_selection_key"] = selected;
+}
+
+[[nodiscard]] inline std::string host_model_selection_key(
+    const ModelResponse& response, std::string_view requested) {
+    std::string selected{requested};
+    if (response.raw.is_object()) {
+        const auto key = response.raw.find("epoch_host_selection_key");
+        if (key != response.raw.end()) {
+            if (!key->is_string()) return {};
+            selected = key->get<std::string>();
+            if (!requested.empty() && requested != "auto" && selected != requested) return {};
+        }
+    }
+    if (selected.empty() || selected == "auto"
+        || selected.find_first_of("\r\n\0", 0, 3) != std::string::npos) return {};
+    return selected;
+}
+
 enum class StreamEventKind {
     text_delta,
     reasoning_delta,
@@ -104,6 +130,9 @@ public:
     [[nodiscard]] virtual std::optional<double> observed_latency_ms(
         std::string_view, std::string_view) const { return std::nullopt; }
     [[nodiscard]] virtual bool is_model_resident(std::string_view) const { return false; }
+    [[nodiscard]] virtual bool requires_explicit_selection(std::string_view model) const {
+        return epochengine::ai::model_behavior::classify_text(model).flagged();
+    }
     [[nodiscard]] virtual std::expected<ModelResponse, core::Error> complete(const ModelRequest&) = 0;
     [[nodiscard]] virtual std::expected<ModelResponse, core::Error> complete_stream(const ModelRequest& request, const StreamCallback& callback) {
         auto response = complete(request);

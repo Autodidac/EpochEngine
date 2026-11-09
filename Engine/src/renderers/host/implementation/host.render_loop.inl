@@ -201,65 +201,85 @@
             return epochengine::perf::with_frame_pacing_override(
                 startup, win.editorFramePacingOverride);
         };
+        epochengine::rendercontext::WindowObservation cachedNativeObservation{};
+        HWND sampledObservedWindow{};
+        std::uint64_t sampledNativeGeneration{}, sampledResizeGeneration{};
+        HostPhaseClock::time_point nativeObservationSampleTime{};
+        bool nativeObservationSampled{};
         const auto resolveFrameWindowState = [&]() noexcept
         {
             const auto queryStarted = measureHostPhases ? HostPhaseClock::now() : HostPhaseClock::time_point{};
-            HWND observedWindow = win.host_hwnd ? win.host_hwnd : win.hwnd;
-            HWND rootWindow = observedWindow
-                ? ::GetAncestor(observedWindow, GA_ROOT)
-                : nullptr;
-            if (!rootWindow)
-                rootWindow = observedWindow;
-
-            const bool validWindow = rootWindow
-                && ::IsWindow(rootWindow) != FALSE;
-            const HWND foreground = ::GetForegroundWindow();
-            DWORD cloaked = 0u;
-            const auto cloakStarted = measureHostPhases ? HostPhaseClock::now() : HostPhaseClock::time_point{};
-            const HRESULT cloakResult = validWindow
-                ? ::DwmGetWindowAttribute(
-                    rootWindow,
-                    DWMWA_CLOAKED,
-                    &cloaked,
-                    sizeof(cloaked))
-                : E_FAIL;
-            const auto cloakFinished = measureHostPhases ? HostPhaseClock::now() : HostPhaseClock::time_point{};
-            const UINT dpi = validWindow ? ::GetDpiForWindow(rootWindow) : 0u;
-            const auto dpiFinished = measureHostPhases ? HostPhaseClock::now() : HostPhaseClock::time_point{};
-            const bool minimized = validWindow
-                && ::IsIconic(rootWindow) != FALSE;
-
-            epochengine::rendercontext::WindowObservation observation{};
-            observation.logical_width = minimized ? 0 : (std::max)(0, win.width);
-            observation.logical_height = minimized ? 0 : (std::max)(0, win.height);
-            observation.framebuffer_width = minimized
-                ? 0 : (std::max)(0, ctx->framebufferWidth);
-            observation.framebuffer_height = minimized
-                ? 0 : (std::max)(0, ctx->framebufferHeight);
-            observation.dpi_milli = dpi > 0u
-                ? static_cast<std::uint32_t>((dpi * 1000u + 48u) / 96u)
-                : 1000u;
-            observation.resize_generation =
-                win.resizeGeneration.load(std::memory_order_acquire);
-            observation.visible = !validWindow
-                || ::IsWindowVisible(rootWindow) != FALSE;
-            observation.focused = !validWindow || !foreground
-                || foreground == rootWindow
-                || ::IsChild(rootWindow, foreground) != FALSE;
-            observation.minimized = minimized;
-            observation.occluded = SUCCEEDED(cloakResult) && cloaked != 0u;
-            observation.visibility_known = validWindow;
-            observation.focus_known = validWindow && foreground;
-            observation.minimized_known = validWindow;
-            observation.occlusion_known = SUCCEEDED(cloakResult);
-            observation.dpi_known = dpi > 0u;
-            const auto state = epochengine::rendercontext::resolve_window_state(observation);
-            if (measureHostPhases)
+            struct NativeGeometrySnapshot final
             {
-                hostFrame[hostQuery] = hostMicros(queryStarted, HostPhaseClock::now());
-                hostFrame[hostDwmCloak] = hostMicros(cloakStarted, cloakFinished);
-                hostFrame[hostDpi] = hostMicros(cloakFinished, dpiFinished);
+                HWND observedWindow{};
+                int width{},height{};
+                std::uint64_t resizeGeneration{};
+            } geometry;
+            {
+                // HandleResize publishes this pair and its generation under the
+                // same registry lock. No native calls may occur in this scope.
+                std::scoped_lock lock(windowsMutex);
+                geometry={win.host_hwnd ? win.host_hwnd : win.hwnd,win.width,win.height,
+                    win.resizeGeneration.load(std::memory_order_acquire)};
             }
+            const auto generation=nativeWindowStateGeneration.load(std::memory_order_acquire);
+            const auto now=HostPhaseClock::now();
+            const bool sampleNative=!nativeObservationSampled
+                || sampledObservedWindow!=geometry.observedWindow
+                || sampledResizeGeneration!=geometry.resizeGeneration
+                || sampledNativeGeneration!=generation
+                || now<nativeObservationSampleTime
+                || now-nativeObservationSampleTime>=std::chrono::milliseconds{100};
+            if (measureHostPhases)
+                hostFrame[hostDwmCloak]=hostFrame[hostDpi]=0.0;
+            if (sampleNative)
+            {
+                HWND rootWindow=geometry.observedWindow
+                    ? ::GetAncestor(geometry.observedWindow,GA_ROOT) : nullptr;
+                if (!rootWindow) rootWindow=geometry.observedWindow;
+                const bool validWindow=rootWindow && ::IsWindow(rootWindow)!=FALSE;
+                const HWND foreground=::GetForegroundWindow();
+                DWORD cloaked=0u;
+                const auto cloakStarted=measureHostPhases ? HostPhaseClock::now() : HostPhaseClock::time_point{};
+                const HRESULT cloakResult=validWindow
+                    ? ::DwmGetWindowAttribute(rootWindow,DWMWA_CLOAKED,&cloaked,sizeof(cloaked)) : E_FAIL;
+                const auto cloakFinished=measureHostPhases ? HostPhaseClock::now() : HostPhaseClock::time_point{};
+                const UINT dpi=validWindow ? ::GetDpiForWindow(rootWindow) : 0u;
+                const auto dpiFinished=measureHostPhases ? HostPhaseClock::now() : HostPhaseClock::time_point{};
+                auto& observation=cachedNativeObservation;
+                observation.dpi_milli=dpi>0u ? static_cast<std::uint32_t>((dpi*1000u+48u)/96u) : 1000u;
+                observation.visible=validWindow && ::IsWindowVisible(rootWindow)!=FALSE;
+                observation.focused=validWindow && foreground
+                    && (foreground==rootWindow || ::IsChild(rootWindow,foreground)!=FALSE);
+                observation.minimized=validWindow && ::IsIconic(rootWindow)!=FALSE;
+                observation.occluded=SUCCEEDED(cloakResult) && cloaked!=0u;
+                observation.visibility_known=validWindow;
+                observation.focus_known=validWindow && foreground;
+                observation.minimized_known=validWindow;
+                observation.occlusion_known=validWindow && SUCCEEDED(cloakResult);
+                observation.dpi_known=validWindow && dpi>0u;
+                sampledObservedWindow=geometry.observedWindow;
+                sampledResizeGeneration=geometry.resizeGeneration;
+                sampledNativeGeneration=generation;
+                nativeObservationSampleTime=now;
+                nativeObservationSampled=true;
+                if (measureHostPhases)
+                {
+                    hostFrame[hostDwmCloak]=hostMicros(cloakStarted,cloakFinished);
+                    hostFrame[hostDpi]=hostMicros(cloakFinished,dpiFinished);
+                }
+            }
+            auto observation=cachedNativeObservation;
+            observation.logical_width=observation.minimized ? 0 : (std::max)(0,geometry.width);
+            observation.logical_height=observation.minimized ? 0 : (std::max)(0,geometry.height);
+            // Legacy Context framebuffer publication is unchanged here; this
+            // registry snapshot repairs WindowData's logical geometry race only.
+            observation.framebuffer_width=observation.minimized ? 0 : (std::max)(0,ctx->framebufferWidth);
+            observation.framebuffer_height=observation.minimized ? 0 : (std::max)(0,ctx->framebufferHeight);
+            observation.resize_generation=geometry.resizeGeneration;
+            const auto state=epochengine::rendercontext::resolve_window_state(observation);
+            if (measureHostPhases)
+                hostFrame[hostQuery]=hostMicros(queryStarted,HostPhaseClock::now());
             return state;
         };
         const auto publishFrameWindowState = [&]()
@@ -315,6 +335,10 @@
                     nativeResult);
             coreFrameLimiter.set_plan(framePlan);
             win.editorFramePacingHz.store(framePlan.effective_hz, std::memory_order_relaxed);
+            win.editorNativeVsyncActive.store(
+                framePlan.effective_mode == epochengine::perf::frame_pacing_mode::vsync
+                    && framePlan.native_pacing_active,
+                std::memory_order_release);
             win.uncappedFrameSubmission.store(
                 framePlan.requested_mode == epochengine::perf::frame_pacing_mode::uncapped
                     && framePlan.effective_mode == epochengine::perf::frame_pacing_mode::uncapped

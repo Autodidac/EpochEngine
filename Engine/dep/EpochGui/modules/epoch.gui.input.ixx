@@ -68,6 +68,7 @@ export namespace epochengine::gui_lib::input
         std::array<DigitalState, static_cast<std::size_t>(Key::count)> keys{};
         ModifierState modifiers{};
         std::uint64_t sequence{};
+        std::uint64_t input_source{}; // Opaque host window/view identity; zero is the default.
 
         [[nodiscard]] const DigitalState& pointer(PointerButton button) const noexcept;
         [[nodiscard]] const DigitalState& key(Key key_code) const noexcept;
@@ -80,6 +81,13 @@ export namespace epochengine::gui_lib::input
 
         void reset() noexcept;
         void finish_frame() noexcept;
+        // Opt in to bounded ordered handoff. The default frame() snapshot contract is unchanged.
+        // next_event_frame() preserves button/key/modifier order; adjacent moves may coalesce.
+        // An overflow cancels pending input; the consumer must cancel its active gestures too.
+        static constexpr std::size_t maximum_pending_events = 256;
+        void enable_ordered_events(bool enabled = true) noexcept;
+        [[nodiscard]] bool next_event_frame(InputFrame& output) noexcept;
+        [[nodiscard]] bool events_overflowed() const noexcept;
         void set_pointer_position(Vec2 position) noexcept;
         void add_wheel_delta(Vec2 delta) noexcept;
         void set_pointer_button(
@@ -88,12 +96,55 @@ export namespace epochengine::gui_lib::input
             std::uint8_t click_count = 1) noexcept;
         void set_key(Key key_code, bool down, bool repeated = false) noexcept;
         void set_modifiers(ModifierState modifiers) noexcept;
+        void set_input_source(std::uint64_t source) noexcept;
 
         [[nodiscard]] const InputFrame& frame() const noexcept;
 
     private:
+        enum class EventKind : std::uint8_t { move, button, wheel, key, modifiers, source };
+        struct PendingEvent
+        {
+            EventKind kind{};
+            Vec2 vector{};
+            PointerButton button{};
+            Key key{};
+            ModifierState modifiers{};
+            std::uint64_t source{};
+            bool down{};
+            bool repeated{};
+            std::uint8_t click_count{};
+        };
+        static void clear_transients(InputFrame& frame) noexcept;
+        static void apply_event(InputFrame& frame, const PendingEvent& event) noexcept;
+        [[nodiscard]] bool record_event(const PendingEvent& event) noexcept;
         InputFrame frame_{};
+        InputFrame replay_frame_{};
+        std::array<PendingEvent, maximum_pending_events> events_{};
+        std::size_t event_head_{};
+        std::size_t event_count_{};
+        bool ordered_events_{};
+        bool events_overflowed_{};
     };
+
+    // Deferred popup rendering does not grant input ownership. The adapter
+    // latches these facts before ordinary controls process the frame.
+    struct PopupCapture final
+    {
+        bool selection_open_this_frame{};
+        bool current_selection_owner{};
+        bool application_menu_open_this_frame{};
+        bool application_menu_owner{};
+    };
+
+    [[nodiscard]] bool popup_allows_pointer(PopupCapture capture) noexcept;
+
+    // Window chrome takes its press before child controls. Unhandled body
+    // input is absorbed only after children have had their turn.
+    [[nodiscard]] bool floating_chrome_owns_press(
+        bool inside_window, bool movable, bool title_hovered,
+        bool close_hovered, bool resize_hovered) noexcept;
+    [[nodiscard]] bool floating_absorb_unhandled_pointer(
+        bool inside_window, bool already_consumed) noexcept;
 
     enum class ModalInputMode : std::uint8_t
     {
@@ -101,6 +152,8 @@ export namespace epochengine::gui_lib::input
         bounded,
         blocked_until_clear
     };
+
+    class ScopedInputSuppression;
 
     class ModalInputArbiter final
     {
@@ -123,11 +176,59 @@ export namespace epochengine::gui_lib::input
         [[nodiscard]] bool background_input_allowed() const noexcept;
 
     private:
+        friend class ScopedInputSuppression;
         Rect bounds_{};
         ModalInputMode mode_{ ModalInputMode::inactive };
         bool exclusive_owner_{ false };
         bool inside_owner_{ false };
+        bool suppressed_{};
     };
+
+    // Paint existing controls without taking input. Nested scopes restore only
+    // this gate; modal bounds, ownership and focus remain owned by their caller.
+    class ScopedInputSuppression final
+    {
+    public:
+        explicit ScopedInputSuppression(ModalInputArbiter& owner,
+            bool suppress = true) noexcept;
+        ~ScopedInputSuppression() noexcept;
+        ScopedInputSuppression(const ScopedInputSuppression&) = delete;
+        ScopedInputSuppression& operator=(const ScopedInputSuppression&) = delete;
+    private:
+        ModalInputArbiter* owner_{};
+        bool previous_{};
+    };
+
+    struct PointerDragState final
+    {
+        Vec2 press_position{};
+        bool pending{};
+        bool dragging{};
+    };
+
+    struct PointerDragInput final
+    {
+        Vec2 position{};
+        bool down{};
+        bool pressed{};
+        bool released{};
+        bool press_allowed{};
+        bool cancelled{};
+    };
+
+    struct PointerDragResult final
+    {
+        Vec2 delta{};
+        bool pressed{};
+        bool dragging{};
+        bool released{};
+    };
+
+    // Feed admitted transitions in their existing order. This pure step owns
+    // no event queue, frame loop, native capture or control hit-testing policy.
+    [[nodiscard]] PointerDragResult update_pointer_drag(
+        PointerDragState& state, const PointerDragInput& input,
+        float threshold) noexcept;
 
     struct ContextMenuRequest
     {

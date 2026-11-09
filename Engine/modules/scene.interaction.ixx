@@ -146,27 +146,28 @@ export namespace epochengine::scene_interaction
             const float sinZ = std::sin(z);
             const float cosZ = std::cos(z);
 
-            const Vec3 aroundX{
-                value.x,
-                value.y * cosX - value.z * sinX,
-                value.y * sinX + value.z * cosX
+            const Vec3 aroundZ{
+                value.x * cosZ - value.y * sinZ,
+                value.x * sinZ + value.y * cosZ,
+                value.z
             };
             const Vec3 aroundY{
-                aroundX.x * cosY + aroundX.z * sinY,
-                aroundX.y,
-                -aroundX.x * sinY + aroundX.z * cosY
+                aroundZ.x * cosY + aroundZ.z * sinY,
+                aroundZ.y,
+                -aroundZ.x * sinY + aroundZ.z * cosY
             };
             return {
-                aroundY.x * cosZ - aroundY.y * sinZ,
-                aroundY.x * sinZ + aroundY.y * cosZ,
-                aroundY.z
+                aroundY.x,
+                aroundY.y * cosX - aroundY.z * sinX,
+                aroundY.y * sinX + aroundY.z * cosX
             };
         }
 
         [[nodiscard]] inline std::optional<epochengine::ray::Aabb> world_bounds(
             const epochengine::scene::SceneObjectSnapshot& object,
             const epochengine::ray::Aabb& localBounds,
-            float minimumHalfExtent) noexcept
+            float minimumHalfExtent,
+            const std::array<double,3>& coordinateOrigin = {}) noexcept
         {
             if (!epochengine::ray::validate(localBounds) ||
                 !std::isfinite(minimumHalfExtent) || minimumHalfExtent < 0.0f)
@@ -195,7 +196,17 @@ export namespace epochengine::scene_interaction
                 }
             }
 
-            const Vec3 position{object.position[0], object.position[1], object.position[2]};
+            const auto absolute=epochengine::scene::world_position(object);
+            if(!absolute)return {};
+            std::array<float,3> relative{};
+            for(std::size_t axis=0;axis<3u;++axis)
+            {
+                const double value=(*absolute)[axis]-coordinateOrigin[axis];
+                if(!std::isfinite(coordinateOrigin[axis])||!std::isfinite(value)
+                    ||std::abs(value)>(std::numeric_limits<float>::max)())return {};
+                relative[axis]=static_cast<float>(value);
+            }
+            const Vec3 position{relative[0],relative[1],relative[2]};
             Vec3 minimum{
                 (std::numeric_limits<float>::max)(),
                 (std::numeric_limits<float>::max)(),
@@ -309,6 +320,9 @@ export namespace epochengine::scene_interaction
         bool includeEditorOnly{true};
         bool hiddenObjectsSelectable{};
         std::uint32_t defaultVisibilityMask{kAllVisibility};
+        // All query rays, bounds and focus targets use this same local frame.
+        // Subtract in double precision before float spatial-index construction.
+        std::array<double,3> coordinateOrigin{};
     };
 
     enum class SceneInteractionBuildStatus : std::uint8_t
@@ -521,7 +535,8 @@ export namespace epochengine::scene_interaction
                 const auto bounds = detail::world_bounds(
                     source,
                     localBounds,
-                    options.minimumHalfExtent);
+                    options.minimumHalfExtent,
+                    options.coordinateOrigin);
                 if (!bounds.has_value())
                 {
                     report.status = SceneInteractionBuildStatus::InvalidTransformOrBounds;
@@ -787,6 +802,7 @@ export namespace epochengine::scene_interaction
         bool hitResolvedByPersistentId{};
         bool duplicateIdsRejected{};
         bool sourceRevisionPreserved{};
+        bool outlinerOnlyContainerPassThrough{};
 
         [[nodiscard]] constexpr explicit operator bool() const noexcept
         {
@@ -794,7 +810,7 @@ export namespace epochengine::scene_interaction
                 reorderStable &&
                 hitResolvedByPersistentId &&
                 duplicateIdsRejected &&
-                sourceRevisionPreserved;
+                sourceRevisionPreserved && outlinerOnlyContainerPassThrough;
         }
     };
 
@@ -871,6 +887,24 @@ export namespace epochengine::scene_interaction
             selection.sceneRevision == 42u &&
             duplicateBuild.sourceRevision == 43u &&
             query.source_revision() == 42u;
+        // A large container keeps its bounds for explicit Outliner focus, but
+        // must not intercept a viewport ray aimed at an object inside it.
+        auto containerScene = snapshot;
+        containerScene.objects.push_back(epochengine::scene::SceneObjectSnapshot{
+            .id = 303u, .name = "System", .type = "IndexedMesh"});
+        const std::array containerOverrides{SceneObjectInteractionOverride{
+            .object = {303u, 1u},
+            .localBounds = {{-100.0f, -100.0f, -100.0f}, {100.0f, 100.0f, 100.0f}},
+            .selectability = Selectability::Unselectable,
+            .useLocalBounds = true}};
+        SceneInteractionQuery containerQuery;
+        const auto containerBuild = containerQuery.rebuild(containerScene, {}, containerOverrides);
+        const auto insideHit = containerQuery.trace(selectionRay);
+        const auto containerFocus = containerQuery.focus_bounds(SceneObjectId{303u, 1u});
+        result.outlinerOnlyContainerPassThrough = containerBuild.committed()
+            && insideHit.has_hit() && insideHit.hit.object == SceneObjectId{101u, 1u}
+            && containerFocus && containerFocus->minimum.x == -100.0f
+            && containerFocus->maximum.x == 100.0f;
         return result;
     }
 

@@ -59,7 +59,7 @@ function Invoke-LinuxScript {
 $repo = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 . (Join-Path $repo 'Tools\build\epoch_package_layout.ps1')
 $edition = Get-EpochSourceEdition -RepoRoot $repo
-$packageRoot = Join-Path $repo 'build\packages'
+$packageRoot = Join-Path $repo 'Artifacts\Packages'
 $versionScript = Join-Path $repo 'Tools\build\get_epoch_version.ps1'
 Require-Path -Path $versionScript -Label 'Epoch version reader'
 $sourceVersion = (& $versionScript -VersionModule (Join-Path $repo 'Engine\modules\epoch.version.ixx')).Trim()
@@ -75,7 +75,7 @@ if ($Version -notmatch '^\d+\.\d+\.\d+$') {
 
 $engine = Join-Path $repo 'Engine'
 if ([string]::IsNullOrWhiteSpace($BinaryRoot)) {
-    $binaryRoot = Join-Path $repo ("build\cmake\linux\{0}\{1}" -f $edition.Directory, $Configuration)
+    $binaryRoot = Join-Path $repo ("Artifacts\Runtime\cmake\linux\{0}\{1}" -f $edition.Directory, $Configuration)
 }
 else {
     $binaryRoot = $BinaryRoot
@@ -87,7 +87,22 @@ $license = Join-Path $repo 'LICENSE'
 $readme = Join-Path $repo 'README.md'
 $noticeScript = Join-Path $repo 'Tools\build\collect_third_party_notices.ps1'
 if ([string]::IsNullOrWhiteSpace($VcpkgInstalledRoot)) {
-    $vcpkgInstalled = Join-Path $binaryRoot 'vcpkg_installed\x64-linux-epoch'
+    # Runtime products are separate from the disposable CMake configure tree.
+    # Use the exact cache's installed dependency base when one was configured.
+    $installedBase = Join-Path $repo 'Artifacts\Dependencies\vcpkg_installed'
+    $configureRoot = Join-Path $repo ("Artifacts\Intermediate\cmake\linux\{0}\{1}" -f $edition.Directory, $Configuration)
+    $configureCache = Join-Path $configureRoot 'CMakeCache.txt'
+    if (Test-Path -LiteralPath $configureCache -PathType Leaf) {
+        $configured = [regex]::Match([IO.File]::ReadAllText($configureCache), '(?m)^VCPKG_INSTALLED_DIR:[^=\r\n]+=([^\r\n]+)')
+        if ($configured.Success) {
+            $installedBase = $configured.Groups[1].Value
+            if ($env:OS -eq 'Windows_NT' -and $installedBase -match '^/mnt/([a-zA-Z])/(.*)$') {
+                $installedBase = $Matches[1] + ':\' + $Matches[2].Replace('/', '\')
+            }
+            if (-not [IO.Path]::IsPathRooted($installedBase)) { throw 'Configured dependency base must be absolute.' }
+        }
+    }
+    $vcpkgInstalled = Join-Path $installedBase 'x64-linux-epoch'
 }
 else {
     $vcpkgInstalled = $VcpkgInstalledRoot
@@ -141,6 +156,7 @@ $binaryRootWsl = To-LinuxPath $binaryRoot
 $outWsl = To-LinuxPath $resolvedOutput
 $tarWsl = To-LinuxPath $tarball
 $verifyLogsWsl = To-LinuxPath $verifyLogs
+$graphicsRunnerWsl = To-LinuxPath (Join-Path $repo 'Tools/build/run_linux_graphics_smoke.py')
 
 $validationScript = @'
 set -euo pipefail
@@ -202,10 +218,10 @@ $runtimeSmoke = if ($SkipRuntimeSmoke) {
     "printf '%s\n' 'Linux packaged runtime smoke explicitly skipped; package remains build/contract proven only.'"
 }
 elseif ($SoftwareOpenGLSmoke) {
-    "EPOCH_LOG_DIR='__LOGS__' LIBGL_ALWAYS_SOFTWARE=1 timeout --signal=INT --kill-after=3s 30s xvfb-run -a --server-args='-screen 0 1280x720x24 -nolisten tcp' ./epoch --editor --renderer opengl --smoke"
+    "xvfb-run -a --server-args='-screen 0 1280x720x24 -nolisten tcp' python3 '$graphicsRunnerWsl' --binary '$stageWsl/epoch' --output-root '__LOGS__/graphics' --software-opengl"
 }
 else {
-    "EPOCH_LOG_DIR='__LOGS__' timeout --signal=INT --kill-after=3s 30s ./epoch --editor --renderer opengl --smoke"
+    "python3 '$graphicsRunnerWsl' --binary '$stageWsl/epoch' --output-root '__LOGS__/graphics'" + $(if ($env:LIBGL_ALWAYS_SOFTWARE -eq '1') { ' --software-opengl' } else { '' })
 }
 $runtimeSmoke = $runtimeSmoke.Replace('__LOGS__', $verifyLogsWsl)
 $validationScript = $validationScript.Replace('__RUNTIME_SMOKE__', $runtimeSmoke)
@@ -213,9 +229,8 @@ $validationScript = $validationScript.Replace('__RUNTIME_SMOKE__', $runtimeSmoke
 Invoke-LinuxScript -Script $validationScript -Label 'Linux staged-package validation'
 
 # Validation paths can still create executable-local runtime artifacts before
-# their environment override is consumed. Public packages never carry them.
-Remove-EpochPackageItem -LiteralPath (Join-Path $stage 'logs') -PackageRoot $packageRoot -Recurse
-Remove-EpochPackageItem -LiteralPath (Join-Path $stage 'cache') -PackageRoot $packageRoot -Recurse
+# their environment override is consumed. Preserve them outside the payload.
+Move-EpochPackageValidationEvidence -Stage $stage -VerifyLogs $verifyLogs -PackageRoot $packageRoot
 
 Write-EpochRuntimeDistribution -Stage $stage -Edition $edition.Id -Version $Version
 
@@ -236,7 +251,6 @@ $lines += "$hash  $stageName.tar.gz"
 [System.IO.File]::WriteAllLines($checksum, $lines, [System.Text.Encoding]::ASCII)
 
 Get-Item -LiteralPath $tarball, $checksum | Select-Object FullName, Length
-Write-Host "package_inventory.result=pass artifact=$stageName.tar.gz sha256=$hash"
 
 # The machine-readable receipt describes only checks that completed above.
 $validation = [ordered]@{
@@ -257,4 +271,9 @@ $validation = [ordered]@{
 [IO.File]::WriteAllText("$tarball.sha256", "$hash  $stageName.tar.gz`n", [Text.Encoding]::ASCII)
 [IO.File]::WriteAllText("$tarball.build-validation.json", ($validation | ConvertTo-Json), [Text.UTF8Encoding]::new($false))
 & python (Join-Path $repo 'Tools/build/audit_epoch_linux_package.py') --archive $tarball
-if ($LASTEXITCODE -ne 0) { throw 'Linux package audit failed; no artifact is admitted for upload.' }
+if ($LASTEXITCODE -ne 0) {
+    $validation.archive_inventory = 'fail'
+    [IO.File]::WriteAllText("$tarball.build-validation.json", ($validation | ConvertTo-Json), [Text.UTF8Encoding]::new($false))
+    throw 'Linux package audit failed; no artifact is admitted for upload.'
+}
+Write-Host "package_inventory.result=pass artifact=$stageName.tar.gz sha256=$hash"

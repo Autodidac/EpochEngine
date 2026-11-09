@@ -94,8 +94,8 @@ namespace epochengine::gui_lib
             constexpr float close_h = 22.0f;
             layout.close_button = Rect{
                 {
-                    state.position.x + (std::max)(0.0f, state.size.x - close_w - padding),
-                    state.position.y + (std::max)(2.0f, (layout.title_bar.size.y - close_h) * 0.5f)
+                    state.position.x + (std::max)(0.0f, state.size.x - close_w),
+                    state.position.y
                 },
                 { close_w, close_h }
             };
@@ -188,6 +188,16 @@ namespace epochengine::gui_lib
 
         state.size = clamp_size(state.size, options.min_size);
         state.position = clamp_position(state.position, state.size, options.viewport_size);
+        if (options.constrain_to_viewport)
+        {
+            const auto constrain = [](float& position, float& size, float viewport) {
+                if (!std::isfinite(viewport) || viewport <= 0.0f) return;
+                size = (std::min)(size, (std::max)(1.0f, viewport));
+                position = std::clamp(position, 0.0f, (std::max)(0.0f, viewport - size));
+            };
+            constrain(state.position.x, state.size.x, options.viewport_size.x);
+            constrain(state.position.y, state.size.y, options.viewport_size.y);
+        }
     }
 
     FloatingWindowLayout update_floating_window(
@@ -261,6 +271,8 @@ namespace epochengine::gui_lib
             state.close_pressed = false;
         }
 
+        if (options.constrain_to_viewport)
+            normalize_floating_window(state, options);
         FloatingWindowLayout updated = make_layout(state, options);
         updated.hovered = contains(updated.window, input.mouse_position);
         updated.title_hovered = contains(updated.title_bar, input.mouse_position);

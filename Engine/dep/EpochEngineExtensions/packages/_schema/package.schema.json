@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Epoch Extension Package Manifest",
+  "type": "object",
+  "required": [
+    "id",
+    "displayName",
+    "manifestLicense",
+    "manifestCopyright",
+    "status",
+    "kind",
+    "activation",
+    "security",
+    "source",
+    "engineBoundary"
+  ],
+  "properties": {
+    "id": { "type": "string" },
+    "displayName": { "type": "string" },
+    "manifestLicense": { "type": "string" },
+    "manifestCopyright": { "type": "string" },
+    "status": { "type": "string" },
+    "kind": { "type": "string" },
+    "activation": { "type": "string" },
+    "summary": { "type": "string" },
+    "security": {
+      "type": "object",
+      "required": [
+        "serverOrListenerAllowed",
+        "requiresExplicitNetworkApproval",
+        "autoRunAllowed",
+        "includeByDefault"
+      ],
+      "properties": {
+        "serverOrListenerAllowed": { "type": "boolean" },
+        "requiresExplicitNetworkApproval": { "type": "boolean" },
+        "autoRunAllowed": { "type": "boolean" },
+        "includeByDefault": { "type": "boolean" }
+      }
+    },
+    "source": { "type": "object" },
+    "engineBoundary": { "type": "object" },
+    "script": {
+      "type": "object",
+      "properties": {
+        "language": { "type": "string" },
+        "path": { "type": "string" },
+        "api": { "type": "string" },
+        "mode": { "type": "string" },
+        "downloadsSource": { "type": "boolean" },
+        "compilesSource": { "type": "boolean" },
+        "livePreview": { "type": "boolean" },
+        "humanGated": { "type": "boolean" },
+        "autoRunAllowed": { "type": "boolean" }
+      }
+    },
+    "build": { "type": "object" },
+    "notes": { "type": "array", "items": { "type": "string" } }
+  }
+}

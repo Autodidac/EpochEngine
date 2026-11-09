@@ -30,22 +30,37 @@ class SelectPopupPlacement(unittest.TestCase):
         ownership = 'struct SelectBoxState' + engine.split('struct SelectBoxState', 1)[1].split('        struct PendingSelectPopup', 1)[0]
         ownership += 'bool any_select_box_open(' + engine.split('bool any_select_box_open(', 1)[1].split('        [[nodiscard]] static bool is_select_box_list_id', 1)[0]
         lifecycle = read_owned_source(ROOT / 'Engine/src/epochgui/controls/gui.frame_lifecycle.inl')
-        begin_visit = lifecycle.split('        for (auto& [key, state] : g_selectBoxStates) {', 1)[1].split('    static void render_pending_select_popups', 1)[0]
-        begin_visit = 'for (auto& [key, state] : g_selectBoxStates) {' + begin_visit.rsplit('    }', 1)[0]
+        from Tests.build.test_opengl_sprite_stream import definition
+        popup_query = definition(lifecycle, '    bool select_box_popup_open()')
+        finish = read_owned_source(ROOT / 'Engine/src/editor/application/editor.frame_finish.inl')
+        finish_priority = finish[finish.index('        ctx->set_gui_overlay_priority('):].split(';', 1)[0] + ';'
+        bootstrap = read_owned_source(ROOT / 'Engine/src/editor/application/editor.frame_bootstrap.inl')
+        bootstrap_priority = bootstrap[bootstrap.index('        const bool overlayPriorityActive ='):].split(';', 1)[0] + ';'
+        begin_visit = definition(lifecycle, '        for (auto& [key, state] : g_selectBoxStates)')
         end_visit = lifecycle.split('    void end_frame() noexcept', 1)[1].split('        for (auto& [key, state] : g_selectBoxStates) {', 1)[1].split('        render_pending_select_popups();', 1)[0]
         end_visit = 'for (auto& [key, state] : g_selectBoxStates) {' + end_visit
         toolbar = read_owned_source(ROOT / 'Engine/src/editor/application/editor.frame_toolbar_dock_targets.inl')
-        compact_bounds = 'for (std::size_t index = 0; index < topMenus.size(); ++index)' + toolbar.split('open_chrome_menu(chromeResult.selected_left);', 1)[1].split('for (std::size_t index = 0; index < topMenus.size(); ++index)', 1)[1].split('        const bool toolbarControlsBlockedByMenu', 1)[0]
+        compact_bounds = 'for (std::size_t index = 0; index < topMenus.size(); ++index)' + toolbar.split('const auto selectedMenu = chrome_menu_route(chromeResult.selected_left);', 1)[1].split('for (std::size_t index = 0; index < topMenus.size(); ++index)', 1)[1].split('        const bool toolbarControlsBlockedByMenu', 1)[0]
         code = r'''
 #include <unordered_map>
 #include <string>
 namespace ownership_test {
-namespace core {struct Context {};}
+namespace core {struct Context {bool overlay{};void set_gui_overlay_priority(bool value){overlay=value;}};}
 struct SelectBoxState;
 extern thread_local std::unordered_map<std::string, SelectBoxState> g_selectBoxStates;
 OWNERSHIP
 thread_local std::unordered_map<std::string, SelectBoxState> g_selectBoxStates;
 struct {const core::Context* ctx{};} g_frame;
+POPUP_QUERY
+namespace gui {using ownership_test::select_box_popup_open;}
+enum class TopMenu {None};
+struct {TopMenu openMenu{TopMenu::None};struct {struct {struct {bool open{};}popup;}menu;}outlinerContextMenu;}editor;
+bool modal_visible_now(){return false;}bool floating_gui_visible(){return false;}
+bool actual_priority(){auto*ctx=const_cast<core::Context*>(g_frame.ctx);const bool modalVisible=false,pointerGrabActive=false;
+BOOTSTRAP_PRIORITY
+const bool before=overlayPriorityActive;
+FINISH_PRIORITY
+return before&&ctx->overlay;}
 void begin_visit(const core::Context* rawCtx){BEGIN_VISIT}
 void end_visit(){END_VISIT}
 }
@@ -77,7 +92,9 @@ struct Modal {
     auto bounds()const{return rectangle;}
 };
 struct Frame {Context* ctx{};Modal modalInput;} g_frame;
-struct Options {std::vector<std::string_view> options{"60 FPS","120 FPS","Unlimited"};std::size_t max_visible_options=3;};
+constexpr float kFontScale=1.0f,kContentPadding=4.0f;
+float measure_text_width(std::string_view text,float) {return static_cast<float>(text.size())*8.0f;}
+struct Options {std::vector<std::string_view> options{"60 FPS","120 FPS","Unlimited"};std::size_t max_visible_options=3;bool fit_content{};};
 struct Result {gui_lib::Rect rectangle;float pitch,contentHeight;};
 Result actual_geometry(const Options& options,Vec2 start,float width=250.0f){
     const float rowHeight=28.0f,closedHeight=30.0f;
@@ -94,6 +111,9 @@ int main(){
     g_selectBoxStates["second"]={&second,false,false,true};
     CHECK(any_select_box_open(&first));
     CHECK(!any_select_box_open(&second));
+    ownership_test::g_frame.ctx=&first;CHECK(select_box_popup_open()&&actual_priority());
+    ownership_test::g_frame.ctx=&second;CHECK(!select_box_popup_open()&&!actual_priority());
+    ownership_test::g_frame.ctx=nullptr;CHECK(!select_box_popup_open());
     begin_visit(&second);ownership_test::g_frame.ctx=&second;end_visit();
     CHECK(g_selectBoxStates["first"].open&&g_selectBoxStates["first"].visited_this_frame);
     begin_visit(&first);ownership_test::g_frame.ctx=&first;end_visit();
@@ -116,6 +136,11 @@ COMPACT_BOUNDS
     auto normal=actual_geometry(options,{20.0f,60.0f});
     CHECK(normal.rectangle.position.y==94.0f&&normal.rectangle.size.y==88.0f);
     CHECK(normal.contentHeight==88.0f&&normal.pitch==30.0f);
+    options.fit_content=true;
+    auto fitted=actual_geometry(options,{200.0f,60.0f},96.0f);
+    CHECK(fitted.rectangle.size.x>96.0f);
+    CHECK(fitted.rectangle.size.x>=measure_text_width("Unlimited",1.0f)+2*kContentPadding+22);
+    options.fit_content=false;
     g_frame.modalInput.current=gui_lib::input::ModalInputMode::bounded;
     g_frame.modalInput.rectangle={{100.0f,100.0f},{300.0f,250.0f}};
     auto modal=actual_geometry(options,{120.0f,320.0f});
@@ -143,7 +168,7 @@ COMPACT_BOUNDS
     CHECK(edge.rectangle.position.y+edge.rectangle.size.y<=596.0f);
     return 0;
 }
-'''.replace('COMPACT_BOUNDS', compact_bounds).replace('OWNERSHIP', ownership).replace('BEGIN_VISIT', begin_visit).replace('END_VISIT', end_visit).replace('PORTABLE', portable).replace('STANDALONE', contract).replace('GEOMETRY', geometry)
+'''.replace('COMPACT_BOUNDS', compact_bounds).replace('OWNERSHIP', ownership).replace('POPUP_QUERY', popup_query).replace('BOOTSTRAP_PRIORITY', bootstrap_priority).replace('FINISH_PRIORITY', finish_priority).replace('BEGIN_VISIT', begin_visit).replace('END_VISIT', end_visit).replace('PORTABLE', portable).replace('STANDALONE', contract).replace('GEOMETRY', geometry)
         parent = (ROOT / 'build/contract-tests').resolve()
         parent.mkdir(parents=True, exist_ok=True)
         scratch = Path(tempfile.mkdtemp(prefix='select-popup-placement-', dir=parent))

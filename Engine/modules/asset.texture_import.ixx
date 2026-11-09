@@ -5,7 +5,9 @@
 module;
 
 #include <cstdint>
+#include <cstddef>
 #include <filesystem>
+#include <span>
 #include <string_view>
 
 export module asset.texture_import;
@@ -69,6 +71,17 @@ export namespace epochengine::asset::texture
         TextureImportLimits limits{};
     };
 
+    // A caller-owned immutable byte snapshot. The dotted extension is lowercase;
+    // the same decoder, limits and compiler as file import own its admission.
+    struct TextureMemoryImportRequest final
+    {
+        std::span<const std::byte> source{};
+        std::string_view extension{};
+        std::uint64_t source_sequence{1u};
+        TextureCompileProfile profile{};
+        TextureImportLimits limits{};
+    };
+
     struct TextureImportResult final
     {
         TextureImportStatus status{TextureImportStatus::invalid_request};
@@ -87,6 +100,8 @@ export namespace epochengine::asset::texture
 
     [[nodiscard]] TextureImportResult import_texture_file(
         const TextureImportRequest& request) noexcept;
+    [[nodiscard]] TextureImportResult import_texture_memory(
+        const TextureMemoryImportRequest& request) noexcept;
 
     enum class TextureImportContractFailure : std::uint8_t
     {
@@ -95,7 +110,11 @@ export namespace epochengine::asset::texture
         ppm_import,
         deterministic_identity,
         malformed_rejection,
-        oversized_rejection
+        oversized_rejection,
+        png_rgba,
+        png_color_space,
+        png_bounds,
+        png_truncated
     };
 
     [[nodiscard]] constexpr std::string_view
@@ -105,6 +124,10 @@ export namespace epochengine::asset::texture
         switch (failure)
         {
         case TextureImportContractFailure::none: return "pass";
+        case TextureImportContractFailure::png_rgba: return "png_rgba";
+        case TextureImportContractFailure::png_color_space: return "png_color_space";
+        case TextureImportContractFailure::png_bounds: return "png_bounds";
+        case TextureImportContractFailure::png_truncated: return "png_truncated";
         case TextureImportContractFailure::temporary_source:
             return "temporary_source";
         case TextureImportContractFailure::ppm_import: return "ppm_import";

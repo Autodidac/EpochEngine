@@ -1,5 +1,7 @@
     LRESULT CALLBACK MultiContextManager::ParentProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
     {
+        const NativeFocusDispatchTrace focusDispatch{"ParentProc",hwnd,msg};
+        trace_native_close_dispatch("ParentProc",hwnd,msg,wParam);
         if (msg == WM_NCDESTROY)
         {
             forget_native_title_window(hwnd);
@@ -16,6 +18,7 @@
 
         auto* mgr = reinterpret_cast<MultiContextManager*>(::GetWindowLongPtrW(hwnd, GWLP_USERDATA));
         if (!mgr) return ::DefWindowProcW(hwnd, msg, wParam, lParam);
+        const NativeWindowObservationInvalidation nativeObservation{mgr,msg};
 
         switch (msg)
         {
@@ -185,6 +188,9 @@
 
     LRESULT CALLBACK MultiContextManager::ChildProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
     {
+        const NativeFocusDispatchTrace focusDispatch{"ChildProc",hwnd,msg};
+        trace_native_close_dispatch("ChildProc",hwnd,msg,wParam);
+        const NativeWindowObservationInvalidation nativeObservation{s_activeInstance,msg};
         if (route_context_close_shortcut(hwnd, msg, wParam, lParam)) return 0;
         static DragState& drag = Drag();
         const auto resolveGuiContext = [hwnd]() -> std::shared_ptr<epochengine::core::Context>
@@ -307,8 +313,10 @@
                 }
             }
 
+            if (window && is_sfml_proxy_candidate(window))
+                window->proxyChildNativeGeneration.fetch_add(1, std::memory_order_acq_rel);
             if (detachedProxyHost && window->hwndChild && ::IsWindow(window->hwndChild) != FALSE)
-                ::SetFocus(window->hwndChild);
+                focus_proxy_child_window(window->hwndChild);
             else if (!detachedProxyHost)
                 ::SetFocus(hwnd);
 
@@ -522,7 +530,7 @@
                             {
                                 ::ShowWindow(window->host_hwnd, SW_HIDE);
                             }
-                            ::SetFocus(window->hwndChild);
+                            focus_proxy_child_window(window->hwndChild);
                         }
                         else
                         {
@@ -830,14 +838,28 @@
                             || dragState.draggedWindow == window->host_hwnd)
                         && ::IsWindow(window->host_hwnd) != FALSE)
                     {
-                        ::ReleaseCapture();
-                        ::SetCapture(window->host_hwnd);
+                        // SetCapture synchronously notifies the old child. Publish
+                        // the new drag owner first so that notification cannot
+                        // cancel this transfer or invalidate its queued layout.
                         dragState.draggedWindow = window->host_hwnd;
+                        ::SetCapture(window->host_hwnd);
+                        if (::GetCapture() != window->host_hwnd)
+                        {
+                            cancel_native_context_drag(window->host_hwnd);
+                            // Undocking the UI shell already committed. Settle
+                            // its child under the post-cancel generation, while
+                            // ending the drag rather than claiming capture.
+                            apply_child_fill_layout(window->hwndChild, window->host_hwnd,
+                                request->width, request->height);
+                            if (request->parentHwnd && ::IsWindow(request->parentHwnd) != FALSE)
+                                request_parent_layout(request->parentHwnd);
+                            return 0;
+                        }
                         sync_drag_offset_to_host_window(window->host_hwnd);
                         ::SetActiveWindow(window->host_hwnd);
                         ::SetForegroundWindow(window->host_hwnd);
                         const HWND child = window->hwndChild.load(std::memory_order_acquire);
-                        ::SetFocus(
+                        focus_proxy_child_window(
                             (child && ::IsWindow(child) != FALSE)
                             ? child
                             : window->host_hwnd);
@@ -1157,7 +1179,7 @@
                     }
                     focusTarget = window->hwndChild;
                 }
-                ::SetFocus(focusTarget);
+                focus_proxy_child_window(focusTarget);
 
                 if (originalParent && ::IsWindow(originalParent) != FALSE)
                     ::PostMessageW(originalParent, WM_SIZE, 0, 0);
@@ -1235,27 +1257,15 @@
         }
 
         case WM_ERASEBKGND:
-            if (auto* const window = resolveWindowData();
-                should_draw_opengl_startup_placeholder(window))
-            {
-                RECT clientRect{};
-                if (::GetClientRect(hwnd, &clientRect))
-                {
-                    ::FillRect(reinterpret_cast<HDC>(wParam), &clientRect, parent_background_brush());
-                }
-            }
+            // Renderer-owned child surfaces never paint through GDI, including
+            // startup and retirement after WindowData leaves the active list.
             return 1;
 
         case WM_PAINT:
         {
-            PAINTSTRUCT ps{};
-            HDC hdc = ::BeginPaint(hwnd, &ps);
-            if (auto* const window = resolveWindowData();
-                should_draw_opengl_startup_placeholder(window))
-            {
-                ::FillRect(hdc, &ps.rcPaint, parent_background_brush());
-            }
-            ::EndPaint(hwnd, &ps);
+            // CS_OWNDC belongs to the render thread. BeginPaint would acquire
+            // that same DC and alter its clip state while WGL may be current.
+            (void)::ValidateRect(hwnd, nullptr);
             return 0;
         }
         case WM_CLOSE:

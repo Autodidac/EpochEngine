@@ -4,6 +4,7 @@
 #include "ai.backend_model_qwen_flash_runtime.hpp"
 
 #include "ai.backend_process_process.hpp"
+#include "../ai.native_shared_inputs.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -143,11 +144,19 @@ void append_unique_cache_root(
     std::filesystem::path candidate) {
     if (candidate.empty()) return;
     candidate = candidate.lexically_normal();
+    std::error_code candidate_error;
+    auto resolved_candidate = std::filesystem::weakly_canonical(candidate, candidate_error);
+    if (candidate_error) resolved_candidate = candidate;
     const auto already_present = std::ranges::any_of(roots, [&](const auto& existing) {
+        std::error_code identity_error;
+        if (std::filesystem::equivalent(existing, candidate, identity_error) && !identity_error) return true;
+        std::error_code existing_error;
+        auto resolved_existing = std::filesystem::weakly_canonical(existing, existing_error);
+        if (existing_error) resolved_existing = existing;
 #ifdef _WIN32
-        return lower(existing.string()) == lower(candidate.string());
+        return lower(resolved_existing.string()) == lower(resolved_candidate.string());
 #else
-        return existing == candidate;
+        return resolved_existing == resolved_candidate;
 #endif
     });
     if (!already_present) roots.push_back(std::move(candidate));
@@ -156,8 +165,15 @@ void append_unique_cache_root(
 [[nodiscard]] std::vector<std::filesystem::path> candidate_model_cache_roots(
     const std::filesystem::path& configured_root) {
     std::vector<std::filesystem::path> roots;
-    roots.reserve(12);
+    roots.reserve(20);
     append_unique_cache_root(roots, configured_root);
+    const auto append_epoch_weights = [&](const std::filesystem::path& epoch_root) {
+        append_unique_cache_root(roots, epoch_root / "AI" / "model-cache");
+        // Known legacy weight buckets only. Never traverse/adopt either
+        // edition's conversations, profiles, workspace, learning or approvals.
+        append_unique_cache_root(roots, epoch_root / "AI" / "native" / "model-cache");
+        append_unique_cache_root(roots, epoch_root / "AI" / "public" / "native" / "model-cache");
+    };
 
     if (const auto value = environment_value("LLAMA_CACHE"); !value.empty()) append_unique_cache_root(roots, value);
     if (const auto value = environment_value("HF_HUB_CACHE"); !value.empty()) append_unique_cache_root(roots, value);
@@ -173,6 +189,8 @@ void append_unique_cache_root(
     if (!home.empty()) {
         append_unique_cache_root(roots, std::filesystem::path{home} / ".cache" / "huggingface" / "hub");
     }
+    if (!local.empty()) append_epoch_weights(std::filesystem::path{local} / "EpochEngine");
+    else if (!home.empty()) append_epoch_weights(std::filesystem::path{home} / "AppData" / "Local" / "EpochEngine");
     if (!local.empty()) {
         // Older llama.cpp/Qwen runtime builds have used LOCALAPPDATA-backed
         // caches. Checking their repo-shaped subdirectories is cheap and lets
@@ -184,6 +202,9 @@ void append_unique_cache_root(
     }
 #else
     const auto home = environment_value("HOME");
+    const auto data = environment_value("XDG_DATA_HOME");
+    if (!data.empty()) append_epoch_weights(std::filesystem::path{data} / "EpochEngine");
+    else if (!home.empty()) append_epoch_weights(std::filesystem::path{home} / ".local" / "share" / "EpochEngine");
     if (!home.empty()) {
         append_unique_cache_root(roots, std::filesystem::path{home} / ".cache" / "huggingface" / "hub");
         append_unique_cache_root(roots, std::filesystem::path{home} / ".cache" / "llama.cpp");
@@ -342,10 +363,17 @@ void write_runtime_manifest(const std::filesystem::path& runtime_root, std::stri
 
 QwenFlashRuntime::QwenFlashRuntime(const core::Config& config, std::filesystem::path state_root)
     : config_(config), state_root_(std::move(state_root)) {
+    if (config_.shared_model_inputs_bound) {
+        (void)epochengine::ai::native_shared_inputs::validate_path(
+            config_.model_cache_root, true, config_.shared_native_inputs_disabled);
+        return; // Borrow inputs; never create a shared cache or private SDK copy.
+    }
     std::error_code ec;
     std::filesystem::create_directories(config_.model_cache_root, ec);
-    std::filesystem::create_directories(state_root_ / "runtimes" / "qwen-flash", ec);
-    adopt_existing_backend();
+    if (config_.qwen_flash_server.empty()) {
+        std::filesystem::create_directories(state_root_ / "runtimes" / "qwen-flash", ec);
+        adopt_existing_backend();
+    }
 }
 
 QwenFlashRuntime::~QwenFlashRuntime() {
@@ -353,6 +381,7 @@ QwenFlashRuntime::~QwenFlashRuntime() {
 }
 
 void QwenFlashRuntime::adopt_existing_backend() {
+    if (config_.shared_model_inputs_bound || !config_.qwen_flash_server.empty()) return;
 #ifdef _WIN32
     constexpr const char* exe = "llama-server.exe";
 #else
@@ -425,6 +454,14 @@ std::string QwenFlashRuntime::last_error() const {
 }
 
 std::filesystem::path QwenFlashRuntime::discover_server() const {
+    if (config_.shared_model_inputs_bound) {
+        if (config_.shared_native_inputs_disabled) return {};
+        try {
+            return installed_backend_verified(config_.qwen_flash_server)
+                ? epochengine::ai::native_shared_inputs::validate_path(config_.qwen_flash_server, false)
+                : std::filesystem::path{};
+        } catch (...) { return {}; }
+    }
 #ifdef _WIN32
     constexpr const char* exe = "llama-server.exe";
 #else
@@ -472,12 +509,33 @@ std::filesystem::path QwenFlashRuntime::discover_server() const {
 }
 
 bool QwenFlashRuntime::runtime_verified() const {
+    if (config_.shared_model_inputs_bound) return !discover_server().empty();
     if (!config_.qwen_flash_server.empty()) {
         std::error_code ec;
         return std::filesystem::is_regular_file(config_.qwen_flash_server, ec) && !ec;
     }
     const auto runtime_root = state_root_ / "runtimes" / "qwen-flash";
     return runtime_manifest_matches(runtime_root);
+}
+
+bool QwenFlashRuntime::installed_backend_verified(const std::filesystem::path& executable) {
+    try {
+        const auto admitted = epochengine::ai::native_shared_inputs::validate_path(executable, false);
+        if (!runtime_manifest_is_known_baseline(admitted.parent_path().parent_path())) return false;
+#ifdef _WIN32
+        // The installed launcher is small; its implementation is a required
+        // SDK input, not evidence that a filename alone constitutes a runtime.
+        (void)epochengine::ai::native_shared_inputs::validate_path(
+            admitted.parent_path() / "llama-server-impl.dll", false);
+#endif
+        return true;
+    } catch (...) { return false; }
+}
+
+bool QwenFlashRuntime::worker_retired() const {
+    std::scoped_lock lock(mutex_);
+    return !worker_.joinable() && !startup_in_progress_
+        && owned_process_id_.load(std::memory_order_acquire) == 0u && !running();
 }
 
 QwenFlashRuntime::RuntimeCapabilities QwenFlashRuntime::capabilities_for_server(
@@ -639,6 +697,16 @@ RuntimeModelProfile QwenFlashRuntime::resolve_profile(
     const HardwareSnapshot& hardware,
     const RuntimeCapabilities& capabilities) const {
     RuntimeModelProfile resolved = profile;
+    if (profile.source == ModelSourceKind::local_gguf
+        && (profile.gpu_layers.empty() || profile.gpu_layers == "auto")
+        && profile.runtime_policy != "manual")
+    {
+        // Imported profiles used the shared 48-layer hint even for a 65-block
+        // GGUF. Qualify automatic placement from bounded model metadata, using
+        // this runtime's block+output -ngl scale; preserve exact manual choices.
+        if (const auto metadata = layer_metadata_cache_.get(profile.local_path))
+            resolved.gpu_layer_count_hint = metadata->offload_capacity();
+    }
     if (resolved.estimated_bytes == 0u)
     {
         // Imported local models often have no estimate. Reuse the existing
@@ -817,7 +885,8 @@ std::vector<std::string> QwenFlashRuntime::build_arguments(
         args.push_back(std::move(value));
     };
 
-    if (profile.source == ModelSourceKind::local_gguf && !profile.local_path.empty()) {
+    if (profile.source == ModelSourceKind::local_gguf) {
+        if (!inspect_local_gguf(profile.local_path).complete) return {};
         add("-m", profile.local_path.string());
     } else if (const auto cached = cached_model_path(profile); !cached.empty()) {
         // Prefer an already-complete model from any recognized shared/legacy
@@ -826,9 +895,8 @@ std::vector<std::string> QwenFlashRuntime::build_arguments(
         // cache root differs from the runtime that originally fetched it.
         add("-m", cached.string());
     } else {
-        auto spec = profile.repo;
-        if (!profile.quant.empty()) spec += ":" + profile.quant;
-        add("-hf", std::move(spec));
+        // Model acquisition belongs to the explicit installer, never Load or Send.
+        return {};
     }
 
     add("--host", "127.0.0.1");
@@ -892,11 +960,11 @@ std::vector<std::string> QwenFlashRuntime::build_arguments(
     }
 
     if (profile.speculative_enabled) {
-        if (!profile.speculative_model.empty()) {
-            add("--spec-draft-model", profile.speculative_model.string());
-        } else if (!profile.speculative_repo.empty()) {
-            add("--spec-draft-hf", profile.speculative_repo);
-        }
+        std::error_code error;
+        if (!profile.speculative_repo.empty() || profile.speculative_model.empty()
+            || !std::filesystem::is_regular_file(profile.speculative_model, error) || error)
+            return {};
+        add("--spec-draft-model", profile.speculative_model.string());
         add("--spec-type", profile.speculative_type.empty() ? "draft-mtp" : profile.speculative_type);
         add("--spec-draft-n-max", std::to_string(std::max<std::uint32_t>(1, profile.speculative_tokens)));
     }
@@ -979,6 +1047,12 @@ std::expected<std::string, core::Error> QwenFlashRuntime::ensure_started(
     const RuntimeModelProfile& profile,
     std::chrono::steady_clock::time_point deadline,
     std::stop_token stop) {
+    return ensure_started_impl(profile, deadline, stop, nullptr);
+}
+
+std::expected<std::string, core::Error> QwenFlashRuntime::ensure_started_impl(
+    const RuntimeModelProfile& profile, std::chrono::steady_clock::time_point deadline,
+    std::stop_token stop, const ResidentLaunch* exact) {
     std::unique_lock lock(mutex_);
     if (stop.stop_requested()) {
         return std::unexpected(core::Error{core::make_error_code(core::Errc::cancelled), "Qwen Flash model load was cancelled"});
@@ -1041,6 +1115,23 @@ std::expected<std::string, core::Error> QwenFlashRuntime::ensure_started(
         });
     });
 
+    std::vector<std::pair<std::string, std::string>> shared_environment;
+    if (config_.shared_model_inputs_bound) {
+        try {
+            (void)epochengine::ai::native_shared_inputs::validate_path(config_.model_cache_root, true);
+            if (!runtime_verified()) return fail_startup(core::Error{
+                core::make_error_code(core::Errc::model_unavailable),
+                "Shared native SDK is unavailable; use the parent Model Manager"});
+            if (profile.source == ModelSourceKind::hugging_face && !cache_status(profile).value("installed", false))
+                return fail_startup(core::Error{core::make_error_code(core::Errc::model_unavailable),
+                    "Shared model weights are unavailable; install them through the parent Model Manager"});
+            shared_environment = epochengine::ai::native_shared_inputs::runtime_search_environment(
+                config_.shared_runtime_dependency_directories);
+        } catch (const std::exception& error) {
+            return fail_startup(core::Error{core::make_error_code(core::Errc::model_unavailable), error.what()});
+        }
+    }
+
     // Reject mechanically-invalid speculation before touching a currently
     // healthy runtime. A bad edited profile must not turn a validation error
     // into downtime merely because the caller reached ensure_started directly.
@@ -1091,6 +1182,37 @@ std::expected<std::string, core::Error> QwenFlashRuntime::ensure_started(
         }
     }
 
+    // Validate immutable load inputs before retiring any healthy worker. Only
+    // the explicit installer may acquire absent model weights.
+    if (profile.source == ModelSourceKind::hugging_face
+        && !cache_status(profile).value("installed", false)) {
+        return fail_startup(core::Error{core::make_error_code(core::Errc::model_unavailable),
+            "Model weights are not fully installed. Choose Install Only in Model Manager before loading; no download was started."});
+    }
+    if (profile.source == ModelSourceKind::local_gguf) {
+        const auto inspection = inspect_local_gguf(profile.local_path);
+        if (!inspection.complete) {
+            return fail_startup(core::Error{
+                core::make_error_code(core::Errc::model_loading_failed),
+                inspection.error.empty() ? "Local GGUF shard set is incomplete" : inspection.error,
+            });
+        }
+        if (!model_size_is_plausible(profile, inspection.bytes)) {
+            return fail_startup(core::Error{
+                core::make_error_code(core::Errc::model_loading_failed),
+                "Local GGUF override is incomplete/truncated: " +
+                    std::to_string(inspection.bytes / (1024ULL * 1024ULL * 1024ULL)) +
+                    " GiB present, about " +
+                    std::to_string(profile.estimated_bytes / (1024ULL * 1024ULL * 1024ULL)) +
+                    " GiB expected for " + profile.display_name,
+            });
+        }
+    }
+
+    if (build_arguments(profile).empty()) {
+        return fail_startup(core::Error{core::make_error_code(core::Errc::model_unavailable),
+            "Installed model inputs changed before launch; no worker was stopped or download started. Use Model Manager."});
+    }
     if (worker_.joinable()) {
         worker_.request_stop();
         worker_.join();
@@ -1120,26 +1242,6 @@ std::expected<std::string, core::Error> QwenFlashRuntime::ensure_started(
             core::make_error_code(core::Errc::model_unavailable),
             "Qwen Flash llama-server backend was not found. Build/stage the local qwen-flash runtime or set ENGCODER_QWEN_FLASH_SERVER.",
         });
-    }
-
-    if (profile.source == ModelSourceKind::local_gguf) {
-        const auto inspection = inspect_local_gguf(profile.local_path);
-        if (!inspection.complete) {
-            return fail_startup(core::Error{
-                core::make_error_code(core::Errc::model_loading_failed),
-                inspection.error.empty() ? "Local GGUF shard set is incomplete" : inspection.error,
-            });
-        }
-        if (!model_size_is_plausible(profile, inspection.bytes)) {
-            return fail_startup(core::Error{
-                core::make_error_code(core::Errc::model_loading_failed),
-                "Local GGUF override is incomplete/truncated: " +
-                    std::to_string(inspection.bytes / (1024ULL * 1024ULL * 1024ULL)) +
-                    " GiB present, about " +
-                    std::to_string(profile.estimated_bytes / (1024ULL * 1024ULL * 1024ULL)) +
-                    " GiB expected for " + profile.display_name,
-            });
-        }
     }
 
     // Never silently attach to an unrelated process. Epoch AI owns the native
@@ -1173,6 +1275,10 @@ std::expected<std::string, core::Error> QwenFlashRuntime::ensure_started(
 
     auto launch_attempt = [&](const RuntimeModelProfile& candidate, bool safety_fallback, bool minimal_compatibility = false)
         -> std::expected<void, core::Error> {
+        const auto args = build_arguments(candidate, minimal_compatibility);
+        if (args.empty()) return std::unexpected(core::Error{
+            core::make_error_code(core::Errc::model_unavailable),
+            "Native model inputs changed before launch; no worker was started"});
         if (worker_.joinable()) {
             worker_.request_stop();
             worker_.join();
@@ -1188,27 +1294,41 @@ std::expected<std::string, core::Error> QwenFlashRuntime::ensure_started(
         worker_exited_.store(false, std::memory_order_release);
         running_.store(false, std::memory_order_release);
 
-        const auto args = build_arguments(candidate, minimal_compatibility);
         const auto cache = cache_status(candidate);
         // Only an already-complete shared cache is eligible for reuse.
         // Partial legacy downloads must not become Epoch's write destination.
-        const auto launch_cache_root = cache.value("installed", false)
-            ? cache.value("cache_root", config_.model_cache_root.string())
-            : config_.model_cache_root.string();
+        const auto launch_cache_root = exact ? exact->cache_root_
+            : cache.value("installed", false)
+                ? cache.value("cache_root", config_.model_cache_root.string())
+                : config_.model_cache_root.string();
         const auto command = command_string(server, args);
         last_command_ = command;
         last_effective_profile_ = to_json(candidate);
         last_effective_profile_["launch_profile"] = minimal_compatibility ? "minimal-compatibility" : "full";
 
-        worker_ = std::jthread([this, server, args, command, launch_cache_root](std::stop_token stop) {
+        ++launch_generation_;
+        owned_process_id_.store(0u, std::memory_order_release);
+        auto captured = std::make_shared<ResidentLaunch>();
+        captured->owner_ = this; captured->profile_ = candidate;
+        captured->server_ = server; captured->arguments_ = args;
+        captured->cache_root_ = launch_cache_root;
+        captured->generation_ = launch_generation_;
+        captured->minimal_ = minimal_compatibility; captured->safety_fallback_ = safety_fallback;
+
+        worker_ = std::jthread([this, server, args, command, launch_cache_root, shared_environment](std::stop_token stop) {
             process::Request request;
             request.executable = server.string();
             request.arguments = args;
             request.working_directory = server.parent_path();
             request.environment.emplace_back("LLAMA_CACHE", launch_cache_root);
+            for (const auto& variable : shared_environment) request.environment.push_back(variable);
             request.timeout = std::chrono::hours{24 * 365};
             request.max_output_bytes = 32 * 1024 * 1024;
+            request.on_started = [this](std::uint64_t pid) {
+                owned_process_id_.store(pid, std::memory_order_release);
+            };
             auto result = process::run(request, stop);
+            owned_process_id_.store(0u, std::memory_order_release);
             if (!result) {
                 set_last_error(result.error().message + "\nLaunch: " + command);
             } else if (!result->cancelled && result->exit_code != 0) {
@@ -1247,6 +1367,14 @@ std::expected<std::string, core::Error> QwenFlashRuntime::ensure_started(
             });
         }
 
+        captured->process_id_ = owned_process_id_.load(std::memory_order_acquire);
+        if (exact && captured->process_id_ == 0u) {
+            if (worker_.joinable()) { worker_.request_stop(); worker_.join(); }
+            running_.store(false, std::memory_order_release);
+            return std::unexpected(core::Error{core::make_error_code(core::Errc::model_unavailable),
+                "Exact restoration has no confirmed owned backend PID"});
+        }
+        last_resident_ = std::move(captured);
         running_.store(true, std::memory_order_release);
         if (safety_fallback) {
             startup_note_ = "Requested runtime policy could not initialize; Local Models recovered with its hardware-aware safety profile (" +
@@ -1261,6 +1389,22 @@ std::expected<std::string, core::Error> QwenFlashRuntime::ensure_started(
         }
         return {};
     };
+
+    if (exact) {
+        if (exact->owner_ != this || exact->generation_ != launch_generation_
+            || server != exact->server_
+            || (!runtime_verified() && !installed_backend_verified(server))
+            || cached_model_path(profile).empty()
+            || std::find(exact->arguments_.begin(), exact->arguments_.end(), "-hf") != exact->arguments_.end()
+            || build_arguments(profile, exact->minimal_) != exact->arguments_) {
+            return fail_startup(core::Error{core::make_error_code(core::Errc::model_unavailable),
+                "Captured native launch identity/cache changed; exact restoration refused"});
+        }
+        auto restored = launch_attempt(profile, exact->safety_fallback_, exact->minimal_);
+        if (!restored) return fail_startup(restored.error());
+        finish_startup();
+        return "http://127.0.0.1:" + std::to_string(config_.qwen_flash_port);
+    }
 
     const auto first_candidate = resolve_profile(profile, hardware, capabilities);
     auto first = launch_attempt(first_candidate, false);
@@ -1412,6 +1556,43 @@ std::expected<std::string, core::Error> QwenFlashRuntime::ensure_started(
     });
 }
 
+std::expected<QwenFlashRuntime::ResidentSnapshot, core::Error>
+QwenFlashRuntime::capture_resident() const {
+    std::scoped_lock lock(mutex_);
+    const auto pid = owned_process_id_.load(std::memory_order_acquire);
+    if (!running() || startup_in_progress_ || !worker_.joinable() || pid == 0u
+        || !last_resident_ || last_resident_->process_id_ != pid
+        || last_resident_->generation_ != launch_generation_
+        || last_resident_->server_ != discover_server()
+        || (!runtime_verified() && !installed_backend_verified(last_resident_->server_))
+        || cached_model_path(last_resident_->profile_).empty()
+        || std::find(last_resident_->arguments_.begin(), last_resident_->arguments_.end(), "-hf") != last_resident_->arguments_.end()
+        || build_arguments(last_resident_->profile_, last_resident_->minimal_) != last_resident_->arguments_)
+        return std::unexpected(core::Error{core::make_error_code(core::Errc::model_unavailable),
+            "Resident model is adopted, unverified or changing; it was not evicted"});
+    return last_resident_;
+}
+bool QwenFlashRuntime::matches_resident(const ResidentSnapshot& saved) const {
+    std::scoped_lock lock(mutex_);
+    return saved && saved->owner_ == this && saved->generation_ == launch_generation_
+        && saved->process_id_ == owned_process_id_.load(std::memory_order_acquire)
+        && running() && worker_.joinable() && !startup_in_progress_;
+}
+bool QwenFlashRuntime::resident_retired(const ResidentSnapshot& saved) const {
+    std::scoped_lock lock(mutex_);
+    return saved && saved->owner_ == this && !running() && !worker_.joinable()
+        && owned_process_id_.load(std::memory_order_acquire) == 0u;
+}
+std::expected<std::string, core::Error> QwenFlashRuntime::restore_resident(
+    const ResidentSnapshot& saved,
+    const epochengine::ai::native_runtime::idle::RetirementClaim& claim,
+    std::chrono::steady_clock::time_point deadline, std::stop_token stop) {
+    if (!claim || !saved || saved->owner_ != this || !resident_retired(saved))
+        return std::unexpected(core::Error{core::make_error_code(core::Errc::model_unavailable),
+            "Exact restoration requires the original retired model and exclusive native retirement claim"});
+    return ensure_started_impl(saved->profile_, deadline, stop, saved.get());
+}
+
 void QwenFlashRuntime::stop() {
     std::scoped_lock lock(mutex_);
     if (worker_.joinable()) {
@@ -1421,6 +1602,7 @@ void QwenFlashRuntime::stop() {
     running_.store(false, std::memory_order_release);
     active_image_input_.store(-1, std::memory_order_release);
     worker_exited_.store(true, std::memory_order_release);
+    owned_process_id_.store(0u, std::memory_order_release);
     active_model_id_.clear();
     active_context_tokens_ = 0;
     active_parallel_slots_ = 0;
@@ -1458,7 +1640,9 @@ std::filesystem::path QwenFlashRuntime::cached_model_path(const RuntimeModelProf
 
     const auto quant = lower(profile.quant);
     const std::regex split_pattern{R"(-(\d+)-of-(\d+)\.gguf$)", std::regex::icase};
-    for (const auto& cache_root : candidate_model_cache_roots(config_.model_cache_root)) {
+    for (const auto& cache_root : config_.shared_model_inputs_bound
+             ? std::vector<std::filesystem::path>{config_.model_cache_root}
+             : candidate_model_cache_roots(config_.model_cache_root)) {
         const auto root = repo_root_for_cache(cache_root, profile);
         std::error_code ec;
         if (!std::filesystem::is_directory(root, ec) || ec) continue;
@@ -1555,10 +1739,13 @@ nlohmann::json QwenFlashRuntime::cache_status(const RuntimeModelProfile& profile
     bool best_installed = false;
     nlohmann::json roots = nlohmann::json::array();
 
-    for (const auto& cache_root : candidate_model_cache_roots(config_.model_cache_root)) {
+    for (const auto& cache_root : config_.shared_model_inputs_bound
+             ? std::vector<std::filesystem::path>{config_.model_cache_root}
+             : candidate_model_cache_roots(config_.model_cache_root)) {
         const auto root = repo_root_for_cache(cache_root, profile);
         std::uint64_t model_bytes = 0;
         std::uint64_t storage_bytes = 0;
+        std::vector<std::pair<std::filesystem::path, std::uint64_t>> stored_files;
         std::set<std::pair<std::string, std::uint64_t>> unique_matching_files;
         std::size_t gguf_files = 0;
         std::size_t matching_gguf_files = 0;
@@ -1575,7 +1762,22 @@ nlohmann::json QwenFlashRuntime::cache_status(const RuntimeModelProfile& profile
                 const auto name = lower(raw_name);
                 const auto size = entry.file_size(ec);
                 if (ec) { ec.clear(); continue; }
-                storage_bytes += size;
+                // HF snapshots name the same blob through symlinks; imported
+                // caches may instead use hardlinks. Count each file identity
+                // once, while still inspecting every logical GGUF filename.
+                std::error_code identity_error;
+                auto identity = std::filesystem::canonical(entry.path(), identity_error);
+                if (identity_error) identity = entry.path().lexically_normal();
+                const bool accounted = std::ranges::any_of(stored_files, [&](const auto& known) {
+                    if (known.second != size) return false;
+                    if (known.first == identity) return true;
+                    std::error_code equivalent_error;
+                    return std::filesystem::equivalent(known.first, identity, equivalent_error) && !equivalent_error;
+                });
+                if (!accounted) {
+                    stored_files.emplace_back(std::move(identity), size);
+                    storage_bytes += size;
+                }
                 if (name.ends_with(".gguf")) {
                     ++gguf_files;
                     const bool matches = quant.empty() || name.find(quant) != std::string::npos;
@@ -1661,6 +1863,8 @@ nlohmann::json QwenFlashRuntime::describe() const {
         {"downloadable", true},
         {"runtime_owned_by", runtime_owner},
         {"running", running()},
+        {"owned_process_id", owned_process_id_.load(std::memory_order_acquire)},
+        {"launch_generation", launch_generation_},
         {"startup_in_progress", startup_in_progress_},
         {"startup_model", startup_model_id_.empty() ? nlohmann::json(nullptr) : nlohmann::json(startup_model_id_)},
         {"active_model", active_model_id_.empty() ? nlohmann::json(nullptr) : nlohmann::json(active_model_id_)},

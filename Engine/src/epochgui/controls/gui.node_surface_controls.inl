@@ -605,8 +605,11 @@
                 g_frame.mousePos, position.x, position.y, width, height)
             && point_in_active_clip(g_frame.mousePos);
 
+        // Explicit slider IDs stay stable while a value label wraps, the
+        // parent scrolls, or the window resizes during a drag. Geometry is
+        // used for hit testing, not for the lifetime of pointer capture.
         const std::size_t pressKey = widget_press_key(
-            options.id, position, {width, height});
+            options.id, {}, {});
         auto& pressedKey = g_contextPressedButtonKeys[g_frame.ctx];
         if (result.hovered && left_press_available())
         {
@@ -638,7 +641,7 @@
         renderedLayoutOptions.value = result.value;
         const gui_lib::SliderLayout layout =
             gui_lib::make_slider_layout(renderedLayoutOptions);
-        const bool lightSlider = g_frame.activeTheme == ThemeVariant::DefaultLight;
+        const bool lightSlider = active_palette_is_light();
         draw_sprite(lightSlider ? palette.buttonActive : palette.titleBar,
             layout.track.position.x, layout.track.position.y,
             layout.track.size.x, layout.track.size.y);

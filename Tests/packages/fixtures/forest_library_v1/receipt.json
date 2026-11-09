@@ -1,0 +1,23 @@
+{
+  "schema": "epoch.forest-library.golden.v1",
+  "created_utc": "2026-10-26T23:35:13.310896+00:00",
+  "producer": "Actual pre-v2 project.forest_library MSVC x64 Debug consumer",
+  "project_id": "forest-v1-golden",
+  "logical_path": "Assets/Forest/default.epoch_forest",
+  "artifact_key": "d8911f7382f14a7194b51a53fab5b280f05bad69a510f9eae6dd5966f48c43a9",
+  "files": {
+    "default.epoch_forest": {
+      "bytes": 300,
+      "sha256": "f97dd1c9a646826317e74604af06d782035acaae058e73ddc48c20a5250645a2"
+    },
+    "default.epoch_forest_artifact": {
+      "bytes": 2146,
+      "sha256": "82493bbb65706f187af412a0c92f771784d22291cf8012d29f7a2c260871af76"
+    }
+  },
+  "production_source_sha256": {
+    "Engine/src/project/project.forest_library.cpp": "586289fc3d217c1b07b57e4947ce951e42b6f506c27fbd2cadcc16494c58873e",
+    "Engine/modules/project.forest_library.ixx": "02998b34084dc01cde88832b39cf2677bf58b2b52be68604d3a6cfabd1597830",
+    "Engine/modules/forest.factory.ixx": "128f9ba20c442a274d321876531ee35f8905612820aa92697b269aad4c81a660"
+  }
+}

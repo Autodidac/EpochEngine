@@ -158,7 +158,8 @@ namespace epochengine::directxcontext::detail
 
     void render_engine_arcade_sampled_surface_preview(
         const core::Context& ctx,
-        DirectXState& state) noexcept
+        DirectXState& state,
+        const std::shared_ptr<const previewgrid::PublishedSceneFrame>& matchedScene) noexcept
     {
         constexpr std::size_t kVerticesPerQuad = 6u;
         static_assert(kVerticesPerQuad == 6u);
@@ -166,7 +167,8 @@ namespace epochengine::directxcontext::detail
         if (!state.device || !state.immediate || !state.renderTarget)
             return;
 
-        const auto markers = previewgrid::sampled_render_surface_markers_for(&ctx);
+        const auto markers = matchedScene ? previewgrid::sampled_render_surface_markers_for(*matchedScene)
+            : previewgrid::sampled_render_surface_markers_for(&ctx);
         if (markers.empty() || !ensure_arcade_screen_target(state))
             return;
 
@@ -231,7 +233,7 @@ namespace epochengine::directxcontext::detail
         const D3D11_VIEWPORT sceneViewport = scene_viewport_for(ctx, state);
         state.immediate->RSSetViewports(1, &sceneViewport);
 
-        const auto camera = previewgrid::camera_for(&ctx);
+        const auto camera = matchedScene ? matchedScene->camera : previewgrid::camera_for(&ctx);
         const auto requested = ctx.scene_viewport();
         const auto frame = rendercontext::resolve_frame_plan({
             state.width,
@@ -362,6 +364,7 @@ namespace epochengine::directxcontext::detail
     void build_preview_geometry(
         const core::Context& ctx,
         const DirectXState& state,
+        const std::shared_ptr<const previewgrid::PublishedSceneFrame>& matchedScene,
         std::vector<DirectXVertex>& gridLines,
         std::vector<DirectXVertex>& solid,
         std::vector<DirectXVertex>& overlayLines)
@@ -381,7 +384,7 @@ namespace epochengine::directxcontext::detail
             : core::RenderViewport{
                 0, 0, (std::max)(1, state.width), (std::max)(1, state.height) };
 
-        const auto camera = previewgrid::camera_for(&ctx);
+        const auto camera = matchedScene ? matchedScene->camera : previewgrid::camera_for(&ctx);
         const float aspect = frame.scene_visible ? frame.projection_aspect : 1.0f;
         const auto proj = previewgrid::projection_for(&ctx, aspect, camera);
         const auto view = previewgrid::look_at(
@@ -390,20 +393,27 @@ namespace epochengine::directxcontext::detail
             camera.up);
         const auto mvp = previewgrid::multiply(proj, view);
 
-        const auto gridGeometry = previewgrid::grid_geometry_for(&ctx);
-        const auto& gridVertices = gridGeometry->vertices;
-        const auto& gridIndices = gridGeometry->indices;
-        for (std::size_t i = 0; i + 1 < gridIndices.size(); i += 2)
+        if (!matchedScene)
         {
-            const auto first = static_cast<std::size_t>(gridIndices[i]);
-            const auto second = static_cast<std::size_t>(gridIndices[i + 1]);
-            if (first >= gridVertices.size() || second >= gridVertices.size())
-                continue;
+            const auto gridGeometry = previewgrid::grid_geometry_for(&ctx);
+            const auto& gridVertices = gridGeometry->vertices;
+            const auto& gridIndices = gridGeometry->indices;
+            for (std::size_t i = 0; i + 1 < gridIndices.size(); i += 2)
+            {
+                const auto first = static_cast<std::size_t>(gridIndices[i]);
+                const auto second = static_cast<std::size_t>(gridIndices[i + 1]);
+                if (first >= gridVertices.size() || second >= gridVertices.size())
+                    continue;
 
-            (void)append_clip_line(gridLines, mvp, gridVertices[first], gridVertices[second]);
+                (void)append_clip_line(gridLines, mvp, gridVertices[first], gridVertices[second]);
+            }
+
         }
 
-        const auto solidVertices = previewgrid::object_solid_vertices_for(&ctx);
+        const auto solidGeometry = matchedScene ? matchedScene->solids->geometry
+            : previewgrid::object_solid_geometry_for(&ctx);
+
+        const auto& solidVertices = *solidGeometry;
         for (std::size_t i = 0; i + 2 < solidVertices.size(); i += 3)
         {
             if (!previewgrid::clockwise_solid_triangle_faces_camera(
@@ -422,14 +432,23 @@ namespace epochengine::directxcontext::detail
                 solidVertices[i + 2]);
         }
 
-        const auto focusVertices = previewgrid::look_marker_vertices_for(&ctx);
-        const std::size_t focusCount = previewgrid::look_marker_vertex_count_for(&ctx);
-        for (std::size_t i = 0; i + 1 < focusCount && i + 1 < focusVertices.size(); i += 2)
-            (void)append_clip_line(overlayLines, mvp, focusVertices[i], focusVertices[i + 1]);
+        if (!matchedScene)
+        {
+            const auto focusVertices = previewgrid::look_marker_vertices_for(&ctx);
+            const std::size_t focusCount = previewgrid::look_marker_vertex_count_for(&ctx);
+            for (std::size_t i = 0; i + 1 < focusCount && i + 1 < focusVertices.size(); i += 2)
+                (void)append_clip_line(overlayLines, mvp, focusVertices[i], focusVertices[i + 1]);
 
-        const auto objectVertices = previewgrid::object_marker_vertices_for(&ctx);
-        for (std::size_t i = 0; i + 1 < objectVertices.size(); i += 2)
-            (void)append_clip_line(overlayLines, mvp, objectVertices[i], objectVertices[i + 1]);
+        }
+
+        const auto objectGeometry = matchedScene ? matchedScene->lines
+            : previewgrid::object_marker_geometry_for(&ctx);
+
+        const auto& objectVertices = *objectGeometry;
+        const auto meshWire = matchedScene ? matchedScene->wire
+            : previewgrid::object_mesh_wire_frame_for(&ctx);
+        previewgrid::for_each_visible_marker_line(*meshWire, objectVertices, camera.eye,
+            [&](const auto& first,const auto& second){(void)append_clip_line(overlayLines,mvp,first,second);});
     }
 }
 #endif

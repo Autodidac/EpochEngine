@@ -32,8 +32,10 @@ module;
 
 #include <array>
 #include <bitset>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <memory>
 
 // Global module fragment: macros + native headers + GL typedefs only.
 #include <include/engine.config.hpp> // for EPOCH_USING Macros
@@ -71,12 +73,41 @@ export module opengl.state;
 
 import core.timer;          // timing::Timer, timing::createTimer(...)
 import opengl.platform;   // PlatformGLContext
-import render.neuromorphic_invalidation;
+import opengl.native_present;
+import render.device;
+import render.device_opengl_family;
+import render.texture_residency;
 
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
 
 export namespace epochengine::openglstate
 {
+    struct MeshBaseColorResources final
+    {
+        OpenGLFamilyRenderDevice device{RendererBackendKind::opengl};
+        texture_residency::TextureResidencyCache residency{device, 1, [] {
+            texture_residency::ResidencyLimits limits{};
+            limits.maximum_resident_bytes=64ull*1024*1024;
+            limits.maximum_single_texture_bytes=32ull*1024*1024;
+            limits.maximum_transient_replacement_bytes=32ull*1024*1024;
+            limits.maximum_upload_bytes_per_frame=64ull*1024*1024;
+            return limits;
+        }()};
+        GLuint program{}, vao{}, vbo{};
+        GLint mvp{-1}, texture{-1}, decode_srgb{-1}, encode_srgb{-1};
+        GLint alpha_cutout{-1}, alpha_cutoff{-1};
+        std::uint64_t sequence{};
+        bool failed{};
+    };
+
+    struct CloudVolumeResources final
+    {
+        GLuint program{}, composite_program{}, vao{}, depth_texture{}, color_texture{}, framebuffer{};
+        int width{}, height{};
+        bool failed{};
+        const char* diagnostic{};
+    };
+
     struct OpenGL4State
     {
 #if defined(_WIN32)
@@ -135,6 +166,11 @@ export namespace epochengine::openglstate
         timing::Timer fpsTimer = timing::createTimer(1.0);
         int frameCount = 0;
         epochengine::openglcontext::frame_admission::State frameAdmission{};
+        epochengine::openglcontext::native_present::State nativePresent{};
+        unsigned nativePresentSyncInterval{};
+
+        std::unique_ptr<MeshBaseColorResources> meshBaseColor{};
+        CloudVolumeResources cloudVolume{};
 
         // GL objects / uniform locations
         GLuint shader = 0;
@@ -149,8 +185,15 @@ export namespace epochengine::openglstate
         GLuint spriteStreamVao = 0;
         GLuint spriteStreamVbo = 0;
         bool spriteStreamUnavailable = false;
+        std::size_t spriteStreamCapacitySprites = 0;
+        std::size_t spriteStreamWriteVertex = 0;
+        bool spriteStreamFramePrepared = false;
+        bool spriteStreamFrameAllocated = false;
         std::uint64_t guiSpritesSubmitted = 0;
         std::uint64_t guiDrawCallsSubmitted = 0;
+        std::uint64_t meshTrianglesSubmitted = 0;
+        std::uint64_t meshDrawCallsSubmitted = 0;
+        std::uint64_t meshUploadBytesSubmitted = 0;
 
         GLuint sceneShader = 0;
         GLint sceneMvpLoc = -1;
@@ -161,17 +204,6 @@ export namespace epochengine::openglstate
         GLsizei sceneGridIndexCount = 0;
         GLuint sceneMarkerVao = 0;
         GLuint sceneMarkerVbo = 0;
-
-        // Persistent editor-scene cache used by event-driven partial redraw.
-        GLuint sceneCacheFramebuffer = 0;
-        GLuint sceneCacheColor = 0;
-        GLuint sceneCacheDepth = 0;
-        int sceneCacheWidth = 0;
-        int sceneCacheHeight = 0;
-        std::uint64_t sceneCacheCameraRevision = 0;
-        std::uint64_t sceneCacheGeometryRevision = 0;
-        bool sceneCacheValid = false;
-        epochengine::render::neuromorphic_invalidation::InvalidationNetwork sceneInvalidationNetwork{};
 
         GLuint arcadeScreenShader = 0;
         GLint arcadeScreenMvpLoc = -1;

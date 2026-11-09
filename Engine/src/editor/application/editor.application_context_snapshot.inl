@@ -1,5 +1,11 @@
 // Epoch feature implementation; included by editor.core application owner only.
 // SPDX-License-Identifier: LicenseRef-MIT-NoSell
+    struct EditorPlantLabPreview final
+    {
+        forest::ForestAssetDocument document{};
+        forest::CompiledForestAsset compiled{};
+    };
+
     EditorContextSnapshot editor_capture_context_snapshot(const core::Context* ctx)
     {
         EditorContextSnapshot snapshot{};
@@ -14,6 +20,11 @@
 
         const EditorState& editor = it->second;
         snapshot.valid = true;
+        if (editor.plantLabDocumentInitialized && editor.plantLabCompiled.valid
+            && editor.plantLabCompiled.sourceRevision == editor.plantLabDocument.revision
+            && editor.plantLabCompiled.sourceContentHash == editor.plantLabDocument.contentHash)
+            snapshot.plant_lab_preview = std::make_shared<const EditorPlantLabPreview>(
+                EditorPlantLabPreview{editor.plantLabDocument, editor.plantLabCompiled});
         snapshot.project_id = editor.projectId;
         snapshot.project_name = editor.projectName;
         snapshot.project_root = editor.projectRoot;
@@ -32,7 +43,7 @@
         snapshot.script_editor_status = editor.scriptEditorStatus;
         snapshot.script_editor_dirty = editor.scriptEditorDirty;
         snapshot.project_run_backend = editor.projectRunBackend;
-        snapshot.project_run_frame_limit_fps = snapshot_frame_limit(editor.projectRunFrameLimitFps, 60.0);
+        snapshot.project_run_frame_limit_fps = snapshot_frame_limit(editor.projectRunFrameLimitFps, 30.0);
         snapshot.canvas2d_project = sanitize_canvas2d_project(editor.canvas2dProject);
 #if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
         snapshot.tile_map_tile_extent = editor.tileMapTileExtent;
@@ -61,7 +72,7 @@
         snapshot.theme_preference = snapshot_theme_preference(editor.themePreference);
         snapshot.theme_cycle_interval_seconds = editor.themeCycleIntervalSeconds;
         snapshot.rounded_rectangles = editor.roundedRectangles;
-        snapshot.editor_frame_limit_fps = snapshot_frame_limit(editor.editorFrameLimitFps, 120.0);
+        snapshot.editor_frame_limit_fps = snapshot_frame_limit(editor.editorFrameLimitFps, 30.0);
         snapshot.editor_frame_vsync_requested = editor.editorFrameVsyncRequested;
         snapshot.selected_project_file = editor.selectedProjectFile;
         snapshot.selected_asset_path = editor.selectedAssetPath;
@@ -82,6 +93,7 @@
         snapshot.workspace_tab = snapshot_workspace_tab(editor.workspaceTab);
         snapshot.dock_status_tab = snapshot_workspace_tab(editor.dockStatusTab);
         snapshot.main_surface = static_cast<std::uint8_t>(editor.mainSurface);
+        snapshot.game2d_gui_workspace = editor.game2DGuiWorkspace;
         snapshot.bottom_grid_split = gui_lib::normalize_bottom_dock_column_fraction(editor.bottomGridSplit);
         snapshot.outliner_split = snapshot_layout_split(editor.outlinerSplit, 0.20f);
         snapshot.inspector_split = snapshot_layout_split(editor.inspectorSplit, 0.33f);
@@ -130,6 +142,33 @@
         return snapshot;
     }
 
+    bool editor_restore_plant_lab_preview(
+        const std::shared_ptr<core::Context>& ctx,
+        const EditorContextSnapshot& snapshot)
+    {
+        if (!ctx || !snapshot.valid || !snapshot.plant_lab_preview)
+            return false;
+        const auto& preview = *snapshot.plant_lab_preview;
+        if (!preview.compiled.valid
+            || preview.compiled.sourceRevision != preview.document.revision
+            || preview.compiled.sourceContentHash != preview.document.contentHash)
+            return false;
+        // Called only for the newly-created application context. Never apply
+        // the source project's full snapshot or change its current application.
+        editor_load_application(ctx, EditorApplicationKind::PlantLab);
+        auto& editor = editor_state_for(ctx);
+        if (editor.applicationKind != EditorApplicationKind::PlantLab)
+            return false;
+        editor.plantLabDocument = preview.document;
+        editor.plantLabCompiled = preview.compiled;
+        editor.plantLabCompiledRevision = preview.document.revision;
+        editor.plantLabCompiledContentHash = preview.document.contentHash;
+        editor.plantLabDocumentInitialized = true;
+        ensure_plant_lab_preview_entities(editor);
+        push_editor_log(editor, "[plant] Opened the selected compiled plant in a separate Plant Lab application.");
+        return true;
+    }
+
     bool editor_restore_context_snapshot(core::Context* ctx, const EditorContextSnapshot& snapshot)
     {
         if (!ctx || !snapshot.valid)
@@ -139,12 +178,14 @@
         std::scoped_lock lock(storage.mutex);
         EditorState& editor = storage.states[ctx];
         editor.initialized = true;
+        editor.planetaryInitialFramePending = false;
         editor.openMenu = TopMenu::None;
         editor.projectId = snapshot.project_id;
         if (!editor.projectId.empty())
             editor.projectPickerId = editor.projectId;
         editor.projectName = snapshot.project_name;
         editor.projectRoot = snapshot.project_root;
+        editor.projectBuildConfiguration = editor_project_build_configuration(editor.projectRoot).value_or("");
         editor.projectScenePath = snapshot.project_scene_path;
         editor.projectManifest = snapshot.project_manifest;
         editor.projectTemplate = snapshot.project_template;
@@ -165,7 +206,7 @@
         editor.projectBuildOutputPath.clear();
         editor.projectBuildRunBackend.clear();
         editor.projectRunBackend = snapshot.project_run_backend.empty() ? std::string{ "opengl" } : snapshot.project_run_backend;
-        editor.projectRunFrameLimitFps = snapshot_frame_limit(snapshot.project_run_frame_limit_fps, 60.0);
+        editor.projectRunFrameLimitFps = snapshot_frame_limit(snapshot.project_run_frame_limit_fps, 30.0);
         editor.canvas2dProject = sanitize_canvas2d_project(snapshot.canvas2d_project);
         editor.projectCameraMode = snapshot_camera_mode(snapshot.project_camera_mode);
         editor.viewportCameraMode = snapshot.camera.valid
@@ -179,7 +220,7 @@
         editor.themeCycleIntervalSeconds = gui::normalize_theme_cycle_interval(
             snapshot.theme_cycle_interval_seconds);
         editor.roundedRectangles = snapshot.rounded_rectangles;
-        editor.editorFrameLimitFps = snapshot_frame_limit(snapshot.editor_frame_limit_fps, 120.0);
+        editor.editorFrameLimitFps = snapshot_frame_limit(snapshot.editor_frame_limit_fps, 30.0);
         editor.editorFrameVsyncRequested = snapshot.editor_frame_vsync_requested;
         if (ctx->windowData)
             ctx->windowData->editorFramePacingOverride.publish(
@@ -191,10 +232,13 @@
         editor.selectedAssetPath = snapshot.selected_asset_path;
         editor.projectTextures.reset();
         editor.projectTextureStatus = "Texture Library will reopen exact scene revisions on demand.";
+        editor.guiSelectedWidget = {};
+        editor.guiContentEditorWidget = {};
         editor.guiDocument.reset();
         editor.guiDocumentRoot = {};
         editor.guiDocumentWidgets.clear();
         editor.guiCanvasWidgetDrag = {};
+        editor.guiCanvasView = {};
         editor.guiCanvasWidgetDragHandle = {};
         editor.guiProjectionTombstones.clear();
         editor.guiDocumentLoadAttempted = false;
@@ -283,10 +327,13 @@
             select_editor_entity(editor, snapshot.selected_entity);
         editor.sceneDragEntityId = scene::kInvalidSceneObjectId;
         editor.logLines = snapshot.log_lines;
+        ++editor.outputLogRevision;
+        editor.outputFilterRevision = 0u;
         editor.helpersVisible = snapshot.helpers_visible;
         editor.applicationKind = snapshot.application_kind;
         const auto& application = editor_application_profile(editor.applicationKind);
         editor.sceneLightingDirty = true;
+        editor.sceneAmbientDraftInitialized = false;
         editor.sceneInteractionDirty = true;
         editor.sceneDragActive = false;
         editor.sceneLeftWasHeld = false;
@@ -296,8 +343,13 @@
         editor.workspaceTab = snapshot_workspace_tab(snapshot.workspace_tab);
         editor.dockStatusTab = snapshot_workspace_tab(snapshot.dock_status_tab);
         editor.mainSurface = snapshot_main_surface(snapshot.main_surface);
+        editor.game2DGuiWorkspace = snapshot.game2d_gui_workspace
+            || editor_application_owns_dedicated_gui_workspace(editor.applicationKind);
         if (!editor_application_supports_surface(application, editor.mainSurface))
             editor.mainSurface = application.default_surface;
+        // A native-context restore retains the user's selected/closed panes.
+        // Companions are activated on the next explicit workspace selection.
+        editor.workspaceCompanionsPending = false;
         editor.bottomGridSplit = gui_lib::normalize_bottom_dock_column_fraction(snapshot.bottom_grid_split);
         editor.outlinerSplit = snapshot_layout_split(snapshot.outliner_split, 0.20f);
         editor.inspectorSplit = snapshot_layout_split(snapshot.inspector_split, 0.33f);
@@ -445,7 +497,8 @@
         else
             previewgrid::set_camera_mode(ctx, editor.viewportCameraMode);
         input::set_active_profile(editor.inputProfilePreset);
-        ctx->set_scene_preview_mode(editor.previewMode);
+        ctx->set_scene_preview_mode(editor_project_viewport_input_reserved(editor)
+            ? core::ScenePreviewMode::None : editor.previewMode);
         publish_editor_preview_markers(ctx, editor);
         return true;
     }
@@ -457,14 +510,22 @@
 
         std::string projectRoot{};
         std::string projectId{};
+        ScriptTranslationRegistration translation{.context=ctx};
         {
             auto& storage = editor_storage();
             std::scoped_lock lock(storage.mutex);
             const auto it = storage.states.find(ctx);
             if (it != storage.states.end())
             {
+                if (!editor_scene_script_mutation_allowed(it->second))
+                {
+                    push_editor_log(it->second,
+                        "[script] Stop the running project before running this Editor script. Its changes would not update the running copy.");
+                    return false;
+                }
                 projectRoot = it->second.projectRoot;
                 projectId = it->second.projectId;
+                translation.binding=script_translation_binding(it->second,it->second.selectedEntityId);
             }
         }
 
@@ -482,18 +543,27 @@
             .attach_cube_oscillators = &script_attach_cube_oscillators_callback
         };
 
+        const EpochScriptHostV2 hostV2{EPOCH_SCRIPT_HOST_ABI_V2,sizeof(EpochScriptHostV2),
+            &host,&translation,&script_copy_selected_translation_callback};
+
         const std::string sourcePath = editor_resolve_script_source_path(script_name, projectRoot);
-        const bool ok = scripting::load_or_reload_script(
+        bool ok = scripting::load_or_reload_script(
             std::filesystem::path{ sourcePath },
             script_name,
             &host,
-            &report);
+            &report,&hostV2);
 
         auto& storage = editor_storage();
         std::scoped_lock lock(storage.mutex);
         const auto it = storage.states.find(ctx);
+        if(it==storage.states.end()&&translation.pending)ok=false;
         if (it != storage.states.end())
         {
+            if(ok&&!commit_script_translation_registration(it->second,translation))
+            {
+                ok=false;push_editor_log(it->second,
+                    "[script] Copied motion was not committed: the project, scene or selected entity changed, or its track budget is full.");
+            }
             push_editor_log(it->second, std::string("[script] Source path: ") + sourcePath);
             for (const auto& message : report.messages())
                 push_editor_log(it->second, message);

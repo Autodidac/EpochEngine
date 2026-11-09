@@ -5,6 +5,9 @@ module;
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cmath>
+#include <charconv>
+#include <cstring>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
@@ -16,6 +19,7 @@ module;
 #include <optional>
 #include <span>
 #include <string>
+#include <stdexcept>
 #include <string_view>
 #include <thread>
 #include <utility>
@@ -36,6 +40,8 @@ module;
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <sys/stat.h>
+#include <pthread.h>
 #include <unistd.h>
 #if defined(__linux__)
 #include <sys/syscall.h>
@@ -285,6 +291,194 @@ namespace epochengine::platform::child_process
         };
 #endif
 
+        // Two private anonymous pipes, one bounded typed command outstanding.
+        // No network listener, stdio reuse, arbitrary byte send or shell API.
+        using ControlPort = std::uintptr_t;
+        void close_control_port(ControlPort& port) noexcept
+        {
+            if (!port) return;
+#if defined(_WIN32)
+            (void)::CloseHandle(reinterpret_cast<HANDLE>(port));
+#else
+            (void)::close(static_cast<int>(port));
+#endif
+            port = 0;
+        }
+        struct ControlPacket final
+        {
+            std::uint32_t magic{0x48435045u};
+            std::uint8_t version{2}, kind{}, mode{}, result{};
+            std::uint64_t token{}, sequence{}, generation{};
+            double seconds{},duration_seconds{},rate{};
+        };
+        static_assert(sizeof(ControlPacket) == 56);
+        struct OwnedRuntimeControl final
+        {
+            RuntimeControlLease lease{};
+            RuntimeControlSnapshot snapshot{.status=RuntimeControlStatus::idle};
+            ControlPort command_read{}, command_write{}, ack_read{}, ack_write{};
+            std::uint64_t token{}, outstanding{}, binding{};
+            std::uint64_t wire_sequence{};
+            std::uint8_t outstanding_kind{};
+            std::optional<MeshDrawMode> pending_mesh{};
+            std::optional<RuntimePresentation> pending_presentation{},active_presentation{};
+            bool claimed{};
+            ~OwnedRuntimeControl() noexcept { close(); }
+            void close() noexcept
+            {
+                close_control_port(command_read);close_control_port(command_write);
+                close_control_port(ack_read);close_control_port(ack_write);
+                pending_mesh.reset();pending_presentation.reset();active_presentation.reset();
+                outstanding=0u;outstanding_kind=0u;snapshot.presentation_pending=false;
+            }
+        };
+        std::uint64_t control_binding(std::string_view project, std::string_view scene) noexcept
+        {
+            std::uint64_t result=1469598103934665603ull;
+            for(const auto part:{project,scene}){for(unsigned char c:part){result^=c;result*=1099511628211ull;}
+                result^=0xffu;result*=1099511628211ull;}
+            return result;
+        }
+        bool make_control_pipe(ControlPort& read, ControlPort& write) noexcept
+        {
+#if defined(_WIN32)
+            SECURITY_ATTRIBUTES security{sizeof(security),nullptr,TRUE};
+            HANDLE r{},w{};
+            if(!::CreatePipe(&r,&w,&security,4096))return false;
+            read=reinterpret_cast<ControlPort>(r);write=reinterpret_cast<ControlPort>(w);
+#else
+            int ports[2];if(::pipe(ports)!=0)return false;
+            for(unsigned i=0;i<2;++i){const int moved=::fcntl(ports[i],F_DUPFD_CLOEXEC,5);
+                (void)::close(ports[i]);ports[i]=moved;}
+            if(ports[0]<0||ports[1]<0){for(int fd:ports)if(fd>=0)(void)::close(fd);return false;}
+            read=static_cast<ControlPort>(ports[0]);write=static_cast<ControlPort>(ports[1]);
+            if(::fcntl(ports[0],F_SETFL,O_NONBLOCK)<0||::fcntl(ports[1],F_SETFL,O_NONBLOCK)<0){
+                close_control_port(read);close_control_port(write);return false;}
+#endif
+            return true;
+        }
+        bool control_write(ControlPort port,const ControlPacket& packet) noexcept
+        {
+            if(!port)return false;
+#if defined(_WIN32)
+            DWORD written{};return ::WriteFile(reinterpret_cast<HANDLE>(port),&packet,sizeof(packet),&written,nullptr)
+                &&written==sizeof(packet);
+#else
+            // A closed peer must fail this owned command, never deliver SIGPIPE
+            // to the process. Preserve the caller's signal mask/pending signal.
+            sigset_t block{},old{},pending{};::sigemptyset(&block);::sigaddset(&block,SIGPIPE);
+            if(::pthread_sigmask(SIG_BLOCK,&block,&old)!=0)return false;
+            const bool alreadyPending=::sigpending(&pending)==0&&::sigismember(&pending,SIGPIPE)==1;
+            ssize_t written;do{written=::write(static_cast<int>(port),&packet,sizeof(packet));}while(written<0&&errno==EINTR);
+            if(written<0&&errno==EPIPE&&!alreadyPending){timespec timeout{};(void)::sigtimedwait(&block,nullptr,&timeout);}
+            (void)::pthread_sigmask(SIG_SETMASK,&old,nullptr);
+            return written==sizeof(packet);
+#endif
+        }
+        // 0: no packet yet, 1: exact packet, -1: closed/malformed/failed.
+        int control_read(ControlPort port,ControlPacket& packet) noexcept
+        {
+            if(!port)return -1;
+#if defined(_WIN32)
+            DWORD available{};
+            if(!::PeekNamedPipe(reinterpret_cast<HANDLE>(port),nullptr,0,nullptr,&available,nullptr))return -1;
+            if(!available)return 0;
+            if(available!=sizeof(packet))return -1;
+            DWORD received{};
+            return ::ReadFile(reinterpret_cast<HANDLE>(port),&packet,sizeof(packet),&received,nullptr)
+                &&received==sizeof(packet)?1:-1;
+#else
+            const auto received=::read(static_cast<int>(port),&packet,sizeof(packet));
+            if(received<0&&(errno==EAGAIN||errno==EWOULDBLOCK||errno==EINTR))return 0;
+            return received==sizeof(packet)?1:-1;
+#endif
+        }
+        bool valid_control_packet(const OwnedRuntimeControl& control,const ControlPacket& packet,std::uint8_t kind) noexcept
+        {
+            const bool time=kind==3u||kind==4u;
+            const RuntimePresentation sample{packet.seconds,packet.duration_seconds,packet.rate,
+                (packet.mode&1u)!=0u,(packet.mode&2u)!=0u};
+            return packet.magic==0x48435045u&&packet.version==2&&packet.kind==kind&&packet.mode<=(time?3u:1u)
+                &&packet.token==control.token&&packet.generation==control.lease.project_generation&&packet.sequence!=0u
+                &&(time?valid_runtime_presentation(sample):packet.seconds==0.0&&packet.duration_seconds==0.0&&packet.rate==0.0);
+        }
+        ControlPacket presentation_packet(const OwnedRuntimeControl& control,std::uint8_t kind,
+            std::uint64_t sequence,const RuntimePresentation& sample,bool accepted=false) noexcept
+        {
+            return {.kind=kind,.mode=static_cast<std::uint8_t>((sample.reverse?1u:0u)|(sample.playing?2u:0u)),
+                .result=static_cast<std::uint8_t>(accepted),.token=control.token,.sequence=sequence,
+                .generation=control.lease.project_generation,.seconds=sample.seconds,
+                .duration_seconds=sample.duration_seconds,.rate=sample.rate};
+        }
+        bool flush_control_request(OwnedRuntimeControl& control) noexcept
+        {
+            if(control.outstanding)return true;
+            if(!control.pending_mesh&&!control.pending_presentation)return true;
+            if(control.wire_sequence==std::numeric_limits<std::uint64_t>::max())return false;
+            const auto sequence=control.wire_sequence+1u;
+            ControlPacket packet;
+            if(control.pending_mesh)
+            {
+                packet={.kind=1,.mode=static_cast<std::uint8_t>(*control.pending_mesh),
+                    .token=control.token,.sequence=sequence,.generation=control.lease.project_generation};
+                control.snapshot.requested_sequence=sequence;
+            }
+            else
+            {
+                packet=presentation_packet(control,3u,sequence,*control.pending_presentation);
+                control.active_presentation=control.pending_presentation;
+                control.snapshot.presentation_requested_sequence=sequence;
+                control.snapshot.presentation_pending=true;
+            }
+            if(!control_write(control.command_write,packet))return false;
+            control.wire_sequence=sequence;control.outstanding=sequence;control.outstanding_kind=packet.kind;
+            if(packet.kind==1u)control.pending_mesh.reset();else control.pending_presentation.reset();
+            return true;
+        }
+        void poll_control_ack(OwnedRuntimeControl& control) noexcept
+        {
+            if(!control.outstanding)return;
+            ControlPacket packet;const int read=control_read(control.ack_read,packet);
+            if(!read)return;
+            const auto kind=control.outstanding_kind==1u?2u:4u;
+            if(read<0||!valid_control_packet(control,packet,static_cast<std::uint8_t>(kind))
+                ||packet.sequence!=control.outstanding||packet.result>1
+                ||(kind==2u&&packet.result==1&&packet.mode!=static_cast<std::uint8_t>(control.snapshot.requested_mode))
+                ||(kind==4u&&(!control.active_presentation
+                    ||RuntimePresentation{packet.seconds,packet.duration_seconds,packet.rate,
+                        (packet.mode&1u)!=0u,(packet.mode&2u)!=0u}!=*control.active_presentation))){
+                control.close();control.snapshot.status=RuntimeControlStatus::disconnected;return;}
+            if(kind==2u)
+            {
+                control.snapshot.acknowledged_sequence=packet.sequence;
+                control.snapshot.acknowledged_mode=static_cast<MeshDrawMode>(packet.mode);
+                control.snapshot.status=packet.result?RuntimeControlStatus::accepted:RuntimeControlStatus::rejected;
+            }
+            else
+            {
+                control.snapshot.presentation_acknowledged_sequence=packet.sequence;
+                control.snapshot.presentation_accepted=packet.result!=0u;
+                control.active_presentation.reset();
+            }
+            control.outstanding=0u;control.outstanding_kind=0u;
+            control.snapshot.presentation_pending=control.pending_presentation.has_value();
+            if(!flush_control_request(control))
+            {control.close();control.snapshot.status=RuntimeControlStatus::disconnected;}
+        }
+        std::unique_ptr<OwnedRuntimeControl> inheritedControl;
+        std::mutex inheritedControlMutex;
+
+        std::string control_argument(const OwnedRuntimeControl& control)
+        {
+#if defined(_WIN32)
+            const auto read=control.command_read, write=control.ack_write;
+#else
+            constexpr ControlPort read=3,write=4;
+#endif
+            return "--owned-runtime-control="+std::to_string(read)+","+std::to_string(write)+","
+                +std::to_string(control.token)+","+std::to_string(control.lease.project_generation)+","
+                +std::to_string(control_binding(control.lease.project_id,control.lease.scene_id));
+        }
         struct ProcessSlot final
         {
             bool occupied{};
@@ -296,7 +490,10 @@ namespace epochengine::platform::child_process
             std::optional<ExecutableIdentity> verified_executable{};
             std::optional<std::vector<EnvironmentVariable>> environment{};
             bool disconnect_standard_input{};
+            bool suppress_console{};
+            std::shared_ptr<OwnedRuntimeControl> runtime_control{};
             std::optional<WorkspaceIsolation> isolation{};
+            std::shared_ptr<void> retirement_guard{};
             std::vector<std::string> arguments{};
             std::filesystem::path requested_working_directory{};
             std::filesystem::path requested_output_path{};
@@ -307,6 +504,7 @@ namespace epochengine::platform::child_process
             std::string exclusive_group{};
             std::string display_name{};
             WindowMode window_mode{WindowMode::normal};
+            std::string expected_window_class{};
             std::uint64_t started_tick_ns{};
             std::uint64_t finished_tick_ns{};
             std::int32_t exit_code{};
@@ -314,6 +512,8 @@ namespace epochengine::platform::child_process
             bool focus_pending{};
             std::uint64_t focus_deadline_ns{};
             std::string message{};
+            mutable std::string window_diagnostic{};
+            mutable unsigned window_diagnostic_records{};
 #if defined(_WIN32)
             HANDLE process{};
             HANDLE job{};
@@ -458,6 +658,8 @@ namespace epochengine::platform::child_process
 #else
             slot.process_id = -1;
 #endif
+            if(slot.runtime_control){slot.runtime_control->close();slot.runtime_control->snapshot.status=RuntimeControlStatus::disconnected;}
+            slot.retirement_guard.reset();
             revise(value);
         }
 
@@ -664,13 +866,50 @@ namespace epochengine::platform::child_process
         {
             DWORD process_id{};
             HWND window{};
+            bool include_hidden{};
+            std::string_view expected_class{};
         };
+
+        [[nodiscard]] bool matches_window_class(HWND window,
+            std::string_view expected) noexcept
+        {
+            if (expected.empty()) return true;
+            std::array<wchar_t, 129u> name{};
+            const int count = ::GetClassNameW(window, name.data(), static_cast<int>(name.size()));
+            if (count <= 0 || static_cast<std::size_t>(count) != expected.size()) return false;
+            for (std::size_t i = 0; i < expected.size(); ++i)
+                if (name[i] != static_cast<unsigned char>(expected[i])) return false;
+            return true;
+        }
+
+        void record_window_diagnostic(const ProcessSlot& slot, HWND window,
+            DWORD thread, std::string_view action) noexcept
+        {
+            if (slot.expected_window_class.empty() || slot.window_diagnostic_records >= 8u) return;
+            ++slot.window_diagnostic_records;
+            try
+            {
+                std::array<wchar_t, 129u> wide{};
+                const int count = window ? ::GetClassNameW(window, wide.data(), static_cast<int>(wide.size())) : 0;
+                std::string name;
+                for (int i = 0; i < count; ++i)
+                    name.push_back(wide[i] >= 0x20 && wide[i] <= 0x7e ? static_cast<char>(wide[i]) : '?');
+                slot.window_diagnostic = "Native window " + std::string{action}
+                    + ": pid=" + std::to_string(slot.process_id)
+                    + " hwnd=" + std::to_string(reinterpret_cast<std::uintptr_t>(window))
+                    + " thread=" + std::to_string(thread) + " class=" + name
+                    + " expected=" + slot.expected_window_class + ".";
+            }
+            catch (...) {} // Optional evidence cannot change process admission.
+        }
 
         BOOL CALLBACK find_process_window(HWND window, LPARAM data) noexcept
         {
             auto* search = reinterpret_cast<WindowSearch*>(data);
             if (search == nullptr || search->window != nullptr
-                || ::IsWindowVisible(window) == FALSE
+                || (!search->include_hidden && ::IsWindowVisible(window) == FALSE)
+                || (search->include_hidden
+                    && (::GetWindowLongPtrW(window, GWL_EXSTYLE) & WS_EX_TOOLWINDOW) != 0)
                 || ::GetWindow(window, GW_OWNER) != nullptr)
             {
                 return TRUE;
@@ -679,6 +918,13 @@ namespace epochengine::platform::child_process
             (void)::GetWindowThreadProcessId(window, &processId);
             if (processId == search->process_id)
             {
+                if (!matches_window_class(window, search->expected_class)) return TRUE;
+                if (!search->expected_class.empty())
+                {
+                    RECT client{};
+                    if (!::IsWindowEnabled(window) || !::GetClientRect(window, &client)
+                        || client.right <= client.left || client.bottom <= client.top) return TRUE;
+                }
                 search->window = window;
                 return FALSE;
             }
@@ -710,13 +956,17 @@ namespace epochengine::platform::child_process
                 DWORD pid{};
                 const DWORD thread = ::GetWindowThreadProcessId(slot.observed_window, &pid);
                 if (::IsWindow(slot.observed_window) && pid == slot.process_id
-                    && thread != 0u && thread == slot.observed_window_thread)
+                    && thread != 0u && thread == slot.observed_window_thread
+                    && matches_window_class(slot.observed_window, slot.expected_window_class))
                     return static_cast<std::uint64_t>(
                         reinterpret_cast<std::uintptr_t>(slot.observed_window));
+                record_window_diagnostic(slot, slot.observed_window, thread, "cache invalidated");
                 slot.observed_window = nullptr;
                 slot.observed_window_thread = 0u;
             }
-            WindowSearch search{.process_id = slot.process_id};
+            WindowSearch search{.process_id = slot.process_id,
+                .include_hidden = slot.window_mode == WindowMode::deferred,
+                .expected_class = slot.expected_window_class};
             (void)::EnumWindows(
                 find_process_window,
                 reinterpret_cast<LPARAM>(&search));
@@ -725,6 +975,7 @@ namespace epochengine::platform::child_process
             if (!search.window || thread == 0u || pid != slot.process_id) return 0u;
             slot.observed_window = search.window;
             slot.observed_window_thread = thread;
+            record_window_diagnostic(slot, search.window, thread, "selected");
             return static_cast<std::uint64_t>(
                 reinterpret_cast<std::uintptr_t>(search.window));
         }
@@ -733,7 +984,7 @@ namespace epochengine::platform::child_process
         {
             if (!active(slot.state))
                 return FocusCode::not_running;
-            if (slot.window_mode == WindowMode::hidden)
+            if (slot.window_mode != WindowMode::normal)
                 return FocusCode::unsupported;
 
             WindowSearch search{.process_id = slot.process_id,
@@ -886,6 +1137,7 @@ namespace epochengine::platform::child_process
                 arguments.emplace_back(std::move(*wide));
             }
 
+            if(slot.runtime_control)arguments.push_back(*utf8_to_wide(control_argument(*slot.runtime_control)));
             std::wstring commandLine = quote_windows_argument(slot.executable.wstring());
             for (const std::wstring& argument : arguments)
             {
@@ -919,13 +1171,13 @@ namespace epochengine::platform::child_process
             STARTUPINFOEXW startup{};
             startup.StartupInfo.cb = sizeof(STARTUPINFOW);
             startup.StartupInfo.dwFlags = STARTF_USESHOWWINDOW;
-            startup.StartupInfo.wShowWindow = request.window_mode == WindowMode::hidden
+            startup.StartupInfo.wShowWindow = request.window_mode != WindowMode::normal
                 ? SW_HIDE
                 : SW_SHOWNORMAL;
             CapturedStartupResources captured{};
             const DWORD attributeCount = request.isolation ? 3u : 1u;
             DWORD applicationPackagesPolicy = PROCESS_CREATION_ALL_APPLICATION_PACKAGES_OPT_OUT;
-            std::array<HANDLE, 2u> inheritedHandles{};
+            std::array<HANDLE, 4u> inheritedHandles{};
             if (!request.merged_output_path.empty())
             {
                 SECURITY_ATTRIBUTES security{};
@@ -1009,9 +1261,12 @@ namespace epochengine::platform::child_process
                 }
                 captured.attributes_initialized = true;
                 inheritedHandles = {captured.input, captured.output};
+                const std::size_t inheritedCount=slot.runtime_control?4u:2u;
+                if(slot.runtime_control){inheritedHandles[2]=reinterpret_cast<HANDLE>(slot.runtime_control->command_read);
+                    inheritedHandles[3]=reinterpret_cast<HANDLE>(slot.runtime_control->ack_write);}
                 if (::UpdateProcThreadAttribute(
                         captured.attributes, 0u, PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
-                        inheritedHandles.data(), inheritedHandles.size() * sizeof(HANDLE),
+                        inheritedHandles.data(), inheritedCount * sizeof(HANDLE),
                         nullptr, nullptr) == FALSE)
                 {
                     const DWORD failure = ::GetLastError();
@@ -1046,7 +1301,7 @@ namespace epochengine::platform::child_process
             PROCESS_INFORMATION process{};
             DWORD flags = CREATE_SUSPENDED;
             if (request.environment) flags |= CREATE_UNICODE_ENVIRONMENT;
-            if (request.window_mode == WindowMode::hidden)
+            if (request.window_mode != WindowMode::normal || request.suppress_console)
                 flags |= CREATE_NO_WINDOW;
             if (captured.attributes_initialized)
                 flags |= EXTENDED_STARTUPINFO_PRESENT;
@@ -1074,6 +1329,7 @@ namespace epochengine::platform::child_process
             // can allocate. The reservation failure path stops this exact PID
             // and retains its lease until native retirement is observed.
             ScopedNativeHandle initialThread{process.hThread};
+            if(slot.runtime_control){close_control_port(slot.runtime_control->command_read);close_control_port(slot.runtime_control->ack_write);}
             slot.process = process.hProcess;
             slot.job = job.release();
             slot.process_id = process.dwProcessId;
@@ -1121,6 +1377,7 @@ namespace epochengine::platform::child_process
                 argumentStorage.end(),
                 request.arguments.begin(),
                 request.arguments.end());
+            if(slot.runtime_control)argumentStorage.push_back(control_argument(*slot.runtime_control));
             std::vector<char*> arguments{};
             arguments.reserve(argumentStorage.size() + 1u);
             for (std::string& argument : argumentStorage)
@@ -1151,10 +1408,11 @@ namespace epochengine::platform::child_process
             // Keep the handshake outside stdio even when the caller entered
             // with closed standard descriptors. A later dup2 must not replace
             // the only path that can report a failed input/environment setup.
-            const auto reserveDescriptor = [](int& descriptor)
+            const auto reserveDescriptor = [&slot](int& descriptor)
             {
-                if (descriptor > STDERR_FILENO) return true;
-                const int replacement = ::fcntl(descriptor, F_DUPFD_CLOEXEC, STDERR_FILENO + 1);
+                const int minimum=slot.runtime_control?5:STDERR_FILENO+1;
+                if (descriptor >= minimum) return true;
+                const int replacement = ::fcntl(descriptor, F_DUPFD_CLOEXEC, minimum);
                 if (replacement < 0) return false;
                 (void)::close(descriptor);
                 descriptor = replacement;
@@ -1252,18 +1510,25 @@ namespace epochengine::platform::child_process
                     if (outputFile > STDERR_FILENO)
                         (void)::close(outputFile);
                 }
+                if(slot.runtime_control)
+                {
+                    redirect(static_cast<int>(slot.runtime_control->command_read),3);
+                    redirect(static_cast<int>(slot.runtime_control->ack_write),4);
+                }
 #if defined(__linux__)
-                // fork owns a private descriptor table. Retain only stdio and
-                // the CLOEXEC setup writer; sparse descriptors above a lowered
+                // fork owns a private descriptor table. Retain stdio, explicit
+                // control fd3/4 if enabled, and the CLOEXEC setup writer;
+                // sparse descriptors above a lowered
                 // RLIMIT_NOFILE must not survive either execv or execve.
                 // Direct syscalls avoid allocator/stdio/directory-walk state
                 // inherited from other threads. Unsupported or denied cleanup
                 // is a launch failure, never an incomplete close-loop fallback.
 #if defined(SYS_close_range)
                 const auto setupWriter = static_cast<unsigned int>(errorPipe[1]);
-                if (setupWriter > static_cast<unsigned int>(STDERR_FILENO) + 1u
+                const unsigned firstDisposable=slot.runtime_control?5u:static_cast<unsigned>(STDERR_FILENO)+1u;
+                if (setupWriter > firstDisposable
                     && ::syscall(SYS_close_range,
-                        static_cast<unsigned int>(STDERR_FILENO) + 1u,
+                        firstDisposable,
                         setupWriter - 1u, 0u) < 0)
                     failSetup(errno, true);
                 if (::syscall(SYS_close_range, setupWriter + 1u,
@@ -1283,6 +1548,7 @@ namespace epochengine::platform::child_process
             }
 
             (void)::close(errorPipe[1]);
+            if(slot.runtime_control){close_control_port(slot.runtime_control->command_read);close_control_port(slot.runtime_control->ack_write);}
             if (nullFile >= 0)
                 (void)::close(nullFile);
             if (outputFile >= 0)
@@ -1395,6 +1661,7 @@ namespace epochengine::platform::child_process
                     --value.metrics.active_processes;
                 slot.active_counted = false;
                 slot.finished_tick_ns = now_ns();
+                slot.retirement_guard.reset();
             }
             revise(value);
         }
@@ -1406,7 +1673,8 @@ namespace epochengine::platform::child_process
             bool armed{true};
             ~LaunchReservation() noexcept
             {
-                if (!armed || !active(slot.state)) return;
+                if (!armed) return;
+                if (!active(slot.state)) { slot.retirement_guard.reset(); return; }
                 try { slot.message = "Process launch failed during host preparation."; }
                 catch (...) {}
                 fail_reserved_launch(value, slot);
@@ -1416,6 +1684,16 @@ namespace epochengine::platform::child_process
         void poll_locked(SupervisorStorage& value)
         {
             const std::uint64_t tick = now_ns();
+            for(auto& slot:value.slots)if(slot.occupied&&slot.runtime_control)
+            {
+                const auto status=slot.runtime_control->snapshot.status;
+                const auto presentation=slot.runtime_control->snapshot.presentation_acknowledged_sequence;
+                const auto presentationPending=slot.runtime_control->snapshot.presentation_pending;
+                poll_control_ack(*slot.runtime_control);
+                if(status!=slot.runtime_control->snapshot.status
+                    ||presentation!=slot.runtime_control->snapshot.presentation_acknowledged_sequence
+                    ||presentationPending!=slot.runtime_control->snapshot.presentation_pending)revise(value);
+            }
             for (ProcessSlot& slot : value.slots)
             {
                 if (!slot.occupied || !active(slot.state))
@@ -1674,6 +1952,24 @@ namespace epochengine::platform::child_process
         {
             if (request.executable.empty())
                 return "Executable path is empty.";
+            if (request.window_mode != WindowMode::normal
+                && request.window_mode != WindowMode::hidden
+                && request.window_mode != WindowMode::deferred)
+                return "Process window presentation is invalid.";
+            if (request.expected_window_class.size() > 128u
+                || !std::ranges::all_of(request.expected_window_class,
+                    [](unsigned char ch) { return ch >= 0x20u && ch <= 0x7eu; }))
+                return "Expected native window class is invalid or exceeds its bound.";
+#if !defined(_WIN32)
+            if (!request.expected_window_class.empty())
+                return "Expected native window class discovery is unsupported on this platform.";
+#endif
+            if(request.runtime_control&&(!request.expected_executable||!request.disconnect_standard_input
+                ||request.merged_output_path.empty()||request.isolation
+                ||request.runtime_control->project_generation==0
+                ||!valid_text(request.runtime_control->project_id,256u,false)
+                ||!valid_text(request.runtime_control->scene_id,256u,false)))
+                return "Runtime control requires an exact trusted executable, bounded project lease and disconnected captured stdio.";
             if (!valid_executable_path(request.executable))
                 return "Executable path is invalid or exceeds its bound.";
             if (request.expected_executable && !request.expected_executable->valid())
@@ -1788,13 +2084,169 @@ namespace epochengine::platform::child_process
 #endif
                 .focus_pending = slot.focus_pending,
                 .stop_supported = true,
-                .message = slot.message,
+                .message = slot.window_diagnostic.empty() ? slot.message
+                    : slot.message + " " + slot.window_diagnostic,
                 .verified_executable = slot.verified_executable,
                 .environment_replaced = slot.started_tick_ns != 0u && slot.environment.has_value(),
                 .standard_input_disconnected = slot.started_tick_ns != 0u && slot.disconnect_standard_input,
                 .restricted_token_verified = slot.restricted_token_verified,
-                .isolation_retired = slot.isolation_retired};
+                .isolation_retired = slot.isolation_retired,
+                .runtime_control = slot.runtime_control ? slot.runtime_control->snapshot : RuntimeControlSnapshot{}};
         }
+    }
+
+    bool request_runtime_mesh_mode(ProcessHandle handle,const RuntimeControlLease& lease,
+        const ExecutableIdentity& executable,std::string_view correlation,MeshDrawMode mode) noexcept
+    {
+        try
+        {
+            auto& owner=storage();std::scoped_lock lock(owner.mutex);poll_locked(owner);
+            auto* slot=resolve_slot(owner,handle);
+            if(!slot||slot->state!=ProcessState::running||!slot->runtime_control
+                ||slot->runtime_control->lease!=lease||slot->verified_executable!=executable
+                ||slot->correlation_key!=correlation||static_cast<unsigned>(mode)>1u)return false;
+            auto& control=*slot->runtime_control;
+            if(control.snapshot.status==RuntimeControlStatus::pending
+                ||control.snapshot.status==RuntimeControlStatus::disconnected
+                ||control.wire_sequence==std::numeric_limits<std::uint64_t>::max())return false;
+            control.pending_mesh=mode;control.snapshot.requested_sequence=control.wire_sequence+1u;
+            control.snapshot.requested_mode=mode;control.snapshot.status=RuntimeControlStatus::pending;
+            if(!flush_control_request(control)){control.close();control.snapshot.status=RuntimeControlStatus::disconnected;return false;}
+            revise(owner);return true;
+        }
+        catch(...){return false;}
+    }
+    bool request_runtime_presentation(ProcessHandle handle,const RuntimeControlLease& lease,
+        const ExecutableIdentity& executable,std::string_view correlation,const RuntimePresentation& sample) noexcept
+    {
+        if(!valid_runtime_presentation(sample))return false;
+        try
+        {
+            auto& owner=storage();std::scoped_lock lock(owner.mutex);poll_locked(owner);
+            auto* slot=resolve_slot(owner,handle);
+            if(!slot||slot->state!=ProcessState::running||!slot->runtime_control
+                ||slot->runtime_control->lease!=lease||slot->verified_executable!=executable
+                ||slot->correlation_key!=correlation)return false;
+            auto& control=*slot->runtime_control;
+            if(control.snapshot.status==RuntimeControlStatus::disconnected
+                ||control.wire_sequence==std::numeric_limits<std::uint64_t>::max())return false;
+            // Only explicit transport changes enter this bounded, latest-wins slot.
+            // A mesh request retains priority after the current typed ACK.
+            control.pending_presentation=sample;control.snapshot.presentation_pending=true;
+            if(!flush_control_request(control)){control.close();control.snapshot.status=RuntimeControlStatus::disconnected;return false;}
+            revise(owner);return true;
+        }
+        catch(...){return false;}
+    }
+    bool initialize_inherited_runtime_control(int argc,char* argv[]) noexcept
+    {
+        try
+        {
+            std::scoped_lock lock(inheritedControlMutex);
+            constexpr std::string_view prefix="--owned-runtime-control=";
+            for(int i=1;i<argc;++i)
+            {
+                const std::string_view argument=argv[i]?argv[i]:"";
+                if(!argument.starts_with(prefix))continue;
+                if(inheritedControl||argument.size()>160)return false;
+                auto value=argument.substr(prefix.size());std::array<std::uint64_t,5> fields{};
+                for(std::size_t part=0;part<fields.size();++part){
+                    const auto end=value.find(',');const auto number=value.substr(0,end);
+                    const auto parsed=std::from_chars(number.data(),number.data()+number.size(),fields[part]);
+                    if(number.empty()||parsed.ec!=std::errc{}||parsed.ptr!=number.data()+number.size()||!fields[part])return false;
+                    if(part+1<fields.size()){if(end==std::string_view::npos)return false;value.remove_prefix(end+1);}
+                    else if(end!=std::string_view::npos)return false;
+                }
+                if(fields[0]==fields[1]||fields[0]>std::numeric_limits<ControlPort>::max()
+                    ||fields[1]>std::numeric_limits<ControlPort>::max())return false;
+#if defined(_WIN32)
+                const auto r=reinterpret_cast<HANDLE>(static_cast<ControlPort>(fields[0]));
+                const auto w=reinterpret_cast<HANDLE>(static_cast<ControlPort>(fields[1]));
+                if(::GetFileType(r)!=FILE_TYPE_PIPE||::GetFileType(w)!=FILE_TYPE_PIPE)return false;
+                if(!::SetHandleInformation(r,HANDLE_FLAG_INHERIT,0)||!::SetHandleInformation(w,HANDLE_FLAG_INHERIT,0))return false;
+#else
+                if(fields[0]!=3||fields[1]!=4)return false;
+                for(const int fd:{3,4}){struct stat info{};
+                    if(::fstat(fd,&info)!=0||!S_ISFIFO(info.st_mode)||::fcntl(fd,F_SETFD,FD_CLOEXEC)<0)return false;}
+#endif
+                auto control=std::make_unique<OwnedRuntimeControl>();
+                control->command_read=static_cast<ControlPort>(fields[0]);control->ack_write=static_cast<ControlPort>(fields[1]);
+                control->token=fields[2];control->lease.project_generation=fields[3];control->binding=fields[4];
+                inheritedControl=std::move(control);
+            }
+            return true;
+        }
+        catch(...){return false;}
+    }
+    bool claim_inherited_runtime_control(std::string_view project,std::string_view scene) noexcept
+    {
+        std::scoped_lock lock(inheritedControlMutex);
+        if(!inheritedControl||inheritedControl->binding!=control_binding(project,scene))return false;
+        inheritedControl->claimed=true;return true;
+    }
+    namespace
+    {
+        void poll_inherited_control() noexcept
+        {
+            if(!inheritedControl||!inheritedControl->claimed||inheritedControl->outstanding)return;
+            auto& control=*inheritedControl;ControlPacket packet;
+            const auto read=control_read(control.command_read,packet);if(!read)return;
+            if(read<0||(packet.kind!=1u&&packet.kind!=3u)
+                ||!valid_control_packet(control,packet,packet.kind)||packet.result!=0
+                ||control.wire_sequence==std::numeric_limits<std::uint64_t>::max()
+                ||packet.sequence!=control.wire_sequence+1u){control.close();return;}
+            control.wire_sequence=packet.sequence;control.outstanding=packet.sequence;control.outstanding_kind=packet.kind;
+            if(packet.kind==1u)
+            {
+                control.snapshot.requested_mode=static_cast<MeshDrawMode>(packet.mode);
+                control.pending_mesh=control.snapshot.requested_mode;
+            }
+            else
+            {
+                control.active_presentation=RuntimePresentation{packet.seconds,packet.duration_seconds,packet.rate,
+                    (packet.mode&1u)!=0u,(packet.mode&2u)!=0u};
+                control.pending_presentation=control.active_presentation;
+            }
+        }
+    }
+    std::optional<RuntimeMeshCommand> poll_runtime_mesh_command() noexcept
+    {
+        std::scoped_lock lock(inheritedControlMutex);
+        poll_inherited_control();
+        if(!inheritedControl||inheritedControl->outstanding_kind!=1u||!inheritedControl->pending_mesh)return {};
+        auto& control=*inheritedControl;const auto mode=*control.pending_mesh;control.pending_mesh.reset();
+        return RuntimeMeshCommand{control.outstanding,mode};
+    }
+    void acknowledge_runtime_mesh_command(const RuntimeMeshCommand& command,bool published,MeshDrawMode actual_mode) noexcept
+    {
+        std::scoped_lock lock(inheritedControlMutex);
+        if(!inheritedControl||!inheritedControl->claimed||inheritedControl->outstanding_kind!=1u
+            ||command.sequence!=inheritedControl->outstanding
+            ||command.mode!=inheritedControl->snapshot.requested_mode)return;
+        auto& control=*inheritedControl;
+        const ControlPacket ack{.kind=2,.mode=static_cast<std::uint8_t>(actual_mode),.result=static_cast<std::uint8_t>(published),
+            .token=control.token,.sequence=command.sequence,.generation=control.lease.project_generation};
+        if(!control_write(control.ack_write,ack))control.close();
+        control.snapshot.acknowledged_sequence=command.sequence;control.outstanding=0;control.outstanding_kind=0u;
+    }
+    std::optional<RuntimePresentationCommand> poll_runtime_presentation_command() noexcept
+    {
+        std::scoped_lock lock(inheritedControlMutex);poll_inherited_control();
+        if(!inheritedControl||inheritedControl->outstanding_kind!=3u||!inheritedControl->pending_presentation)return {};
+        auto& control=*inheritedControl;const auto sample=*control.pending_presentation;control.pending_presentation.reset();
+        return RuntimePresentationCommand{control.outstanding,sample};
+    }
+    void acknowledge_runtime_presentation_command(const RuntimePresentationCommand& command,bool accepted) noexcept
+    {
+        std::scoped_lock lock(inheritedControlMutex);
+        if(!inheritedControl||!inheritedControl->claimed||inheritedControl->outstanding_kind!=3u
+            ||command.sequence!=inheritedControl->outstanding||!inheritedControl->active_presentation
+            ||command.sample!=*inheritedControl->active_presentation)return;
+        auto& control=*inheritedControl;
+        const auto ack=presentation_packet(control,4u,command.sequence,command.sample,accepted);
+        if(!control_write(control.ack_write,ack))control.close();
+        control.snapshot.presentation_acknowledged_sequence=command.sequence;
+        control.active_presentation.reset();control.outstanding=0u;control.outstanding_kind=0u;
     }
 
     std::string_view process_state_name(ProcessState state) noexcept
@@ -2072,12 +2524,16 @@ namespace epochengine::platform::child_process
                         || slot.verified_executable != request.expected_executable
                         || slot.environment != request.environment
                         || slot.disconnect_standard_input != request.disconnect_standard_input
+                        || slot.suppress_console != request.suppress_console
+                        || static_cast<bool>(slot.runtime_control)!=request.runtime_control.has_value()
+                        || (slot.runtime_control&&slot.runtime_control->lease!=*request.runtime_control)
                         || slot.isolation != request.isolation
                         || slot.arguments != request.arguments
                         || slot.requested_working_directory != request.working_directory
                         || slot.requested_output_path != request.merged_output_path
                         || slot.append_output != request.append_output
                         || slot.window_mode != request.window_mode
+                        || slot.expected_window_class != request.expected_window_class
                         || slot.exclusive_group != request.exclusive_group)
                     {
                         ++value.metrics.launch_failures;
@@ -2154,10 +2610,28 @@ namespace epochengine::platform::child_process
             slot->exclusive_group = request.exclusive_group;
             slot->display_name = request.display_name;
             slot->window_mode = request.window_mode;
+            slot->expected_window_class = request.expected_window_class;
             slot->environment = request.environment;
             slot->disconnect_standard_input = request.disconnect_standard_input;
+            slot->suppress_console = request.suppress_console;
             slot->isolation = request.isolation;
+            slot->retirement_guard = request.retirement_guard;
             slot->arguments = request.arguments;
+            if(request.runtime_control)
+            {
+                slot->runtime_control=std::make_shared<OwnedRuntimeControl>();
+                auto& control=*slot->runtime_control;control.lease=*request.runtime_control;
+                control.token=now_ns()^(static_cast<std::uint64_t>(generation)<<32u);
+                if(!control.token)control.token=1;
+                if(!make_control_pipe(control.command_read,control.command_write)
+                    ||!make_control_pipe(control.ack_read,control.ack_write))
+                    throw std::runtime_error("Private runtime command pipes could not be created.");
+#if defined(_WIN32)
+                if(!::SetHandleInformation(reinterpret_cast<HANDLE>(control.command_write),HANDLE_FLAG_INHERIT,0)
+                    ||!::SetHandleInformation(reinterpret_cast<HANDLE>(control.ack_read),HANDLE_FLAG_INHERIT,0))
+                    throw std::runtime_error("Private runtime command parent ports could not be protected.");
+#endif
+            }
             slot->requested_working_directory = request.working_directory;
             slot->requested_output_path = request.merged_output_path;
             slot->append_output = request.append_output;
@@ -2313,6 +2787,8 @@ namespace epochengine::platform::child_process
         if (!active(slot->state))
             return StopCode::not_running;
         ++value.metrics.stop_requests;
+        if(slot->runtime_control){slot->runtime_control->close();slot->runtime_control->snapshot.status=RuntimeControlStatus::disconnected;}
+
 #if defined(_WIN32)
         if (mode == StopMode::force)
         {
@@ -2335,14 +2811,53 @@ namespace epochengine::platform::child_process
             return StopCode::forced;
         }
         DWORD processId = slot->process_id;
-        WindowSearch search{.process_id = processId};
-        (void)::EnumWindows(find_process_window, reinterpret_cast<LPARAM>(&search));
-        if (search.window == nullptr)
+        if (!slot->expected_window_class.empty())
         {
-            revise(value);
-            return StopCode::unsupported;
+            // Use the exact opt-in render identity retained at discovery,
+            // including after it becomes a child of another process. A visible
+            // helper in this process must not divert the runtime's Stop.
+            const auto window = reinterpret_cast<HWND>(process_window_id(*slot));
+            if (!window)
+            {
+                revise(value);
+                return StopCode::unsupported;
+            }
+            const bool posted = ::PostMessageW(window, WM_CLOSE, 0u, 0) != FALSE;
+            const DWORD error = posted ? ERROR_SUCCESS : ::GetLastError();
+            record_window_diagnostic(*slot, window, slot->observed_window_thread,
+                posted ? "close posted" : "close post failed");
+            if (!posted)
+            {
+                slot->message = "Graceful process close could not be posted (Win32 "
+                    + std::to_string(error) + ").";
+                revise(value);
+                return StopCode::failed;
+            }
         }
-        (void)::EnumWindows(close_process_window, reinterpret_cast<LPARAM>(&processId));
+        else
+        {
+            WindowSearch search{.process_id = processId};
+            (void)::EnumWindows(find_process_window, reinterpret_cast<LPARAM>(&search));
+            if (search.window == nullptr)
+            {
+                // Parenting removes an owned runtime from EnumWindows. The cached
+                // observed window is still checked against this live process and
+                // its original window thread before receiving a close request.
+                const auto window = reinterpret_cast<HWND>(process_window_id(*slot));
+                if (!window)
+                {
+                    revise(value);
+                    return StopCode::unsupported;
+                }
+                if (::PostMessageW(window, WM_CLOSE, 0u, 0) == FALSE)
+                {
+                    revise(value);
+                    return StopCode::failed;
+                }
+            }
+            else
+                (void)::EnumWindows(close_process_window, reinterpret_cast<LPARAM>(&processId));
+        }
 #else
         const int signal = mode == StopMode::force ? SIGKILL : SIGTERM;
         if (slot->process_id <= 0 || ::kill(-slot->process_id, signal) != 0)

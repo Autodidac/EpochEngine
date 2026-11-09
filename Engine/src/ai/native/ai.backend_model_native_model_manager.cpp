@@ -20,6 +20,7 @@ extern "C" void core_log_write(std::uint32_t, const char*, const char*);
 #include <regex>
 #include <stdexcept>
 #include <system_error>
+import platform.filesystem;
 
 namespace epoch_ai::model {
 namespace {
@@ -247,7 +248,7 @@ namespace {
         });
         return value;
     }();
-    if (filename_lower.starts_with("mmproj-") || filename_lower == "mmproj.gguf") {
+    if (is_vision_projector_filename(filename_lower)) {
         return std::unexpected(
             "The selected file is an mmproj vision projector, not the Qwen model. "
             "Choose the first model shard ending in -00001-of-0000N.gguf.");
@@ -303,7 +304,52 @@ struct NativeModelManager::RuntimeSlot {
         : config(with_port(source, port)), runtime(config, state_root) {}
     core::Config config;
     QwenFlashRuntime runtime;
+    epochengine::ai::native_runtime::idle::UsefulActivity activity;
+    std::string idle_status;
 };
+
+struct NativeModelManager::GpuOwnership {
+    epochengine::platform::filesystem::ExclusiveFileLease lease;
+};
+struct NativeModelManager::GpuUse {
+    NativeModelManager* manager{};
+    std::shared_ptr<GpuOwnership> owner;
+    ~GpuUse() { owner.reset(); if (manager) manager->release_gpu_ownership_if_retired(); }
+};
+
+std::expected<std::shared_ptr<NativeModelManager::GpuOwnership>, core::Error>
+NativeModelManager::acquire_gpu_ownership() {
+    namespace fs = std::filesystem;
+    namespace filesystem = epochengine::platform::filesystem;
+    std::scoped_lock lock(gpu_owner_mutex_);
+    if (config_.shared_native_inputs_disabled)
+        return std::unexpected(core::Error{core::make_error_code(core::Errc::model_unavailable),
+            "Local model inputs are unavailable in this runtime. Configure them in the owning Editor first."});
+    if (gpu_owner_) return gpu_owner_;
+    std::error_code error;
+    const auto cache = fs::canonical(config_.model_cache_root, error);
+    if (error || !fs::is_directory(cache, error) || error || !cache.is_absolute() || cache == cache.root_path())
+        return std::unexpected(core::Error{core::make_error_code(core::Errc::model_unavailable),
+            "The shared model store is unavailable; no native model was started."});
+    auto lease = filesystem::ExclusiveFileLease::acquire(cache.parent_path() / "native-gpu.lock");
+    if (!lease) return std::unexpected(core::Error{core::make_error_code(core::Errc::model_unavailable),
+        lease.code() == filesystem::FileLeaseCode::busy
+            ? "Another Epoch application owns local models. Unload them there before loading a model here."
+            : "The shared native-model ownership lease could not be validated; no model was started."});
+    gpu_owner_ = std::make_shared<GpuOwnership>(GpuOwnership{std::move(lease)});
+    return gpu_owner_;
+}
+
+void NativeModelManager::release_gpu_ownership_if_retired() noexcept {
+    try {
+        std::scoped_lock owner_lock(gpu_owner_mutex_);
+        if (!gpu_owner_ || gpu_owner_.use_count() != 1u) return; // A start/restore still owns it.
+        std::scoped_lock slots_lock(slots_mutex_);
+        for (const auto& [_, slot] : slots_)
+            if (!slot->runtime.worker_retired()) return;
+        gpu_owner_.reset();
+    } catch (...) { /* Unknown retirement retains ownership instead of admitting another process. */ }
+}
 
 std::shared_ptr<NativeModelManager::RuntimeSlot> NativeModelManager::find_slot(
     std::string_view id_or_uri) const {
@@ -344,7 +390,199 @@ bool NativeModelManager::model_loaded(std::string_view id_or_uri) const {
 nlohmann::json NativeModelManager::model_runtime_status(std::string_view id_or_uri) const {
     const auto slot = find_slot(id_or_uri);
     if (!slot) return nlohmann::json{{"running", false}};
-    return slot->runtime.describe();
+    auto status = slot->runtime.describe();
+    std::scoped_lock lock(slots_mutex_);
+    status["idle_seconds"] = slot->activity.elapsed_seconds(
+        epochengine::ai::native_runtime::idle::Clock::now());
+    status["idle_status"] = !slot->idle_status.empty() ? slot->idle_status
+        : !slot->runtime.running() ? "Not loaded"
+        : epochengine::ai::native_runtime::idle::work_gate.protected_work()
+            ? "Active or queued work protects residency" : "Idle";
+    return status;
+}
+
+void NativeModelManager::note_model_use(std::string_view id_or_uri,
+    epochengine::ai::native_runtime::idle::Clock::time_point now) {
+    const auto id = normalize_id(id_or_uri);
+    std::scoped_lock lock(slots_mutex_);
+    const auto found = slots_.find(id);
+    if (found == slots_.end() || !found->second->runtime.running()) return;
+    found->second->activity.note(now);
+    found->second->idle_status.clear();
+}
+
+nlohmann::json NativeModelManager::retire_idle_models(
+    epochengine::ai::native_runtime::idle::Clock::time_point now,
+    const std::function<void(std::string_view)>& before_stop) {
+    namespace idle = epochengine::ai::native_runtime::idle;
+    std::vector<std::pair<std::string, std::shared_ptr<RuntimeSlot>>> expired;
+    // Snapshot profiles before slots; tuning saves use the same lock order.
+    for (const auto& profile : models()) {
+        const auto slot = find_slot(profile.id);
+        if (!slot) continue;
+        std::scoped_lock lock(slots_mutex_);
+        if (slot->runtime.running() && slot->activity.expired(now, profile.idle_timeout_minutes))
+            expired.emplace_back(profile.id, slot);
+    }
+    nlohmann::json results = nlohmann::json::array();
+    if (expired.empty()) return results;
+    idle::RetirementClaim claim;
+    if (!claim) return results; // Another model's work defers the whole cleanup.
+    for (const auto& [id, slot] : expired) {
+        const auto profile = find(id);
+        {
+            std::scoped_lock lock(slots_mutex_);
+            // A request may have finished, or the timeout may have been saved,
+            // between the candidate snapshot and the retirement claim.
+            if (!profile || !slot->runtime.running()
+                || !slot->activity.expired(now, profile->idle_timeout_minutes)) continue;
+            slot->idle_status = "Unloading after idle timeout";
+        }
+        bool retired{};
+        std::string error;
+        try {
+            if (before_stop) before_stop(id);
+            stop_model(id); // Existing owned stop + join, outside every UI/slot lock.
+            retired = !slot->runtime.running();
+            if (!retired) error = "Owned model worker did not retire";
+        } catch (const std::exception& failure) { error = failure.what(); }
+        catch (...) { error = "Owned model retirement failed"; }
+        {
+            std::scoped_lock lock(slots_mutex_);
+            slot->activity.retirement_failed = !retired;
+            slot->idle_status = retired ? "Unloaded after idle timeout"
+                : "Idle unload failed; manual attention required";
+        }
+        results.push_back({{"model", id}, {"retired", retired}, {"error", error}});
+    }
+    return results;
+}
+
+struct NativeResidency::State {
+    struct Entry {
+        RuntimeModelProfile saved;
+        std::shared_ptr<NativeModelManager::RuntimeSlot> slot;
+        QwenFlashRuntime::ResidentSnapshot launch;
+        nlohmann::json manifest;
+    };
+    const NativeModelManager* owner{};
+    std::string preferred;
+    std::vector<Entry> entries;
+    std::optional<nlohmann::json> selection;
+};
+[[nodiscard]] static std::optional<nlohmann::json> idle_resume_file(const std::filesystem::path& path) {
+    std::error_code error;
+    const auto bytes = std::filesystem::file_size(path, error);
+    if (error || bytes == 0u || bytes > 64u * 1024u) return std::nullopt;
+    const auto value = read_json(path);
+    return value.is_object() ? std::optional{value} : std::nullopt;
+}
+std::vector<std::string> NativeResidency::ids() const {
+    std::vector<std::string> result;
+    if (state_) for (const auto& entry : state_->entries) result.push_back(entry.saved.id);
+    return result;
+}
+std::vector<std::uint64_t> NativeResidency::process_ids() const {
+    std::vector<std::uint64_t> result;
+    if (state_) for (const auto& entry : state_->entries) result.push_back(entry.launch->process_id());
+    return result;
+}
+std::expected<std::shared_ptr<const NativeResidency>, core::Error>
+NativeModelManager::capture_residency(std::string_view exact_selected_id) const {
+    auto state = std::make_shared<NativeResidency::State>(); state->owner = this;
+    { std::scoped_lock lock(slots_mutex_); state->preferred = last_active_id_; }
+    if (!exact_selected_id.empty()) {
+        state->selection = idle_resume_file(state_root_ / "models" / "selection.json");
+        if (!state->selection || state->selection->value("foundation_model", std::string{})
+                != "qwenflash://" + std::string{exact_selected_id})
+            return std::unexpected(core::Error{core::make_error_code(core::Errc::model_unavailable),
+                "Exact idle reload has no current explicit model selection"});
+        state->preferred = exact_selected_id;
+    }
+    for (const auto& profile : models()) {
+        if (!exact_selected_id.empty() && profile.id != exact_selected_id) continue;
+        auto slot = find_slot(profile.id);
+        if (!slot || !slot->runtime.running()) continue;
+        auto launch = slot->runtime.capture_resident();
+        if (!launch) return std::unexpected(launch.error());
+        nlohmann::json manifest;
+        if (!exact_selected_id.empty()) {
+            const auto current = idle_resume_file(manifest_path(profile.id));
+            bool matches{};
+            try { matches = current && to_json(runtime_model_from_json(*current)) == to_json(profile); }
+            catch (const std::exception&) { matches = false; }
+            if (!matches)
+                return std::unexpected(core::Error{core::make_error_code(core::Errc::model_unavailable),
+                    "Selected model profile changed before idle retirement"});
+            manifest = *current;
+        }
+        state->entries.push_back({profile, std::move(slot), *launch, std::move(manifest)});
+    }
+    if (!exact_selected_id.empty() && state->entries.size() != 1u)
+        return std::unexpected(core::Error{core::make_error_code(core::Errc::model_unavailable),
+            "Exact idle reload requires one owned resident model"});
+    return std::shared_ptr<const NativeResidency>{new NativeResidency{std::move(state)}};
+}
+bool NativeModelManager::residency_settings_match(const NativeResidency& snapshot) const {
+    if (!snapshot.state_ || snapshot.state_->owner != this) return false;
+    if (snapshot.state_->selection
+        && idle_resume_file(state_root_ / "models" / "selection.json") != snapshot.state_->selection) return false;
+    for (const auto& entry : snapshot.state_->entries) {
+        const auto current = find(entry.saved.id);
+        if (!current || to_json(*current) != to_json(entry.saved)
+            || find_slot(entry.saved.id) != entry.slot) return false;
+        if (snapshot.state_->selection
+            && idle_resume_file(manifest_path(entry.saved.id)) != std::optional{entry.manifest}) return false;
+    }
+    return true;
+}
+std::expected<void, core::Error> NativeModelManager::suspend_residency(
+    const NativeResidency& snapshot,
+    const epochengine::ai::native_runtime::idle::RetirementClaim& claim) {
+    if (!claim || !residency_settings_match(snapshot))
+        return std::unexpected(core::Error{core::make_error_code(core::Errc::model_unavailable),
+            "Native settings changed before handoff; resident models were retained"});
+    // Validate every captured owner before stopping the first one.
+    for (const auto& entry : snapshot.state_->entries)
+        if (!entry.slot->runtime.matches_resident(entry.launch))
+            return std::unexpected(core::Error{core::make_error_code(core::Errc::model_unavailable),
+                "A captured native process changed before handoff; no generation started"});
+    for (const auto& entry : snapshot.state_->entries) {
+        stop_model(entry.saved.id); // Real owned stop and join outside slots/UI locks.
+        if (!entry.slot->runtime.resident_retired(entry.launch))
+            return std::unexpected(core::Error{core::make_error_code(core::Errc::model_unavailable),
+                "Native worker retirement could not be verified; no asset stage started"});
+    }
+    return {};
+}
+std::expected<void, core::Error> NativeModelManager::restore_residency(
+    const NativeResidency& snapshot,
+    const epochengine::ai::native_runtime::idle::RetirementClaim& claim,
+    std::chrono::steady_clock::time_point deadline, std::stop_token stop,
+    const std::function<bool()>& still_current) {
+    if (!claim || !residency_settings_match(snapshot))
+        return std::unexpected(core::Error{core::make_error_code(core::Errc::model_unavailable),
+            "Native settings changed; stale restoration refused"});
+    std::shared_ptr<GpuOwnership> ownership;
+    if (!snapshot.state_->entries.empty()) {
+        auto acquired = acquire_gpu_ownership();
+        if (!acquired) return std::unexpected(acquired.error());
+        ownership = std::move(*acquired);
+    }
+    GpuUse gpu_use{this, std::move(ownership)};
+    for (const auto& entry : snapshot.state_->entries) {
+        if (stop.stop_requested() || (still_current && !still_current())
+            || !residency_settings_match(snapshot))
+            return std::unexpected(core::Error{core::make_error_code(core::Errc::cancelled),
+                "Native restoration superseded by operator settings or shutdown"});
+        if (!entry.slot->runtime.matches_resident(entry.launch)) {
+            auto restored = entry.slot->runtime.restore_resident(entry.launch, claim, deadline, stop);
+            if (!restored) return std::unexpected(restored.error());
+            note_model_use(entry.saved.id);
+        }
+    }
+    { std::scoped_lock lock(slots_mutex_); last_active_id_ = snapshot.state_->preferred; }
+    return {};
 }
 
 void NativeModelManager::prefer_model(std::string_view id_or_uri) {
@@ -356,12 +594,15 @@ void NativeModelManager::prefer_model(std::string_view id_or_uri) {
 
 void NativeModelManager::stop_model(std::string_view id_or_uri) {
     if (auto slot = find_slot(id_or_uri)) slot->runtime.stop();
-    std::scoped_lock lock(slots_mutex_);
-    if (last_active_id_ == normalize_id(id_or_uri)) {
-        last_active_id_.clear();
-        for (const auto& [id, candidate] : slots_)
-            if (candidate->runtime.running()) { last_active_id_ = id; break; }
+    {
+        std::scoped_lock lock(slots_mutex_);
+        if (last_active_id_ == normalize_id(id_or_uri)) {
+            last_active_id_.clear();
+            for (const auto& [id, candidate] : slots_)
+                if (candidate->runtime.running()) { last_active_id_ = id; break; }
+        }
     }
+    release_gpu_ownership_if_retired();
 }
 
 bool is_native_runtime_model(std::string_view model) noexcept {
@@ -418,7 +659,7 @@ std::filesystem::path NativeModelManager::manifest_path(std::string_view id) con
     return catalog_root_ / normalize_id(id) / "manifest.json";
 }
 
-void NativeModelManager::save_profile(const RuntimeModelProfile& profile) const {
+void NativeModelManager::save_profile(const RuntimeModelProfile& profile, bool only_if_absent) const {
     const auto path = manifest_path(profile.id);
     std::error_code ec;
     std::filesystem::create_directories(path.parent_path(), ec);
@@ -436,6 +677,16 @@ void NativeModelManager::save_profile(const RuntimeModelProfile& profile) const 
             output << to_json(profile).dump(2) << '\n';
             output.flush();
             if (!output) throw std::runtime_error("Could not write model profile: " + temporary.string());
+        }
+        if (only_if_absent) {
+            // Publish the completed sibling without replacing any existing file,
+            // including one created after the catalog's in-memory check. Both
+            // links are on one filesystem; unsupported filesystems fail closed.
+            std::filesystem::create_hard_link(temporary, path, ec);
+            if (ec) throw std::filesystem::filesystem_error(
+                "Could not register new model without replacing existing data", temporary, path, ec);
+            std::filesystem::remove(temporary, ec);
+            return;
         }
         // Only the platform layer knows the atomic replacement contract;
         // never remove the existing manifest before the replacement succeeds.
@@ -711,7 +962,8 @@ std::expected<nlohmann::json, core::Error> NativeModelManager::update_tuning(
         core::make_error_code(core::Errc::invalid_argument), "Model tuning requires an object"});
     // Whitelist only non-identity runtime settings. Never accept a caller's
     // id/path/repo/command override via the settings GUI.
-    static constexpr std::array<std::string_view, 24> allowed{
+    static constexpr std::array<std::string_view, 25> allowed{
+        "idle_timeout_minutes",
         "runtime_policy", "gpu_layers", "gpu_layer_count_hint", "context_tokens", "parallel_slots",
         "context_reserve_tokens", "auto_compact", "compact_trigger_ratio", "compact_target_ratio",
         "threads", "batch_threads", "batch_size", "ubatch_size", "flash_attention",
@@ -751,7 +1003,12 @@ std::expected<nlohmann::json, core::Error> NativeModelManager::update_tuning(
 
 std::expected<nlohmann::json, core::Error> NativeModelManager::register_model(const nlohmann::json& spec) {
     try {
+        if (spec.contains("only_if_absent") && !spec.at("only_if_absent").is_boolean())
+            throw std::invalid_argument("only_if_absent must be a boolean");
+        const bool only_if_absent = spec.value("only_if_absent", false);
         RuntimeModelProfile profile;
+        profile.behavior_labels = declared_behavior_labels(spec);
+        profile.tags = behavior_metadata(spec, "tags");
         profile.runtime = RuntimeKind::qwen_flash;
         const auto source = spec.value("source", std::string{"hugging-face"});
         profile.source = source == "local-gguf" ? ModelSourceKind::local_gguf : ModelSourceKind::hugging_face;
@@ -836,7 +1093,10 @@ std::expected<nlohmann::json, core::Error> NativeModelManager::register_model(co
         if (profile.parallel_slots > 4U) throw std::invalid_argument("parallel_slots must be between 1 and 4");
         if (effective_context_tokens(profile) < 4'096U) throw std::invalid_argument("effective per-slot context is too small");
         if (profile.compact_target_ratio >= profile.compact_trigger_ratio) throw std::invalid_argument("compact target must be below compact trigger");
-        profile = runtime_model_from_json(to_json(profile));
+        auto validated_profile = to_json(profile);
+        if (spec.contains("idle_timeout_minutes"))
+            validated_profile["idle_timeout_minutes"] = spec.at("idle_timeout_minutes");
+        profile = runtime_model_from_json(validated_profile);
 
         const bool runtime_reload_required = model_loaded(profile.id);
 
@@ -844,9 +1104,11 @@ std::expected<nlohmann::json, core::Error> NativeModelManager::register_model(co
         // commands. Persist them even while this model is loaded, but never
         // tear down/reload a live model implicitly. The active llama-server
         // keeps its current GPU/KV layout until the next explicit load.
-        save_profile(profile);
         {
             std::scoped_lock lock(mutex_);
+            if (only_if_absent && find_locked(profile.id))
+                throw std::invalid_argument("Model is already registered; its settings were preserved.");
+            save_profile(profile, only_if_absent);
             load_profiles_locked();
         }
         auto payload = to_json(profile);
@@ -865,6 +1127,9 @@ void NativeModelManager::set_install_state(nlohmann::json state) {
 }
 
 std::expected<nlohmann::json, core::Error> NativeModelManager::install(std::string_view id_or_uri) {
+    if (config_.shared_model_inputs_bound) return std::unexpected(core::Error{
+        core::make_error_code(core::Errc::model_unavailable),
+        "Shared model inputs are read-only here. Use the owning Editor to install or change them."});
     RuntimeModelProfile profile;
     {
         std::scoped_lock lock(mutex_);
@@ -932,6 +1197,12 @@ std::expected<nlohmann::json, core::Error> NativeModelManager::install(std::stri
                 {"error", "Insufficient free native model slots/ports for install-only load"}});
             return;
         }
+        auto acquired = acquire_gpu_ownership();
+        if (!acquired) {
+            set_install_state({{"state", "failed"}, {"model", runtime_model_uri(profile)}, {"error", acquired.error().message}});
+            return;
+        }
+        GpuUse gpu_use{this, std::move(*acquired)};
         auto started = slot->runtime.ensure_started(profile, std::chrono::steady_clock::time_point::max(), stop);
         if (!started) {
             set_install_state({
@@ -954,6 +1225,9 @@ std::expected<nlohmann::json, core::Error> NativeModelManager::install(std::stri
 }
 
 std::expected<nlohmann::json, core::Error> NativeModelManager::provision_runtime() {
+    if (config_.shared_model_inputs_bound) return std::unexpected(core::Error{
+        core::make_error_code(core::Errc::model_unavailable),
+        "Shared runtime inputs are read-only here. Use the owning Editor to install or update the runtime."});
     if (const auto server = qwen_flash_.discover_server(); !server.empty() && qwen_flash_.runtime_verified()) {
         std::scoped_lock lock(mutex_);
         runtime_install_state_ = {
@@ -1062,6 +1336,9 @@ std::expected<std::string, core::Error> NativeModelManager::prepare(
     std::chrono::steady_clock::time_point deadline,
     std::stop_token stop,
     std::optional<std::uint32_t> gpu_offload_cap_percent) {
+    epochengine::ai::native_runtime::idle::WorkLease loading;
+    if (!loading.admitted()) return std::unexpected(core::Error{
+        core::make_error_code(core::Errc::model_unavailable), "Idle unload is retiring; retry model setup after it finishes"});
     RuntimeModelProfile profile;
     {
         std::scoped_lock lock(mutex_);
@@ -1104,11 +1381,21 @@ std::expected<std::string, core::Error> NativeModelManager::prepare(
         profile.expert_cache_mode = "off";
         profile.speculative_enabled = false;
     }
+    if (!qwen_flash_.cache_status(profile).value("installed", false))
+        return std::unexpected(core::Error{core::make_error_code(core::Errc::model_unavailable),
+            config_.shared_model_inputs_bound
+                ? "This shared model is not fully installed. Install it in the owning Editor before running it here."
+                : "This model is not fully installed. Choose Install Only in Model Manager before loading; Load does not download weights."});
     auto slot = slot_for(profile);
     if (!slot) return std::unexpected(core::Error{
         core::make_error_code(core::Errc::model_unavailable),
         "Native resident-model limit (3 concurrent processes) or port capacity reached. Unload a model."});
+    auto acquired = acquire_gpu_ownership();
+    if (!acquired) return std::unexpected(acquired.error());
+    GpuUse gpu_use{this, std::move(*acquired)};
+    const bool already_running = slot->runtime.running();
     auto result = slot->runtime.ensure_started(profile, deadline, stop);
+    if (result && !already_running) note_model_use(profile.id);
     if (result) { std::scoped_lock lock(slots_mutex_);
         if (last_active_id_.empty()) last_active_id_ = profile.id; }
     return result;
@@ -1119,6 +1406,9 @@ std::expected<std::string, core::Error> NativeModelManager::prepare_with_local_o
     const std::filesystem::path& local_path_override,
     std::chrono::steady_clock::time_point deadline,
     std::stop_token stop) {
+    epochengine::ai::native_runtime::idle::WorkLease loading;
+    if (!loading.admitted()) return std::unexpected(core::Error{
+        core::make_error_code(core::Errc::model_unavailable), "Idle unload is retiring; retry model setup after it finishes"});
     auto normalized_local = normalize_local_gguf_path(local_path_override);
     if (!normalized_local) {
         return std::unexpected(core::Error{
@@ -1181,7 +1471,12 @@ std::expected<std::string, core::Error> NativeModelManager::prepare_with_local_o
     if (!slot) return std::unexpected(core::Error{
         core::make_error_code(core::Errc::model_unavailable),
         "Native resident-model limit (3 concurrent processes) or port capacity reached. Unload a model."});
+    auto acquired = acquire_gpu_ownership();
+    if (!acquired) return std::unexpected(acquired.error());
+    GpuUse gpu_use{this, std::move(*acquired)};
+    const bool already_running = slot->runtime.running();
     auto result = slot->runtime.ensure_started(profile, deadline, stop);
+    if (result && !already_running) note_model_use(profile.id);
     if (result) { std::scoped_lock lock(slots_mutex_);
         if (last_active_id_.empty()) last_active_id_ = profile.id; }
     return result;
@@ -1204,9 +1499,13 @@ void NativeModelManager::stop_active() {
         last_active_id_.clear();
     }
     for (const auto& slot : current) slot->runtime.stop();
+    release_gpu_ownership_if_retired();
 }
 
 std::expected<nlohmann::json, core::Error> NativeModelManager::clear_transient_cache(std::string_view id_or_uri) {
+    if (config_.shared_model_inputs_bound) return std::unexpected(core::Error{
+        core::make_error_code(core::Errc::model_unavailable),
+        "Shared model inputs are read-only here. Clear their cache in the owning Editor."});
     auto profile = find(id_or_uri);
     if (!profile) return std::unexpected(core::Error{core::make_error_code(core::Errc::model_unavailable), "Unknown native model"});
     {
@@ -1263,6 +1562,9 @@ std::expected<nlohmann::json, core::Error> NativeModelManager::clear_transient_c
 }
 
 std::expected<nlohmann::json, core::Error> NativeModelManager::delete_downloaded_weights(std::string_view id_or_uri) {
+    if (config_.shared_model_inputs_bound) return std::unexpected(core::Error{
+        core::make_error_code(core::Errc::model_unavailable),
+        "Shared model inputs are read-only here. Remove downloaded weights only in the owning Editor."});
     auto profile = find(id_or_uri);
     if (!profile) return std::unexpected(core::Error{core::make_error_code(core::Errc::model_unavailable), "Unknown native model"});
     {

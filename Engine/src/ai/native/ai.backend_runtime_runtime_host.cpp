@@ -54,7 +54,9 @@ struct RuntimeHost::Impl {
 #endif
 
 RuntimeHost::RuntimeHost(core::Config config)
-    : impl_(std::make_unique<Impl>(std::move(config))) {}
+    : impl_(std::make_unique<Impl>(std::move(config))) {
+    impl_->model.bind_model_selections(impl_->models);
+}
 
 RuntimeHost::~RuntimeHost() = default;
 
@@ -164,6 +166,29 @@ void RuntimeHost::unload_native_model() {
 }
 void RuntimeHost::unload_native_model(std::string_view id_or_uri) {
     impl_->native_models.stop_model(id_or_uri);
+}
+std::expected<std::shared_ptr<const model::NativeResidency>, core::Error>
+RuntimeHost::capture_native_residency(std::string_view exact_selected_id) const {
+    return impl_->native_models.capture_residency(exact_selected_id);
+}
+bool RuntimeHost::native_residency_settings_match(const model::NativeResidency& snapshot) const {
+    return impl_->native_models.residency_settings_match(snapshot);
+}
+std::expected<void, core::Error> RuntimeHost::suspend_native_residency(
+    const model::NativeResidency& snapshot,
+    const epochengine::ai::native_runtime::idle::RetirementClaim& claim) {
+    return impl_->native_models.suspend_residency(snapshot, claim);
+}
+std::expected<void, core::Error> RuntimeHost::restore_native_residency(
+    const model::NativeResidency& snapshot,
+    const epochengine::ai::native_runtime::idle::RetirementClaim& claim,
+    std::chrono::steady_clock::time_point deadline, std::stop_token stop,
+    const std::function<bool()>& still_current) {
+    return impl_->native_models.restore_residency(snapshot, claim, deadline, stop, still_current);
+}
+json RuntimeHost::retire_idle_native_models(std::chrono::steady_clock::time_point now,
+    const std::function<void(std::string_view)>& before_stop) {
+    return impl_->native_models.retire_idle_models(now, before_stop);
 }
 void RuntimeHost::cancel_native_installation() { impl_->native_models.cancel_installation(); }
 

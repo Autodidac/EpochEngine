@@ -39,6 +39,7 @@ module;
 #include "../include/ai.token_metrics.hpp"
 #include "ai.native_runtime.hpp"
 #include "ai.thinking_policy.hpp"
+#include <nlohmann/json.hpp>
 
 #if defined(_WIN32)
 #   ifndef WIN32_LEAN_AND_MEAN
@@ -78,6 +79,7 @@ module;
 #include <ctime>
 #include <limits>
 #include <memory>
+#include <span>
 #include <mutex>
 #include <optional>
 #include <sstream>
@@ -86,6 +88,7 @@ module;
 #include <string>
 #include <string_view>
 #include <thread>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -1443,6 +1446,8 @@ namespace epochengine::ai
         {
             const bool projectScript = workload == InferenceWorkload::authoring
                 && input.starts_with("Return one complete C++23 project script for review, using this exact envelope:\nEPOCH_PROJECT_SCRIPT_V1\n");
+            const bool projectTool = workload == InferenceWorkload::authoring
+                && input.starts_with(tool_plan_protocol_prompt());
             std::string prompt = directRuntime
                 ? "You are an operator-selected Epoch-local OS AI model invoked directly by Epoch through llama.cpp.\n"
                 : "You are an operator-selected external OS AI model connected to Epoch through an operator-managed endpoint.\n";
@@ -1452,6 +1457,8 @@ namespace epochengine::ai
                 " - Stay grounded in the current visible Epoch editor/project context.\n";
             prompt += projectScript
                 ? " - Current task: propose one complete active-project C++23 script in EPOCH_PROJECT_SCRIPT_V1. The host owns its destination and stages the source for review. Saving, compilation and native execution require the displayed operator action; never claim any of them happened from model output alone. Use only the documented EpochScriptHost callbacks for scene work.\n"
+                : projectTool
+                ? " - Current task: propose one active-project host tool from the provided catalog and protocol, including package review or terrain generation when requested. Epoch validates its arguments and asks for approval before execution. A proposal is not completed work and grants no direct file, shell, network or engine-source access.\n"
                 : " - Project authoring may change only the active scene or GUI through validated semantic calls and explicit operator approval.\n";
             prompt +=
                 " - Evidence review diagnoses existing output; it is not a source proposal and must not claim files were changed.\n"
@@ -1465,6 +1472,8 @@ namespace epochengine::ai
             {
                 prompt += projectScript
                     ? " - Return only the complete script review envelope requested by the host, without Markdown fences or drafting notes.\n"
+                    : projectTool
+                    ? " - Return only one EPOCH_TOOL_PLAN_V1 proposal or one EPOCH_TOOL_QUESTION_V1 critical question. The tool names, arguments and approval rules come from this host request.\n"
                     : " - Follow the requested answer format. Return only the final result in assistant content, without drafting notes. Project authoring returns the requested validated semantic-call packet, not a prose substitute.\n";
                 return prompt;
             }
@@ -2243,9 +2252,18 @@ namespace epochengine::ai
             return "The local-model request is empty or exceeds its bounded host prompt budget.";
         }
         notify_model_stage(observer, ModelRequestStage::queued);
+        // Cover requests waiting at the existing global inference gate, before
+        // complete_host_request can acquire its own native transport lease.
+        const bool nativeSelected = native_runtime::selected();
+        std::optional<native_runtime::WorkLease> nativeWork;
+        if (nativeSelected) {
+            nativeWork.emplace();
+            if (!nativeWork->admitted())
+                return "The selected native model is unloading; no request was sent to another provider.";
+        }
         // Controlled Epoch workloads use one native completion. The existing
         // host owns source tools, scene/script approval, builds and repair.
-        if (native_runtime::selected())
+        if (nativeSelected)
         {
             notify_model_stage(observer, ModelRequestStage::sending);
             bool hostControlled = true;
@@ -2339,18 +2357,17 @@ namespace epochengine::ai
                             progress.completion_tokens = *count;
                             progress.token_usage_reported = true;
                         }
-                        const auto duration = model_json_field(timings, "predicted_ms");
-                        if (!duration.empty())
+                        if (const auto duration = metrics::reported_positive(
+                            model_json_field(timings, "predicted_ms")))
                         {
-                            double parsed{};
-                            const auto [end, error] = std::from_chars(
-                                duration.data(), duration.data() + duration.size(), parsed);
-                            if (error == std::errc{} && end == duration.data() + duration.size()
-                                && parsed > 0.0 && parsed < std::numeric_limits<double>::infinity())
-                                {
-                                    progress.generation_ms = parsed;
-                                    progress.provider_generation_timing = true;
-                                }
+                            progress.generation_ms = *duration;
+                            progress.provider_generation_timing = true;
+                        }
+                        if (const auto rate = metrics::reported_positive(
+                            model_json_field(timings, "predicted_per_second")))
+                        {
+                            progress.measured_tps = *rate;
+                            progress.tps_known = true;
                         }
                     }
                 }
@@ -2364,17 +2381,20 @@ namespace epochengine::ai
                     progress.generation_ms = std::chrono::duration<double, std::milli>(
                         std::chrono::steady_clock::now() - *firstNativePayloadAt).count();
             }
-            if (result.generation_tps_known)
+            if (result.generation_tps_known && metrics::positive_finite(result.generation_tps))
             {
-                progress.completion_tokens = result.completion_tokens;
-                progress.measured_tps = result.generation_tps;
-                progress.tps_known = true;
-                if (!progress.token_usage_reported && result.generation_tps > 0.0)
+                if (!progress.tps_known)
                 {
+                    progress.measured_tps = result.generation_tps;
+                    progress.tps_known = true;
+                }
+                if (!progress.token_usage_reported && result.completion_tokens > 0u)
+                {
+                    progress.completion_tokens = result.completion_tokens;
                     progress.token_usage_reported = true;
-                    progress.generation_ms = 1000.0 * result.completion_tokens / result.generation_tps;
                 }
             }
+            progress.canonical_model_key = result.canonical_model_key;
             notify_model_progress(progress_observer, progress);
             if (cancellation.stop_requested()) return cancelled();
             if (!result.ok)
@@ -2465,5 +2485,209 @@ namespace epochengine::ai
                 + ". Check the endpoint/model selection and retry.";
         observation.succeeded = true;
         return reply.text;
+    }
+    ToolOutputDisplay format_tool_output_for_display(std::string_view payload, bool streaming,
+        std::span<const std::string> source_paths)
+    {
+        constexpr std::size_t limit = 128u * 1024u;
+        if (payload.empty() || payload.size() > limit) return {};
+        using Json = nlohmann::json;
+        struct Display final : nlohmann::json_sax<Json>
+        {
+            struct Heading { std::size_t begin{},length{}; std::string label{},path{},source_label{};
+                std::optional<std::uint32_t> source_id{}; bool source_seen{}; };
+            struct Frame { bool object{}; unsigned count{}; std::string key{},path{},source_label{};
+                std::optional<std::uint32_t> source_id{}; bool source_seen{};
+                std::vector<std::size_t> headings{}; std::unordered_set<std::string> keys{}; };
+            std::vector<Frame> frames{};
+            std::vector<Heading> headings{};
+            std::span<const std::string> source_paths{};
+            std::string text{}, root_string{};
+            std::vector<std::pair<std::size_t, std::size_t>> code_ranges{};
+            bool limited{}, rejected{}, root_is_string{};
+            unsigned completed{};
+            bool append(std::string_view value)
+            {
+                if (value.size() > 128u * 1024u - text.size()) { limited = true; return false; }
+                text.append(value); return true;
+            }
+            bool newline()
+            { return append("\n") && append(std::string(frames.size() * 2u, ' ')); }
+            bool value()
+            {
+                if (frames.empty()) return true;
+                auto& frame = frames.back();
+                if (!frame.object && !newline()) return false;
+                ++frame.count; return true;
+            }
+            bool scalar(std::string_view data)
+            { if (!value() || !append(data)) return false; ++completed; return true; }
+            bool null() override { return scalar("null"); }
+            bool boolean(bool data) override { return scalar(data ? "true" : "false"); }
+            void source_number(std::string label,std::optional<std::uint32_t> id={})
+            {
+                if(!frames.empty()&&frames.back().object&&frames.back().key=="source_id")
+                {frames.back().source_label=std::move(label);frames.back().source_id=id;}
+            }
+            bool number_integer(number_integer_t data) override
+            {
+                const auto label=std::to_string(data);
+                source_number(label,data>0&&data<=(std::numeric_limits<std::uint32_t>::max)()
+                    ?std::optional{static_cast<std::uint32_t>(data)}:std::nullopt);
+                return scalar(label);
+            }
+            bool number_unsigned(number_unsigned_t data) override
+            {
+                const auto label=std::to_string(data);
+                source_number(label,data>0&&data<=(std::numeric_limits<std::uint32_t>::max)()
+                    ?std::optional{static_cast<std::uint32_t>(data)}:std::nullopt);
+                return scalar(label);
+            }
+            bool number_float(number_float_t data, const string_t&) override
+            {auto label=Json(data).dump();source_number(label);return scalar(label);}
+            bool string(string_t& data) override
+            {
+                if (frames.empty()) { root_is_string = true; root_string = data; ++completed; return true; }
+                if (!value()) return false;
+                if(frames.back().object&&frames.back().key=="path")frames.back().path=data;
+                const bool code = frames.back().object
+                    && (frames.back().key == "search" || frames.back().key == "replacement");
+                if (code && !append("\n")) return false;
+                const auto code_begin = text.size();
+                // SAX has already decoded exactly this JSON string. Never
+                // reinterpret backslashes in C++ source or guess another layer.
+                for (std::size_t i{}; i < data.size(); ++i) {
+                    const char ch = data[i];
+                    if (ch == '\r' && i + 1u < data.size() && data[i + 1u] == '\n') continue;
+                    if (ch == '\r') { if (!append("\n")) return false; }
+                    else if (ch == '\0') { if (!append("\\u0000")) return false; }
+                    else if (!append(std::string_view{&data[i], 1u})) return false;
+                }
+                if (code) {
+                    if (code_ranges.size() == 256u) { limited = true; return false; }
+                    code_ranges.emplace_back(code_begin, text.size() - code_begin);
+                }
+                ++completed; return true;
+            }
+            bool binary(binary_t&) override { rejected = true; return false; }
+            bool start(bool object)
+            {
+                if (frames.size() >= 32u) { limited = true; return false; }
+                if (!value()) return false;
+                frames.push_back(Frame{.object = object}); return true;
+            }
+            bool start_object(std::size_t) override { return start(true); }
+            bool start_array(std::size_t) override { return start(false); }
+            bool key(string_t& data) override
+            {
+                auto& frame = frames.back();
+                if (!frame.keys.insert(data).second) { rejected = true; return false; }
+                if (!newline()) return false;
+                frame.key = data;
+                if(data=="source_id")frame.source_seen=true;
+                const std::string_view label = data == "search" ? "Before"
+                    : data == "replacement" ? "After" : data == "title" ? "Task"
+                    : data == "rationale" ? "Why" : data == "operations" ? "Changes"
+                    : data == "summary" ? "Change" : data == "source_id" ? "Source ID"
+                    : std::string_view{data};
+                if(data=="search"||data=="replacement")
+                {
+                    if(headings.size()==256u){limited=true;return false;}
+                    frame.headings.push_back(headings.size());
+                    headings.push_back({.begin=text.size(),.length=label.size(),.label=std::string{label}});
+                }
+                return append(label) && append(": ");
+            }
+            void capture_headings(const Frame& frame)
+            {
+                for(const auto index:frame.headings)
+                {
+                    auto& heading=headings[index];heading.path=frame.path;heading.source_label=frame.source_label;
+                    heading.source_id=frame.source_id;heading.source_seen=frame.source_seen;
+                }
+            }
+            static std::string relative_path(std::string_view path)
+            {
+                if(path.empty()||path.size()>1024u||path.front()=='/'||path.front()=='\\'
+                    ||path.find(':')!=path.npos)return {};
+                std::string result{path};std::replace(result.begin(),result.end(),'\\','/');
+                std::size_t begin{};
+                while(begin<result.size())
+                {
+                    const auto end=result.find('/',begin);const auto count=end==result.npos?result.size()-begin:end-begin;
+                    const std::string_view segment{result.data()+begin,count};
+                    if(segment.empty()||segment.compare(".")==0||segment.compare("..")==0)return {};
+                    for(const auto ch:segment)if(static_cast<unsigned char>(ch)<0x20u||ch==0x7f)return {};
+                    if(end==result.npos)return result;
+                    begin=end+1u;
+                }
+                return {};
+            }
+            bool describe_headings()
+            {
+                for(const auto& frame:frames)capture_headings(frame);
+                // Work backwards so stored parser offsets remain valid. Only
+                // labels change; source strings and raw protocol bytes do not.
+                for(auto current=headings.rbegin();current!=headings.rend();++current)
+                {
+                    auto& heading=*current;std::string path;
+                    if(heading.source_seen)
+                    {
+                        if(heading.source_id&&*heading.source_id<=source_paths.size())
+                            path=relative_path(source_paths[*heading.source_id-1u]);
+                    }
+                    else path=relative_path(heading.path);
+                    auto label=heading.label;
+                    if(!path.empty())
+                    {
+                        const auto slash=path.find_last_of('/');
+                        label+=" - "+path.substr(slash==path.npos?0u:slash+1u)+" ("+path+")";
+                    }
+                    else if(heading.source_seen&&!heading.source_label.empty())
+                        label+=" - Source ID "+heading.source_label+" (path unavailable)";
+                    else label+=" (source path unavailable)";
+                    if(label.size()>128u*1024u-(text.size()-heading.length))return false;
+                    const auto shift=label.size()-heading.length;
+                    text.replace(heading.begin,heading.length,label);
+                    for(auto& range:code_ranges)if(range.first>=heading.begin+heading.length)range.first+=shift;
+                }
+                return true;
+            }
+            bool end(bool object)
+            {
+                capture_headings(frames.back());
+                const bool populated = frames.back().count != 0u;
+                frames.pop_back();
+                if (populated && !newline()) return false;
+                (void)object;
+                return true;
+            }
+            bool end_object() override { return end(true); }
+            bool end_array() override { return end(false); }
+            bool parse_error(std::size_t, const std::string&, const nlohmann::detail::exception&) override
+            { return false; }
+        };
+        std::string nested{};
+        try {
+            for (unsigned layer{}; layer != 3u; ++layer) {
+                const auto first = payload.find_first_not_of(" \t\r\n");
+                if (first == payload.npos || (payload[first] != '{' && payload[first] != '[' && payload[first] != '"')) return {};
+                Display display;
+                display.source_paths=source_paths;
+                const bool complete = Json::sax_parse(payload.begin(), payload.end(), &display);
+                if (display.limited || display.rejected) return {};
+                if (complete && display.root_is_string) {
+                    nested = std::move(display.root_string); payload = nested;
+                    continue; // A complete JSON envelope, never a source-field heuristic.
+                }
+                if (!complete) {
+                    if (!streaming || display.completed == 0u) return {};
+                    if (!display.append("\nReceiving more tool output...")) return {};
+                }
+                if(!display.describe_headings())return {};
+                return {.text = std::move(display.text), .code_ranges = std::move(display.code_ranges)};
+            }
+        } catch (const std::exception&) { }
+        return {}; // Malformed, oversized or ambiguous data retains its raw view.
     }
 }

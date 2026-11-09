@@ -35,6 +35,7 @@ module;
 
 #include <array>
 #include <cstddef>
+#include <array>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
@@ -115,6 +116,9 @@ namespace epochengine
         std::string command_argument{};
         core::ContextType requested_context_type{ core::ContextType::None };
         bool close_current_context_after_command{ false };
+        // Explicit workspace transitions may reveal two already-open native
+        // companion panes without replacing this frame's actual command.
+        std::array<std::string, 2> companion_pane_activations{};
     };
 
     // Renderer backend replacement is a lifecycle operation, not a work-mode
@@ -421,6 +425,9 @@ namespace epochengine
         bool editor_only{ false };
         std::optional<scene::SceneTextureMaterialSnapshot>
             texture_material{};
+        std::optional<scene::SceneMeshSnapshot> mesh_asset{};
+        std::optional<std::array<double,3>> position_anchor{};
+        std::optional<scene::SceneForestRegionInstance> forest_region{};
     };
 
     export struct EditorCanvas2DProjectSnapshot
@@ -444,9 +451,14 @@ namespace epochengine
         std::uint32_t tab_order{};
     };
 
+    // Immutable Plant Lab handoff stays opaque to window/runtime consumers.
+    // The Editor owns document/compiled-asset types and validates their pairing.
+    export struct EditorPlantLabPreview;
+
     export struct EditorContextSnapshot
     {
         bool valid{ false };
+        std::shared_ptr<const EditorPlantLabPreview> plant_lab_preview{};
         std::string project_id{};
         std::string project_name{};
         std::string project_root{};
@@ -465,7 +477,7 @@ namespace epochengine
         std::string script_editor_status{};
         bool script_editor_dirty{ false };
         std::string project_run_backend{ "opengl" };
-        double project_run_frame_limit_fps{ 60.0 };
+        double project_run_frame_limit_fps{ 30.0 };
         std::uint8_t project_camera_mode{ 0 };
         EditorCanvas2DProjectSnapshot canvas2d_project{};
         std::vector<std::byte> tile_map_document{};
@@ -481,7 +493,7 @@ namespace epochengine
         gui::ThemePreference theme_preference{ gui::ThemePreference::FollowSystemDark };
         std::uint32_t theme_cycle_interval_seconds{30u};
         bool rounded_rectangles{ true };
-        double editor_frame_limit_fps{ 120.0 };
+        double editor_frame_limit_fps{ 30.0 };
         bool editor_frame_vsync_requested{ false };
         std::string selected_project_file{};
         std::string selected_asset_path{};
@@ -498,25 +510,26 @@ namespace epochengine
         EditorWorkspaceTab workspace_tab{ EditorWorkspaceTab::Output };
         EditorWorkspaceTab dock_status_tab{ EditorWorkspaceTab::Output };
         std::uint8_t main_surface{ 0 };
+        bool game2d_gui_workspace{};
         float bottom_grid_split{ 0.50f };
         float outliner_split{ 0.20f };
         float inspector_split{ 0.22f };
         float dock_split{ 0.28f };
-        std::array<float, 9> workspace_bottom_grid_splits{
+        std::array<float, 10> workspace_bottom_grid_splits{
             0.50f, 0.50f, 0.50f, 0.50f, 0.50f,
-            0.50f, 0.50f, 0.50f, 0.50f
+            0.50f, 0.50f, 0.50f, 0.50f, 0.50f
         };
-        std::array<float, 9> workspace_dock_splits{
+        std::array<float, 10> workspace_dock_splits{
             0.28f, 0.28f, 0.28f, 0.28f, 0.28f,
-            0.28f, 0.28f, 0.28f, 0.28f
+            0.28f, 0.28f, 0.28f, 0.28f, 0.28f
         };
-        std::array<bool, 9> workspace_output_follow{
+        std::array<bool, 10> workspace_output_follow{
             true, true, true, true, true,
-            true, true, true, true
+            true, true, true, true, true
         };
-        std::array<bool, 9> workspace_ai_chat_follow{
+        std::array<bool, 10> workspace_ai_chat_follow{
             true, true, true, true, true,
-            true, true, true, true
+            true, true, true, true, true
         };
         bool show_outliner{ true };
         bool show_inspector{ true };
@@ -550,15 +563,37 @@ namespace epochengine
         EditorApplicationKind application);
     export void editor_suppress_startup_update_check(const std::shared_ptr<core::Context>& ctx);
     export void editor_reset_transient_ui(const core::Context* ctx);
+    export struct EditorAppearancePreferences
+    {
+        gui::ThemePreference theme{gui::ThemePreference::FollowSystemDark};
+        std::uint32_t theme_cycle_seconds{30u};
+        bool rounded_rectangles{true};
+    };
+    // Read appearance without creating an Editor, project, task or AI session.
+    export [[nodiscard]] EditorAppearancePreferences editor_appearance_preferences(const core::Context* ctx);
     export bool editor_run_script(const core::Context* ctx, std::string_view script_name);
     export [[nodiscard]] EditorProjectAdmissionResult
         editor_admit_project_manifest(std::string_view manifest_path);
+    export [[nodiscard]] EditorProjectAdmissionResult
+        editor_inspect_runtime_project_manifest(
+            std::string_view manifest_path, std::string_view expected_project_id,
+            std::string& project_root, std::string& scene_path);
+    // Re-read the existing manifest contract without registering a project or
+    // changing the active catalog. Legacy admitted manifests remain supported.
+    export [[nodiscard]] EditorProjectAdmissionResult
+        editor_inspect_project_manifest_identity(
+            std::string_view manifest_path, std::string_view expected_project_id,
+            std::string_view expected_project_root);
     // Candidate-only mutable project path. Ordinary processes and rejected
     // paths return empty; immutable Engine resource lookup is separate.
     export [[nodiscard]] std::filesystem::path editor_resolve_candidate_project_path(
         const std::filesystem::path& requested,
         bool allow_root = false);
     export [[nodiscard]] std::span<const EditorProjectProfile> editor_project_profiles() noexcept;
+    // Invalidate discovery on explicit Refresh; the next catalog read rebuilds it.
+    // Existing profile views remain valid until that next read.
+    export void editor_refresh_project_profiles() noexcept;
+    export [[nodiscard]] std::filesystem::path editor_projects_root() noexcept;
     export [[nodiscard]] const EditorProjectProfile& editor_default_project_profile() noexcept;
     export [[nodiscard]] const EditorProjectProfile* editor_find_project_profile(std::string_view project_id) noexcept;
     export [[nodiscard]] std::span<const EditorScriptProfile> editor_script_profiles() noexcept;
@@ -571,11 +606,35 @@ namespace epochengine
         EditorProjectInputProvision input_provision);
     export [[nodiscard]] bool editor_project_manifest_capability_contract() noexcept;
     export [[nodiscard]] EditorProjectCreationResult editor_ensure_project_shell(std::string_view project_id);
+    export [[nodiscard]] EditorProjectCreationResult editor_stage_engine_arcade_project(
+        std::string_view project_root);
     export [[nodiscard]] EditorScriptBuildResult editor_build_script(std::string_view script_name);
     export [[nodiscard]] EditorProjectBuildResult editor_build_project(std::string_view project_root);
+    export [[nodiscard]] constexpr bool editor_project_build_configuration_supported(
+        std::string_view configuration) noexcept
+    {
+        return configuration == "Debug" || configuration == "Release";
+    }
+    export [[nodiscard]] std::optional<std::string> editor_project_build_configuration(
+        std::string_view project_root);
+    export [[nodiscard]] bool editor_set_project_build_configuration(
+        std::string_view project_root, std::string_view configuration,
+        std::string& diagnostic);
+    export struct EditorProjectRunSettings final
+    {
+        std::string backend{"opengl"};
+        double frame_limit_fps{30.0};
+        bool operator==(const EditorProjectRunSettings&) const = default;
+    };
+    export [[nodiscard]] std::optional<EditorProjectRunSettings> editor_project_run_settings(
+        std::string_view project_root);
+    export [[nodiscard]] bool editor_set_project_run_settings(
+        std::string_view project_root, const EditorProjectRunSettings& settings,
+        std::string& diagnostic);
     [[nodiscard]] EditorProjectBuildResult editor_build_project(
         std::string_view project_root,
-        std::stop_token cancellation);
+        std::stop_token cancellation,
+        std::string_view configuration = "Debug");
     export [[nodiscard]] EditorProjectModelSummary editor_project_model_summary(std::string_view project_id);
     export [[nodiscard]] EditorProjectInputProfileSummary
         editor_project_input_profile_summary(std::string_view project_id);
@@ -651,6 +710,9 @@ namespace epochengine
     export void editor_consume_time_step_request(const core::Context* ctx);
     export [[nodiscard]] EditorContextSnapshot editor_capture_context_snapshot(const core::Context* ctx);
     export bool editor_restore_context_snapshot(core::Context* ctx, const EditorContextSnapshot& snapshot);
+    export bool editor_restore_plant_lab_preview(
+        const std::shared_ptr<core::Context>& ctx,
+        const EditorContextSnapshot& snapshot);
 
     export void cleanup_chat_context(const core::Context* ctx);
     export void shutdown_chat_system();

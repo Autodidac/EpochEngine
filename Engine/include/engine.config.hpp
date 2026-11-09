@@ -57,6 +57,15 @@
 #   error EPOCH_ENABLE_TEXTURE_DIAGNOSTICS must be 0 or 1
 #endif
 
+// Optional read-only NVIDIA driver telemetry. An absent SDK/header or runtime
+// library leaves readings unavailable; ordinary builds never require CUDA.
+#ifndef EPOCH_ENABLE_NVIDIA_TELEMETRY
+#   define EPOCH_ENABLE_NVIDIA_TELEMETRY 1
+#endif
+#if EPOCH_ENABLE_NVIDIA_TELEMETRY != 0 && EPOCH_ENABLE_NVIDIA_TELEMETRY != 1
+#   error EPOCH_ENABLE_NVIDIA_TELEMETRY must be 0 or 1
+#endif
+
 #ifndef EPOCH_ENABLE_AUTHORING_PLATFORM
 #   define EPOCH_ENABLE_AUTHORING_PLATFORM 1
 #endif

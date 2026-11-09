@@ -27,6 +27,50 @@ namespace epochengine::editor_hierarchy
 {
     namespace tree = epochengine::gui_lib::hierarchy_tree;
 
+
+    GuiHierarchyProjection project_gui_hierarchy(
+        const authoring::gui::GuiDocument& document,
+        authoring::gui::WidgetHandle root)
+    {
+        GuiHierarchyProjection result{};
+        if (!document.valid()) return result;
+        const auto rootView = document.widget(root);
+        if (!rootView) return result;
+        const auto& limits = document.limits();
+        result.document = document.document();
+        result.branch = document.branch();
+        result.revision = document.revision();
+        result.root = root;
+        result.rows.reserve(document.metrics().active_widgets);
+        struct PendingRow final
+        {
+            authoring::gui::WidgetHandle handle{};
+            std::uint32_t depth{};
+        };
+        std::vector<PendingRow> pending{};
+        pending.reserve(document.metrics().active_widgets);
+        for (auto child = rootView->children.rbegin();
+             child != rootView->children.rend(); ++child)
+            pending.push_back({*child, 0u});
+        while (!pending.empty())
+        {
+            const auto row = pending.back();
+            pending.pop_back();
+            const auto view = document.widget(row.handle);
+            if (!view || result.rows.size() >= limits.maximum_active_widgets
+                || row.depth >= limits.maximum_hierarchy_depth
+                || view->descriptor.name.size() > limits.maximum_name_bytes)
+                return {};
+            result.rows.push_back({row.handle, row.depth,
+                view->descriptor.name, view->descriptor.kind});
+            for (auto child = view->children.rbegin();
+                 child != view->children.rend(); ++child)
+                pending.push_back({*child, row.depth + 1u});
+        }
+        result.ready = true;
+        return result;
+    }
+
     namespace
     {
         constexpr tree::ActionId select_action{1u};
@@ -281,8 +325,18 @@ namespace epochengine::editor_hierarchy
             }
             if (!supplied_entities.emplace(entity.canonical_id).second)
                 return state.result(Code::duplicate_entity, false, false);
-            categories.emplace_back(
-                entity.category.empty() ? "Uncategorized" : entity.category);
+            if (entity.parent_id == invalid_canonical_id)
+                categories.emplace_back(
+                    entity.category.empty() ? "Uncategorized" : entity.category);
+        }
+
+        std::unordered_set<CanonicalId> parents;
+        for (const EntityRecord& entity : entities)
+        {
+            if (entity.parent_id == invalid_canonical_id) continue;
+            if (entity.parent_id == entity.canonical_id || !supplied_entities.contains(entity.parent_id))
+                return state.result(Code::invalid_entity, false, false);
+            parents.emplace(entity.parent_id);
         }
 
         std::sort(categories.begin(), categories.end());
@@ -378,14 +432,15 @@ namespace epochengine::editor_hierarchy
             search_terms += category;
             nodes.push_back(tree::Node{
                 .id = tree::NodeId{entity_nodes.at(entity.canonical_id)},
-                .parent = tree::NodeId{group_nodes.at(category)},
+                .parent = tree::NodeId{entity.parent_id == invalid_canonical_id
+                    ? group_nodes.at(category) : entity_nodes.at(entity.parent_id)},
                 .label = std::string{entity.label},
                 .detail = std::move(detail),
                 .search_terms = std::move(search_terms),
                 .context_tag = "world-entity",
                 .order = entity.order,
                 .kind = tree::NodeKind::item,
-                .expandable = false,
+                .expandable = parents.contains(entity.canonical_id),
                 .disabled = false,
                 .locked = entity.locked});
         }

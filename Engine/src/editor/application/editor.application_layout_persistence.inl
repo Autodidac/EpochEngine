@@ -22,6 +22,7 @@
             case 5: return EditorMainSurface::Timeline;
             case 6: return EditorMainSurface::AISandbox;
             case 8: return EditorMainSurface::PlantLab;
+            case 9: return EditorMainSurface::AssetGeneration;
             case 7: return EditorMainSurface::Systems;
             case 0:
             default: return EditorMainSurface::Scene;
@@ -84,6 +85,11 @@
             case gui::ThemePreference::ForestTerminal:
             case gui::ThemePreference::AuroraSteel:
             case gui::ThemePreference::CodexBlack:
+            case gui::ThemePreference::GraphiteCopper:
+            case gui::ThemePreference::SlateOrchard:
+            case gui::ThemePreference::IndigoQuartz:
+            case gui::ThemePreference::SignalPlum:
+            case gui::ThemePreference::ForgedSteel:
             case gui::ThemePreference::FollowSystemDark:
             case gui::ThemePreference::ThemeCycle:
                 return value;
@@ -156,7 +162,7 @@
             const EditorState& state)
         {
             std::ostringstream output{};
-            output << "EPOCH_EDITOR_LAYOUT 9\n";
+            output << "EPOCH_EDITOR_LAYOUT 11\n";
             output << "application "
                 << static_cast<unsigned int>(state.applicationKind) << '\n';
             output << "splits "
@@ -183,6 +189,13 @@
             for (std::size_t index = 0u; index < kEditorMainSurfaceCount; ++index)
                 output << ' ' << static_cast<unsigned int>(workspaceOutputFollow[index])
                     << ' ' << static_cast<unsigned int>(workspaceAiChatFollow[index]);
+            output << '\n';
+            const auto visibleWorkspaceCount=std::count_if(kEditorWorkspaceSpecs.begin(),kEditorWorkspaceSpecs.end(),
+                [&](const auto& workspace){return editor_workspace_supported(state,workspace)&&editor_workspace_visible(state,workspace);});
+            output << "workspaces " << visibleWorkspaceCount;
+            for(const auto& workspace:kEditorWorkspaceSpecs)
+                if(editor_workspace_supported(state,workspace)&&editor_workspace_visible(state,workspace))
+                    output << ' ' << workspace.id;
             output << '\n';
             output << "visibility "
                 << static_cast<unsigned int>(state.showOutliner) << ' '
@@ -259,7 +272,7 @@
             std::string token{};
             unsigned int schema{};
             if (!(input >> token >> schema)
-                || token != "EPOCH_EDITOR_LAYOUT" || schema < 1u || schema > 10u)
+                || token != "EPOCH_EDITOR_LAYOUT" || schema < 1u || schema > 11u)
             {
                 return false;
             }
@@ -296,7 +309,7 @@
                 std::size_t count{};
                 if (!(input >> token >> count)
                     || token != "workspace_splits"
-                    || count != kEditorMainSurfaceCount)
+                    || (count != kEditorMainSurfaceCount && count != 9u))
                 {
                     return false;
                 }
@@ -316,7 +329,7 @@
                 }
                 if (!(input >> token >> count)
                     || token != "workspace_follow"
-                    || count != kEditorMainSurfaceCount)
+                    || (count != kEditorMainSurfaceCount && count != 9u))
                 {
                     return false;
                 }
@@ -332,6 +345,21 @@
                     }
                     workspaceOutputFollow[index] = outputFollow != 0u;
                     workspaceAiChatFollow[index] = aiChatFollow != 0u;
+                }
+            }
+
+            std::vector<std::string> visibleWorkspaceIds{};
+            if(schema>=11u)
+            {
+                std::size_t count{};
+                if(!(input>>token>>count)||token!="workspaces"||count>kEditorWorkspaceSpecs.size()) return false;
+                for(std::size_t index=0;index<count;++index)
+                {
+                    std::string id{};
+                    if(!(input>>id)||std::none_of(kEditorWorkspaceSpecs.begin(),kEditorWorkspaceSpecs.end(),
+                        [&](const auto& workspace){return workspace.id==id;})
+                        ||std::find(visibleWorkspaceIds.begin(),visibleWorkspaceIds.end(),id)!=visibleWorkspaceIds.end()) return false;
+                    visibleWorkspaceIds.push_back(std::move(id));
                 }
             }
 
@@ -404,9 +432,9 @@
             unsigned int rounded{};
             if (!(input >> token >> theme >> rounded)
                 || token != "theme"
-                // Accept the retired v0.90.132 theme ordinal only to recover user settings.
-                // It is not a selectable or implemented theme.
-                || theme > 13u
+                // Retired ordinal 13 remains readable for settings recovery.
+                // New themes append IDs without reusing retired identities.
+                || theme > 18u
                 || !valid_layout_boolean(rounded))
             {
                 return false;
@@ -506,6 +534,8 @@
                 : snapshot_theme_preference(static_cast<gui::ThemePreference>(theme));
             state.themeCycleIntervalSeconds = themeCycleIntervalSeconds;
             state.roundedRectangles = rounded != 0u;
+            state.workspaceVisibilityCustomized=schema>=11u;
+            state.visibleWorkspaceIds=std::move(visibleWorkspaceIds);
             return true;
         }
 
@@ -548,11 +578,9 @@
                     "[layout] Ignored malformed editor layout preferences; defaults remain active.");
                 return;
             }
-            // v0.90.132 wrote schema 10 and ordinal 13 for an accidentally
-            // introduced theme. Keep all other saved layout choices, restore
-            // the system dark/light theme, then rewrite into schema 9 during
-            // the next normal settings persistence pass.
-            state.layoutPreferencesSnapshot = encoded.starts_with("EPOCH_EDITOR_LAYOUT 10\n")
+            // Earlier schemas keep their pane/theme choices and gain the
+            // default workspace set when rewritten by normal persistence.
+            state.layoutPreferencesSnapshot = encoded.starts_with("EPOCH_EDITOR_LAYOUT 11\n")
                 ? encoded : serialize_editor_layout_preferences(state);
         }
 

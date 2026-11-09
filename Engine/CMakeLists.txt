@@ -5,6 +5,20 @@ set(CMAKE_CXX_SCAN_FOR_MODULES ON)
 
 project(Epoch LANGUAGES C CXX)
 
+# Keep managed compiler caches disposable without removing runnable products.
+# Explicit external build trees retain their caller-owned output convention.
+get_filename_component(EPOCH_ARTIFACT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../Artifacts" ABSOLUTE)
+set(_epoch_configure_root "${EPOCH_ARTIFACT_ROOT}/Intermediate/cmake/")
+cmake_path(IS_PREFIX _epoch_configure_root "${CMAKE_BINARY_DIR}" NORMALIZE _epoch_managed_output)
+if(_epoch_managed_output)
+    cmake_path(RELATIVE_PATH CMAKE_BINARY_DIR BASE_DIRECTORY "${_epoch_configure_root}" OUTPUT_VARIABLE _epoch_output_lane)
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${EPOCH_ARTIFACT_ROOT}/Runtime/cmake/${_epoch_output_lane}")
+    set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
+endif()
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR)
+    message(FATAL_ERROR "Use an out-of-source preset: cmake --preset <name>. Generated files belong in Artifacts/Intermediate.")
+endif()
+
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -16,10 +30,16 @@ option(EPOCH_STRICT_WARNINGS "Enable stricter compiler warnings for Epoch target
 option(EPOCH_WARNINGS_AS_ERRORS "Treat warnings as errors when strict warnings are enabled." OFF)
 option(EPOCH_ENABLE_SANITIZERS "Enable supported sanitizer flags for compatible compilers." OFF)
 option(EPOCH_CI_HEADLESS_ONLY "Configure only the portable hosted-CI smoke target." OFF)
+option(EPOCH_ENABLE_GRAPHICS_TESTS "Opt into bounded Linux software graphics Editor startup tests under Xvfb." OFF)
 option(EPOCH_SOFTWARE_BASE_ONLY "Configure the editor-free CLI/native-window software base without engine or renderer targets." OFF)
 option(EPOCH_BUILD_STATIC_RUNTIME "Build Epoch as a reusable static runtime for generated child applications." OFF)
 option(EPOCH_BUILD_AI_TRANSPORT_CONTRACT "Expose the opt-in console model HTTP transport probe (never runs automatically)." OFF)
 option(EPOCH_ENABLE_TEXTURE_DIAGNOSTICS "Emit verbose atlas and sprite lifecycle diagnostics (no renderer behavior change)." OFF)
+option(EPOCH_ENABLE_NVIDIA_TELEMETRY "Observe optional NVIDIA whole-adapter utilisation and memory without requiring its SDK or driver." ON)
+if(EPOCH_ENABLE_NVIDIA_TELEMETRY AND WIN32)
+    find_path(EPOCH_NVML_INCLUDE_DIR nvml.h HINTS ENV CUDA_PATH PATH_SUFFIXES include
+        DOC "Optional installed NVML SDK header directory; no CUDA language or runtime link dependency.")
+endif()
 option(EPOCH_ENABLE_AUTHORING_PLATFORM "Gate the shared Epoch authoring-document and editor foundation as implementation units land." ON)
 option(EPOCH_ENABLE_TEXTURE_EDITOR "Gate texture painting, compositing, and texture-node authoring implementation units." ON)
 option(EPOCH_ENABLE_TILEMAP_EDITOR "Gate tile palette, sparse map authoring, and map compilation implementation units." ON)
@@ -259,6 +279,16 @@ add_custom_target(epoch_headless_explicit_root_contract
 
 include(CTest)
 if(BUILD_TESTING)
+    if(EPOCH_CONFIGURES_MODULE_TARGETS)
+        add_executable(epoch_cloud_volume_contract ../Tests/assets/asset.cloud_volume_contract.cpp)
+        target_sources(epoch_cloud_volume_contract PRIVATE FILE_SET cloud_volume_modules TYPE CXX_MODULES
+            BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/modules
+            FILES ${CMAKE_CURRENT_SOURCE_DIR}/modules/asset.cloud_volume.ixx)
+        epoch_apply_cxx_dialect(epoch_cloud_volume_contract)
+        epoch_apply_warnings(epoch_cloud_volume_contract)
+        epoch_apply_sanitizers(epoch_cloud_volume_contract)
+        add_test(NAME epoch_cloud_volume_contract COMMAND epoch_cloud_volume_contract)
+    endif()
     include("${CMAKE_CURRENT_SOURCE_DIR}/../Tools/CMake/repository_tests.cmake")
     # Production native process ownership without model/renderer dependencies.
     
@@ -300,7 +330,75 @@ if(BUILD_TESTING)
         NAME epoch_texture_artifact_contract
         COMMAND epoch_texture_artifact_contract
     )
+    add_executable(epoch_mesh_artifact_contract
+        src/assets/mesh/asset.mesh_artifact_contract.cpp
+        src/render/render.preview_camera.cpp
+        src/assets/texture/asset.texture_artifact.cpp
+        src/authoring/texture/authoring.texture_document.cpp)
+    target_sources(epoch_mesh_artifact_contract PRIVATE
+        FILE_SET epoch_mesh_artifact_modules TYPE CXX_MODULES
+            BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/modules
+            FILES
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/asset.mesh_artifact.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/asset.cloud_volume.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/asset.texture_artifact.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/authoring.document.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/authoring.texture.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/authoring.texture_detail.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/editor.application.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/package.registry.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/render.arcade.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/render.camera.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/render.canvas2d.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/render.device.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/render.graph.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/render.lighting.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/render.math.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/render.preview_grid.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/render.ray.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/render.texture_artifact.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/render.texture_residency.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/scene.document.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/scene.runtime.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/scene.serializer.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/scene.snapshot.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/scene.tier0.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/terrain.foundation.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/visuals.engine.ixx
+    )
+    target_include_directories(epoch_mesh_artifact_contract PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    epoch_apply_cxx_dialect(epoch_mesh_artifact_contract)
+    epoch_apply_warnings(epoch_mesh_artifact_contract)
+    epoch_apply_sanitizers(epoch_mesh_artifact_contract)
+    add_test(NAME epoch_mesh_artifact_contract COMMAND epoch_mesh_artifact_contract
+        ${CMAKE_CURRENT_BINARY_DIR}/epoch_mesh_contract_project)
+
     if(EPOCH_CONFIGURES_MODULE_TARGETS)
+        # CPU resource loading uses the canonical importer; execution is supplied
+        # by the existing scheduler rather than a second worker pool.
+        add_executable(epoch_texture_streaming_contract
+            src/assets/assets.streaming.cpp
+            src/assets/assets.streaming_contract.cpp
+            src/assets/image.stb.cpp
+            src/assets/texture/asset.texture_artifact.cpp
+            src/assets/texture/asset.texture_import.cpp)
+        target_sources(epoch_texture_streaming_contract PRIVATE
+            FILE_SET epoch_texture_streaming_modules TYPE CXX_MODULES
+                BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/modules
+                FILES
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/assets.streaming.ixx
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/project.asset_registry.ixx
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/asset.texture_import.ixx
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/asset.texture_artifact.ixx)
+        epoch_apply_cxx_dialect(epoch_texture_streaming_contract)
+        epoch_apply_warnings(epoch_texture_streaming_contract)
+        epoch_apply_sanitizers(epoch_texture_streaming_contract)
+        add_test(NAME epoch_texture_streaming_contract
+            COMMAND epoch_texture_streaming_contract
+                ${CMAKE_CURRENT_BINARY_DIR}/texture-streaming-contract-data)
+        set_tests_properties(epoch_texture_streaming_contract PROPERTIES TIMEOUT 30)
+
         # Pure resource/cooldown admission; synthetic observations, no runtime
         # launch, sleeps, model requests, or renderer initialization.
         add_executable(epoch_platform_work_admission_contract
@@ -313,6 +411,11 @@ if(BUILD_TESTING)
         epoch_apply_cxx_dialect(epoch_platform_work_admission_contract)
         epoch_apply_warnings(epoch_platform_work_admission_contract)
         epoch_apply_sanitizers(epoch_platform_work_admission_contract)
+        target_compile_definitions(epoch_platform_work_admission_contract PRIVATE
+            EPOCH_ENABLE_NVIDIA_TELEMETRY=$<BOOL:${EPOCH_ENABLE_NVIDIA_TELEMETRY}>)
+        if(EPOCH_ENABLE_NVIDIA_TELEMETRY AND EPOCH_NVML_INCLUDE_DIR)
+            target_include_directories(epoch_platform_work_admission_contract PRIVATE "${EPOCH_NVML_INCLUDE_DIR}")
+        endif()
         add_test(NAME epoch_platform_work_admission_contract
             COMMAND epoch_platform_work_admission_contract)
 
@@ -527,6 +630,26 @@ if(EPOCH_CONFIGURES_MODULE_TARGETS)
     endif()
 endif()
 
+# The full runtime and native AI import this same platform contract. Keep
+# one compiled provider in their linked graph; standalone contracts retain
+# their independent providers in separate executables.
+if(EPOCH_CONFIGURES_MODULE_TARGETS AND
+   (EPOCH_BUILD_AI_TRANSPORT_CONTRACT OR
+    (NOT EPOCH_SOFTWARE_BASE_ONLY AND NOT EPOCH_CI_HEADLESS_ONLY)))
+    add_library(epoch_platform_filesystem STATIC)
+    target_sources(epoch_platform_filesystem PUBLIC
+        FILE_SET epoch_platform_filesystem_modules TYPE CXX_MODULES
+            BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/modules
+            FILES ${CMAKE_CURRENT_SOURCE_DIR}/modules/platform.filesystem.ixx)
+    target_include_directories(epoch_platform_filesystem PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    set_target_properties(epoch_platform_filesystem PROPERTIES
+        POSITION_INDEPENDENT_CODE ON)
+    epoch_apply_cxx_dialect(epoch_platform_filesystem)
+    epoch_apply_warnings(epoch_platform_filesystem)
+    epoch_apply_sanitizers(epoch_platform_filesystem)
+endif()
+
 if(EPOCH_BUILD_AI_TRANSPORT_CONTRACT)
     # Compile the same production transport implementation with its explicit
     # renderer-free module closure. This target never acquires a dependency on
@@ -540,7 +663,7 @@ if(EPOCH_BUILD_AI_TRANSPORT_CONTRACT)
 
         src/platform/core.path.cpp
     )
-    target_link_libraries(epoch_ai_transport_contract PUBLIC Epoch::PlatformEngine)
+    target_link_libraries(epoch_ai_transport_contract PUBLIC Epoch::PlatformEngine epoch_platform_filesystem)
     target_sources(epoch_ai_transport_contract PRIVATE
         FILE_SET epoch_ai_transport_modules TYPE CXX_MODULES
             BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/modules
@@ -556,7 +679,6 @@ if(EPOCH_BUILD_AI_TRANSPORT_CONTRACT)
 
                 ${CMAKE_CURRENT_SOURCE_DIR}/modules/core.path.ixx
                 ${CMAKE_CURRENT_SOURCE_DIR}/modules/core.sha256.ixx
-                ${CMAKE_CURRENT_SOURCE_DIR}/modules/platform.filesystem.ixx
     )
 
     target_include_directories(epoch_ai_transport_contract PRIVATE
@@ -643,7 +765,9 @@ set(EPOCH_SOURCES
     src/updater/updater.source_worker_win.cpp
     src/epoch/epoch.build_validation.cpp
     src/epoch/epoch.build_validation_contract.cpp
+    src/voxel/voxel.sdf_contract.cpp
     src/editor/editor.code_workspace.cpp
+    src/editor/editor.asset_generation.cpp
     src/editor/editor.code_workspace_contract.cpp
     
     
@@ -653,6 +777,12 @@ set(EPOCH_SOURCES
     src/ai/ai.project_profile_contract.cpp
     src/ai/ai.model_install.cpp
     src/ai/ai.model_install_contract.cpp
+    src/ai/ai.image_generation.cpp
+    src/ai/ai.model_generation.cpp
+    src/ai/ai.triposr_generation.cpp
+    src/ai/ai.asset_jobs.cpp
+    src/ai/ai.asset_stage_fwd.hpp
+    src/assets/mesh/asset.model_import.cpp
     
     
     
@@ -688,6 +818,7 @@ set(EPOCH_SOURCES
     src/ai/ai.mcp_stdio_contract.cpp
     src/extensions/extension.catalog_contract.cpp
     src/packages/package.catalog.cpp
+    src/packages/package.source_install.cpp
     src/input/input.controller.cpp
     src/input/input.controller_sdl.cpp
     src/input/input.controller_contract.cpp
@@ -698,8 +829,12 @@ set(EPOCH_SOURCES
     src/physics/physics.manager.cpp
     src/physics/physics.solver2d.cpp
     src/physics/physics.solver2d_contract.cpp
+    src/water/water.system.cpp
+    src/water/water.surface.cpp
     src/project/project.sprite_animation.cpp
+    src/project/project.motion_track.cpp
     src/project/project.sprite_animation_contract.cpp
+    src/render/render.preview_camera.cpp
     src/render/render.portal_contract.cpp
     src/renderers/core/core.context_command_queue.cpp
     src/renderers/core/engine.context.cpp
@@ -721,6 +856,7 @@ set(EPOCH_SOURCES
     src/renderers/opengl/opengl.scene_preview.cpp
     src/renderers/opengl/opengl.canvas2d_scene.cpp
     src/renderers/opengl/opengl.context_process_impl.cpp
+    src/renderers/opengl/opengl.native_present.cpp
     src/renderers/software/software.context.cpp
     src/renderers/software/software.context_capture.cpp
     src/renderers/software/software.context_draw.cpp
@@ -733,11 +869,14 @@ set(EPOCH_SOURCES
     src/renderers/raylib/core.context_raylib.cpp
     src/renderers/raylib/raylib.api.cpp
     src/epochgui/gui.engine.cpp
+    src/epochgui/gui.docking_adapter.cpp
+    src/epochgui/gui.clipboard.cpp
     src/scripts/scripting.compiler_engine.cpp
     src/editor/editor.application.cpp
     src/editor/editor.scene.cpp
     src/editor/editor.standard.cpp
     src/editor/editor.plant_lab.cpp
+    src/forest/forest.preview_mesh.cpp
     src/editor/editor.gui.cpp
     src/editor/editor.canvas2d_scene.cpp
     src/editor/editor.hierarchy_adapter.cpp
@@ -791,6 +930,8 @@ set(EPOCH_SOURCES
     src/epochgui/font.renderer.cpp
     src/project/project.asset_registry.cpp
     src/project/project.forest_library.cpp
+    src/project/project.planetary.cpp
+    src/project/project.planetary_snapshot.cpp
     src/project/project.texture_resources.cpp
     src/project/project.texture_library.cpp
     src/project/project.texture_pipeline.cpp
@@ -798,7 +939,9 @@ set(EPOCH_SOURCES
     src/project/project.contracts.cpp
     src/project/project.lifecycle_contract.cpp
     src/assets/texture/asset.texture_artifact.cpp
+    src/assets/image.stb.cpp
     src/assets/texture/asset.texture_import.cpp
+    src/assets/assets.streaming.cpp
     src/core/core.assert.cpp
     src/core/core.error.cpp
     src/core/core.id.cpp
@@ -899,7 +1042,6 @@ list(APPEND EPOCH_SOURCES ${EPOCH_EDITOR_IMPLEMENTATION_PARTS})
 
 set(EPOCH_DOMAIN_IMPLEMENTATION_PARTS
     src/authoring/texture/implementation/authoring.texture_binary_codec.inl
-    src/authoring/texture/implementation/authoring.texture_residency.inl
     src/editor/implementation/editor.scene_commands.inl
     src/editor/implementation/editor.project_registry.inl
     src/editor/implementation/editor.project_shell_generation.inl
@@ -941,6 +1083,7 @@ endif()
 if(EPOCH_ENABLE_AUTHORING_PLATFORM AND EPOCH_ENABLE_TEXTURE_EDITOR)
     list(APPEND EPOCH_SOURCES
         src/authoring/texture/authoring.texture_document.cpp
+        src/authoring/texture/authoring.texture_residency.cpp
     )
 endif()
 if(EPOCH_ENABLE_AUTHORING_PLATFORM AND EPOCH_ENABLE_TILEMAP_EDITOR)
@@ -949,10 +1092,12 @@ if(EPOCH_ENABLE_AUTHORING_PLATFORM AND EPOCH_ENABLE_TILEMAP_EDITOR)
     )
 endif()
 
+# Project manifests and update identities use JSON even without native AI.
+find_package(nlohmann_json CONFIG REQUIRED)
+
 # Epoch owns its native AI task/model runtime; no separate frontend server.
 option(EPOCH_ENABLE_NATIVE_AI "Compile native Epoch AI agent and Qwen Flash runtime" ON)
 if(EPOCH_ENABLE_NATIVE_AI)
-    find_package(nlohmann_json CONFIG REQUIRED)
     find_package(httplib CONFIG REQUIRED)
     find_package(CURL REQUIRED)
     find_package(unofficial-sqlite3 CONFIG REQUIRED)
@@ -982,7 +1127,8 @@ if(EPOCH_ENABLE_NATIVE_AI)
     target_include_directories(epoch_ai_native PUBLIC
         "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native")
     target_link_libraries(epoch_ai_native PUBLIC
-        nlohmann_json::nlohmann_json httplib::httplib CURL::libcurl unofficial::sqlite3::sqlite3)
+        nlohmann_json::nlohmann_json httplib::httplib CURL::libcurl unofficial::sqlite3::sqlite3
+        epoch_platform_filesystem)
     target_compile_definitions(epoch_ai_native PRIVATE
         $<$<PLATFORM_ID:Windows>:NOMINMAX;WIN32_LEAN_AND_MEAN>)
     list(APPEND EPOCH_SOURCES src/ai/ai.native_runtime.cpp)
@@ -998,7 +1144,7 @@ endif()
 
 if(EPOCH_BUILD_STATIC_RUNTIME)
     add_library(epoch STATIC ${EPOCH_SOURCES})
-    target_link_libraries(epoch PUBLIC Epoch::PlatformEngine)
+    target_link_libraries(epoch PUBLIC Epoch::PlatformEngine epoch_platform_filesystem)
     target_compile_definitions(epoch PRIVATE
         ENGINE_STATICLIB=1
         EPOCH_MAIN_IN_MAIN_CPP=1)
@@ -1007,7 +1153,7 @@ if(EPOCH_BUILD_STATIC_RUNTIME)
         POSITION_INDEPENDENT_CODE ON)
 else()
     add_executable(epoch ${EPOCH_SOURCES})
-    target_link_libraries(epoch PUBLIC Epoch::PlatformEngine)
+    target_link_libraries(epoch PUBLIC Epoch::PlatformEngine epoch_platform_filesystem)
     if(WIN32)
         target_sources(epoch PRIVATE resource/epoch.manifest)
     endif()
@@ -1199,6 +1345,8 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND UNIX AND NOT APPLE)
         PROPERTIES COMPILE_OPTIONS "$<$<CONFIG:Release>:-O0>"
     )
 endif()
+# Engine adapters such as gui.frame_limit_control stay in this module set;
+# the standalone EpochGui target remains independent of perf.tier.
 file(GLOB EPOCH_MODULE_FILES CONFIGURE_DEPENDS ${EPOCH_MODULE_DIR}/*.ixx)
 list(SORT EPOCH_MODULE_FILES)
 
@@ -1210,7 +1358,7 @@ target_include_directories(epoch PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/stb
 )
 
-target_link_libraries(epoch PRIVATE epoch_gui Epoch::AudioEngine Epoch::MediaEngine)
+target_link_libraries(epoch PRIVATE epoch_gui Epoch::AudioEngine Epoch::MediaEngine nlohmann_json::nlohmann_json)
 
 if(EPOCH_ENABLE_NATIVE_AI)
     target_link_libraries(epoch PRIVATE epoch_ai_native)
@@ -1234,6 +1382,10 @@ target_include_directories(epoch_renderer_smoke PRIVATE
 )
 
 find_program(GLSLANG_VALIDATOR glslangValidator)
+find_program(GLSLC glslc HINTS
+    "${VCPKG_INSTALLED_DIR}/${VCPKG_HOST_TRIPLET}/tools/shaderc"
+    "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/tools/shaderc"
+    "${CMAKE_CURRENT_SOURCE_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/tools/shaderc")
 set(EPOCH_VULKAN_ASSET_DIR ${CMAKE_CURRENT_BINARY_DIR}/assets/vulkan)
 set(EPOCH_VULKAN_SHADER_DIR ${EPOCH_VULKAN_ASSET_DIR}/shaders)
 set(EPOCH_FONT_ASSET_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts)
@@ -1260,33 +1412,55 @@ if(EXISTS ${EPOCH_FONT_ASSET_SOURCE_DIR}/OFL.txt)
     )
 endif()
 
-if(GLSLANG_VALIDATOR)
+if(GLSLANG_VALIDATOR OR GLSLC)
+    if(GLSLANG_VALIDATOR)
+        set(_epoch_shader_compiler "${GLSLANG_VALIDATOR}")
+        set(_epoch_shader_vertex_options -V -S vert)
+        set(_epoch_shader_fragment_options -V -S frag)
+    else()
+        set(_epoch_shader_compiler "${GLSLC}")
+        set(_epoch_shader_vertex_options --target-env=vulkan1.0 -fshader-stage=vert)
+        set(_epoch_shader_fragment_options --target-env=vulkan1.0 -fshader-stage=frag)
+    endif()
     add_custom_command(
         OUTPUT
             ${EPOCH_VULKAN_SHADER_DIR}/vert.spv
             ${EPOCH_VULKAN_SHADER_DIR}/frag.spv
-        COMMAND ${GLSLANG_VALIDATOR} -V -S vert
+            ${EPOCH_VULKAN_SHADER_DIR}/gui_vert.spv
+            ${EPOCH_VULKAN_SHADER_DIR}/gui_frag.spv
+        COMMAND "${_epoch_shader_compiler}" ${_epoch_shader_vertex_options}
             ${CMAKE_CURRENT_SOURCE_DIR}/assets/vulkan/shaders/vert.glsl
             -o ${EPOCH_VULKAN_SHADER_DIR}/vert.spv
-        COMMAND ${GLSLANG_VALIDATOR} -V -S frag
+        COMMAND "${_epoch_shader_compiler}" ${_epoch_shader_fragment_options}
             ${CMAKE_CURRENT_SOURCE_DIR}/assets/vulkan/shaders/frag.glsl
             -o ${EPOCH_VULKAN_SHADER_DIR}/frag.spv
+        COMMAND "${_epoch_shader_compiler}" ${_epoch_shader_vertex_options}
+            ${CMAKE_CURRENT_SOURCE_DIR}/assets/vulkan/shaders/gui_vert.glsl
+            -o ${EPOCH_VULKAN_SHADER_DIR}/gui_vert.spv
+        COMMAND "${_epoch_shader_compiler}" ${_epoch_shader_fragment_options}
+            ${CMAKE_CURRENT_SOURCE_DIR}/assets/vulkan/shaders/gui_frag.glsl
+            -o ${EPOCH_VULKAN_SHADER_DIR}/gui_frag.spv
         DEPENDS
             ${CMAKE_CURRENT_SOURCE_DIR}/assets/vulkan/shaders/vert.glsl
             ${CMAKE_CURRENT_SOURCE_DIR}/assets/vulkan/shaders/frag.glsl
+            ${CMAKE_CURRENT_SOURCE_DIR}/assets/vulkan/shaders/gui_vert.glsl
+            ${CMAKE_CURRENT_SOURCE_DIR}/assets/vulkan/shaders/gui_frag.glsl
         COMMENT "Compiling Vulkan GLSL shaders to SPIR-V"
+        VERBATIM
     )
 
     add_custom_target(epoch_vulkan_shaders
         DEPENDS
             ${EPOCH_VULKAN_SHADER_DIR}/vert.spv
             ${EPOCH_VULKAN_SHADER_DIR}/frag.spv
+            ${EPOCH_VULKAN_SHADER_DIR}/gui_vert.spv
+            ${EPOCH_VULKAN_SHADER_DIR}/gui_frag.spv
     )
 
     add_dependencies(epoch epoch_vulkan_shaders)
     add_dependencies(epoch_renderer_smoke epoch_vulkan_shaders)
 else()
-    message(WARNING "glslangValidator not found; Vulkan SPIR-V shaders will not be generated.")
+    message(WARNING "glslangValidator/glslc not found; Vulkan SPIR-V shaders will not be generated.")
 endif()
 
 epoch_apply_cxx_dialect(epoch)
@@ -1599,7 +1773,6 @@ if(EPOCH_VULKAN_ACTIVE)
 
     if(EPOCH_VULKAN_ACTIVE)
         target_sources(epoch PRIVATE
-            src/assets/image.stb.cpp
             src/renderers/vulkan/vulkan.platform_context.cpp
             src/renderers/vulkan/vulkan.dispatch_storage.cpp
         )
@@ -1613,7 +1786,7 @@ elseif(WIN32)
     target_link_libraries(epoch PRIVATE opengl32)
 endif()
 
-if(EPOCH_OPENGL_ACTIVE OR EPOCH_SDL_ACTIVE)
+if(EPOCH_OPENGL_ACTIVE OR EPOCH_SDL_ACTIVE OR (WIN32 AND (EPOCH_SFML_ACTIVE OR EPOCH_RAYLIB_ACTIVE)))
     set(EPOCH_GLAD_NEED_HEADERS ON)
 else()
     set(EPOCH_GLAD_NEED_HEADERS OFF)
@@ -1678,6 +1851,8 @@ if(EPOCH_GLAD_NEED_HEADERS)
     endif()
 endif()
 set(EPOCH_ACTIVE_MODULE_FILES ${EPOCH_MODULE_FILES})
+# The shared platform target above is the single provider for linked consumers.
+list(REMOVE_ITEM EPOCH_ACTIVE_MODULE_FILES ${EPOCH_MODULE_DIR}/platform.filesystem.ixx)
 
 function(epoch_exclude_modules list_var regex_pattern)
     set(_epoch_filtered ${${list_var}})
@@ -1722,7 +1897,7 @@ endif()
 epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[(^|[/\\])almondshell\.ixx$]])
 
 if(NOT EPOCH_ENABLE_AUTHORING_PLATFORM OR NOT EPOCH_ENABLE_TEXTURE_EDITOR)
-    epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[(^|[/\\])authoring\.texture\.ixx$]])
+    epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[(^|[/\\])authoring\.texture(_detail)?\.ixx$]])
     epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[project[.]texture_source[.]ixx$]])
     set_source_files_properties(src/project/project.texture_source.cpp
         PROPERTIES HEADER_FILE_ONLY TRUE)
@@ -1730,6 +1905,15 @@ endif()
 
 if(NOT EPOCH_OPENGL_ACTIVE)
     epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[(^|[/\\])opengl\.]])
+    if(WIN32 AND (EPOCH_SFML_ACTIVE OR EPOCH_RAYLIB_ACTIVE))
+        # Native presentation helpers do not enable the OpenGL renderer or its GLAD table.
+        list(APPEND EPOCH_ACTIVE_MODULE_FILES
+            ${EPOCH_MODULE_DIR}/opengl.platform.ixx
+            ${EPOCH_MODULE_DIR}/opengl.native_present.ixx)
+    else()
+        set_source_files_properties(src/renderers/opengl/opengl.native_present.cpp
+            PROPERTIES HEADER_FILE_ONLY TRUE)
+    endif()
 endif()
 
 if(NOT EPOCH_SOFTWARE_RENDERER_ACTIVE)
@@ -1778,11 +1962,32 @@ if(NOT EPOCH_DIRECTX_ACTIVE)
     )
 endif()
 
+# Linked optional project controllers consume only these small public contracts.
+# The Engine remains their single module owner in the combined application.
+set(EPOCH_PROJECT_PUBLIC_MODULE_FILES
+    ${EPOCH_MODULE_DIR}/asset.texture_artifact.ixx
+    ${EPOCH_MODULE_DIR}/asset.mesh_artifact.ixx
+    ${EPOCH_MODULE_DIR}/asset.cloud_volume.ixx
+    ${EPOCH_MODULE_DIR}/water.wave.ixx
+    ${EPOCH_MODULE_DIR}/project.planetary_snapshot.ixx
+    ${EPOCH_MODULE_DIR}/project.planetary_runtime.ixx)
+list(REMOVE_ITEM EPOCH_ACTIVE_MODULE_FILES ${EPOCH_PROJECT_PUBLIC_MODULE_FILES})
+target_sources(epoch PUBLIC
+    FILE_SET epoch_project_modules TYPE CXX_MODULES
+        BASE_DIRS ${EPOCH_MODULE_DIR}
+        FILES ${EPOCH_PROJECT_PUBLIC_MODULE_FILES})
 target_sources(epoch PRIVATE
     FILE_SET epoch_modules TYPE CXX_MODULES
         BASE_DIRS ${EPOCH_MODULE_DIR}
         FILES ${EPOCH_ACTIVE_MODULE_FILES}
 )
+if(_epoch_managed_output AND NOT EPOCH_BUILD_STATIC_RUNTIME)
+    # Configure-time shader/font/private assets must survive Intermediate cleanup.
+    add_custom_command(TARGET epoch POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_CURRENT_BINARY_DIR}/assets" "$<TARGET_FILE_DIR:epoch>/assets"
+        VERBATIM)
+endif()
 if(BUILD_TESTING)
     add_executable(epoch_input_controller_contract
         src/input/input.controller.cpp
@@ -1911,28 +2116,69 @@ if(BUILD_TESTING)
     target_compile_definitions(epoch_media_timeline_preview_contract PRIVATE EPOCH_MEDIA_TIMELINE_PREVIEW_CONTRACT_MAIN=1)
     epoch_apply_cxx_dialect(epoch_media_timeline_preview_contract)
     add_test(NAME epoch_media_timeline_preview_contract COMMAND epoch_media_timeline_preview_contract)
-    add_executable(epoch_forest_preview_mesh_contract
-        src/forest/forest.preview_mesh_contract.cpp
+    add_executable(epoch_voxel_sdf_contract
+        src/voxel/voxel.sdf_contract.cpp
     )
-    target_sources(epoch_forest_preview_mesh_contract PRIVATE
-        FILE_SET epoch_forest_preview_mesh_modules TYPE CXX_MODULES
+    target_sources(epoch_voxel_sdf_contract PRIVATE
+        FILE_SET epoch_voxel_sdf_modules TYPE CXX_MODULES
             BASE_DIRS ${EPOCH_MODULE_DIR}
             FILES
-                ${EPOCH_MODULE_DIR}/authoring.document.ixx
                 ${EPOCH_MODULE_DIR}/voxel.field.ixx
-                ${EPOCH_MODULE_DIR}/authoring.morphology.ixx
-                ${EPOCH_MODULE_DIR}/forest.preview_mesh.ixx
+                ${EPOCH_MODULE_DIR}/voxel.sdf.ixx
     )
-    target_compile_definitions(epoch_forest_preview_mesh_contract PRIVATE
-        EPOCH_FOREST_PREVIEW_MESH_CONTRACT_MAIN=1
+    target_compile_definitions(epoch_voxel_sdf_contract PRIVATE
+        EPOCH_VOXEL_SDF_CONTRACT_MAIN=1
     )
-    epoch_apply_cxx_dialect(epoch_forest_preview_mesh_contract)
-    epoch_apply_warnings(epoch_forest_preview_mesh_contract)
-    epoch_apply_sanitizers(epoch_forest_preview_mesh_contract)
-    add_test(
-        NAME epoch_forest_preview_mesh_contract
-        COMMAND epoch_forest_preview_mesh_contract
+    epoch_apply_cxx_dialect(epoch_voxel_sdf_contract)
+    epoch_apply_warnings(epoch_voxel_sdf_contract)
+    epoch_apply_sanitizers(epoch_voxel_sdf_contract)
+    add_test(NAME epoch_voxel_sdf_contract COMMAND epoch_voxel_sdf_contract)
+
+    add_executable(epoch_water_system_contract
+        src/water/water.system.cpp
+        src/water/water.system_contract.cpp
     )
+    target_sources(epoch_water_system_contract PRIVATE
+        FILE_SET epoch_water_system_modules TYPE CXX_MODULES
+            BASE_DIRS ${EPOCH_MODULE_DIR}
+            FILES
+                ${EPOCH_MODULE_DIR}/render.math.ixx
+                ${EPOCH_MODULE_DIR}/voxel.field.ixx
+                ${EPOCH_MODULE_DIR}/voxel.storage.ixx
+                ${EPOCH_MODULE_DIR}/water.wave.ixx
+                ${EPOCH_MODULE_DIR}/water.system.ixx
+    )
+    epoch_apply_cxx_dialect(epoch_water_system_contract)
+    epoch_apply_warnings(epoch_water_system_contract)
+    epoch_apply_sanitizers(epoch_water_system_contract)
+    add_test(NAME epoch_water_system_contract
+        COMMAND epoch_water_system_contract "${CMAKE_CURRENT_BINARY_DIR}/water-system-replay.txt")
+
+    add_executable(epoch_water_surface_contract
+        src/water/water.system.cpp
+        src/water/water.surface.cpp
+        src/water/water.surface_contract.cpp
+        src/assets/texture/asset.texture_artifact.cpp
+    )
+    target_sources(epoch_water_surface_contract PRIVATE
+        FILE_SET epoch_water_surface_modules TYPE CXX_MODULES
+            BASE_DIRS ${EPOCH_MODULE_DIR}
+            FILES
+                ${EPOCH_MODULE_DIR}/render.math.ixx
+                ${EPOCH_MODULE_DIR}/voxel.field.ixx
+                ${EPOCH_MODULE_DIR}/voxel.storage.ixx
+                ${EPOCH_MODULE_DIR}/water.wave.ixx
+                ${EPOCH_MODULE_DIR}/water.system.ixx
+                ${EPOCH_MODULE_DIR}/water.surface.ixx
+                ${EPOCH_MODULE_DIR}/asset.texture_artifact.ixx
+                ${EPOCH_MODULE_DIR}/asset.mesh_artifact.ixx
+                ${EPOCH_MODULE_DIR}/asset.cloud_volume.ixx
+    )
+    epoch_apply_cxx_dialect(epoch_water_surface_contract)
+    epoch_apply_warnings(epoch_water_surface_contract)
+    epoch_apply_sanitizers(epoch_water_surface_contract)
+    add_test(NAME epoch_water_surface_contract
+        COMMAND epoch_water_surface_contract "${CMAKE_CURRENT_BINARY_DIR}/water-surface-replay.txt")
 
     add_executable(epoch_ai_model_install_contract
         src/ai/ai.model_install.cpp
@@ -2080,10 +2326,12 @@ if(BUILD_TESTING)
         src/project/project.input_controller.cpp
         src/project/project.input_controller_contract.cpp
     )
+    target_link_libraries(epoch_project_input_controller_contract PUBLIC Epoch::PlatformEngine)
     target_sources(epoch_project_input_controller_contract PRIVATE
         FILE_SET epoch_project_input_controller_modules TYPE CXX_MODULES
             BASE_DIRS ${EPOCH_MODULE_DIR}
             FILES
+                ${EPOCH_MODULE_DIR}/core.logger.ixx
                 ${EPOCH_MODULE_DIR}/input.controller.ixx
                 ${EPOCH_MODULE_DIR}/platform.filesystem.ixx
                 ${EPOCH_MODULE_DIR}/project.asset_registry.ixx
@@ -2114,10 +2362,12 @@ if(BUILD_TESTING)
         src/editor/editor.project_input_settings.cpp
         src/editor/editor.project_input_settings_contract.cpp
     )
+    target_link_libraries(epoch_editor_project_input_settings_contract PUBLIC Epoch::PlatformEngine)
     target_sources(epoch_editor_project_input_settings_contract PRIVATE
         FILE_SET epoch_editor_project_input_settings_modules TYPE CXX_MODULES
             BASE_DIRS ${EPOCH_MODULE_DIR}
             FILES
+                ${EPOCH_MODULE_DIR}/core.logger.ixx
                 ${EPOCH_MODULE_DIR}/input.controller.ixx
                 ${EPOCH_MODULE_DIR}/platform.filesystem.ixx
                 ${EPOCH_MODULE_DIR}/project.asset_registry.ixx
@@ -2149,7 +2399,10 @@ if(BUILD_TESTING)
     target_sources(epoch_editor_hierarchy_adapter_contract PRIVATE
         FILE_SET epoch_editor_hierarchy_adapter_modules TYPE CXX_MODULES
             BASE_DIRS ${EPOCH_MODULE_DIR}
-            FILES ${EPOCH_MODULE_DIR}/editor.hierarchy_adapter.ixx
+            FILES
+                ${EPOCH_MODULE_DIR}/authoring.document.ixx
+                ${EPOCH_MODULE_DIR}/authoring.gui_document.ixx
+                ${EPOCH_MODULE_DIR}/editor.hierarchy_adapter.ixx
     )
     target_include_directories(epoch_editor_hierarchy_adapter_contract PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/dep/EpochGui/include
@@ -2320,6 +2573,7 @@ if(BUILD_TESTING)
         add_executable(epoch_authoring_texture_contract
     src/assets/texture/asset.texture_artifact.cpp
             src/authoring/texture/authoring.texture_document.cpp
+            src/authoring/texture/authoring.texture_residency.cpp
             src/authoring/texture/authoring.texture_contract.cpp
         )
         target_sources(epoch_authoring_texture_contract PRIVATE
@@ -2328,6 +2582,7 @@ if(BUILD_TESTING)
                 FILES
                     ${EPOCH_MODULE_DIR}/asset.texture_artifact.ixx
                     ${EPOCH_MODULE_DIR}/authoring.texture.ixx
+                    ${EPOCH_MODULE_DIR}/authoring.texture_detail.ixx
         )
         target_include_directories(epoch_authoring_texture_contract PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}
@@ -2641,6 +2896,26 @@ if(BUILD_TESTING)
         COMMAND epoch_editor_code_workspace_contract
     )
 
+    add_executable(epoch_platform_file_lease_contract
+        "${CMAKE_CURRENT_SOURCE_DIR}/../Tests/platform/platform.file_lease_contract.cpp")
+    target_sources(epoch_platform_file_lease_contract PRIVATE
+        FILE_SET platform_file_lease_modules TYPE CXX_MODULES
+            BASE_DIRS ${EPOCH_MODULE_DIR}
+            FILES ${EPOCH_MODULE_DIR}/platform.filesystem.ixx)
+    epoch_apply_cxx_dialect(epoch_platform_file_lease_contract)
+    epoch_apply_warnings(epoch_platform_file_lease_contract)
+    epoch_apply_sanitizers(epoch_platform_file_lease_contract)
+    find_package(Python3 COMPONENTS Interpreter QUIET)
+    if(Python3_Interpreter_FOUND)
+        add_test(NAME epoch_platform_file_lease_contract
+            COMMAND "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/../Tests/platform/test_file_lease.py"
+                --helper "$<TARGET_FILE:epoch_platform_file_lease_contract>"
+                --scratch "${CMAKE_CURRENT_BINARY_DIR}/file-lease-fixtures/$<CONFIG>"
+                --result "${CMAKE_CURRENT_BINARY_DIR}/file-lease-$<CONFIG>.json")
+        set_tests_properties(epoch_platform_file_lease_contract PROPERTIES TIMEOUT 30)
+    endif()
+
     add_executable(epoch_editor_workspace_commands_contract
         src/editor/editor.workspace_commands_contract.cpp
     )
@@ -2656,6 +2931,46 @@ if(BUILD_TESTING)
         NAME epoch_editor_workspace_commands_contract
         COMMAND epoch_editor_workspace_commands_contract
     )
+
+    add_executable(epoch_project_planetary_settings_contract
+        ${CMAKE_CURRENT_SOURCE_DIR}/../Tests/packages/project.planetary_settings_contract.cpp)
+    target_sources(epoch_project_planetary_settings_contract PRIVATE
+        FILE_SET epoch_project_planetary_settings_modules TYPE CXX_MODULES
+            BASE_DIRS ${EPOCH_MODULE_DIR}
+            FILES
+                ${EPOCH_MODULE_DIR}/asset.texture_artifact.ixx
+                ${EPOCH_MODULE_DIR}/asset.mesh_artifact.ixx
+                ${EPOCH_MODULE_DIR}/asset.cloud_volume.ixx
+                ${EPOCH_MODULE_DIR}/water.wave.ixx
+                ${EPOCH_MODULE_DIR}/project.planetary_snapshot.ixx
+                ${EPOCH_MODULE_DIR}/project.planetary.ixx)
+    epoch_apply_cxx_dialect(epoch_project_planetary_settings_contract)
+    epoch_apply_warnings(epoch_project_planetary_settings_contract)
+    add_test(NAME epoch_project_planetary_settings_contract COMMAND epoch_project_planetary_settings_contract)
+
+    add_executable(epoch_package_source_install_contract
+        ${CMAKE_CURRENT_SOURCE_DIR}/../Tests/packages/package.source_install_contract.cpp
+        src/packages/package.catalog.cpp
+        src/packages/package.source_install.cpp
+    )
+    target_sources(epoch_package_source_install_contract PRIVATE
+        FILE_SET epoch_package_source_install_modules TYPE CXX_MODULES
+            BASE_DIRS ${EPOCH_MODULE_DIR}
+            FILES
+                ${EPOCH_MODULE_DIR}/core.sha256.ixx
+                ${EPOCH_MODULE_DIR}/package.registry.ixx
+                ${EPOCH_MODULE_DIR}/package.catalog.ixx
+                ${EPOCH_MODULE_DIR}/package.source_install.ixx
+                ${EPOCH_MODULE_DIR}/platform.filesystem.ixx
+    )
+    if(WIN32)
+        target_sources(epoch_package_source_install_contract PRIVATE resource/epoch.manifest)
+        target_link_libraries(epoch_package_source_install_contract PRIVATE winhttp)
+    endif()
+    epoch_apply_cxx_dialect(epoch_package_source_install_contract)
+    epoch_apply_warnings(epoch_package_source_install_contract)
+    epoch_apply_sanitizers(epoch_package_source_install_contract)
+    add_test(NAME epoch_package_source_install_contract COMMAND epoch_package_source_install_contract)
 
     add_executable(epoch_editor_authoring_history_contract
         src/editor/editor.authoring_history_contract.cpp
@@ -2695,6 +3010,19 @@ if(BUILD_TESTING)
             COMMAND epoch_authoring_task_graph_contract
         )
     endif()
+    # Engine distribution choices are tested without the Editor or renderers.
+    add_executable(epoch_updater_platform_policy_contract
+        "${CMAKE_CURRENT_SOURCE_DIR}/../Tests/updater/updater.platform_policy_contract.cpp")
+    target_sources(epoch_updater_platform_policy_contract PRIVATE
+        FILE_SET updater_platform_policy_modules TYPE CXX_MODULES
+            BASE_DIRS ${EPOCH_MODULE_DIR}
+            FILES "${EPOCH_MODULE_DIR}/updater.platform_policy.ixx")
+    target_link_libraries(epoch_updater_platform_policy_contract PRIVATE Epoch::PlatformEngine)
+    epoch_apply_cxx_dialect(epoch_updater_platform_policy_contract)
+    epoch_apply_warnings(epoch_updater_platform_policy_contract)
+    epoch_apply_sanitizers(epoch_updater_platform_policy_contract)
+    add_test(NAME epoch_updater_platform_policy_contract COMMAND epoch_updater_platform_policy_contract)
+    set_tests_properties(epoch_updater_platform_policy_contract PROPERTIES TIMEOUT 20)
     add_test(
         NAME epoch_engine_contract
         COMMAND $<TARGET_FILE:epoch> --engine-contract-self-test
@@ -2707,10 +3035,59 @@ if(BUILD_TESTING)
             ENVIRONMENT "DISPLAY=;WAYLAND_DISPLAY="
         )
     endif()
+    if(EPOCH_ENABLE_GRAPHICS_TESTS AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        find_package(Python3 3.10 COMPONENTS Interpreter REQUIRED)
+        find_program(EPOCH_XVFB_RUN_EXECUTABLE NAMES xvfb-run REQUIRED)
+        # Runtime proof must use the built executable with its matching assets.
+        # This copy is opt-in only; normal builds never launch graphics tests.
+        add_custom_command(TARGET epoch POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${CMAKE_CURRENT_SOURCE_DIR}/assets"
+                "$<TARGET_FILE_DIR:epoch>/assets"
+            VERBATIM
+        )
+        foreach(_epoch_linux_renderer IN ITEMS opengl sdl sfml raylib vulkan software)
+            string(TOUPPER "${_epoch_linux_renderer}" _epoch_renderer_option)
+            if(_epoch_linux_renderer STREQUAL "software")
+                set(_epoch_renderer_option SOFTWARE_RENDERER)
+            endif()
+            if(NOT EPOCH_${_epoch_renderer_option}_ACTIVE)
+                continue()
+            endif()
+            set(_epoch_renderer_flags)
+            set(_epoch_renderer_label software_cpu)
+            if(_epoch_linux_renderer STREQUAL "vulkan")
+                set(_epoch_renderer_flags --software-vulkan)
+                set(_epoch_renderer_label software_vulkan)
+            elseif(NOT _epoch_linux_renderer STREQUAL "software")
+                set(_epoch_renderer_flags --software-opengl)
+                set(_epoch_renderer_label software_opengl)
+            endif()
+            add_test(NAME epoch_linux_${_epoch_linux_renderer}_smoke
+                COMMAND "${EPOCH_XVFB_RUN_EXECUTABLE}" -a
+                    "--server-args=-screen 0 1280x720x24 -nolisten tcp"
+                    "${Python3_EXECUTABLE}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/../Tools/build/run_linux_graphics_smoke.py"
+                    --binary "$<TARGET_FILE:epoch>"
+                    --output-root "${CMAKE_CURRENT_SOURCE_DIR}/../build/validation/linux-graphics"
+                    --renderer "${_epoch_linux_renderer}"
+                    ${_epoch_renderer_flags} --timeout-seconds 30
+            )
+            set_tests_properties(epoch_linux_${_epoch_linux_renderer}_smoke PROPERTIES
+                WORKING_DIRECTORY "$<TARGET_FILE_DIR:epoch>"
+                TIMEOUT 45 RUN_SERIAL TRUE
+                LABELS "graphics;linux;${_epoch_renderer_label}"
+            )
+        endforeach()
+    endif()
 endif()
 
+if(EPOCH_ENABLE_NVIDIA_TELEMETRY AND EPOCH_NVML_INCLUDE_DIR)
+    target_include_directories(epoch PRIVATE "${EPOCH_NVML_INCLUDE_DIR}")
+endif()
 target_compile_definitions(epoch PRIVATE
     EPOCH_ENABLE_TEXTURE_DIAGNOSTICS=$<BOOL:${EPOCH_ENABLE_TEXTURE_DIAGNOSTICS}>
+    EPOCH_ENABLE_NVIDIA_TELEMETRY=$<BOOL:${EPOCH_ENABLE_NVIDIA_TELEMETRY}>
     $<$<BOOL:${EPOCH_UPDATER_SHELL_BUILD}>:EPOCH_UPDATER_SHELL_BUILD=1>
     EPOCH_BINARY_ONLY_DISTRIBUTION=$<BOOL:${EPOCH_BINARY_ONLY_DISTRIBUTION}>
     EPOCH_ENABLE_AUTHORING_PLATFORM=$<BOOL:${EPOCH_ENABLE_AUTHORING_PLATFORM}>
@@ -2750,6 +3127,10 @@ endif()
 
 if(WIN32 AND EPOCH_DIRECTX_ACTIVE)
     target_link_libraries(epoch PRIVATE d3d11 dxgi d3dcompiler)
+elseif(WIN32 AND (EPOCH_OPENGL_ACTIVE OR EPOCH_SFML_ACTIVE OR EPOCH_RAYLIB_ACTIVE))
+    # The Windows GL-family native presenter needs these SDK libraries independently
+    # of whether the DirectX renderer is compiled. It compiles no D3D shaders.
+    target_link_libraries(epoch PRIVATE d3d11 dxgi)
 endif()
 
 find_package(glm CONFIG QUIET)

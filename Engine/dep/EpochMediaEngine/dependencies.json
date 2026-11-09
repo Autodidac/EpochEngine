@@ -6,20 +6,22 @@
       "repository": "Autodidac/EpochGui",
       "root_argument": "EPOCHGUI_ROOT",
       "base_revision": "c52e91293749a7a34959bfc042c582c3ac182504",
-      "selection": "published reviewed source 0.90.0",
-      "revision": "f83b2f15385598b8efbb028a6f391ca637e07634"
+      "selection": "local unpublished Gui input-ownership checkpoint; use explicit local EPOCHGUI_ROOT",
+      "revision": "28d81396a4b1e782264712d97bbe7c8aefc05748"
     },
     {
       "repository": "Autodidac/EpochGui_Demo",
       "root_argument": "EPOCHGUI_DEMO_ROOT",
       "base_revision": "eaf26a37b8bed4756294c17b141c7b35be69653b",
-      "selection": "published 0.6.0 DPI/navigation repair including standalone native host; Media native acceptance and exact-head hosted checks pending",
-      "revision": "67e41b5ba094ef9e677c608043882984ca3516f6"
+      "selection": "published Demo 0.7.0 source; the Media-owned optional composition and native runtime acceptance are separate checks",
+      "revision": "4ae2233a5da36d636a4f6a4af4dc6df852ca9430"
     }
   ],
   "release_ready": false,
   "source_revisions": {
-    "Gui": "f83b2f15385598b8efbb028a6f391ca637e07634",
-    "Gui_Demo": "67e41b5ba094ef9e677c608043882984ca3516f6"
-  }
+    "Gui": "28d81396a4b1e782264712d97bbe7c8aefc05748",
+    "Gui_Demo": "4ae2233a5da36d636a4f6a4af4dc6df852ca9430"
+  },
+  "dependency_status": "local_unpublished_checkpoint",
+  "published_gui_revision": "7d5d5514a1443c0ef340a626fa163569858ca362"
 }

@@ -57,9 +57,9 @@ namespace epochengine::vulkancontext
 {
     void Application::createVertexBuffer()
     {
-        const auto vertices = epochengine::vulkancontext::preview_vertices_for(bound_context());
+        const auto vertices = epochengine::vulkancontext::preview_vertices_for(bound_context(), previewSceneFrame);
         if (vertices.empty())
-            throw std::runtime_error("[ Vulkan ] - No vertex data available.");
+            return; // Camera-filtered wire frames can legitimately emit no lines.
 
         const vk::DeviceSize bufferSize =
             static_cast<vk::DeviceSize>(sizeof(vertices[0]) * vertices.size());
@@ -94,9 +94,34 @@ namespace epochengine::vulkancontext
 
     void Application::createIndexBuffer()
     {
-        const auto indices = preview_indices_for(bound_context());
+        const auto indices = preview_indices_for(bound_context(), previewSceneFrame);
         if (indices.empty())
-            throw std::runtime_error("[ Vulkan ] - No index data available.");
+        {
+            indexCount = solidIndexCount = lineIndexCount = 0;
+            arcadeScreenIndexOffset = arcadeScreenIndexCount = 0;
+            previewIndicesSequential = false;
+            return;
+        }
+
+        const bool sequentialIndices = preview_indices_are_sequential(indices);
+        const auto updateDrawCounts = [&]
+        {
+            indexCount = static_cast<std::uint32_t>(indices.size());
+            solidIndexCount = preview_solid_index_count_for(bound_context(), previewSceneFrame);
+            arcadeScreenIndexOffset = solidIndexCount;
+            arcadeScreenIndexCount = preview_arcade_screen_index_count_for(bound_context(), previewSceneFrame);
+            const std::uint32_t sceneIndexCount = solidIndexCount + arcadeScreenIndexCount;
+            lineIndexCount = indexCount >= sceneIndexCount ? indexCount - sceneIndexCount : 0u;
+        };
+        // Expanded solid/wire meshes normally use exactly 0..N-1. Both the
+        // previous GPU upload and this complete candidate must have that content;
+        // equal sizes alone never establish identity. Nonsequential layouts keep
+        // the existing upload path, without a second resident CPU index vector.
+        if (indexBuffer && previewIndicesSequential && sequentialIndices && indices.size() == indexCount)
+        {
+            updateDrawCounts();
+            return;
+        }
 
         const vk::DeviceSize bufferSize =
             static_cast<vk::DeviceSize>(sizeof(indices[0]) * indices.size());
@@ -127,11 +152,7 @@ namespace epochengine::vulkancontext
 
         indexBuffer = std::move(ib);
         indexBufferMemory = std::move(ibMem);
-        indexCount = static_cast<std::uint32_t>(indices.size());
-        solidIndexCount = preview_solid_index_count_for(bound_context());
-        arcadeScreenIndexOffset = solidIndexCount;
-        arcadeScreenIndexCount = preview_arcade_screen_index_count_for(bound_context());
-        const std::uint32_t sceneIndexCount = solidIndexCount + arcadeScreenIndexCount;
-        lineIndexCount = indexCount >= sceneIndexCount ? indexCount - sceneIndexCount : 0u;
+        previewIndicesSequential = sequentialIndices;
+        updateDrawCounts();
     }
 }

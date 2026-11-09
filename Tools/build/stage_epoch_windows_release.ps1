@@ -36,7 +36,7 @@ function Copy-FileSet {
 $repo = [System.IO.Path]::GetFullPath($RepoRoot)
 . (Join-Path $repo 'Tools\build\epoch_package_layout.ps1')
 $edition = Get-EpochSourceEdition -RepoRoot $repo
-$packageRoot = Join-Path $repo 'build\packages'
+$packageRoot = Join-Path $repo 'Artifacts\Packages'
 $versionScript = Join-Path $repo 'Tools\build\get_epoch_version.ps1'
 Require-Path -Path $versionScript -Label 'Epoch version reader'
 $sourceVersion = (& $versionScript -VersionModule (Join-Path $repo 'Engine\modules\epoch.version.ixx')).Trim()
@@ -52,7 +52,7 @@ if ($Version -notmatch '^\d+\.\d+\.\d+$') {
 $OutputRoot = Get-EpochPackageOutputRoot -RepoRoot $repo -Edition $edition.Directory -Version $Version -OutputRoot $OutputRoot
 
 $releaseOutput = if ([string]::IsNullOrWhiteSpace($ReleaseOutputRoot)) {
-    Join-Path $repo ('build\bin\windows\{0}\x64\Release' -f $edition.Directory)
+    Join-Path $repo ('Artifacts\Runtime\windows\{0}\x64\Release' -f $edition.Directory)
 } else {
     [System.IO.Path]::GetFullPath($ReleaseOutputRoot)
 }
@@ -77,7 +77,7 @@ Require-Path -Path (Join-Path $repo 'README.md') -Label 'README'
 Require-Path -Path (Join-Path $repo 'LICENSE') -Label 'LICENSE'
 $noticeScript = Join-Path $repo 'Tools\build\collect_third_party_notices.ps1'
 if ([string]::IsNullOrWhiteSpace($VcpkgInstalledRoot)) {
-    $VcpkgInstalledRoot = Join-Path $repo 'Engine\vcpkg_installed\x64-windows'
+    $VcpkgInstalledRoot = Join-Path $repo 'Artifacts\Dependencies\vcpkg_installed\x64-windows'
     # Match the dependency layout selected by the MSBuild executable targets.
     $nestedRoot = Join-Path $VcpkgInstalledRoot 'x64-windows'
     if (-not (Test-Path -LiteralPath (Join-Path $VcpkgInstalledRoot 'include')) -and
@@ -91,7 +91,13 @@ Require-Path -Path $vcpkgInstalled -Label 'Windows vcpkg installed tree'
 Require-Path -Path (Join-Path $vcpkgInstalled 'include') -Label 'Windows dependency headers'
 Require-Path -Path (Join-Path $vcpkgInstalled 'share') -Label 'Windows dependency notices'
 
-$crtRoot = 'C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Redist\MSVC'
+$vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+Require-Path -Path $vswhere -Label 'Visual Studio installation finder'
+$vsRoot = & $vswhere -latest -products '*' -version '[17.0,18.0)' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($vsRoot)) {
+    throw 'Visual Studio 2022 x64 C++ tools were not found.'
+}
+$crtRoot = Join-Path $vsRoot 'VC\Redist\MSVC'
 Require-Path -Path $crtRoot -Label 'VC redistributable root'
 $crtPayload = Get-ChildItem -LiteralPath $crtRoot -Directory |
     Sort-Object Name -Descending |
@@ -108,6 +114,9 @@ Remove-EpochPackageItem -LiteralPath $zip -PackageRoot $packageRoot
 New-Item -ItemType Directory -Path $stage -Force | Out-Null
 
 Copy-Item -LiteralPath (Join-Path $releaseOutput 'EpochEditor.exe') -Destination $stage -Force
+if (Test-Path -LiteralPath (Join-Path $vcpkgInstalled 'bin')) {
+    Copy-FileSet -Source (Join-Path $vcpkgInstalled 'bin') -Destination $stage
+}
 Copy-FileSet -Source $releaseOutput -Destination $stage
 Copy-FileSet -Source $crtPayload -Destination $stage
 Copy-Item -LiteralPath (Join-Path $repo 'README.md') -Destination $stage -Force
@@ -196,6 +205,12 @@ Require-Path -Path (Join-Path $verifyRoot 'THIRD_PARTY_NOTICES.txt') -Label 'Thi
 Require-Path -Path (Join-Path $verifyRoot 'THIRD_PARTY_COMPONENTS.json') -Label 'Third-party component manifest'
 if ((Test-Path -LiteralPath (Join-Path $verifyRoot 'logs')) -or (Test-Path -LiteralPath (Join-Path $verifyRoot 'cache'))) {
     throw 'Release archive must not include generated logs or runtime cache.'
+}
+if ($edition.Directory -ceq 'public') {
+    & python -B (Join-Path $repo 'Tools/build/audit_epoch_runtime_provenance.py') --windows-runtime $verifyRoot
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Windows package provenance audit failed. No artifact is admitted for upload.'
+    }
 }
 Remove-EpochPackageItem -LiteralPath $verifyRoot -PackageRoot $packageRoot -Recurse
 

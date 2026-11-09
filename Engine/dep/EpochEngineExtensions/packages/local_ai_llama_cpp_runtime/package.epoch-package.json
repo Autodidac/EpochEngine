@@ -1,0 +1,68 @@
+{
+  "id": "local_ai_llama_cpp_runtime",
+  "displayName": "Local AI llama.cpp Runtime",
+  "manifestLicense": "LicenseRef-MIT-NoSell",
+  "manifestCopyright": "Copyright (c) 2026 Adam Rushford",
+  "status": "plan-only",
+  "kind": "runtime-plan",
+  "activation": "package-manager-opt-in",
+  "summary": "C++23 planner and validator for an operator-selected llama-cli plus separately licensed GGUF model.",
+  "security": {
+    "serverOrListenerAllowed": false,
+    "requiresExplicitNetworkApproval": true,
+    "currentExecutorPerformsNetwork": false,
+    "autoRunAllowed": false,
+    "includeByDefault": false
+  },
+  "source": {
+    "repo": "https://epoch.adamrushford.chatgpt.site/git/EpochEngineExtensions.git",
+    "path": "packages/local_ai_llama_cpp_runtime",
+    "upstreamReference": "https://github.com/ggml-org/llama.cpp",
+    "upstreamLicense": "MIT",
+    "immutableRevisionRequired": true,
+    "immutableRevision": "",
+    "provenance": "Plan-only C++23 offline llama-cli build contract; a future approved fetch executor must supply and record an immutable upstream revision"
+  },
+  "engineBoundary": {
+    "epochPackageId": "local_ai_llama_cpp_runtime",
+    "expectedCacheRoot": "cache/packages/local_ai_llama_cpp_runtime",
+    "notes": "Epoch can invoke an existing llama-cli directly with argv and captured output. This package starts no server, listener, fetch, build, or model process during discovery or staging."
+  },
+  "script": {
+    "language": "C++23",
+    "path": "scripts/local_ai_llama_cpp_runtime_package.ascript.cpp",
+    "api": "epoch_package_script_api",
+    "mode": "plan-only",
+    "downloadsSource": false,
+    "compilesSource": false,
+    "livePreview": false,
+    "runtimeStatusOnly": true,
+    "humanGated": true,
+    "autoRunAllowed": false
+  },
+  "build": {
+    "humanGated": true,
+    "planOnly": true,
+    "sourceFiles": [
+      "CMakeLists.txt",
+      "include/epoch/extensions/local_ai_llama_cpp_runtime/local_ai_llama_cpp_runtime.hpp",
+      "src/local_ai_llama_cpp_runtime.cpp",
+      "tests/local_ai_llama_cpp_runtime_self_test.cpp"
+    ],
+    "targets": [
+      "epoch_extension_local_ai_llama_cpp_runtime",
+      "epoch_extension_local_ai_llama_cpp_runtime_self_test"
+    ],
+    "commands": [
+      "cmake -S packages/local_ai_llama_cpp_runtime -B cache/packages/local_ai_llama_cpp_runtime/package-build",
+      "cmake --build cache/packages/local_ai_llama_cpp_runtime/package-build --target epoch_extension_local_ai_llama_cpp_runtime_self_test",
+      "cache/packages/local_ai_llama_cpp_runtime/package-build/epoch_extension_local_ai_llama_cpp_runtime_self_test"
+    ]
+  },
+  "notes": [
+    "llama.cpp is MIT licensed; GGUF model licenses are separate and must be reviewed by the operator.",
+    "The current package validates an offline llama-cli plan with LLAMA_BUILD_SERVER=OFF and LLAMA_CURL=OFF.",
+    "A future fetch executor must require visible network approval and verify an immutable revision before configuration.",
+    "No native extension, upstream source, or model is fetched, built, or executed during package discovery or staging."
+  ]
+}

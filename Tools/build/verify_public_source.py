@@ -19,10 +19,176 @@ import json
 from pathlib import Path, PurePosixPath
 import re
 import subprocess
+from urllib.parse import urlsplit
+import xml.etree.ElementTree as ET
+from posixpath import normpath
 
 WORKFLOW = '.github/workflows/epoch-public.yml'
-WORKFLOW_SHA256 = '6600dccb2e1caf12b9c2b11a343fabbda4cf7d7710dabc99ac5a647e726b9bc5'
+WORKFLOW_SHA256 = 'facf6e619d1f5ff3ebe40fd4ffd7acca38dda2a1c0ea68c0b008f319aa398205'
 MANIFEST = 'source-projection.json'
+# Exact root outputs from local CPU measurements, never source or release data.
+# Keep this list shared with the exporter; do not hide similarly named source.
+GENERATED_ROOT_FILES = frozenset({'solid-benchmark-debug.json', 'solid-progress.txt'})
+# Operator-supplied reference artwork is usable locally, but its recorded
+# provenance has not cleared redistribution. Keep the native procedural fallback.
+HELD_REFERENCE_ASSETS = frozenset({
+    'engine/resource/forest/bark_texture_preview.png',
+    'engine/resource/forest/leaf_fan_texture.png',
+    'engine/resource/forest/foliage_reference_board.png',
+    'engine/resource/forest/provenance.json',
+})
+
+
+SOLUTION_GUID = r'\{[0-9A-Fa-f]{8}(?:-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}\}'
+SOLUTION_FOLDERS = frozenset({
+    '{2150E333-8FDC-42A3-9474-1A3956D46DE8}',
+    '{66A26720-8FB5-11D2-AA7E-00C04F688DDE}',
+})
+
+
+def solution_structure(name: str, data: bytes) -> tuple[list[str], list[dict], dict[int, set[str]]]:
+    """Read project blocks and project-ID records without rewriting solution bytes."""
+    try:
+        lines = data.decode('utf-8-sig').splitlines(keepends=True)
+    except UnicodeDecodeError as error:
+        raise RuntimeError(f'{name}: invalid UTF-8 solution') from error
+    if not lines or not lines[0].startswith('Microsoft Visual Studio Solution File, Format Version '):
+        raise RuntimeError(f'{name}: missing Visual Studio solution header')
+    project_pattern = re.compile(
+        rf'Project\("(?P<type>{SOLUTION_GUID})"\)\s*=\s*"(?P<name>[^"\r\n]+)",\s*'
+        rf'"(?P<path>[^"\r\n]+)",\s*"(?P<guid>{SOLUTION_GUID})"')
+    pair_pattern = re.compile(rf'(?P<left>{SOLUTION_GUID})\s*=\s*(?P<right>{SOLUTION_GUID})')
+    projects, records = [], {}
+    current = None
+    section = None
+    global_open = global_seen = global_ended = False
+    identifiers = set()
+    for index, line in enumerate(lines):
+        row = line.strip()
+        if not row or row.startswith('#'):
+            continue
+        if row.startswith('Project('):
+            match = project_pattern.fullmatch(row)
+            if not match or current is not None or global_seen:
+                raise RuntimeError(f'{name}:{index+1}: malformed solution project block')
+            current = dict(match.groupdict(), start=index)
+            current['guid'] = current['guid'].upper()
+            if current['guid'] in identifiers:
+                raise RuntimeError(f'{name}:{index+1}: duplicate solution project ID')
+            identifiers.add(current['guid'])
+            continue
+        if row == 'EndProject':
+            if current is None or section is not None:
+                raise RuntimeError(f'{name}:{index+1}: unmatched solution EndProject')
+            current['end'] = index
+            projects.append(current)
+            current = None
+            continue
+        if row.startswith('ProjectSection('):
+            match = re.fullmatch(r'ProjectSection\(([A-Za-z0-9_.-]+)\)\s*=\s*(?:preProject|postProject)', row)
+            if current is None or section is not None or not match:
+                raise RuntimeError(f'{name}:{index+1}: malformed solution project section')
+            section = match.group(1)
+            continue
+        if row == 'EndProjectSection':
+            if current is None or section is None:
+                raise RuntimeError(f'{name}:{index+1}: unmatched solution project section')
+            section = None
+            continue
+        if row == 'Global':
+            if current is not None or global_seen:
+                raise RuntimeError(f'{name}:{index+1}: malformed solution Global block')
+            global_open = global_seen = True
+            continue
+        if row == 'EndGlobal':
+            if not global_open or section is not None:
+                raise RuntimeError(f'{name}:{index+1}: unmatched solution EndGlobal')
+            global_open = False
+            global_ended = True
+            continue
+        if row.startswith('GlobalSection('):
+            match = re.fullmatch(r'GlobalSection\(([A-Za-z0-9_.-]+)\)\s*=\s*(?:preSolution|postSolution)', row)
+            if not global_open or section is not None or not match:
+                raise RuntimeError(f'{name}:{index+1}: malformed solution global section')
+            section = match.group(1)
+            continue
+        if row == 'EndGlobalSection':
+            if not global_open or section is None:
+                raise RuntimeError(f'{name}:{index+1}: unmatched solution global section')
+            section = None
+            continue
+        if section in {'ProjectDependencies', 'NestedProjects'}:
+            match = pair_pattern.fullmatch(row)
+            if not match:
+                raise RuntimeError(f'{name}:{index+1}: malformed solution project-ID record')
+            records[index] = {match.group('left').upper(), match.group('right').upper()}
+        elif section in {'ProjectConfiguration', 'ProjectConfigurationPlatforms'}:
+            match = re.fullmatch(rf'({SOLUTION_GUID})\.[^=]+\s*=\s*[^=]+', row)
+            if not match:
+                raise RuntimeError(f'{name}:{index+1}: malformed solution project configuration')
+            records[index] = {match.group(1).upper()}
+        elif section == 'SharedMSBuildProjectFiles':
+            match = re.fullmatch(rf'.+\*({SOLUTION_GUID})\*SharedItemsImports\s*=\s*[0-9]+', row)
+            if not match:
+                raise RuntimeError(f'{name}:{index+1}: malformed shared-project record')
+            records[index] = {match.group(1).upper()}
+        elif current is not None and section is None:
+            raise RuntimeError(f'{name}:{index+1}: content outside a solution project section')
+        elif global_ended or (not global_open and index != 0
+                and not re.fullmatch(r'(?:VisualStudioVersion|MinimumVisualStudioVersion)\s*=.+', row)):
+            raise RuntimeError(f'{name}:{index+1}: unexpected solution content')
+    if current is not None or section is not None or not global_ended or global_open:
+        raise RuntimeError(f'{name}: unterminated solution block')
+    for index, references in records.items():
+        if not references <= identifiers:
+            raise RuntimeError(f'{name}:{index+1}: solution references an undeclared project ID')
+    return lines, projects, records
+
+
+def solution_project_path(name: str, reference: str) -> str:
+    reference = reference.replace('\\', '/')
+    target = normpath(str(PurePosixPath(name).parent / reference))
+    if (PurePosixPath(reference).is_absolute() or ':' in reference or '$(' in reference
+            or target == '..' or target.startswith('../')):
+        raise RuntimeError(f'{name}: solution project path leaves its source root')
+    return target
+
+
+def verify_solution_references(files: dict[str, bytes]) -> None:
+    names = {name.casefold() for name in files}
+    for name, data in files.items():
+        if PurePosixPath(name).suffix.lower() != '.sln':
+            continue
+        _, projects, _ = solution_structure(name, data)
+        for project in projects:
+            if project['type'].upper() in SOLUTION_FOLDERS:
+                continue
+            target = solution_project_path(name, project['path'])
+            if target.casefold() not in names:
+                raise RuntimeError(f'{name}: solution project reference missing from payload: {project["path"]}')
+
+
+def held_msbuild_reference(name: str, data: bytes) -> str | None:
+    """Reject exact held asset declarations, including mixed MSBuild item lists."""
+    if PurePosixPath(name).suffix.lower() not in {'.vcxproj', '.vcxitems', '.filters', '.props', '.targets'}:
+        return None
+    try:
+        tree = ET.fromstring(data)
+    except ET.ParseError as error:
+        raise RuntimeError(f'{name}: invalid MSBuild XML') from error
+    for element in tree.iter():
+        for member in element.attrib.get('Include', '').split(';'):
+            reference = member.strip().replace('\\', '/')
+            if reference.startswith('$(EpochRepositoryRoot)'):
+                resolved = normpath(reference[len('$(EpochRepositoryRoot)'):])
+            else:
+                reference = reference.replace('$(MSBuildThisFileDirectory)', '')
+                if not reference or '$(' in reference or '*' in reference:
+                    continue
+                resolved = normpath(str(PurePosixPath(name).parent / reference))
+            if resolved.casefold() in HELD_REFERENCE_ASSETS:
+                return member
+    return None
 CPP = {'.c','.cc','.cpp','.cxx','.h','.hh','.hpp','.hxx','.ixx','.cppm','.mpp','.inl','.inc','.ipp','.tpp','.cu','.cuh'}
 SOURCE_HASH_ALGORITHM = 'sha256-git-text-lf-v1'
 HASH_TEXT_SUFFIXES = CPP | {
@@ -67,8 +233,8 @@ PRIVATE_STEMS = ('ai.development_', 'ai.iteration_', 'ai.source_', 'ai.self_iter
                  'editor.codex_app_server', 'editor.codex_bridge') + PRIVATE_NATIVE_SOURCE_PREFIXES
 PRIVATE_STEMS += ('editor.ai_approved_patch', 'editor.ai_engine_mission',
                   'editor.ai_reference_images')
-REVIEWED_SHARED = {'Engine/src/editor/ai/editor.ai_session_diagnostics.hpp': 'fb102f6ef8b39d0e8155dbdc564a7432a41d7f2f6322d976c85bcfd542e2953f', 'Engine/src/editor/ai/editor.ai_source_intent.hpp': '01001dab803008aadd19be834f4eb1e6f92a2a0748a9fbf475d2a46ae1eb71fa', 'AGENTS.md': 'a9e6a23513ee770be38d12db2baf2faf7fd28bf483bae4e80e6ba04093f16924'}
-PRIVATE_API = re.compile(r'\b(?:editor_ai_development_panel|editor_ai_development_controller|aiDevelopmentPanel|aiSourceArtifacts|AiSourceTaskResult|editor_ai_approved_patch|editor_ai_engine_mission|engine_mission_requested|engine_mission_file|engine_mission_model|engine_mission_error|set_source_mission_model|source_mission_setup_stop_source|epoch_engine_mission_model|source_mission_model|ApprovedPatchHandoff|prepare_approved_patch_handoff|invalidate_approved_patch_handoff|epoch_propose_source_patch|epoch_select_source_context|EPOCH_SOURCE_PROPOSAL_V1|EPOCH_SOURCE_CONTEXT_REQUEST_V1|source_iteration|source_self_review|project_ai_iteration|project_ai_iteration_session|EditorProjectSelfIterationProvision|projectSelfIterationDefault|ProjectSelfIterationChoice|self_iteration_provision|includeSelfIteration|project_self_iteration_choices|project_self_iteration_label|self_iteration_orchestrator|source_patch_stager|source_patch_proposal|source_patch_bundle|curated_context_bundle|development_proposal_codec|candidate_artifacts(?=\s*::)|push_ai_development_log(?=\s*\()|log_ai_candidate_event(?=\s*\())\b')
+REVIEWED_SHARED = {'Engine/src/editor/ai/editor.ai_session_diagnostics.hpp': '327726e230daa46b7702145559690740ed0e2250717f67e340d6c172678b0fb5', 'Engine/src/editor/ai/editor.ai_source_intent.hpp': '52c453c06b620862e2ce82dc7c7a627d3ca553a0f18443311ee4d06394118f15', 'AGENTS.md': 'a9e6a23513ee770be38d12db2baf2faf7fd28bf483bae4e80e6ba04093f16924'}
+PRIVATE_API = re.compile(r'\b(?:editor_ai_development_panel|editor_ai_development_controller|aiDevelopmentPanel|aiSourceArtifacts|AiSourceTaskResult|editor_ai_approved_patch|editor_ai_engine_mission|engine_mission_requested|engine_mission_file|engine_mission_model|engine_mission_candidate|engine_mission_error|codex_task_requested|codex_task_file|codex_task_error|set_source_mission_model|source_mission_setup_stop_source|epoch_engine_mission_model|source_mission_model|ApprovedPatchHandoff|prepare_approved_patch_handoff|invalidate_approved_patch_handoff|epoch_propose_source_patch|epoch_select_source_context|EPOCH_SOURCE_PROPOSAL_V1|EPOCH_SOURCE_CONTEXT_REQUEST_V1|source_iteration|source_self_review|project_ai_iteration|project_ai_iteration_session|EditorProjectSelfIterationProvision|projectSelfIterationDefault|ProjectSelfIterationChoice|self_iteration_provision|includeSelfIteration|project_self_iteration_choices|project_self_iteration_label|self_iteration_orchestrator|source_patch_stager|source_patch_proposal|source_patch_bundle|curated_context_bundle|development_proposal_codec|candidate_artifacts(?=\s*::)|push_ai_development_log(?=\s*\()|log_ai_candidate_event(?=\s*\())\b')
 PRIVATE_AUTH = re.compile(r'/api/private/epoch-engine/device/|EpochEngine\.SourceDeviceAuth\.v1|epoch-source-key-wrap-v1|EpochEngine private source DEK wrap v1')
 PRIVATE_NATIVE_CODING_API = re.compile(
     r'\b(?:AgentRuntime|ToolRegistry|InternalModelHost|register_builtin_tools|training_backend)\b|'
@@ -84,6 +250,8 @@ PRIVATE_SOURCE_PROVENANCE = re.compile(
     rb'/(?:home|Users)/[^/\s<>`"\']+/|'
     rb'\.codex[\\/]+worktrees[\\/]+[a-z0-9]{2,}[\\/]|'
     rb'\bai[\\/]+s[0-9][a-z0-9]{8,}(?:[\\/]|[\s`"\']|$)')
+HTTPS_REFERENCE = re.compile(rb'(?i)\bhttps://[^\s<>`"\'\\]+')
+HTTPS_HOST = re.compile(r'[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?\Z')
 
 
 def private_source_provenance(name: str, data: bytes):
@@ -91,7 +259,35 @@ def private_source_provenance(name: str, data: bytes):
     # reproducibility/privacy concern; this gate refuses source-text evidence.
     path = PurePosixPath(name)
     if path.suffix.lower() in HASH_TEXT_SUFFIXES or path.name.lower() in HASH_TEXT_NAMES:
-        return PRIVATE_SOURCE_PROVENANCE.search(data)
+        remote_paths = []
+        for reference in HTTPS_REFERENCE.finditer(data):
+            try:
+                value = reference.group().decode('ascii')
+                url = urlsplit(value)
+                # Credentials must never gain an exception by looking like a
+                # documentation URL, including empty or percent-encoded users.
+                if '@' in url.netloc:
+                    return reference
+                host = url.hostname or ''
+                if (not HTTPS_HOST.fullmatch(host)
+                        or '.' not in host or host.lower().endswith('.localhost')
+                        or (url.port is not None and not 1 <= url.port <= 65535)):
+                    continue
+                start = reference.start() + len('https://') + len(url.netloc)
+                remote_paths.append((start, start + len(url.path)))
+            except (UnicodeDecodeError, ValueError):
+                continue
+        for match in PRIVATE_SOURCE_PROVENANCE.finditer(data):
+            # /users/platforms in an HTTPS documentation path is not a local
+            # home directory. Keep drive paths, candidate/worktree identities,
+            # file URLs, and local paths in URL queries/fragments blocked.
+            unix_home = match.group().lower().startswith((b'/users/', b'/home/'))
+            if data[max(0, match.start() - 7):match.start()].lower() == b'file://':
+                return match
+            if unix_home and any(start <= match.start() and match.end() <= end
+                                 for start, end in remote_paths):
+                continue
+            return match
     return None
 
 
@@ -131,6 +327,10 @@ MODULE = re.compile(rb'export\s+module\s+([A-Za-z_][A-Za-z0-9_.:]*);')
 
 def forbidden_path(name: str) -> bool:
     path = PurePosixPath(name)
+    if name.casefold() in HELD_REFERENCE_ASSETS:
+        return True
+    if name.casefold() in GENERATED_ROOT_FILES:
+        return True
     if name.casefold().startswith('engine/dep/epochselfcoding/'):
         return True
     if any(part.casefold() == 'selfiteration' for part in path.parts):
@@ -141,7 +341,7 @@ def forbidden_path(name: str) -> bool:
         return False
     if any(part.casefold() in {'.git','.codex','.agents','.github','.vs','.idea','.vscode','.aws','.ssh','.azure','.cache','.pytest_cache','node_modules','__pycache__'} for part in path.parts):
         return True
-    if path.parts[0].casefold() in {'changes','projects','addons','releasenotes','images','ai','cache','logs','captures','build','x64'}:
+    if path.parts[0].casefold() in {'changes','projects','addons','releasenotes','images','ai','cache','logs','captures','build','artifacts','x64'}:
         return True
     if path.name.lower().startswith(('.env','credentials','secrets')) or path.suffix.lower() in {'.pem','.key','.pfx','.p12','.sqlite','.db','.jsonl','.zip','.7z','.tar','.gz','.tgz','.exe','.dll','.pdb','.obj','.gguf','.lib','.so','.dylib','.a','.pyc','.aps'}:
         return True
@@ -165,7 +365,32 @@ def forbidden_path(name: str) -> bool:
 
 
 
-PUBLIC_RUNTIME_UPLOAD = b'      - name: Return audited Linux runtime only\n        uses: actions/upload-artifact@v4\n        with:\n          name: epoch-public-linux-runtime\n          if-no-files-found: error\n          retention-days: 7\n          include-hidden-files: false\n          path: |\n            build/packages/public/v${{ steps.package.outputs.version }}/epoch_linux_x64_v${{ steps.package.outputs.version }}.tar.gz\n            build/packages/public/v${{ steps.package.outputs.version }}/epoch_linux_x64_v${{ steps.package.outputs.version }}.tar.gz.sha256\n            build/packages/public/v${{ steps.package.outputs.version }}/epoch_linux_x64_v${{ steps.package.outputs.version }}.tar.gz.build-validation.json\n'
+PUBLIC_WINDOWS_RUNTIME_UPLOAD = b"""      - name: Return audited Windows runtime only
+        uses: actions/upload-artifact@v4
+        with:
+          name: epoch-public-windows-runtime
+          if-no-files-found: error
+          retention-days: 7
+          include-hidden-files: false
+          path: |
+            Artifacts/Packages/public/v${{ steps.package.outputs.version }}/epoch_win10_x64_v${{ steps.package.outputs.version }}.zip
+            Artifacts/Packages/public/v${{ steps.package.outputs.version }}/epoch_win10_x64_v${{ steps.package.outputs.version }}.zip.sha256
+            Artifacts/Packages/public/v${{ steps.package.outputs.version }}/epoch_win10_x64_v${{ steps.package.outputs.version }}.zip.build-validation.json
+
+  linux:
+"""
+PUBLIC_LINUX_RUNTIME_UPLOAD = b"""      - name: Return audited Linux runtime only
+        uses: actions/upload-artifact@v4
+        with:
+          name: epoch-public-linux-runtime
+          if-no-files-found: error
+          retention-days: 7
+          include-hidden-files: false
+          path: |
+            Artifacts/Packages/public/v${{ steps.package.outputs.version }}/epoch_linux_x64_v${{ steps.package.outputs.version }}.tar.gz
+            Artifacts/Packages/public/v${{ steps.package.outputs.version }}/epoch_linux_x64_v${{ steps.package.outputs.version }}.tar.gz.sha256
+            Artifacts/Packages/public/v${{ steps.package.outputs.version }}/epoch_linux_x64_v${{ steps.package.outputs.version }}.tar.gz.build-validation.json
+"""
 
 
 def verify_workflow(workflow: bytes) -> None:
@@ -175,8 +400,9 @@ def verify_workflow(workflow: bytes) -> None:
     if (not normalized or b'contents: read' not in normalized
             or any(value in normalized.lower() for value in (b'secrets.',b'chatgpt.site',
                 b'contents: write',b'id-token:',b'pull_request_target',b'--refresh-manifest'))
-            or normalized.count(b'actions/upload-artifact@') != 1
-            or not normalized.endswith(PUBLIC_RUNTIME_UPLOAD)):
+            or normalized.count(b'actions/upload-artifact@') != 2
+            or normalized.count(PUBLIC_WINDOWS_RUNTIME_UPLOAD) != 1
+            or not normalized.endswith(PUBLIC_LINUX_RUNTIME_UPLOAD)):
         raise RuntimeError('Public CI permits only the exact audited runtime artifact allowlist')
 
 
@@ -207,7 +433,10 @@ def check(root: Path, manifest: dict, names: set[str], verify_hashes: bool = Tru
         files[name] = path.read_bytes()
         if private_source_provenance(name, files[name]) is not None:
             raise RuntimeError('Private operator/candidate source provenance refused')
+        if held_msbuild_reference(name, files[name]) is not None:
+            raise RuntimeError('Held reference-art build item refused')
     edition = files.get('Engine/include/epoch.edition.hpp', b'')
+    verify_solution_references(files)
     definitions = re.findall(rb'(?m)^#define EPOCH_SOURCE_EDITION_PUBLIC ([01])[ \t]*\r?$',edition)
     if definitions != [b'1']:
         raise RuntimeError('Expected one physical public edition identity')

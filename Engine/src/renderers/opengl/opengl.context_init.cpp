@@ -31,6 +31,7 @@ module;
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -137,6 +138,7 @@ import atlas.manager;
 import atlas.texture;
 import core.commandline;
 import core.logger;
+import core.env;
 import diagnostics.engine;
 import telemetry.engine;
 import opengl.capture;
@@ -174,6 +176,82 @@ namespace epochengine::openglcontext
 
     namespace detail
     {
+#if defined(GL_VERSION_4_3) || defined(GL_KHR_debug)
+        // Process-wide, saturating diagnostic budget; callbacks retain no owner.
+        inline std::atomic<unsigned> driverDebugReports{};
+
+        inline void
+#if defined(_WIN32)
+        APIENTRY
+#endif
+        driver_debug_message(GLenum source, GLenum type, GLuint id, GLenum severity,
+            GLsizei length, const GLchar* message, const void*) noexcept
+        {
+            if (severity != GL_DEBUG_SEVERITY_HIGH && severity != GL_DEBUG_SEVERITY_MEDIUM)
+                return;
+            unsigned used = driverDebugReports.load(std::memory_order_relaxed);
+            do
+            {
+                if (used >= 8u) return;
+            } while (!driverDebugReports.compare_exchange_weak(
+                used, used + 1u, std::memory_order_relaxed));
+            try
+            {
+                constexpr std::size_t maxBytes = 96u;
+                const std::size_t available = message && length > 0
+                    ? static_cast<std::size_t>(length) : 0u;
+                const std::string_view text = available
+                    ? std::string_view{message, (std::min)(available, maxBytes)}
+                    : std::string_view{"<no message>"};
+                logger::get("OpenGL.Debug").logf(
+                    logger::LogLevel::WARN, std::source_location::current(),
+                    "GL src={:X} type={:X} id={:X} sev={:X} cut={}: {}",
+                    source, type, id, severity, available > maxBytes, text);
+            }
+            catch (...) {} // A driver callback must not unwind into OpenGL.
+        }
+#endif
+
+        inline void configure_driver_debug_output() noexcept
+        {
+            try
+            {
+                const auto requested = core::env::get("EPOCH_OPENGL_DEBUG");
+                if (!requested || requested->size() != 1u || requested->data()[0] != '1') return;
+#if defined(GL_VERSION_4_3) || defined(GL_KHR_debug)
+                bool supported = false;
+#if defined(GL_VERSION_4_3)
+                supported = GLAD_GL_VERSION_4_3 != 0;
+#endif
+#if defined(GL_KHR_debug)
+                supported = supported || GLAD_GL_KHR_debug != 0;
+#endif
+                if (supported && glDebugMessageCallback && glDebugMessageControl)
+                {
+                    // Synchronous delivery plus null userdata avoids asynchronous
+                    // access to context state during replacement or retirement.
+                    glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
+                    glDebugMessageCallback(driver_debug_message, nullptr);
+                    glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE,
+                        0, nullptr, GL_FALSE);
+                    glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DEBUG_SEVERITY_HIGH,
+                        0, nullptr, GL_TRUE);
+                    glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DEBUG_SEVERITY_MEDIUM,
+                        0, nullptr, GL_TRUE);
+                    glEnable(GL_DEBUG_OUTPUT);
+                    logger::get("OpenGL.Debug").log(logger::LogLevel::INFO,
+                        "Synchronous HIGH/MEDIUM GL diagnostics enabled; process limit=8 records. Diagnostic timing may differ.",
+                        std::source_location::current());
+                    return;
+                }
+#endif
+                logger::get("OpenGL.Debug").log(logger::LogLevel::WARN,
+                    "GL diagnostics requested but loaded core/KHR debug output is unavailable.",
+                    std::source_location::current());
+            }
+            catch (...) {} // Optional diagnostics cannot reject context startup.
+        }
+
 #if defined(_WIN32)
         inline const wchar_t* gl_child_class_name() noexcept { return L"EpochGLChild"; }
 
@@ -186,9 +264,9 @@ namespace epochengine::openglcontext
 
             case WM_PAINT:
             {
-                PAINTSTRUCT ps{};
-                ::BeginPaint(hwnd, &ps);
-                ::EndPaint(hwnd, &ps);
+                // Rendering owns this CS_OWNDC; validate without acquiring or
+                // changing the clip state of its current OpenGL device context.
+                (void)::ValidateRect(hwnd, nullptr);
                 return 0;
             }
 
@@ -255,7 +333,13 @@ namespace epochengine::openglcontext
             throw std::runtime_error("[ OpenGL ] - opengl_initialize requires non-null Context");
 
         auto& backend = epochengine::opengltextures::get_opengl_backend();
-        auto& glState = backend.glState;
+        // Hosted contexts already have native identities. Initializing a new
+        // window must not replace a sibling's native handles or GL objects in
+        // the legacy single-window state.
+        const auto providedNativeContext = contextdetail::context_to_platform_context(ctx.get());
+        auto& glState = providedNativeContext.valid()
+            ? opengltextures::state_for_platform_context(backend, providedNativeContext, ctx.get())
+            : backend.glState;
 
 #if defined(_WIN32)
         if (glState.ownsWindow || glState.ownsDc || glState.ownsContext)
@@ -343,20 +427,20 @@ namespace epochengine::openglcontext
             // SetPixelFormat is one-time per HDC.
             if (::GetPixelFormat(glState.hdc) == 0)
             {
-                PIXELFORMATDESCRIPTOR pfd{
-                    sizeof(PIXELFORMATDESCRIPTOR), 1,
-                    PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER,
-                    PFD_TYPE_RGBA, 32,
-                    0,0,0,0,0,0,0,0,0,
-                    24, 0, 0, 0, 0, 0, 0, 0
-                };
+                PIXELFORMATDESCRIPTOR pfd{};
+                pfd.nSize = sizeof(pfd);
+                pfd.nVersion = 1;
+                pfd.dwFlags = PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER;
+                pfd.iPixelType = PFD_TYPE_RGBA;
+                pfd.cColorBits = 32;
+                pfd.cDepthBits = 24;
+                pfd.iLayerType = PFD_MAIN_PLANE;
 
                 int pf = ::ChoosePixelFormat(glState.hdc, &pfd);
                 if (!pf) throw std::runtime_error("[ OpenGL ] - ChoosePixelFormat failed");
                 if (!::SetPixelFormat(glState.hdc, pf, &pfd))
                     throw std::runtime_error("[ OpenGL ] - SetPixelFormat failed");
             }
-
             // ---- WGL bootstrap: temp context stays current while loading + creating ----
             HGLRC tmp = ::wglCreateContext(glState.hdc);
             if (!tmp) throw std::runtime_error("[ OpenGL ] - wglCreateContext(temp) failed");
@@ -422,6 +506,16 @@ namespace epochengine::openglcontext
             }
             glState.ownsContext = true;
         }
+
+        // The format may be inherited from a host window. Depth testing
+        // cannot occlude anything when the selected drawable has no depth.
+        PIXELFORMATDESCRIPTOR selectedFormat{};
+        if (!::DescribePixelFormat(glState.hdc, ::GetPixelFormat(glState.hdc),
+                sizeof(selectedFormat), &selectedFormat) || selectedFormat.cDepthBits < 24)
+            throw std::runtime_error("[ OpenGL ] - Selected pixel format requires at least 24 depth bits");
+        logger::get("OpenGL").logf(logger::LogLevel::INFO,
+            std::source_location::current(), "Window pixel format: {} depth bits, {} stencil bits.",
+            static_cast<unsigned>(selectedFormat.cDepthBits), static_cast<unsigned>(selectedFormat.cStencilBits));
 
         // Publish through PlatformGL (so the rest of the engine uses the same path).
         PlatformGL::PlatformGLContext finalCtx{};
@@ -633,6 +727,28 @@ namespace epochengine::openglcontext
         (void)parentWindowOpaque;
         throw std::runtime_error("[ OpenGL ] - Unsupported platform");
 #endif
+
+        detail::configure_driver_debug_output();
+
+        // Identify this current context's renderer, independently of optional
+        // whole-adapter telemetry. Driver strings are borrowed only for this log.
+        const auto boundedIdentity = [](const GLubyte* bytes) noexcept -> std::string_view
+        {
+            if (!bytes) return "<unavailable>";
+            constexpr std::size_t maxBytes = 512;
+            std::size_t length = 0;
+            while (length < maxBytes && bytes[length] != 0) ++length;
+            if (length == 0) return "<empty>";
+            return {reinterpret_cast<const char*>(bytes), length};
+        };
+        logger::get("OpenGL").logf(
+            logger::LogLevel::INFO,
+            std::source_location::current(),
+            "Current context={} GL_VENDOR=\"{}\" GL_RENDERER=\"{}\" GL_VERSION=\"{}\" (each field limited to 512 bytes).",
+            ctx->native_gl_context,
+            boundedIdentity(::glGetString(GL_VENDOR)),
+            boundedIdentity(::glGetString(GL_RENDERER)),
+            boundedIdentity(::glGetString(GL_VERSION)));
 
         const bool swapIntervalDisabled =
             PlatformGL::set_swap_interval(0);

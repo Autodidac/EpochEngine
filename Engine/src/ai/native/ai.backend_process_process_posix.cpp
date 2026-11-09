@@ -204,6 +204,9 @@ std::expected<Result, core::Error> run_posix(const Request& request, std::stop_t
         return std::unexpected(posix_error("posix_spawnp", rc));
     }
 
+    if (request.on_started) {
+        try { request.on_started(static_cast<std::uint64_t>(pid)); } catch (...) {}
+    }
     Result result;
     std::jthread stdout_reader([&](std::stop_token token) {
         read_fd(stdout_pipe[0], result.stdout_text, request.max_output_bytes, token);

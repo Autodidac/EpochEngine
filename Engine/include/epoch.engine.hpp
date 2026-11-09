@@ -84,6 +84,18 @@ namespace epochengine::core
 
 namespace epochengine::project
 {
+    struct RuntimeProjectBinding final
+    {
+        bool succeeded{};
+        std::string project_root{}, manifest_path{}, scene_path{}, summary{};
+    };
+
+    // Startup-only generated project binding. The nearest executable ancestor
+    // manifest must pass the existing project parser, identity and edition gates.
+    // No ambient project-root override is accepted.
+    [[nodiscard]] RuntimeProjectBinding BindRuntimeProject(
+        std::string_view expected_project_id) noexcept;
+
     enum class ArtifactKind : std::uint32_t
     {
         scene = 1u << 0u,

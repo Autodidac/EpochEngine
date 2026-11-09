@@ -14,6 +14,18 @@ foreach ($name in @('Engine.vcxitems', 'Engine.vcxitems.filters')) {
         if (!$value.StartsWith('$(MSBuildThisFileDirectory)')) { continue }
         $relative = $value.Replace('$(MSBuildThisFileDirectory)', '').Replace('\', '/')
         if ($relative -notmatch '^(src|include|modules)/') { continue }
+        # Incremental implementation tracking uses MSBuild wildcard inputs.
+        # Resolve those against their literal owner directory; do not mistake
+        # the wildcard itself for a missing source file or exempt empty groups.
+        if ($node.LocalName -eq 'EpochImplementationFragment' -and $relative -match '[*?]') {
+            $ownerDirectory = Join-Path "$RepoRoot/Engine" (Split-Path -Parent $relative)
+            $pattern = Split-Path -Leaf $relative
+            $implementationInputs = @(Get-ChildItem -LiteralPath $ownerDirectory -Filter $pattern -File -ErrorAction SilentlyContinue)
+            if ($implementationInputs.Count -eq 0) {
+                $failures.Add("$name references missing implementation inputs: $relative")
+            }
+            continue
+        }
         if (!(Test-Path -LiteralPath (Join-Path "$RepoRoot/Engine" $relative) -PathType Leaf)) {
             $failures.Add("$name references missing source: $relative")
         }

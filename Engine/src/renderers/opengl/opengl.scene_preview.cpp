@@ -7,6 +7,7 @@
 import core.context;
 import opengl.preview;
 import opengl.textures;
+import opengl.platform;
 import render.context_frame;
 
 namespace epochengine::openglscene
@@ -43,7 +44,11 @@ namespace epochengine::openglscene
             return;
         }
 
-        auto& glState = opengltextures::get_opengl_backend().glState;
+        const auto native = openglcontext::PlatformGL::get_current();
+        if (!native.valid()) return;
+        auto& backend = opengltextures::get_opengl_backend();
+        auto& glState = opengltextures::state_for_platform_context(
+            backend, native, ctx.get());
         openglpreview::render_scene_preview(
             ctx.get(),
             glState,

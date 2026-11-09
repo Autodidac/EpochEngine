@@ -37,8 +37,6 @@ module;
 #include "core.format_text.hpp"
 #include "gui.theme_cycle.hpp"
 #include "gui.theme_palette_spec.hpp"
-#include "gui.popup_input_ownership.hpp"
-#include "gui.floating_input_policy.hpp"
 #include <gui/node_graph_workspace.hpp>
 #include <gui/circle_raster.hpp>
 #include <gui/rounded_corner_raster.hpp>
@@ -80,6 +78,7 @@ module gui.engine;
 
 import epoch.gui;
 import epoch.gui.input;
+import epoch.gui.command_menu;
 import epoch.gui.image;
 import epoch.gui.rounded_rect;
 
@@ -93,22 +92,62 @@ import atlas.manager;
 import atlas.texture;
 import core.path;
 import core.logger;
+import core.commandline;
 import font.renderer;
 import sprite.pool;
 import sprite.registry;
 import sprite.handle;
 import texture.core;
 
+#include "gui.popup_input_ownership.hpp"
+#include "gui.floating_input_policy.hpp"
+
 namespace epochengine::gui
 {
     using Context = epochengine::core::Context;
+
+    namespace clipboard_detail
+    {
+        [[nodiscard]] std::string clipboard_read_text();
+        [[nodiscard]] bool clipboard_write_text(std::string_view text);
+    }
+    using clipboard_detail::clipboard_read_text;
+    using clipboard_detail::clipboard_write_text;
+
+    namespace docking_adapter_detail
+    {
+        [[nodiscard]] gui_lib::Vec2 to_lib(Vec2 v) noexcept;
+        [[nodiscard]] Vec2 from_lib(gui_lib::Vec2 v) noexcept;
+        [[nodiscard]] gui_lib::FloatingWindowState to_lib(const FloatingWindowState& state) noexcept;
+        void from_lib(const gui_lib::FloatingWindowState& source, FloatingWindowState& state) noexcept;
+        [[nodiscard]] WidgetBounds from_lib(gui_lib::Rect rect) noexcept;
+        [[nodiscard]] gui_lib::Rect to_lib(WidgetBounds bounds) noexcept;
+        [[nodiscard]] gui_lib::DockSlot to_lib(DockSlot slot) noexcept;
+        [[nodiscard]] DockSlot from_lib(gui_lib::DockSlot slot) noexcept;
+        [[nodiscard]] gui_lib::DockGuideTarget to_lib(DockGuideTarget target) noexcept;
+        [[nodiscard]] DockGuideTarget from_lib(gui_lib::DockGuideTarget target) noexcept;
+        [[nodiscard]] gui_lib::DockGuideOptions to_lib(const DockGuideOptions& options) noexcept;
+        [[nodiscard]] DockGuideLayout from_lib(const gui_lib::DockGuideLayout& source) noexcept;
+        [[nodiscard]] gui_lib::DockableWindowMode to_lib(DockableWindowMode mode) noexcept;
+        [[nodiscard]] DockableWindowMode from_lib(gui_lib::DockableWindowMode mode) noexcept;
+        [[nodiscard]] gui_lib::DockableWindowAction to_lib(DockableWindowAction action) noexcept;
+        [[nodiscard]] DockableWindowAction from_lib(gui_lib::DockableWindowAction action) noexcept;
+        [[nodiscard]] gui_lib::DockableWindowHostState to_lib(const DockableWindowHostState& host) noexcept;
+        void from_lib(const gui_lib::DockableWindowHostState& source, DockableWindowHostState& host) noexcept;
+        [[nodiscard]] gui_lib::DockableWindowState to_lib(const DockableWindowState& state) noexcept;
+        void from_lib(const gui_lib::DockableWindowState& source, DockableWindowState& state) noexcept;
+        [[nodiscard]] gui_lib::DockableWindowOptions to_lib(const DockableWindowOptions& options) noexcept;
+        [[nodiscard]] gui_lib::DockableWindowInput to_lib(const DockableWindowInput& input) noexcept;
+        [[nodiscard]] DockableWindowChrome from_lib(const gui_lib::DockableWindowChrome& chrome) noexcept;
+        [[nodiscard]] DockableWindowResult from_lib(const gui_lib::DockableWindowResult& result) noexcept;
+    }
 
     constexpr const char* kAtlasName = "__agui_builtin";
     constexpr float       kContentPadding = 6.0f;
     // Readable desktop default at 1440p/4K. Text geometry is derived from
     // the same atlas metrics, so wrapping, controls and hit-testing agree.
     constexpr float       kDefaultFontSizePt = 21.0f;
-    constexpr float       kFontScale = 1.0f;
+    thread_local float    kFontScale = 1.0f;
     constexpr float       kTitleScale = 1.07f;
     constexpr float       kLineSpacingFactor = 0.15f;
     constexpr float       kLetterSpacingFactor = 0.0f;
@@ -140,6 +179,8 @@ namespace epochengine::gui
 
     namespace
     {
+        using docking_adapter_detail::to_lib;
+        using docking_adapter_detail::from_lib;
 #include "controls/gui.context_roles.inl"
         struct GuiFontCache
         {
@@ -184,6 +225,13 @@ namespace epochengine::gui
                 SpriteHandle consoleBackground{};
                 SpriteHandle titleBar{};
                 SpriteHandle modalScrim{};
+                bool isLight{};
+                bool captionUsesLightText{};
+                bool beveledControls{};
+                SpriteHandle bevelHighlight{}, bevelShadow{}, bevelDarkShadow{};
+                SpriteHandle headingAccent{};
+                theme_detail::Rgb headingColor{};
+                mutable GuiFontCache headingFont{};
             };
 
             struct SemanticSpritePair
@@ -204,6 +252,11 @@ namespace epochengine::gui
             PaletteSprites forestTerminal{};
             PaletteSprites auroraSteel{};
             PaletteSprites codexBlack{};
+            PaletteSprites graphiteCopper{};
+            PaletteSprites slateOrchard{};
+            PaletteSprites indigoQuartz{};
+            PaletteSprites signalPlum{};
+            PaletteSprites forgedSteel{};
             std::array<SemanticSpritePair, gui_lib::semantic_tone_count> semanticDark{};
             std::array<SemanticSpritePair, gui_lib::semantic_tone_count> semanticLight{};
             SpriteHandle dockGuide{};
@@ -229,6 +282,7 @@ namespace epochengine::gui
             GuiFontCache statusErrorFont{.fontName = kStatusErrorFontName};
             GuiFontCache statusErrorLightFont{.fontName = kStatusErrorLightFontName};
             SpriteHandle windowShadow{};
+            SpriteHandle contrastBlack{}, contrastWhite{};
             font::FontRenderer fontRenderer{};
             std::array<const TextureAtlas*, font::kFontAtlasMaximumPages> fontAtlasPages{};
             std::unordered_map<SpriteHandle, RoundedCorners, SpriteHandleHash> roundedControls{};
@@ -347,8 +401,13 @@ namespace epochengine::gui
             }
         }
 
-        static thread_local std::unordered_map<const void*, bool, PtrHash> g_contextMouseDownStates{};
-        static thread_local std::unordered_map<const void*, bool, PtrHash> g_contextRightMouseDownStates{};
+        struct ContextPointerButtonState
+        {
+            bool down{};
+            bool queued_edge_owned{};
+        };
+        static thread_local std::unordered_map<const void*, ContextPointerButtonState, PtrHash> g_contextMouseDownStates{};
+        static thread_local std::unordered_map<const void*, ContextPointerButtonState, PtrHash> g_contextRightMouseDownStates{};
         static thread_local std::unordered_map<const void*, const void*, PtrHash> g_contextActiveWidgets{};
         static thread_local std::unordered_map<const void*, std::size_t, PtrHash> g_contextPressedButtonKeys{};
         struct EditBoxTextState
@@ -356,10 +415,28 @@ namespace epochengine::gui
             gui_lib::TextControlState control{};
             bool initialized{};
             bool draggingSelection{};
+            bool tabTextPending{};
+            const void* owner{};
+            std::string windowKey{};
+            Vec2 wheelMin{}, wheelMax{};
+            bool wheelVisible{}, visited{}, scrolling{};
+            DragSurfaceState scrollbarDrag{};
+            float dragGrabOffset{};
         };
 
         static thread_local std::unordered_map<const void*, EditBoxTextState, PtrHash> g_editBoxTextStates{};
         static thread_local std::unordered_map<const void*, bool, PtrHash> g_textFieldSelectAllStates{};
+        static void reset_edit_box_visits(const void* owner) noexcept
+        {
+            for (auto& [key,state] : g_editBoxTextStates)
+            { (void)key; if (state.owner==owner) state.visited=false; }
+        }
+        static void retire_hidden_edit_boxes(const void* owner) noexcept
+        {
+            for (auto& [key,state] : g_editBoxTextStates)
+                if (state.owner==owner&&!state.visited)
+                { (void)key; state.wheelVisible=false; state.scrollbarDrag={}; }
+        }
 
         struct ScrollTextState
         {
@@ -386,6 +463,7 @@ namespace epochengine::gui
             // vector index: pruning the conversation cannot expand another run.
             std::unordered_map<std::size_t, bool> expandedRuns{};
             std::unordered_map<std::size_t, bool> expandedActivityItems{};
+            std::unordered_map<std::size_t, bool> rawActivityItems{};
             std::unordered_set<std::size_t> activeStreamKeys{};
             std::size_t firstLine = 0;
             std::size_t selectedLine = 0;
@@ -397,7 +475,7 @@ namespace epochengine::gui
             float lastContentPixelHeight = 0.0f;
             float lastViewportHeight = 0.0f;
             std::uint64_t scrollToEndGeneration = 0u;
-            bool draggingScrollbar = false;
+            DragSurfaceState scrollbarDrag{};
             bool draggingSelection = false;
             float dragGrabOffset = 0.0f;
             bool contextMenuOpen = false;
@@ -412,7 +490,7 @@ namespace epochengine::gui
             float contentHeight = 0.0f;
             float viewportHeight = 0.0f;
             bool followTail = false;
-            bool draggingScrollbar = false;
+            DragSurfaceState scrollbarDrag{};
             float dragGrabOffset = 0.0f;
         };
 
@@ -556,6 +634,7 @@ namespace epochengine::gui
         {
             std::shared_ptr<core::Context> ctxShared{};
             core::Context* ctx = nullptr;
+            const void* visitedActiveWidget{};
 
             Vec2 cursor{};
             Vec2 origin{};
@@ -571,6 +650,7 @@ namespace epochengine::gui
             bool mouseRightDown = false;
             bool prevMouseRightDown = false;
             bool pointerInputAllowed = true;
+            bool keyboardFocusCancelled = false;
             bool justReleased = false;
             bool rightJustReleased = false;
             bool insideWindow = false;
@@ -663,7 +743,11 @@ namespace epochengine::gui
                 && palette.panelBackground.is_valid()
                 && palette.consoleBackground.is_valid()
                 && palette.titleBar.is_valid()
-                && palette.modalScrim.is_valid();
+                && palette.modalScrim.is_valid()
+                && (!palette.beveledControls
+                    || (palette.bevelHighlight.is_valid()
+                        && palette.bevelShadow.is_valid()
+                        && palette.bevelDarkShadow.is_valid()));
         }
 
         [[nodiscard]] static const GuiResources::PaletteSprites& active_palette() noexcept
@@ -692,6 +776,21 @@ namespace epochengine::gui
             case ThemeVariant::CodexBlack:
                 candidate = &g_resources.codexBlack;
                 break;
+            case ThemeVariant::GraphiteCopper:
+                candidate = &g_resources.graphiteCopper;
+                break;
+            case ThemeVariant::SlateOrchard:
+                candidate = &g_resources.slateOrchard;
+                break;
+            case ThemeVariant::IndigoQuartz:
+                candidate = &g_resources.indigoQuartz;
+                break;
+            case ThemeVariant::SignalPlum:
+                candidate = &g_resources.signalPlum;
+                break;
+            case ThemeVariant::ForgedSteel:
+                candidate = &g_resources.forgedSteel;
+                break;
             case ThemeVariant::StudioNavy: // Legacy saved theme resolves to the updated Midnight Blue.
                 candidate = &g_resources.midnightBlue;
                 break;
@@ -705,6 +804,11 @@ namespace epochengine::gui
             return complete_palette(*candidate) ? *candidate : g_resources.defaultDark;
         }
 
+        [[nodiscard]] static bool active_palette_is_light() noexcept
+        {
+            return active_palette().isLight;
+        }
+
         static_assert(gui_lib::semantic_tone_count
             == static_cast<std::size_t>(SemanticTone::engine) + 1u);
 
@@ -713,7 +817,7 @@ namespace epochengine::gui
         {
             const auto index = static_cast<std::size_t>(tone);
             const auto safeIndex = index < gui_lib::semantic_tone_count ? index : 0u;
-            return g_frame.activeTheme == ThemeVariant::DefaultLight
+            return active_palette_is_light()
                 ? g_resources.semanticLight[safeIndex]
                 : g_resources.semanticDark[safeIndex];
         }
@@ -743,7 +847,7 @@ namespace epochengine::gui
         {
             if (g_temporaryTextFont && g_temporaryTextFont->asset)
                 return *g_temporaryTextFont;
-            if (g_frame.activeTheme == ThemeVariant::DefaultLight
+            if (active_palette_is_light()
                 && g_resources.darkTextFont.asset)
                 return g_resources.darkTextFont;
             return g_resources.font;
@@ -809,32 +913,6 @@ namespace epochengine::gui
             return g_frame.insideWindow;
         }
 
-        struct ContentClipScope
-        {
-            Vec2 previousMin{};
-            Vec2 previousMax{};
-
-            ContentClipScope(Vec2 clipMin, Vec2 clipMax) noexcept
-            {
-                previousMin = g_frame.contentMin;
-                previousMax = g_frame.contentMax;
-                g_frame.contentMin = {
-                    (std::max)(previousMin.x, clipMin.x),
-                    (std::max)(previousMin.y, clipMin.y)
-                };
-                g_frame.contentMax = {
-                    (std::min)(previousMax.x, clipMax.x),
-                    (std::min)(previousMax.y, clipMax.y)
-                };
-            }
-
-            ~ContentClipScope()
-            {
-                g_frame.contentMin = previousMin;
-                g_frame.contentMax = previousMax;
-            }
-        };
-
         struct ContentClipClearScope
         {
             Vec2 previousMin{};
@@ -895,337 +973,6 @@ namespace epochengine::gui
         [[nodiscard]] static std::string asset_grid_state_key(std::string_view id)
         {
             return window_scoped_state_key(id);
-        }
-
-        [[nodiscard]] static gui_lib::Vec2 to_lib(Vec2 v) noexcept
-        {
-            return { v.x, v.y };
-        }
-
-        [[nodiscard]] static Vec2 from_lib(gui_lib::Vec2 v) noexcept
-        {
-            return { v.x, v.y };
-        }
-
-        [[nodiscard]] static gui_lib::FloatingWindowState to_lib(const FloatingWindowState& state) noexcept
-        {
-            return gui_lib::FloatingWindowState{
-                .position = to_lib(state.position),
-                .size = to_lib(state.size),
-                .drag_offset = to_lib(state.drag_offset),
-                .resize_origin_mouse = to_lib(state.resize_origin_mouse),
-                .resize_origin_size = to_lib(state.resize_origin_size),
-                .open = state.open,
-                .initialized = state.initialized,
-                .dragging = state.dragging,
-                .resizing = state.resizing,
-                .close_pressed = state.close_pressed,
-                .focus_order = state.focus_order
-            };
-        }
-
-        static void from_lib(const gui_lib::FloatingWindowState& source, FloatingWindowState& state) noexcept
-        {
-            state.position = from_lib(source.position);
-            state.size = from_lib(source.size);
-            state.drag_offset = from_lib(source.drag_offset);
-            state.resize_origin_mouse = from_lib(source.resize_origin_mouse);
-            state.resize_origin_size = from_lib(source.resize_origin_size);
-            state.open = source.open;
-            state.initialized = source.initialized;
-            state.dragging = source.dragging;
-            state.resizing = source.resizing;
-            state.close_pressed = source.close_pressed;
-            state.focus_order = source.focus_order;
-        }
-
-        [[nodiscard]] static WidgetBounds from_lib(gui_lib::Rect rect) noexcept
-        {
-            return WidgetBounds{
-                .position = from_lib(rect.position),
-                .size = from_lib(rect.size)
-            };
-        }
-
-        [[nodiscard]] static gui_lib::Rect to_lib(WidgetBounds bounds) noexcept
-        {
-            return gui_lib::Rect{
-                .position = to_lib(bounds.position),
-                .size = to_lib(bounds.size)
-            };
-        }
-
-        [[nodiscard]] static gui_lib::DockSlot to_lib(DockSlot slot) noexcept
-        {
-            switch (slot)
-            {
-            case DockSlot::left: return gui_lib::DockSlot::left;
-            case DockSlot::right: return gui_lib::DockSlot::right;
-            case DockSlot::top: return gui_lib::DockSlot::top;
-            case DockSlot::bottom: return gui_lib::DockSlot::bottom;
-            case DockSlot::center: return gui_lib::DockSlot::center;
-            case DockSlot::none:
-            default: return gui_lib::DockSlot::none;
-            }
-        }
-
-        [[nodiscard]] static DockSlot from_lib(gui_lib::DockSlot slot) noexcept
-        {
-            switch (slot)
-            {
-            case gui_lib::DockSlot::left: return DockSlot::left;
-            case gui_lib::DockSlot::right: return DockSlot::right;
-            case gui_lib::DockSlot::top: return DockSlot::top;
-            case gui_lib::DockSlot::bottom: return DockSlot::bottom;
-            case gui_lib::DockSlot::center: return DockSlot::center;
-            case gui_lib::DockSlot::none:
-            default: return DockSlot::none;
-            }
-        }
-
-        [[nodiscard]] static gui_lib::DockGuideTarget to_lib(DockGuideTarget target) noexcept
-        {
-            switch (target)
-            {
-            case DockGuideTarget::left_tabs: return gui_lib::DockGuideTarget::left_tabs;
-            case DockGuideTarget::right_tabs: return gui_lib::DockGuideTarget::right_tabs;
-            case DockGuideTarget::bottom_left_tabs: return gui_lib::DockGuideTarget::bottom_left_tabs;
-            case DockGuideTarget::bottom_right_tabs: return gui_lib::DockGuideTarget::bottom_right_tabs;
-            case DockGuideTarget::left_context: return gui_lib::DockGuideTarget::left_context;
-            case DockGuideTarget::right_context: return gui_lib::DockGuideTarget::right_context;
-            case DockGuideTarget::float_window: return gui_lib::DockGuideTarget::float_window;
-            case DockGuideTarget::none:
-            default: return gui_lib::DockGuideTarget::none;
-            }
-        }
-
-        [[nodiscard]] static DockGuideTarget from_lib(gui_lib::DockGuideTarget target) noexcept
-        {
-            switch (target)
-            {
-            case gui_lib::DockGuideTarget::left_tabs: return DockGuideTarget::left_tabs;
-            case gui_lib::DockGuideTarget::right_tabs: return DockGuideTarget::right_tabs;
-            case gui_lib::DockGuideTarget::bottom_left_tabs: return DockGuideTarget::bottom_left_tabs;
-            case gui_lib::DockGuideTarget::bottom_right_tabs: return DockGuideTarget::bottom_right_tabs;
-            case gui_lib::DockGuideTarget::left_context: return DockGuideTarget::left_context;
-            case gui_lib::DockGuideTarget::right_context: return DockGuideTarget::right_context;
-            case gui_lib::DockGuideTarget::float_window: return DockGuideTarget::float_window;
-            case gui_lib::DockGuideTarget::none:
-            default: return DockGuideTarget::none;
-            }
-        }
-
-        [[nodiscard]] static gui_lib::DockGuideOptions to_lib(const DockGuideOptions& options) noexcept
-        {
-            return gui_lib::DockGuideOptions{
-                .guide_bounds = to_lib(options.guide_bounds),
-                .left_tabs_preview = to_lib(options.left_tabs_preview),
-                .right_tabs_preview = to_lib(options.right_tabs_preview),
-                .bottom_left_tabs_preview = to_lib(options.bottom_left_tabs_preview),
-                .bottom_right_tabs_preview = to_lib(options.bottom_right_tabs_preview),
-                .left_context_preview = to_lib(options.left_context_preview),
-                .right_context_preview = to_lib(options.right_context_preview),
-                .floating_preview = to_lib(options.floating_preview),
-                .pointer = to_lib(options.pointer),
-                .guide_extent = options.guide_extent,
-                .guide_gap = options.guide_gap,
-                .allow_side_tabs = options.allow_side_tabs,
-                .allow_bottom_tabs = options.allow_bottom_tabs,
-                .allow_contexts = options.allow_contexts,
-                .allow_float = options.allow_float,
-                .center_context_guides_in_previews =
-                    options.center_context_guides_in_previews
-            };
-        }
-
-        [[nodiscard]] static DockGuideLayout from_lib(const gui_lib::DockGuideLayout& source) noexcept
-        {
-            DockGuideLayout result{};
-            result.count = (std::min)(source.count, std::uint32_t{7});
-            result.hovered_target = from_lib(source.hovered_target);
-            result.hovered_preview = from_lib(source.hovered_preview);
-            for (std::uint32_t i = 0; i < result.count; ++i)
-            {
-                result.guides[i] = DockGuide{
-                    .target = from_lib(source.guides[i].target),
-                    .target_bounds = from_lib(source.guides[i].target_bounds),
-                    .preview_bounds = from_lib(source.guides[i].preview_bounds),
-                    .hovered = source.guides[i].hovered
-                };
-            }
-            return result;
-        }
-
-        [[nodiscard]] static gui_lib::DockableWindowMode to_lib(DockableWindowMode mode) noexcept
-        {
-            switch (mode)
-            {
-            case DockableWindowMode::docked: return gui_lib::DockableWindowMode::docked;
-            case DockableWindowMode::detached: return gui_lib::DockableWindowMode::detached;
-            case DockableWindowMode::floating:
-            default: return gui_lib::DockableWindowMode::floating;
-            }
-        }
-
-        [[nodiscard]] static DockableWindowMode from_lib(gui_lib::DockableWindowMode mode) noexcept
-        {
-            switch (mode)
-            {
-            case gui_lib::DockableWindowMode::docked: return DockableWindowMode::docked;
-            case gui_lib::DockableWindowMode::detached: return DockableWindowMode::detached;
-            case gui_lib::DockableWindowMode::floating:
-            default: return DockableWindowMode::floating;
-            }
-        }
-
-        [[nodiscard]] static gui_lib::DockableWindowAction to_lib(DockableWindowAction action) noexcept
-        {
-            switch (action)
-            {
-            case DockableWindowAction::focus: return gui_lib::DockableWindowAction::focus;
-            case DockableWindowAction::dock: return gui_lib::DockableWindowAction::dock;
-            case DockableWindowAction::float_window: return gui_lib::DockableWindowAction::float_window;
-            case DockableWindowAction::detach: return gui_lib::DockableWindowAction::detach;
-            case DockableWindowAction::close: return gui_lib::DockableWindowAction::close;
-            case DockableWindowAction::none:
-            default: return gui_lib::DockableWindowAction::none;
-            }
-        }
-
-        [[nodiscard]] static DockableWindowAction from_lib(gui_lib::DockableWindowAction action) noexcept
-        {
-            switch (action)
-            {
-            case gui_lib::DockableWindowAction::focus: return DockableWindowAction::focus;
-            case gui_lib::DockableWindowAction::dock: return DockableWindowAction::dock;
-            case gui_lib::DockableWindowAction::float_window: return DockableWindowAction::float_window;
-            case gui_lib::DockableWindowAction::detach: return DockableWindowAction::detach;
-            case gui_lib::DockableWindowAction::close: return DockableWindowAction::close;
-            case gui_lib::DockableWindowAction::none:
-            default: return DockableWindowAction::none;
-            }
-        }
-
-        [[nodiscard]] static gui_lib::DockableWindowHostState to_lib(const DockableWindowHostState& host) noexcept
-        {
-            return gui_lib::DockableWindowHostState{
-                .active_window_id = host.active_window_id,
-                .next_focus_order = host.next_focus_order,
-                .changed_this_frame = host.changed_this_frame
-            };
-        }
-
-        static void from_lib(const gui_lib::DockableWindowHostState& source, DockableWindowHostState& host) noexcept
-        {
-            host.active_window_id = source.active_window_id;
-            host.next_focus_order = source.next_focus_order;
-            host.changed_this_frame = source.changed_this_frame;
-        }
-
-        [[nodiscard]] static gui_lib::DockableWindowState to_lib(const DockableWindowState& state) noexcept
-        {
-            return gui_lib::DockableWindowState{
-                .id = state.id,
-                .mode = to_lib(state.mode),
-                .dock_slot = to_lib(state.dock_slot),
-                .floating = to_lib(state.floating),
-                .visible = state.visible,
-                .initialized = state.initialized,
-                .active = state.active,
-                .detach_requested = state.detach_requested,
-                .close_requested = state.close_requested,
-                .focus_order = state.focus_order
-            };
-        }
-
-        static void from_lib(const gui_lib::DockableWindowState& source, DockableWindowState& state) noexcept
-        {
-            state.id = source.id;
-            state.mode = from_lib(source.mode);
-            state.dock_slot = from_lib(source.dock_slot);
-            from_lib(source.floating, state.floating);
-            state.visible = source.visible;
-            state.initialized = source.initialized;
-            state.active = source.active;
-            state.detach_requested = source.detach_requested;
-            state.close_requested = source.close_requested;
-            state.focus_order = source.focus_order;
-        }
-
-        [[nodiscard]] static gui_lib::DockableWindowOptions to_lib(const DockableWindowOptions& options) noexcept
-        {
-            return gui_lib::DockableWindowOptions{
-                .title = options.title,
-                .docked_frame = to_lib(options.docked_frame),
-                .floating = gui_lib::FloatingWindowOptions{
-                    .default_position = to_lib(options.floating.default_position),
-                    .default_size = to_lib(options.floating.default_size),
-                    .min_size = to_lib(options.floating.min_size),
-                    .viewport_size = to_lib(options.floating.viewport_size),
-                    .movable = options.floating.movable,
-                    .resizable = options.floating.resizable,
-                    .closable = options.floating.closable
-                },
-                .viewport_size = to_lib(options.viewport_size),
-                .title_bar_height = options.title_bar_height,
-                .content_padding = options.content_padding,
-                .action_button_width = options.action_button_width,
-                .action_button_gap = options.action_button_gap,
-                .allow_dock = options.allow_dock,
-                .allow_float = options.allow_float,
-                .allow_detach = options.allow_detach,
-                .allow_close = options.allow_close,
-                .fallback_dock_slot = to_lib(options.fallback_dock_slot)
-            };
-        }
-
-        [[nodiscard]] static gui_lib::DockableWindowInput to_lib(const DockableWindowInput& input) noexcept
-        {
-            return gui_lib::DockableWindowInput{
-                .mouse_position = to_lib(input.mouse_position),
-                .mouse_down = input.mouse_down,
-                .mouse_pressed = input.mouse_pressed,
-                .mouse_released = input.mouse_released,
-                .requested_action = to_lib(input.requested_action),
-                .requested_dock_slot = to_lib(input.requested_dock_slot)
-            };
-        }
-
-        [[nodiscard]] static DockableWindowChrome from_lib(const gui_lib::DockableWindowChrome& chrome) noexcept
-        {
-            return DockableWindowChrome{
-                .frame = from_lib(chrome.frame),
-                .title_bar = from_lib(chrome.title_bar),
-                .content = from_lib(chrome.content),
-                .dock_button = from_lib(chrome.dock_button),
-                .float_button = from_lib(chrome.float_button),
-                .detach_button = from_lib(chrome.detach_button),
-                .close_button = from_lib(chrome.close_button),
-                .visible = chrome.visible,
-                .hovered = chrome.hovered,
-                .title_hovered = chrome.title_hovered,
-                .dock_hovered = chrome.dock_hovered,
-                .float_hovered = chrome.float_hovered,
-                .detach_hovered = chrome.detach_hovered,
-                .close_hovered = chrome.close_hovered,
-                .active = chrome.active
-            };
-        }
-
-        [[nodiscard]] static DockableWindowResult from_lib(const gui_lib::DockableWindowResult& result) noexcept
-        {
-            return DockableWindowResult{
-                .chrome = from_lib(result.chrome),
-                .mode = from_lib(result.mode),
-                .action = from_lib(result.action),
-                .dock_slot = from_lib(result.dock_slot),
-                .changed = result.changed,
-                .focused = result.focused,
-                .dock_requested = result.dock_requested,
-                .float_requested = result.float_requested,
-                .detach_requested = result.detach_requested,
-                .close_requested = result.close_requested
-            };
         }
 
         [[nodiscard]] static bool uses_deferred_gui_batch(const core::Context* ctx) noexcept
@@ -1646,7 +1393,10 @@ namespace epochengine::gui
                 && g_resources.statusSuccessLightFont.asset
                 && g_resources.statusWarningLightFont.asset
                 && g_resources.statusErrorLightFont.asset)
-                return;
+            {
+                const auto& heading = active_palette().headingFont;
+                if (heading.asset || heading.loadFailed) return;
+            }
 
             // Probe missing/file-change evidence at most every five seconds.
             // A failed registration must not rebake all glyphs/kerning on this
@@ -1654,7 +1404,10 @@ namespace epochengine::gui
             using FontClock = std::chrono::steady_clock;
             static FontClock::time_point nextFontAttempt{}; // protected by g_resourceMutex
             const auto now = FontClock::now();
-            if (now < nextFontAttempt)
+            const auto& pendingHeading = active_palette().headingFont;
+            const bool newHeading = g_resources.font.asset && !pendingHeading.asset
+                && !pendingHeading.loadFailed && !pendingHeading.fontName.empty();
+            if (now < nextFontAttempt && !newHeading)
                 return;
             nextFontAttempt = now + std::chrono::seconds{5};
 
@@ -1695,9 +1448,18 @@ namespace epochengine::gui
                     cache->loadFailed = false;
                 g_failedFontLoadWarningLogged = false;
                 g_missingFontAssetWarningLogged = false;
+                for (auto* palette : {&g_resources.defaultDark, &g_resources.defaultLight,
+                    &g_resources.classicLauncher, &g_resources.midnightBlue,
+                    &g_resources.emberForge, &g_resources.forestTerminal,
+                    &g_resources.auroraSteel, &g_resources.codexBlack,
+                    &g_resources.graphiteCopper, &g_resources.slateOrchard,
+                    &g_resources.indigoQuartz, &g_resources.signalPlum,
+                    &g_resources.forgedSteel})
+                    palette->headingFont.loadFailed = false;
             }
 
-            const auto loadCache = [&](GuiFontCache& fontCache, font::FontColor color)
+            const auto loadCache = [&](GuiFontCache& fontCache, font::FontColor color,
+                font::GlyphCoverage coverage = font::GlyphCoverage::full)
                 {
                     if (fontCache.asset)
                         return true;
@@ -1710,7 +1472,7 @@ namespace epochengine::gui
                             fontCache.fontName,
                             fontPath.string(),
                             fontCache.fontSizePt,
-                            color))
+                            color, coverage))
                     {
                         fontCache.loadFailed = true;
                         return false;
@@ -1786,6 +1548,14 @@ namespace epochengine::gui
                 font::FontColor{133, 82, 18, 255});
             (void)loadCache(g_resources.statusErrorLightFont,
                 font::FontColor{171, 49, 62, 255});
+            const auto& headingPalette = active_palette();
+            const auto headingColor = headingPalette.headingColor;
+            (void)loadCache(headingPalette.headingFont,
+                font::FontColor{headingColor.r, headingColor.g, headingColor.b, 255},
+                font::GlyphCoverage::basic_latin);
+            // Same face and size: colored heading coverage must not change
+            // baseline, line height or spacing from the complete text font.
+            headingPalette.headingFont.metrics = g_resources.font.metrics;
             if (!lightTextLoaded || !darkTextLoaded || !shadowTextLoaded)
             {
                 if (!g_failedFontLoadWarningLogged)
@@ -1849,6 +1619,14 @@ namespace epochengine::gui
                     make_solid_pixels(0xFF, 0xB4, 0x55, 0xD0, 8, 8), 8, 8);
                 g_resources.windowShadow = add_sprite(atlas, "__agui/window_shadow",
                     make_solid_pixels(0x00, 0x00, 0x00, 0x58, 8, 8), 8, 8);
+                g_resources.contrastBlack = add_sprite(atlas, "__agui/contrast_black",
+                    make_solid_pixels(0, 0, 0, 255, 8, 8), 8, 8);
+                g_resources.contrastWhite = add_sprite(atlas, "__agui/contrast_white",
+                    make_solid_pixels(255, 255, 255, 255, 8, 8), 8, 8);
+                register_rounded_control(atlas, g_resources.contrastBlack,
+                    "__agui_round/contrast_black", {0, 0, 0, 255});
+                register_rounded_control(atlas, g_resources.contrastWhite,
+                    "__agui_round/contrast_white", {255, 255, 255, 255});
 
                 // Every theme is sourced from one palette specification. Both
                 // square and rounded atlas controls use identical RGB values.
@@ -1873,6 +1651,18 @@ namespace epochengine::gui
                     target.consoleBackground = surface("console_bg", spec.console);
                     target.titleBar = surface("title_bar", spec.title);
                     target.modalScrim = surface("modal_scrim", spec.scrim);
+                    target.isLight = spec.isLight;
+                    target.captionUsesLightText = spec.captionUsesLightText;
+                    target.beveledControls = spec.beveledControls;
+                    target.headingColor = theme_detail::section_heading_color(spec);
+                    target.headingAccent = surface("heading_accent", target.headingColor);
+                    target.headingFont.fontName = std::string{spec.atlasPrefix} + "/heading_font";
+                    if (spec.beveledControls)
+                    {
+                        target.bevelHighlight = surface("bevel_highlight", {255, 255, 255, 255});
+                        target.bevelShadow = surface("bevel_shadow", {128, 128, 128, 255});
+                        target.bevelDarkShadow = surface("bevel_dark_shadow", {64, 64, 64, 255});
+                    }
 
                     const auto rounded = [&atlas, &spec](
                         SpriteHandle sprite, std::string_view name, theme_detail::Rgb color)
@@ -1900,6 +1690,11 @@ namespace epochengine::gui
                 registerPalette(g_resources.forestTerminal, theme_detail::palette_at(5));
                 registerPalette(g_resources.auroraSteel, theme_detail::palette_at(6));
                 registerPalette(g_resources.codexBlack, theme_detail::palette_at(7));
+                registerPalette(g_resources.graphiteCopper, theme_detail::palette_at(8));
+                registerPalette(g_resources.slateOrchard, theme_detail::palette_at(9));
+                registerPalette(g_resources.indigoQuartz, theme_detail::palette_at(10));
+                registerPalette(g_resources.signalPlum, theme_detail::palette_at(11));
+                registerPalette(g_resources.forgedSteel, theme_detail::palette_at(12));
 
                 for (std::size_t index = 0u;
                      index < gui_lib::semantic_tone_count;
@@ -2121,6 +1916,36 @@ namespace epochengine::gui
             ctx->draw_sprite_safe(handle, span, x, y, w, h);
         }
 
+        // The existing sprite path clips every edge, queues it on the current
+        // layer, and preserves the widget's original layout and hit rectangle.
+        // Coordinates use the same screen units as the other 1/2px GUI borders.
+        [[nodiscard]] static bool draw_beveled_control(
+            const GuiResources::PaletteSprites& palette,
+            const SpriteHandle& face, float x, float y, float w, float h,
+            bool sunken)
+        {
+            if (!palette.beveledControls || !face.is_valid()
+                || !palette.bevelHighlight.is_valid() || !palette.bevelShadow.is_valid()
+                || !palette.bevelDarkShadow.is_valid()
+                || !std::isfinite(x) || !std::isfinite(y)
+                || !std::isfinite(w) || !std::isfinite(h) || w < 4.0f || h < 4.0f)
+                return false;
+            draw_sprite_raw(face, x, y, w, h);
+            const auto outerLeading = sunken ? palette.bevelShadow : palette.bevelHighlight;
+            const auto outerTrailing = sunken ? palette.bevelHighlight : palette.bevelDarkShadow;
+            const auto innerLeading = sunken ? palette.bevelDarkShadow : face;
+            const auto innerTrailing = sunken ? face : palette.bevelShadow;
+            draw_sprite_raw(outerLeading, x, y, w - 1.0f, 1.0f);
+            draw_sprite_raw(outerLeading, x, y + 1.0f, 1.0f, h - 2.0f);
+            draw_sprite_raw(outerTrailing, x, y + h - 1.0f, w, 1.0f);
+            draw_sprite_raw(outerTrailing, x + w - 1.0f, y, 1.0f, h - 1.0f);
+            draw_sprite_raw(innerLeading, x + 1.0f, y + 1.0f, w - 3.0f, 1.0f);
+            draw_sprite_raw(innerLeading, x + 1.0f, y + 2.0f, 1.0f, h - 4.0f);
+            draw_sprite_raw(innerTrailing, x + 1.0f, y + h - 2.0f, w - 2.0f, 1.0f);
+            draw_sprite_raw(innerTrailing, x + w - 2.0f, y + 1.0f, 1.0f, h - 3.0f);
+            return true;
+        }
+
         static void draw_rounded_sprite(
             const SpriteHandle& handle,
             float x,
@@ -2132,7 +1957,7 @@ namespace epochengine::gui
             auto style = gui_lib::rounded_rect::normalize_rounded_rect_style(requestedStyle);
             // A per-widget radius must never override the editor-level
             // square-controls preference. Geometry/hit testing are unchanged.
-            style.enabled = style.enabled && g_frame.roundedRectStyle.enabled;
+            style.enabled = style.enabled && rounded_rectangles_enabled();
             // A circular square control uses an independent high-resolution
             // silhouette; the nine-slice path is reserved for rounded rectangles.
             if (style.enabled && w >= 8.0f && h >= 8.0f
@@ -2199,6 +2024,32 @@ namespace epochengine::gui
                 bottom - cornerRadius, cornerRadius, cornerRadius);
             draw_sprite_raw(corners.bottomLeft, left, bottom - cornerRadius,
                 cornerRadius, cornerRadius);
+        }
+
+        [[nodiscard]] static bool draw_high_contrast_control(
+            float x, float y, float w, float h, bool circular)
+        {
+            const auto face = active_palette().isLight ? g_resources.contrastWhite : g_resources.contrastBlack;
+            const auto edge = active_palette().isLight ? g_resources.contrastBlack : g_resources.contrastWhite;
+            if (!face.is_valid() || !edge.is_valid() || w < 4.0f || h < 4.0f)
+                return false;
+            if (circular)
+            {
+                // Explicit circular actions keep their circle even when the
+                // surrounding Classic controls use square borders.
+                const auto outer = g_resources.circleControls.find(edge);
+                const auto inner = g_resources.circleControls.find(face);
+                if (outer == g_resources.circleControls.end() || inner == g_resources.circleControls.end())
+                    return false;
+                draw_sprite_raw(outer->second, x, y, w, h);
+                draw_sprite_raw(inner->second, x + 1.0f, y + 1.0f, w - 2.0f, h - 2.0f);
+            }
+            else
+            {
+                draw_sprite_raw(edge, x, y, w, h);
+                draw_sprite_raw(face, x + 1.0f, y + 1.0f, w - 2.0f, h - 2.0f);
+            }
+            return true;
         }
 
         static void draw_sprite(const SpriteHandle& handle, float x, float y, float w, float h)
@@ -2408,9 +2259,18 @@ namespace epochengine::gui
             return fontCache.fallbackGlyph;
         }
 
+        [[nodiscard]] static const GuiFontCache& font_cache_for_codepoint(char32_t codepoint) noexcept
+        {
+            const auto& active = active_font_cache();
+            if (active.asset && active.asset->coverage == font::GlyphCoverage::basic_latin
+                && (codepoint < U' ' || codepoint > U'~'))
+                return active_palette_is_light() ? g_resources.darkTextFont : g_resources.font;
+            return active;
+        }
+
         [[nodiscard]] static const font::Glyph* lookup_glyph(char32_t codepoint) noexcept
         {
-            return lookup_glyph_from_cache(active_font_cache(), codepoint);
+            return lookup_glyph_from_cache(font_cache_for_codepoint(codepoint), codepoint);
         }
 
         struct StatusKeyword final
@@ -2446,7 +2306,7 @@ namespace epochengine::gui
                     if (!eq(text[index + i], word[i])) return false;
                 return true;
             };
-            const bool lightTheme = g_frame.activeTheme == ThemeVariant::DefaultLight;
+            const bool lightTheme = active_palette_is_light();
             const auto& info = lightTheme && g_resources.statusInfoLightFont.asset
                 ? g_resources.statusInfoLightFont : g_resources.statusInfoFont;
             const auto& ok = lightTheme && g_resources.statusSuccessLightFont.asset
@@ -2493,6 +2353,8 @@ namespace epochengine::gui
 
         [[nodiscard]] static const font::Glyph* lookup_shadow_glyph(char32_t codepoint) noexcept
         {
+            if (active_palette_is_light() || g_temporaryTextFont)
+                return nullptr;
             return lookup_glyph_from_cache(g_resources.textShadowFont, codepoint);
         }
 
@@ -2513,141 +2375,6 @@ namespace epochengine::gui
             }
             return codepoint;
         }
-
-#if defined(_WIN32)
-        [[nodiscard]] static std::wstring utf8_to_wide(std::string_view text)
-        {
-            if (text.empty())
-                return {};
-
-            const int required = ::MultiByteToWideChar(
-                CP_UTF8,
-                MB_ERR_INVALID_CHARS,
-                text.data(),
-                static_cast<int>(text.size()),
-                nullptr,
-                0);
-
-            if (required <= 0)
-            {
-                std::wstring fallback{};
-                fallback.reserve(text.size());
-                for (unsigned char ch : text)
-                    fallback.push_back(ch < 128u ? static_cast<wchar_t>(ch) : L'?');
-                return fallback;
-            }
-
-            std::wstring out(static_cast<std::size_t>(required), L'\0');
-            ::MultiByteToWideChar(
-                CP_UTF8,
-                MB_ERR_INVALID_CHARS,
-                text.data(),
-                static_cast<int>(text.size()),
-                out.data(),
-                required);
-            return out;
-        }
-
-        [[nodiscard]] static std::string wide_to_utf8(std::wstring_view text)
-        {
-            if (text.empty())
-                return {};
-
-            const int required = ::WideCharToMultiByte(
-                CP_UTF8,
-                0,
-                text.data(),
-                static_cast<int>(text.size()),
-                nullptr,
-                0,
-                nullptr,
-                nullptr);
-
-            if (required <= 0)
-            {
-                std::string fallback{};
-                fallback.reserve(text.size());
-                for (wchar_t ch : text)
-                    fallback.push_back((ch >= 0 && ch < 128) ? static_cast<char>(ch) : '?');
-                return fallback;
-            }
-
-            std::string out(static_cast<std::size_t>(required), '\0');
-            ::WideCharToMultiByte(
-                CP_UTF8,
-                0,
-                text.data(),
-                static_cast<int>(text.size()),
-                out.data(),
-                required,
-                nullptr,
-                nullptr);
-            return out;
-        }
-
-        [[nodiscard]] static std::string clipboard_read_text()
-        {
-            std::string out{};
-            if (!::OpenClipboard(nullptr))
-                return out;
-
-            if (HANDLE handle = ::GetClipboardData(CF_UNICODETEXT))
-            {
-                if (const auto* wide = static_cast<const wchar_t*>(::GlobalLock(handle)))
-                {
-                    out = wide_to_utf8(std::wstring_view{ wide });
-                    ::GlobalUnlock(handle);
-                }
-            }
-
-            ::CloseClipboard();
-            return out;
-        }
-
-        [[nodiscard]] static bool clipboard_write_text(std::string_view text)
-        {
-            if (!::OpenClipboard(nullptr))
-                return false;
-
-            const std::wstring wide = utf8_to_wide(text);
-            const SIZE_T bytes = (wide.size() + 1u) * sizeof(wchar_t);
-            HGLOBAL memory = ::GlobalAlloc(GMEM_MOVEABLE, bytes);
-            if (!memory)
-            {
-                ::CloseClipboard();
-                return false;
-            }
-
-            bool wrote = false;
-            if (void* locked = ::GlobalLock(memory))
-            {
-                std::memcpy(locked, wide.c_str(), bytes);
-                ::GlobalUnlock(memory);
-                ::EmptyClipboard();
-                if (!::SetClipboardData(CF_UNICODETEXT, memory))
-                    ::GlobalFree(memory);
-                else
-                    wrote = true;
-            }
-            else
-            {
-                ::GlobalFree(memory);
-            }
-
-            ::CloseClipboard();
-            return wrote;
-        }
-#else
-        [[nodiscard]] static std::string clipboard_read_text()
-        {
-            return {};
-        }
-
-        [[nodiscard]] static bool clipboard_write_text(std::string_view)
-        {
-            return false;
-        }
-#endif
 
         static void append_text_limited(std::string& text, std::string_view incoming, std::size_t limit, bool multiline, bool& changed)
         {
@@ -2810,7 +2537,11 @@ namespace epochengine::gui
             char32_t right,
             float scale) noexcept
         {
-            const auto& fontCache = active_font_cache();
+            const auto& leftFont = font_cache_for_codepoint(left);
+            const auto& rightFont = font_cache_for_codepoint(right);
+            const auto& fontCache = leftFont.asset
+                && leftFont.asset->coverage == font::GlyphCoverage::basic_latin
+                ? rightFont : leftFont;
             if (!fontCache.asset)
                 return 0.0f;
 
@@ -3004,7 +2735,8 @@ namespace epochengine::gui
             return advance;
         }
 
-        [[nodiscard]] static float measure_wrapped_text_height(std::string_view text, float width, float scale) noexcept
+        [[nodiscard]] static float measure_wrapped_text_height(std::string_view text, float width, float scale,
+            bool preserveIndentation = false) noexcept
         {
             ensure_resources();
             const float effectiveWidth = (std::max)(space_advance(scale), width);
@@ -3033,14 +2765,17 @@ namespace epochengine::gui
                 {
                     std::size_t runEnd = byteIndex;
                     float whitespaceAdvance = 0.0f;
-                    while (runEnd < text.size() && is_wrap_space(text[runEnd]))
+                    while (runEnd < text.size())
                     {
+                        const auto whitespace = decode_utf8_codepoint(text, runEnd);
+                        const auto space = safe_draw_codepoint(whitespace.codepoint);
+                        if (!is_wrap_space(space)) break;
                         const auto next = next_drawable_char(text, runEnd);
-                        whitespaceAdvance += glyph_advance_with_kerning(static_cast<unsigned char>(text[runEnd]), next, scale);
-                        ++runEnd;
+                        whitespaceAdvance += glyph_advance_with_kerning(space, next, scale);
+                        runEnd += (std::max)(std::size_t{1u}, whitespace.byte_count);
                     }
 
-                    if (penX <= 0.0f)
+                    if (penX <= 0.0f && !preserveIndentation)
                     {
                         i = runEnd - 1;
                         continue;
@@ -3113,11 +2848,14 @@ namespace epochengine::gui
                 {
                     std::size_t runEnd = byteIndex;
                     float whitespaceAdvance = 0.0f;
-                    while (runEnd < text.size() && is_wrap_space(text[runEnd]))
+                    while (runEnd < text.size())
                     {
+                        const auto whitespace = decode_utf8_codepoint(text, runEnd);
+                        const auto space = safe_draw_codepoint(whitespace.codepoint);
+                        if (!is_wrap_space(space)) break;
                         const auto next = next_drawable_char(text, runEnd);
-                        whitespaceAdvance += glyph_advance_with_kerning(static_cast<unsigned char>(text[runEnd]), next, scale);
-                        ++runEnd;
+                        whitespaceAdvance += glyph_advance_with_kerning(space, next, scale);
+                        runEnd += (std::max)(std::size_t{1u}, whitespace.byte_count);
                     }
 
                     if (penX <= x)
@@ -3165,6 +2903,140 @@ namespace epochengine::gui
             return { penX, caretTop };
         }
 
+        enum class CodeInk { plain, keyword, value };
+
+        struct CodeLexeme
+        {
+            std::size_t end{};
+            CodeInk ink{CodeInk::plain};
+        };
+
+        // Scan source bytes, independently of wrapping, clipping and frame count.
+        // A partial stream may finish its last token later; completed tokens keep
+        // their meaning. This is display classification, never source validation.
+        [[nodiscard]] static CodeLexeme code_lexeme_at(std::string_view text,
+            std::size_t begin) noexcept
+        {
+            if (begin >= text.size()) return {text.size()};
+            const auto digit = [](char c) { return c >= '0' && c <= '9'; };
+            const auto word = [&](char c) {
+                return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+                    || digit(c) || c == '_' || static_cast<unsigned char>(c) >= 0x80u;
+            };
+            const char c = text[begin];
+            const auto remaining = text.substr(begin);
+            if (remaining.starts_with("//"))
+            {
+                auto end = text.find('\n', begin + 2u);
+                while (end != text.npos)
+                {
+                    auto previous = end;
+                    if (previous > begin && text[previous - 1u] == '\r') --previous;
+                    if (previous <= begin || text[previous - 1u] != '\\') break;
+                    end = text.find('\n', end + 1u);
+                }
+                return {end == text.npos ? text.size() : end};
+            }
+            if (remaining.starts_with("/*"))
+            {
+                const auto end = text.find("*/", begin + 2u);
+                return {end == text.npos ? text.size() : end + 2u};
+            }
+
+            // Raw and prefixed C++ literals must be recognized before identifiers.
+            auto quote = begin;
+            if (remaining.starts_with("u8")) quote += 2u;
+            else if (c == 'u' || c == 'U' || c == 'L') ++quote;
+            if (quote < text.size() && text[quote] == 'R'
+                && quote + 1u < text.size() && text[quote + 1u] == '"')
+            {
+                const auto delimiter = quote + 2u;
+                auto open = delimiter;
+                while (open < text.size() && open - delimiter <= 16u
+                    && text[open] != '(' && text[open] != '\\'
+                    && static_cast<unsigned char>(text[open]) > 0x20u
+                    && text[open] != ')') ++open;
+                if (open < text.size() && open - delimiter <= 16u && text[open] == '(')
+                {
+                    const auto tag = text.substr(delimiter, open - delimiter);
+                    auto close = text.find(')', open + 1u);
+                    while (close != text.npos)
+                    {
+                        const auto tail = text.substr(close + 1u);
+                        if (tail.starts_with(tag) && tail.size() > tag.size()
+                            && tail[tag.size()] == '"')
+                            return {close + 2u + tag.size(), CodeInk::value};
+                        close = text.find(')', close + 1u);
+                    }
+                    return {text.size(), CodeInk::value};
+                }
+            }
+            if (quote < text.size() && (text[quote] == '"' || text[quote] == '\''))
+            {
+                const auto mark = text[quote];
+                auto end = quote + 1u;
+                bool closed{};
+                for (; end < text.size(); ++end)
+                {
+                    if (text[end] == '\n' || text[end] == '\r') break;
+                    if (text[end] == '\\' && end + 1u < text.size())
+                    {
+                        ++end;
+                        if (text[end] == '\r' && end + 1u < text.size() && text[end + 1u] == '\n') ++end;
+                        continue;
+                    }
+                    if (text[end] == mark) { ++end; closed = true; break; }
+                }
+                auto next = end;
+                while (next < text.size() && std::string_view{" \t\r\n"}.find(text[next]) != text.npos) ++next;
+                auto previous = begin;
+                while (previous > 0u && std::string_view{" \t\r\n"}.find(text[previous - 1u]) != text.npos) --previous;
+                const bool keyPosition = previous > 0u
+                    && (text[previous - 1u] == '{' || text[previous - 1u] == ',');
+                return {end, closed && mark == '"' && keyPosition && next < text.size() && text[next] == ':'
+                    ? CodeInk::keyword : CodeInk::value};
+            }
+            if (digit(c) || (c == '.' && begin + 1u < text.size() && digit(text[begin + 1u])))
+            {
+                auto end = begin + 1u;
+                while (end < text.size())
+                {
+                    const auto ch = text[end];
+                    if (word(ch) || ch == '.' || ch == '\'') { ++end; continue; }
+                    if ((ch == '+' || ch == '-')
+                        && std::string_view{"eEpP"}.find(text[end - 1u]) != text.npos) { ++end; continue; }
+                    break;
+                }
+                return {end, CodeInk::value};
+            }
+            if (word(c))
+            {
+                auto end = begin + 1u;
+                while (end < text.size() && word(text[end])) ++end;
+                const auto token = text.substr(begin, end - begin);
+                if (token == "true" || token == "false" || token == "nullptr" || token == "null")
+                    return {end, CodeInk::value};
+                static constexpr std::string_view keywords[]{
+                    "alignas", "alignof", "and", "and_eq", "asm", "auto", "bitand", "bitor",
+                    "bool", "break", "case", "catch", "char", "char8_t", "char16_t", "char32_t",
+                    "class", "compl", "concept", "const", "consteval", "constexpr", "constinit",
+                    "const_cast", "continue", "co_await", "co_return", "co_yield", "decltype",
+                    "default", "delete", "do", "double", "dynamic_cast", "else", "enum",
+                    "explicit", "export", "extern", "float", "for", "friend", "goto", "if",
+                    "import", "inline", "int", "long", "module", "mutable", "namespace", "new",
+                    "noexcept", "not", "not_eq", "operator", "or", "or_eq", "private", "protected",
+                    "public", "register", "reinterpret_cast", "requires", "return", "short",
+                    "signed", "sizeof", "static", "static_assert", "static_cast", "struct",
+                    "switch", "template", "this", "thread_local", "throw", "try", "typedef",
+                    "typeid", "typename", "union", "unsigned", "using", "virtual", "void",
+                    "volatile", "wchar_t", "while", "xor", "xor_eq"};
+                return {end, std::ranges::find(keywords, token) != std::end(keywords)
+                    ? CodeInk::keyword : CodeInk::plain};
+            }
+            return {begin + 1u, std::string_view{"{}[]():,;#<>+-*/%=!&|^~?"}.find(c) != text.npos
+                ? CodeInk::keyword : CodeInk::plain};
+        }
+
         static float draw_wrapped_text(std::string_view text, float x, float y,
             float width, float scale, bool emphasizeStatus = false,
             bool emphasizeCode = false)
@@ -3197,61 +3069,16 @@ namespace epochengine::gui
                     keywordEnd = keyword.word.empty() ? byteIndex : byteIndex + keyword.word.size();
                     keywordFont = keyword.font && keyword.font->asset ? keyword.font : nullptr;
                 }
-                // Tool payloads retain their exact bytes and ordinary text
-                // geometry. Color only literal strings, punctuation and values;
-                // never interpret their contents as markup or commands.
+                // Keep token state in source coordinates, not visual line positions.
                 if (emphasizeCode && byteIndex >= keywordEnd)
                 {
-                    keywordFont = nullptr;
-                    keywordEnd = byteIndex;
-                    const char c = text[byteIndex];
-                    const bool light = g_frame.activeTheme == ThemeVariant::DefaultLight;
+                    const auto token = code_lexeme_at(text, byteIndex);
+                    keywordEnd = token.end;
+                    const bool light = active_palette_is_light();
                     const auto* info = light ? &g_resources.statusInfoLightFont : &g_resources.statusInfoFont;
                     const auto* value = light ? &g_resources.statusSuccessLightFont : &g_resources.statusSuccessFont;
-                    if (c == '"' || c == '\'')
-                    {
-                        std::size_t end = byteIndex + 1u;
-                        for (; end < text.size(); ++end)
-                        {
-                            if (text[end] == '\\' && end + 1u < text.size()) { ++end; continue; }
-                            if (text[end] == c) { ++end; break; }
-                        }
-                        keywordEnd = end;
-                        auto next = end;
-                        while (next < text.size()
-                            && (text[next] == ' ' || text[next] == '\t'
-                                || text[next] == '\r' || text[next] == '\n')) ++next;
-                        keywordFont = next < text.size() && text[next] == ':' ? info : value;
-                    }
-                    else if (std::string_view{"{}[]():,;"}.find(c) != std::string_view::npos)
-                    {
-                        keywordEnd = byteIndex + 1u;
-                        keywordFont = info;
-                    }
-                    else if (c >= '0' && c <= '9')
-                    {
-                        keywordEnd = byteIndex + 1u;
-                        keywordFont = value;
-                    }
-                    else if ((c >= 'a' && c <= 'z') || c == '_')
-                    {
-                        const auto isWord = [](char ch) noexcept {
-                            return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z')
-                                || (ch >= '0' && ch <= '9') || ch == '_';
-                        };
-                        auto end = byteIndex + 1u;
-                        while (end < text.size() && isWord(text[end])) ++end;
-                        const auto word = text.substr(byteIndex, end - byteIndex);
-                        static constexpr std::array<std::string_view, 18> words{
-                            "auto", "bool", "class", "const", "constexpr", "enum",
-                            "export", "false", "import", "namespace", "nullptr", "return",
-                            "static", "struct", "true", "using", "void", "null"};
-                        keywordEnd = end;
-                        if ((byteIndex == 0u || !isWord(text[byteIndex - 1u]))
-                            && std::ranges::find(words, word) != words.end())
-                            keywordFont = word == "true" || word == "false" || word == "null"
-                                || word == "nullptr" ? value : info;
-                    }
+                    keywordFont = token.ink == CodeInk::keyword ? info
+                        : token.ink == CodeInk::value ? value : nullptr;
                     if (keywordFont && !keywordFont->asset) keywordFont = nullptr;
                 }
                 const DecodedUtf8Codepoint decoded =
@@ -3273,14 +3100,17 @@ namespace epochengine::gui
                 {
                     std::size_t runEnd = byteIndex;
                     float whitespaceAdvance = 0.0f;
-                    while (runEnd < text.size() && is_wrap_space(text[runEnd]))
+                    while (runEnd < text.size())
                     {
+                        const auto whitespace = decode_utf8_codepoint(text, runEnd);
+                        const auto space = safe_draw_codepoint(whitespace.codepoint);
+                        if (!is_wrap_space(space)) break;
                         const auto next = next_drawable_char(text, runEnd);
-                        whitespaceAdvance += glyph_advance_with_kerning(static_cast<unsigned char>(text[runEnd]), next, scale);
-                        ++runEnd;
+                        whitespaceAdvance += glyph_advance_with_kerning(space, next, scale);
+                        runEnd += (std::max)(std::size_t{1u}, whitespace.byte_count);
                     }
 
-                    if (penX <= x)
+                    if (penX <= x && !emphasizeCode)
                     {
                         i = runEnd - 1;
                         continue;
@@ -3329,8 +3159,16 @@ namespace epochengine::gui
 
                 if (ch != ' ' && ch != '\t')
                 {
-                    if (const auto* glyph = keywordFont && byteIndex < keywordEnd
-                        ? lookup_glyph_from_cache(*keywordFont, ch) : lookup_glyph(ch))
+                    const auto* glyph = lookup_glyph(ch);
+                    if (keywordFont && byteIndex < keywordEnd)
+                    {
+                        const auto* colored = lookup_glyph_from_cache(*keywordFont, ch);
+                        // Optional color sheets have smaller coverage. Preserve
+                        // the actual character instead of drawing their '?' fallback.
+                        if (colored && colored->handle.is_valid()
+                            && (ch == U'?' || colored != keywordFont->fallbackGlyph)) glyph = colored;
+                    }
+                    if (glyph)
                     {
                         const float drawW = glyph->size_px.x * scale;
                         const float drawH = glyph->size_px.y * scale;
@@ -3370,6 +3208,79 @@ namespace epochengine::gui
             return baseHeight + static_cast<float>(lines - 1) * lineAdvance;
         }
 
+        // One measured/drawn surface for structured tool code and its prose.
+        // Ranges point into the derived string; they never interpret model markup.
+        static float chat_activity_detail_surface(const ChatActivityEvent& item,
+            std::string_view text, bool raw, float x, float y, float width,
+            float scale, bool draw)
+        {
+            width = (std::max)(1.0f, width);
+            const float unit = (std::max)(0.5f, scale);
+            const float gap = 6.0f * unit;
+            const float border = (std::min)(unit, width * 0.2f);
+            const float padX = (std::min)(10.0f * unit, (width - 2.0f * border) * 0.2f);
+            const float padY = 10.0f * unit;
+            float offset{};
+            const auto piece = [&](std::string_view part, bool code)
+            {
+                if (!code)
+                {
+                    while (!part.empty() && (part.front() == '\n' || part.front() == '\r')) part.remove_prefix(1u);
+                    while (!part.empty() && (part.back() == '\n' || part.back() == '\r')) part.remove_suffix(1u);
+                }
+                if (!code && part.find_first_not_of(" \t\r\n") == part.npos) return;
+                const float inset = code ? border + padX : 0.0f;
+                const float innerWidth = (std::max)(1.0f, width - 2.0f * inset);
+                const float textHeight = measure_wrapped_text_height(part, innerWidth, scale, code);
+                const float height = textHeight + (code ? 2.0f * (border + padY) : 0.0f);
+                if (draw)
+                {
+                    if (code)
+                    {
+                        const auto& palette = active_palette();
+                        draw_rounded_sprite(palette.buttonHover, x, y + offset, width, height,
+                            gui_lib::rounded_rect::RoundedRectStyle{.enabled = true, .control_radius = 8.0f * unit});
+                        // A distinct surface from the conversation background:
+                        // ink on a light input card; light text on dark control slate.
+                        draw_rounded_sprite(palette.isLight ? palette.textField : palette.buttonNormal,
+                            x + border, y + offset + border,
+                            (std::max)(1.0f, width - 2.0f * border), height - 2.0f * border,
+                            gui_lib::rounded_rect::RoundedRectStyle{.enabled = true, .control_radius = 6.0f * unit});
+                        const ContentClipScope clip{{x + inset, y + offset + border + padY},
+                            {x + width - inset, y + offset + height - border - padY}};
+                        draw_wrapped_text(part, x + inset, y + offset + border + padY,
+                            innerWidth, scale, false, true);
+                    }
+                    else draw_wrapped_text(part, x, y + offset, innerWidth, scale);
+                }
+                offset += height + gap;
+            };
+            const bool structured = !raw && !item.display_detail.empty()
+                && text == item.display_detail && !item.display_code_ranges.empty();
+            bool valid = structured;
+            std::size_t previous{};
+            if (valid) for (const auto& [begin, size] : item.display_code_ranges)
+            {
+                if (begin < previous || begin > text.size() || size > text.size() - begin)
+                { valid = false; break; }
+                previous = begin + size;
+            }
+            if (valid)
+            {
+                std::size_t begin{};
+                for (const auto& [codeBegin, codeSize] : item.display_code_ranges)
+                {
+                    piece(text.substr(begin, codeBegin - begin), false);
+                    piece(text.substr(codeBegin, codeSize), true);
+                    begin = codeBegin + codeSize;
+                }
+                piece(text.substr(begin), false);
+            }
+            else piece(text, raw || item.tool || item.summary == "Tool arguments"
+                || (item.summary == "Response tokens" && text.find("```") != text.npos));
+            return (std::max)(0.0f, offset - gap);
+        }
+
         static void draw_text_line(std::string_view text, float x, float y, float scale, std::optional<float> indent = std::nullopt)
         {
             ensure_resources();
@@ -3401,7 +3312,7 @@ namespace epochengine::gui
                     continue;
                 }
 
-                if (const auto* glyph = lookup_glyph(ch))
+                if (const auto* glyph = ch == U'\t' ? nullptr : lookup_glyph(ch))
                 {
                     if (glyph->handle.is_valid())
                     {
@@ -3451,14 +3362,39 @@ namespace epochengine::gui
             }
         }
 
-        static void draw_close_mark(Vec2 position, Vec2 size)
+        static void draw_caption_text(std::string_view text, float x, float y, float scale)
+        {
+            const auto* previous = g_temporaryTextFont;
+            if (active_palette().captionUsesLightText && g_resources.font.asset)
+                g_temporaryTextFont = &g_resources.font;
+            draw_text_line(text, x, y, scale);
+            g_temporaryTextFont = previous;
+        }
+
+        static void draw_contrast_text(std::string_view text, float x, float y, float scale)
+        {
+            const auto* previous = g_temporaryTextFont;
+            const auto& font = active_palette().isLight ? g_resources.darkTextFont : g_resources.font;
+            if (font.asset) g_temporaryTextFont = &font;
+            draw_text_line(text, x, y, scale);
+            g_temporaryTextFont = previous;
+        }
+
+        static void draw_close_mark(Vec2 position, Vec2 size,
+            bool hovered = false, bool pressed = false, bool title_bar = false)
         {
             ensure_resources();
             if (!g_frame.ctx)
                 return;
 
             const float scale = kFontScale * 0.65f;
-            const auto* glyph = lookup_glyph(U'X');
+            const auto& palette = active_palette();
+            const bool lightInk = title_bar ? palette.captionUsesLightText : !palette.isLight;
+            const auto& normalFont = lightInk ? g_resources.font : g_resources.darkTextFont;
+            const auto& feedbackFont = lightInk ? g_resources.statusErrorFont : g_resources.statusErrorLightFont;
+            const auto* glyph = lookup_glyph_from_cache(
+                (hovered || pressed) && feedbackFont.asset ? feedbackFont : normalFont, U'X');
+            if (!glyph) glyph = lookup_glyph_from_cache(normalFont, U'X');
             if (!glyph || !glyph->handle.is_valid())
                 return;
 
@@ -3470,7 +3406,7 @@ namespace epochengine::gui
                 return;
             const float x = position.x + std::floor((size.x - width) * 0.5f);
             const float y = position.y + std::floor((size.y - height) * 0.5f);
-            if (const auto* shadowGlyph = g_temporaryTextFont
+            if (const auto* shadowGlyph = !lightInk
                 ? nullptr : lookup_shadow_glyph(U'X');
                 shadowGlyph && shadowGlyph->handle.is_valid())
             {
@@ -3540,13 +3476,6 @@ namespace epochengine::gui
             std::size_t minimumReserve) noexcept
         {
             std::shared_ptr<std::vector<QueuedSpriteDraw>> candidate;
-            if (!pending.empty())
-            {
-                candidate = std::make_shared<std::vector<QueuedSpriteDraw>>();
-                candidate->swap(pending);
-                pending.reserve((std::max)(candidate->size(), minimumReserve));
-            }
-
             for (;;)
             {
                 std::shared_ptr<std::vector<QueuedSpriteDraw>> previous;
@@ -3557,10 +3486,16 @@ namespace epochengine::gui
 
                 // Published vectors are immutable. Keep the observed snapshot
                 // alive while comparing without holding the renderer's lock.
-                if (!candidate && previous && !previous->empty())
+                const auto& desired = candidate ? *candidate : pending;
+                const bool unchanged = previous
+                    ? same_queued_draws(*previous, desired) : desired.empty();
+                if (!unchanged && !candidate)
+                {
                     candidate = std::make_shared<std::vector<QueuedSpriteDraw>>();
-                const bool unchanged = !candidate
-                    || (previous && same_queued_draws(*previous, *candidate));
+                    candidate->swap(pending);
+                    if (!candidate->empty())
+                        pending.reserve((std::max)(candidate->size(), minimumReserve));
+                }
                 {
                     std::scoped_lock lock(g_deferredBatchMutex);
                     auto& batch = batches[ctx];
@@ -3572,6 +3507,10 @@ namespace epochengine::gui
                         ++batch.generation;
                     }
                 }
+                // Unchanged frames retain the existing pending vector store.
+                // No published storage is modified, and destruction stays out
+                // of the renderer's publication lock.
+                pending.clear();
                 // Both references, including retired vector storage, are
                 // released only after the publication lock has been dropped.
                 return;
@@ -3651,12 +3590,17 @@ namespace epochengine::gui
             { "System Light/Dark", ThemePreference::FollowSystemDark },
             { "Light", ThemePreference::Light },
             { "Dark", ThemePreference::Dark },
-            { "Classic Launcher", ThemePreference::ClassicLauncher },
+            { "Classic Theme", ThemePreference::ClassicLauncher },
             { "Midnight Blue", ThemePreference::MidnightBlue },
             { "Ember Forge", ThemePreference::EmberForge },
             { "Forest Terminal", ThemePreference::ForestTerminal },
             { "Aurora Steel", ThemePreference::AuroraSteel },
-            { "Codex", ThemePreference::CodexBlack },
+            { "Codex Black", ThemePreference::CodexBlack },
+            { "Graphite Copper", ThemePreference::GraphiteCopper },
+            { "Slate Orchard", ThemePreference::SlateOrchard },
+            { "Indigo Quartz", ThemePreference::IndigoQuartz },
+            { "Signal Plum", ThemePreference::SignalPlum },
+            { "Forged Steel", ThemePreference::ForgedSteel },
             { "Theme Cycle", ThemePreference::ThemeCycle }
         };
         return std::span<const ThemePreferenceChoice>{kChoices};
@@ -3730,7 +3674,7 @@ namespace epochengine::gui
         if (preference == ThemePreference::ThemeCycle)
         {
             using Clock = std::chrono::steady_clock;
-            constexpr std::array<ThemeVariant, 8> kCycle{{
+            constexpr std::array<ThemeVariant, 13> kCycle{{
                 ThemeVariant::DefaultDark,
                 ThemeVariant::DefaultLight,
                 ThemeVariant::ClassicLauncher,
@@ -3738,7 +3682,12 @@ namespace epochengine::gui
                 ThemeVariant::EmberForge,
                 ThemeVariant::ForestTerminal,
                 ThemeVariant::AuroraSteel,
-                ThemeVariant::CodexBlack
+                ThemeVariant::CodexBlack,
+                ThemeVariant::GraphiteCopper,
+                ThemeVariant::SlateOrchard,
+                ThemeVariant::IndigoQuartz,
+                ThemeVariant::SignalPlum,
+                ThemeVariant::ForgedSteel
             }};
             const auto index = static_cast<std::size_t>(
                 g_themeCycle.slot(Clock::now()) % kCycle.size());
@@ -3769,6 +3718,16 @@ namespace epochengine::gui
             return ThemeVariant::AuroraSteel;
         case ThemePreference::CodexBlack:
             return ThemeVariant::CodexBlack;
+        case ThemePreference::GraphiteCopper:
+            return ThemeVariant::GraphiteCopper;
+        case ThemePreference::SlateOrchard:
+            return ThemeVariant::SlateOrchard;
+        case ThemePreference::IndigoQuartz:
+            return ThemeVariant::IndigoQuartz;
+        case ThemePreference::SignalPlum:
+            return ThemeVariant::SignalPlum;
+        case ThemePreference::ForgedSteel:
+            return ThemeVariant::ForgedSteel;
         case ThemePreference::RemovedLegacyTheme: // Stored ordinal 11: backward-compatible Dark migration.
             return ThemeVariant::DefaultDark;
         case ThemePreference::FollowSystemDark:
@@ -3787,7 +3746,7 @@ namespace epochengine::gui
         g_publishedWindowVariant.store(g_frame.activeTheme, std::memory_order_relaxed);
         if (preference == ThemePreference::ThemeCycle)
             g_cycleWindowDark.store(
-                g_frame.activeTheme != ThemeVariant::DefaultLight,
+                !active_palette_is_light(),
                 std::memory_order_relaxed);
         g_nativeWindowTheme.store(preference, std::memory_order_release);
     }
@@ -3813,6 +3772,11 @@ namespace epochengine::gui
         case ThemeVariant::ForestTerminal: index = 5u; break;
         case ThemeVariant::AuroraSteel: index = 6u; break;
         case ThemeVariant::CodexBlack: index = 7u; break;
+        case ThemeVariant::GraphiteCopper: index = 8u; break;
+        case ThemeVariant::SlateOrchard: index = 9u; break;
+        case ThemeVariant::IndigoQuartz: index = 10u; break;
+        case ThemeVariant::SignalPlum: index = 11u; break;
+        case ThemeVariant::ForgedSteel: index = 12u; break;
         default: break;
         }
         const auto& spec = theme_detail::palette_at(index);
@@ -3822,7 +3786,7 @@ namespace epochengine::gui
             .backgroundRgb = theme_detail::packed_rgb(spec.window),
             .captionRgb = theme_detail::packed_rgb(spec.title),
             .borderRgb = theme_detail::packed_rgb(spec.hover),
-            .textRgb = spec.isLight ? 0x19273Au : 0xF6F7F8u
+            .textRgb = spec.isLight && !spec.captionUsesLightText ? 0x19273Au : 0xF6F7F8u
         };
     }
 
@@ -3837,7 +3801,7 @@ namespace epochengine::gui
         case ThemePreference::ThemeCycle:
             return g_cycleWindowDark.load(std::memory_order_relaxed);
         default:
-            return true;
+            return !native_window_chrome_palette().isLight;
         }
     }
 
@@ -3869,7 +3833,10 @@ namespace epochengine::gui
 
     bool rounded_rectangles_enabled() noexcept
     {
-        return g_frame.roundedRectStyle.enabled;
+        // Classic uses the existing square-control path, without changing the
+        // saved rounding preference when another theme is selected.
+        return g_frame.roundedRectStyle.enabled
+            && g_frame.activeTheme != ThemeVariant::ClassicLauncher;
     }
 
     void push_rounded_rectangles(bool enabled) noexcept
@@ -3893,6 +3860,37 @@ namespace epochengine::gui
         {
             g_frame.roundedRectStyle = {};
         }
+    }
+
+    ContentClipScope::ContentClipScope(Vec2 clipMin, Vec2 clipMax) noexcept
+    {
+        previousMin = g_frame.contentMin;
+        previousMax = g_frame.contentMax;
+        g_frame.contentMin = {
+            (std::max)(previousMin.x, clipMin.x),
+            (std::max)(previousMin.y, clipMin.y)};
+        g_frame.contentMax = {
+            (std::min)(previousMax.x, clipMax.x),
+            (std::min)(previousMax.y, clipMax.y)};
+    }
+
+    ContentClipScope::~ContentClipScope() noexcept
+    {
+        g_frame.contentMin = previousMin;
+        g_frame.contentMax = previousMax;
+    }
+
+    ScopedTextScale::ScopedTextScale(float factor) noexcept
+        : previous_(kFontScale)
+    {
+        const float scaled = previous_ * factor;
+        if (std::isfinite(scaled) && scaled > 0.0f)
+            kFontScale = scaled;
+    }
+
+    ScopedTextScale::~ScopedTextScale() noexcept
+    {
+        kFontScale = previous_;
     }
 
     ScopedRoundedRectangles::ScopedRoundedRectangles(bool enabled) noexcept
@@ -3921,6 +3919,8 @@ namespace epochengine::gui
         if (active_)
             pop_theme();
     }
+
+    [[nodiscard]] static const GuiFontCache* semantic_text_font(SemanticTone tone) noexcept;
 
 #include "controls/gui.window_controls.inl"
 #include "controls/gui.buttons_images.inl"

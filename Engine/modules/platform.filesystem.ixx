@@ -43,6 +43,8 @@ module;
 #else
 #include <cerrno>
 #include <fcntl.h>
+#include <sys/file.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #endif
 
@@ -50,10 +52,132 @@ export module platform.filesystem;
 
 export namespace epochengine::platform::filesystem
 {
+    enum class FileLeaseCode : std::uint8_t { acquired, busy, invalid_path, io_error };
+
+    // A persistent, empty coordination file. Closing the native handle releases
+    // the lease; the file is never deleted or truncated. The OS also releases it
+    // when its owning process exits. This is coordination, not OS confinement.
+    class ExclusiveFileLease final
+    {
+    public:
+        ExclusiveFileLease() noexcept = default;
+        ExclusiveFileLease(const ExclusiveFileLease&) = delete;
+        ExclusiveFileLease& operator=(const ExclusiveFileLease&) = delete;
+        ExclusiveFileLease(ExclusiveFileLease&& other) noexcept
+            : native_(std::exchange(other.native_, -1)), code_(std::exchange(other.code_,FileLeaseCode::invalid_path)) {}
+        ExclusiveFileLease& operator=(ExclusiveFileLease&& other) noexcept
+        {
+            if(this!=&other) { reset();native_=std::exchange(other.native_,-1);code_=std::exchange(other.code_,FileLeaseCode::invalid_path); }
+            return *this;
+        }
+        ~ExclusiveFileLease() noexcept { reset(); }
+        [[nodiscard]] explicit operator bool() const noexcept { return native_!=-1; }
+        [[nodiscard]] FileLeaseCode code() const noexcept { return code_; }
+        [[nodiscard]] static ExclusiveFileLease acquire(const std::filesystem::path& path) noexcept;
+        void reset() noexcept
+        {
+            if(native_==-1)return;
+#if defined(_WIN32)
+            (void)::CloseHandle(reinterpret_cast<HANDLE>(native_));
+#else
+            (void)::close(static_cast<int>(native_));
+#endif
+            native_=-1;
+            code_=FileLeaseCode::invalid_path;
+        }
+    private:
+        explicit ExclusiveFileLease(FileLeaseCode code,std::intptr_t native=-1) noexcept
+            :native_(native),code_(code) {}
+        std::intptr_t native_{-1};
+        FileLeaseCode code_{FileLeaseCode::invalid_path};
+    };
+
+    [[nodiscard]] inline ExclusiveFileLease ExclusiveFileLease::acquire(const std::filesystem::path& path) noexcept
+    {
+        try
+        {
+            const auto normalized=path.lexically_normal();
+            if(!path.is_absolute()||normalized!=path||normalized.filename().empty()
+                ||normalized.filename()=="."||normalized.filename()=="..")return ExclusiveFileLease{FileLeaseCode::invalid_path};
+#if defined(_WIN32)
+            auto ancestor=normalized.root_path();
+            for(const auto& component:normalized.relative_path().parent_path())
+            {
+                ancestor/=component;
+                const DWORD attributes=::GetFileAttributesW(ancestor.c_str());
+                if(attributes==INVALID_FILE_ATTRIBUTES ||!(attributes&FILE_ATTRIBUTE_DIRECTORY)
+                    ||(attributes&FILE_ATTRIBUTE_REPARSE_POINT))return ExclusiveFileLease{FileLeaseCode::invalid_path};
+            }
+            const DWORD attributes=::GetFileAttributesW(normalized.c_str());
+            if(attributes!=INVALID_FILE_ATTRIBUTES
+                &&(attributes&(FILE_ATTRIBUTE_DIRECTORY|FILE_ATTRIBUTE_REPARSE_POINT)))
+                return ExclusiveFileLease{FileLeaseCode::invalid_path};
+            const HANDLE handle=::CreateFileW(normalized.c_str(),GENERIC_READ|GENERIC_WRITE,0,nullptr,
+                OPEN_ALWAYS,FILE_ATTRIBUTE_NORMAL|FILE_FLAG_OPEN_REPARSE_POINT,nullptr);
+            if(handle==INVALID_HANDLE_VALUE)
+            {
+                const DWORD error=::GetLastError();
+                return ExclusiveFileLease{error==ERROR_SHARING_VIOLATION||error==ERROR_LOCK_VIOLATION
+                    ?FileLeaseCode::busy:FileLeaseCode::io_error};
+            }
+            ExclusiveFileLease lease{FileLeaseCode::acquired,reinterpret_cast<std::intptr_t>(handle)};
+            BY_HANDLE_FILE_INFORMATION information{};
+            if(::GetFileType(handle)!=FILE_TYPE_DISK||!::GetFileInformationByHandle(handle,&information)
+                ||(information.dwFileAttributes&(FILE_ATTRIBUTE_DIRECTORY|FILE_ATTRIBUTE_REPARSE_POINT))
+                ||information.nFileSizeHigh!=0u||information.nFileSizeLow!=0u||information.nNumberOfLinks!=1u)
+                return ExclusiveFileLease{FileLeaseCode::invalid_path};
+            const DWORD length=::GetFinalPathNameByHandleW(handle,nullptr,0,FILE_NAME_NORMALIZED|VOLUME_NAME_DOS);
+            if(length==0u||length>32768u)return ExclusiveFileLease{FileLeaseCode::io_error};
+            std::wstring actual(length,L'\0');
+            const DWORD written=::GetFinalPathNameByHandleW(handle,actual.data(),length,FILE_NAME_NORMALIZED|VOLUME_NAME_DOS);
+            if(written==0u||written>=length)return ExclusiveFileLease{FileLeaseCode::io_error};
+            actual.resize(written);
+            if(actual.starts_with(L"\\\\?\\UNC\\"))actual=L"\\\\"+actual.substr(8u);
+            else if(actual.starts_with(L"\\\\?\\"))actual.erase(0u,4u);
+            const auto expected=normalized.wstring();
+            if(::CompareStringOrdinal(actual.data(),static_cast<int>(actual.size()),expected.data(),
+                static_cast<int>(expected.size()),TRUE)!=CSTR_EQUAL)return ExclusiveFileLease{FileLeaseCode::invalid_path};
+            return lease;
+#else
+            // Resolve each parent relative to an already open directory. A
+            // replaced parent cannot redirect the final open through a symlink.
+            struct Directory final {int descriptor{-1};~Directory(){if(descriptor>=0)::close(descriptor);}};
+            Directory directory{::open(normalized.root_path().c_str(),O_RDONLY|O_DIRECTORY|O_CLOEXEC)};
+            if(directory.descriptor<0)return ExclusiveFileLease{FileLeaseCode::io_error};
+            for(const auto& component:normalized.relative_path().parent_path())
+            {
+                const int next=::openat(directory.descriptor,component.c_str(),O_RDONLY|O_DIRECTORY|O_CLOEXEC|O_NOFOLLOW);
+                if(next<0)return ExclusiveFileLease{errno==ELOOP||errno==ENOTDIR?FileLeaseCode::invalid_path:FileLeaseCode::io_error};
+                ::close(directory.descriptor);directory.descriptor=next;
+            }
+            struct stat existing{};
+            if(::fstatat(directory.descriptor,normalized.filename().c_str(),&existing,AT_SYMLINK_NOFOLLOW)==0)
+            {
+                if(!S_ISREG(existing.st_mode)||existing.st_size!=0||existing.st_nlink!=1)
+                    return ExclusiveFileLease{FileLeaseCode::invalid_path};
+            }
+            else if(errno!=ENOENT)return ExclusiveFileLease{FileLeaseCode::io_error};
+            const int descriptor=::openat(directory.descriptor,normalized.filename().c_str(),
+                O_RDWR|O_CREAT|O_CLOEXEC|O_NOFOLLOW|O_NONBLOCK,0600);
+            if(descriptor<0)return ExclusiveFileLease{errno==ELOOP||errno==ENOTDIR||errno==EISDIR
+                ?FileLeaseCode::invalid_path:FileLeaseCode::io_error};
+            ExclusiveFileLease lease{FileLeaseCode::acquired,descriptor};
+            struct stat information{};
+            if(::fstat(descriptor,&information)!=0)return ExclusiveFileLease{FileLeaseCode::io_error};
+            if(!S_ISREG(information.st_mode)||information.st_size!=0||information.st_nlink!=1)
+                return ExclusiveFileLease{FileLeaseCode::invalid_path};
+            if(::flock(descriptor,LOCK_EX|LOCK_NB)!=0)
+                return ExclusiveFileLease{errno==EWOULDBLOCK||errno==EAGAIN?FileLeaseCode::busy:FileLeaseCode::io_error};
+            return lease;
+#endif
+        }
+        catch(...){return ExclusiveFileLease{FileLeaseCode::io_error};}
+    }
+
     struct ImageThumbnail final
     {
         std::vector<std::uint8_t> rgba{};
-        std::uint32_t width{}, height{};
+        std::uint32_t width{}, height{}, source_width{}, source_height{};
     };
 
     [[nodiscard]] inline ImageThumbnail image_thumbnail(std::string_view encoded) noexcept
@@ -61,7 +185,8 @@ export namespace epochengine::platform::filesystem
 #if defined(_WIN32)
         try {
             auto decoded = platform_image_codec::decode_thumbnail(encoded);
-            return {std::move(decoded.rgba), decoded.width, decoded.height};
+            return {std::move(decoded.rgba), decoded.width, decoded.height,
+                decoded.source_width, decoded.source_height};
         } catch (...) { return {}; }
 #else
         return {};

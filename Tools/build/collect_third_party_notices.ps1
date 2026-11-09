@@ -144,14 +144,28 @@ $bundled = @(
         FileName = 'epoch-bundled-glad.txt'
     },
     [pscustomobject]@{
-        Name = 'EpochGui'
-        Version = 'repository source'
-        License = 'See preserved file'
-        Source = 'https://github.com/Autodidac/EpochGui'
-        Path = Join-Path $repo 'Engine\dep\EpochGui\LICENSE'
-        FileName = 'epochgui.txt'
+        Name = 'Roboto'
+        Version = '3.009 (bundled font metadata)'
+        License = 'OFL-1.1'
+        Source = 'https://github.com/googlefonts/roboto-3-classic/tree/cc4324ac5e7632b8f5521ed2ad470dc681e249ac'
+        Path = Join-Path $repo 'Engine\assets\fonts\OFL.txt'
+        FileName = 'roboto-OFL.txt'
     }
 )
+
+foreach ($library in @('EpochGui', 'EpochPlatformEngine', 'EpochAudioEngine', 'EpochMediaEngine')) {
+    $safeName = $library.ToLowerInvariant()
+    $bundled += [pscustomobject]@{
+        Name = $library
+        Version = 'repository source'
+        License = 'MPL-2.0'
+        Source = "https://github.com/Autodidac/$library"
+        Path = Join-Path $repo "Engine\dep\$library\LICENSE"
+        FileName = "$safeName.txt"
+        NoticePath = Join-Path $repo "Engine\dep\$library\NOTICE"
+        NoticeFileName = "$safeName-NOTICE.txt"
+    }
+}
 
 foreach ($component in $bundled) {
     Require-Path -Path $component.Path -Label "$($component.Name) license"
@@ -171,6 +185,24 @@ foreach ($component in $bundled) {
     $notice.Add(('=' * 78))
     $notice.Add('')
 
+    $attributionNotice = $null
+    $attributionHash = $null
+    if ($component.NoticePath) {
+        Require-Path -Path $component.NoticePath -Label "$($component.Name) attribution notice"
+        $preservedNoticePath = Join-Path $licenseRoot $component.NoticeFileName
+        Copy-Item -LiteralPath $component.NoticePath -Destination $preservedNoticePath -Force
+        $attributionHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $preservedNoticePath).Hash.ToLowerInvariant()
+        $attributionNotice = "licenses/$($component.NoticeFileName)"
+        $notice.Add("Component attribution: $($component.Name)")
+        $notice.Add("Preserved notice: $attributionNotice")
+        $notice.Add("SHA-256: $attributionHash")
+        $notice.Add('')
+        $notice.Add([System.IO.File]::ReadAllText($preservedNoticePath).TrimEnd())
+        $notice.Add('')
+        $notice.Add(('=' * 78))
+        $notice.Add('')
+    }
+
     $components.Add([pscustomobject]@{
         name = $component.Name
         version = $component.Version
@@ -179,6 +211,8 @@ foreach ($component in $bundled) {
         notice = "licenses/$($component.FileName)"
         sha256 = $hash
         origin = 'bundled source'
+        attribution_notice = $attributionNotice
+        attribution_sha256 = $attributionHash
     })
 }
 

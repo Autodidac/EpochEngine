@@ -25,6 +25,18 @@ The first mobile milestone should stay deliberately narrow:
 That means Android should **not** begin by copying the desktop multicontext
 story onto mobile.
 
+The October29 output goal is an ordinary project, not only a platform-library
+test. The project must be editable and persistent in Epoch, produce an Android
+package, and run without the desktop Editor. Start with a small software/GUI
+application using only its declared dependencies. AI and terrain remain optional.
+
+Keep the existing owners: `EpochPlatformEngine` owns application entry, native
+lifecycle and input; the selected renderer owns graphics; EpochGui owns controls;
+the project's build/export path assembles the application and assets. The current
+Android platform/tier policy does not supply the missing Android host, package
+pipeline or proven renderer. C++23 module toolchain support and packaged asset
+resolution must be qualified together before claiming this output works.
+
 ## What Must Stay True
 
 - no cwd-dependent asset lookups
@@ -48,4 +60,8 @@ story onto mobile.
   cwd assumptions
 - one stable mobile backend path presents real content
 - app lifecycle and touch/input behave predictably
+- rotation, background/foreground and surface loss recover without duplicating
+  application state or losing the saved project
+- the startup report identifies the actual platform, adapter, graphics tier and
+  selection reason, with unknown or unsupported capabilities stated explicitly
 - docs say exactly what works and what is still missing

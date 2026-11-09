@@ -3,6 +3,7 @@
 module;
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cmath>
 #include <cstring>
@@ -571,6 +572,26 @@ namespace
         ctx->is_mouse_button_down = [](epochengine::input::MouseButton button) { return epochengine::input::is_mouse_button_down(button); };
     }
 
+#if defined(__linux__)
+    void queue_x11_sfml_button(const std::shared_ptr<epochengine::core::Context>& ctx,
+        int button, bool pressed, int x, int y) noexcept
+    {
+        constexpr std::array x11Buttons{1, 3, 2, 8, 9};
+        if (button >= 0 && static_cast<std::size_t>(button) < x11Buttons.size())
+            epochengine::core::QueueX11PointerInput(ctx->hwnd,
+                x11Buttons[static_cast<std::size_t>(button)], pressed, x, y);
+    }
+
+    void queue_x11_sfml_wheel(const std::shared_ptr<epochengine::core::Context>& ctx,
+        int wheel, float delta, int x, int y) noexcept
+    {
+        if (wheel == 0 && std::isfinite(delta))
+            epochengine::core::QueueX11PointerInput(ctx->hwnd, 0, false, x, y,
+                static_cast<int>(std::lround(
+                    (std::clamp)(static_cast<double>(delta), -32767.0, 32767.0) * 120.0)));
+    }
+#endif
+
     [[nodiscard]] sf::Color to_sfml_color(const epochengine::previewgrid::Vec3& color) noexcept
     {
         const auto clamp_channel = [](float value) noexcept -> std::uint8_t
@@ -654,12 +675,14 @@ namespace
     void render_engine_arcade_sampled_surface_preview(
         const std::shared_ptr<epochengine::core::Context>& ctx,
         const epochengine::previewgrid::Mat4& mvp,
-        const epochengine::core::RenderViewport& viewport)
+        const epochengine::core::RenderViewport& viewport,
+        const std::shared_ptr<const epochengine::previewgrid::PublishedSceneFrame>& matchedScene)
     {
         if (!ctx || !s_window)
             return;
 
-        const auto markers = epochengine::previewgrid::sampled_render_surface_markers_for(ctx.get());
+        const auto markers = matchedScene ? epochengine::previewgrid::sampled_render_surface_markers_for(*matchedScene)
+            : epochengine::previewgrid::sampled_render_surface_markers_for(ctx.get());
         if (markers.empty() || !update_arcade_preview_surface())
             return;
 
@@ -777,7 +800,8 @@ namespace
         sf::RenderStates renderStates{};
         s_window->draw(background, renderStates);
 
-        const auto camera = epochengine::previewgrid::camera_for(ctx.get());
+        const auto matchedScene = epochengine::previewgrid::scene_frame_for(ctx.get());
+        const auto camera = matchedScene ? matchedScene->camera : epochengine::previewgrid::camera_for(ctx.get());
         const float aspect = viewport.height > 0
             ? (viewport.width / static_cast<float>(viewport.height))
             : 1.0f;
@@ -787,40 +811,46 @@ namespace
             camera.target,
             camera.up);
         const auto mvp = epochengine::previewgrid::multiply(proj, view);
-        const auto gridGeometry = epochengine::previewgrid::grid_geometry_for(ctx.get());
-        const auto& vertices = gridGeometry->vertices;
-        const auto& indices = gridGeometry->indices;
         sf::VertexArray lines(sf::PrimitiveType::Lines);
-
-        for (std::size_t i = 0; i + 1 < indices.size(); i += 2)
+        sf::VertexArray solids(sf::PrimitiveType::Triangles);
+        if (!matchedScene)
         {
-            const auto firstIndex = static_cast<std::size_t>(indices[i]);
-            const auto secondIndex = static_cast<std::size_t>(indices[i + 1]);
-            if (firstIndex >= vertices.size() || secondIndex >= vertices.size())
-                continue;
+            const auto gridGeometry = epochengine::previewgrid::grid_geometry_for(ctx.get());
+            const auto& vertices = gridGeometry->vertices;
+            const auto& indices = gridGeometry->indices;
 
-            sf::Vector2f a{};
-            sf::Vector2f b{};
-            if (!project_preview_vertex(mvp, vertices[firstIndex].position, viewport, a)
-                || !project_preview_vertex(mvp, vertices[secondIndex].position, viewport, b))
+            for (std::size_t i = 0; i + 1 < indices.size(); i += 2)
             {
-                continue;
+                const auto firstIndex = static_cast<std::size_t>(indices[i]);
+                const auto secondIndex = static_cast<std::size_t>(indices[i + 1]);
+                if (firstIndex >= vertices.size() || secondIndex >= vertices.size())
+                    continue;
+
+                sf::Vector2f a{};
+                sf::Vector2f b{};
+                if (!project_preview_vertex(mvp, vertices[firstIndex].position, viewport, a)
+                    || !project_preview_vertex(mvp, vertices[secondIndex].position, viewport, b))
+                {
+                    continue;
+                }
+
+                a.x -= static_cast<float>(viewport.x);
+                a.y -= static_cast<float>(viewport.y);
+                b.x -= static_cast<float>(viewport.x);
+                b.y -= static_cast<float>(viewport.y);
+
+                lines.append(sf::Vertex(a, to_sfml_color(vertices[firstIndex].color)));
+                lines.append(sf::Vertex(b, to_sfml_color(vertices[firstIndex].color)));
             }
 
-            a.x -= static_cast<float>(viewport.x);
-            a.y -= static_cast<float>(viewport.y);
-            b.x -= static_cast<float>(viewport.x);
-            b.y -= static_cast<float>(viewport.y);
+            if (lines.getVertexCount() > 0)
+                s_window->draw(lines, renderStates);
 
-            lines.append(sf::Vertex(a, to_sfml_color(vertices[firstIndex].color)));
-            lines.append(sf::Vertex(b, to_sfml_color(vertices[firstIndex].color)));
         }
 
-        if (lines.getVertexCount() > 0)
-            s_window->draw(lines, renderStates);
-
-        sf::VertexArray solids(sf::PrimitiveType::Triangles);
-        const auto solidVertices = epochengine::previewgrid::object_solid_vertices_for(ctx.get());
+        const auto solidGeometry = matchedScene ? matchedScene->solids->geometry
+            : epochengine::previewgrid::object_solid_geometry_for(ctx.get());
+        const auto& solidVertices = *solidGeometry;
         for (std::size_t i = 0; i + 2 < solidVertices.size(); i += 3)
         {
             if (!epochengine::previewgrid::clockwise_solid_triangle_faces_camera(
@@ -856,48 +886,58 @@ namespace
         if (solids.getVertexCount() > 0)
             s_window->draw(solids, renderStates);
 
-        render_engine_arcade_sampled_surface_preview(ctx, mvp, viewport);
+        render_engine_arcade_sampled_surface_preview(ctx, mvp, viewport, matchedScene);
 
-        const auto markerVertices = epochengine::previewgrid::look_marker_vertices_for(ctx.get());
-        const std::size_t markerCount = epochengine::previewgrid::look_marker_vertex_count_for(ctx.get());
-        if (markerCount > 0)
+        if (!matchedScene)
         {
-            sf::VertexArray markerLines(sf::PrimitiveType::Lines);
-            for (std::size_t i = 0; i + 1 < markerCount; i += 2)
+            const auto markerVertices = epochengine::previewgrid::look_marker_vertices_for(ctx.get());
+            const std::size_t markerCount = epochengine::previewgrid::look_marker_vertex_count_for(ctx.get());
+            if (markerCount > 0)
             {
-                sf::Vector2f a{};
-                sf::Vector2f b{};
-                if (!project_preview_vertex(mvp, markerVertices[i].position, viewport, a)
-                    || !project_preview_vertex(mvp, markerVertices[i + 1].position, viewport, b))
+                sf::VertexArray markerLines(sf::PrimitiveType::Lines);
+                for (std::size_t i = 0; i + 1 < markerCount; i += 2)
                 {
-                    continue;
+                    sf::Vector2f a{};
+                    sf::Vector2f b{};
+                    if (!project_preview_vertex(mvp, markerVertices[i].position, viewport, a)
+                        || !project_preview_vertex(mvp, markerVertices[i + 1].position, viewport, b))
+                    {
+                        continue;
+                    }
+
+                    a.x -= static_cast<float>(viewport.x);
+                    a.y -= static_cast<float>(viewport.y);
+                    b.x -= static_cast<float>(viewport.x);
+                    b.y -= static_cast<float>(viewport.y);
+
+                    markerLines.append(sf::Vertex(a, to_sfml_color(markerVertices[i].color)));
+                    markerLines.append(sf::Vertex(b, to_sfml_color(markerVertices[i].color)));
                 }
 
-                a.x -= static_cast<float>(viewport.x);
-                a.y -= static_cast<float>(viewport.y);
-                b.x -= static_cast<float>(viewport.x);
-                b.y -= static_cast<float>(viewport.y);
-
-                markerLines.append(sf::Vertex(a, to_sfml_color(markerVertices[i].color)));
-                markerLines.append(sf::Vertex(b, to_sfml_color(markerVertices[i].color)));
+                if (markerLines.getVertexCount() > 0)
+                    s_window->draw(markerLines, renderStates);
             }
 
-            if (markerLines.getVertexCount() > 0)
-                s_window->draw(markerLines, renderStates);
         }
 
-        const auto objectVertices = epochengine::previewgrid::object_marker_vertices_for(ctx.get());
+        const auto objectGeometry = matchedScene ? matchedScene->lines
+            : epochengine::previewgrid::object_marker_geometry_for(ctx.get());
+
+        const auto& objectVertices = *objectGeometry;
         if (!objectVertices.empty())
         {
             sf::VertexArray objectLines(sf::PrimitiveType::Lines);
-            for (std::size_t i = 0; i + 1 < objectVertices.size(); i += 2)
+            const auto meshWire = matchedScene ? matchedScene->wire
+                : epochengine::previewgrid::object_mesh_wire_frame_for(ctx.get());
+            epochengine::previewgrid::for_each_visible_marker_line(*meshWire, objectVertices, camera.eye,
+                [&](const auto& first, const auto& second)
             {
                 sf::Vector2f a{};
                 sf::Vector2f b{};
-                if (!project_preview_vertex(mvp, objectVertices[i].position, viewport, a)
-                    || !project_preview_vertex(mvp, objectVertices[i + 1].position, viewport, b))
+                if (!project_preview_vertex(mvp, first.position, viewport, a)
+                    || !project_preview_vertex(mvp, second.position, viewport, b))
                 {
-                    continue;
+                    return;
                 }
 
                 a.x -= static_cast<float>(viewport.x);
@@ -905,9 +945,9 @@ namespace
                 b.x -= static_cast<float>(viewport.x);
                 b.y -= static_cast<float>(viewport.y);
 
-                objectLines.append(sf::Vertex(a, to_sfml_color(objectVertices[i].color)));
-                objectLines.append(sf::Vertex(b, to_sfml_color(objectVertices[i].color)));
-            }
+                objectLines.append(sf::Vertex(a, to_sfml_color(first.color)));
+                objectLines.append(sf::Vertex(b, to_sfml_color(first.color)));
+            });
 
             if (objectLines.getVertexCount() > 0)
                 s_window->draw(objectLines, renderStates);
@@ -1057,6 +1097,18 @@ namespace
             ? ctx->windowData->titleNarrow
             : (ctx->backendName.empty() ? "SFML" : ctx->backendName);
 
+#if defined(__linux__)
+        if (ctx->hwnd)
+        {
+            // Wrap the manager-owned X11 window; keep input and native lifetime
+            // with that owner rather than opening an unmanaged second window.
+            s_window = std::make_unique<sf::RenderWindow>(
+                static_cast<sf::WindowHandle>(
+                    reinterpret_cast<std::uintptr_t>(ctx->hwnd)),
+                sf::ContextSettings{});
+        }
+        else
+#endif
         s_window = epochengine::sfml_compat::make_render_window(
             epochengine::sfml_compat::video_mode(
                 static_cast<unsigned>(s_width),
@@ -1301,6 +1353,17 @@ namespace
 #if EPOCH_SFML_HAS_V3_API
         while (const auto event = s_window->pollEvent())
         {
+#if defined(__linux__)
+            if (const auto* button = event->getIf<sf::Event::MouseButtonPressed>())
+                queue_x11_sfml_button(ctx, static_cast<int>(button->button), true,
+                    button->position.x, button->position.y);
+            else if (const auto* button = event->getIf<sf::Event::MouseButtonReleased>())
+                queue_x11_sfml_button(ctx, static_cast<int>(button->button), false,
+                    button->position.x, button->position.y);
+            else if (const auto* wheel = event->getIf<sf::Event::MouseWheelScrolled>())
+                queue_x11_sfml_wheel(ctx, static_cast<int>(wheel->wheel), wheel->delta,
+                    wheel->position.x, wheel->position.y);
+#endif
             if (event->is<sf::Event::Closed>())
             {
                 request_host_shutdown(ctx);
@@ -1320,6 +1383,17 @@ namespace
         sf::Event event{};
         while (s_window->pollEvent(event))
         {
+#if defined(__linux__)
+            if (event.type == sf::Event::MouseButtonPressed
+                || event.type == sf::Event::MouseButtonReleased)
+                queue_x11_sfml_button(ctx, static_cast<int>(event.mouseButton.button),
+                    event.type == sf::Event::MouseButtonPressed,
+                    event.mouseButton.x, event.mouseButton.y);
+            else if (event.type == sf::Event::MouseWheelScrolled)
+                queue_x11_sfml_wheel(ctx, static_cast<int>(event.mouseWheelScroll.wheel),
+                    event.mouseWheelScroll.delta, event.mouseWheelScroll.x,
+                    event.mouseWheelScroll.y);
+#endif
             if (event.type == sf::Event::Closed)
             {
                 request_host_shutdown(ctx);

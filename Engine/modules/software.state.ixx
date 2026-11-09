@@ -97,21 +97,11 @@ export namespace epochengine::anativecontext
         int height{ 300 };
         bool running{ false };
         std::vector<std::uint32_t> framebuffer{};
-        std::vector<std::uint32_t> sceneFramebuffer{};
         SoftwareArcadeScreenSurface arcadeScreen{};
-        bool frameValid{ false };
-        std::uint64_t lastGuiGeneration{ 0 };
-        std::uint64_t lastCameraRevision{ 0 };
-        std::uint64_t lastGeometryRevision{ 0 };
-        epochengine::core::RenderViewport lastSceneViewport{};
-        std::uint8_t lastPreviewMode{
-            static_cast<std::uint8_t>(epochengine::core::ScenePreviewMode::None)
-        };
         int lastTelemetryWidth{ 0 };
         int lastTelemetryHeight{ 0 };
         std::size_t lastTelemetryBufferLength{ 0 };
         std::int64_t lastTelemetryCommandDepth{ -1 };
-        std::uint32_t smokeFrames{ 0 };
 
         struct MouseState
         {

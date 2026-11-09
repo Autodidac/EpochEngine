@@ -27,12 +27,16 @@ module;
 #include <vector>
 
 module authoring.texture;
+import authoring.texture_detail;
 
 namespace epochengine::authoring::texture
 {
+    using detail::StableHash;
+    using detail::mip_dimension;
+    using detail::checked_add;
+    using detail::checked_multiply;
     namespace
     {
-        constexpr std::uint64_t kFnvPrime = 1'099'511'628'211ull;
         constexpr std::uint64_t kSubpixelsPerPixel = 256;
         constexpr std::uint64_t kChannelMaximum = 65'535;
         constexpr std::uint64_t kMaximumSerializedDocumentBytes =
@@ -43,126 +47,6 @@ namespace epochengine::authoring::texture
             std::byte{'X'}, std::byte{'D'}, std::byte{'0'}, std::byte{'1'}};
 
 #include "implementation/authoring.texture_binary_codec.inl"
-        class StableHash final
-        {
-        public:
-            StableHash() noexcept
-                : words_{
-                    0xcbf29ce484222325ull,
-                    0x9e3779b97f4a7c15ull,
-                    0x6a09e667f3bcc909ull,
-                    0xbb67ae8584caa73bull
-                }
-            {
-            }
-
-            void add_byte(std::uint8_t value) noexcept
-            {
-                words_[0] ^= value;
-                words_[0] *= kFnvPrime;
-
-                words_[1] ^= static_cast<std::uint64_t>(value)
-                    + 0x9e3779b97f4a7c15ull
-                    + (words_[1] << 6)
-                    + (words_[1] >> 2);
-                words_[1] = std::rotl(words_[1], 17) *
-                    0xbf58476d1ce4e5b9ull;
-
-                words_[2] += static_cast<std::uint64_t>(value)
-                    + (words_[0] ^ std::rotl(words_[1], 11));
-                words_[2] ^= words_[2] >> 29;
-                words_[2] *= 0x94d049bb133111ebull;
-
-                words_[3] ^= static_cast<std::uint64_t>(value)
-                    + std::rotl(words_[0], 7)
-                    + std::rotl(words_[2], 31);
-                words_[3] *= 0x9e3779b185ebca87ull;
-            }
-
-            template <typename Value>
-            void add_integral(Value value) noexcept
-            {
-                static_assert(
-                    std::is_integral_v<Value> || std::is_enum_v<Value>);
-                using Raw = typename std::conditional_t<
-                    std::is_enum_v<Value>,
-                    std::underlying_type<Value>,
-                    std::type_identity<Value>>::type;
-                if constexpr (std::is_same_v<std::remove_cv_t<Raw>, bool>)
-                {
-                    add_byte(value ? 1u : 0u);
-                }
-                else
-                {
-                    using Unsigned = std::make_unsigned_t<Raw>;
-                    Unsigned bits = static_cast<Unsigned>(value);
-                    for (std::size_t index = 0;
-                         index < sizeof(Unsigned);
-                         ++index)
-                    {
-                        add_byte(static_cast<std::uint8_t>(
-                            bits & static_cast<Unsigned>(0xff)));
-                        if constexpr (sizeof(Unsigned) > 1)
-                        {
-                            if (index + 1u < sizeof(Unsigned))
-                                bits = static_cast<Unsigned>(bits >> 8u);
-                        }
-                    }
-                }
-            }
-
-            void add_bytes(const std::byte* bytes, std::size_t size) noexcept
-            {
-                add_integral(size);
-                for (std::size_t index = 0; index < size; ++index)
-                {
-                    add_byte(std::to_integer<std::uint8_t>(bytes[index]));
-                }
-            }
-
-            void add_string(std::string_view value) noexcept
-            {
-                add_integral(value.size());
-                for (const char character : value)
-                {
-                    add_byte(static_cast<std::uint8_t>(character));
-                }
-            }
-
-            void add_hash(const ContentHash& hash) noexcept
-            {
-                for (const std::uint64_t word : hash.words)
-                {
-                    add_integral(word);
-                }
-            }
-
-            [[nodiscard]] ContentHash finish() const noexcept
-            {
-                ContentHash result{ words_ };
-                for (std::size_t index = 0; index < result.words.size(); ++index)
-                {
-                    std::uint64_t value = result.words[index]
-                        ^ std::rotl(
-                            result.words[(index + 1) % result.words.size()],
-                            static_cast<int>(13 + index * 7));
-                    value ^= value >> 30;
-                    value *= 0xbf58476d1ce4e5b9ull;
-                    value ^= value >> 27;
-                    value *= 0x94d049bb133111ebull;
-                    value ^= value >> 31;
-                    result.words[index] = value;
-                }
-                if (result.empty())
-                {
-                    result.words[0] = 1;
-                }
-                return result;
-            }
-
-        private:
-            std::array<std::uint64_t, 4> words_{};
-        };
 
         struct TileCoordinateLess final
         {
@@ -256,39 +140,8 @@ namespace epochengine::authoring::texture
             DocumentState state{};
         };
 
-        [[nodiscard]] constexpr std::uint32_t mip_dimension(
-            std::uint32_t base,
-            std::uint8_t mip) noexcept
-        {
-            return mip >= 32
-                ? 1u
-                : (std::max)(1u, base >> mip);
-        }
 
-        [[nodiscard]] constexpr bool checked_add(
-            std::uint64_t left,
-            std::uint64_t right,
-            std::uint64_t& result) noexcept
-        {
-            if (right > (std::numeric_limits<std::uint64_t>::max)() - left)
-                return false;
-            result = left + right;
-            return true;
-        }
 
-        [[nodiscard]] constexpr bool checked_multiply(
-            std::uint64_t left,
-            std::uint64_t right,
-            std::uint64_t& result) noexcept
-        {
-            if (left != 0 &&
-                right > (std::numeric_limits<std::uint64_t>::max)() / left)
-            {
-                return false;
-            }
-            result = left * right;
-            return true;
-        }
 
         [[nodiscard]] constexpr std::uint16_t tile_width(
             const CanvasDescriptor& descriptor,
@@ -1030,36 +883,6 @@ namespace epochengine::authoring::texture
                 payload);
         }
 
-        [[nodiscard]] std::uint64_t format_mip_bytes(
-            ArtifactFormat format,
-            std::uint32_t width,
-            std::uint32_t height,
-            bool& overflow) noexcept
-        {
-            std::uint64_t result{};
-            const bool compressed =
-                format == ArtifactFormat::bc1_rgb
-                || format == ArtifactFormat::bc3_rgba
-                || format == ArtifactFormat::bc5_normal
-                || format == ArtifactFormat::bc7_rgba
-                || format == ArtifactFormat::astc_4x4_rgba;
-            if (!compressed)
-            {
-                std::uint64_t pixels{};
-                overflow = !checked_multiply(width, height, pixels)
-                    || !checked_multiply(pixels, 4, result);
-                return overflow ? 0 : result;
-            }
-
-            const std::uint64_t blocksWide = (width + 3ull) / 4ull;
-            const std::uint64_t blocksHigh = (height + 3ull) / 4ull;
-            const std::uint64_t blockBytes =
-                format == ArtifactFormat::bc1_rgb ? 8ull : 16ull;
-            std::uint64_t blocks{};
-            overflow = !checked_multiply(blocksWide, blocksHigh, blocks)
-                || !checked_multiply(blocks, blockBytes, result);
-            return overflow ? 0 : result;
-        }
 
         [[nodiscard]] std::uint8_t full_mip_count(
             std::uint32_t width,
@@ -1075,72 +898,8 @@ namespace epochengine::authoring::texture
             return result;
         }
 
-        [[nodiscard]] bool artifact_mip_sizes(
-            const CompiledTextureArtifactIdentity& artifact,
-            std::vector<std::uint64_t>& result) noexcept
-        {
-            try
-            {
-                result.clear();
-                result.reserve(artifact.mip_count);
-                std::uint64_t total{};
-                for (std::uint8_t mip = 0; mip < artifact.mip_count; ++mip)
-                {
-                    bool overflow{};
-                    const std::uint64_t bytes = format_mip_bytes(
-                        artifact.profile.format,
-                        mip_dimension(artifact.width, mip),
-                        mip_dimension(artifact.height, mip),
-                        overflow);
-                    if (overflow || !checked_add(total, bytes, total))
-                        return false;
-                    result.push_back(bytes);
-                }
-                return true;
-            }
-            catch (...)
-            {
-                result.clear();
-                return false;
-            }
-        }
 
-        [[nodiscard]] std::uint64_t range_sum(
-            const std::vector<std::uint64_t>& values,
-            std::uint8_t first,
-            std::uint8_t count) noexcept
-        {
-            std::uint64_t result{};
-            const std::size_t end = (std::min)(
-                values.size(),
-                static_cast<std::size_t>(first) + count);
-            for (std::size_t index = first; index < end; ++index)
-                result += values[index];
-            return result;
-        }
 
-        [[nodiscard]] std::uint64_t logical_page_count(
-            const CompiledTextureArtifactIdentity& artifact,
-            std::uint32_t pageExtent,
-            std::uint8_t first,
-            std::uint8_t count) noexcept
-        {
-            std::uint64_t result{};
-            const std::uint8_t end = static_cast<std::uint8_t>(
-                (std::min)(
-                    static_cast<unsigned>(artifact.mip_count),
-                    static_cast<unsigned>(first) + count));
-            for (std::uint8_t mip = first; mip < end; ++mip)
-            {
-                const std::uint64_t width =
-                    mip_dimension(artifact.width, mip);
-                const std::uint64_t height =
-                    mip_dimension(artifact.height, mip);
-                result += ((width + pageExtent - 1) / pageExtent)
-                    * ((height + pageExtent - 1) / pageExtent);
-            }
-            return result;
-        }
 
         [[nodiscard]] CompiledTextureArtifactIdentity make_artifact_identity(
             const CanvasDescriptor& canvas,
@@ -3901,6 +3660,11 @@ namespace epochengine::authoring::texture
         }
     }
 
-#include "implementation/authoring.texture_residency.inl"
 
+    RestoreResult::operator bool() const noexcept
+    {
+        return code == ResultCode::success
+            && document != nullptr
+            && document->valid();
+    }
 }

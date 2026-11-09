@@ -34,6 +34,36 @@ int popup_layout_contract()
         || compressed.position.x + compressed.size.x > 156.0f
         || compressed.position.y + compressed.size.y > 96.0f)
         return 3;
+    const auto width_only = gui::place_popup({
+        .owner = {{100.0f, 20.0f}, {40.0f, 20.0f}},
+        .preferred_size = {140.0f, 50.0f},
+        .viewport_size = {160.0f, 160.0f}}, {}, &used, &flipped, &clamped);
+    if (flipped || !clamped || used != gui::PopupPlacement::below
+        || width_only.position.y != 44.0f || width_only.position.x != 16.0f)
+        return 4;
+    const auto height_only = gui::place_popup({
+        .owner = {{20.0f, 110.0f}, {20.0f, 20.0f}},
+        .preferred_size = {60.0f, 60.0f},
+        .viewport_size = {160.0f, 160.0f}, .placement = gui::PopupPlacement::right},
+        {}, &used, &flipped, &clamped);
+    if (flipped || !clamped || used != gui::PopupPlacement::right
+        || height_only.position.x != 44.0f || height_only.position.y != 96.0f)
+        return 5;
+    const auto left = gui::place_popup({
+        .owner = {{120.0f, 30.0f}, {20.0f, 20.0f}},
+        .preferred_size = {60.0f, 50.0f},
+        .viewport_size = {200.0f, 160.0f}, .placement = gui::PopupPlacement::right},
+        {}, &used, &flipped, &clamped);
+    if (!flipped || clamped || used != gui::PopupPlacement::left
+        || left.position.x != 56.0f)
+        return 6;
+    const auto equal_overflow = gui::place_popup({
+        .owner = {{70.0f, 70.0f}, {20.0f, 20.0f}},
+        .preferred_size = {60.0f, 120.0f},
+        .viewport_size = {160.0f, 160.0f}}, {}, &used, &flipped, &clamped);
+    if (flipped || !clamped || used != gui::PopupPlacement::below
+        || equal_overflow.position.y != 36.0f)
+        return 7;
     return 0;
 }
 

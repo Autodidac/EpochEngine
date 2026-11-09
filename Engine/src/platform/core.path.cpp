@@ -413,6 +413,21 @@ namespace epochengine::core::path
             if (is_epoch_repo_root(probe))
                 return probe;
 
+            // A packaged runtime may live below an unrelated source checkout.
+            // Its distribution marker bounds source discovery; it does not
+            // authenticate an edition or admit a source/update payload. Keep
+            // confirmed source roots first, and never follow a marker symlink.
+            std::error_code markerError;
+            const auto marker = std::filesystem::symlink_status(
+                probe / "epoch-distribution.json", markerError);
+            if (!markerError && std::filesystem::is_regular_file(marker))
+            {
+                std::error_code assetsError;
+                if (std::filesystem::is_directory(probe / "assets", assetsError)
+                    && !assetsError)
+                    return {};
+            }
+
             const path parent = probe.parent_path();
             if (parent == probe)
                 break;
@@ -480,6 +495,32 @@ namespace epochengine::core::path
                 return normalize(overridePath / "assets");
             if (exists_noerr(overridePath))
                 return overridePath;
+        }
+
+        // An ordinary built project may be inside a source checkout. Prefer its
+        // complete staged runtime resources without changing source/SDK lookup
+        // or an explicitly selected runtime root.
+        if (env_override_path("EPOCH_RUNTIME_ROOT").empty())
+        {
+            const path executableRoot = executable_dir();
+            const path executableAssets = executableRoot / "assets";
+            const auto ordinary = [](const path& candidate, bool directory)
+            {
+                std::error_code error;
+                const auto status = std::filesystem::symlink_status(candidate, error);
+                return !error && (directory ? std::filesystem::is_directory(status)
+                    : std::filesystem::is_regular_file(status));
+            };
+            bool complete = !executableRoot.empty() && executableRoot.is_absolute()
+                && ordinary(executableAssets, true);
+            for (const char* relative : {"fonts", "vulkan", "vulkan/shaders"})
+                complete = complete && ordinary(executableAssets / relative, true);
+            for (const char* relative : {"fonts/Roboto-Regular.ttf", "fonts/OFL.txt",
+                "vulkan/texture.ppm", "vulkan/shaders/vert.spv", "vulkan/shaders/frag.spv",
+                "vulkan/shaders/gui_vert.spv", "vulkan/shaders/gui_frag.spv"})
+                complete = complete && ordinary(executableAssets / relative, false);
+            if (complete)
+                return normalize(executableAssets);
         }
 
         if (const path repoRoot = runtime_root_dir(); is_epoch_repo_root(repoRoot))

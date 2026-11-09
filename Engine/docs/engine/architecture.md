@@ -2,21 +2,94 @@
 
 ## Snapshot
 
-Epoch is a C++23 module-first engine/editor. The operator's source checkpoint is
-`v0.90.146`; published Site Windows/Linux runtime authority remains `v0.90.55`.
-This import publishes source commits only and establishes no new native runtime,
-GPU, inference or candidate-succession proof. Current acceptance lives in
+Epoch is a universal modular environment for AI-enabled software and games. Empty,
+camera-only, CLI, windowed, GUI, game and Editor consumers select services rather
+than inherit the full Editor/world/model stack. Explicit time, events, resource
+admission and lifecycle apply across those profiles. Optional AI and world
+features cooperate through common contracts without being prerequisites for
+ordinary software. Fixed-step, continuous and event-driven work coexist.
+
+Epoch is a C++23 module-first engine/editor. Current source, edition releases and
+exact validation receipts are owned by `Changes/active_pass.md`; do not infer
+today's status from an older version in an architecture snapshot. This October25
+documentation pass establishes no new native runtime, GPU, inference or
+candidate-succession proof. Current acceptance lives in
 `Changes/active_pass.md`; historical snapshots are retained in
 `Engine/docs/reference/pass_history.md`.
 Runtime/editor code lives under `Engine/modules/`, `Engine/src/`, and
 `Engine/include/`, with reusable GUI ownership mirrored into EpochGui and bulky
 optional package implementations kept in EpochEngineExtensions.
 
+Render-to-texture is an Engine service. The central render-device/graph contracts
+own logical surfaces and their lifetimes; each renderer/context owns its native
+allocation, draw and presentation. The optional Arcade extension consumes that
+service: a cabinet asset hosts a screen surface and routes focused input to the
+selected game. Other software, portals and UI previews can use RTT independently.
+`render.device` owns the device contract and capability evidence; `render.graph`
+owns pass dependencies and render-texture bindings. A logical asset may have
+separate native resources on several devices or heads. Never pass a native
+texture/target handle from one device or context to another as if it were portable.
+Cross-device presentation requires an explicitly supported transfer path, its
+budget and synchronization; otherwise report that combination as unsupported.
+Resize, context loss and retirement must invalidate or recreate only the owning
+resources, without stopping unrelated heads. These are required acceptance
+conditions, not a claim that every backend already passes them.
+The existing `render.arcade` content and built-in game modules are implementation
+foundations, not proof that every game is playable through an extension cabinet.
+Updating the games, replacing the cabinet with an approved generated asset, and
+testing the live screen on every backend remain acceptance work.
+
+The Editor builds and supervises an ordinary project; its authoring scene and the
+running project's simulation have separate ownership. Planet exploration must
+reuse `project.planetary_runtime` and its admitted optional provider, commands and
+saved session. The 3D Preview Explore action uses the existing in-editor Play
+path instead of a second flight/landing implementation. Building or running
+reserves authoring input and suspends the authoring scene draw; theme-colored GUI
+backing remains visible, and Stop restores the authored view. This contract does
+not establish a freely editable running simulation or claim native parity before
+its acceptance tests pass.
+
 The next foundational target is a persistent, reversible, event-driven
 spacetime engine. That target is specified in
 `temporal.md`; it is a phased mission, not a statement that
 event sourcing, immutable world pages, or arbitrary-time reconstruction already
 ship.
+
+## Planned local generation and shared AI resources (October 25)
+
+The connected world design is in [voxels.md](voxels.md): durable volume edits,
+derived render/collision/navigation resources, bounded dynamic loading and shared
+event invalidation. System One requests policy/work through existing schedulers;
+rendering remains valid with every bot/model disabled. The first typed SDF slice
+does not establish the complete streamed world or native terrain presentation.
+
+This is an architecture target, not a shipped pipeline. The canonical
+[text → 2D → 3D plan](../../../Changes/v010-ai-image-to-3d-plan.md) owns exact model
+research, license gaps and M1–M7 acceptance. Keep authoring documents and approved
+project assets separate from generated compiled artifacts and disposable renderer/
+model residency. Generation is ordinary project work, not private self-coding.
+
+```text
+Assistant specification → existing taskgraph/admission → optional local worker
+  → working image/mesh/material artifacts → validation + human review
+  → project-owned import/compiled assets → capability-checked render preview
+```
+
+Existing native runtime/process owners perform real model loading/unloading;
+the residency ledger alone cannot free GPU memory. Extend the existing admission
+service with measured per-device reservations rather than add another scheduler.
+Renderer allocations, Qwen/Flash weights/KV and generation peaks share a budget.
+Active coding waits safely or uses an operator-approved handoff with exact session/
+configuration restoration. [AI architecture](ai_plan.md#shared-model-loading-and-unloading-plan)
+owns that planned transaction and DAVID/ARCHITECT 1/ELA/ADAM/NEO/KEYMAKER roles.
+
+NEO/engcoder is a planned internal and optionally shippable English/coding
+micromodel for game/application AI, with speech I/O separately qualified. It does
+not carry own-engine-source rights or the private self-coding library into Public.
+Event-camera sampling and conservative OpenGL invalidation already have bounded
+code; learned perception/rendering models, automatic eviction and new generation
+adapters remain unproved. Preserve the existing platform/GUI/module boundaries,
+queues, clocks and draw order.
 
 ## Established Baseline
 
@@ -53,13 +126,12 @@ ship.
   application. Forest Factory remains in the standard editor as the
   vegetation-import and placement workflow that activates and consumes Plant
   Lab/package outputs in project scenes.
-- **Event-driven OpenGL scene reuse**: the real editor 3D scene owns persistent
-  color/depth history, previous/current object invalidation, conservative projected
-  dirty regions, scissored regional reconstruction, and automatic conventional/full
-  fallback for camera, sampled-surface, global, or dense changes. v0.90.23 adds
-  live CACHED/PARTIAL/FULL/CONVENTIONAL telemetry, a conventional-path A/B toggle,
-  and an optional dirty-region viewport overlay. Vulkan retains geometry-revision
-  reuse but not partial framebuffer reuse yet.
+- **Full-frame scene composition**: cached and partial scene rendering were
+  removed by the October30 decision. Each admitted frame uses conventional
+  composition in the protected backend order. Resource residency and geometry
+  preparation still reuse valid inputs; they do not skip final composition.
+  Explicit time, events and future neuromorphic consumers remain separate
+  contracts. See [the current rendering policy](event_render.md).
 - **Renderer resource spine**: shared resource handles, graph binding, sampled
   render-target descriptors, capability truth, validated base-mip texture
   uploads, and backend-native allocation are growing from OpenGL-family proof

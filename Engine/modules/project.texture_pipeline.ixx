@@ -15,6 +15,7 @@ import asset.texture_artifact;
 import project.asset_registry;
 import project.texture_library;
 import project.texture_resources;
+import render.texture_artifact;
 import render.canvas2d;
 import render.canvas2d_scene;
 
@@ -134,14 +135,16 @@ export namespace epochengine::project_textures
 
         [[nodiscard]] TexturePipelineResult publish(
             std::string_view logicalPath,
-            const asset::texture::CompiledTextureArtifact& artifact) noexcept;
+            const asset::texture::CompiledTextureArtifact& artifact,
+            texture_artifact::TransferUsage usage = texture_artifact::TransferUsage::linear_data) noexcept;
 
         [[nodiscard]] TexturePipelineResult restore_latest(
             std::string_view logicalPath,
             const asset::texture::TextureCompileProfile& profile) noexcept;
         [[nodiscard]] TexturePipelineResult restore_exact(
             std::string_view logicalPath,
-            const asset::texture::ContentHash& artifactKey) noexcept;
+            const asset::texture::ContentHash& artifactKey,
+            texture_artifact::TransferUsage usage = texture_artifact::TransferUsage::linear_data) noexcept;
 
         [[nodiscard]] Canvas2DLeaseResult bind_canvas2d(
             std::span<const canvas2d::LogicalTextureReference> logicalTextures) noexcept;
@@ -151,7 +154,8 @@ export namespace epochengine::project_textures
             std::string_view logicalPath,
             const asset::texture::CompiledTextureArtifact& artifact,
             TextureArtifactLocator locator,
-            bool libraryChanged) noexcept;
+            bool libraryChanged,
+            texture_artifact::TransferUsage usage = texture_artifact::TransferUsage::linear_data) noexcept;
         [[nodiscard]] TexturePipelineResult reject(
             PipelineCode code,
             LibraryCode libraryCode = LibraryCode::invalid_library,

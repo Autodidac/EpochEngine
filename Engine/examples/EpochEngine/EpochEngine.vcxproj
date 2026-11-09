@@ -1,5 +1,5 @@
-<?xml version='1.0' encoding='utf-8'?>
-<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" DefaultTargets="Build">
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Release|x64">
       <Configuration>Release</Configuration>
@@ -113,7 +113,7 @@
     <VcpkgTriplet Condition="'$(VcpkgTriplet)'=='' and '$(Platform)'=='Win32'">x86-windows</VcpkgTriplet>
     <VcpkgManifestInstall>true</VcpkgManifestInstall>
     <VcpkgManifestRoot>$(SolutionDir)Engine\</VcpkgManifestRoot>
-    <VcpkgInstalledDir>$(SolutionDir)Engine\vcpkg_installed\</VcpkgInstalledDir>
+    <VcpkgInstalledDir>$(SolutionDir)Artifacts\Dependencies\vcpkg_installed\</VcpkgInstalledDir>
     <VcpkgEnabled>true</VcpkgEnabled>
     <VcpkgAutoBootstrap>false</VcpkgAutoBootstrap>
     <VcpkgAutoLink>false</VcpkgAutoLink>
@@ -123,7 +123,7 @@
     <EpochRaylibDllDefine Condition="'$(VcpkgUseStatic)'!='true'">RAYLIB_DLL;</EpochRaylibDllDefine>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64' or ('$(Configuration)|$(Platform)'=='Release|x64' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|x64')">
-    <EpochVcpkgInstallRoot>$(SolutionDir)Engine\vcpkg_installed\$(VcpkgTriplet)\</EpochVcpkgInstallRoot>
+    <EpochVcpkgInstallRoot>$(SolutionDir)Artifacts\Dependencies\vcpkg_installed\$(VcpkgTriplet)\</EpochVcpkgInstallRoot>
     <EpochVcpkgNestedInstallRoot>$(EpochVcpkgInstallRoot)$(VcpkgTriplet)\</EpochVcpkgNestedInstallRoot>
     <EpochVcpkgInstallRoot Condition="!Exists('$(EpochVcpkgInstallRoot)include\') And Exists('$(EpochVcpkgNestedInstallRoot)include\')">$(EpochVcpkgNestedInstallRoot)</EpochVcpkgInstallRoot>
   </PropertyGroup>
@@ -358,10 +358,21 @@
       <FileType>Document</FileType>
     </ClCompile>
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\dep\EpochGui\EpochGui.vcxproj">
+      <Project>{7B41A9B2-4B7E-4B5D-9B39-68D2408BCA90}</Project>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+  </ItemGroup>
   <ItemGroup><ProjectReference Include="..\..\dep\EpochPlatformEngine\EpochPlatformEngine.vcxproj"><Project>{DFA26C91-27C8-4F23-A7BF-1CCB74811899}</Project><ReferenceOutputAssembly>false</ReferenceOutputAssembly></ProjectReference></ItemGroup>
 <ItemGroup><ProjectReference Include="..\..\dep\EpochAudioEngine\EpochAudioEngine.vcxproj"><Project>{6E9692A5-DBF3-53A6-A986-F7D54195BA55}</Project><ReferenceOutputAssembly>false</ReferenceOutputAssembly></ProjectReference></ItemGroup>
 <ItemGroup><ProjectReference Include="..\..\dep\EpochMediaEngine\EpochMediaEngine.vcxproj"><Project>{C4FD64B9-B958-543A-86A1-FC447091E9EA}</Project><ReferenceOutputAssembly>false</ReferenceOutputAssembly></ProjectReference></ItemGroup>
 <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <Target Name="EpochValidateGuiFeatureProfile" BeforeTargets="PrepareForBuild">
+    <Error Condition="'$(EpochGuiEnableRoundedRect)'!='' And '$(EpochGuiEnableRoundedRect)'!='true'"
+           Text="EpochEngine requires the EpochGui rounded-rectangle module. Omit EpochGuiEnableRoundedRect or set it to true. Disabling it is supported only for standalone EpochGui builds." />
+  </Target>
   <Target Name="EpochRestoreVcpkgBeforeModuleScan" BeforeTargets="SetModuleDependencies" DependsOnTargets="VcpkgInstallManifestDependencies" Condition="'$(VcpkgEnabled)'=='true' And '$(VcpkgEnableManifest)'=='true' And '$(VcpkgManifestInstall)'=='true'" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <!-- CL and MultiToolTask can share batched tracking records and a common PDB.
+       Check each implementation owner's object independently of those records.
+       Ordinary compiler tracking still owns headers and module dependencies. -->
+  <Target Name="EpochInvalidateImplementationOwner"
+          Inputs="@(EpochImplementationFragment)"
+          Outputs="%(EpochImplementationFragment.ObjectFile)"
+          Condition="'@(EpochImplementationFragment)' != ''">
+    <!-- ValueSetByTask prevents MSBuild's skipped-target output inference from
+         marking an already-current owner dirty. -->
+    <CreateProperty Value="%(EpochImplementationFragment.Owner)">
+      <Output TaskParameter="ValueSetByTask" ItemName="_EpochChangedImplementationOwner" />
+    </CreateProperty>
+  </Target>
+  <Target Name="EpochApplyImplementationInvalidation" BeforeTargets="ClCompile"
+          DependsOnTargets="EpochInvalidateImplementationOwner">
+    <PropertyGroup>
+      <_EpochChangedImplementationPaths>;@(_EpochChangedImplementationOwner);</_EpochChangedImplementationPaths>
+    </PropertyGroup>
+    <ItemGroup Condition="'@(_EpochChangedImplementationOwner)' != ''">
+      <ClCompile>
+        <MinimalRebuildFromTracking Condition="$([System.String]::Copy('$(_EpochChangedImplementationPaths)').Contains(';%(ClCompile.FullPath);'))">false</MinimalRebuildFromTracking>
+      </ClCompile>
+    </ItemGroup>
+    <Message Importance="Normal" Condition="'@(_EpochChangedImplementationOwner)' != ''" Text="Implementation changed: @(_EpochChangedImplementationOwner)" />
+    <Message Importance="Low" Text="Implementation tracking: %(ClCompile.FullPath) = %(ClCompile.MinimalRebuildFromTracking)" />
+  </Target>
+</Project>

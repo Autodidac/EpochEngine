@@ -2,9 +2,9 @@
 from pathlib import Path
 import os
 import re
-import shutil
+import hashlib
+import json
 import subprocess
-import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -30,29 +30,49 @@ class NativeWindowAttachment(unittest.TestCase):
         kits = sorted((kitroot / 'Include').glob('*'))
         if not toolsets or not kits:
             self.skipTest('Installed MSVC/SDK required')
-        parent = (ROOT / 'build/contract-tests').resolve()
-        parent.mkdir(parents=True, exist_ok=True)
-        scratch = Path(tempfile.mkdtemp(prefix='native-attachment-', dir=parent))
-        try:
-            source = scratch / 'contract.cpp'
-            source.write_text(code, encoding='utf-8')
-            toolset, kit = toolsets[-1], kits[-1]
-            binary = scratch / 'contract.exe'
+        proof = ROOT/'Artifacts/Reports/runtime-viewport-stall-oct29/native-lease'/hashlib.sha256(code.encode()).hexdigest()[:16]
+        proof.mkdir(parents=True,exist_ok=True)
+        source = proof/'contract.cpp'
+        source.write_text(code,encoding='utf-8')
+        toolset, kit = toolsets[-1], kits[-1]
+        results=[]
+        for config in ('Debug','Release'):
+            scratch=proof/config
+            scratch.mkdir(exist_ok=True)
+            binary=scratch/'contract.exe'
             args = [str(toolset / 'bin/Hostx64/x64/cl.exe'), '/nologo', '/std:c++latest', '/EHsc', '/WX',
+                '/MDd' if config=='Debug' else '/MD','/Z7' if config=='Debug' else '/O2',
+                '/I'+str(dependency/'include'),
                 '/I' + str(toolset / 'include'), '/I' + str(kit / 'ucrt'), '/I' + str(kit / 'shared'),
                 '/I' + str(kit / 'um'), '/Fo' + str(scratch / 'contract.obj'), '/Fe' + str(binary),
                 str(source), '/link', '/LIBPATH:' + str(toolset / 'lib/x64'),
                 '/LIBPATH:' + str(kitroot / 'Lib' / kit.name / 'um/x64'),
                 '/LIBPATH:' + str(kitroot / 'Lib' / kit.name / 'ucrt/x64')]
             compiled = subprocess.run(args, cwd=scratch, capture_output=True, text=True, timeout=90)
+            (scratch/'compile.log').write_text(compiled.stdout+compiled.stderr,encoding='utf-8')
             self.assertEqual(compiled.returncode, 0, compiled.stdout + compiled.stderr)
             executed = subprocess.run([str(binary)], cwd=scratch, capture_output=True, text=True, timeout=10)
             lines = code.splitlines()
             failure = lines[executed.returncode - 1] if 0 < executed.returncode <= len(lines) else ''
             self.assertEqual(executed.returncode, 0, 'Actual native attachment CPU contract: ' + failure)
-        finally:
-            self.assertTrue(scratch.resolve().is_relative_to(parent))
-            shutil.rmtree(scratch)
+            results.append(dict(configuration=config,exit=executed.returncode))
+        # The former permissive logger port accepted a std::string that the
+        # actual ABI rejects. Keep this as a compiler-negative regression.
+        negative=code.replace('epochengine::string_view{message.data(), message.size()}', 'message')
+        self.assertNotEqual(negative,code)
+        negative_source=proof/'abi-negative.cpp'
+        negative_source.write_text(negative,encoding='utf-8')
+        negative_args=args[:args.index('/link')]
+        negative_args[negative_args.index(str(source))]=str(negative_source)
+        negative_args += ['/c']
+        rejected=subprocess.run(negative_args,cwd=scratch,capture_output=True,text=True,timeout=45)
+        (proof/'abi-negative.log').write_text(rejected.stdout+rejected.stderr,encoding='utf-8')
+        self.assertNotEqual(rejected.returncode,0,'Real custom string-view ABI must reject std::string')
+        self.assertIn('C2664',rejected.stdout+rejected.stderr)
+        results.append(dict(case='former_std_string_log_abi',compile_exit=rejected.returncode,expected='C2664'))
+        (proof/'result.json').write_text(json.dumps(dict(passed=True,cases=results,
+            source_sha256=hashlib.sha256((dependency/'src/platform/platform.window_attachment.cpp').read_bytes()).hexdigest(),
+            scope='Actual native attachment owner with recorded Windows ports; stage/native-error/geometry recorded before rollback, bounded32 refusals; no native windows/GPU'),indent=2)+'\n',encoding='utf-8')
 
 
 if __name__ == '__main__':

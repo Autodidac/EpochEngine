@@ -55,6 +55,7 @@ export namespace epochengine
         u32 depth_object = 0;
         u32 framebuffer_object = 0;
         u32 sampler_object = 0;
+        const void* native_context_key = nullptr;
         bool native_allocation_ready = false;
         bool active = false;
 
@@ -80,6 +81,7 @@ export namespace epochengine
         u32 depth_object = 0;
         u32 sampler_object = 0;
         bool ready = false;
+        const void* context_key = nullptr;
     };
 
     struct OpenGLFamilyNativeRenderTextureHooks
@@ -506,6 +508,7 @@ export namespace epochengine
                     record.depth_object = allocation.depth_object;
                     record.framebuffer_object = allocation.framebuffer_object;
                     record.sampler_object = allocation.sampler_object;
+                    record.native_context_key = allocation.context_key;
                     record.native_allocation_ready = record.native_work_order_ready();
                 }
             }

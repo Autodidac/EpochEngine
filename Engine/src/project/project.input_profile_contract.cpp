@@ -40,6 +40,7 @@ namespace epochengine::project_input
         struct ContractRoot final
         {
             fs::path path{};
+            bool preserve_on_failure{};
 
             ContractRoot()
             {
@@ -75,6 +76,29 @@ namespace epochengine::project_input
                 if (path.empty())
                     return;
                 std::error_code error{};
+                if (preserve_on_failure)
+                {
+                    // Retain failed evidence only inside the source checkout.
+                    // External TEMP roots retain their ordinary cleanup policy.
+                    const fs::path owner{__FILE__};
+                    if (owner.is_absolute())
+                    {
+                        const auto checkout = owner.parent_path().parent_path()
+                            .parent_path().parent_path();
+                        for (auto ancestor = path.parent_path();
+                            !ancestor.empty();)
+                        {
+                            error.clear();
+                            if (fs::equivalent(ancestor, checkout, error) && !error)
+                                return;
+                            const auto parent = ancestor.parent_path();
+                            if (parent == ancestor)
+                                break;
+                            ancestor = parent;
+                        }
+                    }
+                }
+                error.clear();
                 fs::remove_all(path, error);
             }
 
@@ -761,6 +785,7 @@ namespace epochengine::project_input
             || !repairedArtifact
             || repairedArtifact.artifact != modifiedArtifact.artifact)
         {
+            artifactAheadRoot.preserve_on_failure = true;
             logger::get("Engine.Editor.SelfTest").log(logger::LogLevel::Error,
                 "input profile artifact-ahead repair: pair=" + std::string{store_code_name(repairedPair.code)}
                     + " source=" + std::string{store_code_name(repairedPair.source.code)}
@@ -768,7 +793,8 @@ namespace epochengine::project_input
                     + " reopened_source=" + std::string{store_code_name(repairedSource.code)}
                     + " source_matches=" + std::to_string(repairedSource.source == modified)
                     + " reopened_artifact=" + std::string{store_code_name(repairedArtifact.code)}
-                    + " artifact_matches=" + std::to_string(repairedArtifact.artifact == modifiedArtifact.artifact),
+                    + " artifact_matches=" + std::to_string(repairedArtifact.artifact == modifiedArtifact.artifact)
+                    + " fixture=" + artifactAheadRoot.path.string(),
                 std::source_location::current());
             return ContractFailure::paired_artifact_ahead_repair;
         }
@@ -776,6 +802,7 @@ namespace epochengine::project_input
         ContractRoot partialRoot{};
         if (!partialRoot.valid())
             return ContractFailure::temporary_root;
+        partialRoot.preserve_on_failure = true;
         ProjectInputProfileStore partialStore{
             "input-profile-contract", partialRoot.path};
         if (!partialStore.save_source(source))
@@ -844,6 +871,7 @@ namespace epochengine::project_input
                 std::source_location::current());
             return ContractFailure::paired_partial_save_reopen;
         }
+        partialRoot.preserve_on_failure = false;
 
         const ProfileSource stale = make_legacy_default_profile(1u);
         if (store.save_source(stale).code != StoreCode::stale_revision)

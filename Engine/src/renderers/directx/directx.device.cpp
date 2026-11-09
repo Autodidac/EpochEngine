@@ -16,12 +16,14 @@ module;
 #include <source_location>
 #include <span>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
 module directx.context;
 
 import core.context;
+import render.preview_grid;
 import core.logger;
 import atlas.texture;
 import sprite.handle;
@@ -337,6 +339,71 @@ float4 PSMain(PSIn input) : SV_Target
             log_failure("D3D11CreateDeviceAndSwapChain", hr);
             return false;
         }
+
+        // Identify the adapter of the device actually created, not adapter zero
+        // from an independent telemetry provider. Release COM references before logging.
+        IDXGIDevice* dxgiDevice = nullptr;
+        IDXGIAdapter* adapter = nullptr;
+        DXGI_ADAPTER_DESC adapterDesc{};
+        const char* queryStage = "QueryInterface(IDXGIDevice)";
+        HRESULT adapterQuery = state.device
+            ? state.device->QueryInterface(__uuidof(IDXGIDevice), reinterpret_cast<void**>(&dxgiDevice))
+            : E_POINTER;
+        if (succeeded(adapterQuery))
+        {
+            queryStage = "IDXGIDevice::GetAdapter";
+            adapterQuery = dxgiDevice ? dxgiDevice->GetAdapter(&adapter) : E_POINTER;
+        }
+        if (succeeded(adapterQuery))
+        {
+            queryStage = "IDXGIAdapter::GetDesc";
+            adapterQuery = adapter ? adapter->GetDesc(&adapterDesc) : E_POINTER;
+        }
+        safe_release(adapter);
+        safe_release(dxgiDevice);
+        try
+        {
+            if (!succeeded(adapterQuery))
+            {
+                logger::get(kLogDirectX).logf(logger::LogLevel::WARN,
+                    std::source_location::current(),
+                    "Created DirectX adapter identity unavailable: {} failed (HRESULT=0x{:08X}).",
+                    queryStage, static_cast<unsigned long>(adapterQuery));
+            }
+            else
+            {
+                int wideLength = 0;
+                while (wideLength < 128 && adapterDesc.Description[wideLength] != L'\0')
+                    ++wideLength;
+                char description[512]{};
+                const int bytes = wideLength > 0
+                    ? ::WideCharToMultiByte(CP_UTF8, 0, adapterDesc.Description, wideLength,
+                        description, 511, nullptr, nullptr)
+                    : 0;
+                std::size_t length = bytes > 0 ? static_cast<std::size_t>(bytes) : 0u;
+                const bool cut = length > 80u;
+                if (cut)
+                {
+                    length = 80u;
+                    while (length > 0u && (static_cast<unsigned char>(description[length]) & 0xC0u) == 0x80u)
+                        --length;
+                }
+                const std::string_view name = bytes > 0
+                    ? std::string_view{description, length}
+                    : std::string_view{"<unavailable>"};
+                logger::get(kLogDirectX).logf(logger::LogLevel::INFO,
+                    std::source_location::current(),
+                    "DX adapter vendor={:04X} device={:04X} LUID={:08X}:{:08X} cut={} name={}",
+                    adapterDesc.VendorId, adapterDesc.DeviceId,
+                    static_cast<std::uint32_t>(adapterDesc.AdapterLuid.HighPart),
+                    adapterDesc.AdapterLuid.LowPart, cut, name);
+                if (bytes <= 0)
+                    logger::get(kLogDirectX).log(logger::LogLevel::WARN,
+                        "Created DirectX adapter description is empty or could not be converted to UTF-8.",
+                        std::source_location::current());
+            }
+        }
+        catch (...) {} // Adapter diagnostics cannot reject an otherwise usable device.
 
         return create_render_target(state) && create_shaders(state) && create_sprite_pipeline(state);
     }

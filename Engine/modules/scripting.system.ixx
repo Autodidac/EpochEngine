@@ -251,6 +251,21 @@ namespace epochengine::scripting
 #endif
 
     using run_script_fn = void(*)(EpochScriptHost*);
+    using run_script_v2_fn = int(*)(const EpochScriptHostV2*);
+
+    [[nodiscard]] inline bool invoke_script_entry(run_script_fn legacy,run_script_v2_fn version2,
+        EpochScriptHost* host,const EpochScriptHostV2* hostV2)
+    {
+        if(version2)
+        {
+            if(!hostV2||hostV2->abi_version!=EPOCH_SCRIPT_HOST_ABI_V2
+                ||hostV2->struct_size<sizeof(EpochScriptHostV2)||!hostV2->legacy
+                ||!hostV2->copy_selected_translation_track)return false;
+            return version2(hostV2)==0;
+        }
+        if(!legacy)return false;
+        legacy(host);return true;
+    }
 
     inline std::mutex scriptReloadMutex{};
     inline std::atomic<std::uint64_t> scriptCompileGeneration{0};
@@ -429,7 +444,8 @@ namespace epochengine::scripting
         std::string_view logicalScriptName,
         ScriptScheduler& scheduler,
         EpochScriptHost* host,
-        ScriptLoadReport& report);
+        ScriptLoadReport& report,
+        const EpochScriptHostV2* hostV2=nullptr);
 
     inline Task do_load_script(const std::string& scriptName, ScriptScheduler& scheduler, EpochScriptHost* host, ScriptLoadReport& report)
     {
@@ -446,7 +462,8 @@ namespace epochengine::scripting
         std::string_view logicalScriptName,
         ScriptScheduler& scheduler,
         EpochScriptHost* host,
-        ScriptLoadReport& report)
+        ScriptLoadReport& report,
+        const EpochScriptHostV2* hostV2)
     {
         (void)scheduler;
         try
@@ -548,12 +565,14 @@ namespace epochengine::scripting
             }
             auto entry = reinterpret_cast<run_script_fn>(
                 ::GetProcAddress(candidateLib, "run_script"));
-            if (!entry)
+            auto entryV2 = reinterpret_cast<run_script_v2_fn>(
+                ::GetProcAddress(candidateLib, "run_script_v2"));
+            if (!entry&&!entryV2)
             {
                 ::FreeLibrary(candidateLib);
                 detail::remove_regular_file(loadPath);
                 const std::string message =
-                    "[script] Verified library has no run_script symbol: "
+                    "[script] Verified library has no supported run_script entry: "
                     + loadPath.string();
                 logger::error("Scripting", message);
                 report.log_error(message);
@@ -574,12 +593,14 @@ namespace epochengine::scripting
             }
             auto entry = reinterpret_cast<run_script_fn>(
                 ::dlsym(candidateLib, "run_script"));
-            if (!entry)
+            auto entryV2 = reinterpret_cast<run_script_v2_fn>(
+                ::dlsym(candidateLib, "run_script_v2"));
+            if (!entry&&!entryV2)
             {
                 ::dlclose(candidateLib);
                 detail::remove_regular_file(loadPath);
                 const std::string message =
-                    "[script] Verified library has no run_script symbol: "
+                    "[script] Verified library has no supported run_script entry: "
                     + loadPath.string();
                 logger::error("Scripting", message);
                 report.log_error(message);
@@ -591,7 +612,18 @@ namespace epochengine::scripting
             try
             {
                 report.log_info("Executing run_script for '" + scriptName + "'.");
-                entry(host);
+                if(!invoke_script_entry(entry,entryV2,host,hostV2))
+                {
+#ifdef _WIN32
+                    ::FreeLibrary(candidateLib);
+#else
+                    ::dlclose(candidateLib);
+#endif
+                    detail::remove_regular_file(loadPath);
+                    report.dllLoaded.store(false,std::memory_order_relaxed);
+                    report.log_error("[script] Entry rejected the host ABI or copied project data. The previous library is retained.");
+                    co_return;
+                }
                 report.executed.store(true, std::memory_order_relaxed);
             }
             catch (...)
@@ -704,7 +736,8 @@ namespace epochengine::scripting
         std::string_view logicalScriptName,
         ScriptScheduler& scheduler,
         EpochScriptHost* host,
-        ScriptLoadReport* reportPtr = nullptr)
+        ScriptLoadReport* reportPtr = nullptr,
+        const EpochScriptHostV2* hostV2 = nullptr)
     {
         ScriptLoadReport fallbackReport;
         ScriptLoadReport& report = reportPtr ? *reportPtr : fallbackReport;
@@ -712,7 +745,7 @@ namespace epochengine::scripting
 
         try
         {
-            Task t = do_load_script(sourcePath, logicalScriptName, scheduler, host, report);
+            Task t = do_load_script(sourcePath, logicalScriptName, scheduler, host, report,hostV2);
 
             auto node = std::make_unique<taskgraph::Node>(std::move(t));
             const std::string nodeLabel = logicalScriptName.empty()
@@ -761,13 +794,14 @@ namespace epochengine::scripting
         const std::filesystem::path& sourcePath,
         std::string_view logicalScriptName,
         EpochScriptHost* host,
-        ScriptLoadReport* reportPtr = nullptr)
+        ScriptLoadReport* reportPtr = nullptr,
+        const EpochScriptHostV2* hostV2 = nullptr)
     {
         const std::size_t workerCount = (std::max)(std::size_t{ 1 }, std::thread::hardware_concurrency() > 0
             ? static_cast<std::size_t>(std::thread::hardware_concurrency())
             : std::size_t{ 4 });
         taskgraph::TaskGraph scheduler(workerCount);
-        return load_or_reload_script(sourcePath, logicalScriptName, scheduler, host, reportPtr);
+        return load_or_reload_script(sourcePath, logicalScriptName, scheduler, host, reportPtr,hostV2);
     }
 
     export TaskGraphStressReport run_taskgraph_reload_stress_test(const TaskGraphStressConfig& config)

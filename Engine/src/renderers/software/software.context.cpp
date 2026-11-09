@@ -71,10 +71,6 @@ namespace epochengine::anativecontext
         sr.framebuffer.assign(
             std::size_t(sr.width) * std::size_t(sr.height),
             0xFF000000u);
-        sr.sceneFramebuffer.assign(
-            std::size_t(sr.width) * std::size_t(sr.height),
-            0xFF000000u);
-        sr.frameValid = false;
 
 #if defined(_WIN32)
         sr.bmi.bmiHeader.biWidth = sr.width;
@@ -100,10 +96,6 @@ namespace epochengine::anativecontext
         sr.width = static_cast<int>(w);
         sr.height = static_cast<int>(h);
         sr.running = true;
-        sr.frameValid = false;
-        sr.lastGuiGeneration = 0;
-        sr.lastSceneViewport = {};
-        sr.lastPreviewMode = static_cast<std::uint8_t>(core::ScenePreviewMode::None);
 
         ctx->get_width = get_width;
         ctx->get_height = get_height;
@@ -138,7 +130,6 @@ namespace epochengine::anativecontext
         sr.onResize = ctx->onResize;
 
         sr.framebuffer.assign(std::size_t(w) * std::size_t(h), 0xFF000000u);
-        sr.sceneFramebuffer.assign(std::size_t(w) * std::size_t(h), 0xFF000000u);
 
 #if defined(_WIN32)
         HWND resolvedParent = reinterpret_cast<HWND>(parentWnd);
@@ -198,12 +189,7 @@ namespace epochengine::anativecontext
         auto& sr = s_softrendererstate;
 
         sr.framebuffer.clear();
-        sr.sceneFramebuffer.clear();
         cubeTexture.reset();
-        sr.frameValid = false;
-        sr.lastGuiGeneration = 0;
-        sr.lastSceneViewport = {};
-        sr.lastPreviewMode = static_cast<std::uint8_t>(core::ScenePreviewMode::None);
 
 #if defined(_WIN32)
         sr.hwnd = nullptr;

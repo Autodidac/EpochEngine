@@ -34,15 +34,33 @@
                     return;
                 }
 
+                const auto index = editor_entity_index(state, state.selectedEntityId);
+                if(index&&state.mainSurface==EditorMainSurface::ForestFactory&&state.forestTerrainPainting
+                    &&state.entities[*index].forestRegion)
+                {
+                    const auto& tree=state.entities[*index];
+                    const auto terrain=editor_entity_index(state,tree.forestRegion->terrain_object_id);
+                    const bool focused=terrain&&focus_forest_paint_region(ctx,state.entities[*terrain],tree);
+                    push_editor_log(state,focused?"[forest] Focused the painted terrain area."
+                        :"[forest] Painted area no longer matches its terrain; Focus was not applied.");
+                    return;
+                }
+
+                if(index&&!ensure_editor_forest_focus_mesh(state,state.entities[*index]))
+                {
+                    push_editor_log(state,"[scene] Forest mesh is unavailable or exceeds the scene cache; Focus was not applied.");
+                    return;
+                }
+
                 if (!ensure_editor_scene_interaction(state))
                 {
                     push_editor_log(state, "[scene] Selection bounds are invalid; Focus was not applied.");
                     return;
                 }
 
-                const auto focus = state.sceneInteraction.focus_target(
+                const auto bodyFocus=index?editor_planetary_body_focus(state,state.entities[*index]):std::nullopt;
+                const auto focus = bodyFocus?bodyFocus:state.sceneInteraction.focus_target(
                     scene_interaction::SceneObjectId{ state.selectedEntityId, 1u });
-                const auto index = editor_entity_index(state, state.selectedEntityId);
                 if (!focus || !index)
                 {
                     push_editor_log(state, "[scene] Selected object no longer resolves; Focus was not applied.");
@@ -50,10 +68,17 @@
                 }
 
                 const EditorEntity& entity = state.entities[*index];
-                bool focused = epochengine::previewgrid::focus_camera(
-                    ctx,
-                    { focus->target.x, focus->target.y, focus->target.z },
-                    focus->radius);
+                const bool preciseFocus = !bodyFocus && (entity.positionAnchor.has_value()
+                    || state.sceneInteractionOrigin != std::array<double, 3>{});
+                const std::array<double, 3> absoluteFocus{
+                    double(focus->target.x) + (bodyFocus ? 0.0 : state.sceneInteractionOrigin[0]),
+                    double(focus->target.y) + (bodyFocus ? 0.0 : state.sceneInteractionOrigin[1]),
+                    double(focus->target.z) + (bodyFocus ? 0.0 : state.sceneInteractionOrigin[2])};
+                const auto applyFocus = [&](const void* context)
+                {
+                    return frame_editor_scene_target(context,absoluteFocus,focus->radius,preciseFocus);
+                };
+                bool focused = applyFocus(ctx);
 #if defined(_WIN32)
                 if (auto* manager = core::GetActiveMultiContextManager())
                 {
@@ -61,10 +86,7 @@
                     {
                         if (!window || !window->context || window->context.get() == ctx)
                             continue;
-                        focused = epochengine::previewgrid::focus_camera(
-                            window->context.get(),
-                            { focus->target.x, focus->target.y, focus->target.z },
-                            focus->radius) || focused;
+                        focused = applyFocus(window->context.get()) || focused;
                     }
                 }
 #endif
@@ -249,6 +271,70 @@
             push_editor_log(
                 it->second,
                 epochengine::format_text("[script] Rotated {} scene entities by {:.1f} degrees.", rotated, deltaDegrees));
+        }
+
+        struct ScriptTranslationRegistration final
+        {
+            const core::Context* context{};
+            project_motion_track::Binding binding{};
+            std::optional<project_motion_track::Track> pending{};
+        };
+
+        [[nodiscard]] bool editor_scene_script_mutation_allowed(const EditorState& state) noexcept
+        {
+            return !editor_project_viewport_input_reserved(state);
+        }
+
+        [[nodiscard]] project_motion_track::Binding script_translation_binding(
+            const EditorState& state,scene::SceneObjectId entity)
+        {
+            return {state.projectLifecycle.evidence().generations.selected_project.generation,
+                state.sceneDocument.identity().scene.value,entity,state.projectId};
+        }
+
+        int script_copy_selected_translation_callback(void* userData,
+            const EpochScriptTranslationKey* keys,std::uint32_t count)
+        {
+            auto* request=static_cast<ScriptTranslationRegistration*>(userData);
+            if(!request||!request->context||!keys||!count||count>project_motion_track::maximum_keys||request->pending)return -1;
+            try
+            {
+                auto& storage=editor_storage();std::scoped_lock lock(storage.mutex);
+                const auto found=storage.states.find(request->context);
+                if(found==storage.states.end())return -1;
+                const auto& state=found->second;
+                if(!editor_scene_script_mutation_allowed(state))return -1;
+                if(script_translation_binding(state,state.selectedEntityId)!=request->binding)return -1;
+                const auto index=editor_entity_index(state,state.selectedEntityId);
+                if(!index||state.entities[*index].editorOnly||state.entities[*index].type=="Camera"
+                    ||state.entities[*index].type=="Level")return -1;
+                std::array<project_motion_track::Keyframe,project_motion_track::maximum_keys> copied{};
+                for(std::size_t i{};i<count;++i)
+                    copied[i]={keys[i].seconds,{keys[i].offset[0],keys[i].offset[1],keys[i].offset[2]}};
+                auto compiled=project_motion_track::make_track(request->binding,std::span{copied}.first(count));
+                if(!compiled)return -1;
+                request->pending=std::move(compiled.track);return 0;
+            }
+            catch(...){return -1;}
+        }
+
+        [[nodiscard]] bool commit_script_translation_registration(EditorState& state,
+            const ScriptTranslationRegistration& request)
+        {
+            if(!request.pending)return true; // Legacy scripts need not register motion.
+            if(!editor_scene_script_mutation_allowed(state))return false;
+            const auto entity=editor_entity_index(state,request.binding.entity_id);
+            if(script_translation_binding(state,state.selectedEntityId)!=request.binding
+                ||!entity||state.entities[*entity].editorOnly||state.entities[*entity].type=="Camera"||state.entities[*entity].type=="Level"
+                ||(state.scriptTranslationTracks.size()>=256u&&!state.scriptTranslationTracks.contains(request.binding.entity_id)))return false;
+            try
+            {
+                state.scriptTranslationTracks.insert_or_assign(request.binding.entity_id,*request.pending);
+                state.scriptCubeOscillators.erase(request.binding.entity_id);
+                if(state.scriptOscillator.entity_id==request.binding.entity_id)state.scriptOscillator={};
+                state.sceneInteractionDirty=true;return true;
+            }
+            catch(...){return false;}
         }
 
         [[nodiscard]] bool attach_script_cube_oscillators(EditorState& state, unsigned count,
@@ -846,40 +932,20 @@
                 && editor.projectLifecycle.evidence().project_selected;
         }
 
-        [[nodiscard]] bool open_project_manifest_from_dialog(
+        [[nodiscard]] bool open_project_manifest_path(
             EditorState& editor,
-            const std::shared_ptr<core::Context>& ctx)
+            const std::shared_ptr<core::Context>& ctx,
+            const std::filesystem::path& manifest)
         {
-            std::filesystem::path initialDirectory{};
-            if (!editor.projectRoot.empty())
-                initialDirectory =
-                    resolve_editor_path(editor.projectRoot).parent_path();
-            if (initialDirectory.empty())
+            if (editor.projectBuildPending || editor.scriptBuildPending
+                || editor.planetaryAttachmentPending || editor.planetaryGeneratePending || editor.planetaryStreamPending)
             {
-                std::error_code ignored{};
-                initialDirectory = std::filesystem::current_path(ignored);
-            }
-
-            const auto selected =
-                platform::filesystem::open_file_dialog(
-                    L"Open Epoch Project",
-                    L"Epoch project manifest",
-                    L"project.epoch.json",
-                    initialDirectory);
-            if (!selected.accepted)
-            {
-                editor.projectStatus = selected.diagnostic;
-                if (!selected.cancelled)
-                {
-                    push_editor_log(
-                        editor,
-                        "[project] " + editor.projectStatus);
-                }
+                editor.projectStatus = "Cancel or finish the active project operation before opening another project.";
+                push_editor_log(editor, "[project] " + editor.projectStatus);
                 return false;
             }
-
             const auto admitted = editor_admit_project_manifest(
-                selected.path.generic_string());
+                manifest.generic_string());
             editor.projectStatus = admitted.summary;
             if (!admitted.succeeded)
             {
@@ -911,6 +977,8 @@
                     editor.viewportCameraMode);
             }
 
+            const auto utf8 = manifest.generic_u8string();
+            editor.projectManifestPathDraft.assign(utf8.begin(), utf8.end());
             editor.projectPickerId = admitted.project_id;
             editor.projectStatus =
                 "Opened project from " + admitted.manifest_path + ".";
@@ -918,6 +986,126 @@
                 editor,
                 "[project] " + editor.projectStatus);
             return true;
+        }
+
+        [[nodiscard]] bool open_project_manifest_from_dialog(
+            EditorState& editor,
+            const std::shared_ptr<core::Context>& ctx)
+        {
+            std::filesystem::path initialDirectory = editor_projects_root();
+            if (!editor.projectRoot.empty())
+                initialDirectory =
+                    resolve_editor_path(editor.projectRoot).parent_path();
+            if (initialDirectory.empty())
+            {
+                std::error_code ignored{};
+                initialDirectory = std::filesystem::current_path(ignored);
+            }
+
+            const auto selected =
+                platform::filesystem::open_file_dialog(
+                    L"Open Epoch Project",
+                    L"Epoch project manifest",
+                    L"project.epoch.json",
+                    initialDirectory);
+            if (!selected.accepted)
+            {
+                editor.projectStatus = selected.diagnostic;
+                if (!selected.cancelled)
+                {
+                    push_editor_log(
+                        editor,
+                        "[project] " + editor.projectStatus);
+                }
+                return false;
+            }
+
+            return open_project_manifest_path(editor, ctx, selected.path);
+        }
+
+        void draw_project_browser(
+            EditorState& editor,
+            const std::shared_ptr<core::Context>& ctx,
+            const float width)
+        {
+            const gui::InlineButtonRowOptions row{
+                .sizing=gui::InlineButtonSizing::FitContent,
+                .alignment=gui::InlineButtonAlignment::Center,
+                .wrap=true, .available_width=width};
+            const std::array sessionActions{
+                gui::InlineButtonSpec{.label="Open Project...", .width=0.0f},
+                gui::InlineButtonSpec{.label="Close Project", .width=0.0f,
+                    .enabled=has_open_project(editor)}};
+            if (const auto action = gui::inline_button_row(sessionActions, 30.0f, 6.0f, row))
+            {
+                if (*action == 0u) (void)open_project_manifest_from_dialog(editor, ctx);
+                else (void)editor_close_project(ctx);
+            }
+
+            // Copy the selected identity and manifest before any admission can
+            // rebuild the registry's string-view catalog. Selection alone never opens.
+            std::vector<std::string> ids{}, manifests{}, names{}, roots{};
+            for (const auto& profile : editor_project_profiles())
+            {
+                if (profile.manifest_path.empty()) continue;
+                ids.emplace_back(profile.id);
+                manifests.emplace_back(profile.manifest_path);
+                names.emplace_back(profile.display_name.empty() ? profile.id : profile.display_name);
+                roots.emplace_back(profile.root_path);
+            }
+            std::vector<std::string_view> labels{};
+            for (const auto& name : names) labels.emplace_back(name);
+            const auto selected = std::find(ids.begin(), ids.end(), editor.projectPickerId);
+            std::size_t selectedIndex = static_cast<std::size_t>(selected - ids.begin());
+            gui::label("Available projects");
+            if (!ids.empty())
+            {
+                const auto choice = gui::select_box(gui::SelectBoxOptions{
+                    .id="open-saved-project", .placeholder="Choose a saved project",
+                    .selected=selectedIndex < names.size() ? std::string_view{names[selectedIndex]} : std::string_view{},
+                    .options=labels, .size={width, 30.0f}});
+                if (choice.changed && choice.selected_index && *choice.selected_index < ids.size())
+                {
+                    selectedIndex = *choice.selected_index;
+                    editor.projectPickerId = ids[selectedIndex];
+                }
+                if (selectedIndex < roots.size()) gui::wrapped_label(roots[selectedIndex], width);
+            }
+            else gui::wrapped_label("No saved projects found here. Open Project... lets you choose a project file elsewhere.", width);
+            const std::array catalogActions{
+                gui::InlineButtonSpec{.label="Open Selected", .width=0.0f, .enabled=selectedIndex < manifests.size()},
+                gui::InlineButtonSpec{.label="Refresh", .width=0.0f}};
+            if (const auto action = gui::inline_button_row(catalogActions, 30.0f, 6.0f, row))
+            {
+                if (*action == 0u && selectedIndex < manifests.size())
+                    (void)open_project_manifest_path(editor, ctx, std::filesystem::path{manifests[selectedIndex]});
+                else if (*action == 1u) editor_refresh_project_profiles();
+            }
+            if (gui::button(editor.projectPathAdvancedOpen ? "Hide Advanced Path" : "Advanced: Open by Path...",
+                    {(std::min)(width, 230.0f), 30.0f}))
+                editor.projectPathAdvancedOpen = !editor.projectPathAdvancedOpen;
+            if (editor.projectPathAdvancedOpen)
+            {
+                gui::label("Project manifest path (project.epoch.json)");
+                (void)gui::edit_box(editor.projectManifestPathDraft, {width, 30.0f}, 32768u, false);
+                const std::array pathActions{
+                    gui::InlineButtonSpec{.label="Open Path", .width=0.0f,
+                        .enabled=!editor.projectManifestPathDraft.empty()}};
+                if (gui::inline_button_row(pathActions, 30.0f, 6.0f, row))
+                {
+                    try
+                    {
+                        const std::filesystem::path manifest{std::u8string{
+                            editor.projectManifestPathDraft.begin(), editor.projectManifestPathDraft.end()}};
+                        (void)open_project_manifest_path(editor, ctx, manifest);
+                    }
+                    catch (...)
+                    {
+                        editor.projectStatus = "Could not open that project path. Check the path and try again.";
+                        push_editor_log(editor, "[project] " + editor.projectStatus);
+                    }
+                }
+            }
         }
 
         [[nodiscard]] epochengine::capability::RequirementAdmission renderer_admission(
@@ -931,6 +1119,38 @@
                 policy.allow_software_fallback);
         }
 
+        [[nodiscard]] std::string renderer_feature_proof_names(
+            epochengine::capability::FeatureMask mask)
+        {
+            using Feature = epochengine::capability::Feature;
+            constexpr auto names = std::to_array<std::pair<Feature, std::string_view>>({
+                {Feature::scalar_cpu,"CPU execution"}, {Feature::simd_cpu,"SIMD"},
+                {Feature::deterministic_reference,"deterministic reference"}, {Feature::headless,"headless execution"},
+                {Feature::software_raster,"software raster"}, {Feature::presentation,"presentation proof"},
+                {Feature::raster_pipeline,"raster pipeline"}, {Feature::textures,"textures"},
+                {Feature::render_targets,"render targets"}, {Feature::instancing,"instancing"},
+                {Feature::compute,"compute"}, {Feature::storage_buffers,"storage buffers"},
+                {Feature::image_load_store,"image load/store"}, {Feature::indirect_draw,"indirect drawing"},
+                {Feature::indirect_dispatch,"indirect dispatch"}, {Feature::atomic_operations,"atomics"},
+                {Feature::descriptor_indexing,"descriptor indexing"}, {Feature::bindless_resources,"bindless resources"},
+                {Feature::sparse_resources,"sparse resources"}, {Feature::explicit_queues,"explicit queues"},
+                {Feature::explicit_synchronization,"explicit synchronization"}, {Feature::async_compute,"asynchronous compute"},
+                {Feature::subgroup_operations,"subgroups"}, {Feature::mesh_shaders,"mesh shaders"},
+                {Feature::acceleration_structures,"acceleration structures"}, {Feature::hardware_ray_query,"ray queries"},
+                {Feature::ray_tracing_pipeline,"ray-tracing pipeline"}, {Feature::temporal_reconstruction,"temporal reconstruction"},
+                {Feature::procedural_generation,"procedural generation"}, {Feature::spatial_queries,"spatial queries"},
+                {Feature::navigation,"navigation"}, {Feature::resource_residency,"resource residency"},
+                {Feature::audio_processing,"audio processing"}, {Feature::offline_capture,"offline capture"}});
+            std::string result;
+            for (const auto& [feature, name] : names)
+                if ((mask & epochengine::capability::feature_bit(feature)) != 0u)
+                {
+                    if (!result.empty()) result += ", ";
+                    result += name;
+                }
+            return result;
+        }
+
         [[nodiscard]] std::string renderer_admission_summary(
             const epochengine::RendererBackendKind kind,
             const EditorProjectCapabilityPolicy& policy)
@@ -938,17 +1158,24 @@
             const auto candidate =
                 epochengine::capability::renderer_subsystem_profile_for(kind);
             const auto admission = renderer_admission(kind, policy);
-            std::string summary = epochengine::format_text(
-                "{} | {} {}-{}",
-                policy.id,
-                epochengine::capability::admission_status_label(admission.status),
-                epochengine::capability::tier_code(candidate.capability.tier),
-                epochengine::capability::backend_code(candidate.capability.backend));
+            std::string summary{policy.id};
+            summary += " | ";
+            summary += epochengine::capability::tier_code(candidate.capability.tier);
+            summary += "-";
+            summary += epochengine::capability::backend_code(candidate.capability.backend);
             if (admission.status == epochengine::capability::AdmissionStatus::rejected)
             {
-                summary += " | ";
-                summary += epochengine::capability::match_failure_label(admission.failure);
+                summary += " | Not validated: ";
+                if (admission.missing_features != 0u)
+                    summary += renderer_feature_proof_names(admission.missing_features);
+                else if (admission.failure == epochengine::capability::MatchFailure::missing_evidence)
+                    summary += "backend validation evidence";
+                else
+                    summary += epochengine::capability::match_failure_label(admission.failure);
             }
+            else { summary += " | "; summary += epochengine::capability::admission_status_label(admission.status); }
+            if (admission.provisional_features != 0u)
+                summary += " | Partial proof: " + renderer_feature_proof_names(admission.provisional_features);
             return summary;
         }
 
@@ -1159,6 +1386,17 @@
             std::string_view argument{};
         };
 
+        bool persist_project_run_settings(EditorState& editor)
+        {
+            std::string diagnostic;
+            const bool saved = editor_set_project_run_settings(editor.projectRoot,
+                EditorProjectRunSettings{editor.projectRunBackend, editor.projectRunFrameLimitFps}, diagnostic);
+            editor.projectStatus = std::move(diagnostic);
+            push_editor_log(editor, std::string{"[project] "} + editor.projectStatus);
+            if (!saved) editor.projectBuildStatus = editor.projectStatus;
+            return saved;
+        }
+
         [[nodiscard]] std::span<const ProjectRunBackendChoice> project_run_backend_choices() noexcept
         {
 #if defined(_WIN32)
@@ -1290,13 +1528,6 @@
             }
             return "Custom tile chunk";
         }
-
-        struct FrameLimitChoice
-        {
-            std::string_view label{};
-            std::string_view argument{};
-            double fps{};
-        };
 
         struct ProjectCameraChoice
         {
@@ -1647,91 +1878,10 @@
                     : editor.projectInputSettingsStatus};
         }
 
-        [[nodiscard]] std::span<const FrameLimitChoice> frame_limit_choices() noexcept
-        {
-            static constexpr std::array<FrameLimitChoice, 5> kChoices{ {
-                { "30 FPS", "30", 30.0 },
-                { "60 FPS", "60", 60.0 },
-                { "120 FPS", "120", 120.0 },
-                { "0 (Unlimited)", "0", 0.0 },
-                { "Manual", "1500", 1500.0 }
-            } };
-            return { kChoices.data(), kChoices.size() };
-        }
-
-        [[nodiscard]] std::string_view frame_limit_label(double fps) noexcept
-        {
-            return epochengine::perf::label_for_frame_limit(fps);
-        }
-
-        [[nodiscard]] std::string frame_limit_argument(double fps)
-        {
-            for (const auto& choice : frame_limit_choices())
-            {
-                if (choice.fps == fps)
-                    return std::string{choice.argument};
-            }
-            return std::isfinite(fps) && fps > 0.0
-                ? epochengine::format_text("{}", fps) : "0";
-        }
-
-        [[nodiscard]] bool frame_limit_control(std::string_view id, double& fps,
-            EditorState::FrameLimitEditState& edit, float width, bool vsync = false)
-        {
-            const auto start = gui::cursor_position();
-            const auto choices = frame_limit_choices();
-            if (!edit.initialized)
-            {
-                edit.initialized = true;
-                edit.manual = fps != 0.0 && fps != 30.0 && fps != 60.0 && fps != 120.0;
-                if (edit.manual) edit.text = frame_limit_argument(fps);
-            }
-            std::array<std::string_view, 5> labels{};
-            for (std::size_t n = 0; n < choices.size(); ++n) labels[n] = choices[n].label;
-            const float rowWidth = (std::max)(1.0f, width);
-            const bool stacked = rowWidth < 280.0f;
-            const float selectWidth = stacked ? rowWidth : (std::min)(250.0f, rowWidth - 160.0f);
-            const auto selected = gui::select_box(gui::SelectBoxOptions{
-                .id = id, .placeholder = "Frame limit",
-                .selected = edit.manual ? "Manual" : vsync ? "VSync"
-                    : fps == 0.0 ? "0 (Unlimited)" : frame_limit_label(fps),
-                .options = labels, .size = {selectWidth, 30.0f},
-                .row_height = 28.0f, .max_visible_options = 5});
-            bool changed = false;
-            if (selected.changed && selected.selected_index && *selected.selected_index < choices.size())
-            {
-                edit.manual = *selected.selected_index == choices.size() - 1u;
-                edit.error.clear();
-                if (edit.manual)
-                {
-                    double parsed{};
-                    if (perf::parse_frame_limit_value(edit.text, parsed)) { fps = parsed; changed = true; }
-                    else edit.error = "Enter 0 or a positive FPS.";
-                }
-                else { fps = choices[*selected.selected_index].fps; changed = true; }
-            }
-            if (edit.manual)
-            {
-                const gui::Vec2 manualPos{stacked ? start.x : start.x + selectWidth + 8.0f,
-                    start.y + (stacked ? 34.0f : 0.0f)};
-                const float inputWidth = stacked ? (std::min)(88.0f, (std::max)(32.0f, rowWidth - 64.0f)) : 88.0f;
-                gui::set_cursor(manualPos);
-                const auto input = gui::edit_box(edit.text, {inputWidth, 30.0f}, 24u, false,
-                    gui::TextInputKeyboardPolicy::focused, true, "1500");
-                gui::set_cursor({manualPos.x + inputWidth + 8.0f, manualPos.y});
-                const bool apply = gui::button("Apply", {56.0f, 30.0f});
-                if (input.submitted || apply)
-                {
-                    double parsed{};
-                    if (perf::parse_frame_limit_value(edit.text, parsed))
-                    { fps = parsed; changed = true; edit.error.clear(); }
-                    else edit.error = "Enter 0 or a positive FPS.";
-                }
-            }
-            gui::set_cursor({start.x, start.y + (stacked && edit.manual ? 66.0f : 32.0f)});
-            if (!edit.error.empty()) gui::label(edit.error);
-            return changed;
-        }
+        using gui::frame_limit_choices;
+        using gui::frame_limit_label;
+        using gui::frame_limit_argument;
+        using gui::frame_limit_control;
 
         [[nodiscard]] std::span<const ProjectCameraChoice> project_camera_choices() noexcept
         {

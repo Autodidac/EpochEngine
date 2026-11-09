@@ -5,17 +5,18 @@
 // The frame owns chrome input and absorbs unused clicks only after children.
 namespace epochengine::gui::floating_input
 {
-    [[nodiscard]] constexpr bool chrome_owns_press(
+    // Included after import epoch.gui.input; keep the adapter call sites stable.
+    [[nodiscard]] inline bool chrome_owns_press(
         bool inside_window, bool movable, bool title_hovered,
         bool close_hovered, bool resize_hovered) noexcept
     {
-        return inside_window && (close_hovered || resize_hovered
-            || (movable && title_hovered));
+        return gui_lib::input::floating_chrome_owns_press(inside_window,
+            movable, title_hovered, close_hovered, resize_hovered);
     }
 
-    [[nodiscard]] constexpr bool absorb_unhandled_pointer(
+    [[nodiscard]] inline bool absorb_unhandled_pointer(
         bool inside_window, bool already_consumed) noexcept
     {
-        return inside_window && !already_consumed;
+        return gui_lib::input::floating_absorb_unhandled_pointer(inside_window, already_consumed);
     }
 }

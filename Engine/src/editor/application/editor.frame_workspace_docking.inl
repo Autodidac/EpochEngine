@@ -1,5 +1,78 @@
 // Epoch feature implementation; included by editor.core application owner only.
 // SPDX-License-Identifier: LicenseRef-MIT-NoSell
+        const auto activate_workspace_companions = [&](EditorMainSurface surface,
+            const bool detachedOnly = false)
+        {
+            // Only the final explicit view choice in this frame owns activation.
+            for (auto& pending : result.companion_pane_activations)
+                pending.clear();
+            std::string_view primary{};
+            switch (surface)
+            {
+            case EditorMainSurface::Scene:
+            case EditorMainSurface::ForestFactory:
+            case EditorMainSurface::PlantLab:
+                primary = "pane.world_outliner";
+                break;
+            case EditorMainSurface::Game2D:
+                primary = editor.game2DGuiWorkspace
+                    ? "pane.gui_hierarchy" : "pane.tile_map";
+                break;
+            case EditorMainSurface::Assets:
+            case EditorMainSurface::AssetGeneration:
+                primary = "pane.asset_browser";
+                break;
+            default: return;
+            }
+            const auto activate = [&](std::string_view route)
+            {
+                const auto pane = editor_tool_pane_from_route(route);
+                if (!pane || !pane_supported(*pane)) return;
+                const bool detached = pane_route_is_detached(route);
+                if (detachedOnly && (!detached || !pane_is_shown(route))) return;
+                if (!detachedOnly) set_pane_shown(route, true);
+                // Keep detached panes and their existing dock destinations.
+                // Selecting a workspace never resets the user's dock layout.
+                if (!detached)
+                {
+                    const auto region = pane_dock_region(route);
+                    // Workspace companions must not replace the conversation
+                    // the user is reading. Explicit tab/menu selection still
+                    // uses set_active_pane directly and remains unrestricted.
+                    if (pane_is_shown("pane.ai_chat")
+                        && !pane_route_is_detached("pane.ai_chat")
+                        && pane_dock_region("pane.ai_chat") == region
+                        && editor_tool_pane_from_route(active_pane_storage(region))
+                            == EditorToolPane::AiChat)
+                        return;
+                    set_active_pane(region, route);
+                }
+                else
+                {
+                    for (auto& pending : result.companion_pane_activations)
+                    {
+                        if (pending.empty())
+                        {
+                            pending.assign(route);
+                            break;
+                        }
+                    }
+                }
+            };
+            activate("pane.properties");
+            // If both companions share a custom group, the primary wins.
+            activate(primary);
+        };
+
+        if (focusedCompanionOwnerChanged)
+            activate_workspace_companions(editor.mainSurface, true);
+
+        if (editor.workspaceCompanionsPending)
+        {
+            editor.workspaceCompanionsPending = false;
+            activate_workspace_companions(editor.mainSurface);
+        }
+
         auto apply_editor_surface = [&](EditorMainSurface surface, std::string_view source)
         {
             if (!editor_application_supports_surface(application, surface))
@@ -16,6 +89,8 @@
             {
                 editor.aiAuthoringSurface = editor.mainSurface;
             }
+
+            reveal_editor_workspace_surface(editor, surface);
             if (main_surface_is_ai_authoring(surface))
             {
                 editor.aiAuthoringSurface = surface;
@@ -23,6 +98,33 @@
             }
 
             const bool changedSurface = editor.mainSurface != surface;
+            if (changedSurface && editor.mainSurface == EditorMainSurface::ForestFactory
+                && editor.forestProjectCamera && ctx)
+            {
+                if(editor.forestTerrainPainting)
+                    editor.forestProjectCamera=previewgrid::capture_camera_rig_snapshot(ctx.get());
+                else editor.forestDesignCamera = previewgrid::capture_camera_rig_snapshot(ctx.get());
+                (void)previewgrid::restore_camera_rig_snapshot(ctx.get(), *editor.forestProjectCamera);
+                editor.forestProjectCamera.reset();
+                editor.forestPlacementCamera.reset();
+            }
+            if (changedSurface && surface == EditorMainSurface::ForestFactory && ctx)
+            {
+                editor.forestProjectCamera = previewgrid::capture_camera_rig_snapshot(ctx.get());
+                editor.forestPlacementCamera = previewgrid::camera_for(ctx.get());
+            }
+            if (changedSurface && surface != EditorMainSurface::ForestFactory)
+            {
+                editor.forestTerrainPainting = false;
+                editor.forestProfileSliderDraft.reset();
+            }
+            if(changedSurface&&editor.mainSurface==EditorMainSurface::AssetGeneration&&editor.assetGenerationPreviousCamera&&ctx)
+            {
+                (void)previewgrid::restore_camera_rig_snapshot(ctx.get(),*editor.assetGenerationPreviousCamera);
+                editor.assetGenerationPreviousCamera.reset();
+            }
+            if(changedSurface&&surface==EditorMainSurface::AssetGeneration&&ctx)
+                editor.assetGenerationPreviousCamera=previewgrid::capture_camera_rig_snapshot(ctx.get());
             editor.mainSurface = surface;
             if (changedSurface)
                 editor.surfaceSettleFrames = 1;
@@ -36,6 +138,8 @@
                 if (ctx)
                 {
                     const auto currentCameraMode = epochengine::previewgrid::camera_mode_for(ctx.get());
+                    if (currentCameraMode != epochengine::previewgrid::CameraMode::Canvas2D)
+                        editor.viewportCameraMode = currentCameraMode;
                     if (currentCameraMode == epochengine::previewgrid::CameraMode::Canvas2D)
                         epochengine::previewgrid::set_camera_mode(ctx.get(), editor.viewportCameraMode);
                 }
@@ -43,7 +147,7 @@
                 break;
             case EditorMainSurface::Game2D:
                 editor.workspaceTab = EditorWorkspaceTab::Project;
-                editor.outlinerToolTab = OutlinerToolTab::TileMap;
+                (void)select_editor_2d_workspace(editor, editor.game2DGuiWorkspace);
                 editor.previewMode = core::ScenePreviewMode::Editor;
                 editor.viewportCameraMode = previewgrid::CameraMode::Canvas2D;
                 if (ctx)
@@ -51,7 +155,14 @@
                     epochengine::previewgrid::set_camera_mode(ctx.get(), epochengine::previewgrid::CameraMode::Canvas2D);
                     epochengine::previewgrid::reset_camera(ctx.get());
                 }
-                push_editor_log(editor, "[editor] 2D / UI opened in Tile Map mode with the locked Canvas2D camera.");
+                push_editor_log(editor, editor.game2DGuiWorkspace
+                    ? "[editor] UI workspace opened in GUI Overlay mode."
+                    : "[editor] 2D workspace opened in Tile Map mode with the locked Canvas2D camera.");
+                break;
+            case EditorMainSurface::AssetGeneration:
+                editor.workspaceTab = EditorWorkspaceTab::Assets;
+                editor.outlinerToolTab = OutlinerToolTab::Assets;
+                editor.assetGenerationFocusPending = true;
                 break;
             case EditorMainSurface::Assets:
                 editor.workspaceTab = EditorWorkspaceTab::Assets;
@@ -67,10 +178,26 @@
                 editor.previewMode = core::ScenePreviewMode::Editor;
                 editor.viewportCameraMode = previewgrid::CameraMode::Editor;
                 if (ctx)
+                {
                     epochengine::previewgrid::set_camera_mode(ctx.get(), epochengine::previewgrid::CameraMode::Editor);
+                    if (editor.forestTerrainPainting)
+                    {
+                        if(editor.forestProjectCamera)
+                            (void)previewgrid::restore_camera_rig_snapshot(ctx.get(),*editor.forestProjectCamera);
+                    }
+                    else if (editor.forestDesignCamera)
+                        (void)previewgrid::restore_camera_rig_snapshot(ctx.get(), *editor.forestDesignCamera);
+                    else
+                    {
+                        epochengine::previewgrid::reset_camera(ctx.get());
+                        focus_forest_factory_preview(ctx.get(), editor);
+                    }
+                }
                 push_editor_log(
                     editor,
-                    "[forest] Forest Factory placement opened for adding Plant Lab output to the active 3D scene.");
+                    editor.forestTerrainPainting
+                        ? "[forest] Forest painting opened on the project terrain."
+                        : "[forest] Plant preview opened. Edit the plant, then Add to Scene; the project scene is unchanged.");
                 break;
             case EditorMainSurface::PlantLab:
                 editor.workspaceTab = EditorWorkspaceTab::Assets;
@@ -96,7 +223,7 @@
                 editor.workspaceTab = EditorWorkspaceTab::AI;
                 editor.aiWorkspaceDomain = AiWorkspaceDomain::Control;
 #if EPOCH_EDITION_PUBLIC
-                push_editor_log(editor, "[assistant] Project Assistant workspace opened.");
+                push_editor_log(editor, "[automation] Automation workspace opened.");
 #endif
                 break;
             case EditorMainSurface::Systems:
@@ -106,7 +233,10 @@
             default:
                 break;
             }
-            // Surface switches do not mutate user-owned pane visibility.
+            // This route runs for a requested view transition, never as a
+            // per-frame visibility rule. The user may close/select panes again.
+            activate_workspace_companions(surface);
+            // Companion activation leaves dock geometry and destinations intact.
         };
 
         if (editor.aiAuthoringSurfaceRestoreQueued)
@@ -129,6 +259,18 @@
             // An explicit view choice supersedes an older queued transition.
             editor.requestedMainSurface.reset();
             apply_editor_surface(surface, source);
+        };
+
+        const auto close_editor_workspace_tab = [&](const EditorWorkspaceSpec& workspace)
+        {
+            const bool wasActive = editor_workspace_active(editor,workspace);
+            (void)set_editor_workspace_visible(editor,workspace.id,false);
+            if(wasActive)
+                if(const auto* fallback=editor_workspace_fallback(editor,workspace.id))
+                {
+                    if(fallback->gui_workspace) (void)select_editor_2d_workspace(editor,*fallback->gui_workspace);
+                    open_editor_surface(fallback->surface,"workspace tab closed");
+                }
         };
 
         auto request_pane_region = [&](

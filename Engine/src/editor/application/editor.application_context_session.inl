@@ -110,8 +110,69 @@
 
     namespace
     {
+        void request_editor_task_session_stop(EditorState& editor)
+        {
+            // Signal every common owned cancellable task before TaskGraph
+            // destruction drains its workers. Keep futures and transcripts
+            // alive until owned process cancellation settles. Private source
+            // work retains its separate cancellation owner below.
+            editor.projectBuildRunAfterBuild = false;
+            editor.aiProjectScriptRunAfterBuild = false;
+            editor.aiProjectScriptRepairQueued = false;
+            editor.aiToolTestAfterBuild = false;
+            if (editor.projectBuildPending && editor.taskScheduler
+                && editor.projectBuildCancellation.valid())
+                (void)cancel_project_build(editor);
+            if (editor.taskScheduler)
+                for (const auto ticket : {editor.scriptBuildCancellation,
+                    editor.planetaryCancellation, editor.planetaryPreviewCancellation,
+                    editor.assetGenerationCancellation, editor.aiDirectRuntimeCancellation,
+                    editor.aiAuthoringApplyCancellation, editor.aiToolTestCancellation,
+                    editor.aiContinuousBuildCancellation})
+                    if (ticket.valid()) (void)editor.taskScheduler->cancel(ticket);
+        }
+
         // Called by the owning context while parking, or after detachment for
         // close. No storage lock spans native attachment removal or a join.
+        [[nodiscard]] bool editor_automation_input_reserved(const EditorState& editor, const AiChat& chat)
+        {
+            // Derive this every frame from owned work, never from a persisted
+            // goal/status latch. Review, setup and an idle retained plan unlock.
+            // Streaming LOD is deliberately excluded: navigation drives it.
+            const bool hostWork = editor.aiDirectRuntimePending.has_value()
+                || editor.aiAuthoringApplyPending.has_value()
+                || editor.aiToolTestPending.has_value()
+                || editor.aiContinuousBuildPending.has_value()
+                || editor.projectBuildPending.has_value()
+                || (editor.aiProjectScriptRunAfterBuild && editor.scriptBuildPending.has_value())
+                || editor.assetGenerationPending.has_value()
+                || editor.forestSurfacePending.has_value()
+                || editor.planetaryAttachmentPending.has_value()
+                || editor.planetaryGeneratePending.has_value()
+                || editor.planetaryFeatureReviewPending.has_value()
+                || editor.planetaryFeatureAdmissionPending.has_value()
+                || editor.waterAttachmentPending.has_value();
+            if (hostWork) return true;
+            return chat.pending || chat.worker.joinable();
+        }
+
+        void request_editor_automation_stop(EditorState& editor)
+        {
+            request_editor_task_session_stop(editor);
+            if (editor.taskScheduler && editor.forestSurfaceCancellation.valid())
+                (void)editor.taskScheduler->cancel(editor.forestSurfaceCancellation);
+            // A ready result can no longer observe cancellation. Revoke its
+            // scene commit now; the normal poll still owns future retirement.
+            editor.forestSurfacePlacement.reset();
+            editor.aiGoalRunning = false;
+            editor.aiGoalPlanNextQueued = false;
+            editor.aiGoalTools.stopped = true;
+            editor.aiGoalTools.waiting = false;
+            if (editor.aiPackageRequest) editor.aiPackageRequest->cancelled = true;
+            // Preserve pending futures and execution receipts until their owner
+            // settles them. Stop cannot turn a cancelled operation into success.
+        }
+
         void retire_detached_chat(const std::shared_ptr<AiChat>& chat)
         {
             if (!chat)

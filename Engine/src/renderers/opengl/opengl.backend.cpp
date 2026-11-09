@@ -22,6 +22,7 @@ import core.logger;
 import image.loader;
 import opengl.context;
 import opengl.platform;
+import opengl.native_present;
 import opengl.textures;
 import perf.tier;
 
@@ -172,6 +173,26 @@ namespace epochengine::openglbackend
             const double hz)
         {
             const bool wantsVsync = mode == perf::frame_pacing_mode::vsync;
+            const auto native = openglcontext::PlatformGL::get_current();
+            if (!native.valid())
+                return perf::native_frame_pacing_result{};
+            auto& state = opengltextures::state_for_platform_context(
+                opengltextures::get_opengl_backend(), native, nullptr);
+            const bool dxgi = openglcontext::native_present::selected(state.nativePresent);
+            if (state.nativePresent.failed || !state.nativePresent.selectionResolved)
+                return perf::native_frame_pacing_result{};
+            if (dxgi)
+            {
+                // This callback and presentation run on the owning render thread.
+                // DXGI owns presentation pacing for this admitted native context;
+                // a WGL swap-interval query cannot describe its active mode.
+                state.nativePresentSyncInterval = wantsVsync ? 1u : 0u;
+                return perf::native_frame_pacing_result{
+                    true, wantsVsync,
+                    wantsVsync ? perf::frame_pacing_mode::vsync
+                               : perf::frame_pacing_mode::uncapped,
+                    0.0};
+            }
             const bool requested = openglcontext::PlatformGL::set_swap_interval(
                 wantsVsync ? 1 : 0);
             const auto reported = openglcontext::PlatformGL::query_swap_interval();

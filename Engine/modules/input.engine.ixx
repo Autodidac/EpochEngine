@@ -146,6 +146,8 @@ namespace epochengine::input
         TimelinePlayPause,
         TimelineStepFrame,
         PackageInstallSelected,
+        RollLeft,
+        RollRight,
         Count
     };
 
@@ -209,8 +211,10 @@ namespace epochengine::input
         profile.bindings[action_index(Action::MoveBackward)] = key_binding(Action::MoveBackward, Key::S);
         profile.bindings[action_index(Action::MoveLeft)] = key_binding(Action::MoveLeft, Key::A);
         profile.bindings[action_index(Action::MoveRight)] = key_binding(Action::MoveRight, Key::D);
-        profile.bindings[action_index(Action::MoveUp)] = key_binding(Action::MoveUp, Key::E, Key::PageUp);
-        profile.bindings[action_index(Action::MoveDown)] = key_binding(Action::MoveDown, Key::Q, Key::PageDown);
+        profile.bindings[action_index(Action::MoveUp)] = key_binding(Action::MoveUp, Key::Space, Key::PageUp);
+        profile.bindings[action_index(Action::MoveDown)] = key_binding(Action::MoveDown, Key::LeftControl, Key::RightControl);
+        profile.bindings[action_index(Action::RollLeft)] = key_binding(Action::RollLeft, Key::Q);
+        profile.bindings[action_index(Action::RollRight)] = key_binding(Action::RollRight, Key::E);
         profile.bindings[action_index(Action::LookLeft)] = key_binding(Action::LookLeft, Key::Left);
         profile.bindings[action_index(Action::LookRight)] = key_binding(Action::LookRight, Key::Right);
         profile.bindings[action_index(Action::LookUp)] = key_binding(Action::LookUp, Key::Up);
@@ -325,6 +329,8 @@ namespace epochengine::input
         case Action::MoveRight: return "Move Right";
         case Action::MoveUp: return "Move Up";
         case Action::MoveDown: return "Move Down";
+        case Action::RollLeft: return "Roll Left";
+        case Action::RollRight: return "Roll Right";
         case Action::LookLeft: return "Look Left";
         case Action::LookRight: return "Look Right";
         case Action::LookUp: return "Look Up";
@@ -545,13 +551,17 @@ namespace epochengine::input
         return g_activeProfile;
     }
 
-    export inline ActionBinding binding_for(Action action)
+    export inline ActionBinding binding_for(const InputProfile& profile, Action action)
     {
-        const auto profile = active_profile_snapshot();
         const auto index = action_index(action);
         if (index >= profile.bindings.size())
             return {};
         return profile.bindings[index];
+    }
+
+    export inline ActionBinding binding_for(Action action)
+    {
+        return binding_for(active_profile_snapshot(), action);
     }
 
     export inline void set_action_binding(Action action, Key primary, Key secondary)

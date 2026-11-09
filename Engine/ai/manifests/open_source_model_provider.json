@@ -35,26 +35,6 @@
   ],
   "creative_model_lanes": [
     {
-      "id": "prism-ml/bonsai-image-ternary-4B-mlx-2bit",
-      "url": "https://huggingface.co/prism-ml/bonsai-image-ternary-4B-mlx-2bit",
-      "license": "apache-2.0",
-      "role": "preferred local image generation/editing package lane",
-      "purpose": "best quality/footprint balance",
-      "download_target": "cache/models/prism-ml/bonsai-image-ternary-4B-mlx-2bit",
-      "recommended_default": true,
-      "project_bundle_default": false
-    },
-    {
-      "id": "prism-ml/bonsai-image-binary-4B-mlx-1bit",
-      "url": "https://huggingface.co/prism-ml/bonsai-image-binary-4B-mlx-1bit",
-      "license": "apache-2.0",
-      "role": "optional low-memory local image generation/editing package lane",
-      "purpose": "smallest local footprint",
-      "download_target": "cache/models/prism-ml/bonsai-image-binary-4B-mlx-1bit",
-      "recommended_default": false,
-      "project_bundle_default": false
-    },
-    {
       "id": "Wan-AI/Wan2.1-VACE-1.3B",
       "url": "https://huggingface.co/Wan-AI/Wan2.1-VACE-1.3B",
       "license": "apache-2.0",

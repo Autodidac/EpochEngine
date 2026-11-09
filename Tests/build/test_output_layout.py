@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 class OutputLayout(unittest.TestCase):
     def setUp(self):
-        self.parent = (ROOT / 'build/contract-tests').resolve()
+        self.parent = (ROOT / 'Artifacts/Reports/contract-tests').resolve()
         self.parent.mkdir(parents=True, exist_ok=True)
         self.assertTrue(self.parent.is_relative_to(ROOT.resolve()))
         self.scratch = Path(tempfile.mkdtemp(prefix='output-layout-', dir=self.parent))
@@ -31,8 +31,10 @@ class OutputLayout(unittest.TestCase):
             target.parent.mkdir(parents=True, exist_ok=True)
             source = read_owned_source(ROOT / relative, encoding='utf-8')
             if relative.endswith('epoch.edition.hpp'):
-                source = source.replace('#define EPOCH_SOURCE_EDITION_PUBLIC 0',
-                                        '#define EPOCH_SOURCE_EDITION_PUBLIC ' + str(value))
+                source, count = re.subn(r'^#define EPOCH_SOURCE_EDITION_PUBLIC [01]$',
+                                        f'#define EPOCH_SOURCE_EDITION_PUBLIC {value}',
+                                        source, flags=re.M)
+                self.assertEqual(count, 1)
             target.write_text(source, encoding='utf-8')
         return root
 
@@ -54,16 +56,16 @@ class OutputLayout(unittest.TestCase):
                     '-getProperty:OutDir,IntDir,EpochOutputEdition'], capture_output=True, text=True)
                 self.assertEqual(result.returncode, 0, result.stdout[-2000:] + result.stderr)
                 values = json.loads(result.stdout)['Properties']
-                self.assertEqual(Path(values['OutDir']), ROOT / 'build/bin/windows' / edition / 'x64' / configuration)
-                self.assertEqual(Path(values['IntDir']), ROOT / 'build/obj/msvc' / edition / 'x64' / configuration / project.stem)
+                self.assertEqual(Path(values['OutDir']), ROOT / 'Artifacts/Runtime/windows' / edition / 'x64' / configuration)
+                self.assertEqual(Path(values['IntDir']), ROOT / 'Artifacts/Intermediate/msvc' / edition / 'x64' / configuration / project.stem)
             isolated = self.scratch / 'isolated-products'
             result = subprocess.run([str(msbuild), str(project), '/nologo',
                 '/p:Platform=x64', '/p:Configuration=Debug', '/p:EpochBuildRoot=' + str(isolated),
                 '-getProperty:OutDir,IntDir'], capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             values = json.loads(result.stdout)['Properties']
-            self.assertEqual(Path(values['OutDir']), isolated / 'bin/windows' / edition / 'x64/Debug')
-            self.assertEqual(Path(values['IntDir']), isolated / 'obj/msvc' / edition / 'x64/Debug' / project.stem)
+            self.assertEqual(Path(values['OutDir']), isolated / 'Runtime/windows' / edition / 'x64/Debug')
+            self.assertEqual(Path(values['IntDir']), isolated / 'Intermediate/msvc' / edition / 'x64/Debug' / project.stem)
         # Evaluate the SAME production props against both physical edition markers.
         for edition, value in (('development', 0), ('public', 1)):
             root = self.edition_fixture(edition, value)
@@ -77,7 +79,7 @@ class OutputLayout(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stdout[-2000:] + result.stderr)
             values = json.loads(result.stdout)['Properties']
             self.assertEqual(values['EpochOutputEdition'], edition)
-            self.assertEqual(Path(values['OutDir']), root / 'build/bin/windows' / edition / 'x64/Release')
+            self.assertEqual(Path(values['OutDir']), root / 'Artifacts/Runtime/windows' / edition / 'x64/Release')
             # Run the actual asset target, not a modeled XML transformation.
             assets = ('fonts/Roboto-Regular.ttf', 'vulkan/shaders/vert.spv')
             for asset in assets:
@@ -90,6 +92,47 @@ class OutputLayout(unittest.TestCase):
             for asset in assets:
                 self.assertEqual((Path(values['OutDir']) / 'assets' / asset).read_bytes(),
                                  (ROOT / 'Engine/assets' / asset).read_bytes())
+
+    def test_editor_runtime_deployment_uses_selected_vcpkg_installation(self):
+        msbuild = Path('C:/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/MSBuild.exe')
+        if not msbuild.exists():
+            self.skipTest('MSBuild unavailable')
+        project = ROOT / 'Engine/examples/EpochEditor/EpochEditor.vcxproj'
+        installed = self.scratch / 'selected-dependencies'
+        triplet = installed / 'x64-windows'
+        (triplet / 'include').mkdir(parents=True)
+        for configuration, relative in (('Debug', 'debug/bin'), ('Release', 'bin')):
+            folder = triplet / relative
+            folder.mkdir(parents=True)
+            # The real copy target must choose the selected config, not the
+            # checkout's dependency root or the other configuration's DLLs.
+            marker = folder / (configuration + '-deployment-probe.dll')
+            marker.write_bytes(configuration.encode('ascii'))
+            output = self.scratch / ('products-' + configuration)
+            args = [str(msbuild), str(project), '/nologo', '/verbosity:quiet',
+                    '/p:Platform=x64', '/p:Configuration=' + configuration,
+                    '/p:VcpkgInstalledDir=' + str(installed),
+                    '/p:EpochBuildRoot=' + str(output), '/p:VcpkgManifestInstall=false',
+                    '/p:VcpkgAutoBootstrap=false', '/p:VcpkgUseStatic=false']
+            evaluated = subprocess.run(args + ['-getProperty:EpochVcpkgInstallRoot,OutDir'],
+                                       capture_output=True, text=True)
+            self.assertEqual(evaluated.returncode, 0, evaluated.stdout + evaluated.stderr)
+            values = json.loads(evaluated.stdout)['Properties']
+            self.assertEqual(Path(values['EpochVcpkgInstallRoot']), triplet)
+            result = subprocess.run(args + ['/t:EpochCopy' + configuration + 'VcpkgRuntimeDlls'],
+                                    capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            destination = Path(values['OutDir'])
+            self.assertEqual(sorted(path.name for path in destination.glob('*.dll')), [marker.name])
+            self.assertEqual((destination / marker.name).read_bytes(), marker.read_bytes())
+            # A statically linked build must not deploy dynamic dependencies.
+            static_root = self.scratch / ('static-' + configuration)
+            result = subprocess.run(args + ['/p:EpochBuildRoot=' + str(static_root),
+                                    '/p:VcpkgUseStatic=true',
+                                    '/t:EpochCopy' + configuration + 'VcpkgRuntimeDlls'],
+                                    capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertFalse(list(static_root.rglob('*.dll')))
 
     def test_actual_evaluated_link_metadata_and_library_targets(self):
         msbuild = Path('C:/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/MSBuild.exe')
@@ -116,7 +159,7 @@ class OutputLayout(unittest.TestCase):
                     '-getItem:Link,Lib,ProjectReference'], capture_output=True, text=True)
                 self.assertEqual(result.returncode, 0, result.stdout[-3000:] + result.stderr)
                 evaluated = json.loads(result.stdout)
-                expected = ROOT / 'build/bin/windows' / edition / 'x64' / configuration
+                expected = ROOT / 'Artifacts/Runtime/windows' / edition / 'x64' / configuration
                 legacy = str(ROOT / 'x64' / configuration).casefold()
                 for item in evaluated['Items']['Link'] + evaluated['Items']['Lib']:
                     directories = [value.rstrip('\\/').casefold() for value in
@@ -216,6 +259,7 @@ int main(int argc, char** argv) {
     if (!path_policy::log_output_dir().empty()) return 24;
     if (b::edition != edition) return 2;
     fs::create_directories(root);
+    if (b::dependency_cache(root) != root / "Engine/vcpkg_installed") return 36;
     if (b::source_layout(root) != b::Layout::Legacy) return 3;
     if (a::relative_executable(a::Lane::DebugEditor, root) != "x64/Debug/EpochEditor.exe") return 4;
     const auto marker = root / "Tools/MSVC/EpochOutputLayout.props";
@@ -234,8 +278,20 @@ int main(int argc, char** argv) {
     binding.executable_path = (root / expected).generic_string();
     if (!ledger.accept_build(binding)) return 8;
     if (b::linux_cmake(root, "Clang-Release") != root / "build/cmake/linux" / edition / "Clang-Release") return 9;
+    if (b::dependency_cache(root) != root / "Engine/vcpkg_installed") return 37;
+    std::ofstream{marker} << "<!-- epoch.build-output-layout/v2 -->";
+    const auto current = "Artifacts/Runtime/windows/" + edition + "/x64/Debug/EpochEditor.exe";
+    if (b::source_layout(root) != b::Layout::Artifacts) return 30;
+    if (a::relative_executable(a::Lane::DebugEditor, root) != current) return 31;
+    if (a::valid_binding(binding)) return 32; // old v1 receipt cannot admit a v2 binary
+    binding.executable_path = (root / current).generic_string();
+    if (!a::valid_binding(binding)) return 33;
+    if (b::linux_cmake(root, "Clang-Release") != root / "Artifacts/Intermediate/cmake/linux" / edition / "Clang-Release") return 34;
+    if (b::linux_runtime(root, "Clang-Release") != root / "Artifacts/Runtime/cmake/linux" / edition / "Clang-Release") return 35;
+    if (b::dependency_cache(root) != root / "Artifacts/Dependencies/vcpkg_installed") return 38;
     std::ofstream{marker} << "unsupported layout";
     if (b::source_layout(root) != b::Layout::Invalid) return 10;
+    if (!b::dependency_cache(root).empty()) return 39;
     if (!a::relative_executable(a::Lane::DebugEditor, root).empty()) return 11;
     if (a::valid_binding(binding)) return 12;
     return 0;
@@ -275,21 +331,19 @@ int main(int argc, char** argv) {
 
     def test_all_configuration_producers_and_consumers_share_paths(self):
         root_presets = json.loads(read_owned_source(ROOT / 'CMakePresets.json'))
-        self.assertEqual(root_presets['configurePresets'][0]['binaryDir'], '${sourceDir}/build/cmake/${presetName}')
+        self.assertEqual(root_presets['configurePresets'][0]['binaryDir'], '${sourceDir}/Artifacts/Intermediate/cmake/${presetName}')
         engine_presets = json.loads(read_owned_source(ROOT / 'Engine/CMakePresets.json'))
         for preset in engine_presets['configurePresets']:
             if 'binaryDir' in preset:
-                self.assertEqual(preset['binaryDir'], '${sourceDir}/../build/cmake/${presetName}')
+                self.assertEqual(preset['binaryDir'], '${sourceDir}/../Artifacts/Intermediate/cmake/${presetName}')
         for relative in ('Engine/build.sh', 'Engine/run.sh', 'Engine/install.sh'):
             source = read_owned_source(ROOT / relative)
-            self.assertIn('build/cmake/linux/${EPOCH_OUTPUT_EDITION}', source)
+            self.assertIn('Artifacts/' + ('Runtime' if relative.endswith('run.sh') else 'Intermediate') + '/cmake/linux/${EPOCH_OUTPUT_EDITION}', source)
             self.assertNotIn('${SCRIPT_DIR}/Bin', source)
         updater = read_owned_source(ROOT / 'Engine/src/updater/updater.system.cpp', encoding='utf-8')
         self.assertIn('build_layout::windows_bin(source_root, SOURCE_BUILD_CONFIGURATION(), SOURCE_BUILD_PLATFORM())', updater)
-        self.assertIn('build_layout::linux_cmake(source_root, "Clang-Release")', updater)
+        self.assertIn('build_layout::linux_runtime(source_root, "Clang-Release")', updater)
         app = read_owned_source(ROOT / 'Engine/src/editor/editor.application.cpp', encoding='utf-8')
-        self.assertIn('candidate_artifacts::relative_executable(lane, workspaceRoot)', app)
-        self.assertIn('build_layout::windows_bin(workspace, configuration) / outputName', app)
         self.assertNotIn('workspace / "x64" / configuration', app)
 
 

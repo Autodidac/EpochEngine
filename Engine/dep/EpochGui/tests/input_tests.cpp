@@ -16,6 +16,150 @@ namespace
 
 int main()
 {
+    for (unsigned bits = 0; bits < 16; ++bits)
+    {
+        const bool selected = (bits & 1u) != 0, owner = (bits & 2u) != 0;
+        const bool menu = (bits & 4u) != 0, menu_owner = (bits & 8u) != 0;
+        if (input::popup_allows_pointer({selected, owner, menu, menu_owner})
+            != ((!selected || owner) && (!menu || menu_owner))) return 60;
+    }
+    for (unsigned bits = 0; bits < 32; ++bits)
+    {
+        const bool inside = (bits & 1u) != 0, movable = (bits & 2u) != 0;
+        const bool title = (bits & 4u) != 0, close = (bits & 8u) != 0;
+        const bool resize = (bits & 16u) != 0;
+        if (input::floating_chrome_owns_press(inside, movable, title, close, resize)
+            != (inside && (close || resize || (movable && title)))) return 61;
+    }
+    for (unsigned bits = 0; bits < 4; ++bits)
+    {
+        const bool inside = (bits & 1u) != 0, consumed = (bits & 2u) != 0;
+        if (input::floating_absorb_unhandled_pointer(inside, consumed)
+            != (inside && !consumed)) return 62;
+    }
+    // A body press belongs to children before absorption; title dragging is
+    // disabled for fixed windows, while close/resize keep their own presses.
+    if (input::floating_chrome_owns_press(true, true, false, false, false)
+        || !input::floating_absorb_unhandled_pointer(true, false)
+        || input::floating_absorb_unhandled_pointer(true, true)
+        || input::floating_chrome_owns_press(true, false, true, false, false)
+        || !input::floating_chrome_owns_press(true, false, false, true, false)) return 63;
+
+    // Native pumps may deliver a complete tap before the next consumer frame.
+    input::InputTracker edges;
+    edges.set_key(input::Key::tab, true, false);
+    edges.set_key(input::Key::tab, false, false);
+    if (!edges.frame().key(input::Key::tab).pressed
+        || !edges.frame().key(input::Key::tab).released
+        || edges.frame().key(input::Key::tab).down) return 20;
+    edges.finish_frame();
+    if (edges.frame().key(input::Key::tab).pressed || edges.frame().key(input::Key::tab).released) return 21;
+    edges.set_key(input::Key::arrow_left, true, false);
+    edges.set_key(input::Key::arrow_left, true, true);
+    edges.set_key(input::Key::arrow_left, false, false);
+    if (!edges.frame().key(input::Key::arrow_left).repeated
+        || !edges.frame().key(input::Key::arrow_left).pressed
+        || !edges.frame().key(input::Key::arrow_left).released
+        || edges.frame().key(input::Key::arrow_left).down) return 22;
+    edges.finish_frame();
+    if (edges.frame().key(input::Key::arrow_left).repeated) return 23;
+    edges.set_key(input::Key::enter, false, true); // A release is never a repeat.
+    if (edges.frame().key(input::Key::enter).repeated) return 24;
+    edges.set_pointer_button(input::PointerButton::left, true, 2);
+    edges.set_pointer_button(input::PointerButton::left, false);
+    edges.set_pointer_button(input::PointerButton::left, true);
+    const auto& button = edges.frame().pointer(input::PointerButton::left);
+    if (!button.pressed || !button.released || !button.down || button.click_count != 2) return 25;
+    edges.finish_frame();
+    if (!button.down || button.pressed || button.released || button.click_count != 0) return 26;
+    edges.set_key(input::Key::space, true, false);
+    edges.finish_frame();
+    edges.set_key(input::Key::space, false, false);
+    edges.set_key(input::Key::space, true, false);
+    if (!edges.frame().key(input::Key::space).down
+        || !edges.frame().key(input::Key::space).pressed
+        || !edges.frame().key(input::Key::space).released) return 28;
+    edges.set_key(input::Key::escape, true, true);
+    edges.set_key(static_cast<input::Key>(255), false, false);
+    edges.set_pointer_button(static_cast<input::PointerButton>(255), false);
+    if (!edges.frame().key(input::Key::escape).down || !edges.frame().key(input::Key::escape).repeated
+        || !button.down) return 29;
+    edges.reset();
+    edges.set_pointer_button(static_cast<input::PointerButton>(255), true);
+    edges.set_key(static_cast<input::Key>(255), true, true);
+    if (edges.frame().pointer(input::PointerButton::left).down
+        || edges.frame().key(input::Key::escape).down || edges.frame().sequence != 0) return 27;
+    input::InputTracker ordered;
+    input::InputFrame event;
+    if (edges.next_event_frame(event)) return 40; // Snapshot users opt in explicitly.
+    ordered.enable_ordered_events();
+    ordered.set_modifiers({.shift = true});
+    ordered.set_pointer_position({10.0f, 20.0f});
+    ordered.set_pointer_button(input::PointerButton::left, true);
+    ordered.set_pointer_position({40.0f, 50.0f});
+    ordered.set_pointer_position({60.0f, 70.0f}); // Adjacent moves may coalesce.
+    ordered.set_key(input::Key::arrow_left, true);
+    ordered.set_modifiers({});
+    ordered.set_pointer_position({80.0f, 90.0f}); // Cannot merge across the key/modifier edge.
+    ordered.set_pointer_button(input::PointerButton::left, false);
+    unsigned event_count = 0;
+    bool press_seen = false, move_seen = false, key_seen = false, release_seen = false;
+    while (ordered.next_event_frame(event))
+    {
+        ++event_count;
+        const auto& left = event.pointer(input::PointerButton::left);
+        if (left.pressed)
+            press_seen = left.down && !left.released && near(event.pointer_position.x, 10.0f)
+                && near(event.pointer_position.y, 20.0f) && event.modifiers.shift;
+        if (near(event.pointer_position.x, 60.0f) && event.pointer_delta.x != 0.0f)
+            move_seen = left.down && !left.pressed && event.modifiers.shift;
+        if (event.key(input::Key::arrow_left).pressed)
+            key_seen = left.down && event.modifiers.shift && near(event.pointer_position.x, 60.0f);
+        if (left.released)
+            release_seen = !left.down && !left.pressed && !event.modifiers.shift
+                && event.key(input::Key::arrow_left).down && near(event.pointer_position.x, 80.0f);
+    }
+    if (event_count != 8 || !press_seen || !move_seen || !key_seen || !release_seen) return 41;
+    if (ordered.frame().key(input::Key::arrow_left).pressed
+        || !ordered.frame().key(input::Key::arrow_left).down) return 42;
+    ordered.finish_frame();
+    ordered.reset(); // Reset clears pending events but preserves ordered mode.
+    for (unsigned index = 0; index < 10000; ++index)
+        ordered.set_pointer_position({static_cast<float>(index), 25.0f});
+    if (ordered.events_overflowed() || !ordered.next_event_frame(event)
+        || !near(event.pointer_position.x, 9999.0f) || ordered.next_event_frame(event)) return 43;
+    ordered.reset();
+    for (std::size_t index = 0; index <= input::InputTracker::maximum_pending_events; ++index)
+        ordered.set_key(input::Key::space, (index % 2) == 0);
+    if (!ordered.events_overflowed() || ordered.next_event_frame(event)
+        || ordered.frame().key(input::Key::space).down || ordered.frame().key(input::Key::space).released) return 44;
+    ordered.set_pointer_button(input::PointerButton::left, true); // Ignored until cancellation/reset.
+    if (ordered.frame().pointer(input::PointerButton::left).down) return 45;
+    ordered.reset();
+    ordered.set_pointer_button(input::PointerButton::left, false);
+    if (!ordered.next_event_frame(event) || event.pointer(input::PointerButton::left).released) return 46;
+    ordered.set_pointer_button(input::PointerButton::left, true);
+    ordered.reset();
+    if (ordered.next_event_frame(event) || ordered.events_overflowed()
+        || ordered.frame().pointer(input::PointerButton::left).down) return 47;
+    ordered.reset();
+    ordered.set_input_source(7);
+    ordered.set_pointer_position({10.0f, 15.0f});
+    ordered.set_pointer_button(input::PointerButton::left, true);
+    ordered.set_input_source(9);
+    ordered.set_pointer_position({90.0f, 95.0f});
+    ordered.set_pointer_button(input::PointerButton::left, false);
+    event_count = 0;
+    press_seen = release_seen = false;
+    while (ordered.next_event_frame(event))
+    {
+        ++event_count;
+        if (event.pointer(input::PointerButton::left).pressed)
+            press_seen = event.input_source == 7 && near(event.pointer_position.x, 10.0f);
+        if (event.pointer(input::PointerButton::left).released)
+            release_seen = event.input_source == 9 && near(event.pointer_position.x, 90.0f);
+    }
+    if (event_count != 6 || !press_seen || !release_seen) return 48;
     input::InputTracker tracker{};
     tracker.set_pointer_position({ 40.0f, 50.0f });
     tracker.set_pointer_button(input::PointerButton::left, true);
@@ -136,6 +280,64 @@ int main()
     modal.clear();
     if (modal.active() || !modal.pointer_allowed({ 20.0f, 20.0f }))
         return 11;
+
+    {
+        input::ScopedInputSuppression suppressed{modal};
+        if (modal.owner_input_allowed() || modal.pointer_allowed({20, 20})
+            || modal.background_input_allowed() || modal.active()
+            || modal.keyboard_captured()) return 70;
+        { input::ScopedInputSuppression nested{modal};
+          if (modal.owner_input_allowed()) return 71; }
+        { input::ScopedInputSuppression inactive{modal, false};
+          if (modal.owner_input_allowed()) return 72; }
+        if (modal.owner_input_allowed()) return 73;
+    }
+    if (!modal.owner_input_allowed() || !modal.background_input_allowed()) return 74;
+    modal.begin({{100,80},{300,220}});
+    modal.require_owner_scope();
+    modal.enter_owner_scope();
+    const auto boundsBefore = modal.bounds();
+    {
+        input::ScopedInputSuppression suppressed{modal};
+        if (modal.owner_input_allowed() || modal.pointer_allowed({120,100})
+            || !modal.keyboard_captured() || modal.mode()!=input::ModalInputMode::bounded
+            || modal.bounds().position.x!=boundsBefore.position.x) return 75;
+    }
+    if (!modal.owner_input_allowed() || !modal.pointer_allowed({120,100})
+        || modal.background_input_allowed()) return 76;
+    modal.leave_owner_scope();
+    { input::ScopedInputSuppression inactive{modal, false};
+      if (modal.owner_input_allowed()) return 77; }
+    modal.block_until_clear();
+    { input::ScopedInputSuppression suppressed{modal};
+      if (modal.pointer_allowed({120,100})) return 78; }
+    if (modal.mode()!=input::ModalInputMode::blocked_until_clear
+        || modal.pointer_allowed({120,100})) return 79;
+    modal.clear();
+
+    input::PointerDragState drag{};
+    auto step=input::update_pointer_drag(drag,
+        {.position={20,20},.down=true,.pressed=true,.press_allowed=true},3);
+    if(!step.pressed||!drag.pending||step.dragging) return 80;
+    step=input::update_pointer_drag(drag,{.position={60,45},.down=true},3);
+    if(!step.dragging||step.delta.x!=40||step.delta.y!=25) return 81;
+    step=input::update_pointer_drag(drag,{.position={60,45},.released=true},3);
+    if(!step.released||drag.pending||step.delta.x!=40) return 82;
+    (void)input::update_pointer_drag(drag,
+        {.position={20,20},.down=true,.pressed=true,.press_allowed=true},3);
+    step=input::update_pointer_drag(drag,{.position={60,45},.released=true},3);
+    if(!step.released||drag.pending) return 83;
+    (void)input::update_pointer_drag(drag,
+        {.position={20,20},.down=true,.pressed=true,.press_allowed=true},3);
+    step=input::update_pointer_drag(drag,{.position={21,21},.released=true},3);
+    if(step.released||step.dragging||drag.pending) return 84;
+    step=input::update_pointer_drag(drag,
+        {.position={20,20},.down=true,.pressed=true,.press_allowed=false},3);
+    if(step.pressed||drag.pending) return 85;
+    (void)input::update_pointer_drag(drag,
+        {.position={20,20},.down=true,.pressed=true,.press_allowed=true},3);
+    step=input::update_pointer_drag(drag,{.position={60,45},.cancelled=true},3);
+    if(step.released||drag.pending||drag.dragging) return 86;
 
     return 0;
 }

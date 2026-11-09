@@ -46,8 +46,10 @@
 #include "../../include/epoch.edition.hpp"
 #include "core.abi_types.hpp"
 #include "../../include/epoch.engine.hpp"
+#include "epoch.main.hpp"
 #include "../../include/epoch.runtime_legacy.hpp"
 #include "../editor/editor.frame_stall_watch.hpp"
+#include "../editor/ai/editor.clipboard_screenshot.hpp"
 
 #if defined(_WIN32)
 #  ifndef WIN32_LEAN_AND_MEAN
@@ -114,6 +116,7 @@ import platform.child_process;
 //import engine.config;
 
 import epoch.facade;
+import image.writer;
 
 import epoch.cli;
 import epoch.version;
@@ -178,8 +181,10 @@ import scene.surface_alignment;
 import scene.tier0;
 import terrain.foundation;
 import voxel.field;
+import voxel.sdf;
 import voxel.storage;
 import water.system;
+import water.surface;
 import saveload.system;
 import scene.snapshot;
 import scene.serializer;
@@ -188,11 +193,13 @@ import timeline.system;
 import media.timeline_preview;
 
 import gui.engine;
+import gui.frame_limit_control;
 import font.renderer;
 import gui.menu;
 import editor.core;
 import ai.engine;
 import ai.model_install;
+import ai.asset_jobs;
 import ai.project_profile;
 import epoch.build_validation;
 import editor.systems_workspace;
@@ -226,8 +233,13 @@ import project.actor2d_runtime;
 import project.gameplay2d_runtime;
 import perf.tier;
 import platform.budgets;
+import platform.work_admission;
 import project.sprite_animation;
 import project.audio_profile;
+import project.planetary;
+import project.planetary_runtime;
+import package.source_install;
+import editor.task_scheduler;
 import render.texture_artifact;
 #if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
 import render.device_sdl;
@@ -241,6 +253,8 @@ import render.device_raylib;
 import render.arcade;
 import render.graph;
 import render.preview_grid;
+import asset.mesh_artifact;
+import asset.cloud_volume;
 import atlas.texture;
 import texture.core;
 
@@ -279,9 +293,48 @@ import raylib.state;
 import raylib.textures;
 #endif
 
+// This existing contract is an ordinary translation unit, not a voxel.sdf
+// implementation unit. Keep its declaration in the global module as well.
+namespace epochengine::voxel::sdf::contracts
+{
+    [[nodiscard]] int run_contract() noexcept;
+}
+
 namespace input = epochengine::input;
 namespace menu = epochengine::menu;
 namespace gui = epochengine::gui;
+
+extern "C" bool epoch_bind_admitted_planetary_runtime(const char* root, const char* id) noexcept
+{
+    try
+    {
+        if (!root || !id || !*root || !*id) return false;
+        const auto admitted = epochengine::project::BindRuntimeProject(id);
+        if (!admitted.succeeded || admitted.project_root != root) return false;
+        const std::filesystem::path projectRoot{admitted.project_root};
+        const auto source = epochengine::package_source::load_project_attachment(projectRoot, "planetary_terrain");
+        const auto settings = epochengine::project_planetary::load_settings(projectRoot);
+        if (!source.source_attached() || !settings
+            || !epochengine::project_planetary::supports_exploration(*settings)) return false;
+        if((settings->original_sunlight||settings->ocean_surface)
+            &&!epochengine::project_planetary::runtime_requirement(projectRoot).ok)return false;
+        epochengine::package_source::ProjectAttachment water;
+        if(settings->ocean_surface)
+        {
+            water=epochengine::package_source::load_project_attachment(projectRoot,"fft_ocean");
+            if(!water.source_attached())return false;
+        }
+        const auto generation = epochengine::project_planetary::capture_source_generation(projectRoot, source.content_hash);
+        if (!generation) return false;
+        return epochengine::project_planetary_runtime::bind_admitted_project({
+            .project_root=admitted.project_root, .project_id=id, .source_hash=source.content_hash,
+            .seed=settings->seed, .initial_body=settings->body_index, .ocean_surface=settings->ocean_surface,
+            .size_reference_body=settings->size_reference_body, .reference_radius_meters=settings->reference_radius_meters,
+            .original_sunlight=settings->original_sunlight,.water_source_hash=water.content_hash,
+            .universe=settings->mode=="universe"});
+    }
+    catch (...) { return false; }
+}
 
 namespace epochengine::project
 {
@@ -352,19 +405,24 @@ namespace epochengine::core
 #endif
 
 #if defined(__linux__)
-        cfg.raylib_count = 0;
-        cfg.sdl_count = 0;
-        cfg.sfml_count = 0;
-        cfg.vulkan_count = 0;
-        cfg.opengl_count = 0;
-        cfg.directx_count = 0;
-        cfg.software_count = 0;
         cfg.parented = false;
+        // Default Linux startup is one context. An explicit backend request
+        // must retain its parsed counts instead of silently opening OpenGL.
+        if (!cli::backend_selection_explicit)
+        {
+            cfg.raylib_count = 0;
+            cfg.sdl_count = 0;
+            cfg.sfml_count = 0;
+            cfg.vulkan_count = 0;
+            cfg.opengl_count = 0;
+            cfg.directx_count = 0;
+            cfg.software_count = 0;
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
-        cfg.opengl_count = 1;
+            cfg.opengl_count = 1;
 #elif defined(EPOCH_USING_SOFTWARE_RENDERER) && (EPOCH_USING_SOFTWARE_RENDERER == 1)
-        cfg.software_count = 1;
+            cfg.software_count = 1;
 #endif
+        }
 #endif
 
         const bool defaultAutoBackendGrid =
@@ -466,19 +524,9 @@ namespace epochengine::core
         if (!name || *name == '\0')
             return {};
 
-#if defined(_WIN32)
-        char* raw = nullptr;
-        std::size_t raw_size = 0;
-        if (_dupenv_s(&raw, &raw_size, name) != 0 || raw == nullptr)
-            return {};
-
-        std::string value{ raw };
-        std::free(raw);
-        return value;
-#else
-        const char* const raw = std::getenv(name);
-        return raw ? std::string{ raw } : std::string{};
-#endif
+        const std::string_view key{name};
+        const auto value = epochengine::core::env::get({key.data(), key.size()});
+        return value ? std::string{value->data(), value->size()} : std::string{};
     }
 
     inline void append_editor_project_self_test_note(
@@ -825,72 +873,6 @@ namespace epochengine::core
         return root / epochengine::format_text("{}-parented-grid.bmp", cli::capture_output_stem());
     }
 
-    [[nodiscard]] inline bool write_top_down_bgra_as_bmp(
-        const std::filesystem::path& filepath,
-        const std::vector<std::uint8_t>& pixels,
-        const int width,
-        const int height) noexcept
-    {
-        if (width <= 0 || height <= 0 || pixels.size() < static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 4u)
-            return false;
-
-        const int rowBytes = width * 3;
-        const int padSize = (4 - (rowBytes % 4)) % 4;
-        const int stride = rowBytes + padSize;
-
-        std::vector<std::uint8_t> bmpData(static_cast<std::size_t>(stride) * static_cast<std::size_t>(height), 0);
-        for (int y = 0; y < height; ++y)
-        {
-            const int srcY = height - 1 - y;
-            const auto* srcRow = pixels.data() + static_cast<std::size_t>(srcY) * static_cast<std::size_t>(width) * 4u;
-            auto* dstRow = bmpData.data() + static_cast<std::size_t>(y) * static_cast<std::size_t>(stride);
-
-            for (int x = 0; x < width; ++x)
-            {
-                const auto srcIndex = static_cast<std::size_t>(x) * 4u;
-                dstRow[x * 3 + 0] = srcRow[srcIndex + 0];
-                dstRow[x * 3 + 1] = srcRow[srcIndex + 1];
-                dstRow[x * 3 + 2] = srcRow[srcIndex + 2];
-            }
-        }
-
-        std::uint8_t fileHeader[14] = {
-            'B','M',
-            0,0,0,0,
-            0,0,
-            0,0,
-            54,0,0,0
-        };
-
-        std::uint8_t infoHeader[40] = {
-            40,0,0,0,
-            0,0,0,0,
-            0,0,0,0,
-            1,0,
-            24,0,
-            0,0,0,0,
-            0,0,0,0,
-            0,0,0,0,
-            0,0,0,0,
-            0,0,0,0,
-            0,0,0,0
-        };
-
-        const std::uint32_t fileSize = 54u + static_cast<std::uint32_t>(bmpData.size());
-        std::memcpy(&fileHeader[2], &fileSize, 4);
-        std::memcpy(&infoHeader[4], &width, 4);
-        std::memcpy(&infoHeader[8], &height, 4);
-
-        std::ofstream out(filepath, std::ios::binary | std::ios::trunc);
-        if (!out)
-            return false;
-
-        out.write(reinterpret_cast<const char*>(fileHeader), sizeof(fileHeader));
-        out.write(reinterpret_cast<const char*>(infoHeader), sizeof(infoHeader));
-        out.write(reinterpret_cast<const char*>(bmpData.data()), static_cast<std::streamsize>(bmpData.size()));
-        return out.good();
-    }
-
     [[nodiscard]] inline bool capture_window_to_bmp(HWND hwnd, const std::filesystem::path& filepath) noexcept
     {
         if (!hwnd)
@@ -958,7 +940,12 @@ namespace epochengine::core
         ::DeleteDC(memoryDc);
         ::ReleaseDC(nullptr, screenDc);
 
-        return copied && write_top_down_bgra_as_bmp(filepath, pixels, width, height);
+        try
+        {
+            return copied && epochengine::a_writeBMP(filepath, pixels, width, height, false,
+                epochengine::BitmapSourceChannels::bgra);
+        }
+        catch (...) { return false; }
     }
 
     inline void prepare_parent_window_for_engine_capture(epochengine::core::MultiContextManager& mgr) noexcept
@@ -1577,6 +1564,14 @@ namespace epochengine::core
 
         [[nodiscard]] DetachedPanelRouteMetadata detached_panel_route_metadata(std::string_view route) noexcept
         {
+            if (route == "application.plant_lab")
+                return DetachedPanelRouteMetadata{
+                    .title = "Plant Lab",
+                    .width = 1280,
+                    .height = 800,
+                    .open_success = "Plant Lab application window requested.",
+                    .open_failure = "Plant Lab application window could not be opened."
+                };
             const bool outlinerTool =
                 route == "pane.world_outliner"
                 || route == "pane.asset_browser"
@@ -2201,7 +2196,7 @@ namespace epochengine::core
                 return true;
             if (!runtime_entity_is_forest_preview(entity))
                 return true;
-            return forest::preview_mesh::segment_projection_admitted(
+            return previewgrid::tapered_segment_projection_admitted(
                 std::abs(entity.transform.scale[1]),
                 std::abs(entity.transform.scale[0]) * 0.5f,
                 std::abs(entity.transform.scale[2]) * 0.5f);
@@ -2217,10 +2212,13 @@ namespace epochengine::core
         }
 
         [[nodiscard]] epochengine::lighting::LightingFrame build_project_play_lighting(
-            std::span<const ProjectRuntimeEntity> entities)
+            std::span<const ProjectRuntimeEntity> entities,
+            const epochengine::scene::Vec3& ambient,
+            epochengine::lighting::LightManager* retained = nullptr)
         {
-            epochengine::lighting::LightManager manager{ 128 };
-            manager.set_environment({ { 0.16f, 0.18f, 0.22f } });
+            epochengine::lighting::LightManager temporary{ 128 };
+            auto& manager=retained?*retained:temporary;
+            manager.set_environment({ { ambient[0], ambient[1], ambient[2] } });
             for (const ProjectRuntimeEntity& entity : entities)
             {
                 if (!entity.visible() || entity.type != "Light")
@@ -2249,65 +2247,205 @@ namespace epochengine::core
             return manager.build_frame();
         }
 
-        [[nodiscard]] std::optional<epochengine::previewgrid::Vec3> project_spawn_position(
-            std::span<const ProjectRuntimeEntity> entities) noexcept
+        enum class ProjectSunlightUpdate { unchanged, changed, refused };
+        [[nodiscard]] ProjectSunlightUpdate update_project_play_sunlight(
+            epochengine::lighting::LightManager& manager,epochengine::lighting::LightHandle& handle,
+            epochengine::lighting::LightingFrame& published,
+            const std::optional<epochengine::project_planetary_runtime::Sunlight>& sunlight,
+            const std::array<float,3>& rotation)
         {
-            for (const ProjectRuntimeEntity& entity : entities)
-            {
-                if (entity.visible() && !entity.editor_only() && entity.type == "Spawn")
+            const auto previous=manager.get(handle);
+            const auto commit=[&](const lighting::LightDesc& description) {
+                if(previous&&lighting::same_light_desc(*previous,description))return ProjectSunlightUpdate::unchanged;
+                try
                 {
-                    return epochengine::previewgrid::Vec3{
-                        entity.transform.position[0],
-                        entity.transform.position[1] + 1.65f,
-                        entity.transform.position[2]
-                    };
+                    auto next=manager;auto nextHandle=handle;
+                    if(previous){if(!next.update(nextHandle,description))return ProjectSunlightUpdate::refused;}
+                    else{nextHandle=next.create(description);if(!nextHandle.valid())return ProjectSunlightUpdate::refused;}
+                    auto frame=next.build_frame();
+                    manager=std::move(next);handle=nextHandle;published=std::move(frame);
+                    return ProjectSunlightUpdate::changed;
                 }
+                catch(...){return ProjectSunlightUpdate::refused;}
+            };
+            if(!sunlight)
+            {
+                if(!previous||!previous->enabled)return ProjectSunlightUpdate::unchanged;
+                auto disabled=*previous;disabled.enabled=false;
+                return commit(disabled);
             }
-            return std::nullopt;
+            if(!epochengine::project_planetary_runtime::valid_sunlight(*sunlight))return ProjectSunlightUpdate::refused;
+            for(const auto value:rotation)if(!std::isfinite(value))return ProjectSunlightUpdate::refused;
+            const auto direction=previewgrid::rotate_euler_degrees({
+                static_cast<float>(-sunlight->direction_to_sun[0]),
+                static_cast<float>(-sunlight->direction_to_sun[1]),
+                static_cast<float>(-sunlight->direction_to_sun[2])},{rotation[0],rotation[1],rotation[2]});
+            lighting::LightDesc description;
+            description.kind=lighting::LightKind::Directional;
+            description.direction={direction.x,direction.y,direction.z};
+            description.color={sunlight->color[0],sunlight->color[1],sunlight->color[2]};
+            description.intensity=sunlight->intensity;
+            return commit(description);
         }
-        void publish_project_play_markers(
-            const epochengine::core::Context* ctx,
-            std::span<const ProjectRuntimeEntity> entities)
+
+        [[nodiscard]] std::optional<epochengine::previewgrid::Vec3> project_play_position_for_origin(
+            const scene::Vec3& position,const std::array<double,3>& origin_offset) noexcept
         {
-            if (!ctx)
-                return;
-
-            std::vector<epochengine::previewgrid::ObjectMarker> markers{};
-            markers.reserve(entities.size());
-            for (const auto& entity : entities)
+            std::array<float,3> result{};
+            for(std::size_t axis=0;axis<3;++axis)
             {
-                if (!entity.visible() || entity.editor_only()
-                    || entity.category == "Editor"
-                    || entity.type == "Camera"
-                    || entity.type == "Light"
-                    || entity.type == "Spawn")
-                    continue;
-                if (runtime_entity_is_forest_preview(entity)
-                    && !runtime_forest_projection_admitted(entity))
-                {
-                    continue;
-                }
-
-                markers.push_back(epochengine::previewgrid::ObjectMarker{
-                    .position{ entity.transform.position[0], entity.transform.position[1], entity.transform.position[2] },
-                    .color = runtime_marker_color_for_entity(entity, false),
-                    .scale{ entity.transform.scale[0], entity.transform.scale[1], entity.transform.scale[2] },
-                    .rotationDegrees{ entity.transform.rotation[0],
-                        entity.transform.rotation[1],
-                        entity.transform.rotation[2]
-                    },
-                    .radius = runtime_marker_radius_for_entity(entity),
-                    .primitive = runtime_preview_primitive_for_entity(entity),
-                    .selected = false,
-                    .editorOnly = false,
-                    .sampledRenderSurface = entity.category == "EngineArcade" && entity.name == "EngineArcadeScreen"
-                });
+                const double value=origin_offset[axis]==0.0?double(position[axis])
+                    :double(position[axis])+origin_offset[axis];
+                if(!std::isfinite(value)||std::abs(value)>(std::numeric_limits<float>::max)())return {};
+                result[axis]=static_cast<float>(value);
             }
+            return previewgrid::Vec3{result[0],result[1],result[2]};
+        }
+        [[nodiscard]] bool project_play_entity_has_geometry(
+            const ProjectRuntimeEntity& entity,std::uint64_t suppressed_entity) noexcept
+        {
+            return entity.source_id!=suppressed_entity&&entity.visible()&&!entity.editor_only()
+                &&entity.category!="Editor"&&entity.type!="Camera"&&entity.type!="Light"&&entity.type!="Spawn"
+                &&(!runtime_entity_is_forest_preview(entity)||runtime_forest_projection_admitted(entity));
+        }
+        [[nodiscard]] std::optional<epochengine::previewgrid::ObjectMarker> project_play_marker_for_entity(
+            const ProjectRuntimeEntity& entity,std::shared_ptr<const asset::mesh::Artifact> mesh,
+            const std::array<double,3>& origin_offset,bool precise=false,
+            const std::array<double,3>* managed_position=nullptr) noexcept
+        {
+            const auto scale=scene::mesh_render_scale(entity.transform.scale,entity.mesh_asset);
+            const auto world=managed_position?std::optional{*managed_position}
+                :scene::world_position(entity.transform.position,entity.position_anchor);
+            if(!scale||!world)return {};
+            std::array<double,3> rebased{};
+            std::array<float,3> position{};
+            for(std::size_t axis=0;axis<3;++axis)
+            {
+                rebased[axis]=(*world)[axis]+origin_offset[axis];
+                if(!std::isfinite(rebased[axis])||std::abs(rebased[axis])>(std::numeric_limits<float>::max)())return {};
+                position[axis]=static_cast<float>(rebased[axis]);
+            }
+            auto marker=previewgrid::ObjectMarker{.position={position[0],position[1],position[2]},.color=runtime_marker_color_for_entity(entity,false),
+                .scale={(*scale)[0],(*scale)[1],(*scale)[2]},
+                .rotationDegrees={entity.transform.rotation[0],entity.transform.rotation[1],entity.transform.rotation[2]},
+                .radius=runtime_marker_radius_for_entity(entity),
+                .primitive=mesh?previewgrid::ObjectPreviewPrimitive::IndexedMesh:runtime_preview_primitive_for_entity(entity),
+                .sampledRenderSurface=entity.category=="EngineArcade"&&entity.name=="EngineArcadeScreen",.mesh=std::move(mesh)};
+            if((precise||entity.position_anchor.has_value())&&marker.mesh)
+            {
+                marker.preciseTransform=previewgrid::make_precise_mesh_transform(
+                    rebased,
+                    {double((*scale)[0]),double((*scale)[1]),double((*scale)[2])},marker.rotationDegrees);
+                if(!marker.preciseTransform)return {};
+            }
+            return marker;
+        }
+        [[nodiscard]] std::optional<previewgrid::ObjectMarker> project_play_forest_marker_for_body(
+            const ProjectRuntimeEntity& tree,const ProjectRuntimeEntity& terrain,
+            const project_planetary_runtime::PreviewBody& body,double scene_units,
+            const std::array<double,3>& render_origin,std::shared_ptr<const asset::mesh::Artifact> mesh) noexcept
+        {
+            if(!tree.forest_region||!tree.forest_region->valid()||!mesh||!tree.mesh_asset
+                ||!terrain.mesh_asset||tree.forest_region->terrain_object_id!=terrain.source_id
+                ||tree.forest_region->terrain_artifact_key!=terrain.mesh_asset->artifact_key
+                ||tree.forest_region->body_index!=body.id||!std::isfinite(scene_units)||scene_units<=0.0)return {};
+            const auto pivot=scene::world_position(terrain.transform.position,terrain.position_anchor);
+            if(!pivot)return {};
+            const auto parent=previewgrid::make_precise_mesh_transform(*pivot,
+                {terrain.transform.scale[0],terrain.transform.scale[1],terrain.transform.scale[2]},
+                {terrain.transform.rotation[0],terrain.transform.rotation[1],terrain.transform.rotation[2]});
+            if(!parent)return {};
+            const auto& region=*tree.forest_region;
+            std::array<double,3> local{},up{},offset{};
+            for(std::size_t axis=0;axis<3;++axis)
+            {
+                local[axis]=body.center[axis]*scene_units+region.body_local_root_meters[axis];
+                offset[axis]=-render_origin[axis];
+            }
+            auto root=parent->apply(local);
+            // The saved exact pivot is the paint-time frame. The ordinary
+            // editable Position remains a local delta; never rewrite either.
+            for(std::size_t row=0;row<3;++row)
+            {
+                root[row]+=double(tree.transform.position[row]);
+                for(std::size_t axis=0;axis<3;++axis)
+                    up[row]+=parent->rotation[row*3+axis]*region.radial_up[axis]*parent->scale[axis];
+            }
+            const auto heading=previewgrid::rotate_euler_degrees({0,0,1},
+                {tree.transform.rotation[0],tree.transform.rotation[1],tree.transform.rotation[2]});
+            const auto rotation=forest::preview_mesh::surface_rotation(up,{heading.x,heading.y,heading.z});
+            if(!rotation)return {};
+            auto marker=project_play_marker_for_entity(tree,std::move(mesh),offset,true,&root);
+            if(!marker)return {};
+            marker->rotationDegrees={(*rotation)[0],(*rotation)[1],(*rotation)[2]};
+            marker->preciseTransform=previewgrid::make_precise_mesh_transform(marker->preciseTransform->position,
+                marker->preciseTransform->scale,marker->rotationDegrees);
+            if(!marker->preciseTransform)return {};
+            return marker;
+        }
+        // Bounds are in the same current-frame, rebased coordinates as published
+        // geometry. Unknown primitives retain the conservative camera floor.
+        [[nodiscard]] std::optional<std::array<double,2>> project_play_marker_depth_bounds(
+            const previewgrid::ObjectMarker& marker,const previewgrid::Camera& camera) noexcept
+        { return previewgrid::marker_depth_bounds(marker,camera); }
+        [[nodiscard]] float project_play_adaptive_near_plane(
+            const previewgrid::Camera& camera,double terrain_clearance,double meters_to_scene,
+            std::span<const ProjectRuntimeEntity> entities,
+            const std::unordered_map<std::uint64_t,std::shared_ptr<const asset::mesh::Artifact>>& meshes,
+            std::uint64_t managed_planet,const std::array<double,3>& origin_offset,bool precise=false) noexcept
+        {
+            const double floor=(std::max)(double((std::numeric_limits<float>::min)()),1e-7*meters_to_scene);
+            if(!std::isfinite(terrain_clearance)||!std::isfinite(meters_to_scene)||meters_to_scene<=0.0)
+                return 1e-7f;
+            double nearDistance=(std::max)(floor,(std::max)(0.0,terrain_clearance)*0.1);
+            for(const auto& entity:entities)
+            {
+                if(!project_play_entity_has_geometry(entity,managed_planet))continue;
+                std::shared_ptr<const asset::mesh::Artifact> mesh;
+                if(entity.mesh_asset)
+                {const auto found=meshes.find(entity.source_id);if(found==meshes.end())continue;mesh=found->second;}
+                const auto marker=project_play_marker_for_entity(entity,std::move(mesh),origin_offset,precise);
+                if(!marker)return static_cast<float>(floor);
+                const auto depths=project_play_marker_depth_bounds(*marker,camera);
+                if(!depths)return static_cast<float>(floor);
+                if((*depths)[1]<=0.0)continue;
+                nearDistance=(std::min)(nearDistance,(std::max)(floor,(*depths)[0]*0.5));
+            }
+            return static_cast<float>((std::min)(nearDistance,double(camera.farPlane)*0.5));
+        }
+        struct ProjectPlayWaterCache final
+        {
+            std::shared_ptr<const asset::mesh::Artifact> mesh{};
+            double sampled_seconds{std::numeric_limits<double>::quiet_NaN()};
+            std::string diagnostic{};
+        };
 
-            epochengine::previewgrid::set_object_markers(ctx, std::span<const epochengine::previewgrid::ObjectMarker>{
-                markers.data(),
-                markers.size()
-            });
+        [[nodiscard]] bool sample_project_play_water(
+            std::span<const ProjectRuntimeEntity> entities,
+            const std::optional<double>& sample_time,
+            ProjectPlayWaterCache& cache)
+        {
+            const bool visible = std::any_of(entities.begin(), entities.end(), [](const auto& entity)
+                { return project_play_entity_has_geometry(entity, 0u) && entity.type == "Water"; });
+            if (!visible) { cache = {}; return true; }
+            const auto refuse = [&](std::string_view diagnostic)
+            {
+                cache.mesh.reset();
+                if (cache.diagnostic != diagnostic)
+                    logger::get("Engine.Water").log(logger::LogLevel::WARN, diagnostic, std::source_location::current());
+                cache.diagnostic = diagnostic;
+                return false;
+            };
+            if (!sample_time || !std::isfinite(*sample_time))
+                return refuse("Water animation is waiting for this context's simulation time. Other objects remain available.");
+            if (cache.mesh && cache.sampled_seconds == *sample_time) return true;
+            const auto sampled = water::surface::build(water::surface::default_body(), *sample_time, 32u);
+            if (!sampled)
+                return refuse("Water surface sampling failed. Other objects remain available.");
+            cache.mesh = sampled.artifact;
+            cache.sampled_seconds = *sample_time;
+            cache.diagnostic.clear();
+            return true;
         }
 
         [[nodiscard]] std::filesystem::path project_runtime_root(
@@ -2573,7 +2711,17 @@ namespace epochengine::core
         [[nodiscard]] std::unique_ptr<epochengine::scene::Scene> make_scene_from_id(std::string_view scene_id)
         {
             if (scene_id.starts_with("project:"))
+            {
+                const auto launch = parse_project_scene_launch(scene_id.substr(8));
+                if (!launch.project_id.empty() && !epochengine::editor_find_project_profile(launch.project_id))
+                {
+                    logger::get(kEngineLog).log(logger::LogLevel::Error,
+                        "Project launch refused: no admitted manifest for '" + launch.project_id + "'.",
+                        std::source_location::current());
+                    return {};
+                }
                 return std::make_unique<ProjectPlayScene>(scene_id.substr(8));
+            }
             if (scene_id == "snake")
                 return std::make_unique<epochengine::snakelike::SnakeLikeScene>();
             if (scene_id == "tetris")
@@ -2763,6 +2911,8 @@ namespace epochengine::core
                 DispatchMessageW(&msg);
             }
 
+            if (epoch_editor_perf::stage_trace_enabled())
+                epoch_editor_perf::current_frame_watch().mark(epoch_editor_perf::FrameStage::session_input);
             input::poll_input();
             return true;
         }
@@ -2885,6 +3035,7 @@ namespace epochengine::core
 
     void ParseCommandLine(int argc, char** argv)
     {
+        if (!platform::child_process::initialize_inherited_runtime_control(argc,argv)) return;
         (void)cli::parse(argc, argv);
     }
 
@@ -2987,6 +3138,8 @@ namespace epochengine::core
         }
         catch (const std::exception& ex)
         {
+            logger::get(engine::kEditorLog).log(
+                logger::LogLevel::Error, ex.what(), std::source_location::current());
             MessageBoxA(nullptr, ex.what(), "Error", MB_ICONERROR | MB_OK);
         }
 #elif defined(__linux__)
@@ -3082,6 +3235,60 @@ namespace epochengine::core
 } // namespace epochengine::core
 namespace epochengine::project
 {
+    RuntimeProjectBinding BindRuntimeProject(std::string_view expected_project_id) noexcept
+    {
+        RuntimeProjectBinding result{};
+        try
+        {
+            namespace fs = std::filesystem;
+            auto current = fs::canonical(core::path::executable_dir());
+            for (unsigned depth = 0; depth < 16u; ++depth)
+            {
+                const auto manifest = current / "project.epoch.json";
+                if (fs::exists(manifest))
+                {
+                    const auto inspected = editor_inspect_runtime_project_manifest(
+                        manifest.generic_string(), expected_project_id,
+                        result.project_root, result.scene_path);
+                    if (!inspected.succeeded || fs::path{result.project_root} != current)
+                    { result.summary = inspected.summary; return result; }
+                    result.manifest_path = inspected.manifest_path;
+                    const std::array<std::pair<std::string_view, std::string>, 4> variables{{
+                        {"EPOCH_EDITOR_PROJECT_ID", std::string{expected_project_id}},
+                        {"EPOCH_EDITOR_PROJECT_ROOT", result.project_root},
+                        {"EPOCH_EDITOR_PROJECT_MANIFEST", result.manifest_path},
+                        {"EPOCH_PROJECT_AI_PROFILE", (current / "Assets/AI/project_ai.epochai").generic_string()}}};
+                    std::array<decltype(core::env::get("")), 4> previous{};
+                    for (std::size_t index = 0; index < variables.size(); ++index)
+                    {
+                        const auto& [name, value] = variables[index];
+                        previous[index] = core::env::get({name.data(), name.size()});
+                        if (core::env::set({name.data(), name.size()}, {value.data(), value.size()})) continue;
+                        for (std::size_t restore = 0; restore < index; ++restore)
+                        {
+                            const auto nameToRestore = variables[restore].first;
+                            if (previous[restore])
+                                (void)core::env::set({nameToRestore.data(), nameToRestore.size()},
+                                    {previous[restore]->data(), previous[restore]->size()});
+                            else (void)core::env::unset({nameToRestore.data(), nameToRestore.size()});
+                        }
+                        result.summary = "Generated project environment could not be bound.";
+                        return result;
+                    }
+                    result.succeeded = true;
+                    result.summary = inspected.summary;
+                    return result;
+                }
+                const auto parent = current.parent_path();
+                if (parent == current || parent.empty()) break;
+                current = parent;
+            }
+            result.summary = "No project manifest was found above the generated executable.";
+        }
+        catch (...) { result.summary = "Generated project startup paths could not be resolved."; }
+        return result;
+    }
+
     ArtifactAcceptanceReport VerifyArtifacts(
         const ArtifactAcceptanceRequest& request) noexcept
     {
@@ -3533,12 +3740,9 @@ int WINAPI wWinMain(
     if (!initialize_candidate_runtime(argc, argv)) return candidate_startup_failure();
     configure_unattended_windows_error_mode();
 
-#if defined(_DEBUG)
-    epochengine::core::ShowConsole();
-#endif
-
     try
     {
+        if (!epochengine::platform::child_process::initialize_inherited_runtime_control(argc,argv)) return -1;
         const auto cli_result = epochengine::core::cli::parse(argc, argv);
 
         if (cli_result.version_requested && !cli_result.update_requested)
@@ -3553,8 +3757,16 @@ int WINAPI wWinMain(
         if (cli_result.engine_contract_self_test_requested)
             return epochengine::core::run_engine_contract_self_test();
 
+        if (cli_result.asset_generation_job_requested)
+            return epochengine::ai::asset_jobs::run_file(std::filesystem::path{
+                std::u8string{cli_result.asset_generation_job_file.begin(), cli_result.asset_generation_job_file.end()}});
+
         if (cli_result.engine_validation_self_test_requested)
             return epochengine::core::run_engine_validation_self_test();
+
+#if defined(_DEBUG)
+        epochengine::core::ShowConsole();
+#endif
 
         const epochengine::updater::UpdateChannel channel{
             .version_url = urls::version_url,
@@ -3600,7 +3812,7 @@ int WINAPI wWinMain(
 }
 #endif
 
-int main(int argc, char** argv)
+int epochengine::core::run_application_main(int argc, char** argv)
 {
 #if defined(_WIN32) && defined(EPOCH_USING_WINMAIN)
     return wWinMain(GetModuleHandleW(nullptr), nullptr, GetCommandLineW(), SW_SHOWNORMAL);
@@ -3611,6 +3823,7 @@ int main(int argc, char** argv)
     #endif
     try
     {
+        if (!epochengine::platform::child_process::initialize_inherited_runtime_control(argc,argv)) return -1;
         const auto cli_result = epochengine::core::cli::parse(argc, argv);
 
         if (cli_result.version_requested && !cli_result.update_requested)
@@ -3624,6 +3837,10 @@ int main(int argc, char** argv)
 
         if (cli_result.engine_contract_self_test_requested)
             return epochengine::core::run_engine_contract_self_test();
+
+        if (cli_result.asset_generation_job_requested)
+            return epochengine::ai::asset_jobs::run_file(std::filesystem::path{
+                std::u8string{cli_result.asset_generation_job_file.begin(), cli_result.asset_generation_job_file.end()}});
 
         if (cli_result.engine_validation_self_test_requested)
             return epochengine::core::run_engine_validation_self_test();

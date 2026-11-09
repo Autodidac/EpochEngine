@@ -15,6 +15,7 @@
 #include <nlohmann/json.hpp>
 
 #include "ai.backend_core_config.hpp"
+#include "../ai.model_behavior.hpp"
 
 namespace epoch_ai::models {
 
@@ -51,6 +52,7 @@ struct ModelComponent {
     bool pinned{};
     bool trainable{};
     bool active{};
+    epochengine::ai::model_behavior::Classification behavior{};
 };
 
 class ModelRegistry {
@@ -66,6 +68,7 @@ public:
     [[nodiscard]] std::string controller_model() const;
     [[nodiscard]] bool set_foundation_model(std::string_view provider_model);
     [[nodiscard]] std::string selected_foundation_model() const;
+    [[nodiscard]] std::vector<std::string> explicit_model_selections() const;
     [[nodiscard]] bool set_role_model(std::string_view role, std::string_view model);
     [[nodiscard]] std::string role_model(std::string_view role) const;
     [[nodiscard]] json describe() const;

@@ -1,4 +1,5 @@
 # Generated build/runtime data; source build directories remain trackable.
+/Artifacts/
 /build/
 /out/
 /x64/

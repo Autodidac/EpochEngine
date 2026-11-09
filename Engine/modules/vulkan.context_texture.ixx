@@ -623,12 +623,13 @@ namespace epochengine::vulkancontext
         if (atlas.width == 0 || atlas.height == 0 || atlas.pixel_data.empty())
             return;
 
+        // Descriptor sets retain their pool and sampled-image dependencies.
+        entry.descriptorSets.clear();
+        entry.descriptorPool.reset();
+        entry.sampler.reset();
+        entry.view.reset();
         entry.image.reset();
         entry.memory.reset();
-        entry.view.reset();
-        entry.sampler.reset();
-        entry.descriptorPool.reset();
-        entry.descriptorSets.clear();
 
         const vk::DeviceSize imageSize = static_cast<vk::DeviceSize>(atlas.pixel_data.size());
 

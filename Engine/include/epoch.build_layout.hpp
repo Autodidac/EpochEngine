@@ -9,9 +9,10 @@
 
 namespace epochengine::build_layout
 {
-    enum class Layout { Legacy, Shared, Invalid };
+    enum class Layout { Legacy, Shared, Artifacts, Invalid };
     inline constexpr std::string_view edition = EPOCH_EDITION_PUBLIC ? "public" : "development";
-    inline constexpr std::string_view schema = "epoch.build-output-layout/v1";
+    inline constexpr std::string_view schema = "epoch.build-output-layout/v2";
+    inline constexpr std::string_view retained_schema = "epoch.build-output-layout/v1";
 
     // Select from the source's declared build graph, never from whichever old
     // executable happens to exist. Retained pre-migration source stays usable.
@@ -29,7 +30,9 @@ namespace epochengine::build_layout
         std::array<char, 256> prefix{};
         input.read(prefix.data(), prefix.size());
         const std::string_view content{prefix.data(), static_cast<std::size_t>(input.gcount())};
-        return content.find(schema) != std::string_view::npos ? Layout::Shared : Layout::Invalid;
+        if (content.find(schema) != std::string_view::npos) return Layout::Artifacts;
+        if (content.find(retained_schema) != std::string_view::npos) return Layout::Shared;
+        return Layout::Invalid;
     }
 
     [[nodiscard]] inline std::filesystem::path windows_relative_bin(
@@ -38,11 +41,28 @@ namespace epochengine::build_layout
     {
         switch (source_layout(root))
         {
+        case Layout::Artifacts: return std::filesystem::path{"Artifacts/Runtime/windows"} / edition / platform / configuration;
         case Layout::Shared: return std::filesystem::path{"build/bin/windows"} / edition / platform / configuration;
         case Layout::Legacy: return std::filesystem::path{platform} / configuration;
         case Layout::Invalid: return {};
         }
         return {};
+    }
+
+    [[nodiscard]] inline std::filesystem::path generated_root(const std::filesystem::path& root)
+    {
+        return root / (source_layout(root) == Layout::Artifacts ? "Artifacts" : "build");
+    }
+
+    [[nodiscard]] inline std::filesystem::path build_logs(const std::filesystem::path& root)
+    {
+        return generated_root(root) / (source_layout(root) == Layout::Artifacts ? "Reports" : "logs");
+    }
+
+    [[nodiscard]] inline std::filesystem::path intermediate_root(const std::filesystem::path& root)
+    {
+        const auto generated = generated_root(root);
+        return source_layout(root) == Layout::Artifacts ? generated / "Intermediate" : generated;
     }
 
     [[nodiscard]] inline std::filesystem::path windows_bin(
@@ -58,8 +78,30 @@ namespace epochengine::build_layout
     {
         switch (source_layout(root))
         {
+        case Layout::Artifacts: return root / "Artifacts/Intermediate/cmake/linux" / edition / compiler_configuration;
         case Layout::Shared: return root / "build/cmake/linux" / edition / compiler_configuration;
         case Layout::Legacy: return root / "Engine/Bin" / compiler_configuration;
+        case Layout::Invalid: return {};
+        }
+        return {};
+    }
+
+    [[nodiscard]] inline std::filesystem::path linux_runtime(
+        const std::filesystem::path& root, std::string_view compiler_configuration)
+    {
+        if (source_layout(root) == Layout::Artifacts)
+            return root / "Artifacts/Runtime/cmake/linux" / edition / compiler_configuration;
+        return linux_cmake(root, compiler_configuration);
+    }
+
+    [[nodiscard]] inline std::filesystem::path dependency_cache(
+        const std::filesystem::path& root)
+    {
+        switch (source_layout(root))
+        {
+        case Layout::Artifacts: return root / "Artifacts/Dependencies/vcpkg_installed";
+        case Layout::Shared:
+        case Layout::Legacy: return root / "Engine/vcpkg_installed";
         case Layout::Invalid: return {};
         }
         return {};

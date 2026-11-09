@@ -45,6 +45,8 @@ export module gui.engine;
 
 import core.context;
 import sprite.handle;
+import epoch.gui.input;
+import epoch.gui.command_menu;
 
 namespace epochengine::gui
 {
@@ -89,7 +91,12 @@ namespace epochengine::gui
         ForestTerminal,
         AuroraSteel,
         StudioNavy,
-        CodexBlack
+        CodexBlack,
+        GraphiteCopper,
+        SlateOrchard,
+        IndigoQuartz,
+        SignalPlum,
+        ForgedSteel
     };
 
     export enum class ThemePreference : std::uint8_t
@@ -106,7 +113,12 @@ namespace epochengine::gui
         StudioNavy,
         ThemeCycle,
         RemovedLegacyTheme = 11, // Reserved persisted ordinal; always loads as Dark.
-        CodexBlack = 12 // New ID; never reuse old persisted ordinals.
+        CodexBlack = 12, // New ID; never reuse old persisted ordinals.
+        GraphiteCopper = 14, // Ordinal 13 is retired; retain its settings migration.
+        SlateOrchard = 15,
+        IndigoQuartz = 16,
+        SignalPlum = 17,
+        ForgedSteel = 18
     };
 
     export struct ThemePreferenceChoice
@@ -148,6 +160,33 @@ namespace epochengine::gui
         bool active_{ true };
     };
 
+    // Scale text metrics and glyphs together inside an authored canvas. The
+    // previous scale is restored, including nested scopes and other contexts.
+    export class ScopedTextScale
+    {
+    public:
+        explicit ScopedTextScale(float factor) noexcept;
+        ~ScopedTextScale() noexcept;
+        ScopedTextScale(const ScopedTextScale&) = delete;
+        ScopedTextScale& operator=(const ScopedTextScale&) = delete;
+    private:
+        float previous_{1.0f};
+    };
+
+    // Intersect with the current window clip, never expand it. Drawing and hit
+    // testing use the same bounds; destruction restores the previous clip.
+    export class ContentClipScope
+    {
+    public:
+        ContentClipScope(Vec2 clipMin, Vec2 clipMax) noexcept;
+        ~ContentClipScope() noexcept;
+        ContentClipScope(const ContentClipScope&) = delete;
+        ContentClipScope& operator=(const ContentClipScope&) = delete;
+    private:
+        Vec2 previousMin{};
+        Vec2 previousMax{};
+    };
+
     export enum class EventType : std::uint8_t
     {
         None = 0,
@@ -174,6 +213,54 @@ namespace epochengine::gui
         bool alt_down{};
         std::string text{};
         std::vector<std::string> files{};
+    };
+
+    // An external document keeps its own control focus. These transient
+    // callbacks route admitted events through the existing context/text owner;
+    // they do not store another focus tree or retain document pointers.
+    export struct KeyboardInputTarget
+    {
+        const void* identity{};
+        std::string* text{};
+        Vec2 size{};
+        std::size_t maximum_bytes{};
+        bool multiline{};
+        bool read_only{};
+    };
+
+    export struct KeyboardInputOptions
+    {
+        const void* owner{};
+        std::function<bool(const void*)> owns_text{};
+        std::function<KeyboardInputTarget()> target{};
+        std::function<bool(const InputEvent&)> command{};
+        std::function<void()> cancel{};
+        std::function<bool()> text_changed{};
+    };
+    // Focus-neutral application shortcuts use the same ordered context queue.
+    // Only unclaimed KeyDown events accepted by command are consumed.
+    export bool dispatch_keyboard_shortcuts(
+        const std::function<bool(const InputEvent&)>& command) noexcept;
+
+    export bool dispatch_keyboard_input(const KeyboardInputOptions& options) noexcept;
+    export void release_keyboard_input(const void* identity) noexcept;
+
+    // Preserve normal control painting while this frame's input stays with its
+    // existing owner (for example an authored-canvas pan gesture or a preview).
+    export class ScopedInputSuppression final
+    {
+    public:
+        explicit ScopedInputSuppression(bool suppress = true) noexcept;
+        ~ScopedInputSuppression() noexcept;
+        ScopedInputSuppression(const ScopedInputSuppression&) = delete;
+        ScopedInputSuppression& operator=(const ScopedInputSuppression&) = delete;
+    private:
+        gui_lib::input::ScopedInputSuppression gate_;
+        std::vector<InputEvent> events_{};
+        bool active_{};
+        bool mouseDown_{}, previousMouseDown_{}, mouseRightDown_{}, previousMouseRightDown_{};
+        bool justPressed_{}, justReleased_{}, rightJustPressed_{}, rightJustReleased_{};
+        int wheel_{};
     };
 
     export struct WidgetBounds
@@ -295,6 +382,13 @@ namespace epochengine::gui
         std::string id{};    // Native tool-call identity; never model-generated routing.
         std::string status{};
         bool tool{};
+        // Derived display only. detail remains the exact retained/exported text.
+        std::string display_detail{};
+        std::size_t display_source_bytes{};
+        std::vector<std::pair<std::size_t, std::size_t>> display_code_ranges{};
+        // Immutable host catalog for this event's request. Later requests may
+        // reuse source IDs for other files; they cannot relabel retained code.
+        std::shared_ptr<const std::vector<std::string>> display_source_paths{};
     };
 
     // A truthful snapshot of one request, not the current session model.
@@ -531,6 +625,8 @@ namespace epochengine::gui
         bool draw_background{ true };
         bool top_layer{ true };
         bool capture_input{ true };
+        bool constrain_to_viewport{};
+        bool dim_background{}; // Optional visual separation; input ownership stays caller-owned.
     };
 
     export struct FloatingWindowResult
@@ -1018,6 +1114,14 @@ namespace epochengine::gui
         Workbench
     };
 
+    export struct TabDragOptions
+    {
+        // While active, supply this owner only to the strip containing active_id.
+        DragSurfaceState* state{};
+        std::string_view active_id{};
+        float threshold{12.0f};
+    };
+
     export struct TabBarResult
     {
         struct ItemGeometry
@@ -1030,6 +1134,9 @@ namespace epochengine::gui
         std::optional<std::size_t> selected_index{};
         std::optional<std::size_t> closed_index{};
         std::vector<ItemGeometry> items{};
+        std::optional<std::size_t> dragged_index{};
+        DragSurfaceResult drag{};
+        Vec2 drag_origin{};
     };
 
     export struct ResponsiveTabBarOptions
@@ -1043,13 +1150,22 @@ namespace epochengine::gui
         float gap{ 1.0f };
         TabBarPresentation presentation{ TabBarPresentation::Document };
         bool keyboard_navigation{};
+        TabDragOptions drag{};
+        bool wrap{}; // Keep whole draggable tabs visible in measured rows.
     };
 
+    export enum class ButtonIcon : std::uint8_t
+    {
+        none,start,step_back,play,pause,step_forward,reverse,fast_reverse,fast_forward,add,more
+    };
     export struct InlineButtonSpec
     {
         std::string_view label{};
         float width{};
         bool enabled{ true };
+        // The label remains the semantic/input identity when only vectors paint.
+        ButtonIcon icon{ButtonIcon::none};
+        std::string_view tooltip{};
     };
     export enum class InlineButtonSizing : std::uint8_t
     {
@@ -1073,7 +1189,8 @@ namespace epochengine::gui
     {
         None,
         Check,
-        Radio
+        Radio,
+        Disclosure
     };
 
     // Flat popup commands share one label/indicator/shortcut layout and hit row.
@@ -1088,6 +1205,32 @@ namespace epochengine::gui
         MenuItemIndicator indicator{ MenuItemIndicator::None };
         bool checked{};
         bool separator_before{};
+        std::uint64_t command_id{}; // Optional stable identity for dynamic labels.
+        SemanticTone tone{SemanticTone::neutral};
+        bool selected{};
+        gui_lib::CommandMenuItemsView<MenuItemOptions> children{};
+        float indentation{}; // Logical pixels; hit/selection bounds remain the full row.
+    };
+
+    export using CommandMenuState = gui_lib::CommandMenuState;
+    export struct CommandMenuOptions
+    {
+        WidgetBounds owner{};
+        Vec2 viewport_size{};
+        float maximum_height{};
+        bool open_requested{};
+        bool close_requested{};
+        bool dismiss_on_hover_exit{true};
+        float gap{6.0f};
+        float margin{4.0f};
+    };
+    export struct CommandMenuResult
+    {
+        WidgetBounds bounds{};
+        std::optional<std::size_t> activated_index{};
+        int owner_navigation{};
+        bool visible{}, captured{}, closed{};
+        std::optional<std::uint64_t> activated_id{};
     };
     export enum class ChromeItemRole : std::uint8_t
     {
@@ -1198,6 +1341,8 @@ namespace epochengine::gui
         std::string_view selected{};
         std::span<const std::string_view> options{};
         Vec2 size{};
+        bool fit_content{};
+        InlineButtonAlignment alignment{InlineButtonAlignment::Start};
         float row_height{ 28.0f };
         std::size_t max_visible_options{ 8 };
         bool enabled{true};
@@ -1268,16 +1413,23 @@ namespace epochengine::gui
 
     export void end_frame() noexcept;
     export Vec2 mouse_position() noexcept;
+    // Nondestructive real left-press origin, subject to current input ownership.
+    export std::optional<Vec2> mouse_press_position() noexcept;
     export bool is_mouse_down() noexcept;
+    export bool drag_surface_hit_test(Vec2 position,
+        const DragSurfaceOptions& options) noexcept;
     export DragSurfaceResult drag_surface(
         DragSurfaceState& state,
         const DragSurfaceOptions& options) noexcept;
+    // Current pointer inside the same modal/content clip used by controls.
+    export bool is_mouse_over_content_clip() noexcept;
     export bool was_mouse_pressed() noexcept;
     export bool was_mouse_released() noexcept;
     export bool is_mouse_right_down() noexcept;
     export bool was_mouse_right_pressed() noexcept;
     export bool was_mouse_right_released() noexcept;
     export bool keyboard_input_captured() noexcept;
+    export bool select_box_popup_open() noexcept;
 
     export void begin_window(std::string_view title, Vec2 position, Vec2 size) noexcept;
     export void begin_window(std::string_view title, Vec2 position, Vec2 size, bool draw_background) noexcept;
@@ -1289,6 +1441,8 @@ namespace epochengine::gui
     export void end_modal_window() noexcept;
     export FloatingWindowResult begin_floating_window(
         FloatingWindowState& state,
+        const FloatingWindowOptions& options) noexcept;
+    export void normalize_floating_window(FloatingWindowState& state,
         const FloatingWindowOptions& options) noexcept;
     export void end_floating_window() noexcept;
     export DockGuideLayout make_dock_guide_layout(
@@ -1313,7 +1467,8 @@ namespace epochengine::gui
         float thickness = 2.0f) noexcept;
     export void panel_rect(Vec2 position, Vec2 size) noexcept;
     export void titlebar_rect(Vec2 position, Vec2 size) noexcept;
-    export void splitter_bar(Vec2 position, Vec2 size, bool hovered, bool active) noexcept;
+    export void splitter_bar(Vec2 position, Vec2 size, bool hovered, bool active,
+        bool enabled = true) noexcept;
     export std::span<const ThemePreferenceChoice> theme_preference_choices() noexcept;
     export std::string_view theme_preference_label(ThemePreference preference) noexcept;
     export ThemeVariant resolve_theme_preference(ThemePreference preference) noexcept;
@@ -1350,6 +1505,9 @@ namespace epochengine::gui
     export float menu_item_row_height() noexcept;
     export float menu_item_preferred_width(const MenuItemOptions& options) noexcept;
     export bool menu_item(const MenuItemOptions& options) noexcept;
+    export CommandMenuResult command_menu(CommandMenuState& state,
+        std::span<const MenuItemOptions> items, const CommandMenuOptions& options) noexcept;
+    export void close_command_menu(CommandMenuState& state) noexcept;
     export bool toggle_switch(std::string_view label, bool& value, Vec2 size = { 160.0f, 28.0f }) noexcept;
     export bool text_link(std::string_view label, Vec2 size, bool selected = false) noexcept;
     export bool titlebar_close_button(Vec2 window_position, Vec2 window_size) noexcept;
@@ -1373,6 +1531,8 @@ namespace epochengine::gui
         std::span<const SegmentedButtonSpec> items,
         float height = 26.0f,
         float gap = 6.0f) noexcept;
+    export float segmented_button_row_width(
+        std::span<const SegmentedButtonSpec> items, float gap = 6.0f) noexcept;
     export std::optional<std::size_t> tab_bar(
         std::span<const SegmentedButtonSpec> tabs,
         float height = 28.0f,
@@ -1382,7 +1542,9 @@ namespace epochengine::gui
         float height = 30.0f,
         float gap = 1.0f,
         TabBarPresentation presentation = TabBarPresentation::Document,
-        Vec2 keyboard_region_size = {}) noexcept;
+        Vec2 keyboard_region_size = {},
+        const TabDragOptions& drag = {}) noexcept;
+    export float responsive_tab_bar_height(const ResponsiveTabBarOptions& options) noexcept;
     export TabBarResult responsive_tab_bar_buttons(
         const ResponsiveTabBarOptions& options) noexcept;
     export ChromeBarResult chrome_bar(
@@ -1416,6 +1578,8 @@ namespace epochengine::gui
     // Insert programmatic clipboard/file/voice text through the same undo history.
     export bool paste_text_in_edit_box(std::string& text,
         std::string_view inserted, std::size_t maximum_bytes = 0u) noexcept;
+    export bool replace_text_in_edit_box(std::string& text,
+        std::string_view replacement, std::size_t maximum_bytes = 0u) noexcept;
     export SourceEditorResult source_editor(std::string& text, const SourceEditorOptions& options) noexcept;
     export [[nodiscard]] std::string clipboard_text() noexcept;
     export bool set_clipboard_text(std::string_view text) noexcept;
@@ -1429,7 +1593,9 @@ namespace epochengine::gui
 
     export void label(std::string_view text) noexcept;
     export void status_label(std::string_view text, SemanticTone tone, Vec2 position) noexcept;
-    export void section_heading(std::string_view text) noexcept;
+    export void section_heading(std::string_view text,
+        SemanticTone tone = SemanticTone::neutral) noexcept;
+    export float measure_section_heading_height(std::string_view text, float width) noexcept;
     export void workflow_step(std::string_view state, std::string_view description,
         SemanticTone tone, float width = 0.0f) noexcept;
     export void wrapped_label(std::string_view text, float width = 0.0f) noexcept;

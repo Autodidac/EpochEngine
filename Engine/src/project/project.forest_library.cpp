@@ -19,11 +19,13 @@ module;
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
 module project.forest_library;
 
+import authoring.document;
 import authoring.morphology;
 import core.sha256;
 import platform.filesystem;
@@ -40,6 +42,13 @@ namespace epochengine::project_forests
         constexpr std::array<std::uint8_t, 8u> kArtifactMagic{
             'E', 'P', 'F', 'A', 'R', 'T', '1', 0u};
         constexpr std::uint16_t kSchemaVersion = 1u;
+        constexpr std::uint16_t kIndependentLengthSourceVersion = 2u;
+        constexpr std::uint16_t kCanopySourceVersion = 3u;
+        constexpr std::uint16_t kDurationHistorySourceVersion = 4u;
+        constexpr std::uint16_t kBarkSourceVersion = 5u;
+        constexpr std::uint16_t kMaterialSourceVersion = 6u;
+        constexpr std::uint16_t kCanopyArtifactVersion = 3u;
+        constexpr std::uint32_t kCanopyCompilerRevision = 2u;
         constexpr std::string_view kSourcePrefix{"Assets/Forest/"};
         constexpr std::string_view kSourceExtension{".epoch_forest"};
         constexpr std::string_view kArtifactExtension{
@@ -278,6 +287,19 @@ namespace epochengine::project_forests
                 return value;
             }
 
+            [[nodiscard]] std::span<const std::byte> byte_span(std::size_t maximumBytes) noexcept
+            {
+                const auto size = integer<std::uint32_t>();
+                if (!ok_ || size > maximumBytes || size > remaining())
+                {
+                    ok_ = false;
+                    return {};
+                }
+                const auto result = bytes_.subspan(position_, size);
+                position_ += size;
+                return result;
+            }
+
             [[nodiscard]] bool finished() const noexcept
             {
                 return ok_ && position_ == bytes_.size();
@@ -418,6 +440,8 @@ namespace epochengine::project_forests
                 profile.branch.nodeStepMeters,
                 profile.branch.startHeightMeters,
                 profile.branch.branchLengthMeters,
+                profile.branch.lengthReferenceMeters,
+                profile.leafSizeMeters,
                 profile.branch.angleDegrees,
                 profile.branch.spreadDegrees,
                 profile.branch.twistDegrees,
@@ -435,7 +459,8 @@ namespace epochengine::project_forests
 
         [[nodiscard]] bool valid_source_document(
             const forest::ForestAssetDocument& document,
-            const ForestLibraryLimits& limits) noexcept
+            const ForestLibraryLimits& limits,
+            bool requireCompilation = true) noexcept
         {
             if (document.genome.stableHash == 0u
                 || !valid_text(document.name, limits.maximum_name_bytes)
@@ -456,10 +481,17 @@ namespace epochengine::project_forests
                 || static_cast<std::uint8_t>(document.profile.editStage)
                     > static_cast<std::uint8_t>(
                         forest::ForestEditStage::Foliage)
-                || document.profile.branch.levels == 0u
                 || document.profile.branch.levels > 32u
                 || document.profile.branch.childrenPerNode == 0u
                 || document.profile.branch.childrenPerNode > 8u
+                || document.profile.branch.lengthReferenceMeters < 0.0f
+                || document.profile.branch.lengthReferenceMeters > 128.0f
+                || document.profile.leafSizeMeters < 0.0f
+                || document.profile.leafSizeMeters > 2.0f
+                || document.profile.leafSitesPerBranch > 16u
+                || document.profile.barkTileIndex >= 16u
+                || (!document.profile.barkTexture.empty() && !document.profile.barkTexture.valid())
+                || (!document.profile.foliageTexture.empty() && !document.profile.foliageTexture.valid())
                 || document.profile.config.maxBranchDepth == 0u
                 || document.profile.config.maxBranchDepth > 32u
                 || document.profile.config.maxPreviewSegments == 0u
@@ -483,15 +515,42 @@ namespace epochengine::project_forests
                     || edit.sequence >= document.nextSequence
                     || !std::isfinite(edit.beforeValue)
                     || !std::isfinite(edit.afterValue)
+                    || !std::isfinite(edit.beforeLengthReferenceMeters)
+                    || !std::isfinite(edit.afterLengthReferenceMeters)
+                    || edit.beforeLengthReferenceMeters < 0.0f
+                    || edit.beforeLengthReferenceMeters > 128.0f
+                    || edit.afterLengthReferenceMeters < 0.0f
+                    || edit.afterLengthReferenceMeters > 128.0f
                     || static_cast<std::uint8_t>(edit.property)
                         > static_cast<std::uint8_t>(
-                            forest::ForestProfileProperty::GrowthTimeSeconds))
+                            forest::ForestProfileProperty::FoliageTexture))
                 {
                     return false;
                 }
+                if (!std::isfinite(edit.beforeDurationTimeSeconds) || !std::isfinite(edit.afterDurationTimeSeconds)) return false;
+                if (edit.hasDurationTimeSnapshot)
+                {
+                    if (edit.property != forest::ForestProfileProperty::GrowthDurationSeconds
+                        || edit.beforeValue < 0.001f || edit.beforeValue > 86400.0f
+                        || edit.afterValue < 0.001f || edit.afterValue > 86400.0f
+                        || edit.beforeDurationTimeSeconds < 0.0f || edit.beforeDurationTimeSeconds > edit.beforeValue
+                        || edit.afterDurationTimeSeconds < 0.0f || edit.afterDurationTimeSeconds > edit.afterValue) return false;
+                }
+                else if (edit.beforeDurationTimeSeconds != 0.0f || edit.afterDurationTimeSeconds != 0.0f) return false;
+                const bool material = edit.property == forest::ForestProfileProperty::BarkTexture
+                    || edit.property == forest::ForestProfileProperty::FoliageTexture;
+                if (material)
+                {
+                    if ((!edit.beforeTexture.empty() && !edit.beforeTexture.valid())
+                        || (!edit.afterTexture.empty() && !edit.afterTexture.valid())
+                        || edit.beforeTexture == edit.afterTexture || edit.beforeValue != 0.0f || edit.afterValue != 0.0f
+                        || edit.beforeLengthReferenceMeters != edit.afterLengthReferenceMeters) return false;
+                }
+                else if (!edit.beforeTexture.empty() || !edit.afterTexture.empty()) return false;
                 previous = edit.sequence;
             }
 
+            if (!requireCompilation) return true;
             const forest::CompiledForestAsset compiled =
                 forest::compile_forest_asset(document);
             return compiled.valid
@@ -584,18 +643,61 @@ namespace epochengine::project_forests
             return profile;
         }
 
+        void write_texture_reference(Writer& writer, const forest::ForestTextureReference& reference) noexcept
+        {
+            writer.text(reference.logicalPath);
+            for (const auto word : reference.artifactKey) writer.integer(word);
+        }
+
+        [[nodiscard]] forest::ForestTextureReference read_texture_reference(Reader& reader) noexcept
+        {
+            forest::ForestTextureReference reference;
+            reference.logicalPath = reader.text(1024u);
+            for (auto& word : reference.artifactKey) word = reader.integer<std::uint64_t>();
+            return reference;
+        }
+
         [[nodiscard]] std::vector<std::byte> serialize_source(
             const forest::ForestAssetDocument& document,
-            const ForestLibraryLimits& limits) noexcept
+            const ForestLibraryLimits& limits,
+            bool requireCompilation = true) noexcept
         {
-            if (!valid_source_document(document, limits))
+            if (!valid_source_document(document, limits, requireCompilation))
                 return {};
             Writer writer{limits.maximum_source_bytes - kDigestBytes};
             writer.raw(kSourceMagic);
-            writer.integer(kSchemaVersion);
+            const bool independentLength = document.profile.branch.lengthReferenceMeters != 0.0f
+                || std::any_of(document.journal.begin(), document.journal.end(), [](const auto& edit) {
+                    return edit.beforeLengthReferenceMeters != 0.0f
+                        || edit.afterLengthReferenceMeters != 0.0f;
+                });
+            const bool canopy = document.profile.leafSizeMeters != 0.0f || document.profile.leafSitesPerBranch != 0u
+                || std::any_of(document.journal.begin(), document.journal.end(), [](const auto& edit) {
+                    return edit.property == forest::ForestProfileProperty::LeafSizeMeters
+                        || edit.property == forest::ForestProfileProperty::LeafSitesPerBranch; });
+            const bool durationHistory = std::any_of(document.journal.begin(), document.journal.end(),
+                [](const auto& edit) { return edit.hasDurationTimeSnapshot; });
+            const bool bark = document.profile.barkTileIndex != 0u
+                || std::any_of(document.journal.begin(), document.journal.end(), [](const auto& edit) {
+                    return edit.property == forest::ForestProfileProperty::BarkTileIndex; });
+            const bool material = !document.profile.barkTexture.empty() || !document.profile.foliageTexture.empty()
+                || std::any_of(document.journal.begin(), document.journal.end(), [](const auto& edit) {
+                    return edit.property == forest::ForestProfileProperty::BarkTexture
+                        || edit.property == forest::ForestProfileProperty::FoliageTexture; });
+            const auto version = material ? kMaterialSourceVersion : bark ? kBarkSourceVersion : durationHistory ? kDurationHistorySourceVersion
+                : canopy ? kCanopySourceVersion : independentLength ? kIndependentLengthSourceVersion : kSchemaVersion;
+            writer.integer(version);
             writer.integer(document.genome.stableHash);
             writer.text(document.name);
             write_profile(writer, document.profile);
+            if (version >= kIndependentLengthSourceVersion) writer.real(document.profile.branch.lengthReferenceMeters);
+            if (version >= kCanopySourceVersion) { writer.real(document.profile.leafSizeMeters); writer.integer(document.profile.leafSitesPerBranch); }
+            if (version >= kBarkSourceVersion) writer.integer(document.profile.barkTileIndex);
+            if (version >= kMaterialSourceVersion)
+            {
+                write_texture_reference(writer, document.profile.barkTexture);
+                write_texture_reference(writer, document.profile.foliageTexture);
+            }
             writer.integer(document.revision);
             writer.integer(document.contentHash);
             writer.integer(document.nextSequence);
@@ -607,6 +709,22 @@ namespace epochengine::project_forests
                 writer.integer(static_cast<std::uint8_t>(edit.property));
                 writer.real(edit.beforeValue);
                 writer.real(edit.afterValue);
+                if (version >= kIndependentLengthSourceVersion)
+                {
+                    writer.real(edit.beforeLengthReferenceMeters);
+                    writer.real(edit.afterLengthReferenceMeters);
+                }
+                if (version >= kDurationHistorySourceVersion)
+                {
+                    writer.integer(static_cast<std::uint8_t>(edit.hasDurationTimeSnapshot));
+                    writer.real(edit.beforeDurationTimeSeconds);
+                    writer.real(edit.afterDurationTimeSeconds);
+                }
+                if (version >= kMaterialSourceVersion)
+                {
+                    write_texture_reference(writer, edit.beforeTexture);
+                    write_texture_reference(writer, edit.afterTexture);
+                }
             }
             if (!writer.ok())
                 return {};
@@ -618,7 +736,8 @@ namespace epochengine::project_forests
 
         [[nodiscard]] SourceBytes deserialize_source(
             std::span<const std::byte> bytes,
-            const ForestLibraryLimits& limits) noexcept
+            const ForestLibraryLimits& limits,
+            bool requireCompilation = true) noexcept
         {
             if (bytes.size() > limits.maximum_source_bytes)
                 return {ForestLibraryCode::source_too_large};
@@ -627,16 +746,27 @@ namespace epochengine::project_forests
                 return {ForestLibraryCode::integrity_failure};
             Reader reader{*body};
             std::array<std::uint8_t, kSourceMagic.size()> magic{};
-            if (!reader.raw(magic) || magic != kSourceMagic
-                || reader.integer<std::uint16_t>() != kSchemaVersion)
+            if (!reader.raw(magic) || magic != kSourceMagic)
             {
                 return {ForestLibraryCode::invalid_source};
             }
+            const auto version = reader.integer<std::uint16_t>();
+            if (version != kSchemaVersion && version != kIndependentLengthSourceVersion && version != kCanopySourceVersion && version != kDurationHistorySourceVersion && version != kBarkSourceVersion && version != kMaterialSourceVersion)
+                return {ForestLibraryCode::invalid_source};
 
             forest::ForestAssetDocument document{};
             document.genome.stableHash = reader.integer<std::uint64_t>();
             document.name = reader.text(limits.maximum_name_bytes);
             document.profile = read_profile(reader);
+            if (version >= kIndependentLengthSourceVersion)
+                document.profile.branch.lengthReferenceMeters = reader.real();
+            if (version >= kCanopySourceVersion) { document.profile.leafSizeMeters = reader.real(); document.profile.leafSitesPerBranch = reader.integer<std::uint32_t>(); }
+            if (version >= kBarkSourceVersion) document.profile.barkTileIndex = reader.integer<std::uint32_t>();
+            if (version >= kMaterialSourceVersion)
+            {
+                document.profile.barkTexture = read_texture_reference(reader);
+                document.profile.foliageTexture = read_texture_reference(reader);
+            }
             document.revision = reader.integer<std::uint64_t>();
             document.contentHash = reader.integer<std::uint64_t>();
             document.nextSequence = reader.integer<std::uint64_t>();
@@ -655,13 +785,32 @@ namespace epochengine::project_forests
                             reader.integer<std::uint8_t>()),
                         reader.real(),
                         reader.real()});
+                    if (version >= kIndependentLengthSourceVersion)
+                    {
+                        document.journal.back().beforeLengthReferenceMeters = reader.real();
+                        document.journal.back().afterLengthReferenceMeters = reader.real();
+                    }
+                    if (version >= kDurationHistorySourceVersion)
+                    {
+                        const auto present = reader.integer<std::uint8_t>();
+                        if (present > 1u) return {ForestLibraryCode::invalid_source};
+                        auto& edit = document.journal.back();
+                        edit.hasDurationTimeSnapshot = present != 0u;
+                        edit.beforeDurationTimeSeconds = reader.real();
+                        edit.afterDurationTimeSeconds = reader.real();
+                    }
+                    if (version >= kMaterialSourceVersion)
+                    {
+                        document.journal.back().beforeTexture = read_texture_reference(reader);
+                        document.journal.back().afterTexture = read_texture_reference(reader);
+                    }
                 }
             }
             catch (...)
             {
                 return {ForestLibraryCode::allocation_failure};
             }
-            if (!reader.finished() || !valid_source_document(document, limits))
+            if (!reader.finished() || !valid_source_document(document, limits, requireCompilation))
                 return {ForestLibraryCode::invalid_source};
             const auto digest = asset_hash(digest_bytes(*body));
             std::vector<std::byte> storedBytes{};
@@ -780,6 +929,497 @@ namespace epochengine::project_forests
             return writer.ok() ? writer.release() : std::vector<std::byte>{};
         }
 
+
+        constexpr std::uint16_t kMaterializedArtifactVersion = 2u;
+        constexpr std::string_view kMaterializedProducer{"epoch.forest.factory.materialized.v1"};
+
+        template<typename Id>
+        void write_materialized_id(Writer& writer, const Id& id) noexcept
+        {
+            writer.integer(id.index);
+            writer.integer(id.generation);
+        }
+
+        template<typename Id>
+        Id read_materialized_id(Reader& reader) noexcept
+        {
+            return Id{reader.integer<std::uint32_t>(), reader.integer<std::uint32_t>()};
+        }
+
+        constexpr auto growth_float_members() noexcept
+        {
+            using Growth = authoring::morphology::GrowthParameters;
+            return std::array{
+                &Growth::root_length_meters, &Growth::segment_length_meters,
+                &Growth::length_decay, &Growth::root_radius_meters, &Growth::radius_decay,
+                &Growth::branch_angle_degrees, &Growth::spread_degrees, &Growth::twist_degrees,
+                &Growth::jitter_degrees, &Growth::upward_bias, &Growth::outward_bias,
+                &Growth::sag, &Growth::sapling_pre_age_seconds, &Growth::generation_delay_seconds,
+                &Growth::segment_growth_seconds, &Growth::terminal_delay_seconds,
+                &Growth::terminal_growth_seconds};
+        }
+
+        void write_materialized_recipe(Writer& writer,
+            const authoring::morphology::Recipe& recipe) noexcept
+        {
+            write_materialized_id(writer, recipe.document);
+            for (const auto word : recipe.revision.content.words) writer.integer(word);
+            writer.integer(recipe.revision.sequence);
+            writer.integer(static_cast<std::uint8_t>(recipe.domain));
+            writer.integer(static_cast<std::uint8_t>(recipe.dimension));
+            writer.integer(recipe.growth.seed);
+            writer.integer(recipe.growth.generations);
+            writer.integer(recipe.growth.children_per_node);
+            for (const auto member : growth_float_members()) writer.real(recipe.growth.*member);
+            writer.integer(recipe.limits.maximum_depth);
+            writer.integer(recipe.limits.maximum_children_per_node);
+            writer.integer(recipe.limits.maximum_nodes);
+            writer.integer(recipe.limits.maximum_segments);
+            writer.integer(recipe.limits.maximum_terminals);
+            writer.real(recipe.duration_seconds);
+        }
+
+        authoring::morphology::Recipe read_materialized_recipe(Reader& reader) noexcept
+        {
+            authoring::morphology::Recipe recipe{};
+            recipe.document = read_materialized_id<authoring::DocumentHandle>(reader);
+            for (auto& word : recipe.revision.content.words) word = reader.integer<std::uint64_t>();
+            recipe.revision.sequence = reader.integer<std::uint64_t>();
+            recipe.domain = static_cast<authoring::morphology::Domain>(reader.integer<std::uint8_t>());
+            recipe.dimension = static_cast<authoring::morphology::DimensionMode>(reader.integer<std::uint8_t>());
+            recipe.growth.seed = reader.integer<std::uint64_t>();
+            recipe.growth.generations = reader.integer<std::uint32_t>();
+            recipe.growth.children_per_node = reader.integer<std::uint32_t>();
+            for (const auto member : growth_float_members()) recipe.growth.*member = reader.real();
+            recipe.limits.maximum_depth = reader.integer<std::uint32_t>();
+            recipe.limits.maximum_children_per_node = reader.integer<std::uint32_t>();
+            recipe.limits.maximum_nodes = reader.integer<std::uint32_t>();
+            recipe.limits.maximum_segments = reader.integer<std::uint32_t>();
+            recipe.limits.maximum_terminals = reader.integer<std::uint32_t>();
+            recipe.duration_seconds = reader.real();
+            return recipe;
+        }
+
+        voxel::Float3 read_materialized_float3(Reader& reader) noexcept
+        {
+            return {reader.real(), reader.real(), reader.real()};
+        }
+
+        void write_materialized_lifetime(Writer& writer,
+            authoring::morphology::TemporalRange range) noexcept
+        {
+            writer.real(range.birth_seconds);
+            writer.real(range.end_seconds);
+        }
+
+        authoring::morphology::TemporalRange read_materialized_lifetime(Reader& reader) noexcept
+        {
+            return {reader.real(), reader.real()};
+        }
+
+        std::vector<std::byte> materialized_graph_bytes(
+            const authoring::morphology::Graph& graph, std::uint64_t maximumBytes) noexcept
+        {
+            Writer writer{maximumBytes};
+            write_materialized_recipe(writer, graph.recipe);
+            writer.integer(graph.content_hash);
+            writer.boolean(graph.truncated);
+            writer.integer(static_cast<std::uint32_t>(graph.nodes.size()));
+            for (const auto& node : graph.nodes)
+            {
+                write_materialized_id(writer, node.id);
+                write_materialized_id(writer, node.parent);
+                writer.integer(static_cast<std::uint8_t>(node.role));
+                writer.integer(node.depth);
+                write_float3(writer, node.position);
+                write_float3(writer, node.tangent);
+                writer.real(node.radius_meters);
+                write_materialized_lifetime(writer, node.lifetime);
+            }
+            writer.integer(static_cast<std::uint32_t>(graph.segments.size()));
+            for (const auto& segment : graph.segments)
+            {
+                write_materialized_id(writer, segment.id);
+                write_materialized_id(writer, segment.parent_node);
+                write_materialized_id(writer, segment.child_node);
+                write_float3(writer, segment.start);
+                write_float3(writer, segment.end);
+                write_float3(writer, segment.tangent_start);
+                write_float3(writer, segment.tangent_end);
+                writer.real(segment.radius_start_meters);
+                writer.real(segment.radius_end_meters);
+                writer.integer(segment.depth);
+                write_materialized_lifetime(writer, segment.lifetime);
+            }
+            writer.integer(static_cast<std::uint32_t>(graph.terminals.size()));
+            for (const auto& terminal : graph.terminals)
+            {
+                write_materialized_id(writer, terminal.id);
+                write_materialized_id(writer, terminal.node);
+                writer.integer(static_cast<std::uint8_t>(terminal.kind));
+                write_float3(writer, terminal.position);
+                write_float3(writer, terminal.outward);
+                write_float3(writer, terminal.up);
+                writer.real(terminal.scale_meters);
+                writer.integer(terminal.variant);
+                write_materialized_lifetime(writer, terminal.lifetime);
+            }
+            return writer.ok() ? writer.release() : std::vector<std::byte>{};
+        }
+
+        template<typename Record, typename ReadRecord>
+        bool read_materialized_records(Reader& reader, std::vector<Record>& output,
+            std::size_t maximumCount, std::size_t minimumRecordBytes, ReadRecord read)
+        {
+            const auto count = reader.integer<std::uint32_t>();
+            if (!reader.ok() || count > maximumCount
+                || count > reader.remaining() / minimumRecordBytes) return false;
+            output.resize(count);
+            for (auto& value : output)
+            {
+                read(value);
+                if (!reader.ok()) return false;
+            }
+            return true;
+        }
+
+        bool read_materialized_graph(std::span<const std::byte> bytes,
+            authoring::morphology::Graph& graph)
+        {
+            namespace morphology = authoring::morphology;
+            Reader reader{bytes};
+            graph.recipe = read_materialized_recipe(reader);
+            graph.content_hash = reader.integer<std::uint64_t>();
+            graph.truncated = reader.boolean();
+            if (!reader.ok() || !morphology::validate(graph.recipe)
+                || graph.recipe.limits.maximum_nodes > 16384u
+                || graph.recipe.limits.maximum_segments > 16383u
+                || graph.recipe.limits.maximum_terminals > 16384u) return false;
+            if (!read_materialized_records(reader, graph.nodes,
+                graph.recipe.limits.maximum_nodes, 57u, [&](morphology::Node& node) {
+                    node.id = read_materialized_id<morphology::NodeId>(reader);
+                    node.parent = read_materialized_id<morphology::NodeId>(reader);
+                    node.role = static_cast<morphology::NodeRole>(reader.integer<std::uint8_t>());
+                    node.depth = reader.integer<std::uint32_t>();
+                    node.position = read_materialized_float3(reader);
+                    node.tangent = read_materialized_float3(reader);
+                    node.radius_meters = reader.real();
+                    node.lifetime = read_materialized_lifetime(reader);
+                })) return false;
+            if (!read_materialized_records(reader, graph.segments,
+                graph.recipe.limits.maximum_segments, 92u, [&](morphology::Segment& segment) {
+                    segment.id = read_materialized_id<morphology::SegmentId>(reader);
+                    segment.parent_node = read_materialized_id<morphology::NodeId>(reader);
+                    segment.child_node = read_materialized_id<morphology::NodeId>(reader);
+                    segment.start = read_materialized_float3(reader);
+                    segment.end = read_materialized_float3(reader);
+                    segment.tangent_start = read_materialized_float3(reader);
+                    segment.tangent_end = read_materialized_float3(reader);
+                    segment.radius_start_meters = reader.real();
+                    segment.radius_end_meters = reader.real();
+                    segment.depth = reader.integer<std::uint32_t>();
+                    segment.lifetime = read_materialized_lifetime(reader);
+                })) return false;
+            if (!read_materialized_records(reader, graph.terminals,
+                graph.recipe.limits.maximum_terminals, 69u, [&](morphology::Terminal& terminal) {
+                    terminal.id = read_materialized_id<morphology::TerminalId>(reader);
+                    terminal.node = read_materialized_id<morphology::NodeId>(reader);
+                    terminal.kind = static_cast<morphology::TerminalKind>(reader.integer<std::uint8_t>());
+                    terminal.position = read_materialized_float3(reader);
+                    terminal.outward = read_materialized_float3(reader);
+                    terminal.up = read_materialized_float3(reader);
+                    terminal.scale_meters = reader.real();
+                    terminal.variant = reader.integer<std::uint32_t>();
+                    terminal.lifetime = read_materialized_lifetime(reader);
+                })) return false;
+            return reader.finished() && static_cast<bool>(morphology::validate(graph));
+        }
+
+        std::vector<std::byte> materialized_sample_bytes(
+            const authoring::morphology::Sample& sample, std::uint64_t maximumBytes) noexcept
+        {
+            Writer writer{maximumBytes};
+            writer.real(sample.time_seconds);
+            writer.integer(static_cast<std::uint32_t>(sample.segments.size()));
+            for (const auto& segment : sample.segments)
+            {
+                write_materialized_id(writer, segment.source);
+                write_float3(writer, segment.start);
+                write_float3(writer, segment.end);
+                writer.real(segment.radius_start_meters);
+                writer.real(segment.radius_end_meters);
+                writer.real(segment.progress);
+                writer.integer(segment.depth);
+            }
+            writer.integer(static_cast<std::uint32_t>(sample.terminals.size()));
+            for (const auto& terminal : sample.terminals)
+            {
+                write_materialized_id(writer, terminal.source);
+                writer.integer(static_cast<std::uint8_t>(terminal.kind));
+                write_float3(writer, terminal.position);
+                writer.real(terminal.scale_meters);
+                writer.real(terminal.progress);
+            }
+            return writer.ok() ? writer.release() : std::vector<std::byte>{};
+        }
+
+        bool read_materialized_sample(std::span<const std::byte> bytes,
+            const authoring::morphology::Graph& graph, authoring::morphology::Sample& sample)
+        {
+            namespace morphology = authoring::morphology;
+            Reader reader{bytes};
+            sample.time_seconds = reader.real();
+            if (!std::isfinite(sample.time_seconds) || sample.time_seconds < 0.0f
+                || sample.time_seconds > graph.recipe.duration_seconds) return false;
+            if (!read_materialized_records(reader, sample.segments,
+                graph.segments.size(), 48u, [&](morphology::SampledSegment& segment) {
+                    segment.source = read_materialized_id<morphology::SegmentId>(reader);
+                    segment.start = read_materialized_float3(reader);
+                    segment.end = read_materialized_float3(reader);
+                    segment.radius_start_meters = reader.real();
+                    segment.radius_end_meters = reader.real();
+                    segment.progress = reader.real();
+                    segment.depth = reader.integer<std::uint32_t>();
+                })) return false;
+            if (!read_materialized_records(reader, sample.terminals,
+                graph.terminals.size(), 29u, [&](morphology::SampledTerminal& terminal) {
+                    terminal.source = read_materialized_id<morphology::TerminalId>(reader);
+                    terminal.kind = static_cast<morphology::TerminalKind>(reader.integer<std::uint8_t>());
+                    terminal.position = read_materialized_float3(reader);
+                    terminal.scale_meters = reader.real();
+                    terminal.progress = reader.real();
+                })) return false;
+            if (!reader.finished()) return false;
+            std::size_t sampled{};
+            const auto same = [](voxel::Float3 a, voxel::Float3 b) noexcept {
+                return a.x == b.x && a.y == b.y && a.z == b.z;
+            };
+            for (const auto& segment : graph.segments)
+            {
+                const float progress = morphology::sample_progress(segment.lifetime, sample.time_seconds);
+                if (!(progress > 0.0f)) continue;
+                if (sampled >= sample.segments.size()) return false;
+                const auto& actual = sample.segments[sampled++];
+                if (actual.source != segment.id || actual.depth != segment.depth
+                    || actual.progress != progress || !same(actual.start, segment.start)
+                    || !same(actual.end, morphology::lerp(segment.start, segment.end, progress))
+                    || actual.radius_start_meters != segment.radius_start_meters
+                    || actual.radius_end_meters != segment.radius_end_meters * progress) return false;
+            }
+            if (sampled != sample.segments.size()) return false;
+            sampled = 0u;
+            for (const auto& terminal : graph.terminals)
+            {
+                const float progress = morphology::sample_progress(terminal.lifetime, sample.time_seconds);
+                if (!(progress > 0.0f)) continue;
+                if (sampled >= sample.terminals.size()) return false;
+                const auto& actual = sample.terminals[sampled++];
+                if (actual.source != terminal.id || actual.kind != terminal.kind
+                    || actual.progress != progress || !same(actual.position, terminal.position)
+                    || actual.scale_meters != terminal.scale_meters * progress) return false;
+            }
+            return sampled == sample.terminals.size();
+        }
+
+        voxel::ChunkDesc read_materialized_chunk(Reader& reader) noexcept
+        {
+            voxel::ChunkDesc result;
+            result.cellsX = reader.integer<std::uint32_t>();
+            result.cellsY = reader.integer<std::uint32_t>();
+            result.cellsZ = reader.integer<std::uint32_t>();
+            result.cellSizeMeters = reader.real();
+            result.lodLevel = reader.integer<std::uint8_t>();
+            return result;
+        }
+
+        bool valid_materialized_chunk(const voxel::ChunkDesc& value) noexcept
+        {
+            return value.cellsX >= 4u && value.cellsX <= 128u
+                && value.cellsY >= 4u && value.cellsY <= 128u
+                && value.cellsZ >= 4u && value.cellsZ <= 128u
+                && std::isfinite(value.cellSizeMeters) && value.cellSizeMeters > 0.0f
+                && value.lodLevel < 16u;
+        }
+
+        bool read_materialized_descriptor(std::span<const std::byte> bytes,
+            forest::CompiledForestAsset& artifact)
+        {
+            Reader reader{bytes};
+            artifact.genome.stableHash = reader.integer<std::uint64_t>();
+            artifact.sourceRevision = reader.integer<std::uint64_t>();
+            artifact.sourceContentHash = reader.integer<std::uint64_t>();
+            if (reader.integer<std::uint64_t>() != artifact.graph.content_hash
+                || reader.integer<std::uint32_t>() != artifact.graph.nodes.size()
+                || reader.integer<std::uint32_t>() != artifact.graph.segments.size()
+                || reader.integer<std::uint32_t>() != artifact.graph.terminals.size()
+                || reader.boolean() != artifact.graph.truncated
+                || reader.real() != artifact.sample.time_seconds
+                || reader.integer<std::uint32_t>() != artifact.sample.segments.size()
+                || reader.integer<std::uint32_t>() != artifact.sample.terminals.size()) return false;
+            artifact.preview.segmentCount = reader.integer<std::uint32_t>();
+            if (artifact.preview.segmentCount > artifact.preview.segments.size()) return false;
+            for (std::size_t index = 0; index < artifact.preview.segmentCount; ++index)
+            {
+                auto& segment = artifact.preview.segments[index];
+                segment.start = read_materialized_float3(reader);
+                segment.end = read_materialized_float3(reader);
+                segment.radius = reader.real();
+                segment.depth = reader.integer<std::uint32_t>();
+                if (!authoring::morphology::finite(segment.start)
+                    || !authoring::morphology::finite(segment.end)
+                    || !std::isfinite(segment.radius) || segment.radius <= 0.0f) return false;
+            }
+            artifact.preview.leafCount = reader.integer<std::uint32_t>();
+            if (artifact.preview.leafCount > artifact.preview.leaves.size()) return false;
+            for (std::size_t index = 0; index < artifact.preview.leafCount; ++index)
+            {
+                auto& leaf = artifact.preview.leaves[index];
+                leaf.position = read_materialized_float3(reader);
+                leaf.size = reader.real();
+                leaf.sourceSegment = reader.integer<std::uint32_t>();
+                if (!authoring::morphology::finite(leaf.position)
+                    || !std::isfinite(leaf.size) || leaf.size <= 0.0f
+                    || leaf.sourceSegment >= artifact.sample.segments.size()) return false;
+            }
+            auto& stats = artifact.preview.stats;
+            stats.nodes = reader.integer<std::uint32_t>();
+            stats.branches = reader.integer<std::uint32_t>();
+            stats.leaves = reader.integer<std::uint32_t>();
+            stats.vertices = reader.integer<std::uint32_t>();
+            stats.triangles = reader.integer<std::uint32_t>();
+            if (!artifact.preview.segmentCount || stats.nodes != artifact.preview.segmentCount + 1u
+                || stats.branches != artifact.preview.segmentCount - 1u
+                || stats.leaves != artifact.preview.leafCount
+                || stats.vertices != artifact.preview.segmentCount * 12u + artifact.preview.leafCount * 6u
+                || stats.triangles != artifact.preview.segmentCount * 8u + artifact.preview.leafCount * 2u) return false;
+            const auto levels = reader.integer<std::uint32_t>();
+            if (!levels || levels > 16u || levels > reader.remaining() / 61u) return false;
+            artifact.voxelLods.levels.resize(levels);
+            const auto validBounds = [](const auto& minimum, const auto& maximum) noexcept {
+                for (std::size_t axis = 0u; axis < 3u; ++axis)
+                    if (!std::isfinite(minimum[axis]) || !std::isfinite(maximum[axis])
+                        || minimum[axis] > maximum[axis]) return false;
+                return true;
+            };
+            for (auto& level : artifact.voxelLods.levels)
+            {
+                level.chunk = read_materialized_chunk(reader);
+                for (auto& value : level.bounds_min_meters) value = reader.real();
+                for (auto& value : level.bounds_max_meters) value = reader.real();
+                level.minimum_view_distance_meters = reader.real();
+                level.estimated_active_cells = reader.integer<std::uint64_t>();
+                level.dense_equivalent_bytes = reader.integer<std::uint64_t>();
+                if (!valid_materialized_chunk(level.chunk)
+                    || !validBounds(level.bounds_min_meters, level.bounds_max_meters)
+                    || !std::isfinite(level.minimum_view_distance_meters)
+                    || level.minimum_view_distance_meters < 0.0f
+                    || level.estimated_active_cells > voxel::dense_cell_count(level.chunk)
+                    || level.dense_equivalent_bytes != voxel::dense_cell_bytes(level.chunk)) return false;
+            }
+            artifact.voxelLods.semantics = static_cast<voxel::CellSemantic>(reader.integer<std::uint16_t>());
+            artifact.voxelLods.source_content_hash = reader.integer<std::uint64_t>();
+            if (static_cast<std::uint16_t>(artifact.voxelLods.semantics)
+                != static_cast<std::uint16_t>(authoring::morphology::VoxelLodPlan{}.semantics)
+                || artifact.voxelLods.source_content_hash != artifact.graph.content_hash) return false;
+            auto& occupancy = artifact.voxelOccupancy;
+            occupancy.chunk = read_materialized_chunk(reader);
+            occupancy.semantics = static_cast<voxel::CellSemantic>(reader.integer<std::uint16_t>());
+            for (auto& value : occupancy.boundsMinMeters) value = reader.real();
+            for (auto& value : occupancy.boundsMaxMeters) value = reader.real();
+            occupancy.trunkCells = reader.integer<std::uint64_t>();
+            occupancy.branchCells = reader.integer<std::uint64_t>();
+            occupancy.foliageCells = reader.integer<std::uint64_t>();
+            occupancy.activeCells = reader.integer<std::uint64_t>();
+            occupancy.denseBytes = reader.integer<std::uint64_t>();
+            artifact.valid = reader.boolean();
+            if (!valid_materialized_chunk(occupancy.chunk)
+                || !validBounds(occupancy.boundsMinMeters, occupancy.boundsMaxMeters)
+                || static_cast<std::uint16_t>(occupancy.semantics)
+                    != static_cast<std::uint16_t>(forest::ForestVoxelOccupancySummary{}.semantics)
+                || occupancy.activeCells > voxel::dense_cell_count(occupancy.chunk)
+                || occupancy.denseBytes != voxel::dense_cell_bytes(occupancy.chunk)) return false;
+            return reader.finished() && artifact.valid && !artifact.sample.segments.empty();
+        }
+
+        std::vector<std::byte> serialize_materialized_artifact(
+            const forest::ForestAssetDocument& document,
+            const forest::CompiledForestAsset& compiled,
+            std::span<const std::byte> sourceBytes, const ForestLibraryLimits& limits) noexcept
+        {
+            if (!compiled.valid || compiled.genome.stableHash != document.genome.stableHash
+                || compiled.sourceRevision != document.revision
+                || compiled.sourceContentHash != document.contentHash) return {};
+            const auto graph = materialized_graph_bytes(compiled.graph, limits.maximum_artifact_bytes);
+            const auto sample = materialized_sample_bytes(compiled.sample, limits.maximum_artifact_bytes);
+            const auto descriptor = compiled_descriptor(compiled, limits.maximum_artifact_bytes);
+            if (graph.empty() || sample.empty() || descriptor.empty()
+                || limits.maximum_artifact_bytes < kDigestBytes) return {};
+            Writer writer{limits.maximum_artifact_bytes - kDigestBytes};
+            writer.raw(kArtifactMagic);
+            writer.integer(kMaterializedArtifactVersion);
+            writer.byte_vector(sourceBytes);
+            writer.text(kMaterializedProducer);
+            writer.byte_vector(graph);
+            writer.byte_vector(sample);
+            writer.byte_vector(descriptor);
+            if (!writer.ok()) return {};
+            auto bytes = writer.release();
+            return append_digest(bytes, limits.maximum_artifact_bytes)
+                ? std::move(bytes) : std::vector<std::byte>{};
+        }
+
+        // Structural decoding is not producer proof. Only exact-key host-owned
+        // publication/read paths may call this; generic resolution refuses v2.
+        ArtifactBytes deserialize_materialized_artifact(std::span<const std::byte> bytes,
+            const ForestLibraryLimits& limits) noexcept
+        {
+            try
+            {
+                const auto body = integrity_verified_body(bytes);
+                if (!body) return {ForestLibraryCode::integrity_failure};
+                Reader reader{*body};
+                std::array<std::uint8_t, kArtifactMagic.size()> magic{};
+                if (!reader.raw(magic) || magic != kArtifactMagic
+                    || reader.integer<std::uint16_t>() != kMaterializedArtifactVersion)
+                    return {ForestLibraryCode::invalid_artifact};
+                const auto sourceData = reader.byte_span(static_cast<std::size_t>(limits.maximum_source_bytes));
+                const auto producer = reader.text(64u);
+                if (!reader.ok() || producer != kMaterializedProducer) return {ForestLibraryCode::invalid_artifact};
+                const auto source = deserialize_source(sourceData, limits, false);
+                if (source.code != ForestLibraryCode::ready) return {ForestLibraryCode::invalid_artifact};
+                const auto graph = reader.byte_span(static_cast<std::size_t>(limits.maximum_artifact_bytes));
+                const auto sample = reader.byte_span(static_cast<std::size_t>(limits.maximum_artifact_bytes));
+                const auto descriptor = reader.byte_span(static_cast<std::size_t>(limits.maximum_artifact_bytes));
+                if (!reader.finished()) return {ForestLibraryCode::invalid_artifact};
+                forest::CompiledForestAsset artifact;
+                if (!read_materialized_graph(graph, artifact.graph)
+                    || !read_materialized_sample(sample, artifact.graph, artifact.sample)
+                    || !read_materialized_descriptor(descriptor, artifact))
+                    return {ForestLibraryCode::invalid_artifact};
+                Writer expectedRecipe{1024u}, actualRecipe{1024u};
+                write_materialized_recipe(expectedRecipe, forest::morphology_recipe(source.document.profile));
+                write_materialized_recipe(actualRecipe, artifact.graph.recipe);
+                const float duration = (std::max)(0.001f, source.document.profile.temporal.durationSeconds);
+                const float requestedTime = source.document.profile.temporal.reverse
+                    ? duration - (std::clamp)(source.document.profile.temporal.timeSeconds, 0.0f, duration)
+                    : source.document.profile.temporal.timeSeconds;
+                if (!expectedRecipe.ok() || !actualRecipe.ok()
+                    || expectedRecipe.bytes() != actualRecipe.bytes()
+                    || artifact.sample.time_seconds != (std::clamp)(requestedTime, 0.0f, duration)
+                    || artifact.genome.stableHash != source.document.genome.stableHash
+                    || artifact.sourceRevision != source.document.revision
+                    || artifact.sourceContentHash != source.document.contentHash)
+                    return {ForestLibraryCode::integrity_failure};
+                const auto canonical = compiled_descriptor(artifact, limits.maximum_artifact_bytes);
+                if (canonical.size() != descriptor.size()
+                    || !std::equal(canonical.begin(), canonical.end(), descriptor.begin()))
+                    return {ForestLibraryCode::invalid_artifact};
+                return {ForestLibraryCode::ready, std::move(artifact),
+                    asset_hash(digest_bytes(*body)), std::vector<std::byte>{bytes.begin(), bytes.end()}};
+            }
+            catch (...) { return {ForestLibraryCode::allocation_failure}; }
+        }
+
         [[nodiscard]] std::vector<std::byte> serialize_artifact(
             const forest::ForestAssetDocument& document,
             std::span<const std::byte> sourceBytes,
@@ -793,7 +1433,9 @@ namespace epochengine::project_forests
                 return {};
             Writer writer{limits.maximum_artifact_bytes - kDigestBytes};
             writer.raw(kArtifactMagic);
-            writer.integer(kSchemaVersion);
+            const bool canopy = forest::forest_canopy_settings(document.profile).enabled;
+            writer.integer(canopy ? kCanopyArtifactVersion : kSchemaVersion);
+            if (canopy) writer.integer(kCanopyCompilerRevision);
             writer.byte_vector(sourceBytes);
             writer.raw(std::span<const std::uint8_t>{
                 reinterpret_cast<const std::uint8_t*>(descriptor.data()),
@@ -808,7 +1450,8 @@ namespace epochengine::project_forests
 
         [[nodiscard]] ArtifactBytes deserialize_artifact(
             std::span<const std::byte> bytes,
-            const ForestLibraryLimits& limits) noexcept
+            const ForestLibraryLimits& limits,
+            bool allowMaterialized = false) noexcept
         {
             if (bytes.size() > limits.maximum_artifact_bytes)
                 return {ForestLibraryCode::artifact_too_large};
@@ -817,11 +1460,18 @@ namespace epochengine::project_forests
                 return {ForestLibraryCode::integrity_failure};
             Reader reader{*body};
             std::array<std::uint8_t, kArtifactMagic.size()> magic{};
-            if (!reader.raw(magic) || magic != kArtifactMagic
-                || reader.integer<std::uint16_t>() != kSchemaVersion)
+            if (!reader.raw(magic) || magic != kArtifactMagic)
             {
                 return {ForestLibraryCode::invalid_artifact};
             }
+            const auto version = reader.integer<std::uint16_t>();
+            if (version == kMaterializedArtifactVersion)
+                return allowMaterialized ? deserialize_materialized_artifact(bytes, limits)
+                    : ArtifactBytes{ForestLibraryCode::verified_key_required};
+            if (version != kSchemaVersion && version != kCanopyArtifactVersion)
+                return {ForestLibraryCode::invalid_artifact};
+            const auto compilerRevision = version == kCanopyArtifactVersion
+                ? reader.integer<std::uint32_t>() : 0u;
             std::vector<std::byte> sourceBytes = reader.byte_vector(
                 static_cast<std::size_t>(limits.maximum_source_bytes));
             if (!reader.ok())
@@ -829,12 +1479,25 @@ namespace epochengine::project_forests
             SourceBytes source = deserialize_source(sourceBytes, limits);
             if (source.code != ForestLibraryCode::ready)
                 return {ForestLibraryCode::invalid_artifact};
+            // The sealed authoring source is reusable, but an old compiler's
+            // descriptor is never admitted as current compiled geometry.
+            const auto stale = [&]() {
+                forest::CompiledForestAsset metadata{};
+                metadata.sourceRevision = source.document.revision;
+                metadata.sourceContentHash = source.document.contentHash;
+                return ArtifactBytes{ForestLibraryCode::rebuild_required,
+                    std::move(metadata), asset_hash(digest_bytes(*body)), {}};
+            };
+            if (version == kCanopyArtifactVersion && compilerRevision != kCanopyCompilerRevision)
+                return stale();
             const forest::CompiledForestAsset artifact =
                 forest::compile_forest_asset(source.document);
             const std::vector<std::byte> expected = compiled_descriptor(
                 artifact, limits.maximum_artifact_bytes);
-            if (expected.empty() || reader.remaining() != expected.size())
-                return {ForestLibraryCode::invalid_artifact};
+            if (expected.empty()) return {ForestLibraryCode::invalid_artifact};
+            if (reader.remaining() != expected.size())
+                return version == kSchemaVersion && forest::forest_canopy_settings(source.document.profile).enabled
+                    ? stale() : ArtifactBytes{ForestLibraryCode::invalid_artifact};
             std::vector<std::uint8_t> actual{};
             try
             {
@@ -851,7 +1514,8 @@ namespace epochengine::project_forests
                 if (actual[index]
                     != std::to_integer<std::uint8_t>(expected[index]))
                 {
-                    return {ForestLibraryCode::integrity_failure};
+                    return version == kSchemaVersion && forest::forest_canopy_settings(source.document.profile).enabled
+                        ? stale() : ArtifactBytes{ForestLibraryCode::integrity_failure};
                 }
             }
             std::vector<std::byte> storedBytes{};
@@ -1039,6 +1703,176 @@ namespace epochengine::project_forests
                 && name.ends_with(kArtifactExtension);
         }
 
+        constexpr std::string_view kSelectedReferenceName{"selected.epoch_forest_reference"};
+        constexpr std::array<std::uint8_t, 8u> kSelectedReferenceMagic{
+            'E', 'P', 'F', 'S', 'E', 'L', '1', 0u};
+        constexpr std::uint64_t kMaximumSelectedReferenceBytes = 8192u;
+        constexpr std::uint64_t kMaximumProjectManifestBytes = 65536u;
+
+        // Only this new explicit path uses these stronger filesystem checks;
+        // historical v1 publication and its immutable bytes remain unchanged.
+        bool ordinary_selected_path(const fs::path& path, bool directory) noexcept
+        {
+            try
+            {
+                if (!path.is_absolute() || path != path.lexically_normal()) return false;
+                auto current = path.root_path();
+                for (const auto& component : path.relative_path())
+                {
+                    current /= component;
+                    const auto status = fs::symlink_status(current);
+                    if (fs::is_symlink(status)) return false;
+                    std::error_code redirected;
+                    (void)fs::read_symlink(current, redirected);
+                    if (!redirected) return false; // Includes Windows junctions.
+                    if (current == path && !directory)
+                    {
+                        if (!fs::is_regular_file(status) || fs::hard_link_count(current) != 1u) return false;
+                    }
+                    else if (!fs::is_directory(status)) return false;
+                }
+                return true;
+            }
+            catch (...) { return false; }
+        }
+
+        struct SelectedMaterializedState final
+        {
+            ForestLibraryCode code{ForestLibraryCode::invalid_artifact};
+            fs::path root{}, reference_path{};
+            SourceBytes source{};
+            std::vector<std::byte> manifest{}, reference{};
+            ArtifactBytes artifact{};
+            ForestArtifactLocator locator{};
+        };
+
+        std::vector<std::byte> selected_reference_bytes(
+            const SelectedMaterializedState& state, std::uint64_t maximumRootBytes,
+            const ForestLibraryLimits& limits)
+        {
+            Writer writer{kMaximumSelectedReferenceBytes - kDigestBytes};
+            const auto root = state.root.generic_string();
+            if (root.size() > maximumRootBytes) return {};
+            writer.raw(kSelectedReferenceMagic);
+            writer.integer<std::uint16_t>(1u);
+            writer.text(root);
+            writer.integer(state.locator.project_key);
+            writer.integer(state.locator.asset_key);
+            writer.text(state.locator.canonical_logical_path);
+            for (const auto word : asset_hash(digest_bytes(state.manifest)).words) writer.integer(word);
+            for (const auto word : state.source.digest.words) writer.integer(word);
+            writer.integer(state.locator.source_revision);
+            writer.integer(state.locator.source_content_hash);
+            for (const auto word : state.locator.artifact_key.words) writer.integer(word);
+            writer.integer(state.locator.serialized_bytes);
+            if (!writer.ok() || state.locator.serialized_bytes > limits.maximum_artifact_bytes) return {};
+            auto bytes = writer.release();
+            return append_digest(bytes, kMaximumSelectedReferenceBytes) ? std::move(bytes) : std::vector<std::byte>{};
+        }
+
+        bool valid_selected_reference(std::span<const std::byte> bytes,
+            const fs::path& root, std::uint64_t projectKey, std::uint64_t assetKey, std::string_view logicalPath,
+            const ForestLibraryLimits& limits)
+        {
+            const auto body = integrity_verified_body(bytes);
+            if (!body) return false;
+            Reader reader{*body};
+            std::array<std::uint8_t, 8u> magic{};
+            if (!reader.raw(magic) || magic != kSelectedReferenceMagic
+                || reader.integer<std::uint16_t>() != 1u
+                || reader.text(limits.maximum_project_root_bytes) != root.generic_string()
+                || reader.integer<std::uint64_t>() != projectKey
+                || reader.integer<std::uint64_t>() != assetKey
+                || reader.text(limits.registry.maximum_path_bytes) != logicalPath) return false;
+            const auto nonzero_hash = [&reader] {
+                std::uint64_t nonzero{};
+                for (unsigned word = 0; word < 4u; ++word) nonzero |= reader.integer<std::uint64_t>();
+                return nonzero != 0u;
+            };
+            if (!nonzero_hash() || !nonzero_hash() // Manifest and complete source envelopes.
+                || reader.integer<std::uint64_t>() == 0u
+                || reader.integer<std::uint64_t>() == 0u || !nonzero_hash()) return false;
+            const auto size = reader.integer<std::uint64_t>();
+            return size > kDigestBytes && size <= limits.maximum_artifact_bytes && reader.finished();
+        }
+
+        // Derive the complete expected record from source, never from a saved
+        // key/producer label. This is source replay, not approval restoration.
+        SelectedMaterializedState verify_selected_materialized(
+            const fs::path& projectRoot, std::uint64_t projectKey,
+            std::string_view logicalPath, const ForestLibraryLimits& limits,
+            std::uint64_t& bytesRead)
+        {
+            SelectedMaterializedState state;
+            if (!ordinary_selected_path(projectRoot, true))
+            { state.code = ForestLibraryCode::invalid_path; return state; }
+            state.root = fs::canonical(projectRoot);
+            ForestLibraryCode failure{};
+            const auto asset = canonical_asset(state.root, projectKey, logicalPath, limits, failure);
+            if (!asset) { state.code = failure; return state; }
+            const auto manifestPath = state.root / "project.epoch.json";
+            if (!ordinary_selected_path(manifestPath, false)
+                || !ordinary_selected_path(asset->source_path, false)
+                || !ordinary_selected_path(asset->artifact_directory, true))
+            { state.code = ForestLibraryCode::invalid_path; return state; }
+            state.code = read_file(manifestPath, kMaximumProjectManifestBytes,
+                ForestLibraryCode::source_too_large, state.manifest);
+            bytesRead += state.manifest.size();
+            if (state.code != ForestLibraryCode::ready) return state;
+            std::vector<std::byte> sourceBytes;
+            state.code = read_file(asset->source_path, limits.maximum_source_bytes,
+                ForestLibraryCode::source_too_large, sourceBytes);
+            bytesRead += sourceBytes.size();
+            if (state.code != ForestLibraryCode::ready) return state;
+            state.source = deserialize_source(sourceBytes, limits, false);
+            if (state.source.code != ForestLibraryCode::ready)
+            { state.code = state.source.code; return state; }
+            auto compiled = forest::compile_forest_asset(state.source.document);
+            auto expected = serialize_materialized_artifact(
+                state.source.document, compiled, state.source.bytes, limits);
+            const auto body = integrity_verified_body(expected);
+            if (!body) { state.code = ForestLibraryCode::invalid_artifact; return state; }
+            const auto key = asset_hash(digest_bytes(*body));
+            const auto path = artifact_path(*asset, key);
+            if (!ordinary_selected_path(path, false))
+            { state.code = ForestLibraryCode::invalid_path; return state; }
+            std::vector<std::byte> actual;
+            state.code = read_file(path, limits.maximum_artifact_bytes,
+                ForestLibraryCode::artifact_too_large, actual);
+            bytesRead += actual.size();
+            if (state.code != ForestLibraryCode::ready) return state;
+            if (actual != expected)
+            { state.code = ForestLibraryCode::integrity_failure; return state; }
+            state.artifact = {ForestLibraryCode::ready, std::move(compiled), key, std::move(expected)};
+            state.locator = artifact_locator(ForestLibraryCode::ready, *asset, path, projectKey, state.artifact);
+            state.reference_path = asset->artifact_directory / kSelectedReferenceName;
+            state.reference = selected_reference_bytes(state, limits.maximum_project_root_bytes, limits);
+            if (state.reference.empty()) state.code = ForestLibraryCode::artifact_too_large;
+            return state;
+        }
+
+        bool selected_source_is_current(const SelectedMaterializedState& state,
+            const ForestLibraryLimits& limits, std::uint64_t& bytesRead) noexcept
+        {
+            try
+            {
+            if (!ordinary_selected_path(state.root, true)
+                || !ordinary_selected_path(state.root / "project.epoch.json", false)
+                || !ordinary_selected_path(state.root / state.locator.canonical_logical_path, false)
+                || !ordinary_selected_path(state.locator.storage_path, false)) return false;
+            std::vector<std::byte> source, manifest, artifact;
+            if (read_file(state.root / "project.epoch.json", kMaximumProjectManifestBytes,
+                    ForestLibraryCode::source_too_large, manifest) != ForestLibraryCode::ready
+                || read_file(state.root / state.locator.canonical_logical_path, limits.maximum_source_bytes,
+                    ForestLibraryCode::source_too_large, source) != ForestLibraryCode::ready
+                || read_file(state.locator.storage_path, limits.maximum_artifact_bytes,
+                    ForestLibraryCode::artifact_too_large, artifact) != ForestLibraryCode::ready) return false;
+            bytesRead += source.size() + manifest.size() + artifact.size();
+            return source == state.source.bytes && manifest == state.manifest && artifact == state.artifact.bytes;
+            }
+            catch (...) { return false; }
+        }
+
         struct ContractRoot final
         {
             fs::path path{};
@@ -1167,6 +2001,21 @@ namespace epochengine::project_forests
         std::string_view logicalPath,
         const forest::ForestAssetDocument& document) noexcept
     {
+        return publish_impl(logicalPath, document, false);
+    }
+
+    PublishedForestAsset ForestAssetLibrary::publish_materialized(
+        std::string_view logicalPath,
+        const forest::ForestAssetDocument& document) noexcept
+    {
+        return publish_impl(logicalPath, document, true);
+    }
+
+    PublishedForestAsset ForestAssetLibrary::publish_impl(
+        std::string_view logicalPath,
+        const forest::ForestAssetDocument& document,
+        bool materialized) noexcept
+    {
         ++metrics_.publish_requests;
         if (!valid())
             return reject_publish(ForestLibraryCode::invalid_library);
@@ -1179,19 +2028,26 @@ namespace epochengine::project_forests
                 return reject_publish(pathFailure);
 
             SourceBytes source{};
-            source.bytes = serialize_source(document, limits_);
+            source.bytes = serialize_source(document, limits_, !materialized);
             if (source.bytes.empty())
                 return reject_publish(ForestLibraryCode::invalid_source);
-            source = deserialize_source(source.bytes, limits_);
+            source = deserialize_source(source.bytes, limits_, !materialized);
             if (source.code != ForestLibraryCode::ready)
                 return reject_publish(source.code);
 
             ArtifactBytes artifact{};
-            artifact.bytes = serialize_artifact(
-                source.document, source.bytes, limits_);
+            if (materialized)
+            {
+                // Compile at the host-owned publication boundary. The exact
+                // resulting key, not the producer label, authorizes v2 reads.
+                const auto compiled = forest::compile_forest_asset(source.document);
+                artifact.bytes = serialize_materialized_artifact(
+                    source.document, compiled, source.bytes, limits_);
+            }
+            else artifact.bytes = serialize_artifact(source.document, source.bytes, limits_);
             if (artifact.bytes.empty())
                 return reject_publish(ForestLibraryCode::invalid_artifact);
-            artifact = deserialize_artifact(artifact.bytes, limits_);
+            artifact = deserialize_artifact(artifact.bytes, limits_, materialized);
             if (artifact.code != ForestLibraryCode::ready)
                 return reject_publish(artifact.code);
 
@@ -1212,7 +2068,7 @@ namespace epochengine::project_forests
                     ForestLibraryCode::artifact_too_large, existing);
                 metrics_.bytes_read += existing.size();
                 const ArtifactBytes decoded = read == ForestLibraryCode::ready
-                    ? deserialize_artifact(existing, limits_)
+                    ? deserialize_artifact(existing, limits_, materialized)
                     : ArtifactBytes{read};
                 if (decoded.code != ForestLibraryCode::ready
                     || decoded.bytes != artifact.bytes
@@ -1259,7 +2115,7 @@ namespace epochengine::project_forests
                     ForestLibraryCode::artifact_too_large, verifiedBytes);
                 const ArtifactBytes verified =
                     verifiedRead == ForestLibraryCode::ready
-                    ? deserialize_artifact(verifiedBytes, limits_)
+                    ? deserialize_artifact(verifiedBytes, limits_, materialized)
                     : ArtifactBytes{verifiedRead};
                 metrics_.bytes_read += verifiedBytes.size();
                 if (verified.code != ForestLibraryCode::ready
@@ -1315,7 +2171,7 @@ namespace epochengine::project_forests
                     temporary, limits_.maximum_source_bytes,
                     ForestLibraryCode::source_too_large, verifiedBytes);
                 const SourceBytes verified = verifiedRead == ForestLibraryCode::ready
-                    ? deserialize_source(verifiedBytes, limits_)
+                    ? deserialize_source(verifiedBytes, limits_, !materialized)
                     : SourceBytes{verifiedRead};
                 metrics_.bytes_read += verifiedBytes.size();
                 if (verified.code != ForestLibraryCode::ready
@@ -1422,6 +2278,11 @@ namespace epochengine::project_forests
             if (read != ForestLibraryCode::ready)
                 return reject_artifact(read);
             ArtifactBytes artifact = deserialize_artifact(bytes, limits_);
+            if (artifact.code == ForestLibraryCode::verified_key_required)
+                return reject_artifact(artifact.code);
+            if (artifact.code == ForestLibraryCode::rebuild_required
+                && artifact.digest.words == artifactKey.words)
+                return reject_artifact(artifact.code);
             if (artifact.code != ForestLibraryCode::ready
                 || artifact.digest.words != artifactKey.words)
             {
@@ -1438,6 +2299,172 @@ namespace epochengine::project_forests
         {
             return reject_artifact(ForestLibraryCode::allocation_failure);
         }
+    }
+
+    LoadedForestArtifact ForestAssetLibrary::load_materialized_exact(
+        std::string_view logicalPath,
+        const ForestArtifactLocator& approvedPublication) noexcept
+    {
+        ++metrics_.artifact_load_requests;
+        if (!valid()) return reject_artifact(ForestLibraryCode::invalid_library);
+        if (!approvedPublication || approvedPublication.project_key != project_key_)
+            return reject_artifact(ForestLibraryCode::verified_key_required);
+        try
+        {
+            ForestLibraryCode failure{};
+            const auto asset = canonical_asset(project_root_, project_key_, logicalPath, limits_, failure);
+            if (!asset) return reject_artifact(failure);
+            const auto path = artifact_path(*asset, approvedPublication.artifact_key);
+            if (asset->asset_key != approvedPublication.asset_key
+                || asset->logical_path != approvedPublication.canonical_logical_path
+                || path.lexically_normal() != approvedPublication.storage_path.lexically_normal())
+                return reject_artifact(ForestLibraryCode::verified_key_required);
+            std::vector<std::byte> bytes;
+            const auto read = read_file(path, limits_.maximum_artifact_bytes,
+                ForestLibraryCode::artifact_too_large, bytes);
+            metrics_.bytes_read += bytes.size();
+            if (read != ForestLibraryCode::ready) return reject_artifact(read);
+            const auto body = integrity_verified_body(bytes);
+            if (!body || asset_hash(digest_bytes(*body)).words != approvedPublication.artifact_key.words
+                || bytes.size() != approvedPublication.serialized_bytes)
+                return reject_artifact(ForestLibraryCode::integrity_failure);
+            // Only the exact host-issued key reaches structural materialization.
+            auto decoded = deserialize_materialized_artifact(bytes, limits_);
+            if (decoded.code != ForestLibraryCode::ready) return reject_artifact(decoded.code);
+            if (decoded.artifact.sourceRevision != approvedPublication.source_revision
+                || decoded.artifact.sourceContentHash != approvedPublication.source_content_hash)
+                return reject_artifact(ForestLibraryCode::integrity_failure);
+            ++metrics_.artifact_loads;
+            return {ForestLibraryCode::ready,
+                artifact_locator(ForestLibraryCode::ready, *asset, path, project_key_, decoded),
+                std::move(decoded.artifact)};
+        }
+        catch (...) { return reject_artifact(ForestLibraryCode::allocation_failure); }
+    }
+
+    ForestLibraryCode ForestAssetLibrary::select_materialized(
+        std::string_view logicalPath, const ForestArtifactLocator& publishedArtifact) noexcept
+    {
+        if (!valid()) return ForestLibraryCode::invalid_library;
+        if (!publishedArtifact) return ForestLibraryCode::verified_key_required;
+        try
+        {
+            auto state = verify_selected_materialized(project_root_, project_key_, logicalPath, limits_, metrics_.bytes_read);
+            if (state.code != ForestLibraryCode::ready) return state.code;
+            const auto& expected = state.locator;
+            if (publishedArtifact.project_key != expected.project_key
+                || publishedArtifact.asset_key != expected.asset_key
+                || publishedArtifact.canonical_logical_path != expected.canonical_logical_path
+                || publishedArtifact.artifact_key.words != expected.artifact_key.words
+                || publishedArtifact.source_revision != expected.source_revision
+                || publishedArtifact.source_content_hash != expected.source_content_hash
+                || publishedArtifact.serialized_bytes != expected.serialized_bytes
+                || !ordinary_selected_path(publishedArtifact.storage_path, false)
+                || fs::canonical(publishedArtifact.storage_path) != expected.storage_path)
+                return ForestLibraryCode::verified_key_required;
+
+            std::error_code error;
+            const bool existed = fs::exists(fs::symlink_status(state.reference_path, error));
+            if (error && error != std::errc::no_such_file_or_directory) return ForestLibraryCode::read_failure;
+            std::vector<std::byte> previous;
+            if (existed)
+            {
+                if (!ordinary_selected_path(state.reference_path, false)) return ForestLibraryCode::invalid_path;
+                const auto code = read_file(state.reference_path, kMaximumSelectedReferenceBytes,
+                    ForestLibraryCode::artifact_too_large, previous);
+                metrics_.bytes_read += previous.size();
+                if (code != ForestLibraryCode::ready) return code;
+                if (!valid_selected_reference(previous, state.root, project_key_, expected.asset_key,
+                        expected.canonical_logical_path, limits_)) return ForestLibraryCode::integrity_failure;
+            }
+            if (!selected_source_is_current(state, limits_, metrics_.bytes_read)) return ForestLibraryCode::integrity_failure;
+            if (previous == state.reference)
+            {
+                std::vector<std::byte> current;
+                if (!ordinary_selected_path(state.reference_path, false)
+                    || read_file(state.reference_path, kMaximumSelectedReferenceBytes,
+                        ForestLibraryCode::artifact_too_large, current) != ForestLibraryCode::ready || current != previous)
+                    return ForestLibraryCode::integrity_failure;
+                return ForestLibraryCode::unchanged;
+            }
+
+            auto temporary = state.reference_path;
+            temporary += ".pending." + hex_u64(next_temporary_id());
+            error.clear();
+            if (!platform::filesystem::exclusive_create_and_write(temporary, state.reference, error))
+                return ForestLibraryCode::write_failure;
+            const auto discard = [&] {
+                std::error_code cleanup;
+                fs::remove(temporary, cleanup);
+            };
+            std::vector<std::byte> verified;
+            if (!ordinary_selected_path(temporary, false)
+                || read_file(temporary, kMaximumSelectedReferenceBytes,
+                    ForestLibraryCode::artifact_too_large, verified) != ForestLibraryCode::ready
+                || verified != state.reference
+                || !selected_source_is_current(state, limits_, metrics_.bytes_read))
+            { discard(); return ForestLibraryCode::integrity_failure; }
+            std::vector<std::byte> current;
+            const bool stillExists = fs::exists(fs::symlink_status(state.reference_path, error));
+            if ((error && error != std::errc::no_such_file_or_directory) || stillExists != existed
+                || (existed && (!ordinary_selected_path(state.reference_path, false)
+                    || read_file(state.reference_path, kMaximumSelectedReferenceBytes,
+                        ForestLibraryCode::artifact_too_large, current) != ForestLibraryCode::ready || current != previous)))
+            { discard(); return ForestLibraryCode::integrity_failure; }
+            error.clear();
+            if (!platform::filesystem::atomic_replace_same_filesystem(temporary, state.reference_path, error))
+            { discard(); return ForestLibraryCode::atomic_replace_failure; }
+            metrics_.bytes_written += state.reference.size();
+            return ForestLibraryCode::ready;
+        }
+        catch (...) { return ForestLibraryCode::allocation_failure; }
+    }
+
+    LoadedForestArtifact ForestAssetLibrary::load_selected_materialized(std::string_view logicalPath) noexcept
+    {
+        ++metrics_.artifact_load_requests;
+        if (!valid()) return reject_artifact(ForestLibraryCode::invalid_library);
+        try
+        {
+            if (!ordinary_selected_path(project_root_, true)) return reject_artifact(ForestLibraryCode::invalid_path);
+            const auto root = fs::canonical(project_root_);
+            ForestLibraryCode failure{};
+            const auto asset = canonical_asset(root, project_key_, logicalPath, limits_, failure);
+            if (!asset) return reject_artifact(failure);
+            if (!ordinary_selected_path(root / "project.epoch.json", false)
+                || !ordinary_selected_path(asset->source_path, false)
+                || !ordinary_selected_path(asset->artifact_directory, true))
+                return reject_artifact(ForestLibraryCode::invalid_path);
+            const auto path = asset->artifact_directory / kSelectedReferenceName;
+            std::error_code statusError;
+            const auto status = fs::symlink_status(path, statusError);
+            if (status.type() == fs::file_type::not_found
+                && (!statusError || statusError == std::errc::no_such_file_or_directory))
+                return reject_artifact(ForestLibraryCode::not_found);
+            if (statusError) return reject_artifact(ForestLibraryCode::read_failure);
+            if (!ordinary_selected_path(path, false)) return reject_artifact(ForestLibraryCode::invalid_path);
+            std::vector<std::byte> reference;
+            const auto code = read_file(path, kMaximumSelectedReferenceBytes,
+                ForestLibraryCode::artifact_too_large, reference);
+            metrics_.bytes_read += reference.size();
+            if (code != ForestLibraryCode::ready) return reject_artifact(code);
+            if (!valid_selected_reference(reference, root, project_key_, asset->asset_key, asset->logical_path, limits_))
+                return reject_artifact(ForestLibraryCode::integrity_failure);
+            auto state = verify_selected_materialized(root, project_key_, logicalPath, limits_, metrics_.bytes_read);
+            if (state.code != ForestLibraryCode::ready) return reject_artifact(state.code);
+            // Full canonical comparison includes the manifest, complete source
+            // envelope and expected compiled key. A rehashed hint has no authority.
+            if (reference != state.reference || !selected_source_is_current(state, limits_, metrics_.bytes_read))
+                return reject_artifact(ForestLibraryCode::integrity_failure);
+            std::vector<std::byte> current;
+            if (!ordinary_selected_path(path, false)
+                || read_file(path, kMaximumSelectedReferenceBytes, ForestLibraryCode::artifact_too_large, current)
+                    != ForestLibraryCode::ready || current != reference)
+                return reject_artifact(ForestLibraryCode::integrity_failure);
+            ++metrics_.artifact_loads;
+            return {ForestLibraryCode::ready, std::move(state.locator), std::move(state.artifact.artifact)};
+        }
+        catch (...) { return reject_artifact(ForestLibraryCode::allocation_failure); }
     }
 
     LoadedForestArtifact ForestAssetLibrary::load_latest(
@@ -1480,6 +2507,9 @@ namespace epochengine::project_forests
             ArtifactBytes selected{};
             fs::path selectedPath{};
             bool found{};
+            bool staleCompiler{};
+            std::uint64_t staleRevision{};
+            std::uint64_t staleContentHash{};
             for (const fs::path& candidate : candidates)
             {
                 std::vector<std::byte> bytes{};
@@ -1490,6 +2520,24 @@ namespace epochengine::project_forests
                 if (read != ForestLibraryCode::ready)
                     return reject_artifact(read);
                 ArtifactBytes decoded = deserialize_artifact(bytes, limits_);
+                if (decoded.code == ForestLibraryCode::verified_key_required)
+                    return reject_artifact(decoded.code);
+                if (decoded.code == ForestLibraryCode::rebuild_required)
+                {
+                    if (candidate.filename().generic_string() != hex_hash(decoded.digest)
+                        + std::string{kArtifactExtension})
+                        return reject_artifact(ForestLibraryCode::integrity_failure);
+                    staleCompiler = true;
+                    if (decoded.artifact.sourceRevision > staleRevision)
+                    {
+                        staleRevision = decoded.artifact.sourceRevision;
+                        staleContentHash = decoded.artifact.sourceContentHash;
+                    }
+                    else if (decoded.artifact.sourceRevision == staleRevision
+                        && decoded.artifact.sourceContentHash != staleContentHash)
+                        return reject_artifact(ForestLibraryCode::ambiguous_artifact);
+                    continue;
+                }
                 if (decoded.code != ForestLibraryCode::ready
                     || candidate.filename().generic_string()
                         != hex_hash(decoded.digest)
@@ -1514,7 +2562,12 @@ namespace epochengine::project_forests
                 }
             }
             if (!found)
-                return reject_artifact(ForestLibraryCode::not_found);
+                return reject_artifact(staleCompiler ? ForestLibraryCode::rebuild_required : ForestLibraryCode::not_found);
+            if (staleCompiler && staleRevision > selected.artifact.sourceRevision)
+                return reject_artifact(ForestLibraryCode::rebuild_required);
+            if (staleCompiler && staleRevision == selected.artifact.sourceRevision
+                && staleContentHash != selected.artifact.sourceContentHash)
+                return reject_artifact(ForestLibraryCode::ambiguous_artifact);
             ++metrics_.artifact_loads;
             return {
                 ForestLibraryCode::ready,

@@ -200,6 +200,36 @@ export namespace epochengine::lighting
         }
     };
 
+    inline constexpr std::size_t maximum_pending_light_changes=128u;
+    // Combine unconsumed spatial damage, not source commands. A global redraw
+    // dominates local regions; bounded storage or allocation pressure can only
+    // widen damage, never leave previously changed pixels stale.
+    inline void coalesce_lighting_invalidations(LightingInvalidationFrame& pending,
+        const LightingInvalidationFrame& incoming) noexcept
+    {
+        if(&pending==&incoming)
+        {
+            if(pending.global_invalidation||pending.changes.size()>maximum_pending_light_changes)
+            {pending.global_invalidation=true;pending.changes.clear();}
+            return;
+        }
+        pending.revision=(std::max)(pending.revision,incoming.revision);
+        if(pending.global_invalidation||incoming.global_invalidation
+            ||pending.changes.size()>maximum_pending_light_changes
+            ||incoming.changes.size()>maximum_pending_light_changes-pending.changes.size())
+        {
+            pending.global_invalidation=true;pending.changes.clear();return;
+        }
+        if(incoming.changes.empty()) return;
+        try
+        {
+            pending.changes.reserve(maximum_pending_light_changes);
+            pending.changes.insert(pending.changes.end(),incoming.changes.begin(),incoming.changes.end());
+        }
+        catch(...)
+        {pending.global_invalidation=true;pending.changes.clear();}
+    }
+
     [[nodiscard]] inline bool same_environment(
         const LightingEnvironment& lhs,
         const LightingEnvironment& rhs) noexcept
@@ -250,6 +280,16 @@ export namespace epochengine::lighting
     {
         LightingInvalidationFrame damage{};
         damage.revision = current.revision;
+        // No configured lights at revision zero uses the preview's legacy
+        // fallback. Crossing that boundary changes base shading everywhere,
+        // even when the first/last light has no active local influence.
+        const bool previousFallback=!previous||(previous->revision==0u&&previous->lights.empty());
+        const bool currentFallback=current.revision==0u&&current.lights.empty();
+        if(previousFallback!=currentFallback)
+        {
+            damage.global_invalidation=true;
+            return damage;
+        }
         if (!previous)
         {
             damage.global_invalidation = !current.lights.empty()

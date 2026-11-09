@@ -2082,7 +2082,11 @@ namespace epochengine::editor_code_workspace
         if (!platform::filesystem::exclusive_create_and_write(
                 temporary, std::as_bytes(characters), error))
         {
-            return result(ResultCode::write_failed, "The verified temporary code file could not be written.", handle);
+            return result(ResultCode::write_failed,
+                "The verified temporary code file could not be written; error="
+                    + std::to_string(error.value())
+                    + "; category=" + error.category().name()
+                    + "; message=" + error.message(), handle);
         }
 
         std::string temporary_bytes{};
@@ -2106,8 +2110,12 @@ namespace epochengine::editor_code_workspace
         if (!platform::filesystem::atomic_replace_same_filesystem(
                 temporary, checked->canonical_path, error))
         {
+            const std::string reason = "Atomic code-file replacement failed; error="
+                + std::to_string(error.value())
+                + "; category=" + error.category().name()
+                + "; message=" + error.message();
             fs::remove(temporary, error);
-            return result(ResultCode::write_failed, "Atomic code-file replacement failed.", handle);
+            return result(ResultCode::write_failed, reason, handle);
         }
 
         std::string committed{};

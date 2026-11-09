@@ -34,6 +34,7 @@ import telemetry.engine;
 import context.commandqueue;
 import opengl.context;
 import opengl.platform;
+import opengl.native_present;
 import opengl.quad;
 import opengl.state;
 import opengl.textures;
@@ -64,13 +65,15 @@ namespace epochengine::openglcontext
 #endif
 
         auto& backend = opengltextures::get_opengl_backend();
-        auto& glState = backend.glState;
+        auto desired = contextdetail::context_to_platform_context(ctx.get());
+        auto& glState = desired.valid()
+            ? opengltextures::state_for_platform_context(backend, desired, ctx.get())
+            : backend.glState;
 
         if (!contextdetail::drawable_alive(ctx.get(), glState))
             return false;
 
         PlatformGL::ScopedContext guard;
-        auto desired = contextdetail::context_to_platform_context(ctx.get());
         if (!desired.valid() || !guard.set(desired))
         {
             auto fallback = contextdetail::state_to_platform_context(glState);
@@ -152,8 +155,15 @@ namespace epochengine::openglcontext
         }
 
         opengl_clear();
+        // The diagnostic uses the existing unprepared-frame static-quad path;
+        // GUI replay, scene ordering and native frame admission stay unchanged.
+#if !defined(EPOCH_OPENGL_STATIC_QUADS_DIAGNOSTIC) || !EPOCH_OPENGL_STATIC_QUADS_DIAGNOSTIC
+        opengltextures::prepare_sprite_frame(nativeState);
+#endif
         nativeState.guiSpritesSubmitted = nativeState.guiDrawCallsSubmitted = 0;
+        nativeState.meshTrianglesSubmitted = nativeState.meshDrawCallsSubmitted = nativeState.meshUploadBytesSubmitted = 0;
         opengl_render_active_frame(ctx, queue, fbW, fbH, windowId);
+        nativeState.spriteStreamFramePrepared = false;
         if (ctx->windowData && ctx->windowData->get_should_close())
             return false;
         const auto presentStart = FrameClock::now();
@@ -161,7 +171,28 @@ namespace epochengine::openglcontext
             fbW, fbH, windowId);
         // Uncapped means each completed render is submitted immediately.
         // Do not conceal a native presentation ceiling behind a render counter.
-        const bool nativeSucceeded = PlatformGL::swap_buffers(guard.target());
+        bool nativeSucceeded{};
+        bool nativeOccluded{};
+        const bool dxgi = native_present::selected(nativeState.nativePresent);
+        if (nativeState.nativePresent.failed || !nativeState.nativePresent.selectionResolved)
+            throw std::runtime_error("OpenGL presentation selection failed; no native presentation was attempted.");
+        if (dxgi)
+        {
+#if defined(_WIN32)
+            if (!native_present::initialize(nativeState.nativePresent,
+                    ::WindowFromDC(guard.target().device), guard.target().device,
+                    guard.target().context, fbW, fbH))
+                throw std::runtime_error("Selected OpenGL DXGI presenter could not initialize; no native-swap fallback.");
+            const auto result = native_present::present(nativeState.nativePresent,
+                fbW, fbH, nativeState.nativePresentSyncInterval);
+            nativeSucceeded = result == native_present::Result::presented;
+            nativeOccluded = result == native_present::Result::occluded;
+#else
+            throw std::runtime_error("Selected OpenGL DXGI presentation is unavailable on this platform.");
+#endif
+        }
+        else
+            nativeSucceeded = PlatformGL::swap_buffers(guard.target());
         const auto presentEnd = FrameClock::now();
         if (uncappedSubmission && !frame_admission::submitted(nativeState.frameAdmission))
             throw std::runtime_error("OpenGL GPU completion fence creation failed; rendering stopped before another submission.");
@@ -186,13 +217,14 @@ namespace epochengine::openglcontext
             prepareAndDrawMs,
             timingTags);
         telemetry::emit_histogram_ms(
-            "renderer.opengl.swap_buffers_time_ms",
+            "renderer.opengl.native_presentation_time_ms",
             presentMs,
             timingTags);
         struct BoundedPhaseEvidence final
         {
             const core::Context* owner{};
             bool uncapped{};
+            perf::frame_activity activity{perf::frame_activity::background};
             FrameClock::time_point sampleStart{};
             double admissionTotalMs{};
             std::uint64_t admissionWaits{};
@@ -200,21 +232,39 @@ namespace epochengine::openglcontext
             double presentTotalMs{};
             std::uint64_t samples{};
             std::uint64_t guiSprites{}, guiDrawCalls{};
+            std::uint64_t meshTriangles{}, meshDrawCalls{}, meshUploadBytes{};
             std::uint32_t reports{};
         };
         static thread_local BoundedPhaseEvidence phaseEvidence{};
-        if (phaseEvidence.owner != ctx.get() || phaseEvidence.uncapped != uncappedSubmission)
+        static thread_local unsigned slowFrameReports{};
+        const auto activity = ctx->frame_pacing_activity();
+        if (phaseEvidence.owner != ctx.get() || phaseEvidence.uncapped != uncappedSubmission
+            || phaseEvidence.activity != activity)
         {
             phaseEvidence = {};
             phaseEvidence.owner = ctx.get();
             phaseEvidence.uncapped = uncappedSubmission;
+            phaseEvidence.activity = activity;
             phaseEvidence.sampleStart = framePhaseStart;
             logger::get("OpenGL").logf(
                 logger::LogLevel::INFO,
                 std::source_location::current(),
-                "GPU frame admission {}: maximum {} submitted frames pending completion; no FPS ceiling.",
-                uncappedSubmission ? "enabled" : "inactive",
+                "GPU frame admission active={}: uncapped mode bounds {} pending GPU frames; capped/VSync modes release prior fences without new sync submissions.",
+                uncappedSubmission,
                 frame_admission::frames_in_flight);
+        }
+        // Focus changes can stall outside the Editor's CPU timer. Keep the
+        // existing six-sample presentation window useful after activation, and
+        // retain a bounded completed-stall record even after that window ends.
+        if (slowFrameReports < 8u
+            && (prepareAndDrawMs >= 50.0 || admissionMs >= 50.0 || presentMs >= 50.0))
+        {
+            ++slowFrameReports;
+            logger::get("OpenGL").logf(logger::LogLevel::WARN,
+                std::source_location::current(),
+                "Slow completed frame: draw {:.3f} ms, admission {:.3f} ms, present {:.3f} ms; window={}; uncapped={}; focus={}",
+                prepareAndDrawMs, admissionMs, presentMs, windowId, uncappedSubmission,
+                activity == perf::frame_activity::foreground);
         }
         phaseEvidence.admissionTotalMs += admissionMs;
         phaseEvidence.admissionWaits += admissionWaits;
@@ -223,14 +273,17 @@ namespace epochengine::openglcontext
         ++phaseEvidence.samples;
         phaseEvidence.guiSprites += nativeState.guiSpritesSubmitted;
         phaseEvidence.guiDrawCalls += nativeState.guiDrawCallsSubmitted;
-        if (phaseEvidence.reports < 6u
+        phaseEvidence.meshTriangles += nativeState.meshTrianglesSubmitted;
+        phaseEvidence.meshDrawCalls += nativeState.meshDrawCallsSubmitted;
+        phaseEvidence.meshUploadBytes += nativeState.meshUploadBytesSubmitted;
+        if (phaseEvidence.reports < 8u
             && presentEnd - phaseEvidence.sampleStart
-                >= std::chrono::seconds(1))
+                >= std::chrono::seconds(phaseEvidence.reports < 6u ? 1 : 30))
         {
             logger::get("OpenGL").logf(
                 logger::LogLevel::INFO,
                 std::source_location::current(),
-                "Frame phases: prepare+draw {:.3f} ms | GPU admission {:.3f} ms ({} driver waits) | SwapBuffers {:.3f} ms | {} rendered frames; uncapped admission={}; GUI {:.1f} sprites in {:.1f} draw calls/frame.",
+                "Frame phases: draw {:.3f} ms | admission {:.3f} ms ({} waits) | present {:.3f} ms ({}) | {} frames; uncapped={}",
                 phaseEvidence.prepareAndDrawTotalMs
                     / static_cast<double>(phaseEvidence.samples),
                 phaseEvidence.admissionTotalMs
@@ -238,10 +291,17 @@ namespace epochengine::openglcontext
                 phaseEvidence.admissionWaits,
                 phaseEvidence.presentTotalMs
                     / static_cast<double>(phaseEvidence.samples),
+                dxgi ? "DXGI" : "native swap",
                 phaseEvidence.samples,
-                phaseEvidence.uncapped,
+                phaseEvidence.uncapped);
+            logger::get("OpenGL").logf(logger::LogLevel::INFO,
+                std::source_location::current(),
+                "Submission/frame: GUI {:.1f} sprites/{:.1f} calls; mesh {:.1f} triangles/{:.1f} calls, {:.1f} KiB uploaded (wire depth+line passes counted).",
                 static_cast<double>(phaseEvidence.guiSprites) / phaseEvidence.samples,
-                static_cast<double>(phaseEvidence.guiDrawCalls) / phaseEvidence.samples);
+                static_cast<double>(phaseEvidence.guiDrawCalls) / phaseEvidence.samples,
+                static_cast<double>(phaseEvidence.meshTriangles) / phaseEvidence.samples,
+                static_cast<double>(phaseEvidence.meshDrawCalls) / phaseEvidence.samples,
+                static_cast<double>(phaseEvidence.meshUploadBytes) / phaseEvidence.samples / 1024.0);
             phaseEvidence.sampleStart = presentEnd;
             phaseEvidence.prepareAndDrawTotalMs = 0.0;
             phaseEvidence.admissionTotalMs = 0.0;
@@ -249,11 +309,15 @@ namespace epochengine::openglcontext
             phaseEvidence.presentTotalMs = 0.0;
             phaseEvidence.samples = 0u;
             phaseEvidence.guiSprites = phaseEvidence.guiDrawCalls = 0;
+            phaseEvidence.meshTriangles = phaseEvidence.meshDrawCalls = phaseEvidence.meshUploadBytes = 0;
             ++phaseEvidence.reports;
         }
 
-        // The GPU fence above still owns this rendered work on swap failure.
+        // In uncapped mode the fence above still owns work on swap failure.
         // A failed native submission must not advance completion/FPS evidence.
+        // Occlusion is a nonfatal turn, but cannot publish first-present success.
+        if (nativeOccluded)
+            return true;
         if (!nativeSucceeded)
             return false;
         ++glState.frameCount;
@@ -268,7 +332,9 @@ namespace epochengine::openglcontext
                 ctx->windowData->hwnd,
                 nullptr,
                 nullptr,
-                RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);
+                // Schedule owner-thread paint without synchronously invoking
+                // its window procedure while this render context is current.
+                RDW_INVALIDATE | RDW_ALLCHILDREN);
         }
 #else
         if (nativeSucceeded && ctx->windowData

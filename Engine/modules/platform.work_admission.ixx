@@ -4,6 +4,7 @@
 module;
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <limits>
@@ -27,6 +28,26 @@ export namespace epochengine::platform::work_admission
         [[nodiscard]] constexpr bool operator==(const Request&) const noexcept = default;
     };
 
+    enum class GpuTelemetrySource : std::uint8_t { unavailable, nvidia_nvml };
+    struct GpuResourceSample final
+    {
+        // Whole physical adapter0, including every application and driver use.
+        // Never interpret these as this Editor's/process's allocation or load.
+        GpuTelemetrySource source{GpuTelemetrySource::unavailable};
+        std::uint32_t adapter_index{}, adapter_count{};
+        std::array<char, 96u> adapter_name{};
+        std::uint64_t dedicated_total_bytes{}, dedicated_used_bytes{};
+        double busy_fraction{};
+        bool busy_valid{}, memory_valid{};
+        // Independent driver observations, never percentages of allocated VRAM.
+        // Kernel activity above does not distinguish graphics from compute.
+        double memory_activity_fraction{}, encoder_busy_fraction{}, decoder_busy_fraction{};
+        std::uint32_t encoder_sample_period_us{}, decoder_sample_period_us{};
+        bool memory_activity_valid{}, encoder_valid{}, decoder_valid{};
+        // GPU query start/completion are independent of the CPU/RAM sample.
+        std::uint64_t sampling_started_at_ms{}, captured_at_ms{};
+    };
+
     struct ResourceSample final
     {
         std::uint64_t captured_at_ms{};
@@ -35,6 +56,7 @@ export namespace epochengine::platform::work_admission
         double cpu_busy_fraction{};
         bool memory_valid{};
         bool cpu_valid{};
+        GpuResourceSample gpu{};
     };
 
     struct Policy final
@@ -103,8 +125,42 @@ export namespace epochengine::platform::work_admission
 
     [[nodiscard]] std::uint64_t now_milliseconds() noexcept;
     // Cached and synchronized. CPU requires two actual samples, at least one
-    // second apart. No GPU/VRAM health is inferred from host memory or CPU.
+    // second apart. This read never initializes or queries a GPU driver. GPU
+    // observations expire after five seconds and are independent of admission.
     [[nodiscard]] ResourceSample sample_host_resources() noexcept;
+
+    // Explicit session-owner lifecycle, never started by status reads. The optional
+    // worker owns its driver library. OFF/unsupported builds create no worker.
+    [[nodiscard]] bool start_gpu_telemetry() noexcept;
+    // Requests cancellation; zero budget never waits. Budget is capped at 100ms.
+    // False means a driver call/cleanup is still owned, not forcibly cancelled.
+    // Its joinable worker and state remain process-owned until a later stop can
+    // join it; process exit is the final boundary for an unreturning driver call.
+    [[nodiscard]] bool stop_gpu_telemetry(std::uint32_t wait_budget_ms = 0u) noexcept;
+
+    // One nonblocking RAM check for an already scheduled allocation. This is
+    // not a reservation, a CPU throttle, or a replacement work controller.
+    // Keep the policy's free-memory margin AFTER the estimated allocation.
+    [[nodiscard]] inline Reason assess_memory_budget(const ResourceSample& sample,
+        std::uint64_t now, std::uint64_t additional_bytes, Policy policy = {}) noexcept
+    {
+        if (!policy.valid()) return Reason::invalid_policy;
+        if (!policy.resource_checks) return Reason::ready;
+        if (!sample.memory_valid || sample.total_memory_bytes == 0u
+            || sample.available_memory_bytes > sample.total_memory_bytes)
+            return Reason::resources_unavailable;
+        if (sample.captured_at_ms > now
+            || now - sample.captured_at_ms > policy.maximum_sample_age_ms)
+            return Reason::resources_stale;
+        if (additional_bytes > sample.available_memory_bytes)
+            return Reason::memory_pressure;
+        const auto remaining = sample.available_memory_bytes - additional_bytes;
+        if (remaining < policy.minimum_available_memory_bytes
+            || static_cast<double>(remaining) / static_cast<double>(sample.total_memory_bytes)
+                < policy.minimum_available_memory_fraction)
+            return Reason::memory_pressure;
+        return Reason::ready;
+    }
 
     class Controller final
     {

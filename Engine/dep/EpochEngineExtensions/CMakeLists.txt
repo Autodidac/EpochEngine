@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 4.4)
 
 set(CMAKE_CXX_SCAN_FOR_MODULES ON)
 
-project(EpochEngineExtensions VERSION 0.2.0 LANGUAGES CXX)
+project(EpochEngineExtensions VERSION 0.2.3 LANGUAGES CXX)
 
 set(
     EPOCH_ENGINE_MODULE_DIR
@@ -71,7 +71,46 @@ else()
 endif()
 
 include(CTest)
+
+option(EPOCH_BUILD_SOURCE_PACKAGES "Build the preserved standalone source packages" ON)
+if(EPOCH_BUILD_SOURCE_PACKAGES)
+    set(_epoch_source_packages
+        capability_technique_gallery
+        engine_authoritative_dedicated_server
+        engine_client_listen_server
+        engine_network_runtime
+        fft_ocean
+        forest_temporal_graph
+        local_ai_llama_cpp_runtime
+        planetary_terrain
+        voxel_authoring_tools
+        voxel_planetoid_lod
+    )
+    foreach(_epoch_package IN LISTS _epoch_source_packages)
+        add_subdirectory("packages/${_epoch_package}")
+        if(BUILD_TESTING)
+            set(_epoch_package_test "epoch_extension_${_epoch_package}_self_test")
+            get_property(_epoch_registered_tests
+                DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/packages/${_epoch_package}"
+                PROPERTY TESTS
+            )
+            if(NOT _epoch_package_test IN_LIST _epoch_registered_tests)
+                add_test(NAME "${_epoch_package_test}" COMMAND "${_epoch_package_test}")
+            endif()
+        endif()
+    endforeach()
+endif()
+
 if(BUILD_TESTING)
+    find_package(Python3 COMPONENTS Interpreter REQUIRED)
+    add_test(
+        NAME EpochEngineExtensions.PackageManifests
+        COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tools/validate_packages.py"
+    )
+    add_test(
+        NAME EpochEngineExtensions.SourcePackaging
+        COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_package_source.py"
+    )
     add_executable(EpochTieredTerrainContract
         demonstrations/tiered_terrain/tests/tiered_terrain.generator_contract.cpp
     )

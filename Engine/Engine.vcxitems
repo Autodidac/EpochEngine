@@ -17,9 +17,11 @@
     </ClCompile>
     <Link>
       <AdditionalDependencies>%(AdditionalDependencies);ncrypt.lib;userenv.lib;advapi32.lib;bcrypt.lib</AdditionalDependencies>
-      <AdditionalDependencies Condition="'$(EpochUseRaylib)'=='true'">%(AdditionalDependencies);opengl32.lib</AdditionalDependencies>
+      <AdditionalDependencies Condition="'$(EpochUseRaylib)'=='true' Or '$(EpochUseSfml)'=='true'">%(AdditionalDependencies);opengl32.lib</AdditionalDependencies>
       <AdditionalDependencies Condition="'$(EpochUseSfml)'=='true' And '$(VcpkgUseStatic)'!='true'">%(AdditionalDependencies);sfml-graphics.lib;sfml-window.lib;sfml-system.lib</AdditionalDependencies>
       <AdditionalDependencies Condition="'$(EpochUseDirectX)'=='true'">%(AdditionalDependencies);d3d11.lib;dxgi.lib;d3dcompiler.lib</AdditionalDependencies>
+      <!-- The Windows OpenGL presenter owns no DirectX renderer or shader compiler. -->
+      <AdditionalDependencies Condition="'$(EpochUseDirectX)'!='true'">%(AdditionalDependencies);d3d11.lib;dxgi.lib</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -80,7 +82,6 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="$(MSBuildThisFileDirectory)src\authoring\texture\implementation\authoring.texture_binary_codec.inl" />
-    <ClInclude Include="$(MSBuildThisFileDirectory)src\authoring\texture\implementation\authoring.texture_residency.inl" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\implementation\editor.scene_commands.inl" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\implementation\editor.project_registry.inl" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\implementation\editor.project_shell_generation.inl" />
@@ -105,10 +106,12 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)include\engine.config.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)include\updater.distribution.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)include\updater.runtime_identity.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\updater\updater.handoff_script.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)include\epoch.build_layout.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)include\epoch.edition.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)include\core.utf8.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\ai\editor.ai_file_scope.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\ai\editor.ai_project_model_recovery.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\host\host.frame_rate_sample.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)include\epoch.engine.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)include\epoch.app_api.h" />
@@ -128,6 +131,11 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)resource\resource.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai.model.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai.native_runtime.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai.model_behavior.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_models_candidate_catalog.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai.asset_stage_fwd.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai.native_idle_policy.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai.native_shared_inputs.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_model_profile_import.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai.thinking_policy.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\ai.voice_runtime.hpp" />
@@ -179,6 +187,7 @@
     </None>
     <None Include="$(MSBuildThisFileDirectory)src\physics\physics.manager_contract.cpp" />
     <None Include="$(MSBuildThisFileDirectory)src\authoring\texture\authoring.texture_contract.cpp" />
+    <None Include="$(MSBuildThisFileDirectory)src\assets\mesh\asset.mesh_artifact_contract.cpp" />
     <None Include="$(MSBuildThisFileDirectory)src\assets\texture\asset.texture_artifact_contract.cpp" />
     <None Include="$(MSBuildThisFileDirectory)vcpkg.json">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
@@ -188,11 +197,6 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\modules\epoch.gui.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\modules\epoch.gui.image.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\modules\epoch.gui.tile_workspace.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\modules\epoch.gui.rounded_rect.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\modules\epoch.gui.input.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\game.a2048_like.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\raylib.api.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\raylib.context_win.ixx" />
@@ -209,9 +213,12 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\asset.tilemap_artifact.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\authoring.tilemap.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\authoring.morphology.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\asset.mesh_artifact.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\asset.cloud_volume.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\asset.texture_artifact.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\asset.texture_import.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\authoring.texture.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\authoring.texture_detail.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.project_textures.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.tilemap_workspace.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.lighting.ixx" />
@@ -292,6 +299,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\game.frogger_like.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\game.core.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\gui.engine.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\gui.frame_limit_control.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\image.atlas_writer.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\image.loader.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\image.writer.ixx" />
@@ -305,6 +313,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\noop.context.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.freetype.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.platform.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.native_present.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.quad.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.state.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.triangle.ixx" />
@@ -316,6 +325,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\simulation.sand.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\scene.core.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\updater.config.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\updater.platform_policy.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.version.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\engine.version.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\scene.document.ixx" />
@@ -358,6 +368,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.backend.ixx">
       <AdditionalOptions>/bigobj /Zm2000 /GL- %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.cloud_volume.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.preview.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.renderer.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\opengl.canvas2d.ixx" />
@@ -394,6 +405,11 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.eval.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.engine.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.model_install.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.image_generation.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.model_generation.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.triposr_generation.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\ai.asset_jobs.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\asset.model_import.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\assets.streaming.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\ecs.world.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.engine.ixx" />
@@ -405,11 +421,15 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\platform.runtime.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\package.registry.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\package.catalog.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\package.source_install.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\extension.catalog.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.contracts.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.lifecycle.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.asset_registry.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.forest_library.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.planetary.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.planetary_runtime.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.planetary_snapshot.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.texture_resources.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.texture_library.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.texture_pipeline.ixx" />
@@ -426,17 +446,26 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.gui_library.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.gui_epochgui.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.sprite_animation.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.motion_track.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.motion_track.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.tilemap_source.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\forest.factory.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\forest.preview_mesh.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\forest\forest.preview_mesh.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\audio.device_sdl.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\asset.audio_import.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project.audio_profile.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\physics.manager.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\physics.solver2d.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\voxel.field.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\voxel.sdf.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\voxel\voxel.sdf_contract.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\voxel.storage.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\water.wave.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\water.system.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\water\water.system.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\water.surface.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\water\water.surface.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.canvas2d.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.canvas2d_cpu.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.canvas2d_evidence.ixx" />
@@ -455,8 +484,8 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.texture_residency.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\voxel.trace.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.context_frame.ixx" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.event_debug.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.preview_grid.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\render\render.preview_camera.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.arcade.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.bindings.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.device.ixx" />
@@ -471,7 +500,10 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\systems.registry.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.runtime.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\vulkan\vulkan.dispatch_storage.cpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\assets\image.decode.hpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\assets\image.stb.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\assets\assets.streaming.cpp" />
+    <None Include="$(MSBuildThisFileDirectory)src\assets\assets.streaming_contract.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\vulkan\vulkan.context_texture.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="('$(Configuration)|$(Platform)'=='Release|Win32' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|Win32')">true</ExcludedFromBuild>
@@ -537,7 +569,9 @@
       <AdditionalOptions>/bigobj /Zm2000 /GL- %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\opengl\opengl.canvas2d_scene.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\opengl\opengl.native_present.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\opengl\opengl.context_process_impl.cpp">
+      <PreprocessorDefinitions Condition="'$(EpochOpenGLStaticQuads)' == 'true' Or '$(EpochOpenGLStaticQuads)' == '1'">EPOCH_OPENGL_STATIC_QUADS_DIAGNOSTIC=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalOptions>/bigobj /Zm2000 /GL- %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\opengl\opengl.backend.cpp">
@@ -623,12 +657,9 @@
       <AdditionalOptions>/bigobj /Zm2000 /Ob0 /GL- %(AdditionalOptions)</AdditionalOptions>
       <Optimization>Disabled</Optimization>
     </ClCompile>
-    <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\src\epochgui\image.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\src\epochgui\hierarchy_tree.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\src\epochgui\rounded_rect.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\src\epochgui\text_editor.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)dep\EpochGui\src\epochgui\tile_workspace.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\epochgui\gui.engine.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\epochgui\gui.docking_adapter.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\epochgui\gui.clipboard.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\scripts\scripting.compiler_engine.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\platform\utility.filewatch.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\epochgui\font.renderer.cpp" />
@@ -669,6 +700,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\platform\platform.work_admission.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\extensions\extension.catalog_contract.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\packages\package.catalog.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\packages\package.source_install.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\render\render.portal_contract.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\render\render.graph_epoch.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\audio\audio.device_sdl.cpp" />
@@ -691,6 +723,8 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.lifecycle_contract.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.asset_registry.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.forest_library.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.planetary.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.planetary_snapshot.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.texture_resources.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.texture_library.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.texture_pipeline.cpp" />
@@ -717,17 +751,13 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\assets\texture\asset.texture_artifact.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\assets\texture\asset.texture_import.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\authoring\texture\authoring.texture_document.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\authoring\texture\authoring.texture_residency.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\assets\tilemap\asset.tilemap_artifact.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\assets\gui\asset.gui_artifact.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\authoring\tilemap\authoring.tilemap_document.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\authoring\tilemap\authoring.tilemap_contract.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch\epoch.systems.cpp" />
-    <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch\epoch.main.cpp">
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="('$(Configuration)|$(Platform)'=='Release|Win32' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|Win32')">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
-      <ExcludedFromBuild Condition="('$(Configuration)|$(Platform)'=='Release|x64' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|x64')">true</ExcludedFromBuild>
-    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch\epoch.main.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\render.smoke_harness.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="('$(Configuration)|$(Platform)'=='Release|Win32' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|Win32')">true</ExcludedFromBuild>
@@ -753,6 +783,7 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="('$(Configuration)|$(Platform)'=='Release|x64' or '$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|x64')">true</ExcludedFromBuild>
     </None>
+    <None Include="$(MSBuildThisFileDirectory)src\scripts\script.timeline_translation.cpp" />
 
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\core.sha256.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\epoch.build_validation.ixx" />
@@ -762,6 +793,11 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.project_profile.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.project_profile_contract.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.model_install.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.image_generation.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.model_generation.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.triposr_generation.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.asset_jobs.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\assets\mesh\asset.model_import.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.model_install_contract.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.mcp_stdio.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\ai\ai.mcp_stdio_contract.cpp" />
@@ -777,6 +813,8 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\authoring\task_graph\authoring.task_graph_contract.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.systems_workspace.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.task_scheduler.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.asset_generation.ixx" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\editor.asset_generation.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.systems_panel.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.workspace_layout.ixx" />
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\editor.workspace_commands.ixx" />
@@ -793,7 +831,6 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\editor\systems\editor.systems_workspace_contract.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="$(MSBuildThisFileDirectory)src\forest\forest.preview_mesh_contract.cpp" />
     <None Include="$(MSBuildThisFileDirectory)src\editor\editor.workspace_layout_contract.cpp" />
     <None Include="$(MSBuildThisFileDirectory)src\editor\editor.workspace_commands_contract.cpp" />
     <None Include="$(MSBuildThisFileDirectory)src\editor\editor.authoring_history_contract.cpp" />
@@ -801,10 +838,47 @@
     <None Include="$(MSBuildThisFileDirectory)src\platform\platform.work_admission_contract.cpp" />
     <None Include="$(MSBuildThisFileDirectory)src\epochgui\gui.bottom_dock_contract.cpp" />
     <None Include="$(MSBuildThisFileDirectory)src\simulation\simulation.neuromorphic_contract.cpp" />
+    <None Include="$(MSBuildThisFileDirectory)src\water\water.system_contract.cpp" />
+    <None Include="$(MSBuildThisFileDirectory)src\water\water.surface_contract.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="$(MSBuildThisFileDirectory)src\platform\platform.image_codec_win.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\platform\platform.file_drop_win.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\ai\native\ai.backend_model_tool_arguments.hpp" />
   </ItemGroup>
+  <ItemGroup>
+    <EpochImplementationFragment Include="$(MSBuildThisFileDirectory)src\epoch\implementation\*.inl">
+      <Owner>$(MSBuildThisFileDirectory)src\epoch\epoch.engine_legacy.cpp</Owner>
+      <ObjectFile>$(IntDir)epoch.engine_legacy.obj</ObjectFile>
+    </EpochImplementationFragment>
+    <EpochImplementationFragment Include="$(MSBuildThisFileDirectory)src\editor\application\*.inl">
+      <Owner>$(MSBuildThisFileDirectory)src\editor\editor.application.cpp</Owner>
+      <ObjectFile>$(IntDir)editor.application.obj</ObjectFile>
+    </EpochImplementationFragment>
+    <EpochImplementationFragment Include="$(MSBuildThisFileDirectory)src\editor\implementation\*.inl">
+      <Owner>$(MSBuildThisFileDirectory)src\editor\editor.scene.cpp</Owner>
+      <ObjectFile>$(IntDir)editor.scene.obj</ObjectFile>
+    </EpochImplementationFragment>
+    <EpochImplementationFragment Include="$(MSBuildThisFileDirectory)src\epochgui\controls\*.inl">
+      <Owner>$(MSBuildThisFileDirectory)src\epochgui\gui.engine.cpp</Owner>
+      <ObjectFile>$(IntDir)gui.engine.obj</ObjectFile>
+    </EpochImplementationFragment>
+    <EpochImplementationFragment Include="$(MSBuildThisFileDirectory)src\ai\implementation\*.inl">
+      <Owner>$(MSBuildThisFileDirectory)src\ai\ai.engine.cpp</Owner>
+      <ObjectFile>$(IntDir)ai.engine.obj</ObjectFile>
+    </EpochImplementationFragment>
+    <EpochImplementationFragment Include="$(MSBuildThisFileDirectory)src\updater\implementation\*.inl">
+      <Owner>$(MSBuildThisFileDirectory)src\updater\updater.system.cpp</Owner>
+      <ObjectFile>$(IntDir)updater.system.obj</ObjectFile>
+    </EpochImplementationFragment>
+    <EpochImplementationFragment Include="$(MSBuildThisFileDirectory)src\renderers\host\implementation\*.inl">
+      <Owner>$(MSBuildThisFileDirectory)src\renderers\host\host.context_win.cpp</Owner>
+      <ObjectFile>$(IntDir)host.context_win.obj</ObjectFile>
+    </EpochImplementationFragment>
+    <EpochImplementationFragment Include="$(MSBuildThisFileDirectory)src\authoring\texture\implementation\*.inl">
+      <Owner>$(MSBuildThisFileDirectory)src\authoring\texture\authoring.texture_document.cpp</Owner>
+      <ObjectFile>$(IntDir)authoring.texture_document.obj</ObjectFile>
+    </EpochImplementationFragment>
+  </ItemGroup>
+  <Import Project="$(MSBuildThisFileDirectory)..\Tools\MSVC\EpochImplementationInputs.targets" />
 </Project>

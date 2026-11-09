@@ -52,7 +52,23 @@ export namespace epochengine::package_catalog
         std::string message{};
     };
 
+    // Source inspection is separate from catalog availability and execution.
+    struct LocalSourceManifest final
+    {
+        bool ok{};
+        std::string message{};
+        std::string id{};
+        std::string display_name{};
+        std::string summary{};
+        std::string license{};
+        std::string repository{};
+        std::string source_path{};
+        std::string script_path{};
+        std::vector<std::string> source_files{};
+    };
+
     [[nodiscard]] Snapshot parse(std::string_view json);
+    [[nodiscard]] LocalSourceManifest parse_local_source_manifest(std::string_view json);
     [[nodiscard]] Snapshot fetch();
     [[nodiscard]] bool contract_self_test();
     [[nodiscard]] std::string_view scope_name(Scope value) noexcept;

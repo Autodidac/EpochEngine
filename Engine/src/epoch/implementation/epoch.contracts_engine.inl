@@ -377,14 +377,14 @@
             epochengine::perf::frame_activity::foreground,
             false);
         check(
-            "perf.frame_pacing_editor_120_project_60",
+            "perf.frame_pacing_default_30_until_selected",
             editorPacing.requested_mode
                     == epochengine::perf::frame_pacing_mode::target_hz
                 && editorPacing.effective_mode
                     == epochengine::perf::frame_pacing_mode::target_hz
-                && std::abs(editorPacing.effective_hz - 120.0) < 1.0e-12
+                && std::abs(editorPacing.effective_hz - 30.0) < 1.0e-12
                 && editorPacing.cpu_deadline_wait
-                && std::abs(standalonePacing.effective_hz - 60.0) < 1.0e-12
+                && std::abs(standalonePacing.effective_hz - 30.0) < 1.0e-12
                 && standalonePacing.cpu_deadline_wait);
 
         constexpr epochengine::perf::frame_pacing_backend editorBackends[]{
@@ -406,8 +406,8 @@
                     == epochengine::perf::frame_pacing_mode::target_hz
                 && backendPlan.effective_mode
                     == epochengine::perf::frame_pacing_mode::target_hz
-                && std::abs(backendPlan.configured_hz - 120.0) < 1.0e-12
-                && std::abs(backendPlan.effective_hz - 120.0) < 1.0e-12
+                && std::abs(backendPlan.configured_hz - 30.0) < 1.0e-12
+                && std::abs(backendPlan.effective_hz - 30.0) < 1.0e-12
                 && !backendPlan.native_vsync_requested;
         }
         check(
@@ -916,7 +916,9 @@
             epochengine::forest::compile_forest_asset(plantLabDocument);
         check(
             "forest.plant_lab_compiler",
-            plantLabDefaultHistory == 5u
+            plantLabDefaultHistory == 4u
+            && plantLabDocument.profile.branch.lengthReferenceMeters == 0.0f
+            && plantLabDocument.profile.branch.branchLengthMeters == 0.92f
             && plantLabDefaultHash != 0u
             && plantLabDefaultCompiled.valid
             && !plantLabDefaultCompiled.preview.segments.empty()
@@ -947,7 +949,7 @@
                 epochengine::project_forests::ForestLibraryContractFailure::none);
         const auto packageValidation = epochengine::package_registry::validate_registry();
         const auto* forestPackage = epochengine::package_registry::find(epochengine::package_registry::kEngineForestFactoryPackageId);
-        const auto* bonsaiPackage = epochengine::package_registry::find(epochengine::package_registry::recommended_local_image_model_id());
+        const auto* bonsaiPackage = epochengine::package_registry::find(epochengine::package_registry::kBonsaiImageTernaryPackageId);
         const auto* qwenPackage = epochengine::package_registry::find(epochengine::package_registry::kQwenCoderPackageId);
         const auto* nemotronPackage = epochengine::package_registry::find(epochengine::package_registry::kNemotronNanoPackageId);
         check(
@@ -970,7 +972,8 @@
             && epochengine::package_registry::external_source_repo(forestPackage->id).find("EpochEngineExtensions") != std::string_view::npos);
         check(
             "package.os_models",
-            bonsaiPackage != nullptr
+            epochengine::package_registry::recommended_local_image_model_id().empty()
+            && bonsaiPackage != nullptr
             && qwenPackage != nullptr
             && nemotronPackage != nullptr
             && epochengine::package_registry::is_model_asset(bonsaiPackage->id)
@@ -1278,6 +1281,23 @@
             && boundedVoxelMiss.steps == 1u
             && !outOfRangeVoxel.hit
             && outOfRangeVoxel.steps == 0u);
+
+        check("voxel.sdf.primitive_and_edit_contract",
+            epochengine::voxel::sdf::contracts::run_contract() == 0);
+        {
+            namespace sdf = epochengine::voxel::sdf;
+            sdf::EditVolume volume{sdf::Box{{}, {3.0f, 3.0f, 3.0f}, 1u}};
+            const auto cut = volume.append({
+                sdf::EditKind::subtract, sdf::Sphere{{}, 1.0f, 2u}, 3u});
+            const auto cave = volume.sample({});
+            const auto roof = volume.sample({0.0f, 2.0f, 0.0f});
+            check("voxel.sdf.concave_volume_integration",
+                cut == sdf::AppendStatus::applied
+                && cave.region() == sdf::Region::outside
+                && cave.material() == 3u
+                && roof.region() == sdf::Region::solid
+                && cave.quality() == sdf::DistanceQuality::conservative_csg_bound);
+        }
 
         epochengine::voxel::SparseVoxelField voxelField{{4u, 4u, 4u, 1.0f, 0u}};
         const epochengine::voxel::CellCoord negativeVoxel{-1, 0, 0};
@@ -1613,11 +1633,11 @@
             && !cubePreviewRoute.sampled_surface
             && !cameraPreviewRoute.solid_scene
             && cameraPreviewRoute.marker_wire
-            && !cameraPreviewRoute.selection_wire
+            && cameraPreviewRoute.selection_wire
             && !cameraPreviewRoute.sampled_surface
             && !lightPreviewRoute.solid_scene
             && lightPreviewRoute.marker_wire
-            && !lightPreviewRoute.selection_wire
+            && lightPreviewRoute.selection_wire
             && !lightPreviewRoute.sampled_surface);
         const auto forestTrunkRoute =
             epochengine::previewgrid::object_preview_geometry_route(
@@ -1729,8 +1749,10 @@
             && count_cap_center(2.0f, 0.30f) == 0u
             && count_cap_center(2.0f, 1.70f) == 8u);
         check(
-            "render.forest_preview_indexed_mesh",
-            epochengine::forest::preview_mesh::run_contract().passed());
+            "render.tapered_segment_projection_admission",
+            epochengine::previewgrid::tapered_segment_projection_admitted(1.0f, 0.20f, 0.08f)
+                && !epochengine::previewgrid::tapered_segment_projection_admitted(0.0f, 0.20f, 0.08f)
+                && !epochengine::previewgrid::tapered_segment_projection_admitted(1.0f, 0.0f, 0.08f));
         check("render.canvas2d.core", epochengine::canvas2d::canvas2d_runtime_contract());
         const auto cpuCanvasContract =
             epochengine::canvas2d::cpu::canvas2d_cpu_runtime_contract_failure();
@@ -2135,7 +2157,7 @@
             && snapshot.timeline_keys.front().frame_index == 60u);
         check(
             "snapshot.serialize",
-            snapshotText.find("epoch_snapshot 3") != std::string::npos
+            snapshotText.find("epoch_snapshot 4") != std::string::npos
             && snapshotText.find("timeline \\\"contract\\\"") != std::string::npos
             && snapshotText.find("Persistent\\nLevel") != std::string::npos
             && snapshotText.find("payload\\tvalue") != std::string::npos

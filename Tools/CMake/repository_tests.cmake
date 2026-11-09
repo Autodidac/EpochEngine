@@ -10,8 +10,11 @@ find_package(Python3 COMPONENTS Interpreter QUIET)
 if(Python3_Interpreter_FOUND)
     add_test(NAME epoch_python_contracts
         COMMAND "${Python3_EXECUTABLE}" -X utf8 "${_epoch_repository_root}/Tools/run_tests.py")
+    # This suite compiles real Debug/Release consumers. The measured complete
+    # Linux lane takes about403s; allow CI headroom without changing its checks
+    # or the individual compiler/process deadlines owned by the tests.
     set_tests_properties(epoch_python_contracts PROPERTIES
-        WORKING_DIRECTORY "${_epoch_repository_root}" TIMEOUT 180)
+        WORKING_DIRECTORY "${_epoch_repository_root}" TIMEOUT 900)
 endif()
 
 foreach(_epoch_fixture IN ITEMS
@@ -29,7 +32,8 @@ foreach(_epoch_fixture IN ITEMS
     get_filename_component(_epoch_name "${_epoch_fixture}" NAME_WLE)
     string(REPLACE "." "_" _epoch_name "${_epoch_name}")
     set(_epoch_target "epoch_${_epoch_name}")
-    add_executable("${_epoch_target}" "${_epoch_repository_root}/Tests/${_epoch_fixture}")
+    set(_epoch_fixture_source "${_epoch_repository_root}/Tests/${_epoch_fixture}")
+    add_executable("${_epoch_target}" "${_epoch_fixture_source}")
     set_target_properties("${_epoch_target}" PROPERTIES CXX_SCAN_FOR_MODULES OFF)
     epoch_apply_cxx_dialect("${_epoch_target}")
     epoch_apply_warnings("${_epoch_target}")

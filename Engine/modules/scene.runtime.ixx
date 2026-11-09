@@ -2,6 +2,7 @@
 module;
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -84,6 +85,9 @@ export namespace epochengine::scene_runtime
         RuntimeEntityFlag flags{RuntimeEntityFlag::none};
         std::optional<epochengine::scene::SceneTextureMaterialSnapshot>
             texture_material{};
+        std::optional<epochengine::scene::SceneMeshSnapshot> mesh_asset{};
+        std::optional<std::array<double, 3>> position_anchor{};
+        std::optional<epochengine::scene::SceneForestRegionInstance> forest_region{};
 
         [[nodiscard]] constexpr bool visible() const noexcept
         {
@@ -129,6 +133,7 @@ export namespace epochengine::scene_runtime
         std::size_t source_object_count{};
         SceneObjectId primary_camera{epochengine::scene::kInvalidSceneObjectId};
         SceneObjectId primary_spawn{epochengine::scene::kInvalidSceneObjectId};
+        Vec3 ambient{epochengine::scene::kDefaultAmbientLight};
     };
 
     struct RuntimePrimaryReferences final
@@ -381,7 +386,8 @@ export namespace epochengine::scene_runtime
                 .captured_simulated_seconds = snapshot.captured_simulated_seconds,
                 .source_object_count = snapshot.objects.size(),
                 .primary_camera = snapshot.primary_camera,
-                .primary_spawn = snapshot.primary_spawn
+                .primary_spawn = snapshot.primary_spawn,
+                .ambient = snapshot.ambient
             };
 
             std::vector<const epochengine::scene::SceneObjectSnapshot*> included{};
@@ -435,7 +441,10 @@ export namespace epochengine::scene_runtime
                         .scale = source.scale
                     },
                     .flags = detail::source_flags(source),
-                    .texture_material = source.texture_material
+                    .texture_material = source.texture_material,
+                    .mesh_asset = source.mesh_asset,
+                    .position_anchor = source.position_anchor,
+                    .forest_region = source.forest_region
                 });
 
                 if (const auto kind = detail::classify_light(source.type, source.category))
@@ -588,6 +597,9 @@ export namespace epochengine::scene_runtime
             }
         };
 
+        snapshot.objects.front().position_anchor = std::array{6'371'000.125, -0.0625, 1.0};
+        snapshot.objects.front().position = {0.03125f, 0.0f, 0.0f};
+
         SceneRuntimeContractReport result{};
         SceneRuntime runtime{};
         const RuntimeSceneCompileReport first = runtime.replace(snapshot);
@@ -613,7 +625,11 @@ export namespace epochengine::scene_runtime
             && first.source_revision == 77u
             && first.committed_revision == 77u
             && first_projection->source().revision == 77u
-            && first_projection->source().scene_id == snapshot.scene_id;
+            && first_projection->source().scene_id == snapshot.scene_id
+            && first_mesh != nullptr
+            && first_mesh->position_anchor == snapshot.objects.front().position_anchor
+            && epochengine::scene::world_position(first_mesh->transform.position, first_mesh->position_anchor)
+                == epochengine::scene::world_position(snapshot.objects.front());
         result.runtime_exclusion_enforced = first_projection != nullptr
             && first.runtime_entity_count == 4u
             && first.excluded_hidden_count == 1u

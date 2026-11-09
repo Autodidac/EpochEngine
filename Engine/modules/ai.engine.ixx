@@ -95,6 +95,7 @@ export namespace epochengine::ai
     // text is published, and byte/event counts are deliberately not token counts.
     struct ModelRequestProgress final
     {
+        std::string canonical_model_key{}; // Host-admitted request identity; not a late UI selection.
         std::string phase{};
         std::uint32_t attempt{};
         bool streaming_requested{};
@@ -438,6 +439,17 @@ export namespace epochengine::ai
     [[nodiscard]] bool promote_eval_case(const EvalCase& record, std::string_view suite_name = "editor_ai_smoke");
     [[nodiscard]] bool valid_project_context_text(std::string_view text) noexcept;
     [[nodiscard]] std::string normalize_assistant_reply(std::string_view reply);
+    // Display-only JSON decoding. Raw transport/admission bytes are unchanged;
+    // partial streams show only fields completed by the canonical JSON parser.
+    struct ToolOutputDisplay final
+    {
+        std::string text{};
+        // Offsets into text; completed source strings only, not model markup.
+        std::vector<std::pair<std::size_t, std::size_t>> code_ranges{};
+    };
+    [[nodiscard]] ToolOutputDisplay format_tool_output_for_display(
+        std::string_view payload, bool streaming,
+        std::span<const std::string> source_paths = {});
     [[nodiscard]] std::string normalize_direct_llama_cpp_reply(
         std::string_view transcript,
         std::string_view user_text);

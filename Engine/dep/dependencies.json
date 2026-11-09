@@ -7,19 +7,24 @@
       "repository": "Autodidac/EpochGui",
       "tree": "c7c0ddd948cf42b9b646b17473be3d0f51c00e34",
       "mode": "engine_owned_gui_fork",
-      "upstream_revision": "a990d4202ccb21a1b745aa999012a96fdc986d5e",
-      "upstream_tree": "41a1bae07239262e3063f629ca34793f9def5038",
-      "note": "Portable implementation/header/module/test files exactly match the accepted upstream source revision and are SHA-256 checked by portable_source_manifest.json. Build integration and documentation differ, so this entry deliberately does not claim a full-tree portable mirror.",
-      "portable_source_manifest": "Engine/dep/EpochGui/portable_source_manifest.json"
+      "upstream_revision": "fd926cb7494df456eaf14a24d68d621030f09bb9",
+      "upstream_tree": "b39e2002fad48253281732285662b385e6da0b78",
+      "note": "Portable source matches the audited standalone candidate branch at the pinned commit after CRLF/LF normalization only. Windows/Linux Debug/Release standalone CPU checks pass; engine integration metadata remains owned here. No full-tree mirror, native visual acceptance or new release publication is implied.",
+      "portable_source_manifest": "Engine/dep/EpochGui/portable_source_manifest.json",
+      "published_upstream_revision": "7d5d5514a1443c0ef340a626fa163569858ca362",
+      "publication_status": "audited_candidate_branch",
+      "version": "0.90.2"
     },
     {
       "name": "EpochEngineExtensions",
       "path": "Engine/dep/EpochEngineExtensions",
-      "repository": "Autodidac/EpochEngineExtensions",
-      "revision": "a003bcab58a859e170edb79ca8e63ed15707b2d5",
-      "tree": "e0d07b41af9f8b065b1a6caef402b1ee83e073fd",
-      "mode": "engine_owned_descriptor_fixture",
-      "note": "Not an upstream mirror. Revision identifies the reconciled external source authority; tree identifies this unchanged engine-owned catalog/terrain compatibility fixture. Optional package source remains external."
+      "repository": "https://epoch.adamrushford.chatgpt.site/git/EpochEngineExtensions.git",
+      "mode": "engine_owned_optional_source",
+      "note": "Primary optional package source belongs in this repository and is mirrored to the separate Site project. The locally committed candidate includes the current planetary provider and matches all mirrored source files after line-ending normalization. It is awaiting standalone validation and publication.",
+      "version": "0.2.3",
+      "upstream_revision": "f7dac741609f61f295c5696321e1344a5cfef173",
+      "published_upstream_revision": "92d46ff7240abfc561c70e642d2a195f0da23470",
+      "publication_status": "local_unpublished_changes"
     },
     {
       "name": "EpochPackageDescriptors",
@@ -31,11 +36,14 @@
       "name": "EpochPlatformEngine",
       "path": "Engine/dep/EpochPlatformEngine",
       "mode": "engine_owned_platform",
-      "note": "Published standalone C++23 source; portable implementation, module, consumer and build-support scopes are SHA-256 verified against the pinned revision. Engine integration metadata is not a full-tree mirror. No complete native renderer adoption or physical playback/decoder claim.",
+      "note": "Portable source matches the audited standalone candidate branch at the pinned commit after CRLF/LF normalization only. Windows/Linux Debug/Release standalone CPU checks pass; engine integration metadata remains owned here. No full-tree mirror, native visual acceptance or new release publication is implied.",
+      "publication_status": "audited_candidate_branch",
       "repository": "Autodidac/EpochPlatformEngine",
-      "upstream_revision": "7190bf71ef3e8ecde4113efcda5804ce41fc023d",
-      "upstream_tree": "539e3787eaa93ef4ddeb3da4c3e25049804463cc",
-      "portable_source_manifest": "Engine/dep/EpochPlatformEngine/portable_source_manifest.json"
+      "upstream_revision": "575810b1884f6b906e7652b93dc3f9b68b2d1230",
+      "upstream_tree": "75dfddfdb1727a30c96a1935a9cea9f36e684499",
+      "portable_source_manifest": "Engine/dep/EpochPlatformEngine/portable_source_manifest.json",
+      "published_upstream_revision": "7190bf71ef3e8ecde4113efcda5804ce41fc023d",
+      "version": "0.2.2"
     },
     {
       "name": "EpochAudioEngine",

@@ -38,6 +38,7 @@ export namespace epochengine::project_gui
     {
     public:
         EpochGuiAdapter(std::string projectId, std::string projectRoot) noexcept;
+        ~EpochGuiAdapter() noexcept;
 
         [[nodiscard]] bool valid() const noexcept;
         [[nodiscard]] EpochGuiRenderResult render(
@@ -56,6 +57,9 @@ export namespace epochengine::project_gui
         };
 
         [[nodiscard]] ImageState& resolve_image(std::string_view logicalPath);
+        [[nodiscard]] project_gui_runtime::RuntimeCode dispatch_keyboard(
+            project_gui_runtime::RuntimeSession& runtime,
+            const project_gui_runtime::RuntimeFrame& frame);
         void render_tabs(
             project_gui_runtime::RuntimeSession& runtime,
             const project_gui_runtime::RuntimeFrame& frame);

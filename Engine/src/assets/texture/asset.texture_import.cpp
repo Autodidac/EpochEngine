@@ -20,6 +20,7 @@ module;
 #include <system_error>
 #include <utility>
 #include <vector>
+#include "../image.decode.hpp"
 
 module asset.texture_import;
 
@@ -463,11 +464,37 @@ namespace epochengine::asset::texture
             return result;
         }
 
+        [[nodiscard]] bool valid_import_policy(
+            const std::uint64_t source_sequence,
+            const TextureCompileProfile& profile,
+            const TextureImportLimits& limits) noexcept
+        {
+            return !(source_sequence == 0u
+                || !limits.valid()
+                || profile.compiler_schema_version == 0u
+                || profile.mipmaps != MipmapPolicy::preserve_authored
+                || (profile.format != ArtifactFormat::rgba8_unorm
+                    && profile.format != ArtifactFormat::rgba8_srgb)
+                || (profile.format == ArtifactFormat::rgba8_unorm
+                    && profile.color_space != ColorSpace::linear)
+                || (profile.format == ArtifactFormat::rgba8_srgb
+                    && profile.color_space != ColorSpace::srgb));
+        }
+
         [[nodiscard]] DecodedImage decode(
             std::string_view extension,
             std::span<const std::byte> source,
             const TextureImportLimits& limits)
         {
+            if (extension == ".png")
+            {
+                auto decoded = image_codec::decode_png(source, limits.maximum_dimension, limits.maximum_decoded_bytes);
+                const auto status = decoded.status == image_codec::PngStatus::ready ? TextureImportStatus::ready
+                    : decoded.status == image_codec::PngStatus::dimensions_exceeded ? TextureImportStatus::dimensions_exceeded
+                    : decoded.status == image_codec::PngStatus::allocation_failure ? TextureImportStatus::allocation_failure
+                    : TextureImportStatus::malformed_source;
+                return {status, decoded.width, decoded.height, std::move(decoded.rgba)};
+            }
             if (extension == ".ppm")
                 return decode_ppm(source, limits);
             if (extension == ".bmp")
@@ -510,59 +537,22 @@ namespace epochengine::asset::texture
         };
     }
 
-    TextureImportResult import_texture_file(
-        const TextureImportRequest& request) noexcept
+    TextureImportResult import_texture_memory(
+        const TextureMemoryImportRequest& request) noexcept
     {
         TextureImportResult result{};
         try
         {
-            if (request.source_path.empty()
-                || request.source_sequence == 0u
-                || !request.limits.valid()
-                || request.profile.compiler_schema_version == 0u
-                || request.profile.mipmaps != MipmapPolicy::preserve_authored
-                || (request.profile.format != ArtifactFormat::rgba8_unorm
-                    && request.profile.format != ArtifactFormat::rgba8_srgb)
-                || (request.profile.format == ArtifactFormat::rgba8_unorm
-                    && request.profile.color_space != ColorSpace::linear)
-                || (request.profile.format == ArtifactFormat::rgba8_srgb
-                    && request.profile.color_space != ColorSpace::srgb))
-            {
+            if (!valid_import_policy(request.source_sequence, request.profile, request.limits))
                 return result;
-            }
-
-            std::error_code error{};
-            const std::uint64_t sourceBytes =
-                fs::file_size(request.source_path, error);
-            if (error || !fs::is_regular_file(request.source_path, error))
-            {
-                result.status = TextureImportStatus::source_not_found;
-                return result;
-            }
-            result.source_bytes = sourceBytes;
-            if (sourceBytes == 0u
-                || sourceBytes > request.limits.maximum_source_bytes
-                || sourceBytes
-                    > (std::numeric_limits<std::size_t>::max)())
+            result.source_bytes = request.source.size();
+            if (request.source.empty() || request.source.size() > request.limits.maximum_source_bytes)
             {
                 result.status = TextureImportStatus::source_too_large;
                 return result;
             }
-
-            std::vector<std::byte> source(
-                static_cast<std::size_t>(sourceBytes));
-            std::ifstream input(request.source_path, std::ios::binary);
-            if (!input
-                || !input.read(
-                    reinterpret_cast<char*>(source.data()),
-                    static_cast<std::streamsize>(source.size())))
-            {
-                result.status = TextureImportStatus::malformed_source;
-                return result;
-            }
-
-            const std::string extension =
-                lowercase_extension(request.source_path);
+            const auto source = request.source;
+            const auto extension = request.extension;
             DecodedImage decoded = decode(
                 extension,
                 source,
@@ -575,7 +565,7 @@ namespace epochengine::asset::texture
                 return result;
 
             const ContentHash sourceHash = deterministic_content_hash(
-                "epoch.texture.import." + extension,
+                std::string{"epoch.texture.import."} + std::string{extension},
                 source);
             CompiledTextureArtifactIdentity identity =
                 build_compiled_texture_artifact_identity(
@@ -628,6 +618,68 @@ namespace epochengine::asset::texture
         catch (...)
         {
             result.artifact = {};
+            result.status = TextureImportStatus::malformed_source;
+            return result;
+        }
+    }
+
+    TextureImportResult import_texture_file(
+        const TextureImportRequest& request) noexcept
+    {
+        TextureImportResult result{};
+        try
+        {
+            if (request.source_path.empty()
+                || !valid_import_policy(request.source_sequence, request.profile, request.limits))
+                return result;
+
+            std::error_code error{};
+            const std::uint64_t sourceBytes =
+                fs::file_size(request.source_path, error);
+            if (error || !fs::is_regular_file(request.source_path, error))
+            {
+                result.status = TextureImportStatus::source_not_found;
+                return result;
+            }
+            result.source_bytes = sourceBytes;
+            if (sourceBytes == 0u
+                || sourceBytes > request.limits.maximum_source_bytes
+                || sourceBytes
+                    > (std::numeric_limits<std::size_t>::max)())
+            {
+                result.status = TextureImportStatus::source_too_large;
+                return result;
+            }
+
+            std::vector<std::byte> source(
+                static_cast<std::size_t>(sourceBytes));
+            std::ifstream input(request.source_path, std::ios::binary);
+            if (!input
+                || !input.read(
+                    reinterpret_cast<char*>(source.data()),
+                    static_cast<std::streamsize>(source.size()))
+                || input.peek() != std::char_traits<char>::eof())
+            {
+                result.status = TextureImportStatus::malformed_source;
+                return result;
+            }
+
+            const std::string extension =
+                lowercase_extension(request.source_path);
+            return import_texture_memory({
+                .source = source,
+                .extension = extension,
+                .source_sequence = request.source_sequence,
+                .profile = request.profile,
+                .limits = request.limits});
+        }
+        catch (const std::bad_alloc&)
+        {
+            result.status = TextureImportStatus::allocation_failure;
+            return result;
+        }
+        catch (...)
+        {
             result.status = TextureImportStatus::malformed_source;
             return result;
         }
@@ -701,6 +753,54 @@ namespace epochengine::asset::texture
         {
             return TextureImportContractFailure::oversized_rejection;
         }
+        constexpr std::array<unsigned char, 80> pngSource{
+            137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 2, 0, 0, 0, 2, 8, 6, 0, 0, 0, 114, 182, 13, 36, 0, 0, 0, 23, 73, 68, 65, 84, 120, 156, 99, 248, 207, 192, 240, 159, 225, 63, 67, 3, 3, 152, 254, 255, 223, 1, 0, 63, 24, 7, 186, 222, 66, 110, 250, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130
+        };
+        constexpr std::array<unsigned char, 334> inflateBomb{
+            137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 1, 21, 73, 68, 65, 84, 120, 156, 237, 193, 49, 1, 0, 0, 0, 194, 160, 245, 79, 237, 109, 7, 160, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 222, 0, 0, 60, 0, 1, 106, 218, 35, 247, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130
+        };
+        const fs::path png = root.path / "alpha.png";
+        const auto write_png = [&](std::span<const unsigned char> bytes) {
+            std::ofstream output(png, std::ios::binary | std::ios::trunc);
+            output.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+        };
+        write_png(pngSource);
+        const auto alpha = import_texture_file({.source_path = png});
+        if (!alpha || alpha.width != 2 || alpha.height != 2 || alpha.decoded_bytes != 16
+            || alpha.artifact.mips.front().texels != std::vector<std::byte>{
+                std::byte{255}, std::byte{0}, std::byte{0}, std::byte{255},
+                std::byte{0}, std::byte{255}, std::byte{0}, std::byte{128},
+                std::byte{0}, std::byte{0}, std::byte{255}, std::byte{0},
+                std::byte{255}, std::byte{255}, std::byte{255}, std::byte{64}})
+            return TextureImportContractFailure::png_rgba;
+        TextureImportRequest linear{.source_path = png};
+        linear.profile.format = ArtifactFormat::rgba8_unorm;
+        linear.profile.color_space = ColorSpace::linear;
+        const auto raw = import_texture_file(linear);
+        if (!raw || raw.artifact.identity.key == alpha.artifact.identity.key
+            || raw.artifact.mips.front().texels != alpha.artifact.mips.front().texels)
+            return TextureImportContractFailure::png_color_space;
+        TextureImportRequest pngBound{.source_path = png};
+        pngBound.limits.maximum_dimension = 1;
+        if (import_texture_file(pngBound).status != TextureImportStatus::dimensions_exceeded)
+            return TextureImportContractFailure::png_bounds;
+        pngBound.limits.maximum_dimension = 100;
+        pngBound.limits.maximum_decoded_bytes = 15;
+        if (import_texture_file(pngBound).status != TextureImportStatus::dimensions_exceeded)
+            return TextureImportContractFailure::png_bounds;
+        for (std::size_t end = 0; end < pngSource.size(); ++end)
+        {
+            write_png(std::span{pngSource}.first(end));
+            if (import_texture_file({.source_path = png})) return TextureImportContractFailure::png_truncated;
+        }
+        auto corrupt = pngSource;
+        corrupt[29] ^= 1u; // IHDR checksum corruption, with otherwise valid encoded pixels.
+        write_png(corrupt);
+        if (import_texture_file({.source_path = png}).status != TextureImportStatus::malformed_source)
+            return TextureImportContractFailure::png_truncated;
+        write_png(inflateBomb);
+        if (import_texture_file({.source_path = png}).status != TextureImportStatus::allocation_failure)
+            return TextureImportContractFailure::png_bounds;
         return TextureImportContractFailure::none;
     }
 }

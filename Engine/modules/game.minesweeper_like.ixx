@@ -143,37 +143,35 @@ namespace epochengine::minesweeperlike
             int mx = 0, my = 0;
             ctx->get_mouse_position_safe(mx, my);
             const bool mouseDown = ctx->is_mouse_button_down_safe(input::MouseButton::MouseLeft);
+            const int width = ctx->get_width_safe();
+            const int height = ctx->get_height_safe();
 
-            if (mouseDown && !mouseWasDown)
+            if (mouseDown && !mouseWasDown && !gameOver
+                && mx >= 0 && my >= 0 && mx < width && my < height)
             {
-                const int gx = int(mx / (float(ctx->get_width_safe()) / GRID_W));
-                const int gy = int(my / (float(ctx->get_height_safe()) / GRID_H));
+                const int gx = static_cast<int>(std::int64_t{mx} * GRID_W / width);
+                const int gy = static_cast<int>(std::int64_t{my} * GRID_H / height);
+                const auto idx = gamecore::idx(GRID_W, gx, gy);
 
-                if (gamecore::in_bounds(GRID_W, GRID_H, gx, gy))
+                if (!state.revealed[idx])
                 {
-                    const auto idx = gamecore::idx(GRID_W, gx, gy);
-                    if (!state.revealed[idx])
+                    if (state.mine[idx] || state.count[idx] != 0)
                     {
                         state.revealed[idx] = true;
-
-                        if (state.mine[idx])
+                        gameOver = state.mine[idx];
+                    }
+                    else
+                    {
+                        auto flood = [&](auto&& self, int x, int y) -> void
                         {
-                            gameOver = true;
-                        }
-                        else if (state.count[idx] == 0)
-                        {
-                            auto flood = [&](auto&& self, int fx, int fy) -> void
-                            {
-                                if (!gamecore::in_bounds(GRID_W, GRID_H, fx, fy)) return;
-                                const auto i = gamecore::idx(GRID_W, fx, fy);
-                                if (state.revealed[i]) return;
-                                state.revealed[i] = true;
-                                if (state.count[i] == 0)
-                                    for (auto [nx, ny] : gamecore::neighbors(GRID_W, GRID_H, fx, fy))
-                                        self(self, int(nx), int(ny));
-                            };
-                            flood(flood, gx, gy);
-                        }
+                            const auto cell = gamecore::idx(GRID_W, x, y);
+                            if (state.revealed[cell] || state.mine[cell]) return;
+                            state.revealed[cell] = true;
+                            if (state.count[cell] == 0)
+                                for (auto [nx, ny] : gamecore::neighbors(GRID_W, GRID_H, x, y))
+                                    self(self, int(nx), int(ny));
+                        };
+                        flood(flood, gx, gy);
                     }
                 }
             }
@@ -182,8 +180,8 @@ namespace epochengine::minesweeperlike
 
             ctx->clear_safe();
 
-            const float cellW = float(ctx->get_width_safe()) / GRID_W;
-            const float cellH = float(ctx->get_height_safe()) / GRID_H;
+            const float cellW = float(width) / GRID_W;
+            const float cellH = float(height) / GRID_H;
 
             auto atlasVec = atlasmanager::get_atlas_vector_snapshot(); // by value
             std::span<const TextureAtlas* const> atlasSpan(atlasVec.data(), atlasVec.size());

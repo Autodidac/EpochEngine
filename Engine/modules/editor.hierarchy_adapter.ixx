@@ -16,6 +16,8 @@ module;
 
 export module editor.hierarchy_adapter;
 
+import authoring.gui_document;
+
 export namespace epochengine::editor_hierarchy
 {
     using CanonicalId = std::uint64_t;
@@ -23,6 +25,28 @@ export namespace epochengine::editor_hierarchy
 
     inline constexpr CanonicalId invalid_canonical_id{};
     inline constexpr NodeId invalid_node_id{};
+
+    struct GuiHierarchyRow final
+    {
+        authoring::gui::WidgetHandle handle{};
+        std::uint32_t depth{};
+        std::string name{};
+        authoring::gui::WidgetKind kind{};
+    };
+
+    struct GuiHierarchyProjection final
+    {
+        authoring::gui::DocumentHandle document{};
+        authoring::gui::BranchIdentity branch{};
+        authoring::gui::DocumentRevision revision{};
+        authoring::gui::WidgetHandle root{};
+        std::vector<GuiHierarchyRow> rows{};
+        bool ready{};
+    };
+
+    [[nodiscard]] GuiHierarchyProjection project_gui_hierarchy(
+        const authoring::gui::GuiDocument& document,
+        authoring::gui::WidgetHandle root);
 
     struct EntityRecord final
     {
@@ -33,6 +57,7 @@ export namespace epochengine::editor_hierarchy
         std::uint64_t order{};
         bool visible{true};
         bool locked{};
+        CanonicalId parent_id{}; // Projection of an existing authoritative attachment.
     };
 
     enum class Code : std::uint8_t

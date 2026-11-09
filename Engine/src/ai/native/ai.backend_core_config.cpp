@@ -2,6 +2,7 @@
 // Epoch system notes (auto-checked):
 // Epoch AI: preserve model selection, candidate isolation and host verification gates.
 #include "ai.backend_core_config.hpp"
+#include "../ai.native_shared_inputs.hpp"
 
 #include <algorithm>
 #include <limits>
@@ -272,6 +273,15 @@ Config Config::from_environment() {
     config.model_cache_root = product_environment_value(
         "MODEL_CACHE_ROOT",
         default_model_cache_root(config.data_root).string());
+    const auto shared = epochengine::ai::native_shared_inputs::from_environment();
+    if (shared.bound) {
+        config.shared_model_inputs_bound = true;
+        config.shared_native_inputs_disabled = shared.disabled;
+        config.model_cache_root = shared.weights_root;
+        config.qwen_flash_server = shared.executable;
+        config.shared_runtime_dependency_directories = shared.dependency_directories;
+        if (shared.disabled || shared.executable.empty()) config.qwen_flash_enabled = false;
+    }
 
     auto parse_u16 = [&](const char* name, std::uint16_t& target) {
         const auto value = product_environment_value(name);

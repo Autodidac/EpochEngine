@@ -9,6 +9,7 @@
 #include <expected>
 #include <filesystem>
 #include <mutex>
+#include <memory>
 #include <optional>
 #include <string>
 #include <stop_token>
@@ -20,6 +21,7 @@
 #include "ai.backend_core_config.hpp"
 #include "ai.backend_core_error.hpp"
 #include "ai.backend_model_runtime_model.hpp"
+#include "../ai.native_idle_policy.hpp"
 
 namespace epoch_ai::model {
 
@@ -31,6 +33,21 @@ namespace epoch_ai::model {
 // detail.
 class QwenFlashRuntime {
 public:
+    class ResidentLaunch final {
+    public:
+        [[nodiscard]] const std::string& model_id() const noexcept { return profile_.id; }
+        [[nodiscard]] std::uint64_t process_id() const noexcept { return process_id_; }
+    private:
+        friend class QwenFlashRuntime;
+        const QwenFlashRuntime* owner_{};
+        RuntimeModelProfile profile_{};
+        std::filesystem::path server_{};
+        std::vector<std::string> arguments_{};
+        std::string cache_root_{};
+        std::uint64_t generation_{}, process_id_{};
+        bool minimal_{}, safety_fallback_{};
+    };
+    using ResidentSnapshot = std::shared_ptr<const ResidentLaunch>;
     QwenFlashRuntime(const core::Config& config, std::filesystem::path state_root);
     ~QwenFlashRuntime();
 
@@ -47,8 +64,19 @@ public:
     [[nodiscard]] nlohmann::json cache_status(const RuntimeModelProfile& profile) const;
     [[nodiscard]] std::filesystem::path discover_server() const;
     [[nodiscard]] bool runtime_verified() const;
+    [[nodiscard]] static bool installed_backend_verified(const std::filesystem::path& executable);
+    [[nodiscard]] bool worker_retired() const;
+    [[nodiscard]] std::expected<ResidentSnapshot, core::Error> capture_resident() const;
+    [[nodiscard]] bool matches_resident(const ResidentSnapshot&) const;
+    [[nodiscard]] bool resident_retired(const ResidentSnapshot&) const;
+    [[nodiscard]] std::expected<std::string, core::Error> restore_resident(
+        const ResidentSnapshot&, const epochengine::ai::native_runtime::idle::RetirementClaim&,
+        std::chrono::steady_clock::time_point deadline, std::stop_token stop = {});
 
 private:
+    [[nodiscard]] std::expected<std::string, core::Error> ensure_started_impl(
+        const RuntimeModelProfile&, std::chrono::steady_clock::time_point,
+        std::stop_token, const ResidentLaunch* exact);
     struct RuntimeCapabilities {
         std::string recipe;
         bool qwen38_q2_padded_down{false};
@@ -94,6 +122,9 @@ private:
     std::optional<core::Error> last_startup_error_;
     std::atomic_bool running_{false};
     std::atomic_bool worker_exited_{true};
+    std::atomic<std::uint64_t> owned_process_id_{};
+    std::uint64_t launch_generation_{};
+    ResidentSnapshot last_resident_{};
     // Last loaded server's advertised /props modality; -1 means unconfirmed.
     std::atomic<int> active_image_input_{-1};
     std::string active_model_id_;
@@ -104,6 +135,7 @@ private:
     std::string last_command_;
     nlohmann::json last_hardware_ = nlohmann::json::object();
     nlohmann::json last_effective_profile_ = nlohmann::json::object();
+    mutable GgufLayerMetadataCache layer_metadata_cache_;
     std::string last_error_;
 };
 

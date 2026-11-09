@@ -7,6 +7,8 @@
         epoch_editor_perf::FrameTimer frameTimer{};
 
         auto& editor = editor_state_for(ctx);
+        retire_planetary_preview_publication(editor);
+        advance_editor_timeline(editor);
         pump_script_build(editor);
         const bool scriptOperationSettled = editor.aiProjectScriptRunAfterBuild && !editor.scriptBuildPending;
         if (scriptOperationSettled)
@@ -75,7 +77,18 @@
         // Request ownership is independent of whether this application shows
         // an AI Chat pane (for example after switching to GUI or Plant Lab).
         chat.pump();
-        publish_detached_pane_projection(ctx.get(), editor, chat);
+        bool automationInputReserved = editor_automation_input_reserved(editor, chat);
+        bool automationEmergencyStopRequested = automationInputReserved
+            && ctx->has_input_focus_safe()
+            && (gui::dispatch_keyboard_shortcuts([](const gui::InputEvent& event) { return event.key == 27; })
+                || ctx->is_key_down_safe(input::Key::Escape));
+        if (!automationInputReserved)
+            apply_detached_gui_hierarchy_selections(ctx.get(), editor);
+        else
+            (void)consume_detached_gui_hierarchy_selections(ctx.get());
+        bool focusedCompanionOwnerChanged{};
+        publish_detached_pane_projection(ctx.get(), editor, chat,
+            &focusedCompanionOwnerChanged);
         frameTimer.mark_chat_ready();
         if (!chat.pending
             && chat.completionGeneration
@@ -211,6 +224,7 @@
                     && chat.completionGeneration
                         > editor.aiToolRequestedGeneration;
                 editor.aiToolAwaitingReply = false;
+                if (expectedToolReply) editor.aiToolModelRecovery = {};
                 if (expectedToolReply
                     && !consume_failed_project_ai_reply(editor, chat, completedKind))
                 {
@@ -242,14 +256,43 @@
                     }
                     else
                     {
-                        editor.aiToolPlan =
-                            epochengine::ai::parse_tool_plan(toolingReply);
+                        editor.aiToolPlan = admit_ai_project_tool_reply(editor.aiToolBoundRequest,toolingReply);
                         editor.aiToolPlanApplied = false;
                         editor.aiToolStatus = editor.aiToolPlan
                             ? editor.aiToolPlan.message
                                 + " Nothing has executed; review the exact host tool "
                                   "and approve it below or reply yes / approve / run it."
                             : editor.aiToolPlan.message;
+                        if (editor.aiToolPlan)
+                        {
+                            editor.aiToolStatus += "\nExact host operation: " + editor.aiToolPlan.plan.call.tool;
+                            for (const auto& argument : editor.aiToolPlan.plan.call.arguments)
+                                editor.aiToolStatus += " " + argument.name + "=" + argument.value;
+                            editor.aiToolStatus += "\nOnly this one operation is proposed. Later requested steps have not run.";
+                        }
+                        if (editor.aiToolPlan
+                            && (editor.aiToolPlan.plan.call.tool == "package.catalog"
+                                || editor.aiToolPlan.plan.call.tool == "package.install"
+                                || editor.aiToolPlan.plan.call.tool == "terrain.generate"))
+                            editor.aiToolStatus = ai_project_package_tool_description(editor.aiToolPlan.plan.call)
+                                + " Review and approve the host action below. Nothing has executed.";
+                        if (!editor.aiToolPlan && editor.aiMethodSelection == 0
+                            && editor.aiToolProjectId == editor.projectId
+                            && editor.aiToolProjectRoot == editor.projectRoot
+                            && editor.aiToolProjectGeneration == editor.projectLifecycle.evidence().generations.selected_project.generation
+                            && editor.aiToolSceneRevision == editor.sceneDocumentRevision
+                            && editor.aiToolGuiRevision == (editor.guiDocument ? editor.guiDocument->revision().sequence : 0u))
+                        {
+                            // Only a completed, rejected model proposal reaches
+                            // this branch. Missing packages, host execution errors,
+                            // cancellations and transport failures cannot score it.
+                            editor.aiToolModelRecovery = editor_ai_project_model_recovery::offer_native(
+                                editor.aiToolBoundRequest,
+                                editor_ai_project_model_recovery::current_binding(editor, chat.completionGeneration),
+                                chat.latestCanonicalModelKey, ai::native_runtime::snapshot(true));
+                            const auto recovery = editor_ai_project_model_recovery::disclosure(editor.aiToolModelRecovery);
+                            if (!recovery.empty()) editor.aiToolStatus += "\n" + recovery;
+                        }
                         chat.append_status(editor.aiToolStatus);
                         push_editor_log(
                             editor,
@@ -282,7 +325,8 @@
         if (editor.autoUpdateCheckQueued)
         {
             editor.autoUpdateCheckQueued = false;
-            start_editor_update_check(editor, true);
+            if (!core::cli::smoke_requested)
+                start_editor_update_check(editor, true);
         }
         pump_editor_update_check(editor);
         pump_editor_source_update_worker(editor);
@@ -427,26 +471,69 @@
             editor.showSourceUpdateConfirmModal);
         const gui::Vec2 packageManagerModalSize = fit_modal_size(
             {
-                std::clamp(w * 0.72f, 960.0f, 1680.0f),
-                std::clamp(h * 0.76f, 720.0f, 1320.0f)
+                std::clamp(w * 0.86f, 720.0f, 1700.0f),
+                std::clamp(h * 0.88f, 500.0f, 1400.0f)
             },
-            {720.0f, 640.0f});
+            {540.0f, 420.0f});
         const gui::Vec2 aiModelConsentModalSize = fit_modal_size({ 660.0f, 430.0f }, { 520.0f, 380.0f });
         const gui::Vec2 voiceConsentModalSize = fit_modal_size({ 580.0f, 300.0f }, { 500.0f, 280.0f });
-        // Editor Settings must share ONE geometry between input capture and
-        // rendering. A stale 600x462 capture rectangle used to reject clicks
-        // in the actual (up to 700x620) settings dialog, particularly after
-        // opening the theme selector.
-        const gui::Vec2 editorSettingsModalSize =
-            fit_modal_size({700.0f, 620.0f}, {420.0f, 520.0f});
-        const gui::Vec2 editorSettingsModalPos = centered_modal_position(editorSettingsModalSize);
+        // Settings uses the same retained, viewport-constrained shell as Model Manager.
+        const gui::Vec2 editorSettingsDefaultSize{
+            (std::min)(860.0f, w * 0.88f), (std::min)(800.0f, h * 0.88f)};
+        const gui::FloatingWindowOptions editorSettingsWindowOptions{
+            .id="epoch-editor-settings", .title="Editor Settings",
+            .default_position={(std::max)(0.0f, (w-editorSettingsDefaultSize.x)*0.5f),
+                (std::max)(0.0f, (h-editorSettingsDefaultSize.y)*0.5f)},
+            .default_size=editorSettingsDefaultSize,
+            .min_size={(std::min)(440.0f,w), (std::min)(320.0f,h)},
+            .viewport_size={w,h}, .movable=true, .resizable=true, .closable=true,
+            .draw_background=true, .top_layer=true, .capture_input=true,
+            .constrain_to_viewport=true, .dim_background=true};
+        if (editor.showSettingsModal)
+        {
+            editor.editorSettingsWindow.open = true;
+            gui::normalize_floating_window(editor.editorSettingsWindow, editorSettingsWindowOptions);
+        }
+        if (!editor.showSettingsModal || !ctx->has_input_focus_safe())
+        {
+            editor.editorSettingsWindow.dragging = false;
+            editor.editorSettingsWindow.resizing = false;
+            editor.editorSettingsWindow.close_pressed = false;
+        }
+        const gui::Vec2 aiModelManagerDefaultSize{
+            (std::min)(1000.0f, w * 0.88f), (std::min)(800.0f, h * 0.88f)};
+        gui::FloatingWindowOptions aiModelManagerWindowOptions{
+            .id="epoch-model-manager", .title="Model Manager",
+            .default_position={(std::max)(0.0f, (w-aiModelManagerDefaultSize.x)*0.5f),
+                (std::max)(0.0f, (h-aiModelManagerDefaultSize.y)*0.5f)},
+            .default_size=aiModelManagerDefaultSize,
+            .min_size={(std::min)(440.0f,w), (std::min)(320.0f,h)},
+            .viewport_size={w,h}, .movable=true, .resizable=true, .closable=true,
+            .draw_background=true, .top_layer=true, .capture_input=false,
+            .constrain_to_viewport=true};
+        if (editor.showAiModelManagerModal)
+        {
+            if (!editor.aiModelManagerOpenLogged) editor.aiModelManagerWindow.open = true;
+            gui::normalize_floating_window(editor.aiModelManagerWindow, aiModelManagerWindowOptions);
+        }
+        if (!editor.showAiModelManagerModal || !ctx->has_input_focus_safe())
+        {
+            editor.aiModelManagerWindow.dragging = false;
+            editor.aiModelManagerWindow.resizing = false;
+            editor.aiModelManagerWindow.close_pressed = false;
+        }
         const core::RoutedPanelDockDragProjection nativeDockProjection =
             core::routed_panel_dock_drag_projection();
-        const bool pointerGrabActive = nativeDockProjection.active
+        const bool otherPointerGrabActive = nativeDockProjection.active
             || editor.paneTitleDragActive
             || editor.layoutDrag != EditorLayoutDrag::None
             || editor.floatingGuiWindow.floating.dragging
             || editor.floatingGuiWindow.floating.resizing;
+        const bool pointerGrabActive = otherPointerGrabActive
+            || (editor.showSettingsModal && (editor.editorSettingsWindow.dragging
+                || editor.editorSettingsWindow.resizing))
+            || (editor.showAiModelManagerModal && (editor.aiModelManagerWindow.dragging
+                || editor.aiModelManagerWindow.resizing));
 #if EPOCH_EDITION_PUBLIC
         constexpr bool nativeToolApprovalModalVisible = false;
 #endif
@@ -456,7 +543,6 @@
             return nativeToolApprovalModalVisible || editor.showAboutModal
                 || editor.showSettingsModal
                 || editor.showPackageManagerModal
-                || editor.showAiModelManagerModal
                 || editor.showAiModelConsentModal
                 || editor.showVoiceConsentModal
                 || editor.showUpdateConfirmModal
@@ -464,6 +550,37 @@
         };
 
         const bool modalVisible = modal_visible_now();
+        if (modalVisible)
+        {
+            editor.aiModelManagerWindow.dragging = false;
+            editor.aiModelManagerWindow.resizing = false;
+            editor.aiModelManagerWindow.close_pressed = false;
+        }
+        const auto aiModelManagerPress = gui::mouse_press_position();
+        const bool aiModelManagerInputCovered = editor.showAiModelManagerModal
+            && editor.aiModelManagerWindow.open && !modalVisible
+            && editor.openMenu == TopMenu::None
+            && !editor.outlinerContextMenu.menu.popup.open
+            && (editor.aiModelManagerWindow.dragging || editor.aiModelManagerWindow.resizing
+                || (!otherPointerGrabActive
+                    && ((gui::is_mouse_over_content_clip()
+                            && editor_point_in_rect(gui::mouse_position(),
+                                editor.aiModelManagerWindow.position, editor.aiModelManagerWindow.size))
+                        || (aiModelManagerPress && editor_point_in_rect(*aiModelManagerPress,
+                            editor.aiModelManagerWindow.position, editor.aiModelManagerWindow.size)))));
+        aiModelManagerWindowOptions.capture_input = aiModelManagerInputCovered;
+        if (aiModelManagerInputCovered) result.scene_input_captured = true;
+        if (editor.outlinerContextMenu.menu.popup.open
+            && (!ctx->has_input_focus_safe()
+                || gui::was_mouse_right_pressed()
+                || editor.timeSnapshot.frame_index < editor.outlinerContextMenu.last_frame
+                || editor.timeSnapshot.frame_index - editor.outlinerContextMenu.last_frame > 1u))
+            gui::close_command_menu(editor.outlinerContextMenu.menu);
+        if (editor.outlinerContextMenu.menu.popup.open)
+        {
+            gui::block_background_for_popup();
+            result.scene_input_captured = true;
+        }
         if (modalVisible || pointerGrabActive)
         {
             editor.openMenu = TopMenu::None;
@@ -473,16 +590,16 @@
             result.scene_input_captured = true;
         }
 
-        auto floating_gui_visible = [&editor]() noexcept -> bool
+        auto floating_gui_visible = [&editor, aiModelManagerInputCovered]() noexcept -> bool
         {
-            return editor.floatingGuiWindow.visible;
+            return editor.floatingGuiWindow.visible || aiModelManagerInputCovered;
         };
 
         // Print Screen is an editor-level shortcut, even when a text editor or
         // modal owns keyboard input. Poll ONLY while this editor context owns
         // foreground focus; never register a system-wide hotkey or keyboard hook.
         // The existing clipboard capture runs after the present/menu frame.
-        if (ctx->has_input_focus_safe())
+        if (!automationInputReserved && ctx->has_input_focus_safe())
         {
             bool printScreenHeld = ctx->is_key_held_safe(input::Key::PrintScreen);
 #if defined(_WIN32)
@@ -525,52 +642,18 @@
         }
 
         const bool workspaceShortcutInputAvailable =
-            ctx->has_input_focus_safe()
+            !automationInputReserved && ctx->has_input_focus_safe()
+            && !editor.outlinerContextMenu.menu.popup.open
             && !modalVisible
             && !pointerGrabActive
             && editor.openMenu == TopMenu::None
             && !floating_gui_visible();
-        const bool shortcutInputAvailable = workspaceShortcutInputAvailable
-            && !gui::keyboard_input_captured();
-        if (shortcutInputAvailable)
-        {
-            const bool controlDown =
-                ctx->is_key_held_safe(input::Key::LeftControl)
-                || ctx->is_key_held_safe(input::Key::RightControl);
-            const bool shiftDown =
-                ctx->is_key_held_safe(input::Key::LeftShift)
-                || ctx->is_key_held_safe(input::Key::RightShift);
-            if (controlDown && ctx->is_key_down_safe(input::Key::Z))
-            {
-                if (shiftDown)
-                    (void)execute_surface_edit(editor, ctx.get(), SurfaceEditAction::redo);
-                else
-                    (void)execute_surface_edit(editor, ctx.get(), SurfaceEditAction::undo);
-                result.scene_input_captured = true;
-            }
-            else if (controlDown && ctx->is_key_down_safe(input::Key::Y))
-            {
-                (void)execute_surface_edit(editor, ctx.get(), SurfaceEditAction::redo);
-                result.scene_input_captured = true;
-            }
-            else if (ctx->is_key_down_safe(input::Key::Delete))
-            {
-                (void)execute_surface_edit(editor, ctx.get(), SurfaceEditAction::delete_selection);
-                result.scene_input_captured = true;
-            }
-            else if (ctx->is_key_down_safe(input::Key::Escape)
-                && editor_has_selection(editor))
-            {
-                clear_editor_selection(editor);
-                push_editor_log(editor, "[edit] Selection cleared.");
-                result.scene_input_captured = true;
-            }
-        }
-
         const bool overlayPriorityActive =
             editor.openMenu != TopMenu::None
+            || editor.outlinerContextMenu.menu.popup.open
             || modalVisible
             || floating_gui_visible()
+            || gui::select_box_popup_open()
             || pointerGrabActive;
         ctx->set_gui_overlay_priority(overlayPriorityActive);
 
@@ -600,16 +683,24 @@
             gui::begin_modal_background_capture(centered_modal_position(aiModelConsentModalSize), aiModelConsentModalSize);
         else if (editor.showVoiceConsentModal)
             gui::begin_modal_background_capture(centered_modal_position(voiceConsentModalSize), voiceConsentModalSize);
-        else if (editor.showSettingsModal)
-            gui::begin_modal_background_capture(editorSettingsModalPos, editorSettingsModalSize);
-        else if (editor.showAiModelManagerModal)
-            gui::begin_modal_background_capture(centered_modal_position(
-                fit_modal_size({ (std::min)(1000.0f, w * 0.90f), h * 0.90f }, { 500.0f, 480.0f })),
-                fit_modal_size({ (std::min)(1000.0f, w * 0.90f), h * 0.90f }, { 500.0f, 480.0f }));
-        else if (editor.showPackageManagerModal)
+        else if (!editor.showSettingsModal && editor.showPackageManagerModal)
             gui::begin_modal_background_capture(centered_modal_position(packageManagerModalSize), packageManagerModalSize);
-        else if (editor.showAboutModal)
+        else if (!editor.showSettingsModal && editor.showAboutModal)
             gui::begin_modal_background_capture(centered_modal_position(aboutModalSize), aboutModalSize);
+
+        // Settings remains exclusive; restore its events only around its floating
+        // owner, then keep later background controls suppressed for this frame.
+        const bool editorSettingsOwnsInput = editor.showSettingsModal
+            && !nativeToolApprovalModalVisible
+            && !editor.showUpdateConfirmModal && !editor.showSourceUpdateConfirmModal
+            && !editor.showAiModelConsentModal && !editor.showVoiceConsentModal;
+        std::optional<gui::ScopedInputSuppression> editorSettingsBackgroundInput;
+        if (editorSettingsOwnsInput) editorSettingsBackgroundInput.emplace();
+
+        // Reserve covered events before background controls draw; restore them
+        // immediately before the same floating owner draws later in this frame.
+        std::optional<gui::ScopedInputSuppression> aiModelManagerBackgroundInput;
+        if (aiModelManagerInputCovered) aiModelManagerBackgroundInput.emplace();
 
         // A host resize must not reinterpret the last splitter-drag pixel in
         // a new client width. Keep the user's fraction even for one-pixel steps.
@@ -662,6 +753,9 @@
         editor.inspectorSplit = std::clamp(editor.inspectorSplit, 0.06f, 0.70f);
         editor.dockSplit = std::clamp(editor.dockSplit, 0.08f, 0.80f);
 
+        // Presentation only: stored pane visibility and dock fractions remain
+        // untouched, so Stop, Escape and Exit restore the authored layout.
+        const bool projectViewportMaximized = project_runtime_viewport_maximized(editor);
         constexpr auto toolPaneRoutes = editor_tool_pane_routes();
         constexpr auto toolPaneLabels = editor_tool_pane_labels();
         auto pane_supported = [&](EditorToolPane pane) noexcept
@@ -681,15 +775,9 @@
             return pane == EditorToolPane::AiChat
                 && application.panes.ai_chat;
         };
-        int supportedToolPaneCount = 0;
-        for (std::size_t index = 0; index < toolPaneRoutes.size(); ++index)
-        {
-            if (pane_supported(static_cast<EditorToolPane>(index)))
-                ++supportedToolPaneCount;
-        }
-        const int windowMenuItemCount = supportedToolPaneCount + 1;
         auto pane_family_enabled = [&](EditorToolPane pane) noexcept
         {
+            if (projectViewportMaximized) return false;
             if (!pane_supported(pane))
                 return false;
             if (is_outliner_tool_pane(pane))
@@ -867,6 +955,8 @@
         }
         const double chromeThrottle = ctx->windowData
             ? ctx->windowData->editorThrottleHz.load(std::memory_order_relaxed) : 0.0;
+        const bool chromeNativeVsync = ctx->windowData
+            && ctx->windowData->editorNativeVsyncActive.load(std::memory_order_acquire);
         const double chromePacing = ctx->windowData
             ? ctx->windowData->editorFramePacingHz.load(std::memory_order_relaxed) : 0.0;
         const std::string toolbarFps = std::isfinite(editor.chromeFpsSample)
@@ -874,9 +964,11 @@
             ? chromeThrottle > 0.0
                 ? epochengine::format_text("{:.0f} FPS / {:.0f} {} cap", editor.chromeFpsSample,
                     chromeThrottle, chromeThrottle == 10.0 ? "build" : "CPU")
-                : chromePacing > 0.0
-                    ? epochengine::format_text("{:.0f} FPS / {:.0f} cap", editor.chromeFpsSample, chromePacing)
-                    : epochengine::format_text("{:.0f} FPS / uncapped", editor.chromeFpsSample)
+                : chromeNativeVsync
+                    ? epochengine::format_text("{:.0f} FPS / VSync", editor.chromeFpsSample)
+                    : chromePacing > 0.0
+                        ? epochengine::format_text("{:.0f} FPS / {:.0f} cap", editor.chromeFpsSample, chromePacing)
+                        : epochengine::format_text("{:.0f} FPS / uncapped", editor.chromeFpsSample)
             : std::string{"-- FPS"};
         const auto toolbarResources = platform::work_admission::sample_host_resources();
         const bool toolbarCpuValid = toolbarResources.cpu_valid
@@ -901,14 +993,51 @@
         const std::string toolbarCpuCompact = "C " + toolbarCpu;
         const std::string toolbarRamCompact = "R " + toolbarRamPercent;
         const std::string toolbarRamDetail = toolbarRamLabel + " (" + toolbarRam + " free)";
+        const auto& toolbarGpu = toolbarResources.gpu;
+        const bool toolbarGpuValid = toolbarGpu.source == platform::work_admission::GpuTelemetrySource::nvidia_nvml
+            && toolbarGpu.busy_valid && std::isfinite(toolbarGpu.busy_fraction)
+            && toolbarGpu.busy_fraction >= 0.0 && toolbarGpu.busy_fraction <= 1.0;
+        const bool toolbarVramValid = toolbarGpu.source == platform::work_admission::GpuTelemetrySource::nvidia_nvml
+            && toolbarGpu.memory_valid && toolbarGpu.dedicated_total_bytes > 0u
+            && toolbarGpu.dedicated_used_bytes <= toolbarGpu.dedicated_total_bytes;
+        const double toolbarVramFraction = toolbarVramValid
+            ? static_cast<double>(toolbarGpu.dedicated_used_bytes) / toolbarGpu.dedicated_total_bytes : 0.0;
+        const std::string toolbarGpuPercent = toolbarGpuValid
+            ? epochengine::format_text("{:.0f}%", toolbarGpu.busy_fraction * 100.0) : "--";
+        const std::string toolbarVramPercent = toolbarVramValid
+            ? epochengine::format_text("{:.0f}%", toolbarVramFraction * 100.0) : "--";
+        const std::string toolbarGpuLabel = "GPU " + toolbarGpuPercent;
+        const std::string toolbarVramLabel = toolbarVramValid
+            ? epochengine::format_text("VRAM {:.1f}/{:.1f} GiB",
+                static_cast<double>(toolbarGpu.dedicated_used_bytes) / (1024.0 * 1024.0 * 1024.0),
+                static_cast<double>(toolbarGpu.dedicated_total_bytes) / (1024.0 * 1024.0 * 1024.0))
+            : "VRAM --";
+        const std::string toolbarGpuCompact = "G " + toolbarGpuPercent;
+        const std::string toolbarVramCompact = "V " + toolbarVramPercent;
+        // Capacity is immutable between samples; reserve its full numeric width
+        // so changing used bytes does not move menus or status fields.
+        const std::string toolbarVramWidthReference = toolbarVramValid
+            ? epochengine::format_text("VRAM {:.1f}/{:.1f} GiB",
+                static_cast<double>(toolbarGpu.dedicated_total_bytes) / (1024.0 * 1024.0 * 1024.0),
+                static_cast<double>(toolbarGpu.dedicated_total_bytes) / (1024.0 * 1024.0 * 1024.0))
+            : "VRAM --";
+        const std::string toolbarGpuDetail = toolbarGpu.source == platform::work_admission::GpuTelemetrySource::nvidia_nvml
+            ? epochengine::format_text("NVML adapter {} of {}: {}. Whole-adapter load, including all applications; not this process or necessarily the selected renderer.",
+                toolbarGpu.adapter_index, toolbarGpu.adapter_count, toolbarGpu.adapter_name.data()) + " Click for kernel, memory and video counters; 3D/compute/process attribution is unavailable."
+            : "GPU telemetry unavailable. Optional NVIDIA SDK/driver or device support is absent. No process GPU usage is inferred.";
+        const std::string toolbarVramDetail = toolbarVramValid
+            ? epochengine::format_text("NVML adapter {} dedicated framebuffer memory: {:.2f} / {:.2f} GiB used. Whole adapter, including other applications and driver; not this process.",
+                toolbarGpu.adapter_index, static_cast<double>(toolbarGpu.dedicated_used_bytes) / (1024.0 * 1024.0 * 1024.0),
+                static_cast<double>(toolbarGpu.dedicated_total_bytes) / (1024.0 * 1024.0 * 1024.0))
+            : "Dedicated GPU memory unavailable; no zero-use measurement is inferred.";
         const std::string toolbarFpsCompact = std::isfinite(editor.chromeFpsSample)
                 && editor.chromeFpsMeasured
             ? epochengine::format_text("{:.0f} FPS", editor.chromeFpsSample)
             : "-- FPS";
-        constexpr std::size_t toolbarFpsIndex = 4u;
-        constexpr std::size_t toolbarTaskIndex = 5u;
-        const std::array<std::string, 8> toolbarStatus{{
-            toolbarCpuLabel, toolbarRamLabel,
+        constexpr std::size_t toolbarFpsIndex = 6u;
+        constexpr std::size_t toolbarTaskIndex = 7u;
+        const std::array<std::string, 10> toolbarStatus{{
+            toolbarCpuLabel, toolbarRamLabel, toolbarGpuLabel, toolbarVramLabel,
             std::string("v") + epochengine::GetEngineVersionString(),
             epochengine::format_text("{} {} {} {}", toolbarArch, toolbarCompiler,
 #if defined(_MSC_VER) && _MSC_VER >= 1930 && _MSC_VER < 1950
@@ -921,43 +1050,51 @@
             epochengine::format_text("Thread {} / Queued {} / Idle {}",
                 toolbarRunning, toolbarQueued, toolbarActivity.idle_workers),
             renderer_name(ctx),
-            epochengine::format_text("Zoom {}x", static_cast<int>((std::max)(0.0f,
-                std::floor(previewgrid::camera_distance_for(ctx.get())))))
+            epochengine::format_text("Zoom {:.0f}x", (std::max)(0.0f,
+                std::floor(previewgrid::camera_distance_for(ctx.get()))))
         }};
-        const std::array<std::string, 8> toolbarCompactStatus{{
-            toolbarCpuCompact, toolbarRamCompact, toolbarStatus[2],
+        const std::array<std::string, 10> toolbarCompactStatus{{
+            toolbarCpuCompact, toolbarRamCompact, toolbarGpuCompact, toolbarVramCompact, toolbarStatus[4],
             epochengine::format_text("{} {} {}", toolbarArch, toolbarCompiler,
                 build_configuration_label()),
             toolbarFpsCompact,
             epochengine::format_text("{}T / {}Q / {}I",
                 toolbarRunning, toolbarQueued, toolbarActivity.idle_workers),
-            toolbarStatus[6],
-            epochengine::format_text("{}x", static_cast<int>((std::max)(0.0f,
-                std::floor(previewgrid::camera_distance_for(ctx.get())))))
+            toolbarStatus[8],
+            epochengine::format_text("{:.0f}x", (std::max)(0.0f,
+                std::floor(previewgrid::camera_distance_for(ctx.get()))))
         }};
-        const std::array<std::string, 8> toolbarMinimalStatus{{
-            toolbarCpuCompact, toolbarRamCompact, toolbarStatus[2], toolbarArch.data(),
+        const std::array<std::string, 10> toolbarMinimalStatus{{
+            toolbarCpuCompact, toolbarRamCompact, toolbarGpuCompact, toolbarVramCompact, toolbarStatus[4], toolbarArch.data(),
             toolbarFpsCompact, toolbarCompactStatus[toolbarTaskIndex],
-            toolbarStatus[6], toolbarCompactStatus[7]
+            toolbarStatus[8], toolbarCompactStatus[9]
         }};
-        std::array<gui::StatusStripItem, 8> toolbarStatusItems{};
+        std::array<gui::StatusStripItem, 10> toolbarStatusItems{};
         for (std::size_t i = 0u; i < toolbarStatusItems.size(); ++i)
             toolbarStatusItems[i] = {
                 toolbarStatus[i], toolbarCompactStatus[i], toolbarMinimalStatus[i]};
         toolbarStatusItems[0].compression_priority = 200u;
         toolbarStatusItems[1].compression_priority = 200u;
-        toolbarStatusItems[2].compression_priority = 1u;
-        toolbarStatusItems[3].compression_priority = 80u;
+        toolbarStatusItems[2].compression_priority = 200u;
+        toolbarStatusItems[3].compression_priority = 200u;
+        toolbarStatusItems[4].compression_priority = 1u;
+        toolbarStatusItems[5].compression_priority = 80u;
         toolbarStatusItems[toolbarFpsIndex].compression_priority = 40u;
         toolbarStatusItems[toolbarTaskIndex].compression_priority = 100u;
-        toolbarStatusItems[6].compression_priority = 20u;
-        toolbarStatusItems[7].compression_priority = 300u;
+        toolbarStatusItems[8].compression_priority = 20u;
+        toolbarStatusItems[9].compression_priority = 300u;
         toolbarStatusItems[0].width_reference = "CPU 100%";
         toolbarStatusItems[0].compact_width_reference = "C 100%";
         toolbarStatusItems[0].minimal_width_reference = "C 100%";
         toolbarStatusItems[1].width_reference = "RAM 100%";
         toolbarStatusItems[1].compact_width_reference = "R 100%";
         toolbarStatusItems[1].minimal_width_reference = "R 100%";
+        toolbarStatusItems[2].width_reference = "GPU 100%";
+        toolbarStatusItems[2].compact_width_reference = "G 100%";
+        toolbarStatusItems[2].minimal_width_reference = "G 100%";
+        toolbarStatusItems[3].width_reference = toolbarVramWidthReference;
+        toolbarStatusItems[3].compact_width_reference = "V 100%";
+        toolbarStatusItems[3].minimal_width_reference = "V 100%";
         const auto resourceTone = [](bool valid, double busy) noexcept
         {
             return !valid ? gui::SemanticTone::neutral
@@ -970,6 +1107,14 @@
             ? 1.0 - static_cast<double>(toolbarResources.available_memory_bytes)
                 / toolbarResources.total_memory_bytes : 0.0);
         toolbarStatusItems[1].tooltip = toolbarRamDetail;
+        toolbarStatusItems[2].tone = resourceTone(toolbarGpuValid, toolbarGpu.busy_fraction);
+        toolbarStatusItems[3].tone = resourceTone(toolbarVramValid, toolbarVramFraction);
+        toolbarStatusItems[2].tooltip = toolbarGpuDetail;
+        toolbarStatusItems[3].tooltip = toolbarVramDetail;
+        toolbarStatusItems[toolbarTaskIndex].tone = toolbarRunning > 0u ? gui::SemanticTone::info
+            : toolbarQueued > 0u ? gui::SemanticTone::warning : gui::SemanticTone::muted;
+        toolbarStatusItems[toolbarTaskIndex].tooltip =
+            "Editor/AI jobs; idle = Editor workers. Planet workers: Planet LOD.";
         toolbarStatusItems[toolbarFpsIndex].tone = chromeThrottle > 0.0 ? gui::SemanticTone::warning
             : editor.chromeFpsSample >= 50.0 ? gui::SemanticTone::success
             : editor.chromeFpsSample >= 25.0 ? gui::SemanticTone::warning

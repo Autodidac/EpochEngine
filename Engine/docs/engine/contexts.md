@@ -70,10 +70,28 @@ build proof, and operator eye-test evidence.
 
 ## Backend Ownership Notes
 
+- The OpenGL backend owns WGL context activation and final presentation;
+  EpochGui supplies GUI commands and does not own either operation. The
+  existing Windows host owns native windows and their retirement. Windows OpenGL may
+  present completed color frames through its context-owned DXGI/NV resource;
+  this does not select the separate Direct3D renderer. Rendering and capture
+  retain their existing default-backbuffer target and ordering. Each native
+  context caches its own capability decision, resources and VSync request.
+  Normal retirement releases registration before destroying native handles and
+  resets the local selection before Windows can reuse the HGLRC value.
+  A failed registration retirement retains its referenced resource bundle and
+  blocks new bridge allocations; it does not claim a recoverable live window.
 - OpenGL owns the reference winding, alpha, texture sampling, resize, and
   Canvas2D behavior used to compare specialized GL-derived contexts.
 - SDL3 and SFML3 own their native window and GL activation details while using
   Epoch scene and GUI queues. Proxy ownership must be explicit during teardown.
+  The Epoch proxy shell stays on its UI thread. Child docking, fill, show and
+  focus operations use the child's existing pre-frame owner queue. Queued work
+  checks native identity, close/retirement state and a separate docking generation;
+  newer redock/undock/cancel transactions invalidate older child operations.
+  That generation is separate from resize callbacks, whose native reentry must
+  not cancel the current docking transaction. CPU ownership proof does not alone
+  prove desktop responsiveness or native drag acceptance.
 - The Windows parent host may inspect context registry state under its mutex, but
   native placement, owner-thread commands, and resize callbacks execute after that
   mutex is released because window procedures reenter context bookkeeping.

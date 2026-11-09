@@ -21,6 +21,8 @@
 #include "ai.backend_core_error.hpp"
 #include "ai.backend_model_model_provider.hpp"
 
+namespace epoch_ai::model { class NativeResidency; }
+namespace epochengine::ai::native_runtime::idle { class RetirementClaim; }
 namespace epoch_ai::runtime {
 
 using json = nlohmann::json;
@@ -51,6 +53,16 @@ public:
         std::optional<std::uint32_t> gpu_offload_cap_percent = std::nullopt);
     void unload_native_model();
     void unload_native_model(std::string_view id_or_uri);
+    [[nodiscard]] std::expected<std::shared_ptr<const model::NativeResidency>, core::Error> capture_native_residency(
+        std::string_view exact_selected_id = {}) const;
+    [[nodiscard]] bool native_residency_settings_match(const model::NativeResidency&) const;
+    [[nodiscard]] std::expected<void, core::Error> suspend_native_residency(
+        const model::NativeResidency&, const epochengine::ai::native_runtime::idle::RetirementClaim&);
+    [[nodiscard]] std::expected<void, core::Error> restore_native_residency(
+        const model::NativeResidency&, const epochengine::ai::native_runtime::idle::RetirementClaim&,
+        std::chrono::steady_clock::time_point, std::stop_token, const std::function<bool()>&);
+    [[nodiscard]] json retire_idle_native_models(std::chrono::steady_clock::time_point now,
+        const std::function<void(std::string_view)>& before_stop);
     void cancel_native_installation();
     [[nodiscard]] std::expected<json, core::Error> remove_native_model(std::string_view id_or_uri, bool delete_cache);
     [[nodiscard]] std::expected<json, core::Error> clear_native_model_cache(std::string_view id_or_uri);

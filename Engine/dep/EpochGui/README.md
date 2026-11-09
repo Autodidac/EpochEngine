@@ -37,6 +37,30 @@ The core module provides:
 import epoch.gui;
 ```
 
+### `epoch.gui.command_menu`
+
+Give this control one list of commands. That same list determines the menu size,
+visible rows, clicks, keyboard focus and scrolling. Stable nonzero IDs identify
+commands even when the list changes. The caller supplies each row's measured
+width and the current row height using its existing font policy.
+
+`update_command_menu` returns the popup, clipped row rectangles, focus, scrollbar
+and an optional activated command ID. Draw those rectangles with your existing
+renderer, then dispatch the activated ID after the menu closes. Disabled commands
+cannot activate. Check marks, radio marks, shortcuts and separators stay in the
+item list for drawing. Arrow, Home, End and Page keys navigate; Escape, outside presses
+and focus loss close the menu. Scrolling appears only when the actual rows do not
+fit. No timer or follow-tail scrolling runs.
+
+Pass queued press origins through `CommandMenuInput::press_position`; release
+uses the final pointer position. This prevents a quick press on one command and
+release on another from choosing the second command. A caller-resolved shortcut
+ID is checked against the same enabled command list. The component owns no
+platform windows, renderer or application actions.
+
+The module and its existing popup/scrollbar dependencies pass standalone Windows
+Debug/Release CPU tests. Native application acceptance is a separate check.
+
 ### `gui/hierarchy_tree.hpp`
 
 The renderer-neutral hierarchy controller is a public header/source API for

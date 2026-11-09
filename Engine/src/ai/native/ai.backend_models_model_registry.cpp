@@ -2,6 +2,7 @@
 // Epoch system notes (auto-checked):
 // Epoch AI: preserve model selection, candidate isolation and host verification gates.
 #include "ai.backend_models_model_registry.hpp"
+#include "ai.backend_model_runtime_model.hpp"
 
 #include <algorithm>
 #include <fstream>
@@ -142,6 +143,7 @@ void ModelRegistry::refresh() {
                 .pinned = true,
                 .trainable = true,
                 .active = ready,
+                .behavior = model::behavior_for(manifest),
             });
 
             const auto addon_json = manifest.value("addon_components", json::object());
@@ -174,6 +176,7 @@ void ModelRegistry::refresh() {
                     .pinned = pinned,
                     .trainable = true,
                     .active = ready,
+                    .behavior = model::behavior_for(manifest),
                 });
             };
 
@@ -259,10 +262,15 @@ void ModelRegistry::refresh() {
             .pinned = false,
             .trainable = false,
             .active = false,
+            .behavior = model::behavior_for(manifest),
         });
     }
 
     add_configured_components();
+    for (auto& component : components_) {
+        const std::array<std::string_view,3> identity{component.id, component.display_name, component.provider_model};
+        component.behavior.labels |= epochengine::ai::model_behavior::classify(identity).labels;
+    }
 }
 
 void ModelRegistry::load_internal_component(
@@ -307,6 +315,7 @@ void ModelRegistry::load_internal_component(
     component.pinned = pinned;
     component.trainable = trainable;
     component.active = ready;
+    component.behavior = model::behavior_for(manifest);
     components_.push_back(std::move(component));
 }
 
@@ -358,7 +367,7 @@ std::optional<ModelComponent> ModelRegistry::find(std::string_view id) const {
 std::optional<ModelComponent> ModelRegistry::active(ComponentKind kind) const {
     std::shared_lock lock(mutex_);
     const auto it = std::ranges::find_if(components_, [&](const auto& item) {
-        return item.kind == kind && item.active && item.enabled;
+        return item.kind == kind && item.active && item.enabled && !item.behavior.flagged();
     });
     if (it == components_.end()) return std::nullopt;
     return *it;
@@ -380,7 +389,7 @@ std::string ModelRegistry::foundation_model() const {
 
     const auto item = std::ranges::find_if(components_, [](const ModelComponent& component) {
         return component.kind == ComponentKind::foundation && component.active &&
-            component.enabled && !component.provider_model.empty();
+            component.enabled && !component.behavior.flagged() && !component.provider_model.empty();
     });
     if (item != components_.end()) {
         return item->provider_model;
@@ -388,7 +397,9 @@ std::string ModelRegistry::foundation_model() const {
     // A configured managed URI must correspond to a real enabled component.
     // Falling through with an unavailable engcoder:// URI makes the provider
     // repeatedly try to start a model that does not exist yet.
-    return is_managed_model(config_.model) ? std::string{"auto"} : config_.model;
+    return is_managed_model(config_.model)
+        || epochengine::ai::model_behavior::classify_text(config_.model).flagged()
+        ? std::string{"auto"} : config_.model;
 }
 
 bool ModelRegistry::set_foundation_model(std::string_view provider_model) {
@@ -463,6 +474,16 @@ std::string ModelRegistry::selected_foundation_model() const {
     return preferred_foundation_model_;
 }
 
+std::vector<std::string> ModelRegistry::explicit_model_selections() const {
+    std::shared_lock lock(mutex_);
+    std::vector<std::string> selected;
+    if (!preferred_foundation_model_.empty() && preferred_foundation_model_ != "auto")
+        selected.push_back(preferred_foundation_model_);
+    for (const auto& [_, value] : preferred_role_models_)
+        if (!value.empty() && value != "auto") selected.push_back(value);
+    return selected;
+}
+
 std::string ModelRegistry::controller_model() const {
     if(const auto selected=role_model("controller");!selected.empty())return selected;
     if (const auto item = active(ComponentKind::controller); item.has_value() && !item->provider_model.empty()) {
@@ -473,7 +494,9 @@ std::string ModelRegistry::controller_model() const {
     // component is not active yet, do not pretend it is an external model and
     // pay a failed model-start attempt on every request. The deterministic
     // Architect fallback remains available at zero model-start cost.
-    return is_managed_model(config_.controller_model) ? std::string{} : config_.controller_model;
+    return is_managed_model(config_.controller_model)
+        || epochengine::ai::model_behavior::classify_text(config_.controller_model).flagged()
+        ? std::string{} : config_.controller_model;
 }
 
 json ModelRegistry::describe() const {

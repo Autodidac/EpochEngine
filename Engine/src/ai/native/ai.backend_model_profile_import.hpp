@@ -26,7 +26,7 @@ struct ProfileImport final {
         constexpr std::string_view builtin = "qwen3.8-flash-next-ud-q2-k-xl";
         static const std::set<std::string> allowed{
             "format", "id", "display_name", "runtime", "source", "repo", "quant",
-            "local_path", "estimated_bytes", "profile_revision", "runtime_policy",
+            "local_path", "estimated_bytes", "profile_revision", "runtime_policy", "idle_timeout_minutes",
             "gpu_offload_percent", "gpu_layer_count_hint", "context_tokens", "parallel_slots",
             "effective_context_tokens", "context_reserve_tokens", "auto_compact",
             "compact_trigger_ratio", "compact_target_ratio", "threads", "batch_threads",
@@ -36,7 +36,7 @@ struct ProfileImport final {
             "prompt_cache_mib", "context_shift", "reasoning_preserve", "expert_cache_mode",
             "expert_cache_mib", "pinned_host_mib", "early_router", "speculative_enabled",
             "speculative_type", "speculative_repo", "speculative_model", "speculative_tokens",
-            "enabled", "provider_model", "kind"};
+            "enabled", "provider_model", "kind", "behavior_labels", "tags"};
         const auto safe_file = [](const fs::path& path) {
             const auto status = fs::symlink_status(path);
             return !fs::is_symlink(status) && fs::is_regular_file(status);
@@ -79,10 +79,22 @@ struct ProfileImport final {
                 }
                 return true;
             });
-            if (!value.is_object() || value.size() != allowed.size())
+            if (!value.is_object())
                 throw std::invalid_argument("Import requires a complete current runtime profile.");
-            for (const auto& item : value.items())
-                if (item.value().is_structured()) throw std::invalid_argument("Profile fields must be scalar values.");
+            for (const auto& key : allowed)
+                if (key != "behavior_labels" && key != "tags" && !value.contains(key))
+                    throw std::invalid_argument("Import requires a complete current runtime profile.");
+            for (const auto& item : value.items()) {
+                if (item.key() == "behavior_labels" || item.key() == "tags") {
+                    if (!item.value().is_array() || item.value().size() > 64u)
+                        throw std::invalid_argument("Model labels and tags must be bounded string arrays.");
+                    for (const auto& text : item.value())
+                        if (!text.is_string() || text.get_ref<const std::string&>().empty()
+                            || text.get_ref<const std::string&>().size() > 256u)
+                            throw std::invalid_argument("Model labels and tags must be bounded string arrays.");
+                } else if (item.value().is_structured())
+                    throw std::invalid_argument("Profile fields must be scalar values.");
+            }
             if (value.at("format") != "engcoder.runtime-model.v4"
                 || value.at("runtime") != "qwen-flash" || value.at("kind") != "foundation")
                 throw std::invalid_argument("Only current native inference profiles can be imported.");

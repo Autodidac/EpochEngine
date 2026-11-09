@@ -361,6 +361,46 @@ Portable control state belongs in EpochGui. Engine adapters own renderer drawing
 input translation, native hosts, project state, and backend evidence. Floating
 and docking hosts are optional desktop tooling.
 
+## Imported indexed meshes — current contract
+
+`asset.mesh_artifact` owns bounded, immutable `.epoch_mesh` data: indexed
+triangles, positions, normals, colors and UVs, with validated bounds and a content
+identity. Default limits remain65,536 vertices,196,608 indices and4MiB per
+artifact. Callers may explicitly request larger bounded codec limits, up to
+1,048,576 vertices,6,291,456 indices and64MiB; the combined encoded size must
+still fit the selected byte budget. Invalid policies, counts and encoded lengths
+are rejected before geometry allocation. File headers are checked before the
+bounded file buffer is allocated; encoded geometry is checked before decoded
+vertex/index vectors. A valid file may still use its selected file-buffer budget;
+this is not a total process-memory limit. Invalid indices, normals and nonfinite
+data remain rejected, and existing v1 artifact bytes/content identities are
+unchanged. Import reads data; it never executes a producer or source package.
+Larger codec budgets alone grant no larger Editor, project or renderer residency
+budget; those consumers must separately admit them.
+
+Asset → Import Mesh copies an admitted artifact into project-owned
+`Assets/Mesh/<content-key>.epoch_mesh` and creates an undoable scene object.
+Save Project persists its placement. Scene format4 carries that mesh reference
+alongside existing texture/material data; readers retain formats1/2/3. Runtime
+projection preserves the same reference. Project-relative paths and existing
+filesystem links are checked before writing; existing content is verified rather
+than overwritten. These checks are path admission, not OS confinement.
+
+Scene snapshots retain immutable artifacts in a cache bounded to64 entries and
+16MiB. Unchanged content does not force reconstruction; changed mesh content does.
+Asset → Reload Scene Meshes explicitly clears the scene's retained references.
+Renderer-held references retire through the existing context/publication
+lifecycle. The preview admits at most196,608 imported indices per frame and
+rejects an over-budget replacement atomically, preserving the preceding scene.
+
+The current preview transforms real indexed triangles and shades vertex colors
+through `render.preview_grid`. UVs survive the artifact codec; this does not
+claim a new textured-mesh renderer, collision, rigging, LOD or game-ready output.
+Compiled Debug/Release consumers test codec rejection, ownership, format4
+roundtrip/backward reading, path/link rejection and preview publication.
+Receipts: `build/validation/mesh-bridge-oct26/result.json`. Native import,
+selection/focus and project save/reopen acceptance remain separate gates.
+
 ## Source And Cache Layout
 
 Projects separate portable source from generated output:

@@ -167,6 +167,10 @@ namespace epochengine::core
         // Layout order only; registry/lifecycle iteration remains unchanged.
         std::atomic<int> dockGridOrder{ -1 };
         std::atomic_bool routedRedockRequested = false;
+#if defined(_WIN32)
+        // Invalidates queued proxy-child work on redock, undock or drag cancel.
+        std::atomic_uint64_t proxyChildNativeGeneration{ 0 };
+#endif
         std::atomic_uint8_t routedDockTarget = 0u;
         std::atomic_uint32_t routedDockTabInsertion = 0xffffffffu;
         std::atomic_bool retirementQueued = false;
@@ -175,6 +179,7 @@ namespace epochengine::core
         // Observational UI telemetry; never drives queue or frame ordering.
         std::atomic<double> editorThrottleHz{ 0.0 };
         std::atomic<double> editorFramePacingHz{ 0.0 };
+        std::atomic_bool editorNativeVsyncActive{ false };
         // Context-local user policy; independent of immutable CLI startup defaults.
         perf::frame_pacing_override editorFramePacingOverride{};
         // Resolved native mode for backend work admission; never an FPS ceiling.

@@ -249,7 +249,7 @@ namespace epochengine::scene::detail
         Number& output)
     {
         const std::size_t start = position;
-        while (position < line.size() && line[position] != ' ')
+        while (position < line.size() && line[position] != ' ' && line[position] != ',')
             ++position;
         if (start == position
             || position - start > kMaximumNumericTextBytes)
@@ -476,12 +476,60 @@ namespace epochengine::scene::detail
         return true;
     }
 
+    [[nodiscard]] inline bool parse_mesh_payload(std::string_view line, std::size_t& position,
+        std::optional<SceneMeshSnapshot>& output, std::size_t maximumStringBytes,
+        bool hasCoordinates = false)
+    {
+        bool present{};
+        if (!parse_bool01(line, position, present)) return false;
+        if (!present) { output.reset(); return true; }
+        SceneMeshSnapshot mesh{};
+        if (!consume_literal(line, position, " path ")
+            || !parse_quoted_value(line, position, mesh.logical_path, maximumStringBytes)
+            || !consume_literal(line, position, " key ")) return false;
+        for (std::size_t word = 0u; word < mesh.artifact_key.size(); ++word)
+        {
+            if (word != 0u && !consume_literal(line, position, ",")) return false;
+            if (!parse_number_token(line, position, mesh.artifact_key[word])) return false;
+        }
+        if (!consume_literal(line, position, " vertices ")
+            || !parse_number_token(line, position, mesh.vertex_count)
+            || !consume_literal(line, position, " indices ")
+            || !parse_number_token(line, position, mesh.index_count)) return false;
+        if (hasCoordinates)
+        {
+            bool coordinatesPresent{};
+            if (!consume_literal(line, position, " coordinates ")
+                || !parse_bool01(line, position, coordinatesPresent)) return false;
+            if (coordinatesPresent)
+            {
+                SceneMeshCoordinates coordinates{};
+                if (!consume_literal(line, position, " meters_per_unit ")
+                    || !parse_number_token(line, position, coordinates.meters_per_unit)
+                    || !consume_literal(line, position, " source_origin_meters ")) return false;
+                for (std::size_t axis = 0u; axis < coordinates.source_origin_meters.size(); ++axis)
+                {
+                    if (axis != 0u && !consume_literal(line, position, ",")) return false;
+                    if (!parse_number_token(line, position, coordinates.source_origin_meters[axis])) return false;
+                }
+                mesh.coordinates = coordinates;
+            }
+        }
+        if (!mesh.valid()) return false;
+        output = std::move(mesh);
+        return true;
+    }
+
     [[nodiscard]] inline bool parse_snapshot_object_line(
         std::string_view line,
         SceneObjectSnapshot& object,
         std::size_t maximumStringBytes,
         bool hasStableId,
-        bool hasTextureMaterial)
+        bool hasTextureMaterial,
+        bool hasMesh = false,
+        bool hasMeshCoordinates = false,
+        bool hasPositionAnchor = false,
+        bool hasForestRegion = false)
     {
         std::size_t position = 0;
         if (!consume_literal(line, position, "object "))
@@ -521,13 +569,48 @@ namespace epochengine::scene::detail
 
         if (!hasTextureMaterial)
             return position == line.size();
-        return consume_literal(line, position, " material ")
-            && parse_texture_material_payload(
-                line,
-                position,
-                object.texture_material,
-                maximumStringBytes)
-            && position == line.size();
+        if (!consume_literal(line, position, " material ")
+            || !parse_texture_material_payload(line, position, object.texture_material, maximumStringBytes)) return false;
+        if (hasMesh && (!consume_literal(line, position, " mesh ")
+            || !parse_mesh_payload(line, position, object.mesh_asset, maximumStringBytes, hasMeshCoordinates))) return false;
+        if (hasPositionAnchor)
+        {
+            bool anchored{};
+            if (!consume_literal(line, position, " anchor ")
+                || !parse_bool01(line, position, anchored)) return false;
+            if (anchored)
+            {
+                std::array<double, 3> anchor{};
+                if (!consume_literal(line, position, " meters ")) return false;
+                for (std::size_t axis = 0u; axis < anchor.size(); ++axis)
+                    if ((axis != 0u && !consume_literal(line, position, ","))
+                        || !parse_number_token(line, position, anchor[axis])) return false;
+                object.position_anchor = anchor;
+            }
+        }
+        if (hasForestRegion)
+        {
+            bool present{};
+            if (!consume_literal(line,position," forest_region ") || !parse_bool01(line,position,present)) return false;
+            if (present)
+            {
+                SceneForestRegionInstance region;
+                const auto number=[&](auto& value) { return consume_literal(line,position," ") && parse_number_token(line,position,value); };
+                for(auto* value:{&region.region_id,&region.terrain_object_id,&region.seed,&region.plant_genome,&region.plant_revision,&region.plant_hash})
+                    if(!number(*value))return false;
+                if(!number(region.body_index)||!number(region.candidate_index)||!number(region.candidate_count)
+                    ||!number(region.radius_meters)||!number(region.density_per_square_meter)||!number(region.body_radius_meters))return false;
+                for(auto* vector:{&region.center_direction,&region.body_local_root_meters,&region.radial_up,
+                    &region.admitted_body_center_meters,&region.mesh_source_origin_meters})
+                    for(auto& value:*vector)if(!number(value))return false;
+                for(auto& value:region.terrain_artifact_key)if(!number(value))return false;
+                for(auto* value:{&region.provider_content_hash,&region.recipe,&region.plant_source})
+                    if(!consume_literal(line,position," ")||!parse_quoted_value(line,position,*value,maximumStringBytes))return false;
+                if(!region.valid())return false;
+                object.forest_region=std::move(region);
+            }
+        }
+        return position == line.size();
     }
 
     [[nodiscard]] inline bool parse_legacy_object_line(
@@ -849,7 +932,12 @@ namespace epochengine::scene::detail
         std::string_view text,
         std::size_t position,
         const SnapshotTextLimits& limits,
-        bool hasTextureMaterial)
+        bool hasTextureMaterial,
+        bool hasMesh = false,
+        bool hasEnvironment = false,
+        bool hasMeshCoordinates = false,
+        bool hasPositionAnchor = false,
+        bool hasForestRegion = false)
     {
         SceneSnapshot snapshot{};
         std::string_view line{};
@@ -906,6 +994,17 @@ namespace epochengine::scene::detail
             || snapshot.captured_simulated_seconds < 0.0)
             return failure("invalid v2 time line");
 
+        if (hasEnvironment)
+        {
+            std::size_t ambientPosition = 0u;
+            if (!read_line(text, position, line)
+                || !consume_literal(line, ambientPosition, "ambient ")
+                || !parse_compact_vec3(line, ambientPosition, snapshot.ambient)
+                || ambientPosition != line.size()
+                || !valid_scene_ambient(snapshot.ambient))
+                return failure("invalid v5 ambient environment line");
+        }
+
         std::size_t packageCount{};
         if (!read_line(text, position, line)
             || !parse_named_count_line(
@@ -943,7 +1042,7 @@ namespace epochengine::scene::detail
             SceneObjectSnapshot object{};
             if (!read_line(text, position, line)
                 || !parse_snapshot_object_line(
-                    line, object, maximumStringBytes, true, hasTextureMaterial))
+                    line, object, maximumStringBytes, true, hasTextureMaterial, hasMesh, hasMeshCoordinates,hasPositionAnchor,hasForestRegion))
             {
                 return failure(
                     "invalid v2 object line " + std::to_string(index));
@@ -1124,7 +1223,18 @@ export namespace epochengine::scene
                 return {};
 
             detail::BoundedTextWriter writer{limits.maximum_text_bytes};
-            if (!writer.append("epoch_snapshot 3\n")
+            const bool hasForestRegion = std::any_of(snapshot.objects.begin(),snapshot.objects.end(),
+                [](const SceneObjectSnapshot& object) noexcept { return object.forest_region.has_value(); });
+            const bool hasPositionAnchor = hasForestRegion || std::any_of(snapshot.objects.begin(), snapshot.objects.end(),
+                [](const SceneObjectSnapshot& object) noexcept { return object.position_anchor.has_value(); });
+            const bool hasMeshCoordinates = std::any_of(snapshot.objects.begin(), snapshot.objects.end(),
+                [](const SceneObjectSnapshot& object) noexcept
+                {
+                    return object.mesh_asset && object.mesh_asset->coordinates.has_value();
+                });
+            const bool hasEnvironment = hasPositionAnchor || hasMeshCoordinates || snapshot.ambient != kDefaultAmbientLight;
+            if (!writer.append(hasForestRegion ? "epoch_snapshot 8\n" : hasPositionAnchor ? "epoch_snapshot 7\n" : hasMeshCoordinates ? "epoch_snapshot 6\n"
+                    : hasEnvironment ? "epoch_snapshot 5\n" : "epoch_snapshot 4\n")
                 || !detail::append_quoted_line(
                     writer, "scene", snapshot.scene_id)
                 || !detail::append_quoted_line(
@@ -1144,12 +1254,17 @@ export namespace epochengine::scene
                 || !detail::append_number_line(
                     writer, "frame", snapshot.captured_frame_index)
                 || !detail::append_number_line(
-                    writer, "time", snapshot.captured_simulated_seconds)
-                || !detail::append_number_line(
-                    writer, "packages", snapshot.packages.size()))
+                    writer, "time", snapshot.captured_simulated_seconds))
             {
                 return {};
             }
+            if (hasEnvironment && (!writer.append("ambient ")
+                    || !writer.append_vec3(snapshot.ambient)
+                    || !writer.append("\n")))
+                return {};
+            if (!detail::append_number_line(
+                    writer, "packages", snapshot.packages.size()))
+                return {};
 
             for (const std::string& package : snapshot.packages)
             {
@@ -1228,6 +1343,68 @@ export namespace epochengine::scene
                         return {};
                     }
                 }
+                if (!writer.append(" mesh ") || !writer.append_integer(object.mesh_asset ? 1u : 0u)) return {};
+                if (object.mesh_asset)
+                {
+                    const auto& mesh = *object.mesh_asset;
+                    if (!writer.append(" path ") || !writer.append_quoted(mesh.logical_path)
+                        || !writer.append(" key ")) return {};
+                    for (std::size_t word = 0u; word < mesh.artifact_key.size(); ++word)
+                    {
+                        if ((word != 0u && !writer.append(",")) || !writer.append_integer(mesh.artifact_key[word])) return {};
+                    }
+                    if (!writer.append(" vertices ") || !writer.append_integer(mesh.vertex_count)
+                        || !writer.append(" indices ") || !writer.append_integer(mesh.index_count)) return {};
+                    if (hasPositionAnchor || hasMeshCoordinates)
+                    {
+                        if (!writer.append(" coordinates ")
+                            || !writer.append_integer(mesh.coordinates ? 1u : 0u)) return {};
+                        if (mesh.coordinates)
+                        {
+                            const auto& coordinates = *mesh.coordinates;
+                            if (!writer.append(" meters_per_unit ")
+                                || !writer.append_floating(coordinates.meters_per_unit)
+                                || !writer.append(" source_origin_meters ")) return {};
+                            for (std::size_t axis = 0u; axis < coordinates.source_origin_meters.size(); ++axis)
+                            {
+                                if ((axis != 0u && !writer.append(","))
+                                    || !writer.append_floating(coordinates.source_origin_meters[axis])) return {};
+                            }
+                        }
+                    }
+                }
+                if (hasPositionAnchor)
+                {
+                    if (!writer.append(" anchor ")
+                        || !writer.append_integer(object.position_anchor ? 1u : 0u)) return {};
+                    if (object.position_anchor)
+                    {
+                        if (!writer.append(" meters ")) return {};
+                        for (std::size_t axis = 0u; axis < object.position_anchor->size(); ++axis)
+                            if ((axis != 0u && !writer.append(","))
+                                || !writer.append_floating((*object.position_anchor)[axis])) return {};
+                    }
+                }
+                if (hasForestRegion)
+                {
+                    if(!writer.append(" forest_region ")||!writer.append_integer(object.forest_region?1u:0u))return {};
+                    if(object.forest_region)
+                    {
+                        const auto& region=*object.forest_region;
+                        const auto integer=[&](auto value){return writer.append(" ")&&writer.append_integer(value);};
+                        const auto real=[&](double value){return writer.append(" ")&&writer.append_floating(value);};
+                        for(auto value:{region.region_id,region.terrain_object_id,region.seed,region.plant_genome,region.plant_revision,region.plant_hash})
+                            if(!integer(value))return {};
+                        if(!integer(region.body_index)||!integer(region.candidate_index)||!integer(region.candidate_count)
+                            ||!real(region.radius_meters)||!real(region.density_per_square_meter)||!real(region.body_radius_meters))return {};
+                        for(const auto* vector:{&region.center_direction,&region.body_local_root_meters,&region.radial_up,
+                            &region.admitted_body_center_meters,&region.mesh_source_origin_meters})
+                            for(auto value:*vector)if(!real(value))return {};
+                        for(auto value:region.terrain_artifact_key)if(!integer(value))return {};
+                        for(const auto* value:{&region.provider_content_hash,&region.recipe,&region.plant_source})
+                            if(!writer.append(" ")||!writer.append_quoted(*value))return {};
+                    }
+                }
                 if (!writer.append("\n"))
                     return {};
             }
@@ -1279,6 +1456,16 @@ export namespace epochengine::scene
             std::string_view headerLine{};
             if (!detail::read_line(text, position, headerLine))
                 return detail::failure("missing snapshot header");
+            if (headerLine == "epoch_snapshot 8")
+                return detail::parse_v2_body(text, position, limits, true, true, true, true, true, true);
+            if (headerLine == "epoch_snapshot 7")
+                return detail::parse_v2_body(text, position, limits, true, true, true, true, true);
+            if (headerLine == "epoch_snapshot 6")
+                return detail::parse_v2_body(text, position, limits, true, true, true, true);
+            if (headerLine == "epoch_snapshot 5")
+                return detail::parse_v2_body(text, position, limits, true, true, true);
+            if (headerLine == "epoch_snapshot 4")
+                return detail::parse_v2_body(text, position, limits, true, true);
             if (headerLine == "epoch_snapshot 3")
                 return detail::parse_v2_body(text, position, limits, true);
             if (headerLine == "epoch_snapshot 2")
