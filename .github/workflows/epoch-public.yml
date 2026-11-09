@@ -23,6 +23,8 @@ jobs:
   windows:
     runs-on: windows-2022
     timeout-minutes: 180
+    env:
+      VCPKG_FORCE_SYSTEM_BINARIES: '1'
     steps:
       - uses: actions/checkout@v5
         with:
@@ -133,9 +135,26 @@ jobs:
             libasound2-dev libdbus-1-dev libibus-1.0-dev libegl1-mesa-dev libgl1-mesa-dev libvulkan-dev \
             libudev-dev libx11-dev libxcursor-dev libxext-dev libxft-dev libxinerama-dev libxi-dev libxrandr-dev \
             libxrender-dev libxtst-dev libwayland-dev libxkbcommon-dev wayland-protocols xvfb xauth libgl1-mesa-dri mesa-utils mesa-vulkan-drivers
-      - name: Prepare manifest-pinned dependencies
+      - name: Prepare pinned vcpkg and Linux tool archives
         run: |
           set -euo pipefail
+          fetch_tool_asset() {
+            local repo="$1" tag="$2" asset="$3" output="$4" digest="$5" checksum="$6"
+            local api="https://api.github.com/repos/$repo/releases"
+            local id
+            id="$(curl -fsSL --retry 3 "$api/tags/$tag" | python -c '
+          import json, sys
+          assets = [asset["id"] for asset in json.load(sys.stdin)["assets"] if asset["name"] == sys.argv[1]]
+          if len(assets) != 1:
+              raise SystemExit("Expected one exact release asset")
+          print(assets[0])
+          ' "$asset")"
+            [[ "$id" =~ ^[0-9]+$ ]]
+            curl -fsSL --retry 3 --connect-timeout 10 --max-time 120 \
+              -H 'Accept: application/octet-stream' "$api/assets/$id?download=1" -o "$output.part"
+            printf '%s  %s\n' "$digest" "$output.part" | "$checksum" -c --status
+            mv "$output.part" "$output"
+          }
           baseline="$(python -c 'import json; print(json.load(open("Engine/vcpkg.json"))["builtin-baseline"])')"
           [[ "$baseline" =~ ^[0-9a-f]{40}$ ]]
           root="$GITHUB_WORKSPACE/Artifacts/Tooling/public-ci/vcpkg"
@@ -143,8 +162,20 @@ jobs:
           git -C "$root" remote add origin https://github.com/microsoft/vcpkg.git
           git -C "$root" fetch --depth 1 origin "$baseline"
           git -C "$root" checkout --detach FETCH_HEAD
-          "$root/bootstrap-vcpkg.sh" -disableMetrics
+          source "$root/scripts/vcpkg-tool-metadata.txt"
+          fetch_tool_asset microsoft/vcpkg-tool "$VCPKG_TOOL_RELEASE_TAG" vcpkg-glibc \
+            "$root/vcpkg" "$VCPKG_GLIBC_SHA" sha512sum
+          chmod +x "$root/vcpkg"
+          "$root/vcpkg" version --disable-metrics
           echo "EPOCH_VCPKG_ROOT=$root" >> "$GITHUB_ENV"
+          source <(sed 's/\r$//' Engine/unix/current_toolchain.env)
+          downloads="$GITHUB_WORKSPACE/Artifacts/Tooling/public-ci/tools/downloads"
+          mkdir -p "$downloads"
+          cmake_archive="cmake-$EPOCH_CMAKE_VERSION-linux-x86_64.tar.gz"
+          fetch_tool_asset Kitware/CMake "v$EPOCH_CMAKE_VERSION" "$cmake_archive" \
+            "$downloads/$cmake_archive" "$EPOCH_CMAKE_LINUX_X64_SHA256" sha256sum
+          fetch_tool_asset ninja-build/ninja "v$EPOCH_NINJA_VERSION" ninja-linux.zip \
+            "$downloads/ninja-$EPOCH_NINJA_VERSION-linux.zip" "$EPOCH_NINJA_LINUX_X64_SHA256" sha256sum
       - name: Build with production pinned Clang bootstrap
         run: |
           set -euo pipefail

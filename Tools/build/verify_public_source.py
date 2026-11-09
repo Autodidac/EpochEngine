@@ -24,7 +24,7 @@ import xml.etree.ElementTree as ET
 from posixpath import normpath
 
 WORKFLOW = '.github/workflows/epoch-public.yml'
-WORKFLOW_SHA256 = '4d28e71d02c951620c9c4835ff0b3ba8daa785bed560a1d1982aea971b149048'
+WORKFLOW_SHA256 = 'be1c3d126eb205d630936c9f15c4fb1ffc9efe95b72ab14c0bd8ead95a317338'
 MANIFEST = 'source-projection.json'
 # Exact root outputs from local CPU measurements, never source or release data.
 # Keep this list shared with the exporter; do not hide similarly named source.
