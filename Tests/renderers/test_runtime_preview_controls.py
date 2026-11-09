@@ -2139,8 +2139,11 @@ set_tests_properties(mesh_wireframe runtime_shortcuts runtime_source_receipt PRO
             commands += [(config + "-build", build), (config + "-contract", ["ctest", "--test-dir", str(proof / "cmake"), "-C", config, "--output-on-failure"])]
         completed = []
         for label, command in commands:
+            # A clean hosted MSVC build compiles two module consumers for each
+            # configuration. Keep a separate bound for compilation and execution.
+            timeout = 420 if os.name == "nt" and label.endswith("-build") else 180
             result = subprocess.run(command, cwd=ROOT, env=dict(os.environ, MSBUILDDISABLENODEREUSE="1"),
-                capture_output=True, text=True, timeout=180)
+                capture_output=True, text=True, timeout=timeout)
             (proof / (label + ".log")).write_text(result.stdout + result.stderr, encoding="utf-8")
             completed.append({"phase": label, "exit": result.returncode, "command": command})
             (proof / "result.json").write_text(json.dumps({"module_count": len(closure), "completed": completed,

@@ -1,10 +1,45 @@
-# Epoch Engine
+# Epoch - Creative Software And Game Engine
+
+[![Latest Public release](https://img.shields.io/github/v/release/Autodidac/EpochEngine?style=for-the-badge&label=Public%20release)](https://github.com/Autodidac/EpochEngine/releases/latest)
+![C++23](https://img.shields.io/badge/C%2B%2B23-365D7D?style=for-the-badge)
+![Multicontext tooling](https://img.shields.io/badge/Multicontext-486B4A?style=for-the-badge)
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/Autodidac/EpochEngine/8bae9b22125f8ce01371a8987365d5d219fc981d/Images/readme/epoch-engine-overview-v08435.png" alt="Epoch Engine overview card from the earlier Public README" />
+</p>
+
+## What Epoch Is
 
 Epoch is a C++23 engine for software, tools and games, with an optional Editor
 and project Assistant. Reusable platform, GUI, audio and media libraries support
-the Engine; projects select the services they need.
+the Engine. Projects select the services they need.
 
-## Work in the Editor
+The Launcher opens projects, picks the runtime profile and checks for updates.
+The Editor is where you create scenes, edit interfaces, and build and run your
+project. You can use the Assistant for project guidance and review its proposed
+actions before applying them.
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/Autodidac/EpochEngine/8bae9b22125f8ce01371a8987365d5d219fc981d/Images/readme/epoch-engine-story-v08431.png" alt="Illustrated timeline of Epoch Engine's early development" />
+</p>
+
+## Current Snapshot
+
+This source checkpoint is **0.91.02**. Download runtime packages and check their
+validation results in [GitHub Releases](https://github.com/Autodidac/EpochEngine/releases).
+Public releases and source updates use this GitHub repository without account
+pairing. Each edition accepts only its own update channel.
+
+## In Action
+
+These images are from earlier published builds. See the release notes and
+renderer capability matrix for current evidence.
+
+| Windows Editor scene | Windows multicontext Editor | Linux OpenGL Editor |
+| --- | --- | --- |
+| ![Windows scene](https://raw.githubusercontent.com/Autodidac/EpochEngine/8bae9b22125f8ce01371a8987365d5d219fc981d/Images/readme/windows-scene-v09035.png) | ![Windows multicontext Editor](https://raw.githubusercontent.com/Autodidac/EpochEngine/8bae9b22125f8ce01371a8987365d5d219fc981d/Images/readme/windows-multicontext-editor-v08709.png) | ![Linux OpenGL Editor](https://raw.githubusercontent.com/Autodidac/EpochEngine/8bae9b22125f8ce01371a8987365d5d219fc981d/Images/readme/linux-opengl-v08438.png) |
+
+## What Epoch Provides Right Now
 
 - Author scenes and inspect objects in the 3D Preview workspace.
 - Use separate **2D** and **UI** workspaces for 2D content and GUI documents.
@@ -19,23 +54,34 @@ Start with the [Editor and project workflows](Engine/docs/engine/workflows.md),
 [GUI guide](Engine/docs/engine/gui.md) and
 [documentation index](Engine/docs/README.md).
 The [Assistant small-game acceptance prompt](Engine/docs/engine/workflows.md#assistant-test-prompt-for-a-complete-small-game)
-exercises procedural worlds, custom trees, generated assets and play.
+is a checklist for testing procedural worlds, custom trees, generated assets and play.
 
-## Run a Windows release
+## Evidence
 
-Get a Windows x64 package from [Releases](https://github.com/Autodidac/EpochEngine/releases),
-extract it, and run `EpochEditor.exe` beside its included `assets` directory.
-Keep the package's dependency libraries and notices with the executable.
-Release notes describe the checks completed for that exact package.
+- [GitHub Actions](https://github.com/Autodidac/EpochEngine/actions) records builds
+  and tests for individual commits.
+- [GitHub Releases](https://github.com/Autodidac/EpochEngine/releases) records
+  the published packages and their validation.
+- The [renderer capability matrix](Engine/docs/engine/renderers.md) records
+  support by backend and feature.
 
-## Build from source
+## Quick Start
+
+### Run a release
+
+Download the package for your platform from [Releases](https://github.com/Autodidac/EpochEngine/releases).
+Extract it and run `EpochEditor.exe` on Windows or `./epoch --editor --backend opengl`
+on Linux from the extracted directory. Keep the package's assets, dependency
+libraries and notices together.
+
+### Build from source
 
 Use a supported C++23 toolchain with module support. Prepare the documented
 native prerequisites and manifest-pinned dependencies first; see
 [build tools](Engine/docs/build/tools.md) and
 [build scripts](Engine/docs/build/scripts.md).
 
-### Windows / Visual Studio 2022
+#### Windows / Visual Studio 2022
 
 Open `Engine.sln`, or use a Visual Studio Developer PowerShell from the repository
 root:
@@ -58,7 +104,7 @@ Root CMake presets provide another build path. See
 [presets](Engine/docs/build/presets.md); current output-layout details are in
 [build scripts](Engine/docs/build/scripts.md).
 
-### Linux / Clang
+#### Linux / Clang
 
 The full-engine module lane uses the pinned Clang toolchain. After installing
 the documented native prerequisites, run from the repository root:
@@ -77,7 +123,17 @@ parity from a Windows build.
 Generated output belongs under `Artifacts/`: `Intermediate` holds compiler
 state, `Runtime` holds runnable programs and assets, and `Reports` holds checks.
 
-## Libraries and examples
+## Repository Layout
+
+| Path | Contents |
+| --- | --- |
+| `Engine/src` and `Engine/modules` | Engine, editor and runtime implementation |
+| `Engine/assets` and `Engine/resource` | Runtime assets and build resources |
+| `Engine/dep` | Admitted dependency revisions and optional package source |
+| `Engine/examples` | Engine entry points and integration examples |
+| `Tools` and `Tests` | Build, packaging and validation tools |
+
+### Libraries and examples
 
 | Project | Scope |
 | --- | --- |
@@ -104,25 +160,31 @@ does not provide a working feature. Ordinary projects do not include every
 package automatically. Extraction and connected forest/terrain/ocean workflows
 are still being completed.
 
-## Status and license
+## Documentation
+
+- [Editor and project workflows](Engine/docs/engine/workflows.md)
+- [Build presets](Engine/docs/build/presets.md) and [build scripts](Engine/docs/build/scripts.md)
+- [Renderer capabilities](Engine/docs/engine/renderers.md) and [graphics checks](Engine/docs/engine/renderer_checks.md)
+- [Documentation index](Engine/docs/README.md)
+
+## Roadmap Direction
 
 Renderer support is feature-specific. Read the
-[capability evidence](Engine/docs/engine/renderers.md) before choosing a backend;
-an API name or successful compilation does not establish visual parity.
-Optional asset-generation adapters, full Editor-as-project reproduction and
-broader platform coverage still need their remaining integration checks.
-
-Read [LICENSE](LICENSE), including its commercial-licensing requirements.
-Dependencies, models and examples have their own licenses and notices.
+[capability evidence](Engine/docs/engine/renderers.md) before choosing a backend.
+Open work includes the complete playable 2D workflow, more asset-generation
+adapters, running the Editor as an ordinary project, and broader platform coverage.
 
 ## Public edition and contributing
 
-This edition retains ordinary inference and project assistance. Engine
-self-development automation and own-Engine-source AI tools are physically
-excluded. Public source and updates use this GitHub repository without account
-pairing; another edition is never an update fallback.
+The Public edition includes ordinary inference and project assistance.
+Engine self-development tools and access to its own Engine source are excluded.
 
 Run `python Tools/build/verify_public_source.py` before contributing a source
 snapshot. `source-projection.json` records the admitted file inventory and hash
 policy; the verifier documents intentional manifest refreshes. These source
 checks are separate from build, runtime and release acceptance.
+
+## License
+
+Read [LICENSE](LICENSE) for the Engine's commercial-licensing terms. Dependencies,
+models and examples have their own licenses and notices.

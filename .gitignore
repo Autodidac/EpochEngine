@@ -1,21 +1,41 @@
-# Generated build/runtime data; source build directories remain trackable.
+# Build and packaging outputs
 /Artifacts/
+/Engine/dep/*/Artifacts/
+/Tools/MSVC/x64/
+/vcpkg_installed/
+/Engine/vcpkg_installed/
+
+# Legacy output locations
 /build/
 /out/
 /x64/
+/bin/
 /Debug/
 /Release/
 /ReleaseWithDebugInfo/
+/Engine/bin/
 /Engine/Bin/
 /Engine/build/
 /Engine/built/
-/Engine/vcpkg_installed/
-/vcpkg_installed/
-/Engine/examples/EpochEditor/workspace/
+/Engine/dep/*/build/
+/Engine/dep/*/out/
+
+# Local projects, workspaces and runtime data
 /Projects/
+/ai/
 /cache/
 /logs/
 /captures/
+/Engine/cache/
+/Engine/examples/EpochEditor/workspace/
+/.sandbox/
+/.codex/
+/.agents/
+/project_snapshot.zip
+/solid-benchmark-debug.json
+/solid-progress.txt
+
+# IDE, CMake and Python state
 .vs/
 .cache/
 __pycache__/
@@ -29,6 +49,10 @@ build.ninja
 .ninja_log
 .ninja_deps
 *.user
+*.suo
+*.pyc
+
+# Compiled files and diagnostics
 *.obj
 *.o
 *.pch
@@ -37,12 +61,12 @@ build.ninja
 *.idb
 *.ilk
 *.tlog
-*.suo
 *.aps
+*.log
 *.exe
 *.dll
 *.lib
 *.so
+*.so.*
 *.dylib
 *.a
-*.pyc
