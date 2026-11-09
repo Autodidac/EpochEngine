@@ -12,6 +12,8 @@ import subprocess
 import tempfile
 import unittest
 
+from Tests.support.cpp import msvc_2022_root, msvc_2022_toolsets
+
 ROOT = Path(__file__).resolve().parents[2]
 FLAG = 'EPOCH_ENABLE_TEXTURE_DIAGNOSTICS'
 
@@ -33,11 +35,9 @@ class TextureDiagnosticPolicy(unittest.TestCase):
 
     def compiler(self):
         if os.name == 'nt':
-            base = Path(os.environ.get('ProgramFiles', 'C:/Program Files'))
-            choices = sorted((base / 'Microsoft Visual Studio/2022/Community/VC/Tools/MSVC').glob(
-                '*/bin/Hostx64/x64/cl.exe'))
-            if choices:
-                return str(choices[-1]), True
+            toolsets = msvc_2022_toolsets()
+            if toolsets:
+                return str(toolsets[-1] / 'bin/Hostx64/x64/cl.exe'), True
         for name in ('clang++', 'g++', 'c++'):
             found = shutil.which(name)
             if found:
@@ -242,9 +242,9 @@ class TextureDiagnosticPolicy(unittest.TestCase):
 
     @unittest.skipUnless(os.name == 'nt', 'MSVC property evaluation is Windows-specific')
     def test_msvc_projects_emit_shared_property(self):
-        msbuild = Path(os.environ.get('ProgramFiles', 'C:/Program Files')) / (
-            'Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/MSBuild.exe')
-        if not msbuild.exists():
+        installation = msvc_2022_root()
+        msbuild = installation / 'MSBuild/Current/Bin/amd64/MSBuild.exe' if installation else None
+        if msbuild is None or not msbuild.is_file():
             self.skipTest('MSBuild not installed')
         for root, edition in self.edition_roots():
             for name in ('EpochEngine', 'EpochEditor', 'HeadlessCI', 'AiTransportContract'):

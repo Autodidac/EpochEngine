@@ -6,7 +6,7 @@ import hashlib
 import json
 import subprocess
 import unittest
-from Tests.support.cpp import msvc_2022_toolsets
+from Tests.support.cpp import msvc_2022_toolsets, windows_sdk_includes
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -28,7 +28,7 @@ class NativeWindowAttachment(unittest.TestCase):
             self.skipTest('Installed MSVC CPU lane')
         toolsets = msvc_2022_toolsets()
         kitroot = Path('C:/Program Files (x86)/Windows Kits/10')
-        kits = sorted((kitroot / 'Include').glob('*'))
+        kits = windows_sdk_includes(kitroot)
         if not toolsets or not kits:
             self.skipTest('Installed MSVC/SDK required')
         proof = ROOT/'Artifacts/Reports/runtime-viewport-stall-oct29/native-lease'/hashlib.sha256(code.encode()).hexdigest()[:16]

@@ -7,7 +7,7 @@ import re
 import time
 import unittest
 
-from Tests.support.cpp import compile_and_run
+from Tests.support.cpp import compile_and_run, windows_sdk_includes
 from Tools.source.owned_source_text import definition
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -318,7 +318,7 @@ class ProjectRuntimeInputProfile(unittest.TestCase):
         source.write_text(consumer(sources), encoding="utf-8")
         includes = []
         if os.name == "nt":
-            sdk = sorted(Path("C:/Program Files (x86)/Windows Kits/10/Include").glob("*"))[-1]
+            sdk = windows_sdk_includes(Path("C:/Program Files (x86)/Windows Kits/10"))[-1]
             includes = [sdk/"um", sdk/"shared"]
         records = compile_and_run(self, source, report, includes=includes,
             args=lambda configuration:(report/"files"/configuration,))

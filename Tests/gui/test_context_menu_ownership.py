@@ -1,7 +1,7 @@
 """Compile the production context-menu retirement function without a renderer."""
 from pathlib import Path
 import os, shutil, subprocess, tempfile, unittest
-from Tests.support.cpp import msvc_2022_toolsets
+from Tests.support.cpp import msvc_2022_toolsets, windows_sdk_includes
 ROOT = Path(__file__).resolve().parents[2]
 class ContextMenuOwnership(unittest.TestCase):
     def test_retirement_and_consumed_openers(self):
@@ -38,7 +38,7 @@ return 0;
             scratch=Path(temp); source=scratch/"contract.cpp"; source.write_text(code)
             if os.name=="nt":
                 toolsets=msvc_2022_toolsets()
-                kitroot=Path("C:/Program Files (x86)/Windows Kits/10");kits=sorted((kitroot/"Include").glob("*"))
+                kitroot=Path("C:/Program Files (x86)/Windows Kits/10");kits=windows_sdk_includes(kitroot)
                 if not toolsets or not kits:self.skipTest("MSVC/SDK unavailable")
                 toolset,kit=toolsets[-1],kits[-1];binary=scratch/"contract.exe"
                 args=[str(toolset/"bin/Hostx64/x64/cl.exe"),"/nologo","/std:c++latest","/EHsc","/WX",

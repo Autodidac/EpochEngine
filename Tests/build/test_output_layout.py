@@ -8,7 +8,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
-from Tests.support.cpp import msvc_2022_root, msvc_2022_toolsets
+from Tests.support.cpp import msvc_2022_root, msvc_2022_toolsets, windows_sdk_includes
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -221,7 +221,7 @@ class OutputLayout(unittest.TestCase):
             self.skipTest('Installed MSVC CPU lane')
         toolsets = msvc_2022_toolsets()
         kitroot = Path('C:/Program Files (x86)/Windows Kits/10')
-        kits = sorted((kitroot / 'Include').glob('*'))
+        kits = windows_sdk_includes(kitroot)
         if not toolsets or not kits:
             self.skipTest('MSVC/SDK unavailable')
         extra_contract = ''

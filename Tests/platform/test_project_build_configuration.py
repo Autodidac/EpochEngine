@@ -11,7 +11,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
-from Tests.support.cpp import msvc_2022_toolsets
+from Tests.support.cpp import msvc_2022_toolsets, windows_sdk_includes
 from Tests.platform.test_child_close_router import definition
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -333,7 +333,7 @@ assert(state.projectBuildConfiguration=="Debug");
                 self.skipTest("Installed MSVC compiler unavailable")
             tool = tools[-1]
             sdk = Path("C:/Program Files (x86)/Windows Kits/10")
-            kit = sorted((sdk / "Include").glob("*"))[-1]
+            kit = windows_sdk_includes(sdk)[-1]
             environment = dict(os.environ)
             environment["INCLUDE"] = ";".join(map(str, (tool / "include", kit / "ucrt", kit / "shared", kit / "um", kit / "winrt")))
             environment["LIB"] = ";".join(map(str, (tool / "lib/x64", sdk / "Lib" / kit.name / "um/x64", sdk / "Lib" / kit.name / "ucrt/x64")))

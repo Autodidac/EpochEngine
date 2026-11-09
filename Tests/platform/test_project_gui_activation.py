@@ -12,7 +12,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
-from Tests.support.cpp import msvc_2022_toolsets
+from Tests.support.cpp import msvc_2022_toolsets, windows_sdk_includes
 
 from Tests.platform.test_child_close_router import definition
 
@@ -90,7 +90,7 @@ for(const float width:{180.f,700.f}){
                 self.skipTest("Installed MSVC compiler unavailable")
             tool = tools[-1]
             sdk = Path("C:/Program Files (x86)/Windows Kits/10")
-            kit = sorted((sdk / "Include").glob("*"))[-1]
+            kit = windows_sdk_includes(sdk)[-1]
             result = subprocess.run([str(tool / "bin/Hostx64/x64/cl.exe"), "/nologo", "/std:c++latest", "/EHsc",
                 "/I" + str(tool / "include"), "/I" + str(kit / "ucrt"), "/Fo" + str(scratch / "contract.obj"),
                 "/Fe" + str(binary), str(source), "/link", "/LIBPATH:" + str(tool / "lib/x64"),
@@ -475,7 +475,7 @@ int main(){
                 self.skipTest("Installed MSVC compiler unavailable")
             tool = tools[-1]
             sdk = Path("C:/Program Files (x86)/Windows Kits/10")
-            kit = sorted((sdk / "Include").glob("*"))[-1]
+            kit = windows_sdk_includes(sdk)[-1]
             environment = dict(os.environ)
             environment["INCLUDE"] = ";".join(map(str, (tool / "include", kit / "ucrt", kit / "shared", kit / "um", kit / "winrt")))
             environment["LIB"] = ";".join(map(str, (tool / "lib/x64", sdk / "Lib" / kit.name / "um/x64", sdk / "Lib" / kit.name / "ucrt/x64")))

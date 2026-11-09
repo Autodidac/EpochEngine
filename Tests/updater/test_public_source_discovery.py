@@ -10,7 +10,7 @@ import unittest
 
 from Tools.source.owned_source_text import definition
 
-from Tests.support.cpp import msvc_2022_toolsets
+from Tests.support.cpp import msvc_2022_toolsets, windows_sdk_includes
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -21,7 +21,7 @@ class PublicSourceDiscovery(unittest.TestCase):
             self.skipTest('Installed Windows MSVC CPU lane')
         toolset = msvc_2022_toolsets()[-1]
         kits = Path('C:/Program Files (x86)/Windows Kits/10')
-        kit = sorted((kits / 'Include').glob('*'))[-1]
+        kit = windows_sdk_includes(kits)[-1]
         report = ROOT / 'Artifacts/Reports/public-source-contract-oct29' / str(time.time_ns())
         report.mkdir(parents=True)
         # The Codex Python launcher prepends PowerShell7 modules. The production

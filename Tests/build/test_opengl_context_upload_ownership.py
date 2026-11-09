@@ -2,6 +2,8 @@
 from pathlib import Path
 import os,shutil,subprocess,tempfile,unittest
 from Tests.build.test_opengl_sprite_stream import definition
+from Tests.support.cpp import msvc_2022_toolsets, windows_sdk_includes
+
 ROOT=Path(__file__).resolve().parents[2]
 class OpenGLContextUploadOwnership(unittest.TestCase):
  def test_selected_window_depth_format(self):
@@ -49,7 +51,7 @@ int main(){State glState;actual(glState);
 '''.replace('BODY',body)
   report=ROOT/'Artifacts/Reports/mesh-culling-oct31'/('depth-format-'+str(time.time_ns()));report.mkdir(parents=True)
   unit=report/'contract.cpp';unit.write_text(code,encoding='utf-8')
-  sdk=sorted(Path('C:/Program Files (x86)/Windows Kits/10/Include').glob('*'))[-1]
+  sdk=windows_sdk_includes(Path('C:/Program Files (x86)/Windows Kits/10'))[-1]
   result=compile_and_run(self,unit,report,includes=[sdk/'um',sdk/'shared'])
   (report/'result.json').write_text(json.dumps({'scope':'Actual native pixel-format initialization and selected-format gate; installed Windows SDK field layout, ports only, no window/driver','records':result},indent=2),encoding='utf-8')
 
@@ -174,7 +176,9 @@ int main(){
   parent=ROOT/'build/contract-tests';parent.mkdir(parents=True,exist_ok=True)
   scratch=Path(tempfile.mkdtemp(prefix='opengl-context-upload-owner-',dir=parent))
   try:
-   tools=sorted(Path('C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC').glob('*'));sdk=Path('C:/Program Files (x86)/Windows Kits/10');kits=sorted((sdk/'Include').glob('*'))
+   tools=msvc_2022_toolsets()
+   sdk=Path('C:/Program Files (x86)/Windows Kits/10')
+   kits=windows_sdk_includes(sdk)
    if not tools or not kits:self.skipTest('MSVC/SDK required')
    tool,kit=tools[-1],kits[-1];cpp=scratch/'contract.cpp';binary=scratch/'contract.exe';cpp.write_text(code,encoding='utf-8')
    args=[str(tool/'bin/Hostx64/x64/cl.exe'),'/nologo','/utf-8','/std:c++latest','/EHsc','/W4','/WX','/I'+str(tool/'include'),'/I'+str(kit/'ucrt'),'/Fo'+str(scratch/'contract.obj'),'/Fe'+str(binary),str(cpp),'/link','/LIBPATH:'+str(tool/'lib/x64'),'/LIBPATH:'+str(sdk/'Lib'/kit.name/'um/x64'),'/LIBPATH:'+str(sdk/'Lib'/kit.name/'ucrt/x64')]

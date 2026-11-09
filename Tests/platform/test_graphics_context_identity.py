@@ -5,7 +5,7 @@ import subprocess
 import tempfile
 import unittest
 from Tests.build.test_opengl_sprite_stream import definition
-from Tests.support.cpp import compile_and_run, msvc_2022_toolsets
+from Tests.support.cpp import compile_and_run, msvc_2022_toolsets, windows_sdk_includes
 ROOT = Path(__file__).resolve().parents[2]
 
 class GraphicsContextIdentity(unittest.TestCase):
@@ -151,7 +151,7 @@ int main() {
         self.assertIn('struct GraphicsContextDesc', declarations)
         native = ROOT/'Engine/dep/EpochPlatformEngine/include'
         toolsets = msvc_2022_toolsets()
-        kits = sorted(Path('C:/Program Files (x86)/Windows Kits/10/Include').glob('*'))
+        kits = windows_sdk_includes(Path('C:/Program Files (x86)/Windows Kits/10'))
         self.assertTrue(toolsets and kits, 'MSVC and SDK required')
         parent=ROOT/'build/contract-tests';parent.mkdir(parents=True,exist_ok=True)
         with tempfile.TemporaryDirectory(dir=parent,prefix='graphics-context-') as folder:

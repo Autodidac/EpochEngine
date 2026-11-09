@@ -9,7 +9,7 @@ import subprocess
 import tempfile
 import unittest
 
-from Tests.support.cpp import msvc_2022_toolsets
+from Tests.support.cpp import msvc_2022_toolsets, windows_sdk_includes
 
 ROOT = Path(__file__).resolve().parents[2]
 REPORT = ROOT / "Artifacts/Reports/updater-handoff-nov07"
@@ -25,7 +25,7 @@ class ExecutableHandoff(unittest.TestCase):
         cls.scripts = {}
         toolset = msvc_2022_toolsets()[-1]
         kitroot = Path("C:/Program Files (x86)/Windows Kits/10")
-        kit = sorted((kitroot / "Include").glob("*"))[-1]
+        kit = windows_sdk_includes(kitroot)[-1]
         for mode in ("Debug", "Release"):
             folder = cls.root / mode
             folder.mkdir()

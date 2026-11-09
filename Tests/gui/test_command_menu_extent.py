@@ -11,7 +11,7 @@ import unittest
 
 from Tests.platform.test_child_close_router import definition
 from Tests.gui import test_forest_preview_actions as forest_fixture
-from Tests.support.cpp import msvc_2022_toolsets
+from Tests.support.cpp import msvc_2022_toolsets, windows_sdk_includes
 
 ROOT = Path(__file__).resolve().parents[2]
 GUI = ROOT / "Engine/dep/EpochGui"
@@ -89,7 +89,7 @@ int main(){
             self.skipTest("Installed MSVC CPU consumer")
         tools = msvc_2022_toolsets()
         sdk = Path("C:/Program Files (x86)/Windows Kits/10")
-        kits = sorted((sdk / "Include").glob("*"))
+        kits = windows_sdk_includes(sdk)
         if not tools or not kits:
             self.skipTest("Installed MSVC/SDK unavailable")
         commands = (ROOT / "Engine/src/editor/application/editor.frame_command_menus.inl").read_text(encoding="utf-8")

@@ -8,7 +8,7 @@ import subprocess
 import time
 import unittest
 from Tests.build.test_opengl_sprite_stream import definition
-from Tests.support.cpp import msvc_2022_toolsets
+from Tests.support.cpp import msvc_2022_toolsets, windows_sdk_includes
 
 ROOT = Path(__file__).resolve().parents[2]
 # Real full-coverage pixel hashes captured before the coverage API change.
@@ -229,7 +229,7 @@ int main(int argc,char**argv){
         cpp.write_text(code, encoding="utf-8")
         tool = msvc_2022_toolsets()[-1]
         sdk = Path("C:/Program Files (x86)/Windows Kits/10")
-        kit = sorted((sdk / "Include").glob("*"))[-1]
+        kit = windows_sdk_includes(sdk)[-1]
         binary = report / "capacity.exe"
         command = [str(tool / "bin/Hostx64/x64/cl.exe"), "/nologo", "/std:c++latest", "/O2", "/MD", "/EHsc", "/utf-8",
                    "/I" + str(tool / "include"), "/I" + str(kit / "ucrt"), "/Fo" + str(report / "capacity.obj"),

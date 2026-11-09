@@ -5,7 +5,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
-from Tests.support.cpp import msvc_2022_toolsets
+from Tests.support.cpp import msvc_2022_toolsets, windows_sdk_includes
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -36,7 +36,7 @@ class SignedDiscovery(unittest.TestCase):
         code += '\n#undef EPOCH_WINDOWS_PACKAGED_VERSION_REVISION_VALUE\n#undef EPOCH_LINUX_PACKAGED_VERSION_REVISION_VALUE\n#define EPOCH_OVERRIDE_WINDOWS_PACKAGED_VERSION_REVISION 191\n#define EPOCH_OVERRIDE_LINUX_PACKAGED_VERSION_REVISION 192\n' + version + '\nstatic_assert(EPOCH_WINDOWS_PACKAGED_VERSION_REVISION_VALUE == 191);\nstatic_assert(EPOCH_LINUX_PACKAGED_VERSION_REVISION_VALUE == 192);\n'
         if os.name != 'nt': self.skipTest('Installed Windows MSVC CPU lane')
         toolsets=msvc_2022_toolsets()
-        kitroot=Path('C:/Program Files (x86)/Windows Kits/10');kits=sorted((kitroot/'Include').glob('*'))
+        kitroot=Path('C:/Program Files (x86)/Windows Kits/10');kits=windows_sdk_includes(kitroot)
         if not toolsets or not kits:self.skipTest('MSVC/SDK required')
         parent=(ROOT/'build/contract-tests').resolve();parent.mkdir(parents=True,exist_ok=True)
         scratch=Path(tempfile.mkdtemp(prefix='updater-integrity-',dir=parent))

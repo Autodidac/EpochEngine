@@ -5,7 +5,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
-from Tests.support.cpp import msvc_2022_toolsets
+from Tests.support.cpp import msvc_2022_toolsets, windows_sdk_includes
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -26,7 +26,7 @@ class ChildCloseRouter(unittest.TestCase):
             self.skipTest('Installed MSVC CPU lane')
         tools = msvc_2022_toolsets()
         sdk = Path('C:/Program Files (x86)/Windows Kits/10')
-        kits = sorted((sdk / 'Include').glob('*'))
+        kits = windows_sdk_includes(sdk)
         if not tools or not kits:
             self.skipTest('MSVC/SDK unavailable')
         api = (ROOT / 'Engine/dep/EpochPlatformEngine/modules/platform.window.ixx').read_text(encoding='utf-8')

@@ -2,7 +2,7 @@
 from pathlib import Path
 import os,shutil,subprocess,tempfile,unittest
 from Tests.build.test_opengl_sprite_stream import definition
-from Tests.support.cpp import msvc_2022_toolsets
+from Tests.support.cpp import msvc_2022_toolsets, windows_sdk_includes
 ROOT=Path(__file__).resolve().parents[2]
 class ManagerReadability(unittest.TestCase):
  def test_wrapped_information_measured_rows_and_truthful_availability(self):
@@ -99,7 +99,7 @@ int main(){
   try:
    cpp=scratch/'contract.cpp';binary=scratch/'contract';cpp.write_text(code,encoding='utf-8')
    if os.name=='nt':
-    tools=msvc_2022_toolsets();sdk=Path('C:/Program Files (x86)/Windows Kits/10');kits=sorted((sdk/'Include').glob('*'))
+    tools=msvc_2022_toolsets();sdk=Path('C:/Program Files (x86)/Windows Kits/10');kits=windows_sdk_includes(sdk)
     if not tools or not kits:self.skipTest('MSVC/SDK required')
     tool,kit=tools[-1],kits[-1];binary=scratch/'contract.exe'
     args=[str(tool/'bin/Hostx64/x64/cl.exe'),'/nologo','/utf-8','/std:c++latest','/EHsc','/W4','/WX','/I'+str(tool/'include'),'/I'+str(kit/'ucrt'),'/Fo'+str(scratch/'contract.obj'),'/Fe'+str(binary),str(cpp),'/link','/LIBPATH:'+str(tool/'lib/x64'),'/LIBPATH:'+str(sdk/'Lib'/kit.name/'um/x64'),'/LIBPATH:'+str(sdk/'Lib'/kit.name/'ucrt/x64')]

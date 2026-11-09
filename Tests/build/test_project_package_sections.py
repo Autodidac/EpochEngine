@@ -13,6 +13,8 @@ import subprocess
 import tempfile
 import unittest
 
+from Tests.support.cpp import msvc_2022_toolsets, windows_sdk_includes
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -166,10 +168,9 @@ int main() {
                     'static_assert(epochengine::forest::kForestFactoryReferenceRepo == '
                     'epochengine::package_registry::kForestFactoryReferenceRepo);\n', encoding='utf-8')
                 if os.name == 'nt':
-                    program = Path(os.environ.get('ProgramFiles', 'C:/Program Files'))
-                    toolsets = sorted((program / 'Microsoft Visual Studio/2022/Community/VC/Tools/MSVC').glob('*'))
-                    kits = sorted(Path(os.environ.get('ProgramFiles(x86)', 'C:/Program Files (x86)')).glob(
-                        'Windows Kits/10/Include/*'))
+                    toolsets = msvc_2022_toolsets()
+                    kitroot = Path(os.environ.get('ProgramFiles(x86)', 'C:/Program Files (x86)')) / 'Windows Kits/10'
+                    kits = windows_sdk_includes(kitroot)
                     if not toolsets or not kits:
                         self.skipTest('MSVC headers not installed')
                     toolset, kit = toolsets[-1], kits[-1]

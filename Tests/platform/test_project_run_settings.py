@@ -7,7 +7,7 @@ import time
 import unittest
 
 from Tests.build.test_opengl_sprite_stream import definition
-from Tests.support.cpp import compile_and_run, dependency_include
+from Tests.support.cpp import compile_and_run, dependency_include, windows_sdk_includes
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -276,8 +276,8 @@ int main(int argc,char**argv) try {
         source.write_text(body, encoding="utf-8")
         includes = [dependency_include(ROOT)]
         if os.name == "nt":
-            sdk = Path("C:/Program Files (x86)/Windows Kits/10/Include")
-            kit = sorted(sdk.glob("*"))[-1]
+            sdk = Path("C:/Program Files (x86)/Windows Kits/10")
+            kit = windows_sdk_includes(sdk)[-1]
             includes += [kit / "um", kit / "shared"]
         compile_and_run(self, source, report, args=lambda mode: [report / "data" / mode], includes=includes)
 

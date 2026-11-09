@@ -11,7 +11,7 @@ import subprocess
 import tempfile
 import unittest
 import hashlib,json,time
-from Tests.support.cpp import compile_and_run, msvc_2022_toolsets
+from Tests.support.cpp import compile_and_run, msvc_2022_toolsets, windows_sdk_includes
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -328,7 +328,7 @@ int main() {
             self.skipTest('Installed MSVC CPU lane')
         toolsets = msvc_2022_toolsets()
         kitroot = Path('C:/Program Files (x86)/Windows Kits/10')
-        kits = sorted((kitroot / 'Include').glob('*'))
+        kits = windows_sdk_includes(kitroot)
         if not toolsets or not kits:
             self.skipTest('MSVC/SDK unavailable')
         parent = (ROOT / 'Artifacts/Intermediate/tests/frame-submission').resolve()

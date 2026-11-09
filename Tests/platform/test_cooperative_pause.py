@@ -5,7 +5,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
-from Tests.support.cpp import msvc_2022_toolsets
+from Tests.support.cpp import msvc_2022_toolsets, windows_sdk_includes
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -27,7 +27,7 @@ class CooperativePause(unittest.TestCase):
             self.skipTest('Installed MSVC CPU lane')
         toolsets = msvc_2022_toolsets()
         kitroot = Path('C:/Program Files (x86)/Windows Kits/10')
-        kits = sorted((kitroot / 'Include').glob('*'))
+        kits = windows_sdk_includes(kitroot)
         if not toolsets or not kits:
             self.skipTest('MSVC/SDK unavailable')
         production = (ROOT / 'Engine/dep/EpochPlatformEngine/src/platform/platform.window.cpp').read_text(encoding='utf-8')

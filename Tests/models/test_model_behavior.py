@@ -4,7 +4,7 @@ import json
 import os
 import unittest
 
-from Tests.support.cpp import compile_and_run, dependency_include
+from Tests.support.cpp import compile_and_run, dependency_include, windows_sdk_includes
 from Tests.platform.test_child_close_router import definition
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -437,7 +437,7 @@ int main(){try{
         source=report/'no_replace.cpp';source.write_text(code)
         includes=[dependency_include(ROOT)]
         if os.name == 'nt':
-            kits=sorted(Path('C:/Program Files (x86)/Windows Kits/10/Include').glob('*'))
+            kits=windows_sdk_includes(Path('C:/Program Files (x86)/Windows Kits/10'))
             if not kits:
                 self.skipTest('Installed Windows SDK required for actual file publication owner')
             includes += [kits[-1]/'um', kits[-1]/'shared']

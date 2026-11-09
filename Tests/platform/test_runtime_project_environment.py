@@ -5,7 +5,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
-from Tests.support.cpp import msvc_2022_toolsets
+from Tests.support.cpp import msvc_2022_toolsets, windows_sdk_includes
 
 from Tests.platform.test_child_close_router import definition
 
@@ -18,7 +18,7 @@ class RuntimeProjectEnvironment(unittest.TestCase):
             self.skipTest("Installed MSVC/Windows native environment consumer")
         tools = msvc_2022_toolsets()
         sdk = Path("C:/Program Files (x86)/Windows Kits/10")
-        kits = sorted((sdk / "Include").glob("*"))
+        kits = windows_sdk_includes(sdk)
         if not tools or not kits:
             self.skipTest("MSVC/SDK unavailable")
         tool, kit = tools[-1], kits[-1]

@@ -7,7 +7,7 @@ import tempfile
 import unittest
 
 from Tests.build.test_opengl_sprite_stream import definition
-from Tests.support.cpp import compile_and_run, msvc_2022_toolsets
+from Tests.support.cpp import compile_and_run, msvc_2022_toolsets, windows_sdk_includes
 import json, time
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -211,7 +211,7 @@ ROW_RECORD
             cpp=scratch/'contract.cpp';cpp.write_text(fixture(),encoding='utf-8')
             if os.name=='nt':
                 tools=msvc_2022_toolsets()
-                sdk=Path('C:/Program Files (x86)/Windows Kits/10');kits=sorted((sdk/'Include').glob('*'))
+                sdk=Path('C:/Program Files (x86)/Windows Kits/10');kits=windows_sdk_includes(sdk)
                 if not tools or not kits:self.skipTest('MSVC/SDK required')
                 tool,kit=tools[-1],kits[-1]
                 base=[str(tool/'bin/Hostx64/x64/cl.exe'),'/nologo','/utf-8','/std:c++latest','/EHsc','/W4','/WX','/I'+str(tool/'include'),'/I'+str(kit/'ucrt')]

@@ -9,7 +9,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
-from Tests.support.cpp import msvc_2022_toolsets
+from Tests.support.cpp import msvc_2022_toolsets, windows_sdk_includes
 from Tests.build.test_opengl_sprite_stream import definition
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -220,7 +220,7 @@ int main() {
             if os.name == 'nt':
                 toolsets = msvc_2022_toolsets()
                 kitroot = Path(os.environ.get('ProgramFiles(x86)', 'C:/Program Files (x86)'))/'Windows Kits/10'
-                kits = sorted((kitroot/'Include').glob('*'))
+                kits = windows_sdk_includes(kitroot)
                 if not toolsets or not kits:self.skipTest('Installed MSVC/SDK required')
                 toolset,kit=toolsets[-1],kits[-1];binary=scratch/'contract.exe'
                 args=[str(toolset/'bin/Hostx64/x64/cl.exe'),'/nologo','/std:c++latest','/EHsc',

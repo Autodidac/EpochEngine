@@ -42,6 +42,21 @@ def msvc_2022_toolsets() -> list[Path]:
                   if (tool / "bin/Hostx64/x64/cl.exe").is_file())
 
 
+def windows_sdk_includes(sdk_root: Path) -> list[Path]:
+    """Find complete x64 Windows SDKs, ignoring partial newer installations."""
+    complete = {}
+    for headers in (sdk_root / "Include").glob("*"):
+        version = headers.name.split(".")
+        if len(version) != 4 or not all(part.isdecimal() for part in version):
+            continue
+        libraries = sdk_root / "Lib" / headers.name
+        if all(path.is_file() for path in (headers / "ucrt/assert.h",
+                headers / "shared/sdkddkver.h", headers / "um/Windows.h",
+                libraries / "ucrt/x64/ucrt.lib", libraries / "um/x64/kernel32.lib")):
+            complete[tuple(map(int, version))] = headers
+    return [complete[version] for version in sorted(complete)]
+
+
 def compile_and_run(test, source, report, *, args=(), includes=(), windows_flags=(),
                     linux_flags=(), compile_timeout=60, run_timeout=15):
     source, report = Path(source), Path(report)
@@ -52,7 +67,7 @@ def compile_and_run(test, source, report, *, args=(), includes=(), windows_flags
     if os.name == "nt":
         tools = msvc_2022_toolsets()
         sdk = Path("C:/Program Files (x86)/Windows Kits/10")
-        kits = sorted((sdk / "Include").glob("*"))
+        kits = windows_sdk_includes(sdk)
         if not tools or not kits:
             test.skipTest("Installed MSVC and Windows SDK required on Windows")
         tool, kit = tools[-1], kits[-1]

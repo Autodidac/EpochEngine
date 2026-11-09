@@ -6,7 +6,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
-from Tests.support.cpp import msvc_2022_toolsets
+from Tests.support.cpp import msvc_2022_toolsets, windows_sdk_includes
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -23,7 +23,7 @@ class GuiVersionHeaders(unittest.TestCase):
             f'static_assert(epochengine::gui_lib::version_string == "{version}");\nint main() {{}}\n'
         if os.name != 'nt': self.skipTest('Installed Windows MSVC CPU lane')
         toolsets=msvc_2022_toolsets()
-        kitroot=Path('C:/Program Files (x86)/Windows Kits/10');kits=sorted((kitroot/'Include').glob('*'))
+        kitroot=Path('C:/Program Files (x86)/Windows Kits/10');kits=windows_sdk_includes(kitroot)
         if not toolsets or not kits:self.skipTest('MSVC/SDK required')
         parent=(ROOT/'build/contract-tests').resolve();parent.mkdir(parents=True,exist_ok=True)
         scratch=Path(tempfile.mkdtemp(prefix='gui-version-',dir=parent))

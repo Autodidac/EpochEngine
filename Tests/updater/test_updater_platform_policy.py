@@ -5,7 +5,7 @@ import subprocess
 import tempfile
 import unittest
 
-from Tests.support.cpp import msvc_2022_toolsets
+from Tests.support.cpp import msvc_2022_toolsets, windows_sdk_includes
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -30,7 +30,7 @@ class UpdaterPlatformPolicy(unittest.TestCase):
     @unittest.skipUnless(os.name == 'nt', 'Installed MSVC module-consumer proof')
     def test_actual_native_and_engine_modules_compile_link_and_run(self):
         toolsets = msvc_2022_toolsets()
-        kits = sorted(Path('C:/Program Files (x86)/Windows Kits/10/Include').glob('*'))
+        kits = windows_sdk_includes(Path('C:/Program Files (x86)/Windows Kits/10'))
         self.assertTrue(toolsets and kits, 'MSVC and SDK are required')
         tools, sdk = toolsets[-1], kits[-1]
         compiler = tools/'bin/Hostx64/x64/cl.exe'

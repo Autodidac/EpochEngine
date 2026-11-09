@@ -11,7 +11,7 @@ import tempfile
 import unittest
 
 from Tools.source.owned_source_text import read_owned_source
-from Tests.support.cpp import msvc_2022_toolsets
+from Tests.support.cpp import msvc_2022_toolsets, windows_sdk_includes
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -179,7 +179,7 @@ COMPACT_BOUNDS
             if os.name == 'nt':
                 toolsets = msvc_2022_toolsets()
                 kitroot = Path('C:/Program Files (x86)/Windows Kits/10')
-                kits = sorted((kitroot / 'Include').glob('*'))
+                kits = windows_sdk_includes(kitroot)
                 if not toolsets or not kits:
                     self.skipTest('Installed MSVC/SDK required')
                 toolset, kit = toolsets[-1], kits[-1]

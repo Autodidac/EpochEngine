@@ -2,7 +2,7 @@
 from pathlib import Path
 import hashlib,json,os,subprocess,time,unittest
 from Tests.build.test_opengl_sprite_stream import definition
-from Tests.support.cpp import msvc_2022_toolsets
+from Tests.support.cpp import msvc_2022_toolsets, windows_sdk_includes
 ROOT=Path(__file__).resolve().parents[2]
 
 class ProjectMotionScripts(unittest.TestCase):
@@ -170,7 +170,7 @@ int main(int argc,char**argv){
   (proof/'consumer.cpp').write_text(code,encoding='utf-8')
   (proof/'legacy.cpp').write_text('#include "scripting.epoch_api.h"\nEPOCH_SCRIPT_EXPORT void run_script(EpochScriptHost*h){if(h&&h->log)h->log(h->user_data,"legacy");}\n',encoding='utf-8')
   vc=msvc_2022_toolsets()[-1]
-  sdk=Path('C:/Program Files (x86)/Windows Kits/10');kit=sorted((sdk/'Include').iterdir())[-1];compiler=vc/'bin/Hostx64/x64/cl.exe';records=[]
+  sdk=Path('C:/Program Files (x86)/Windows Kits/10');kit=windows_sdk_includes(sdk)[-1];compiler=vc/'bin/Hostx64/x64/cl.exe';records=[]
   env=dict(os.environ);env['INCLUDE']=';'.join(str(p) for p in [vc/'include',kit/'ucrt',kit/'um',kit/'shared',kit/'winrt'])
   for config,flags in [('Debug',['/Od','/MDd','/D_DEBUG']),('Release',['/O2','/MD'])]:
    out=proof/config;out.mkdir(exist_ok=True);base=[str(compiler),'/nologo','/std:c++latest','/utf-8','/EHsc','/Gy','/Zc:inline',*flags,'/I'+str(ROOT/'Engine/include')]

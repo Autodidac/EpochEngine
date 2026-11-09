@@ -10,7 +10,7 @@ import subprocess
 import unittest
 
 from Tests.build.test_opengl_sprite_stream import definition
-from Tests.support.cpp import msvc_2022_toolsets
+from Tests.support.cpp import msvc_2022_toolsets, windows_sdk_includes
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -26,7 +26,7 @@ class ProjectBuildTranscripts(unittest.TestCase):
         source.write_text(code, encoding="utf-8")
         tool = msvc_2022_toolsets()[-1]
         sdk = Path("C:/Program Files (x86)/Windows Kits/10")
-        kit = sorted((sdk / "Include").glob("*"))[-1]
+        kit = windows_sdk_includes(sdk)[-1]
         references = {}
         for file in (ROOT / "Artifacts/Intermediate/msvc/development/x64/Release").rglob("*.ixx.ifc"):
             module = file.name.removesuffix(".ixx.ifc")

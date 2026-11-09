@@ -7,7 +7,7 @@ import time
 import unittest
 
 from Tests.build.test_opengl_sprite_stream import definition
-from Tests.support.cpp import compile_and_run
+from Tests.support.cpp import compile_and_run, windows_sdk_includes
 
 ROOT = Path(__file__).resolve().parents[2]
 OWNER = ROOT / "Engine/src/platform/platform.work_admission.cpp"
@@ -177,7 +177,7 @@ class ResourceSamplerConcurrency(unittest.TestCase):
             "    ResourceSample sample_host_resources()"))
         code = sampler.split("        void run_gpu_telemetry(", 1)
         sampler = code[0] + state + "        void run_gpu_telemetry(" + code[1]
-        kit = sorted(Path("C:/Program Files (x86)/Windows Kits/10/Include").glob("*"))[-1]
+        kit = windows_sdk_includes(Path("C:/Program Files (x86)/Windows Kits/10"))[-1]
         before = {str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()
                   for path in (OWNER, MODULE, Path(__file__))}
         records = []

@@ -10,7 +10,7 @@ import subprocess
 import tempfile
 import unittest
 
-from Tests.support.cpp import msvc_2022_toolsets
+from Tests.support.cpp import msvc_2022_toolsets, windows_sdk_includes
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -48,6 +48,21 @@ class ProjectSourceEdition(unittest.TestCase):
     def remove_fixture(self):
         self.assertTrue(self.scratch.is_relative_to(self.parent.resolve()))
         shutil.rmtree(self.scratch)
+
+    def test_windows_fixture_sdk_ignores_newer_incomplete_installation(self):
+        sdk = self.scratch / 'sdk'
+        for version in ('10.0.9.0', '10.0.19041.0', '10.0.26100.0'):
+            include = sdk / 'Include' / version
+            lib = sdk / 'Lib' / version
+            files = [include / 'shared/sdkddkver.h', include / 'um/Windows.h',
+                     lib / 'ucrt/x64/ucrt.lib', lib / 'um/x64/kernel32.lib']
+            if version != '10.0.26100.0':
+                files.append(include / 'ucrt/assert.h')
+            for path in files:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.touch()
+        self.assertEqual([path.name for path in windows_sdk_includes(sdk)],
+                         ['10.0.9.0', '10.0.19041.0'])
 
     def fixture(self, public):
         root = self.scratch / ('public' if public else 'development')
@@ -142,7 +157,7 @@ class ProjectSourceEdition(unittest.TestCase):
             self.skipTest('Installed MSVC CPU lane')
         tools = msvc_2022_toolsets()
         sdk = Path('C:/Program Files (x86)/Windows Kits/10')
-        kits = sorted((sdk / 'Include').glob('*'))
+        kits = windows_sdk_includes(sdk)
         if not tools or not kits:
             self.skipTest('MSVC/SDK unavailable')
         source = read_owned_source(ROOT / 'Engine/src/editor/editor.scene.cpp', encoding='utf-8')

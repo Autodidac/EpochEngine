@@ -10,7 +10,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
-from Tests.support.cpp import msvc_2022_root, msvc_2022_toolsets
+from Tests.support.cpp import msvc_2022_root, msvc_2022_toolsets, windows_sdk_includes
 from Tools.source.owned_source_text import read_owned_source
 
 from Tests.platform.test_child_close_router import definition
@@ -25,7 +25,7 @@ class GeneratedProjectBinding(unittest.TestCase):
         installation = msvc_2022_root()
         tools = msvc_2022_toolsets()
         sdk = Path("C:/Program Files (x86)/Windows Kits/10")
-        kits = sorted((sdk / "Include").glob("*"))
+        kits = windows_sdk_includes(sdk)
         if installation is None or not tools or not kits:
             self.skipTest("MSVC/SDK unavailable")
         msbuild = installation / "MSBuild/Current/Bin/amd64/MSBuild.exe"
@@ -81,7 +81,7 @@ class GeneratedProjectBinding(unittest.TestCase):
         installation = msvc_2022_root()
         tools = msvc_2022_toolsets()
         sdk = Path("C:/Program Files (x86)/Windows Kits/10")
-        kits = sorted((sdk / "Include").glob("*"))
+        kits = windows_sdk_includes(sdk)
         if installation is None or not tools or not kits:
             self.skipTest("MSVC/SDK unavailable")
         msbuild = installation / "MSBuild/Current/Bin/amd64/MSBuild.exe"

@@ -5,7 +5,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
-from Tests.support.cpp import msvc_2022_toolsets
+from Tests.support.cpp import msvc_2022_toolsets, windows_sdk_includes
 
 from Tests.build.test_opengl_sprite_stream import definition
 
@@ -176,7 +176,7 @@ int main(){
             if os.name == 'nt':
                 versions = msvc_2022_toolsets()
                 sdk = Path('C:/Program Files (x86)/Windows Kits/10')
-                kits = sorted((sdk/'Include').glob('*'))
+                kits = windows_sdk_includes(sdk)
                 if not versions or not kits:
                     self.skipTest('MSVC/SDK required')
                 tool, kit = versions[-1], kits[-1]

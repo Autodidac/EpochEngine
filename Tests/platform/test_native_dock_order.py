@@ -5,7 +5,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
-from Tests.support.cpp import msvc_2022_toolsets
+from Tests.support.cpp import msvc_2022_toolsets, windows_sdk_includes
 ROOT = Path(__file__).resolve().parents[2]
 
 class NativeDockOrder(unittest.TestCase):
@@ -25,7 +25,7 @@ class NativeDockOrder(unittest.TestCase):
         code=(ROOT/'Tests/platform/host.dock_order_contract.cpp').read_text().replace('ORDER_FUNCTION',order).replace('MOVE_FUNCTION',move).replace('CANCEL_FUNCTION',cancel).replace('DOCK_ARM',arm).replace('CAPTION_ARM',caption).replace('RELEASE_POLICY',release).replace('OWNS_FUNCTION',owns)
         if os.name != 'nt': self.skipTest('Installed Windows MSVC CPU lane')
         toolsets=msvc_2022_toolsets()
-        kitroot=Path('C:/Program Files (x86)/Windows Kits/10');kits=sorted((kitroot/'Include').glob('*'))
+        kitroot=Path('C:/Program Files (x86)/Windows Kits/10');kits=windows_sdk_includes(kitroot)
         if not toolsets or not kits:self.skipTest('MSVC/SDK required')
         parent=(ROOT/'build/contract-tests').resolve();parent.mkdir(parents=True,exist_ok=True)
         scratch=Path(tempfile.mkdtemp(prefix='native-docking-',dir=parent))

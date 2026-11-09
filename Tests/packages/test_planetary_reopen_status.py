@@ -9,7 +9,7 @@ import time
 import unittest
 
 from Tests.build.test_opengl_sprite_stream import definition
-from Tests.support.cpp import msvc_2022_toolsets
+from Tests.support.cpp import msvc_2022_toolsets, windows_sdk_includes
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -98,7 +98,7 @@ int main(){
             if os.name == "nt":
                 kits = Path("C:/Program Files (x86)/Windows Kits/10")
                 tool = msvc_2022_toolsets()[-1]
-                kit = sorted((kits / "Include").glob("*"))[-1]
+                kit = windows_sdk_includes(kits)[-1]
                 binary = binary.with_suffix(".exe")
                 command = [str(tool / "bin/Hostx64/x64/cl.exe"), "/nologo", "/std:c++latest", "/utf-8", "/EHsc", "/W4", "/WX", "/Od" if config == "Debug" else "/O2", "/I" + str(tool / "include"), "/I" + str(kit / "ucrt"), "/Fo" + str(proof / (config + ".obj")), "/Fe" + str(binary), str(cpp), "/link", "/LIBPATH:" + str(tool / "lib/x64"), "/LIBPATH:" + str(kits / "Lib" / kit.name / "ucrt/x64"), "/LIBPATH:" + str(kits / "Lib" / kit.name / "um/x64")]
             else:
