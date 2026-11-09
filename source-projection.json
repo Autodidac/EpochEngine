@@ -6,7 +6,7 @@
   "file_hash_normalization": "Text extensions/basenames listed in Tools/build/verify_public_source.py: replace CRLF with LF only; preserve BOMs, lone CR and all other bytes. Other files are hashed raw. Archive bytes and digests remain raw.",
   "files": {
     ".gitattributes": "5deea4a47402979499a349cefbb91e02007e17174fb80eac6a2e6775c8d73636",
-    ".github/workflows/epoch-public.yml": "facf6e619d1f5ff3ebe40fd4ffd7acca38dda2a1c0ea68c0b008f319aa398205",
+    ".github/workflows/epoch-public.yml": "4d28e71d02c951620c9c4835ff0b3ba8daa785bed560a1d1982aea971b149048",
     ".gitignore": "18a94d3a574462a69162b2c6d028882c11332283f6c88254765eb9e967da1a9d",
     "AGENTS.md": "a9e6a23513ee770be38d12db2baf2faf7fd28bf483bae4e80e6ba04093f16924",
     "CMakeLists.txt": "e8f2e62452828a806da966296b00a0861135ffbbacdb1db5b69dbe1501787f96",
@@ -1598,7 +1598,7 @@
     "Tools/build/stage_epoch_linux_release.ps1": "a6bc54d60702ef223aafbd7580db9eded1de317282f573f520aa5731e20d9a67",
     "Tools/build/stage_epoch_windows_release.ps1": "22bb965bf48c9426fbe57a764026df58a66448918ee3263ee29cd77900d8c7e3",
     "Tools/build/verify_epoch_project_source.py": "ff7f785b277c860a794ee7df7bb217e75f28f0a8adfa8a0b5d6fde895be3ec4c",
-    "Tools/build/verify_public_source.py": "b9b939531825eb1a1d54a637ee4bbe563e3fc454263dbc1dc1ddc2b2afb5134b",
+    "Tools/build/verify_public_source.py": "805eaea0cabe896d19a4b4357dba14044c9dd0dee69c5f799f1821cebe80eaf6",
     "Tools/build/write_epoch_build_validation_receipt.ps1": "f5ac4c57780bb3d297699299d80954ba117441d648e87ebd85f598c53bf92843",
     "Tools/build_release_verified.ps1": "da58dbdc7102dbd27d23ecd119537882e69b0e36f442d021832062100756ee09",
     "Tools/epoch_install_build_tools.ps1": "1ba7878de22d35913e81a4780a813b5c3fb6f91f422165da3ecf2e69a55296ab",

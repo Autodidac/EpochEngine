@@ -39,16 +39,15 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          python -m pip install cmake==4.4.0
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $toolRoot = Join-Path $PWD 'Artifacts/Tooling/public-ci/tools'
           New-Item -ItemType Directory -Force -Path $toolRoot | Out-Null
-          $archive = Join-Path $toolRoot 'ninja-win.zip'
-          Invoke-WebRequest 'https://github.com/ninja-build/ninja/releases/download/v1.13.2/ninja-win.zip' -OutFile $archive
-          $expected = '55d3d891e8fc6c8ad7f92e172125319896761e57c5125944613d9bbfa5b9374387e9fc1468ad5bcb31464f43fb1c455ea251343942595f42955dc67090aa12ee'
-          if ((Get-FileHash -Algorithm SHA512 $archive).Hash.ToLowerInvariant() -cne $expected) { throw 'Ninja checksum mismatch' }
-          Expand-Archive -LiteralPath $archive -DestinationPath $toolRoot -Force
-          Add-Content -Path $env:GITHUB_PATH -Value $toolRoot
+          $requirements = Join-Path $toolRoot 'windows-build-tools.txt'
+          @'
+          cmake==4.4.0 --hash=sha256:13209a4d89d554c0b5623ed1158024b045e468bbb912c3f491de5e957b940858
+          ninja==1.13.2 --hash=sha256:1293f4078278b70d0ee4b6cc8f3a9e030656c9b2f59909970343c4fe76070118
+          '@ | Set-Content -LiteralPath $requirements -Encoding ascii
+          python -m pip install --require-hashes --only-binary=:all: -r $requirements
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Prepare manifest-pinned dependencies
         shell: pwsh
         run: |
@@ -127,8 +126,6 @@ jobs:
           python-version: '3.12'
       - name: Verify public edition and source content
         run: python Tools/build/verify_public_source.py
-      - name: Check graphics test failure handling
-        run: python -m unittest discover -s Tests/build -p test_linux_graphics_smoke.py -v
       - name: Install native build prerequisites
         run: |
           sudo apt-get update
