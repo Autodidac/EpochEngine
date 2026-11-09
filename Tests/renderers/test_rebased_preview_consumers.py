@@ -13,6 +13,8 @@ import unittest
 from Tests.build.test_opengl_sprite_stream import definition
 from Tests.support.cpp import compile_and_run
 
+from Tests.support.cpp import msvc_2022_toolsets
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -293,7 +295,7 @@ namespace native_path {sf::RenderWindow*s_window;int s_width,s_height;
         proof = ROOT/'Artifacts/Reports/planetary-frame-precision-oct31/backend-consumers/sfml-scope-repair'/hashlib.sha256(cpp.encode()).hexdigest()[:12]
         proof.mkdir(parents=True,exist_ok=True)
         source = proof/'render.sfml_scope_contract.cpp';source.write_text(cpp,encoding='utf-8')
-        tool = sorted(Path('C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC').glob('*'))[-1]
+        tool = msvc_2022_toolsets()[-1]
         sdk = Path('C:/Program Files (x86)/Windows Kits/10');kit = sorted((sdk/'Include').glob('*'))[-1]
         temp = proof/'tmp';temp.mkdir(exist_ok=True)
         records=[]

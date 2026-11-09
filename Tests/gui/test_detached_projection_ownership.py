@@ -9,6 +9,7 @@ import unittest
 
 from Tests.build.test_opengl_sprite_stream import definition
 from Tools.source.owned_source_text import read_owned_source
+from Tests.support.cpp import msvc_2022_toolsets
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -305,7 +306,7 @@ int main(){
         proof.mkdir(parents=True,exist_ok=True)
         path = proof/'contract.cpp';path.write_text(cpp,encoding='utf-8')
         if os.name=='nt':
-            tool=sorted(Path('C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC').glob('*'))[-1]
+            tool=msvc_2022_toolsets()[-1]
             sdk=Path('C:/Program Files (x86)/Windows Kits/10');kit=sorted((sdk/'Include').glob('*'))[-1]
             binary=proof/'contract.exe'
             command=[str(tool/'bin/Hostx64/x64/cl.exe'),'/nologo','/utf-8','/std:c++latest','/EHsc','/W4','/WX',

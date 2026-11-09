@@ -10,6 +10,7 @@ import time
 import unittest
 
 from Tests.build.test_opengl_sprite_stream import definition
+from Tests.support.cpp import dependency_include
 
 ROOT = Path(__file__).resolve().parents[2]
 REGISTRY = ROOT / "Engine/src/editor/implementation/editor.project_registry.inl"
@@ -138,7 +139,7 @@ project(EngineArcadeProject LANGUAGES CXX)
 add_executable(arcade_project arcade.project_contract.cpp)
 target_compile_features(arcade_project PRIVATE cxx_std_23)
 target_compile_options(arcade_project PRIVATE /W3 /WX /utf-8)
-target_include_directories(arcade_project PRIVATE "{(ROOT/'Engine/include').as_posix()}" "{(ROOT/'Artifacts/Dependencies/vcpkg_installed/x64-windows/include').as_posix()}")
+target_include_directories(arcade_project PRIVATE "{(ROOT/'Engine/include').as_posix()}" "{dependency_include(ROOT).as_posix()}")
 target_sources(arcade_project PRIVATE FILE_SET CXX_MODULES BASE_DIRS "{(ROOT/'Engine/modules').as_posix()}" FILES {" ".join('"'+p.as_posix()+'"' for p in modules)})
 enable_testing()
 add_test(NAME actual_arcade_project COMMAND arcade_project "{fixture_root.as_posix()}/$<CONFIG>")

@@ -50,6 +50,7 @@ void* operator new(std::size_t bytes){if(deny_solar_allocations)throw std::bad_a
 void operator delete(void* value)noexcept{std::free(value);}
 void operator delete(void* value,std::size_t)noexcept{std::free(value);}
 import asset.mesh_artifact;
+import asset.cloud_volume;
 import project.planetary;
 import project.planetary_runtime;
 import scene.snapshot;
@@ -81,6 +82,10 @@ double vector_length(previewgrid::Vec3 value){return std::hypot(double(value.x),
 // The real Windows translation unit retains Win32's legacy near macro.
 // Exercise the owning helpers under that context rather than a clean fixture.
 #define near
+constexpr int m_runtimeViewportWidth=1280,m_runtimeViewportHeight=720;
+// These cases publish without a runtime camera packet. Camera and geometry
+// math below stay real while the asynchronous scheduler remains separate.
+bool pump_runtime_planetary_frame(const void*,previewgrid::SceneFrameRequest,bool){std::abort();}
 RUNTIME_PUBLICATION
 #undef near
 class RuntimeProbe {
@@ -101,7 +106,7 @@ public:
  std::optional<project_planetary::Settings> m_planetarySettings{project_planetary::Settings{}};
  std::shared_ptr<const epochengine::project_planetary_snapshot::Snapshot> m_planetaryWaterSource;
  struct RuntimeClock{double playhead_seconds{};};std::optional<RuntimeClock>m_runtimePresentation;
- bool m_runtimeCloudsVisible{true};
+ bool m_runtimeCloudsVisible{true},m_runtimeCloudBackendUnavailable{};
  std::unordered_map<std::uint64_t,std::shared_ptr<const asset::mesh::Artifact>> m_meshes;
  static std::uint64_t suppressed_planet(bool rebased,const std::vector<previewgrid::ObjectMarker>& planetaryMarkers,
   std::uint64_t m_planetaryEntity){return RUNTIME_SUPPRESSION;}
@@ -144,6 +149,7 @@ float marker_radius_for_entity(const EditorEntity&){return .34f;}
 bool marker_selected_for_entity(const EditorEntity&,bool selected){return selected;}
 bool is_plant_lab_preview_entity(const EditorEntity&){return false;}
 previewgrid::ObjectPreviewPrimitive preview_primitive_for_entity(const EditorEntity&){return previewgrid::ObjectPreviewPrimitive::Cube;}
+EDITOR_FOCUS_TARGET
 void editor_marker(EditorState& state,const EditorEntity& entity,std::vector<previewgrid::ObjectMarker>& markers){
  bool forestPreview{},forestPainting{},meshWireframe{};const auto previewPosition=entity.position;
  EDITOR_MARKER
@@ -272,14 +278,16 @@ int main(int argc,char**argv){
  const auto firstBodyMarkers=probe.planetary_exploration_markers();CHECK(firstBodyMarkers.size()==2&&firstBodyMarkers[0].scale.x==2500&&firstBodyMarkers[1].scale.x==100);
  frame.bodies[0].cloud_mesh=artifact.artifact;frame.bodies[0].cloud_wind_degrees=90.0;
  probe.m_explorationPreview=project_planetary_runtime::preview_frame(frame);
- auto cloudMarkers=probe.planetary_exploration_markers();CHECK(probe.append_planetary_cloud_markers(cloudMarkers));
+ std::vector<previewgrid::CloudVolume> cloudVolumes;
+ auto cloudMarkers=probe.planetary_exploration_markers();CHECK(probe.append_planetary_cloud_markers(cloudMarkers,cloudVolumes,true));
+ CHECK(cloudVolumes.empty()&&!probe.m_runtimeCloudBackendUnavailable);
  CHECK(cloudMarkers.size()==3&&cloudMarkers.back().mesh==artifact.artifact&&cloudMarkers.back().preciseTransform);
  const auto cloudPoint=cloudMarkers.back().preciseTransform->apply({10,0,0});
  CHECK(near(cloudPoint[0],100,1e-8)&&near(cloudPoint[1],200,1e-8)&&near(cloudPoint[2],-24700,1e-8));
  probe.m_explorationRenderOrigin={500,600,700};
- std::vector<previewgrid::ObjectMarker> movedClouds;CHECK(probe.append_planetary_cloud_markers(movedClouds)&&movedClouds.size()==1);
+ std::vector<previewgrid::ObjectMarker> movedClouds;CHECK(probe.append_planetary_cloud_markers(movedClouds,cloudVolumes,true)&&movedClouds.size()==1);
  probe.m_runtimeCloudsVisible=false;std::vector<previewgrid::ObjectMarker> hiddenClouds;
- CHECK(probe.append_planetary_cloud_markers(hiddenClouds)&&hiddenClouds.empty());
+ CHECK(probe.append_planetary_cloud_markers(hiddenClouds,cloudVolumes,true)&&hiddenClouds.empty());
  probe.m_runtimeCloudsVisible=true;
  auto genericCloudProbe=probe;genericCloudProbe.m_explorationPreview.reset();genericCloudProbe.m_explorationController=false;
  auto cloudSnapshot=std::make_shared<epochengine::project_planetary_snapshot::Snapshot>();
@@ -287,7 +295,7 @@ int main(int argc,char**argv){
   .body=0,.center_meters={10,20,30},.radius_meters=25000,.artifact=artifact.artifact};
  genericCloudProbe.m_planetaryWaterSource=cloudSnapshot;
  std::vector<previewgrid::ObjectMarker> genericClouds;
- CHECK(genericCloudProbe.append_planetary_cloud_markers(genericClouds,302400)&&genericClouds.size()==1);
+ CHECK(genericCloudProbe.append_planetary_cloud_markers(genericClouds,cloudVolumes,true,302400)&&genericClouds.size()==1);
  CHECK(genericClouds[0].mesh==artifact.artifact&&genericClouds[0].preciseTransform);
  CHECK(publish_project_play_markers(context,probe.m_entities,&meshes,{},genericClouds,
   RuntimeProbe::suppressed_planet(false,genericClouds,3)));
@@ -295,7 +303,7 @@ int main(int argc,char**argv){
  CHECK(previewgrid::detail::g_objectMarkers.at(context).markers[0].mesh==artifact.artifact);
  CHECK(RuntimeProbe::suppressed_planet(true,cloudMarkers,3)==3);
  genericCloudProbe.m_runtimeCloudsVisible=false;genericClouds.clear();
- CHECK(genericCloudProbe.append_planetary_cloud_markers(genericClouds)&&genericClouds.empty());
+ CHECK(genericCloudProbe.append_planetary_cloud_markers(genericClouds,cloudVolumes,true)&&genericClouds.empty());
  const auto movedCloudPoint=movedClouds.back().preciseTransform->apply({10,0,0});
  CHECK(near(movedCloudPoint[0],cloudPoint[0]-500,1e-8)&&near(movedCloudPoint[1],cloudPoint[1]-600,1e-8)
     &&near(movedCloudPoint[2],cloudPoint[2]-700,1e-8));
@@ -494,8 +502,8 @@ class PlanetarySceneUnits(unittest.TestCase):
             "        [[nodiscard]] bool project_play_entity_has_geometry(",
             "        [[nodiscard]] std::optional<epochengine::previewgrid::ObjectMarker> project_play_marker_for_entity(",
             "        [[nodiscard]] std::optional<std::array<double,2>> project_play_marker_depth_bounds(",
-            "        [[nodiscard]] float project_play_adaptive_near_plane(",
-            "        bool publish_project_play_markers("))
+            "        [[nodiscard]] float project_play_adaptive_near_plane("))
+        publication += "\n" + owner(source["play"], "            bool publish_project_play_markers(")
         publication += "\n" + owner(source["play"],
             "            [[nodiscard]] static std::optional<epochengine::lighting::LightingFrame> project_play_lighting_for_origin(").replace("static std::optional", "std::optional", 1)
         publication += "\n" + source["legacy"][source["legacy"].index("        enum class ProjectSunlightUpdate"):].splitlines()[0] + "\n"
@@ -518,6 +526,7 @@ class PlanetarySceneUnits(unittest.TestCase):
         start = source["editor"].index("                const auto planetScale = scene::mesh_render_scale(")
         end = source["editor"].index("\n            }", start)
         focus = source["editor"][start:end]
+        focus_target = owner(source["editor"], "        [[nodiscard]] bool frame_editor_scene_target(")
         start = source["package"].index("                const auto eye=previewgrid::camera_world_eye(camera);")
         end = source["package"].index("                view.viewport_height", start)
         inverse = source["package"][start:end]
@@ -531,12 +540,12 @@ class PlanetarySceneUnits(unittest.TestCase):
         camera_policy = source["play"][camera_start:camera_end].replace("return;", "return {};")
         code = code.replace("CAMERA_POLICY", camera_policy)
         code = code.replace("SCALE_GUARD", scale_guard).replace("EDITOR_MARKER", marker)
-        code = code.replace("EDITOR_FOCUS", focus)
+        code = code.replace("EDITOR_FOCUS_TARGET", focus_target).replace("EDITOR_FOCUS", focus)
         code = code.replace("EDITOR_INVERSE", inverse).replace("RUNTIME_INVERSE", runtime_inverse)
         code = code.replace("IMPORT_COORDINATES", imported)
         extracted_hashes = {name: hashlib.sha256(value.encode()).hexdigest() for name, value in {
             "runtime_publication": publication, "runtime_methods": methods, "scale_guard": scale_guard,
-            "editor_marker": marker, "editor_focus": focus, "editor_inverse": inverse,
+            "editor_marker": marker, "editor_focus": focus, "editor_focus_target": focus_target, "editor_inverse": inverse,
             "runtime_inverse": runtime_inverse, "import_coordinates": imported,"camera_policy":camera_policy}.items()}
         self.assertIn("binding->size_reference_body!=settings.size_reference_body", source["play"])
         self.assertIn("binding->reference_radius_meters!=settings.reference_radius_meters", source["play"])
@@ -571,7 +580,7 @@ class PlanetarySceneUnits(unittest.TestCase):
             selected[name] = module_map[name]
             pending += re.findall(r"^(?:export )?import\s+([\w.]+);", selected[name].read_text(encoding="utf-8-sig"), re.M)
         modules = "\n".join('"' + path.as_posix() + '"' for path in selected.values())
-        fixture = report / "data" / str(time.time_ns())
+        fixture = ROOT / "Artifacts/Tests" / f"psu{time.time_ns():x}"
         (report / "CMakeLists.txt").write_text(f'''cmake_minimum_required(VERSION 3.30)
 set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT Embedded)
 project(PlanetSceneUnits LANGUAGES CXX)
@@ -581,10 +590,10 @@ target_compile_options(scene_units PRIVATE /W3 /WX /utf-8 /EHsc)
 target_include_directories(scene_units PRIVATE "{(ROOT/'Engine/include').as_posix()}")
 target_sources(scene_units PRIVATE FILE_SET CXX_MODULES BASE_DIRS {" ".join('"'+path.as_posix()+'"' for path in module_roots)} FILES {modules})
 enable_testing()
-add_test(NAME actual_planet_scene_units COMMAND scene_units "{fixture.as_posix()}/$<CONFIG>")
+add_test(NAME actual_planet_scene_units COMMAND scene_units "{fixture.as_posix()}/data/$<CONFIG>")
 set_tests_properties(actual_planet_scene_units PROPERTIES TIMEOUT 20)
 ''', encoding="utf-8")
-        build = ROOT / "Artifacts/Intermediate/cmake/planet-scene-units" / identity
+        build = fixture / "build"
         commands = [["cmake", "-S", str(report), "-B", str(build), "-G", "Visual Studio 17 2022", "-A", "x64"]]
         for config in ("Debug", "Release"):
             commands += [["cmake", "--build", str(build), "--config", config, "--parallel", "1", "--", "/nr:false", "/p:UseMultiToolTask=false", "/p:CL_MPCount=1"],

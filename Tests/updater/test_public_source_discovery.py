@@ -10,6 +10,8 @@ import unittest
 
 from Tools.source.owned_source_text import definition
 
+from Tests.support.cpp import msvc_2022_toolsets
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -17,7 +19,7 @@ class PublicSourceDiscovery(unittest.TestCase):
     def test_actual_signed_source_and_windows_admission(self):
         if os.name != 'nt':
             self.skipTest('Installed Windows MSVC CPU lane')
-        toolset = sorted(Path('C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC').glob('*'))[-1]
+        toolset = msvc_2022_toolsets()[-1]
         kits = Path('C:/Program Files (x86)/Windows Kits/10')
         kit = sorted((kits / 'Include').glob('*'))[-1]
         report = ROOT / 'Artifacts/Reports/public-source-contract-oct29' / str(time.time_ns())

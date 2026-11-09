@@ -11,6 +11,7 @@ import unittest
 
 from Tests.platform.test_child_close_router import definition
 from Tests.gui import test_forest_preview_actions as forest_fixture
+from Tests.support.cpp import msvc_2022_toolsets
 
 ROOT = Path(__file__).resolve().parents[2]
 GUI = ROOT / "Engine/dep/EpochGui"
@@ -86,7 +87,7 @@ int main(){
     def test_actual_asset_descriptors_drive_portable_menu_and_dispatch(self):
         if os.name != "nt":
             self.skipTest("Installed MSVC CPU consumer")
-        tools = sorted(Path("C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC").glob("*"))
+        tools = msvc_2022_toolsets()
         sdk = Path("C:/Program Files (x86)/Windows Kits/10")
         kits = sorted((sdk / "Include").glob("*"))
         if not tools or not kits:

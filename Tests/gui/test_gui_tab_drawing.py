@@ -26,8 +26,9 @@ import epoch.gui;
 namespace gui_lib=epochengine::gui_lib;
 struct Vec2{float x{},y{};};
 struct Sprite{unsigned id{};bool is_valid()const{return id!=0;}};
-namespace font{struct Glyph{Vec2 size_px{7,12},offset_px{};Sprite handle;float advance=7;};}
-struct FontAsset{std::map<char32_t,font::Glyph>glyphs;float get_kerning(char32_t,char32_t)const{return 0;}};
+namespace font{enum class GlyphCoverage{full,basic_latin};struct Glyph{Vec2 size_px{7,12},offset_px{};Sprite handle;float advance=7;};}
+struct FontAsset{std::map<char32_t,font::Glyph>glyphs;float get_kerning(char32_t,char32_t)const{return 0;}
+ font::GlyphCoverage coverage{font::GlyphCoverage::full};};
 struct GuiFontCache{FontAsset* asset{};struct{float ascent=10,descent=2,lineHeight=14,lineGap{},spaceAdvance=6,averageAdvance=7;}metrics;
  std::array<const font::Glyph*,256>glyphLookup{};const font::Glyph* fallbackGlyph{};};
 GuiFontCache cache;FontAsset asset;
@@ -35,6 +36,8 @@ struct{void*ctx=reinterpret_cast<void*>(1);Vec2 contentMin{},contentMax{2000,200
 const GuiFontCache* g_temporaryTextFont{};bool clipped{};
 void ensure_resources(){}bool has_content_clip(){return clipped;}
 const GuiFontCache& active_font_cache(){return cache;}
+struct {GuiFontCache darkTextFont,font;}g_resources;
+bool active_palette_is_light(){return false;}
 const font::Glyph*lookup_shadow_glyph(char32_t){return nullptr;}
 struct Ink{unsigned id;float x,y,w,h;};std::vector<Ink>ink;
 void draw_sprite(Sprite glyph,float x,float y,float w,float h){ink.push_back({glyph.id,x,y,w,h});}
@@ -90,6 +93,7 @@ class GuiTabDrawing(unittest.TestCase):
             "        [[nodiscard]] static DecodedUtf8Codepoint decode_utf8_codepoint(",
             "        [[nodiscard]] static std::optional<char32_t> next_drawable_char(",
             "        [[nodiscard]] static const font::Glyph* lookup_glyph_from_cache(",
+            "        [[nodiscard]] static const GuiFontCache& font_cache_for_codepoint(",
             "        [[nodiscard]] static const font::Glyph* lookup_glyph(",
             "        [[nodiscard]] static float base_line_height(","        [[nodiscard]] static float line_advance_amount(",
             "        [[nodiscard]] static float baseline_offset(","        [[nodiscard]] static float space_advance(",

@@ -17,6 +17,8 @@ def consumer():
     source = (GUI / "controls/gui.frame_lifecycle.inl").read_text(encoding="utf-8")
     frame_end = definition(source, "    void end_frame(")
     keyboard_capture = definition(source, "    bool keyboard_input_captured(")
+    owner = (GUI / "gui.engine.cpp").read_text(encoding="utf-8")
+    retire_edit_boxes = definition(owner, "        static void retire_hidden_edit_boxes(")
     base = keyboard_fixture()
     base = base[:base.index("int main(){")]
     base = base.replace("const void* visitedActiveWidget{};", """const void* visitedActiveWidget{};
@@ -24,7 +26,7 @@ def consumer():
  bool modalInputSuspended{},modalOwnerDrawn{},modalOwnerDrawing{};""")
     base = base.replace("bool visited_this_frame{};", "bool open{},alignSelectedOnOpen{},visited_this_frame{};")
     base += "\nnamespace gui{void render_pending_select_popups()noexcept{}void flush_queued_draws()noexcept{}\n" + \
-        frame_end + ("" if "bool keyboard_input_captured()" in base else keyboard_capture) + "\n}\n"
+        retire_edit_boxes + "\n" + frame_end + ("" if "bool keyboard_input_captured()" in base else keyboard_capture) + "\n}\n"
     before_end = frame_end[:frame_end.index("        // A text/document owner")] + \
         frame_end[frame_end.index("        flush_queued_draws();"):]
     return base, frame_end, before_end

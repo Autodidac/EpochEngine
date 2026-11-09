@@ -151,7 +151,6 @@ class EditorQueuedShortcuts(unittest.TestCase):
         code = project_keyboard_fixture()
         code = code[:code.index("int main(){")]
         code = code.replace("namespace core {", "namespace input {enum class Key {LeftControl,RightControl,LeftShift,RightShift,Z,Y,Delete,Escape};}\nnamespace core {", 1)
-        code = code.replace("struct Frame{", "struct Frame{std::string windowKey;", 1)
         code = code.replace("bool focus=true,pointer=true,wheel=true;", "bool focus=true,pointer=true,wheel=true;bool is_key_held_safe(input::Key)const{return false;}bool is_key_down_safe(input::Key)const{return false;}")
         block = editor_shortcut_blocks()
         code += PORT + "\nvoid shortcuts(EditorState& editor,const std::shared_ptr<core::Context>& ctx,bool modalVisible=false,bool pointerGrabActive=false){Result result;\n" + block + "\ncaptured=result.scene_input_captured;}\n" + FOCUS_MAIN
@@ -198,7 +197,13 @@ add_test(NAME actual_same_frame_text_focus COMMAND editor_shortcut_focus)
         self.assertNotIn("SurfaceEditAction::undo", early)
         order = (ROOT / "Engine/src/editor/editor.application.cpp").read_text(encoding="utf-8")
         self.assertLess(order.index('"application/editor.frame_packages_about.inl"'), order.index('"application/editor.frame_finish.inl"'))
-        self.assertLess(EDITOR.read_text(encoding="utf-8").index("editor_native_agent_approval_modal"), EDITOR.read_text(encoding="utf-8").index("dispatch_keyboard_shortcuts("))
+        late = EDITOR.read_text(encoding="utf-8")
+        edition = (ROOT / "Engine/include/epoch.edition.hpp").read_text(encoding="utf-8")
+        if "#define EPOCH_SOURCE_EDITION_PUBLIC 1" in edition.splitlines():
+            self.assertNotIn("editor_native_agent_approval_modal", late)
+        else:
+            self.assertIn("#define EPOCH_SOURCE_EDITION_PUBLIC 0", edition.splitlines())
+            self.assertLess(late.index("editor_native_agent_approval_modal"), late.index("dispatch_keyboard_shortcuts("))
         proof = ROOT / "Artifacts/Reports/editor-queued-shortcuts-oct28"
         build = ROOT / "Artifacts/Intermediate/tests/editor-queued-shortcuts"
         proof.mkdir(parents=True, exist_ok=True)

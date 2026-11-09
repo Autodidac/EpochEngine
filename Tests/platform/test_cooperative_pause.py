@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from Tests.support.cpp import msvc_2022_toolsets
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -24,7 +25,7 @@ class CooperativePause(unittest.TestCase):
     def test_actual_windows_handle_lifetime_and_bounded_failure(self):
         if os.name != 'nt':
             self.skipTest('Installed MSVC CPU lane')
-        toolsets = sorted(Path('C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC').glob('*'))
+        toolsets = msvc_2022_toolsets()
         kitroot = Path('C:/Program Files (x86)/Windows Kits/10')
         kits = sorted((kitroot / 'Include').glob('*'))
         if not toolsets or not kits:

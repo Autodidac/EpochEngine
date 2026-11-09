@@ -319,7 +319,7 @@ target_sources(asset_image PRIVATE FILE_SET CXX_MODULES BASE_DIRS {" ".join('"'+
         receipts = []
         commands = [["cmake", "-S", str(proof), "-B", str(build), "-G", "Visual Studio 17 2022", "-A", "x64"]]
         for config in ("Debug", "Release"):
-            data = ROOT / "Artifacts/Runtime/TestData" / ("img" + f"{time.time_ns():x}"[-8:]) / config
+            data = ROOT / "Artifacts/Tests" / ("i" + f"{time.time_ns():x}"[-8:]) / config
             external, outside, linked = data / "external", data / "outside", data / "linked-project"
             external.mkdir(parents=True); outside.mkdir(); linked.mkdir()
             path = str(external / "photo.jpg").replace("'", "''")
@@ -340,7 +340,9 @@ target_sources(asset_image PRIVATE FILE_SET CXX_MODULES BASE_DIRS {" ".join('"'+
             log = proof / f"lane-{index}.log"
             log.write_text(completed.stdout + completed.stderr, encoding="utf-8")
             receipts.append({"command": command, "exitCode": completed.returncode, "log": str(log)})
-            self.assertEqual(completed.returncode, 0, completed.stdout[-7000:] + completed.stderr)
+            evidence = Path(command[-1]) / "stage.txt" if command[0].endswith(".exe") else None
+            stage = evidence.read_text(encoding="utf-8") if evidence and evidence.is_file() else ""
+            self.assertEqual(completed.returncode, 0, completed.stdout[-7000:] + completed.stderr + stage)
         (proof / "result.json").write_text(json.dumps({
             "passed": True, "nativeAcceptance": False, "commands": receipts,
             "ownerSha256": hashlib.sha256(OWNER.read_bytes()).hexdigest(),

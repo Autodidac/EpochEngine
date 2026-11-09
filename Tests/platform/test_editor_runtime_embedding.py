@@ -5,6 +5,7 @@ import json
 import os
 import subprocess
 import unittest
+from Tests.support.cpp import msvc_2022_toolsets
 from Tests.platform.test_child_close_router import definition
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -163,7 +164,7 @@ add_test(NAME identity COMMAND identity)
         self.assertNotEqual(former_visibility, code)
         (proof/'former_visibility.cpp').write_text(former_visibility, encoding='utf-8')
         if os.name == 'nt':
-            tools = sorted(Path('C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC').glob('*'))
+            tools = msvc_2022_toolsets()
             sdk = Path('C:/Program Files (x86)/Windows Kits/10')
             kits = sorted((sdk/'Include').glob('*'))
             if not tools or not kits:

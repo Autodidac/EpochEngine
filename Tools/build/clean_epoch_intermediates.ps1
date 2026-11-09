@@ -30,10 +30,11 @@ if (@($entries | Where-Object { $_.Attributes -band [IO.FileAttributes]::Reparse
 }
 $tracked = @(& git -C $repo ls-files -- $relative.Replace('\','/'))
 if ($LASTEXITCODE -ne 0 -or $tracked.Count) { throw 'Could not prove that the intermediate tree is untracked.' }
-$compilers = @(Get-CimInstance Win32_Process | Where-Object {
-    $_.Name -in @('MSBuild.exe','cl.exe','link.exe','cmake.exe','ninja.exe','clang.exe','clang++.exe','gcc.exe','g++.exe')
-})
-if ($Remove -and $compilers.Count) { throw 'Finish active compiler/build processes before cleaning intermediates.' }
+if ($Remove) {
+    $compilerNames = @('MSBuild','cl','link','cmake','ninja','clang','clang++','gcc','g++')
+    $compilers = @(Get-Process -ErrorAction Stop | Where-Object { $_.ProcessName -in $compilerNames })
+    if ($compilers.Count) { throw 'Finish active compiler/build processes before cleaning intermediates.' }
+}
 $files = @($entries | Where-Object { -not $_.PSIsContainer })
 $bytes = ($files | Measure-Object -Property Length -Sum).Sum
 $report = [ordered]@{

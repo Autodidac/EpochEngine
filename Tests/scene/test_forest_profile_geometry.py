@@ -5,6 +5,7 @@ import json
 import os
 import re
 import subprocess
+import tempfile
 import time
 import unittest
 
@@ -19,6 +20,10 @@ class ForestProfileGeometry(unittest.TestCase):
         report.mkdir(parents=True, exist_ok=True)
         temporary = report / "process-temp"
         temporary.mkdir(exist_ok=True)
+        scratch = ROOT / "Artifacts/Tests"
+        scratch.mkdir(parents=True, exist_ok=True)
+        # The real forest library appends a digest and an atomic-write suffix.
+        project_fixtures = Path(tempfile.mkdtemp(prefix="fp-", dir=scratch))
         build = report / "cmake"
         roots = [ROOT / "Engine/modules", ROOT / "Engine/dep/EpochPlatformEngine/modules"]
         source = ROOT / "Tests/scene/forest.profile_geometry_contract.cpp"
@@ -63,9 +68,10 @@ target_sources(forest_profile PRIVATE FILE_SET CXX_MODULES BASE_DIRS {paths(root
         commands = [("configure", ["cmake", "-S", str(report), "-B", str(build), "-G", "Visual Studio 17 2022", "-A", "x64"])]
         for configuration in ("Debug", "Release"):
             commands += [("build-" + configuration, ["cmake", "--build", str(build), "--config", configuration, "--parallel", "1"]),
-                         ("run-" + configuration, [str(build / configuration / "forest_profile.exe"), str(ROOT / "Artifacts/Intermediate/tests/forest82" / (report.name + "-" + configuration))])]
+                         ("run-" + configuration, [str(build / configuration / "forest_profile.exe"), str(project_fixtures / configuration[0].lower())])]
         runs = []
-        result = {"pass": False, "runtime": "CPU only; no Editor/GPU/models", "runs": runs, "frozen_sources": frozen}
+        result = {"pass": False, "runtime": "CPU only; no Editor/GPU/models", "runs": runs,
+                  "project_fixtures": str(project_fixtures), "frozen_sources": frozen}
         for label, command in commands:
             started = time.monotonic()
             completed = subprocess.run(command, cwd=ROOT, env=env, capture_output=True, text=True, timeout=240)

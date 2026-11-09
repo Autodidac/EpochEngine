@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from Tests.support.cpp import msvc_2022_toolsets
 from Tests.build.test_opengl_sprite_stream import definition
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -217,8 +218,7 @@ int main() {
         try:
             source = scratch/'contract.cpp'; source.write_text(code, encoding='utf-8')
             if os.name == 'nt':
-                toolsets = sorted(Path(os.environ.get('ProgramFiles', 'C:/Program Files')).glob(
-                    'Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/*'))
+                toolsets = msvc_2022_toolsets()
                 kitroot = Path(os.environ.get('ProgramFiles(x86)', 'C:/Program Files (x86)'))/'Windows Kits/10'
                 kits = sorted((kitroot/'Include').glob('*'))
                 if not toolsets or not kits:self.skipTest('Installed MSVC/SDK required')

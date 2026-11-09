@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from Tests.support.cpp import msvc_2022_toolsets
 
 from Tests.platform.test_child_close_router import definition
 
@@ -15,7 +16,7 @@ class RuntimeProjectEnvironment(unittest.TestCase):
     def test_native_binding_is_visible_after_crt_environment_was_cached(self):
         if os.name != "nt":
             self.skipTest("Installed MSVC/Windows native environment consumer")
-        tools = sorted(Path("C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC").glob("*"))
+        tools = msvc_2022_toolsets()
         sdk = Path("C:/Program Files (x86)/Windows Kits/10")
         kits = sorted((sdk / "Include").glob("*"))
         if not tools or not kits:

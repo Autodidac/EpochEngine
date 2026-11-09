@@ -9,6 +9,8 @@ import subprocess
 import tempfile
 import unittest
 
+from Tests.support.cpp import msvc_2022_toolsets
+
 ROOT = Path(__file__).resolve().parents[2]
 REPORT = ROOT / "Artifacts/Reports/updater-handoff-nov07"
 
@@ -21,7 +23,7 @@ class ExecutableHandoff(unittest.TestCase):
         REPORT.mkdir(parents=True, exist_ok=True)
         cls.root = Path(tempfile.mkdtemp(prefix="fixtures-", dir=REPORT))
         cls.scripts = {}
-        toolset = sorted(Path("C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC").glob("*"))[-1]
+        toolset = msvc_2022_toolsets()[-1]
         kitroot = Path("C:/Program Files (x86)/Windows Kits/10")
         kit = sorted((kitroot / "Include").glob("*"))[-1]
         for mode in ("Debug", "Release"):

@@ -130,7 +130,8 @@ class SelectedCut(unittest.TestCase):
         last=owner.index('                    result.patch_snapshot=std::move(admitted);',first)+len('                    result.patch_snapshot=std::move(admitted);')
         code=CODE.replace('ACTUAL_WORKER',owner[first:last])
         proof=ROOT/'Artifacts/Reports/planetary-selected-cut-oct31'/str(time.time_ns());proof.mkdir(parents=True)
-        build=ROOT/'Artifacts/Intermediate/tests/planet-selected-cut-oct31'
+        # MSVC appends nested scheduler target, module and file-tracker paths.
+        build=ROOT/'Artifacts/Tests/psc'/proof.name
         (proof/'consumer.cpp').write_text(code,encoding='utf-8')
         (proof/'CMakeLists.txt').write_text(f'''cmake_minimum_required(VERSION 3.30)
 set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT Embedded)
@@ -154,8 +155,6 @@ target_link_libraries(selected_cut PRIVATE selected_cut_settings)
 add_executable(settings_contract "{(ROOT/'Tests/packages/project.planetary_settings_contract.cpp').as_posix()}")
 target_link_libraries(settings_contract PRIVATE selected_cut_settings)
 ''',encoding='utf-8')
-        # Unique bounded configure directory; no operator project or build tree is reused.
-        build=build/proof.name
         records=[]
         def run(command,timeout=180):
             started=time.monotonic();r=subprocess.run(list(map(str,command)),capture_output=True,text=True,cwd=proof,timeout=timeout)

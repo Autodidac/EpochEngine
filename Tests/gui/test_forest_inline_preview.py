@@ -18,6 +18,7 @@ class ForestInlinePreview(unittest.TestCase):
         production=(ROOT/'Engine/src/editor/application/editor.application_scene_preview.inl').read_text(encoding='utf-8')
         workspace=(ROOT/'Engine/src/editor/application/editor.frame_workspace_docking.inl').read_text(encoding='utf-8')
         functions='\n'.join(definition(production, marker, marker.startswith('struct ')) for marker in (
+            '[[nodiscard]] bool frame_editor_scene_target(',
             '[[nodiscard]] bool ensure_plant_lab_compiled_asset(',
             '[[nodiscard]] std::vector<EditorEntity>\n            project_compiled_forest_entities(',
             '[[nodiscard]] bool ensure_forest_factory_preview(',
@@ -32,6 +33,7 @@ class ForestInlinePreview(unittest.TestCase):
         preview=(ROOT/'Engine/modules/render.preview_grid.ixx').read_text(encoding='utf-8')
         camera_owner=(ROOT/'Engine/src/render/render.preview_camera.cpp').read_text(encoding='utf-8')
         precise=definition(preview,'    export struct PreciseMeshTransform final',True).replace('export ','')
+        precise+='\n'+definition(preview,'    export struct CloudVolume final',True).replace('export ','')
         precise+='\n'+definition(camera_owner,'    [[nodiscard]] bool valid_precise_mesh_transform(')
         precise+='\n'+definition(camera_owner,'    [[nodiscard]] std::optional<PreciseMeshTransform> make_precise_mesh_transform(')
         camera_helpers=definition(preview,'    export [[nodiscard]] inline std::array<double,3> camera_world_eye(').replace('export ','')
@@ -65,11 +67,13 @@ import editor.application;
 import forest.factory;
 import forest.preview_mesh;
 import asset.mesh_artifact;
+import asset.cloud_volume;
 void check(bool value,int line){if(!value){std::fprintf(stderr,"Forest inline contract failed line %d\n",line);std::exit(86);}}
 #define CHECK(...) check(static_cast<bool>((__VA_ARGS__)),__LINE__)
 namespace epochengine {
 using EditorMainSurface=EditorApplicationSurface;
-namespace core {enum class ScenePreviewMode {None,Editor};struct Context {
+namespace core {enum class ScenePreviewMode {None,Editor};enum class ContextType{OpenGL,Other};struct Context {
+ ContextType type{ContextType::OpenGL};
  struct Viewport {int width=800,height=600;};Viewport scene_viewport()const{return {};}
 };}
 namespace render_arcade {struct Node{std::string_view name;};constexpr Node kScreenSceneNode{"screen"};}
@@ -100,14 +104,18 @@ namespace previewgrid {
  unsigned publications{},lightingSets{},clears{};
  struct CameraRigSnapshot {bool valid{true};int value{};};
  int cameraValue=5;std::vector<ObjectMarker> observed;
- CameraRigSnapshot capture_camera_rig_snapshot(const core::Context*){return {true,cameraValue};}
- bool restore_camera_rig_snapshot(const core::Context*,CameraRigSnapshot value){cameraValue=value.value;return true;}
- bool focus_camera(const core::Context*,Vec3,float){cameraValue=42;return true;}
+ enum class CameraMode{Editor,FPS};CameraMode mode{CameraMode::Editor};
+ CameraMode camera_mode_for(const void*){return mode;}
+ void set_camera_mode(const void*,CameraMode value){mode=value;}
+ CameraRigSnapshot capture_camera_rig_snapshot(const void*){return {true,cameraValue};}
+ bool restore_camera_rig_snapshot(const void*,CameraRigSnapshot value){cameraValue=value.value;return true;}
+ bool focus_camera(const void*,Vec3,float){cameraValue=42;return true;}
+ bool focus_camera_precise(const void*,const std::array<double,3>&,float){cameraValue=42;return true;}
  void clear_object_markers(const core::Context*){++clears;observed.clear();}
  void clear_lighting_frame(const core::Context*){}
  void set_lighting_frame(const core::Context*,const lighting::Frame&){++lightingSets;}
  struct MeshFrameLimits {std::uint64_t maximum_indices=196608u,maximum_bytes=16ull*1024*1024;};
- struct SceneFrameRequest {std::vector<ObjectMarker>markers;Camera camera;lighting::Frame lighting;MeshFrameLimits limits;std::array<double,3>render_origin;double depth_fit_aspect{};};
+ struct SceneFrameRequest {std::vector<ObjectMarker>markers;Camera camera;lighting::Frame lighting;MeshFrameLimits limits;std::array<double,3>render_origin;std::vector<CloudVolume>clouds;double depth_fit_aspect{};};
  bool set_object_markers(const core::Context*,std::vector<ObjectMarker> value,MeshFrameLimits limits){++publications;assert(limits.maximum_indices==196608u&&limits.maximum_bytes==16ull*1024*1024);observed=std::move(value);return true;}
  bool publish_scene_frame(const core::Context*,const std::vector<ObjectMarker>&,Camera,const lighting::Frame&,MeshFrameLimits){assert(false);return false;}
  bool frame_initial_orbit_mesh(const core::Context*,const ObjectMarker&,float){assert(false);return false;}
@@ -142,7 +150,9 @@ struct EditorState {
  std::optional<previewgrid::Camera> forestPlacementCamera;bool forestTerrainPainting{};
  std::optional<int>forestSurfacePending;int selectedEntityId{};
  bool sceneInteractionDirty{},planetaryInitialFramePending{};std::uint64_t planetaryInitialFrameGeneration{};
- std::string projectRoot,projectId,projectStatus;
+ std::string projectRoot,projectId,projectStatus,projectTextureStatus;
+ std::optional<int>forestProfileSliderDraft,planetaryPreviewPending;
+ std::shared_ptr<const previewgrid::SceneFrameRequest>planetaryPreviewRequest;
  struct {struct {struct {struct {std::uint64_t generation{};}selected_project;}generations;}value;
   const auto& evidence()const{return value;}}projectLifecycle;
  bool covered{},viewportMeshWireframe{};std::optional<bool>viewportMeshWireframeRequest;
@@ -150,7 +160,7 @@ struct EditorState {
  std::optional<int>projectBuildPending{};
  struct PlanetaryMeshPolicy {project_planetary::SourceGeneration source;project_planetary::Settings settings;std::optional<project_planetary::MeshGenerationIdentity>generated_mesh;};
  std::optional<PlanetaryMeshPolicy>planetaryMeshPolicy;
- struct CloudLayer {std::shared_ptr<const asset::mesh::Artifact>artifact;std::array<double,3>center_meters{};double radius_meters{},wind_period_seconds{};};
+ struct CloudLayer {std::shared_ptr<const asset::mesh::Artifact>artifact;std::array<double,3>center_meters{};double radius_meters{},wind_period_seconds{};std::optional<asset::cloud_volume::Recipe>density{};};
  std::optional<CloudLayer>planetaryStreamCloud;int planetaryStreamEntity{};std::shared_ptr<const asset::mesh::Artifact>planetaryStreamSnapshot;
  struct{double playhead_seconds{};}timelineState;
  std::shared_ptr<const asset::mesh::Artifact>temporalWaterMesh;double temporalWaterSampleTime{};
@@ -189,6 +199,8 @@ std::optional<std::array<double,3>>verified_forest_surface_anchor(const EditorEn
 // Recording boundary only: this fixture verifies marker construction, not the
 // Scheduler/async commit implementation exercised by runtime-preview contracts.
 unsigned pumpCalls{};std::optional<previewgrid::SceneFrameRequest>lastPumpRequest;
+void reset_planetary_preview_publication(EditorState& state){
+ state.planetaryPreviewRequest.reset();state.planetaryPreviewPending.reset();}
 bool pump_editor_planetary_preview(const core::Context*,EditorState&,previewgrid::SceneFrameRequest request,bool){
  ++pumpCalls;lastPumpRequest=request;++previewgrid::publications;previewgrid::observed=std::move(request.markers);return true;}
 unsigned transactions{},saves{};bool saving=true;

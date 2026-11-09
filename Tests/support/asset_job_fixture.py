@@ -238,7 +238,8 @@ target_sources(asset_jobs PRIVATE FILE_SET CXX_MODULES BASE_DIRS "{(ROOT/'Engine
                 "steps-zero", "prompt-empty", "prompt-nul", "prompt-over-limit", "negative-prompt-nul", "malformed-executable-hash", "relative-work-directory", "nul-model-path"}
     commands = [configure_arguments(proof,build)]
     for config in ("Debug", "Release"):
-        data = proof/config
+        # Keep Windows fixture data shallow enough for full hash-named artifacts.
+        data = ROOT / "Artifacts/Tests" / ("aj-" + proof.name) / config
         invalid = data/"invalid-cli"; invalid.mkdir(parents=True)
         for index, (name, payload) in enumerate(cases):
             (invalid/f"{index:02d}-{name}.request").write_bytes(payload)

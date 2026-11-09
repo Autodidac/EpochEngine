@@ -32,9 +32,15 @@ class IntermediateCleanup(unittest.TestCase):
         return subprocess.run(command, text=True, capture_output=True, check=True,
                               timeout=30)
 
-    def cleaner(self, *arguments):
+    def cleaner(self, *arguments, active_compiler=False):
+        # Process inventory is independent of the generated checkout. Make it
+        # deterministic while exercising the real script and its safety checks.
+        process = "[pscustomobject]@{ ProcessName = 'MSBuild' }" if active_compiler else ""
+        quoted_script = str(self.script).replace("'", "''")
+        command = ("function Get-Process { [CmdletBinding()] param() " + process
+                   + " }; & '" + quoted_script + "' " + " ".join(arguments))
         return subprocess.run(["powershell.exe", "-NoProfile", "-ExecutionPolicy",
-                               "Bypass", "-File", str(self.script), *arguments],
+                               "Bypass", "-Command", command],
                               text=True, capture_output=True, timeout=30)
 
     def intermediate(self, root="Artifacts/Intermediate"):
@@ -91,6 +97,15 @@ class IntermediateCleanup(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("untracked", result.stderr)
         self.assertTrue(path.exists())
+        self.preserved()
+
+    def test_active_compiler_refuses_removal(self):
+        path = self.intermediate()
+        result = self.cleaner("-Remove", active_compiler=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Finish active compiler/build processes", result.stderr)
+        self.assertTrue(path.exists())
+        self.assertFalse(self.receipts())
         self.preserved()
 
     def test_redirected_ancestor_is_refused(self):

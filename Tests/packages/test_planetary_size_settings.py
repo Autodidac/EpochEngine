@@ -11,6 +11,7 @@ import shutil
 import xml.etree.ElementTree as ET
 
 from Tests.platform.test_child_close_router import definition
+from Tests.support.cpp import msvc_2022_root
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -69,6 +70,8 @@ namespace host {
   constexpr bool patchTransport=false; // These cases cover the retained v1-v5 receipts.
   constexpr bool metricTransport=false;
   constexpr bool boundedMetricOrigin=false;
+  constexpr bool viewTransport=false;
+  constexpr bool footprintTransport=false;
   const bool customLod=requires_lod_controls(settings),customSize=requires_size_controls(settings);
   PARSE_RECEIPT
   operation.ok=true;return result;
@@ -275,6 +278,9 @@ class PlanetarySizeSettings(unittest.TestCase):
         self.test_actual_size_codec_binding_and_transport(stage_only=True)
 
     def _stage_cases(self, build, report):
+        installation = msvc_2022_root()
+        self.assertIsNotNone(installation, 'The retained producer fixture requires VS 2022 MSBuild')
+        msbuild = installation / 'MSBuild/Current/Bin/MSBuild.exe'
         runs=[]
         def run(command, expected=0, timeout=60):
             result=subprocess.run([str(x) for x in command],cwd=ROOT,capture_output=True,text=True,timeout=timeout)
@@ -323,7 +329,6 @@ class PlanetarySizeSettings(unittest.TestCase):
             stage=ET.SubElement(root,ns+'Target',{'Name':'StageOnly'})
             for node in list(target)[-2:]:stage.append(copy.deepcopy(node))
             msproject=packages/'stage-only.proj';ET.ElementTree(root).write(msproject,encoding='utf-8',xml_declaration=True)
-            msbuild=Path('C:/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/MSBuild.exe')
             output=run([msbuild,msproject,'/nologo','/v:minimal','/clp:ErrorsOnly'],1)
             self.assertIn('existing planetary runtime is not the admitted managed provider',output)
             self.assertIn('Planetary provider staging failed:',output)
@@ -356,7 +361,6 @@ class PlanetarySizeSettings(unittest.TestCase):
         ET.SubElement(record,ns+'WriteLinesToFile',{'File':str(base/'cache.path'),'Lines':'$(EpochPlanetBuild)','Overwrite':'true'})
         proof=packages/'link-path-proof.proj'
         ET.ElementTree(wrapper).write(proof,encoding='utf-8',xml_declaration=True)
-        msbuild=Path('C:/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/MSBuild.exe')
         run([msbuild,proof,'/nologo','/v:minimal'],timeout=300)
         cache=Path((base/'cache.path').read_text(encoding='utf-8-sig').strip())
         self.assertEqual(cache.parent,ROOT/'Artifacts/Intermediate/planet-link')

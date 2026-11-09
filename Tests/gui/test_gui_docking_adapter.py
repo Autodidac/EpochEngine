@@ -9,6 +9,7 @@ import time
 import unittest
 
 from Tools.source.owned_source_text import definition
+from Tests.support.cpp import msvc_2022_toolsets
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -17,7 +18,7 @@ class GuiDockingAdapter(unittest.TestCase):
     def test_actual_implementation_units_debug_release(self):
         if os.name != 'nt':
             self.skipTest('Uses matching accepted MSVC Engine IFCs; Linux integration is a separate gate')
-        toolset = sorted(Path('C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC').glob('*'))[-1]
+        toolset = msvc_2022_toolsets()[-1]
         sdk = Path('C:/Program Files (x86)/Windows Kits/10')
         kit = sorted((sdk / 'Include').glob('*'))[-1]
         report = ROOT / 'Artifacts/Reports/gui-docking-adapter-oct29' / str(time.time_ns())

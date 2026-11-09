@@ -10,6 +10,7 @@ import unittest
 
 from Tests.build.test_opengl_sprite_stream import definition
 from Tests.scene.test_glb_model_import import consumer as glb_consumer
+from Tests.support.cpp import dependency_include
 
 ROOT=Path(__file__).resolve().parents[2]
 
@@ -47,18 +48,23 @@ def fixture():
         '        [[nodiscard]] bool approve_project_model_import('))
     preview=(base/'editor.application_scene_preview.inl').read_text(encoding='utf-8')
     functions+='\n'+definition(preview,'        [[nodiscard]] bool restore_editor_mesh_base_color(')
-    runtime=(ROOT/'Engine/src/epoch/epoch.engine_legacy.cpp').read_text(encoding='utf-8')
-    def runtime_definition(marker):
-        start=runtime.index(marker)
-        body=runtime.index('\n        {',start)
-        return runtime[start:body]+definition(runtime[body:],'\n        {')
-    functions+='\n'+'\n'.join(runtime_definition(marker) for marker in (
+    runtime_root=ROOT/'Engine/src/epoch'
+    runtime=(runtime_root/'epoch.engine_legacy.cpp').read_text(encoding='utf-8')
+    runtime_scene=(runtime_root/'implementation/epoch.project_play_scene.inl').read_text(encoding='utf-8')
+    def runtime_definition(source, marker):
+        start=source.index(marker)
+        indentation=marker[:len(marker)-len(marker.lstrip())]
+        body_marker=f'\n{indentation}{{'
+        body=source.index(body_marker,start)
+        return source[start:body]+definition(source[body:],body_marker)
+    functions+='\n'+'\n'.join(runtime_definition(runtime,marker) for marker in (
         '        [[nodiscard]] std::optional<epochengine::previewgrid::Vec3> project_play_position_for_origin(',
         '        [[nodiscard]] bool project_play_entity_has_geometry(',
-        '        [[nodiscard]] std::optional<epochengine::previewgrid::ObjectMarker> project_play_marker_for_entity(',
-        '        bool publish_project_play_markers('))
+        '        [[nodiscard]] std::optional<epochengine::previewgrid::ObjectMarker> project_play_marker_for_entity('))
+    functions+='\n'+runtime_definition(runtime_scene,'            bool publish_project_play_markers(')
     return glb_consumer().split('int main(int argc,char** argv)')[0]+r'''
 #include <charconv>
+#include <cstdlib>
 #include <optional>
 #include <memory>
 #include <span>
@@ -76,6 +82,7 @@ import scene.persistence;
 import scene.runtime;
 import editor.project_textures;
 import render.preview_grid;
+import render.lighting;
 import render.texture_artifact;
 import render.canvas2d;
 import render.device;
@@ -84,9 +91,14 @@ namespace fs=std::filesystem;
 using SpriteHandle=int;
 namespace core{enum class ContextType{OpenGL,Other};struct Context{ContextType type{ContextType::OpenGL};};}
 namespace project_planetary{using GeneratedMeshFrame=scene::SceneMeshCoordinates;}
+namespace forest::preview_mesh{
+const asset::texture::CompiledTextureArtifact& material_atlas(unsigned){std::abort();}
+bool reference_material_available(){std::abort();}
+}
 ENTITY
 struct EditorState{
  REVIEW
+ struct{struct{unsigned barkTileIndex{};}profile;}plantLabDocument;
  std::optional<ModelImportReview>modelImportReview;
  std::string projectRoot,projectId{"model-project"},projectStatus,meshImportPathDraft,projectTextureStatus;
  std::unique_ptr<editor_project_textures::ProjectTextureController>projectTextures;
@@ -117,6 +129,8 @@ bool runtime_forest_projection_admitted(const ProjectRuntimeEntity&){return true
 previewgrid::Vec3 runtime_marker_color_for_entity(const ProjectRuntimeEntity&,bool){return {1,1,1};}
 float runtime_marker_radius_for_entity(const ProjectRuntimeEntity&){return .5f;}
 previewgrid::ObjectPreviewPrimitive runtime_preview_primitive_for_entity(const ProjectRuntimeEntity&){return previewgrid::ObjectPreviewPrimitive::Cube;}
+constexpr int m_runtimeViewportWidth=800,m_runtimeViewportHeight=600;
+bool pump_runtime_planetary_frame(const void*,previewgrid::SceneFrameRequest,bool){std::abort();}
 FUNCTIONS
 std::string contents(const fs::path&p){std::ifstream in(p,std::ios::binary);return {std::istreambuf_iterator<char>{in},{}};}
 void write(const fs::path&p,std::span<const std::byte>b){fs::create_directories(p.parent_path());std::ofstream out(p,std::ios::binary);out.write(reinterpret_cast<const char*>(b.data()),std::streamsize(b.size()));CHECK(out);}
@@ -218,7 +232,8 @@ int main(int argc,char**argv){
  auto collision=make_state(root/"collision");collision.meshImportPathDraft=source.generic_string();CHECK(review_project_model(collision,source));
  const auto key=asset::texture::content_hash_hex(collision.modelImportReview->compiled.textures[0].artifact.identity.key);
  const auto png=root/"collision/Assets/Textures"/(key+".png");write(png,junk);CHECK(!approve_project_model_import(collision)&&collision.entities.size()==1&&contents(png)=="changed after review");
- auto redirected=make_state(root/"redirected");redirected.meshImportPathDraft=source.generic_string();CHECK(review_project_model(redirected,source));fs::create_directories(root/"outside");fs::create_directory_symlink(root/"outside",root/"redirected/Library");
+ CHECK(fs::canonical(root/"redirected/Library")==fs::canonical(root/"outside"));
+ auto redirected=make_state(root/"redirected");redirected.meshImportPathDraft=source.generic_string();CHECK(review_project_model(redirected,source));
  CHECK(!approve_project_model_import(redirected)&&redirected.entities.size()==1&&fs::is_empty(root/"outside"));
 }
 '''.replace('ENTITY',entity).replace('REVIEW',review).replace('FUNCTIONS',functions)
@@ -242,7 +257,7 @@ class ModelProjectImport(unittest.TestCase):
             self.assertIn(name,module_map);selected[name]=module_map[name]
             pending+=re.findall(r'^(?:export )?import\s+([\w.]+);',selected[name].read_text(encoding='utf-8-sig'),re.M)
         implementations=[ROOT/p for p in ('Engine/src/render/render.preview_camera.cpp','Engine/src/assets/texture/asset.texture_artifact.cpp','Engine/src/assets/texture/asset.texture_import.cpp','Engine/src/assets/image.stb.cpp','Engine/src/assets/mesh/asset.model_import.cpp','Engine/src/project/project.asset_registry.cpp','Engine/src/project/project.texture_library.cpp','Engine/src/project/project.texture_source.cpp','Engine/src/project/project.texture_pipeline.cpp','Engine/src/project/project.texture_resources.cpp','Engine/src/authoring/texture/authoring.texture_document.cpp','Engine/src/authoring/texture/authoring.texture_residency.cpp','Engine/src/editor/editor.project_textures.cpp','Engine/src/renderers/canvas2d/render.canvas2d_scene.cpp','Engine/dep/EpochPlatformEngine/src/core/core.env.cpp','Engine/dep/EpochPlatformEngine/src/core/core.time.cpp')]
-        includes=ROOT/'Artifacts/Dependencies/vcpkg_installed/x64-windows/include'
+        includes=dependency_include(ROOT)
         (proof/'CMakeLists.txt').write_text(f'''cmake_minimum_required(VERSION 3.30)
 cmake_policy(SET CMP0141 NEW)
 set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT Embedded)
@@ -255,8 +270,16 @@ target_include_directories(model_project PRIVATE "{includes.as_posix()}" "{(ROOT
 target_sources(model_project PRIVATE FILE_SET CXX_MODULES BASE_DIRS {' '.join('"'+p.as_posix()+'"' for p in roots)} FILES {' '.join('"'+p.as_posix()+'"' for p in selected.values())})
 ''',encoding='utf-8')
         commands=[['cmake','-S',str(proof),'-B',str(build),'-G','Visual Studio 17 2022','-A','x64']]
+        fixture_data=ROOT/'Artifacts/Tests'/f'm{time.time_ns():x}'
         for config in ('Debug','Release'):
-            commands += [['cmake','--build',str(build),'--config',config,'--parallel','1'],[str(build/config/'model_project.exe'),str(proof/config)]]
+            data=fixture_data/config
+            outside=data/'outside'
+            redirected=data/'redirected'
+            outside.mkdir(parents=True)
+            redirected.mkdir()
+            commands += [['cmake','--build',str(build),'--config',config,'--parallel','1'],
+                ['cmd.exe','/d','/c','mklink','/J',str(redirected/'Library'),str(outside)],
+                [str(build/config/'model_project.exe'),str(data)]]
         results=[]
         for i,command in enumerate(commands):
             ran=subprocess.run(command,cwd=ROOT,capture_output=True,text=True,timeout=150)

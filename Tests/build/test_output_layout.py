@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from Tests.support.cpp import msvc_2022_root, msvc_2022_toolsets
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -22,6 +23,20 @@ class OutputLayout(unittest.TestCase):
     def tearDown(self):
         self.assertTrue(self.scratch.resolve().is_relative_to(self.parent))
         shutil.rmtree(self.scratch)
+
+    def source_edition(self):
+        marker = read_owned_source(ROOT / 'Engine/include/epoch.edition.hpp')
+        edition = re.search(r'^#define EPOCH_SOURCE_EDITION_PUBLIC ([01])$', marker, re.M)
+        self.assertIsNotNone(edition, 'Physical source edition marker is missing')
+        return 'public' if edition.group(1) == '1' else 'development'
+
+    def x64_msbuild(self):
+        installation = msvc_2022_root()
+        if installation is None:
+            self.skipTest('MSBuild unavailable')
+        msbuild = installation / 'MSBuild/Current/Bin/amd64/MSBuild.exe'
+        self.assertTrue(msbuild.is_file(), 'Installed MSVC is missing x64 MSBuild')
+        return msbuild
 
     def edition_fixture(self, name, value):
         root = self.scratch / name
@@ -39,15 +54,12 @@ class OutputLayout(unittest.TestCase):
         return root
 
     def test_actual_msbuild_paths_every_project_and_configuration(self):
-        msbuild = Path('C:/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/MSBuild.exe')
-        if not msbuild.exists():
-            self.skipTest('MSBuild unavailable')
+        msbuild = self.x64_msbuild()
         projects = [ROOT / 'Engine/examples' / name / (name + '.vcxproj')
                     for name in ('EpochEngine', 'EpochEditor', 'HeadlessCI', 'AiTransportContract')]
         projects.extend(ROOT / 'Engine/dep' / name / (name + '.vcxproj')
                         for name in ('EpochGui', 'EpochPlatformEngine'))
-        edition = 'public' if re.search(r'^#define EPOCH_SOURCE_EDITION_PUBLIC 1$',
-            read_owned_source(ROOT / 'Engine/include/epoch.edition.hpp'), re.M) else 'development'
+        edition = self.source_edition()
         for project in projects:
             configs = ('Debug', 'Release') if project.stem in ('EpochGui', 'AiTransportContract') else ('Debug', 'Release', 'ReleaseWithDebugInfo')
             for configuration in configs:
@@ -94,9 +106,7 @@ class OutputLayout(unittest.TestCase):
                                  (ROOT / 'Engine/assets' / asset).read_bytes())
 
     def test_editor_runtime_deployment_uses_selected_vcpkg_installation(self):
-        msbuild = Path('C:/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/MSBuild.exe')
-        if not msbuild.exists():
-            self.skipTest('MSBuild unavailable')
+        msbuild = self.x64_msbuild()
         project = ROOT / 'Engine/examples/EpochEditor/EpochEditor.vcxproj'
         installed = self.scratch / 'selected-dependencies'
         triplet = installed / 'x64-windows'
@@ -135,17 +145,14 @@ class OutputLayout(unittest.TestCase):
             self.assertFalse(list(static_root.rglob('*.dll')))
 
     def test_actual_evaluated_link_metadata_and_library_targets(self):
-        msbuild = Path('C:/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/MSBuild.exe')
-        if not msbuild.exists():
-            self.skipTest('MSBuild unavailable')
+        msbuild = self.x64_msbuild()
         inspector = self.scratch / 'inspect.targets'
         inspector.write_text('<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">'
             '<Target Name="EpochInspectEvaluatedLink"><ItemGroup>'
             '<Link Include="__epoch_link_metadata_probe__" />'
             '<Lib Include="__epoch_lib_metadata_probe__" />'
             '</ItemGroup></Target></Project>', encoding='utf-8')
-        edition = 'public' if re.search(r'^#define EPOCH_SOURCE_EDITION_PUBLIC 1$',
-            read_owned_source(ROOT / 'Engine/include/epoch.edition.hpp'), re.M) else 'development'
+        edition = self.source_edition()
         names = ('EpochEngine', 'EpochEditor', 'HeadlessCI', 'AiTransportContract', 'EpochGui', 'EpochPlatformEngine')
         for name in names:
             project = ROOT / ('Engine/dep/' + name + '/' + name + '.vcxproj' if name in ('EpochGui', 'EpochPlatformEngine')
@@ -191,8 +198,6 @@ class OutputLayout(unittest.TestCase):
                     by_name = {Path(ref['Identity']).stem: ref for ref in references}
                     expected_references = {'EpochEngine', 'EpochGui', 'EpochPlatformEngine',
                                            'EpochAudioEngine', 'EpochMediaEngine'}
-                    if edition == 'development':
-                        expected_references.add('EpochSelfCoding')
                     self.assertEqual(set(by_name), expected_references)
                     for ordered in ('EpochEngine', 'EpochGui'):
                         self.assertEqual(by_name[ordered].get('LinkLibraryDependencies'), 'false')
@@ -211,21 +216,15 @@ class OutputLayout(unittest.TestCase):
                     targets = json.loads(result.stdout)['TargetResults']['GetTargetPath']['Items']
                     self.assertEqual(Path(targets[0]['Identity']), expected / (name + '.lib'))
 
-    def test_compiled_path_policy_and_real_ledger_reject_stale_layout(self):
+    def test_compiled_path_policy_rejects_stale_layout(self):
         if os.name != 'nt':
             self.skipTest('Installed MSVC CPU lane')
-        toolsets = sorted(Path('C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC').glob('*'))
+        toolsets = msvc_2022_toolsets()
         kitroot = Path('C:/Program Files (x86)/Windows Kits/10')
         kits = sorted((kitroot / 'Include').glob('*'))
         if not toolsets or not kits:
             self.skipTest('MSVC/SDK unavailable')
-        module = read_owned_source(ROOT / 'Engine/dep/EpochSelfCoding/integration/modules/editor.candidate_artifact.ixx', encoding='utf-8')
-        body = module[module.index('export namespace epochengine::editor::candidate_artifact'):].replace('export namespace', 'namespace', 1)
-        identity = '''namespace epochengine::platform::child_process {
-struct ExecutableIdentity { unsigned long long size_bytes{12}; std::string sha256{"abc"};
-bool valid() const { return size_bytes && !sha256.empty(); }
-friend bool operator==(const ExecutableIdentity&, const ExecutableIdentity&) = default; }; }
-'''
+        extra_contract = ''
         path_source = read_owned_source(ROOT / 'Engine/src/platform/core.path.cpp', encoding='utf-8')
         path_body = path_source[path_source.index('    path log_output_dir()'):path_source.index('    path capture_output_dir()')]
         path_policy = '''namespace path_policy {
@@ -242,7 +241,6 @@ int main(int argc, char** argv) {
     if (argc != 3) return 1;
     namespace fs = std::filesystem;
     namespace b = epochengine::build_layout;
-    namespace a = epochengine::editor::candidate_artifact;
     const fs::path root = fs::absolute(argv[1]);
     const std::string edition = argv[2];
     path_policy::executable = root / "build/bin/windows" / edition / "x64/Release";
@@ -261,39 +259,29 @@ int main(int argc, char** argv) {
     fs::create_directories(root);
     if (b::dependency_cache(root) != root / "Engine/vcpkg_installed") return 36;
     if (b::source_layout(root) != b::Layout::Legacy) return 3;
-    if (a::relative_executable(a::Lane::DebugEditor, root) != "x64/Debug/EpochEditor.exe") return 4;
+    if (b::windows_relative_bin(root, "Debug") != fs::path{"x64/Debug"}) return 4;
     const auto marker = root / "Tools/MSVC/EpochOutputLayout.props";
     fs::create_directories(marker.parent_path());
     std::ofstream{marker} << "<!-- epoch.build-output-layout/v1 -->";
     // A stale legacy binary exists, but is NOT considered a new-graph product.
     fs::create_directories(root / "x64/Debug");
     std::ofstream{root / "x64/Debug/EpochEditor.exe"} << "stale";
-    const auto expected = "build/bin/windows/" + edition + "/x64/Debug/EpochEditor.exe";
-    if (a::relative_executable(a::Lane::DebugEditor, root) != expected) return 5;
-    a::Ledger ledger;
-    if (!ledger.reset(root.generic_string(), 8, true, false)) return 6;
-    a::Binding binding{root.generic_string(), 8, a::Lane::DebugEditor,
-        (root / "x64/Debug/EpochEditor.exe").generic_string(), {}, ledger.begin_build(a::Lane::DebugEditor)};
-    if (ledger.accept_build(binding)) return 7;
-    binding.executable_path = (root / expected).generic_string();
-    if (!ledger.accept_build(binding)) return 8;
+    const auto expected = fs::path{"build/bin/windows"} / edition / "x64/Debug";
+    if (b::source_layout(root) != b::Layout::Shared) return 41;
+    if (b::windows_bin(root, "Debug") != root / expected) return 5;
     if (b::linux_cmake(root, "Clang-Release") != root / "build/cmake/linux" / edition / "Clang-Release") return 9;
     if (b::dependency_cache(root) != root / "Engine/vcpkg_installed") return 37;
     std::ofstream{marker} << "<!-- epoch.build-output-layout/v2 -->";
-    const auto current = "Artifacts/Runtime/windows/" + edition + "/x64/Debug/EpochEditor.exe";
+    const auto current = fs::path{"Artifacts/Runtime/windows"} / edition / "x64/Debug";
     if (b::source_layout(root) != b::Layout::Artifacts) return 30;
-    if (a::relative_executable(a::Lane::DebugEditor, root) != current) return 31;
-    if (a::valid_binding(binding)) return 32; // old v1 receipt cannot admit a v2 binary
-    binding.executable_path = (root / current).generic_string();
-    if (!a::valid_binding(binding)) return 33;
+    if (b::windows_bin(root, "Debug") != root / current) return 31;
     if (b::linux_cmake(root, "Clang-Release") != root / "Artifacts/Intermediate/cmake/linux" / edition / "Clang-Release") return 34;
     if (b::linux_runtime(root, "Clang-Release") != root / "Artifacts/Runtime/cmake/linux" / edition / "Clang-Release") return 35;
     if (b::dependency_cache(root) != root / "Artifacts/Dependencies/vcpkg_installed") return 38;
     std::ofstream{marker} << "unsupported layout";
     if (b::source_layout(root) != b::Layout::Invalid) return 10;
     if (!b::dependency_cache(root).empty()) return 39;
-    if (!a::relative_executable(a::Lane::DebugEditor, root).empty()) return 11;
-    if (a::valid_binding(binding)) return 12;
+    if (!b::windows_bin(root, "Debug").empty()) return 11;
     return 0;
 }
 '''
@@ -302,7 +290,7 @@ int main(int argc, char** argv) {
             root = self.edition_fixture(edition, value)
             cpp = root / 'contract.cpp'
             cpp.write_text('#include "epoch.build_layout.hpp"\n#include <limits>\n#include <optional>\n'
-                '#include <cstdint>\n' + identity + body + path_policy + main, encoding='utf-8')
+                '#include <cstdint>\n' + extra_contract + path_policy + main, encoding='utf-8')
             binary = root / 'contract.exe'
             args = [str(toolset / 'bin/Hostx64/x64/cl.exe'), '/nologo', '/std:c++latest', '/EHsc',
                 '/I' + str(root / 'Engine/include'), '/I' + str(toolset / 'include'),
@@ -315,19 +303,6 @@ int main(int argc, char** argv) {
             self.assertEqual(result.returncode, 0, result.stdout[-3000:] + result.stderr)
             result = subprocess.run([str(binary), str(root / 'workspace'), edition], cwd=root, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, 'Artifact layout case ' + str(result.returncode))
-            if value == 0:
-                # Actual ZIP/timeline helper contract refuses an existing test
-                # fixture and never resets active or retained evidence.
-                diagnostic_binary = root / 'diagnostic.exe'
-                diagnostic_args = [str(ROOT / 'Tests/ai/ai_engine_diagnostics_contract.cpp')
-                    if arg == str(cpp) else '/Fe' + str(diagnostic_binary)
-                    if arg.startswith('/Fe') else '/Fo' + str(root / 'diagnostic.obj')
-                    if arg.startswith('/Fo') else arg for arg in args]
-                result = subprocess.run(diagnostic_args, cwd=root, capture_output=True, text=True)
-                self.assertEqual(result.returncode, 0, result.stdout[-3000:] + result.stderr)
-                result = subprocess.run([str(diagnostic_binary), str(self.scratch / 'diagnostics')],
-                    cwd=ROOT, capture_output=True, text=True)
-                self.assertEqual(result.returncode, 0, 'Diagnostic layout case ' + str(result.returncode))
 
     def test_all_configuration_producers_and_consumers_share_paths(self):
         root_presets = json.loads(read_owned_source(ROOT / 'CMakePresets.json'))

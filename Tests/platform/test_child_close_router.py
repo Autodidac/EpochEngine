@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from Tests.support.cpp import msvc_2022_toolsets
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -23,7 +24,7 @@ class ChildCloseRouter(unittest.TestCase):
     def test_actual_native_selection_is_owned_live_and_remembers_hover(self):
         if os.name != 'nt':
             self.skipTest('Installed MSVC CPU lane')
-        tools = sorted(Path('C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC').glob('*'))
+        tools = msvc_2022_toolsets()
         sdk = Path('C:/Program Files (x86)/Windows Kits/10')
         kits = sorted((sdk / 'Include').glob('*'))
         if not tools or not kits:

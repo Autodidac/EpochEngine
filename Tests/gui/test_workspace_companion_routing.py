@@ -2,6 +2,7 @@
 from pathlib import Path
 import os,shutil,subprocess,tempfile,unittest,json,time
 from Tests.build.test_opengl_sprite_stream import definition
+from Tests.support.cpp import msvc_2022_toolsets
 ROOT=Path(__file__).resolve().parents[2]
 class WorkspaceCompanionRouting(unittest.TestCase):
  def test_scene_camera_metadata_matches_existing_rig(self):
@@ -279,7 +280,7 @@ int main(){
   for configuration in ('Debug','Release'):
    binary=scratch/('contract-'+configuration)
    if os.name=='nt':
-    tools=sorted(Path('C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC').glob('*'));sdk=Path('C:/Program Files (x86)/Windows Kits/10');kits=sorted((sdk/'Include').glob('*'))
+    tools=msvc_2022_toolsets();sdk=Path('C:/Program Files (x86)/Windows Kits/10');kits=sorted((sdk/'Include').glob('*'))
     if not tools or not kits:self.skipTest('MSVC/SDK required')
     tool,kit=tools[-1],kits[-1];binary=binary.with_suffix('.exe');args=[str(tool/'bin/Hostx64/x64/cl.exe'),'/nologo','/utf-8','/std:c++latest','/EHsc','/W4','/WX','/Od' if configuration=='Debug' else '/O2','/I'+str(tool/'include'),'/I'+str(kit/'ucrt'),'/Fo'+str(scratch/('contract-'+configuration+'.obj')),'/Fe'+str(binary),str(cpp),'/link','/LIBPATH:'+str(tool/'lib/x64'),'/LIBPATH:'+str(sdk/'Lib'/kit.name/'um/x64'),'/LIBPATH:'+str(sdk/'Lib'/kit.name/'ucrt/x64')]
    else:

@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from Tests.support.cpp import msvc_2022_root, msvc_2022_toolsets
 from Tools.source.owned_source_text import read_owned_source
 
 from Tests.platform.test_child_close_router import definition
@@ -21,11 +22,14 @@ class GeneratedProjectBinding(unittest.TestCase):
     def test_actual_default_entry_archive_accepts_a_consumer_main(self):
         if os.name != "nt":
             self.skipTest("Installed MSVC CPU consumer")
-        tools = sorted(Path("C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC").glob("*"))
+        installation = msvc_2022_root()
+        tools = msvc_2022_toolsets()
         sdk = Path("C:/Program Files (x86)/Windows Kits/10")
         kits = sorted((sdk / "Include").glob("*"))
-        if not tools or not kits:
+        if installation is None or not tools or not kits:
             self.skipTest("MSVC/SDK unavailable")
+        msbuild = installation / "MSBuild/Current/Bin/amd64/MSBuild.exe"
+        self.assertTrue(msbuild.is_file(), "Installed MSVC is missing x64 MSBuild")
         parent = ROOT / "build/contract-tests"
         parent.mkdir(parents=True, exist_ok=True)
         scratch = Path(tempfile.mkdtemp(prefix="project-entry-", dir=parent))
@@ -58,7 +62,6 @@ class GeneratedProjectBinding(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                 result = subprocess.run([str(binary)], cwd=scratch, capture_output=True, text=True)
                 self.assertEqual(result.returncode, 17, result.stdout + result.stderr)
-            msbuild = Path("C:/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/amd64/MSBuild.exe")
             for configuration in ("Debug", "Release", "ReleaseWithDebugInfo"):
                 result = subprocess.run([str(msbuild), str(ROOT / "Engine/examples/EpochEngine/EpochEngine.vcxproj"),
                     "/nologo", "/nr:false", "/p:Platform=x64", f"/p:Configuration={configuration}",
@@ -75,11 +78,14 @@ class GeneratedProjectBinding(unittest.TestCase):
     def test_actual_binding_uses_executable_project_and_preserves_admission(self):
         if os.name != "nt":
             self.skipTest("Installed MSVC CPU consumer")
-        tools = sorted(Path("C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC").glob("*"))
+        installation = msvc_2022_root()
+        tools = msvc_2022_toolsets()
         sdk = Path("C:/Program Files (x86)/Windows Kits/10")
         kits = sorted((sdk / "Include").glob("*"))
-        if not tools or not kits:
+        if installation is None or not tools or not kits:
             self.skipTest("MSVC/SDK unavailable")
+        msbuild = installation / "MSBuild/Current/Bin/amd64/MSBuild.exe"
+        self.assertTrue(msbuild.is_file(), "Installed MSVC is missing x64 MSBuild")
         registry = (ROOT / "Engine/src/editor/implementation/editor.project_registry.inl").read_text(encoding="utf-8")
         scene = (ROOT / "Engine/src/editor/editor.scene.cpp").read_text(encoding="utf-8")
         legacy = (ROOT / "Engine/src/epoch/epoch.engine_legacy.cpp").read_text(encoding="utf-8")
@@ -261,7 +267,6 @@ write(fs::current_path()/"library-legacy.xml",
                 "/Fo" + str(scratch / "generated.obj"), str(generated)],
                 cwd=scratch, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stdout[-5000:] + result.stderr)
-            msbuild = Path("C:/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/amd64/MSBuild.exe")
             for edition in ("development", "public", "legacy"):
                 properties = (scratch / f"library-{edition}.xml").read_text()
                 project = scratch / f"library-{edition}.proj"

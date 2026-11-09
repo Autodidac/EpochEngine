@@ -5,6 +5,8 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from Tests.support.cpp import msvc_2022_toolsets
+
 ROOT = Path(__file__).resolve().parents[2]
 
 class AtlasPacking(unittest.TestCase):
@@ -16,7 +18,7 @@ class AtlasPacking(unittest.TestCase):
         module = module.replace('export namespace epochengine', 'namespace epochengine')
         code = (ROOT/'Tests/renderers/atlas.packing_contract.cpp').read_text(encoding='utf-8').replace('ATLAS_PRODUCTION', module)
         if os.name != 'nt': self.skipTest('Installed Windows MSVC CPU lane')
-        toolsets=sorted(Path('C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC').glob('*'))
+        toolsets=msvc_2022_toolsets()
         kitroot=Path('C:/Program Files (x86)/Windows Kits/10');kits=sorted((kitroot/'Include').glob('*'))
         if not toolsets or not kits:self.skipTest('MSVC/SDK required')
         parent=(ROOT/'build/contract-tests').resolve();parent.mkdir(parents=True,exist_ok=True)

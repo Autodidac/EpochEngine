@@ -9,12 +9,16 @@ set(_epoch_repository_root "${CMAKE_CURRENT_LIST_DIR}/../..")
 find_package(Python3 COMPONENTS Interpreter QUIET)
 if(Python3_Interpreter_FOUND)
     add_test(NAME epoch_python_contracts
-        COMMAND "${Python3_EXECUTABLE}" -X utf8 "${_epoch_repository_root}/Tools/run_tests.py")
-    # This suite compiles real Debug/Release consumers. The measured complete
-    # Linux lane takes about403s; allow CI headroom without changing its checks
-    # or the individual compiler/process deadlines owned by the tests.
+        COMMAND "${Python3_EXECUTABLE}" -X utf8 "${_epoch_repository_root}/Tools/run_tests.py" --verbose)
+    # Nested Windows fixtures configure MSVC graphs and compile both Debug and
+    # Release. Keep their own process deadlines and allow headroom for the full
+    # suite after discovering every installed Visual Studio edition.
+    set(_epoch_python_timeout 1200)
+    if(WIN32)
+        set(_epoch_python_timeout 2400)
+    endif()
     set_tests_properties(epoch_python_contracts PROPERTIES
-        WORKING_DIRECTORY "${_epoch_repository_root}" TIMEOUT 900)
+        WORKING_DIRECTORY "${_epoch_repository_root}" TIMEOUT "${_epoch_python_timeout}")
 endif()
 
 foreach(_epoch_fixture IN ITEMS

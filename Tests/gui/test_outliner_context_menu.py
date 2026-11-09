@@ -62,7 +62,7 @@ namespace gui{
 using Vec2=gui_lib::Vec2;using SemanticTone=gui_lib::SemanticTone;using CommandMenuState=gui_lib::CommandMenuState;
 struct WidgetBounds{Vec2 position{},size{};};DECLARATIONS
 enum class EventType{KeyDown};struct InputEvent{EventType type{EventType::KeyDown};bool ctrl_down{},alt_down{};int key{};};
-struct Frame {Context*ctx{};Vec2 mousePos{};bool mouseDown{},pointerInputAllowed{true},menuPopupOwnsInput{},blocked{},press{},release{},right{};float mouseWheelDelta{};std::vector<InputEvent>events;}g_frame;
+struct Frame {Context*ctx{};Vec2 mousePos{};bool mouseDown{},pointerInputAllowed{true},menuPopupOwnsInput{},blocked{},press{},release{},right{};float mouseWheelDelta{},deltaTime{1.0f/60.0f};std::vector<InputEvent>events;}g_frame;
 constexpr float kFontScale=1;float line_advance_amount(float){return 18;}float menu_item_row_height(){return 24;}
 float menu_item_preferred_width(const MenuItemOptions&i){return i.label.size()*8.f+24;}
 bool point_in_rect(Vec2 p,float x,float y,float w,float h){return p.x>=x&&p.y>=y&&p.x<x+w&&p.y<y+h;}

@@ -18,6 +18,7 @@ def main() -> int:
         return subprocess.call([sys.executable, '-X', 'utf8', __file__, *sys.argv[1:]])
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--list', action='store_true', help='list tests without running them')
+    parser.add_argument('--verbose', action='store_true', help='report each test by name')
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     # Source-contract suites share the bounded implementation reader, including
@@ -47,7 +48,7 @@ def main() -> int:
                     yield test.id()
         print('\n'.join(entries(suite)))
         return 0
-    return 0 if unittest.TextTestRunner(verbosity=1).run(suite).wasSuccessful() else 1
+    return 0 if unittest.TextTestRunner(verbosity=2 if args.verbose else 1).run(suite).wasSuccessful() else 1
 
 
 if __name__ == '__main__':

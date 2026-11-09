@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from Tests.support.cpp import msvc_2022_toolsets
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -55,7 +56,7 @@ class VulkanPreviewIndices(unittest.TestCase):
                 with self.subTest(configuration=configuration):
                     binary = scratch / ('contract.exe' if os.name == 'nt' else 'contract')
                     if os.name == 'nt':
-                        toolsets = sorted(Path('C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC').glob('*'))
+                        toolsets = msvc_2022_toolsets()
                         kitroot = Path('C:/Program Files (x86)/Windows Kits/10')
                         kits = sorted((kitroot / 'Include').glob('*'))
                         if not toolsets or not kits:

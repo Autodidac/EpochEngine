@@ -7,6 +7,7 @@ import tempfile
 import unittest
 
 from Tests.build.test_opengl_sprite_stream import definition
+from Tests.support.cpp import msvc_2022_toolsets
 
 ROOT=Path(__file__).resolve().parents[2]
 
@@ -194,7 +195,7 @@ class PlanetarySettingsUi(unittest.TestCase):
         try:
             cpp=scratch/'contract.cpp';cpp.write_text(fixture(),encoding='utf-8')
             if os.name=='nt':
-                tools=sorted(Path('C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC').glob('*'))
+                tools=msvc_2022_toolsets()
                 sdk=Path('C:/Program Files (x86)/Windows Kits/10');kits=sorted((sdk/'Include').glob('*'))
                 if not tools or not kits:self.skipTest('MSVC/SDK required')
                 tool,kit=tools[-1],kits[-1]

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-MIT-NoSell
 #include <algorithm>
 #include <atomic>
+#include <cstdint>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -12,7 +13,8 @@ enum class ContextType {None,RayLib,SDL,SFML,Vulkan,OpenGL,DirectX,Software};
 enum class RoutedPanelDockTarget {none,left_tabs,left_context,right_tabs,right_context,bottom_left_tabs,bottom_right_tabs};
 struct Context {ContextType type;};
 struct WindowData {int hwnd; std::string guiRoute; bool isFloating=false;
-std::atomic<unsigned> dockTargetPreference{0};std::atomic<int> dockGridOrder{-1};std::shared_ptr<Context> context;};
+std::atomic<unsigned> dockTargetPreference{0};std::atomic<int> dockGridOrder{-1};std::shared_ptr<Context> context;
+std::atomic_uint64_t proxyChildNativeGeneration{0};};
 auto typed_context(const std::shared_ptr<Context>& context){return context;}
 RECT screen_client_rect(HWND){return {0,0,600,400};}
 bool point_in_rect(RECT r,POINT p){return p.x>=r.left&&p.x<r.right&&p.y>=r.top&&p.y<r.bottom;}
@@ -23,6 +25,7 @@ int parent=10;std::recursive_mutex windowsMutex;std::vector<std::unique_ptr<Wind
 WindowData* findWindowByHWND(int id){for(auto& w:windows)if(w->hwnd==id)return w.get();return nullptr;}
 void ReorderDockedWindow(HWND,POINT);
 };
+MultiContextManager* g_activeManager{};
 ORDER_FUNCTION
 MOVE_FUNCTION
 struct DragState {bool dragging=false;HWND draggedWindow=0,originalParent=0;int opacity=0;};
@@ -54,6 +57,7 @@ bool admits_release(bool routedPane,bool hasDockTarget,bool releaseInsideParent)
 int main(){
 VERIFY(native_class_owns_gui_input(77));VERIFY(!native_class_owns_gui_input(3));
 MultiContextManager manager;
+g_activeManager=&manager;
 for(int i=0;i<6;++i){auto w=std::make_unique<WindowData>();w->hwnd=i+1;
 w->context=std::make_shared<Context>(Context{static_cast<ContextType>(i+1)});manager.windows.push_back(std::move(w));}
 auto ordered=[&]{std::vector<WindowData*> result;for(auto& w:manager.windows)result.push_back(w.get());
@@ -67,9 +71,12 @@ VERIFY(ordered()[1]->hwnd==1 && ordered()[0]->hwnd==2);
 manager.ReorderDockedWindow(1,{-1,1});VERIFY(ordered()[1]->hwnd==1);
 manager.findWindowByHWND(6)->isFloating=true;
 manager.ReorderDockedWindow(6,{1,1});VERIFY(ordered()[0]->hwnd==6);
+auto* dragged=manager.findWindowByHWND(3);
 state={true,3,10,1};capture=3;cancel_native_context_drag(4);VERIFY(state.dragging&&releases==0);
+VERIFY(dragged->proxyChildNativeGeneration.load()==0);
 cancel_native_context_drag(3);VERIFY(!state.dragging&&state.draggedWindow==0&&releases==1&&restores==1&&clears==1&&invalidates==1);
-cancel_native_context_drag(3);VERIFY(releases==1);
+VERIFY(dragged->proxyChildNativeGeneration.load()==1);
+cancel_native_context_drag(3);VERIFY(releases==1&&dragged->proxyChildNativeGeneration.load()==1);
 hotspot=true;VERIFY(route(3,WM_LBUTTONDOWN,0,0)==9&&guiEvents==0&&dragEvents==1);
 state={true,3,10,0};hotspot=false;VERIFY(route(3,WM_LBUTTONUP,0,0)==9&&guiEvents==0&&dragEvents==2);
 state={};VERIFY(route(3,WM_LBUTTONDOWN,0,0)==7&&guiEvents==1);

@@ -39,7 +39,17 @@ V unit(V p){return p/core::length(p);}
 V point(const artifact::Vertex& p){return {p.position[0],p.position[1],p.position[2]};}
 int actual_conversion(const stream::State& state,std::vector<artifact::Vertex>& vertices,std::vector<std::uint32_t>& indices){
  const auto cut=stream::draw_cut(state);const double scale=10.0/state.world.body(state.request.body_index).radius;
- CONVERSION
+ const V artifact_origin{};const bool with_deltas=false;
+ struct PatchGeometry{std::vector<artifact::Vertex> vertices;std::vector<std::uint32_t> indices;std::vector<std::array<float,3>> deltas;};
+ for(const auto tile:cut){
+  const auto* mesh=&stream::detail::find(state,tile)->mesh;
+  PatchGeometry result;
+  CONVERSION
+  result.indices.insert(result.indices.end(),mesh->indices.begin(),mesh->indices.end());
+  const auto base=static_cast<std::uint32_t>(vertices.size());
+  const auto& chunk=result;
+  APPEND
+ }
  return 0;
 }
 std::uint32_t edge_vertex(unsigned edge,unsigned k,unsigned n){switch(edge){case 0:return k*(n+1);case 1:return k*(n+1)+n;case 2:return k;default:return n*(n+1)+k;}}
@@ -117,8 +127,11 @@ class PlanetaryExportSeams(unittest.TestCase):
         if not (PACKAGE / "tools/planet.stream_export.cpp").is_file():
             self.skipTest("Reviewed optional planetary source not staged in this checkout")
         exporter = (PACKAGE / "tools/planet.stream_export.cpp").read_text(encoding="utf-8")
-        conversion = definition(exporter[exporter.index("    int write_snapshot("):], "            for(const auto tile:cut)")
-        code = CODE.replace("CONVERSION", conversion)
+        snapshot = exporter[exporter.index("    int write_snapshot("):]
+        conversion = definition(snapshot, "for(const auto& vertex:mesh->vertices)")
+        begin = snapshot.index("vertices.insert(vertices.end(),chunk.vertices.begin(),chunk.vertices.end());")
+        end = snapshot.index("scratch_reserved-=job.scratch;", begin)
+        code = CODE.replace("CONVERSION", conversion).replace("APPEND", snapshot[begin:end])
         proof = ROOT / "Artifacts/Reports/planet-converted-seams-oct27"
         proof.mkdir(parents=True, exist_ok=True)
         (proof / "consumer.cpp").write_text(code, encoding="utf-8")

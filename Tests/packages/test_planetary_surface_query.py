@@ -160,7 +160,7 @@ class PlanetarySurfaceQuery(unittest.TestCase):
         proof=ROOT/'Artifacts/Reports/planet-surface-query-oct31'/identity
         proof.mkdir(parents=True,exist_ok=True)
         (proof/'consumer.cpp').write_text(code,encoding='utf-8')
-        modules=[PACKAGE/'modules'/name for name in ('planet.terrain.ixx','planet.coverage.ixx','planet.streaming.ixx')]
+        modules=[PACKAGE/'modules'/name for name in ('planet.terrain.ixx','planet.coverage.ixx','planet.streaming.ixx','planet.clouds.ixx')]
         modules += [ROOT/'Engine/modules'/name for name in ('asset.mesh_artifact.ixx','asset.texture_artifact.ixx','asset.cloud_volume.ixx','project.planetary.ixx','project.planetary_snapshot.ixx','water.wave.ixx')]
         owners=[PACKAGE/'upstream/EpochPlanet-0.2.3/src/core/world.cpp',PACKAGE/'upstream/EpochPlanet-0.2.3/src/core/terrain.cpp',ROOT/'Engine/src/assets/texture/asset.texture_artifact.cpp',ROOT/'Engine/src/project/project.planetary_snapshot.cpp']
         quoted=lambda paths:'\n'.join('"'+p.as_posix()+'"' for p in paths)

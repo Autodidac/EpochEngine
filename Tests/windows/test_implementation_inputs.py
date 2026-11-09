@@ -1,21 +1,23 @@
 """Opt-in, real MSBuild proof for implementation-fragment invalidation.
 
-Run: python Tests/windows/test_implementation_inputs.py
+Run with python -m unittest Tests.windows.test_implementation_inputs.
 The tiny console fixture and all logs stay under this checkout's build/validation.
 """
 from pathlib import Path
 import json
-import os
 import subprocess
 import time
 import unittest
 from xml.sax.saxutils import escape
 
+from Tests.support.cpp import msvc_2022_root
+
 ROOT = Path(__file__).resolve().parents[2]
-MSBUILD = Path(os.environ.get("ProgramFiles", "C:/Program Files")) / "Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/MSBuild.exe"
+VS_2022 = msvc_2022_root()
+MSBUILD = VS_2022 / "MSBuild/Current/Bin/MSBuild.exe" if VS_2022 else None
 
 
-@unittest.skipUnless(os.name == "nt" and MSBUILD.is_file(), "requires installed MSVC")
+@unittest.skipUnless(MSBUILD and MSBUILD.is_file(), "requires installed MSVC")
 class ImplementationInputs(unittest.TestCase):
     def test_actual_engine_owner_metadata(self):
         project = ROOT / "Engine/examples/EpochEngine/EpochEngine.vcxproj"
@@ -33,6 +35,7 @@ class ImplementationInputs(unittest.TestCase):
         for item in items["EpochImplementationFragment"]:
             self.assertEqual(Path(item["ObjectFile"]).parent, Path(data["Properties"]["IntDir"]))
         receipt = ROOT / "build/validation/implementation-inputs-oct26/production-invalidation-final.json"
+        receipt.parent.mkdir(parents=True, exist_ok=True)
         receipt.write_text(json.dumps(data, indent=2))
         print("Actual Engine metadata proof:", len(changed), "stale owners correctly invalidated")
 

@@ -8,6 +8,8 @@ import subprocess
 import time
 import unittest
 
+from Tests.support.cpp import dependency_include
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -168,8 +170,7 @@ class GlbModelImport(unittest.TestCase):
                    ROOT / "Engine/src/assets/mesh/asset.model_import.cpp",
                    ROOT / "Engine/src/assets/texture/asset.texture_import.cpp",
                    ROOT / "Engine/src/assets/image.stb.cpp"]
-        includes = ROOT / "Artifacts/Dependencies/vcpkg_installed/x64-windows/include"
-        self.assertTrue((includes / "nlohmann/json.hpp").is_file())
+        includes = dependency_include(ROOT)
         (proof / "CMakeLists.txt").write_text(f'''cmake_minimum_required(VERSION 3.30)
 project(ModelImport LANGUAGES CXX)
 add_executable(model_import {" ".join('"'+p.as_posix()+'"' for p in sources)})

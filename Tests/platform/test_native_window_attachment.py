@@ -6,6 +6,7 @@ import hashlib
 import json
 import subprocess
 import unittest
+from Tests.support.cpp import msvc_2022_toolsets
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -25,7 +26,7 @@ class NativeWindowAttachment(unittest.TestCase):
         if os.name != 'nt':
             # The test executes the Windows adapter's real conditional path.
             self.skipTest('Installed MSVC CPU lane')
-        toolsets = sorted(Path('C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC').glob('*'))
+        toolsets = msvc_2022_toolsets()
         kitroot = Path('C:/Program Files (x86)/Windows Kits/10')
         kits = sorted((kitroot / 'Include').glob('*'))
         if not toolsets or not kits:

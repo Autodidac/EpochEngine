@@ -109,11 +109,14 @@ include("{(ROOT/'Engine/cmake/epoch_task_scheduler.cmake').as_posix()}")
 epoch_admit_task_scheduler(legacy_origin "{ROOT.as_posix()}")
 add_custom_target(metric_origin_proof DEPENDS epoch_planet_mesh_export legacy_origin metric_origin)
 ''', encoding="utf-8")
-        temporary = proof / "tmp"
-        temporary.mkdir(exist_ok=True)
+        # MSVC appends the nested platform target and module scanner paths.
+        # Keep those outputs and provider scratch data below its path limit.
+        fixture = ROOT / "Artifacts/Tests/pmo" / identity
+        temporary = fixture / "tmp"
+        temporary.mkdir(parents=True, exist_ok=True)
         env = dict(os.environ, TEMP=str(temporary), TMP=str(temporary), TMPDIR=str(temporary),
                    MSBUILDDISABLENODEREUSE="1")
-        build = proof / "cmake"
+        build = fixture / "cmake"
         runs = []
 
         def run(phase, command, expected=0, timeout=180):
@@ -132,7 +135,7 @@ add_custom_target(metric_origin_proof DEPENDS epoch_planet_mesh_export legacy_or
                       if os.name == "nt" else ["-G", "Ninja Multi-Config"])
         run("configure", configure)
         metrics = []
-        data_root = proof / str(time.time_ns())
+        data_root = fixture / str(time.time_ns())
         for config in ("Debug", "Release"):
             command = ["cmake", "--build", str(build), "--config", config, "--parallel", "1", "--target",
                        "metric_origin_proof"]

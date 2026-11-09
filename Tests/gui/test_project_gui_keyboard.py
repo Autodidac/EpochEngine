@@ -23,6 +23,7 @@ def fixture():
     base = queue_fixture()
     base = base[:base.index("void fast_sequences(")]
     base = base.replace("#include <algorithm>", "#include <functional>\n#include <ranges>\n#include <unordered_map>\n#include <algorithm>")
+    base = base.replace("const void* visitedActiveWidget{};", "const void* visitedActiveWidget{};std::string windowKey;")
     base = base.replace("import epoch.gui.input;", "import epoch.gui.input;\nimport epoch.gui;\nimport asset.gui_artifact;\nimport project.gui_runtime;")
     base = base.replace("void reset_frame(){", "bool testPopup{};\nvoid reset_frame(){")
     base = base.replace("bool any_select_box_open(const core::Context*){return false;}", "bool any_select_box_open(const core::Context*){return testPopup;}")

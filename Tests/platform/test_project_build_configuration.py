@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from Tests.support.cpp import msvc_2022_toolsets
 from Tests.platform.test_child_close_router import definition
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -327,7 +328,10 @@ assert(state.projectBuildConfiguration=="Debug");
             self.assertIn(str(obj), linker)
             (scratch / "cl.rsp").write_text(compiler, encoding="utf-8")
             (scratch / "link.rsp").write_text(linker, encoding="utf-8")
-            tool = sorted(Path("C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC").glob("*"))[-1]
+            tools = msvc_2022_toolsets()
+            if not tools:
+                self.skipTest("Installed MSVC compiler unavailable")
+            tool = tools[-1]
             sdk = Path("C:/Program Files (x86)/Windows Kits/10")
             kit = sorted((sdk / "Include").glob("*"))[-1]
             environment = dict(os.environ)

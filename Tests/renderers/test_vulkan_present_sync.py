@@ -7,6 +7,8 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from Tests.support.cpp import msvc_2022_toolsets
+
 ROOT = Path(__file__).resolve().parents[2]
 
 class VulkanPresentSync(unittest.TestCase):
@@ -18,7 +20,7 @@ class VulkanPresentSync(unittest.TestCase):
         draw = 'void Application::drawFrame()' + commands.split('void Application::drawFrame()',1)[1].rsplit('} // namespace',1)[0]
         code = (ROOT/'Tests/renderers/vulkan.present_sync_contract.cpp').read_text(encoding='utf-8-sig').replace('ALLOCATOR',allocator).replace('CLEANUP',cleanup).replace('DRAW_FRAME',draw)
         if os.name != 'nt': self.skipTest('Installed Windows MSVC CPU lane')
-        toolsets=sorted(Path('C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC').glob('*'))
+        toolsets=msvc_2022_toolsets()
         kitroot=Path('C:/Program Files (x86)/Windows Kits/10');kits=sorted((kitroot/'Include').glob('*'))
         if not toolsets or not kits:self.skipTest('MSVC/SDK required')
         parent=(ROOT/'build/contract-tests').resolve();parent.mkdir(parents=True,exist_ok=True)

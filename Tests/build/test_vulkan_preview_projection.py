@@ -2,11 +2,11 @@
 from pathlib import Path
 import os
 import shutil
-import subprocess
 import tempfile
 import unittest
 
 from Tests.build.test_opengl_sprite_stream import definition
+from Tests.support.cpp import compile_and_run
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -15,17 +15,12 @@ class VulkanPreviewProjection(unittest.TestCase):
     def test_perspective_and_asymmetric_orthographic_clip_coordinates(self):
         if os.name != 'nt':
             self.skipTest('Installed MSVC CPU lane')
-        tools = sorted(Path('C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC').glob('*'))
-        sdk = Path('C:/Program Files (x86)/Windows Kits/10')
-        kits = sorted((sdk / 'Include').glob('*'))
-        if not tools or not kits:
-            self.skipTest('MSVC/SDK unavailable')
-        shared = (ROOT / 'Engine/modules/render.preview_grid.ixx').read_text(encoding='utf-8')
+        shared = (ROOT / 'Engine/src/render/render.preview_camera.cpp').read_text(encoding='utf-8')
         native = (ROOT / 'Engine/modules/vulkan.context_descriptor.ixx').read_text(encoding='utf-8')
-        functions = '\n'.join(definition(shared, marker).replace('export ', '') for marker in (
-            '    export [[nodiscard]] inline Mat4 identity_matrix(',
-            '    export [[nodiscard]] inline Mat4 perspective(',
-            '    export [[nodiscard]] inline Mat4 orthographic('))
+        functions = '\n'.join(definition(shared, marker) for marker in (
+            '    [[nodiscard]] Mat4 identity_matrix(',
+            '    [[nodiscard]] Mat4 perspective(',
+            '    [[nodiscard]] Mat4 orthographic('))
         conversion = '\n'.join(definition(native, marker) for marker in (
             '        [[nodiscard]] inline glm::mat4 previewgrid_to_glm(',
             '        [[nodiscard]] inline glm::mat4 previewgrid_to_vulkan_projection('))
@@ -81,20 +76,9 @@ int main(){
         parent.mkdir(parents=True, exist_ok=True)
         scratch = Path(tempfile.mkdtemp(prefix='vulkan-projection-', dir=parent))
         try:
-            cpp, binary = scratch / 'contract.cpp', scratch / 'contract.exe'
+            cpp = scratch / 'contract.cpp'
             cpp.write_text(code, encoding='utf-8')
-            tool, kit = tools[-1], kits[-1]
-            result = subprocess.run([
-                str(tool / 'bin/Hostx64/x64/cl.exe'), '/nologo', '/std:c++latest', '/EHsc',
-                '/I'+str(tool/'include'), '/I'+str(kit/'ucrt'),
-                '/Fo'+str(scratch/'contract.obj'), '/Fe'+str(binary), str(cpp),
-                '/link', '/LIBPATH:'+str(tool/'lib/x64'),
-                '/LIBPATH:'+str(sdk/'Lib'/kit.name/'um/x64'),
-                '/LIBPATH:'+str(sdk/'Lib'/kit.name/'ucrt/x64')],
-                cwd=scratch, capture_output=True, text=True)
-            self.assertEqual(result.returncode, 0, result.stdout[-5000:]+result.stderr)
-            result = subprocess.run([str(binary)], cwd=scratch, capture_output=True, text=True)
-            self.assertEqual(result.returncode, 0, result.stdout+result.stderr)
+            compile_and_run(self, cpp, scratch)
         finally:
             self.assertTrue(scratch.resolve().is_relative_to(parent.resolve()))
             shutil.rmtree(scratch)

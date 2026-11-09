@@ -27,14 +27,18 @@ def actual_fixture(owner_text=None):
         "    export struct DragSurfaceState", "    export struct DragSurfaceOptions",
         "    export struct DragSurfaceResult", "    export struct WidgetBounds",
         "    export enum class EventType", "    export struct InputEvent",
-        "    export struct InlineButtonSpec", "    export enum class InlineButtonSizing",
+        "    export enum class ButtonIcon", "    export struct InlineButtonSpec",
+        "    export enum class InlineButtonSizing",
         "    export enum class InlineButtonAlignment", "    export struct InlineButtonRowOptions"))
     clip = "\n".join(definition(gui, marker) for marker in (
         "    ContentClipScope::ContentClipScope(", "    ContentClipScope::~ContentClipScope()",
         "    ScopedTextScale::ScopedTextScale(", "    ScopedTextScale::~ScopedTextScale()",
         "        [[nodiscard]] static bool point_in_rect(",
         "        [[nodiscard]] static bool point_in_active_clip("))
-    pointer = "\n".join(definition(frame, marker) for marker in (
+    pointer_trace = frame[frame.index("    struct PointerFrameTraceState"):
+        frame.index("    static thread_local PointerFrameTraceState g_pointerFrameTrace{};")
+        + len("    static thread_local PointerFrameTraceState g_pointerFrameTrace{};")]
+    pointer = pointer_trace + "\n" + "\n".join(definition(frame, marker) for marker in (
         "    Vec2 mouse_position()", "    std::optional<Vec2> mouse_press_position(",
         "    bool drag_surface_hit_test(", "    DragSurfaceResult drag_surface(",
         "    bool is_mouse_over_content_clip()", "    bool was_mouse_pressed()", "    bool is_mouse_down()", "    bool was_mouse_released()"))
@@ -73,6 +77,7 @@ def actual_fixture(owner_text=None):
 #include <optional>
 #include <ranges>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -83,16 +88,18 @@ void require(bool accepted,int line){if(!accepted){std::fprintf(stderr,"Canvas o
 #define assert(value) require(static_cast<bool>(value),__LINE__)
 namespace authoring = epochengine::authoring;
 namespace gui_lib = epochengine::gui_lib;
+namespace epochengine::logger { void info(std::string_view, std::string_view) {} }
 namespace gui {
 struct Vec2 {float x{},y{};};
 SCOPES
 inline float kFontScale=1;
 inline struct Frame {void* ctx=reinterpret_cast<void*>(1);bool insideWindow=true;
  Vec2 contentMin{0,0},contentMax{2000,2000},mousePos{};
- bool mouseDown{},prevMouseDown{},justPressed{},justReleased{},mousePressConsumed{},mouseReleaseConsumed{},pointerAllowed=true;
+ bool mouseDown{},prevMouseDown{},justPressed{},justReleased{},mousePressConsumed{},mouseReleaseConsumed{},pointerInputAllowed=true;
+ bool selectPopupCapturedThisFrame{},selectPopupOwnsInput{},menuPopupBlocksBackground{},menuPopupOwnsInput{};
  std::vector<InputEvent> events;Vec2 cursor{};}g_frame;
 bool has_content_clip(){return g_frame.insideWindow;}
-bool point_in_modal_input_capture(Vec2){return g_frame.pointerAllowed;}
+bool point_in_modal_input_capture(Vec2){return g_frame.pointerInputAllowed;}
 bool left_press_available(){return g_frame.justPressed&&!g_frame.mousePressConsumed;}
 bool left_release_available(){return g_frame.justReleased;}
 void consume_left_release(){}
@@ -261,8 +268,8 @@ void view_zoom_pan_and_mapping(){
  assert(same(state.guiCanvasView.pan,{30,23})&&!state.guiCanvasView.drag.pending&&doc.revision()==revision);
  gui::g_frame.mousePressConsumed=false;gui::g_frame.justReleased=false;gui::g_frame.mouseDown=gui::g_frame.justPressed=true;gui::g_frame.mousePos={320,240};
  paints.clear();render_gui_document_canvas(state,{20,40},{600,400},true);assert(state.guiCanvasView.drag.pending);
- gui::g_frame.pointerAllowed=false;paints.clear();render_gui_document_canvas(state,{20,40},{600,400},true);assert(!state.guiCanvasView.drag.pending&&!state.guiCanvasView.drag.dragging);
- gui::g_frame.pointerAllowed=true;gui::g_frame.mouseDown=false;gui::g_frame.justReleased=true;gui::g_frame.mousePos={1900,1900};
+ gui::g_frame.pointerInputAllowed=false;paints.clear();render_gui_document_canvas(state,{20,40},{600,400},true);assert(!state.guiCanvasView.drag.pending&&!state.guiCanvasView.drag.dragging);
+ gui::g_frame.pointerInputAllowed=true;gui::g_frame.mouseDown=false;gui::g_frame.justReleased=true;gui::g_frame.mousePos={1900,1900};
  paints.clear();render_gui_document_canvas(state,{20,40},{600,400},true);assert(!state.guiCanvasView.drag.pending&&doc.revision()==revision);
  // Existing widget dragging maps screen delta through the full chosen scale.
  reset(state);state.guiCanvasView.panMode=false;state.guiCanvasView.zoom=2;state.guiCanvasView.pan={};

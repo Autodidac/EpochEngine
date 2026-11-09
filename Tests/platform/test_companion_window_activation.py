@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from Tests.support.cpp import msvc_2022_toolsets
 
 from Tests.build.test_opengl_sprite_stream import definition
 
@@ -173,7 +174,7 @@ int main(){
             binary = scratch/'contract'
             cpp.write_text(source, encoding='utf-8')
             if os.name == 'nt':
-                versions = sorted(Path('C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC').glob('*'))
+                versions = msvc_2022_toolsets()
                 sdk = Path('C:/Program Files (x86)/Windows Kits/10')
                 kits = sorted((sdk/'Include').glob('*'))
                 if not versions or not kits:

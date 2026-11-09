@@ -3,12 +3,43 @@
 This owns no application/model launch or source projection. Every executable is
 the caller's generated contract in its checkout-local report directory.
 """
+from functools import cache
 from pathlib import Path
 import os
 import shlex
 import shutil
 import subprocess
 import time
+
+
+@cache
+def msvc_2022_root() -> Path | None:
+    """Find the latest installed VS 2022 instance with the x64 C++ toolset."""
+    if os.name != "nt":
+        return None
+    program_files = Path(os.environ.get("ProgramFiles(x86)", "C:/Program Files (x86)"))
+    vswhere = program_files / "Microsoft Visual Studio/Installer/vswhere.exe"
+    if not vswhere.is_file():
+        return None
+    try:
+        result = subprocess.run([
+            str(vswhere), "-latest", "-products", "*", "-version", "[17.0,18.0)",
+            "-requires", "Microsoft.VisualStudio.Component.VC.Tools.x86.x64",
+            "-property", "installationPath", "-utf8",
+        ], capture_output=True, encoding="utf-8-sig", check=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    installation = Path(result.stdout.strip())
+    return installation if installation.is_absolute() and installation.is_dir() else None
+
+
+def msvc_2022_toolsets() -> list[Path]:
+    """List installed MSVC toolsets in version-directory order."""
+    installation = msvc_2022_root()
+    if installation is None:
+        return []
+    return sorted(tool for tool in (installation / "VC/Tools/MSVC").glob("*")
+                  if (tool / "bin/Hostx64/x64/cl.exe").is_file())
 
 
 def compile_and_run(test, source, report, *, args=(), includes=(), windows_flags=(),
@@ -19,7 +50,7 @@ def compile_and_run(test, source, report, *, args=(), includes=(), windows_flags
     temporary.mkdir(exist_ok=True)
     env = dict(os.environ, TEMP=str(temporary), TMP=str(temporary), TMPDIR=str(temporary))
     if os.name == "nt":
-        tools = sorted(Path("C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC").glob("*"))
+        tools = msvc_2022_toolsets()
         sdk = Path("C:/Program Files (x86)/Windows Kits/10")
         kits = sorted((sdk / "Include").glob("*"))
         if not tools or not kits:

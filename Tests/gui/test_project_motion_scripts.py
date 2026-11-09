@@ -2,6 +2,7 @@
 from pathlib import Path
 import hashlib,json,os,subprocess,time,unittest
 from Tests.build.test_opengl_sprite_stream import definition
+from Tests.support.cpp import msvc_2022_toolsets
 ROOT=Path(__file__).resolve().parents[2]
 
 class ProjectMotionScripts(unittest.TestCase):
@@ -168,7 +169,7 @@ int main(int argc,char**argv){
   proof=ROOT/'Artifacts/Reports/project-motion-scripts-oct29'/hashlib.sha256(code.encode()).hexdigest()[:12];proof.mkdir(parents=True,exist_ok=True)
   (proof/'consumer.cpp').write_text(code,encoding='utf-8')
   (proof/'legacy.cpp').write_text('#include "scripting.epoch_api.h"\nEPOCH_SCRIPT_EXPORT void run_script(EpochScriptHost*h){if(h&&h->log)h->log(h->user_data,"legacy");}\n',encoding='utf-8')
-  vc=sorted(Path('C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC').glob('*'))[-1]
+  vc=msvc_2022_toolsets()[-1]
   sdk=Path('C:/Program Files (x86)/Windows Kits/10');kit=sorted((sdk/'Include').iterdir())[-1];compiler=vc/'bin/Hostx64/x64/cl.exe';records=[]
   env=dict(os.environ);env['INCLUDE']=';'.join(str(p) for p in [vc/'include',kit/'ucrt',kit/'um',kit/'shared',kit/'winrt'])
   for config,flags in [('Debug',['/Od','/MDd','/D_DEBUG']),('Release',['/O2','/MD'])]:

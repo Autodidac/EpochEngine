@@ -20,6 +20,10 @@ def consumer():
     start=preview.index('            const auto meshBudget=',preview.index('        void publish_editor_preview_markers('))
     end=preview.index('                if (!forestPainting && !restore_editor_mesh_base_color',start)
     load=preview[start:end]+'\n            }\n'
+    mesh_cache='\n'.join(definition(preview, marker, marker.startswith('        struct ')) for marker in (
+        '        struct EditorPreviewMeshCacheUsage',
+        '        [[nodiscard]] std::optional<EditorPreviewMeshCacheUsage> editor_preview_mesh_cache_usage(',
+        '        [[nodiscard]] bool restore_editor_preview_mesh('))
     project=definition(transactions,'        [[nodiscard]] bool project_scene_document_into_editor(')
     project+='\n'+ '\n'.join(definition(transactions.replace("std::string_view selected_name = {}", "std::string_view selected_name"),x) for x in ('        [[nodiscard]] scene::SceneObjectSnapshot editor_entity_snapshot(', '        [[nodiscard]] bool apply_editor_scene_transaction(', '        void append_editor_descriptor_operations(', '        [[nodiscard]] bool synchronize_editor_scene_category('))
     refresh=definition(owner,'        void refresh_editor_planetary_mesh_policy(')
@@ -91,6 +95,7 @@ std::string editor_scene_identity(const EditorState&){return "reopen-budget";}
 PROJECT
 BUDGET
 REFRESH
+MESH_CACHE
 void load_preview_meshes(EditorState&state){const bool forestPreview=false,forestPainting=false;auto&previewEntities=state.entities;
 LOAD
 }
@@ -159,7 +164,7 @@ int main(int argc,char**argv){
   CHECK(project_scene_document_into_editor(state));load_preview_meshes(state);
   CHECK(!state.entities[2].meshSnapshot&&state.logs.size()==1&&state.logs.back().find("cache is full")!=std::string::npos);}
 }
-'''.replace('PROJECT',project).replace('BUDGET',budget).replace('REFRESH',refresh).replace('LOAD',load)
+'''.replace('PROJECT',project).replace('BUDGET',budget).replace('REFRESH',refresh).replace('MESH_CACHE',mesh_cache).replace('LOAD',load)
 
 
 class MeshReopenBudget(unittest.TestCase):

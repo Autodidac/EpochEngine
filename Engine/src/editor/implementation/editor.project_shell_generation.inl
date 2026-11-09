@@ -1025,6 +1025,33 @@
 )EPOCH";
     }
 
+    [[nodiscard]] static constexpr std::string_view generated_windows_msbuild_discovery() noexcept
+    {
+        return R"EPOCH(    $programFilesX86 = ${env:ProgramFiles(x86)}
+    if (-not [string]::IsNullOrWhiteSpace($programFilesX86)) {
+        $vswhere = Join-Path $programFilesX86 'Microsoft Visual Studio\Installer\vswhere.exe'
+        if (Test-Path -LiteralPath $vswhere -PathType Leaf) {
+            $installation = & $vswhere -latest -products '*' -version '[17.0,18.0)' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath | Select-Object -First 1
+            if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($installation) -and [IO.Path]::IsPathRooted($installation)) {
+                $msbuild64 = Join-Path $installation 'MSBuild\Current\Bin\amd64\MSBuild.exe'
+                if (Test-Path -LiteralPath $msbuild64 -PathType Leaf) { return $msbuild64 }
+            }
+        }
+    }
+)EPOCH";
+    }
+
+    [[nodiscard]] static constexpr std::string_view generated_windows_msbuild_candidates() noexcept
+    {
+        return R"EPOCH(    $candidates = @(
+        'C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\amd64\MSBuild.exe',
+        'C:\Program Files\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\amd64\MSBuild.exe',
+        'C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe',
+        'C:\Program Files\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe'
+    )
+)EPOCH";
+    }
+
     [[nodiscard]] static bool repair_generated_windows_dependency_script(std::string& text)
     {
         constexpr std::string_view begin{"    # EPOCH_INSTALLED_DEPENDENCIES_BEGIN\n"};
@@ -1061,14 +1088,12 @@
         'C:\Program Files\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe'
     )
 )EPOCH";
-        constexpr std::string_view currentCandidates = R"EPOCH(    $candidates = @(
-        'C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\amd64\MSBuild.exe',
-        'C:\Program Files\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\amd64\MSBuild.exe',
-        'C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe',
-        'C:\Program Files\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe'
-    )
-)EPOCH";
+        constexpr auto currentCandidates = generated_windows_msbuild_candidates();
+        constexpr auto discovery = generated_windows_msbuild_discovery();
         replace_all(text, previousCandidates, currentCandidates);
+        if (const auto at = text.find(currentCandidates); at != std::string::npos
+            && !std::string_view{text}.substr(0, at).ends_with(discovery))
+            text.insert(at, discovery);
         return true;
     }
 
@@ -2437,12 +2462,8 @@
             "    if (-not [string]::IsNullOrWhiteSpace($env:MSBUILD_EXE_PATH) -and (Test-Path -LiteralPath $env:MSBUILD_EXE_PATH)) {\n"
             "        return $env:MSBUILD_EXE_PATH\n"
             "    }\n"
-            "    $candidates = @(\n"
-            "        'C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\MSBuild\\Current\\Bin\\amd64\\MSBuild.exe',\n"
-            "        'C:\\Program Files\\Microsoft Visual Studio\\2022\\BuildTools\\MSBuild\\Current\\Bin\\amd64\\MSBuild.exe',\n"
-            "        'C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\MSBuild\\Current\\Bin\\MSBuild.exe',\n"
-            "        'C:\\Program Files\\Microsoft Visual Studio\\2022\\BuildTools\\MSBuild\\Current\\Bin\\MSBuild.exe'\n"
-            "    )\n"
+            + std::string{generated_windows_msbuild_discovery()}
+            + std::string{generated_windows_msbuild_candidates()} +
             "    foreach ($candidate in $candidates) {\n"
             "        if (Test-Path -LiteralPath $candidate) { return $candidate }\n"
             "    }\n"

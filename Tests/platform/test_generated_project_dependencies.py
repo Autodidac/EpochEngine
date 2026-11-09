@@ -14,6 +14,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from Tests.support.cpp import msvc_2022_root, msvc_2022_toolsets
 
 from Tests.platform.test_child_close_router import definition
 from Tools.source.owned_source_text import read_owned_source
@@ -26,11 +27,13 @@ SHELL = ROOT / "Engine/src/editor/implementation/editor.project_shell_generation
 class GeneratedProjectDependencies(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        tools = sorted(Path("C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC").glob("*"))
+        installation = msvc_2022_root()
+        tools = msvc_2022_toolsets()
         sdk = Path("C:/Program Files (x86)/Windows Kits/10")
         kits = sorted((sdk / "Include").glob("*"))
-        if not tools or not kits:
+        if installation is None or not tools or not kits:
             raise unittest.SkipTest("Installed MSVC CPU consumer unavailable")
+        cls.msbuild = installation / "MSBuild/Current/Bin/amd64/MSBuild.exe"
         parent = ROOT / "build/contract-tests"
         parent.mkdir(parents=True, exist_ok=True)
         cls.scratch = Path(tempfile.mkdtemp(prefix="project-dependencies-", dir=parent))
@@ -40,7 +43,9 @@ class GeneratedProjectDependencies(unittest.TestCase):
             "    static void replace_all(",
             "    [[nodiscard]] static std::string generated_child_project_library_properties(",
             "    [[nodiscard]] static constexpr std::string_view generated_windows_dependency_properties(",
-            "    [[nodiscard]] static std::string generated_windows_dependency_script("))
+            "    [[nodiscard]] static std::string generated_windows_dependency_script(",
+            "    [[nodiscard]] static constexpr std::string_view generated_windows_msbuild_discovery(",
+            "    [[nodiscard]] static constexpr std::string_view generated_windows_msbuild_candidates("))
         fragments += definition((ROOT / "Engine/src/editor/implementation/editor.project_registry.inl").read_text(encoding="utf-8"),
             "    [[nodiscard]] static std::string to_windows_path(")
         fragments += definition(source, "    inline constexpr std::array<std::string_view, 7> generated_child_runtime_assets", True)
@@ -95,11 +100,16 @@ replace_all(previousTracking,"/p:UseMultiToolTask=false","/p:UseMultiToolTask=tr
 assert(previousTracking!=windowsBuildScriptText);
 assert(repair_generated_windows_dependency_script(previousTracking));
 assert(previousTracking==windowsBuildScriptText);
-auto previousHost=windowsBuildScriptText;
+auto fixedHost=windowsBuildScriptText;
+replace_all(fixedHost,generated_windows_msbuild_discovery(),"");
+assert(fixedHost!=windowsBuildScriptText);
+auto previousHost=fixedHost;
 replace_all(previousHost,"        'C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\MSBuild\\Current\\Bin\\amd64\\MSBuild.exe',\n","");
 replace_all(previousHost,"        'C:\\Program Files\\Microsoft Visual Studio\\2022\\BuildTools\\MSBuild\\Current\\Bin\\amd64\\MSBuild.exe',\n","");
 replace_all(previousHost,"'/p:PreferredToolArchitecture=x64', ","");
 assert(previousHost!=windowsBuildScriptText);
+assert(repair_generated_windows_dependency_script(fixedHost));
+assert(fixedHost==windowsBuildScriptText);
 assert(repair_generated_windows_dependency_script(previousHost));
 assert(previousHost==windowsBuildScriptText);
 auto invalid=std::string{"custom script"};assert(!repair_generated_windows_dependency_script(invalid));assert(invalid=="custom script");
@@ -141,6 +151,9 @@ assert(repair_generated_windows_dependency_script(current));assert(current==wind
             "$repoBuildLockPath = Join-Path $projectRoot 'Artifacts\\generated-project-build.lock'"), encoding="utf-8")
         cls.stub = cls.scratch / "record-msbuild.ps1"
         cls.stub.write_text("@{ arguments = @($args); concurrency = $env:VCPKG_MAX_CONCURRENCY; cmake = $env:CMAKE_BUILD_PARALLEL_LEVEL; nodeReuse = $env:MSBUILDDISABLENODEREUSE; buildRoot = $env:EpochBuildRoot } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $env:EPOCH_ARGUMENT_RECEIPT\n$global:LASTEXITCODE = 0\n", encoding="utf-8")
+        cls.sdk_fixture = cls.scratch / "installed-sdk"
+        cls.canonical_base = cls.sdk_fixture / "Artifacts/Dependencies/vcpkg_installed"
+        cls.canonical_triplet = cls.make_cache(cls.canonical_base)
 
     @classmethod
     def tearDownClass(cls):
@@ -192,22 +205,44 @@ assert(repair_generated_windows_dependency_script(current));assert(current==wind
         self.assertEqual((receipt["concurrency"], receipt["cmake"], receipt["nodeReuse"]), ("2", "2", "1"))
 
     def test_ordinary_build_reuses_actual_canonical_cache_without_install(self):
+        # Execute the actual argument builder and default dependency selection
+        # against the isolated SDK tree. Full generated-script tests below still
+        # run source admission against the unchanged physical source edition.
+        source = (self.output / "build_project.ps1").read_text(encoding="utf-8-sig")
+        start = source.index("    $msbuildArgs = @(\n")
+        stop = source.index("    # EPOCH_INSTALLED_DEPENDENCIES_END", start)
+        preflight = self.scratch / "canonical-preflight.ps1"
+        preflight.write_text(
+            "param($repoRoot, $Configuration, $projectFile, $receiptStub)\n"
+            "$ErrorActionPreference = 'Stop'\n"
+            "$Platform = 'x64'\n"
+            "$solutionDir = $repoRoot + '\\'\n"
+            "$vcpkgManifestRoot = Join-Path $repoRoot 'Engine'\n"
+            "$logPath = Join-Path $PSScriptRoot 'canonical-preflight.log'\n"
+            + source[start:stop] + "& $receiptStub @msbuildArgs\n", encoding="utf-8")
+        receipt_path = self.scratch / "canonical-arguments.json"
+        environment = dict(os.environ, EPOCH_ARGUMENT_RECEIPT=str(receipt_path))
+        environment.pop("EPOCH_CANDIDATE_DEPENDENCY_ROOT", None)
         for configuration in ("Debug", "Release"):
-            result, receipt = self.run_script(configuration)
+            result = subprocess.run(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+                str(preflight), str(self.sdk_fixture), configuration, str(self.output / "DependencyFixture.vcxproj"), str(self.stub)],
+                cwd=self.scratch, env=environment, capture_output=True, text=True, timeout=30)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-            self.assert_arguments(receipt, ROOT / "Artifacts/Dependencies/vcpkg_installed", ROOT / "Artifacts/Dependencies/vcpkg_installed/x64-windows")
+            receipt = json.loads(receipt_path.read_text(encoding="utf-8-sig"))
+            self.assertIn(f"/p:Configuration={configuration}", receipt["arguments"])
+            self.assert_arguments(receipt, self.canonical_base, self.canonical_triplet)
 
     def test_default_release_and_real_build_output_are_preserved(self):
         original = self.stub.read_text(encoding="utf-8")
         messages = ("Scanning sources for module dependencies...", "Compiling...", "fixture.module.ixx", "Linking...")
         try:
             self.stub.write_text(original + "\n" + "\n".join("Write-Output '" + line + "'" for line in messages) + "\n", encoding="utf-8")
-            result, receipt = self.run_script(configuration=None)
+            result, receipt = self.run_script(configuration=None, dependency_base=self.canonical_base)
         finally:
             self.stub.write_text(original, encoding="utf-8")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("/p:Configuration=Release", receipt["arguments"])
-        self.assert_arguments(receipt, ROOT / "Artifacts/Dependencies/vcpkg_installed", ROOT / "Artifacts/Dependencies/vcpkg_installed/x64-windows")
+        self.assert_arguments(receipt, self.canonical_base, self.canonical_triplet)
         captured = (self.output / "Artifacts/Reports/build-release-x64.log").read_bytes()
         transcript = captured.decode("utf-16" if captured.startswith((b"\xff\xfe", b"\xfe\xff")) else "utf-8-sig")
         for line in messages:
@@ -227,11 +262,11 @@ assert(repair_generated_windows_dependency_script(current));assert(current==wind
         self.assertTrue(selected.is_file())
         self.assertEqual(selected.parent.name.lower(), "amd64")
         build_root = self.scratch / "isolated-build-root"
-        result, receipt = self.run_script(build_root=build_root)
+        result, receipt = self.run_script(dependency_base=self.canonical_base, build_root=build_root)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn(str(self.stub), result.stdout)  # Explicit host selection wins.
         self.assertEqual(receipt["buildRoot"], str(build_root))
-        self.assert_arguments(receipt, ROOT / "Artifacts/Dependencies/vcpkg_installed", ROOT / "Artifacts/Dependencies/vcpkg_installed/x64-windows")
+        self.assert_arguments(receipt, self.canonical_base, self.canonical_triplet)
         for configuration in ("Debug", "Release"):
             properties = subprocess.run([str(selected), str(self.output / "DependencyFixture.vcxproj"),
                 "/nologo", "/nr:false", "/p:Platform=x64", f"/p:Configuration={configuration}",
@@ -270,9 +305,9 @@ assert(repair_generated_windows_dependency_script(current));assert(current==wind
         self.assert_arguments(receipt, special, triplet)
 
     def test_actual_msbuild_evaluation_keeps_base_and_triplet_distinct(self):
-        msbuild = Path("C:/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/amd64/MSBuild.exe")
+        self.assertTrue(self.msbuild.is_file(), "Installed MSVC is missing x64 MSBuild")
         for configuration in ("Debug", "Release"):
-            result = subprocess.run([str(msbuild), str(self.output / "DependencyFixture.vcxproj"), "/nologo", "/nr:false",
+            result = subprocess.run([str(self.msbuild), str(self.output / "DependencyFixture.vcxproj"), "/nologo", "/nr:false",
                 "/p:Platform=x64", f"/p:Configuration={configuration}",
                 "/getProperty:VcpkgInstalledDir,_ZVcpkgInstalledDir,_ZVcpkgCurrentInstalledDir,VcpkgManifestInstall,VcpkgAutoBootstrap,EpochVcpkgInstallRoot,CL_MPCount,UseMultiToolTask"],
                 cwd=self.output, capture_output=True, text=True)
@@ -291,9 +326,9 @@ assert(repair_generated_windows_dependency_script(current));assert(current==wind
     def test_required_runtime_assets_copy_exactly_with_both_build_owners(self):
         names = ("fonts/Roboto-Regular.ttf", "fonts/OFL.txt", "vulkan/texture.ppm", "vulkan/shaders/vert.spv",
             "vulkan/shaders/frag.spv", "vulkan/shaders/gui_vert.spv", "vulkan/shaders/gui_frag.spv")
-        msbuild = Path("C:/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/amd64/MSBuild.exe")
+        self.assertTrue(self.msbuild.is_file(), "Installed MSVC is missing x64 MSBuild")
         staged = self.scratch / "staged-msbuild"
-        result = subprocess.run([str(msbuild), str(self.output / "DependencyFixture.vcxproj"), "/nologo", "/nr:false",
+        result = subprocess.run([str(self.msbuild), str(self.output / "DependencyFixture.vcxproj"), "/nologo", "/nr:false",
             "/t:EpochCopyRequiredRuntimeAssets", "/p:Configuration=Release", "/p:Platform=x64", f"/p:OutDir={staged}\\"],
             cwd=self.output, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -325,7 +360,7 @@ assert(repair_generated_windows_dependency_script(current));assert(current==wind
         project.write_text('<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003"><PropertyGroup>'
             f'<EpochRepoRoot>{bad}\\</EpochRepoRoot><OutDir>{bad}\\output\\</OutDir></PropertyGroup>'
             '<Target Name="EpochCopyProjectAssets" />' + fragment + '</Project>', encoding="utf-8")
-        result = subprocess.run([str(msbuild), str(project), "/nologo", "/nr:false", "/t:EpochCopyRequiredRuntimeAssets"], capture_output=True, text=True)
+        result = subprocess.run([str(self.msbuild), str(project), "/nologo", "/nr:false", "/t:EpochCopyRequiredRuntimeAssets"], capture_output=True, text=True)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("Required Engine runtime asset is missing", result.stdout)
         (consumer / "CMakeLists.txt").write_text(cmake.replace(

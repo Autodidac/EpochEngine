@@ -97,46 +97,78 @@ int main(int argc,char** argv) {
 }
 '''
 
-class ForestArea(unittest.TestCase):
- def test_distribution_real_mesh_region_history_and_reopen(self):
-  if os.name != "nt": self.skipTest("Installed MSVC CPU module lane")
-  proof=ROOT/"Artifacts/Reports/forest-area-nov01";proof.mkdir(parents=True,exist_ok=True)
-  receipt=proof/"result.json";receipt.write_text(json.dumps({"pass":False,"status":"running"})+"\n")
-  build=ROOT/"Artifacts/Intermediate/tests/forest-area"
-  source=proof/"forest.area_contract.cpp";source.write_text(CODE,encoding="utf-8")
-  roots=[ROOT/"Engine/modules",ROOT/"Engine/dep/EpochPlatformEngine/modules"]
-  found={}
-  for folder in roots:
-   for path in folder.glob("*.ixx"):
-    match=re.search(r"^export module\s+([\w.:]+);",path.read_text(encoding="utf-8-sig"),re.M)
-    if match: found[match.group(1)]=path
-  selected={};pending=["scene.snapshot","scene.serializer","scene.document","scene.persistence","scene.runtime","scene.interaction","forest.preview_mesh","forest.factory"]
-  while pending:
-   name=pending.pop()
-   if name in selected or name in ("std","std.compat"):continue
-   self.assertIn(name,found);selected[name]=found[name]
-   pending+=re.findall(r"^(?:export )?import\s+([\w.]+);",selected[name].read_text(encoding="utf-8-sig"),re.M)
-  paths=lambda ps:" ".join('"'+p.as_posix()+'"' for p in ps)
-  (proof/"CMakeLists.txt").write_text(f'''cmake_minimum_required(VERSION 3.30)
-project(ForestArea LANGUAGES CXX)
-add_executable(anchor "{source.as_posix()}" "{(ROOT/'Engine/src/forest/forest.preview_mesh.cpp').as_posix()}")
+def run_forest_cpu_contract(test, code, lane, project, filename):
+    if os.name != "nt":
+        test.skipTest("Installed MSVC CPU module lane")
+    proof = ROOT / 'Artifacts/Reports' / f'{lane}-nov01'
+    proof.mkdir(parents=True, exist_ok=True)
+    receipt = proof / 'result.json'
+    receipt.write_text(json.dumps({'pass': False, 'status': 'running'}) + '\n')
+    build = ROOT / 'Artifacts/Intermediate/tests' / lane
+    source = proof / filename
+    source.write_text(code, encoding='utf-8')
+    roots = [ROOT / 'Engine/modules', ROOT / 'Engine/dep/EpochPlatformEngine/modules']
+    implementations = [ROOT / path for path in (
+        'Engine/src/forest/forest.preview_mesh.cpp',
+        'Engine/src/assets/texture/asset.texture_artifact.cpp',
+        'Engine/src/assets/texture/asset.texture_import.cpp',
+        'Engine/src/assets/image.stb.cpp',
+        'Engine/src/platform/core.path.cpp',
+        'Engine/dep/EpochPlatformEngine/src/core/core.log.cpp',
+        'Engine/dep/EpochPlatformEngine/src/core/core.time.cpp',
+    )]
+    found = {}
+    for folder in roots:
+        for path in folder.glob('*.ixx'):
+            match = re.search(r'^export module\s+([\w.:]+);', path.read_text(encoding='utf-8-sig'), re.M)
+            if match:
+                found[match.group(1)] = path
+    imports = re.compile(r'^(?:export )?(?:import|module)\s+([\w.:]+);', re.M)
+    pending = imports.findall(code)
+    for path in implementations:
+        pending.extend(imports.findall(path.read_text(encoding='utf-8-sig')))
+    selected = {}
+    while pending:
+        name = pending.pop()
+        if name in selected or name in ('std', 'std.compat'):
+            continue
+        test.assertIn(name, found)
+        selected[name] = found[name]
+        pending.extend(imports.findall(selected[name].read_text(encoding='utf-8-sig')))
+
+    def paths(values):
+        return ' '.join(f'"{path.as_posix()}"' for path in values)
+
+    (proof / 'CMakeLists.txt').write_text(f'''cmake_minimum_required(VERSION 3.30)
+project({project} LANGUAGES CXX)
+add_executable(anchor "{source.as_posix()}" {paths(implementations)})
+target_link_libraries(anchor PRIVATE shell32)
 target_compile_features(anchor PRIVATE cxx_std_23)
 target_compile_options(anchor PRIVATE /W3 /WX /utf-8 /Z7)
-target_include_directories(anchor PRIVATE "{(ROOT/'Engine/include').as_posix()}")
+target_include_directories(anchor PRIVATE "{(ROOT/'Engine/include').as_posix()}" "{(ROOT/'Engine/dep/EpochPlatformEngine/include').as_posix()}")
 target_sources(anchor PRIVATE FILE_SET CXX_MODULES BASE_DIRS {paths(roots)} FILES {paths(selected.values())})
 enable_testing()
 add_test(NAME actual_scene_anchor COMMAND anchor "{(proof/'fixture').as_posix()}/$<CONFIG>")
-''',encoding="utf-8")
-  commands=[["cmake","-S",str(proof),"-B",str(build),"-G","Visual Studio 17 2022","-A","x64"]]
-  for config in ("Debug","Release"):
-   commands += [["cmake","--build",str(build),"--config",config,"--parallel","1"],["ctest","--test-dir",str(build),"-C",config,"--output-on-failure"]]
-  results=[]
-  for index,command in enumerate(commands):
-   completed=subprocess.run(command,cwd=ROOT,capture_output=True,text=True,timeout=180)
-   (proof/f"lane-{index}.log").write_text(completed.stdout+completed.stderr,encoding="utf-8")
-   results.append({"command":command,"exit_code":completed.returncode})
-   receipt.write_text(json.dumps({"pass":False,"status":"failed" if completed.returncode else "running","runs":results},indent=2)+"\n")
-   self.assertEqual(completed.returncode,0,completed.stdout[-8500:]+completed.stderr)
-  receipt.write_text(json.dumps({"pass":True,"scope":"Actual scene/document/serializer/persistence/interaction/runtime and forest orientation modules; no native renderer or Editor acceptance.","runs":results,"sources":{str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in selected.values()}},indent=2)+"\n")
+''', encoding='utf-8')
+    commands = [['cmake', '-S', str(proof), '-B', str(build), '-G', 'Visual Studio 17 2022', '-A', 'x64']]
+    for config in ('Debug', 'Release'):
+        commands.extend((['cmake', '--build', str(build), '--config', config, '--parallel', '1'],
+                         ['ctest', '--test-dir', str(build), '-C', config, '--output-on-failure']))
+    results = []
+    for index, command in enumerate(commands):
+        completed = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, timeout=180)
+        (proof / f'lane-{index}.log').write_text(completed.stdout + completed.stderr, encoding='utf-8')
+        results.append({'command': command, 'exit_code': completed.returncode})
+        receipt.write_text(json.dumps({'pass': False, 'status': 'failed' if completed.returncode else 'running',
+                                       'runs': results}, indent=2) + '\n')
+        test.assertEqual(completed.returncode, 0, completed.stdout[-8500:] + completed.stderr)
+    receipt.write_text(json.dumps({'pass': True, 'scope': 'Forest and scene CPU contracts', 'runs': results,
+                                   'sources': {str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()
+                                               for path in (*selected.values(), *implementations)}}, indent=2) + '\n')
+
+
+class ForestArea(unittest.TestCase):
+    def test_distribution_real_mesh_region_history_and_reopen(self):
+        run_forest_cpu_contract(self, CODE, 'forest-area', 'ForestArea', 'forest.area_contract.cpp')
 
 if __name__ == "__main__":unittest.main()

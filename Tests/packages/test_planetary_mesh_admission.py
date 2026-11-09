@@ -1,6 +1,5 @@
 """Actual mesh/scene modules and Editor/runtime admission owners; no GPU or provider process."""
 from pathlib import Path
-import hashlib
 import json
 import os
 import re
@@ -18,7 +17,10 @@ PLAY = ROOT / "Engine/src/epoch/implementation/epoch.project_play_scene.inl"
 
 def owner_function(source, marker):
     start = source.index(marker)
-    brace = source.index("\n        {", start) + 9
+    body = re.search(r"\n[ \t]*\{", source[start:])
+    if not body:
+        raise AssertionError(marker)
+    brace = start + body.end() - 1
     end, depth = brace + 1, 1
     while depth:
         depth += (source[end] == "{") - (source[end] == "}")
@@ -171,6 +173,10 @@ bool runtime_forest_projection_admitted(const ProjectRuntimeEntity&){return fals
 previewgrid::ObjectPreviewPrimitive runtime_preview_primitive_for_entity(const ProjectRuntimeEntity&){return previewgrid::ObjectPreviewPrimitive::Cube;}
 previewgrid::Vec3 runtime_marker_color_for_entity(const ProjectRuntimeEntity&,bool){return {1,1,1};}
 float runtime_marker_radius_for_entity(const ProjectRuntimeEntity&){return 1;}
+// This fixture exercises normal mesh publication. The asynchronous camera
+// packet is a separate runtime boundary and must not run in this lane.
+constexpr int m_runtimeViewportWidth=1280,m_runtimeViewportHeight=720;
+bool pump_runtime_planetary_frame(const void*,previewgrid::SceneFrameRequest,bool){std::abort();}
 PUBLICATION
 }
 int main(int argc,char** argv){
@@ -239,7 +245,8 @@ int main(int argc,char** argv){
  CHECK(reopened.snapshot.objects[0].mesh_asset==projected.snapshot.objects[0].mesh_asset);
  scene_runtime::SceneRuntime sceneRuntime;CHECK(sceneRuntime.replace(reopened.snapshot).committed());RuntimeProbe runtime;runtime.m_projectRoot=root.string();
  runtime.m_entities.assign(sceneRuntime.projection()->entities().begin(),sceneRuntime.projection()->entities().end());runtime.prepare_project_meshes();CHECK(runtime.m_meshes.size()==1&&runtime.m_meshPlanetarySettings);
- const auto ctx=reinterpret_cast<const epochengine::core::Context*>(std::uintptr_t{71});
+ const epochengine::core::Context context;
+ const auto* ctx=&context;
  publish_project_play_markers(ctx,runtime.m_entities,&runtime.m_meshes,runtime.m_meshFrameLimits);
  CHECK(previewgrid::detail::g_objectMarkers.at(ctx).markers.size()==1);
  const std::array marker{previewgrid::ObjectMarker{.primitive=previewgrid::ObjectPreviewPrimitive::IndexedMesh,.mesh=built.artifact}};
@@ -301,13 +308,14 @@ class PlanetaryMeshAdmission(unittest.TestCase):
             "[[nodiscard]] std::optional<scene_interaction::FocusTarget> editor_planetary_body_focus(",
             "void refresh_editor_planetary_mesh_policy(", "[[nodiscard]] bool import_project_mesh("))
         geometry = GEOMETRY_CODE[GEOMETRY_CODE.index("struct Geometry"):GEOMETRY_CODE.index("int main(")]
-        runtime = definition(PLAY.read_text(encoding="utf-8"), "            void prepare_project_meshes(")
+        play = PLAY.read_text(encoding="utf-8")
+        runtime = definition(play, "            void prepare_project_meshes(")
         legacy = (ROOT / "Engine/src/epoch/epoch.engine_legacy.cpp").read_text(encoding="utf-8")
         publication = "\n".join(owner_function(legacy,marker) for marker in (
             "[[nodiscard]] std::optional<epochengine::previewgrid::Vec3> project_play_position_for_origin(",
             "[[nodiscard]] bool project_play_entity_has_geometry(",
-            "[[nodiscard]] std::optional<epochengine::previewgrid::ObjectMarker> project_play_marker_for_entity(",
-            "bool publish_project_play_markers("))
+            "[[nodiscard]] std::optional<epochengine::previewgrid::ObjectMarker> project_play_marker_for_entity("))
+        publication += "\n" + owner_function(play, "            bool publish_project_play_markers(")
         outliner = definition((ROOT/'Engine/src/editor/application/editor.frame_outliner.inl').read_text(encoding='utf-8'),
             '        if(editor.planetaryMeshPolicy&&!editor.planetaryMeshPolicy->generated_bodies.empty())')
         code = CODE.replace("GEOMETRY", geometry).replace("EDITOR_FUNCTIONS", functions).replace("RUNTIME_FUNCTION", runtime).replace("PUBLICATION", publication).replace('BODY_OUTLINER',outliner)
@@ -334,6 +342,7 @@ class PlanetaryMeshAdmission(unittest.TestCase):
         module_paths = "\n".join('"'+module_map[name].as_posix()+'"' for name in sorted(modules))
         implementations = [ROOT / path for path in ("Engine/src/render/render.preview_camera.cpp","Engine/src/assets/texture/asset.texture_artifact.cpp",
             "Engine/src/authoring/texture/authoring.texture_document.cpp", "Engine/src/authoring/texture/authoring.texture_residency.cpp")]
+        fixture = ROOT / "Artifacts/Tests" / f"pma{time.time_ns():x}"
         (proof / "CMakeLists.txt").write_text(f'''cmake_minimum_required(VERSION 3.30)
 set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT Embedded)
 project(PlanetaryMeshAdmission LANGUAGES CXX)
@@ -343,11 +352,10 @@ target_compile_options(admission PRIVATE /W3 /WX /utf-8 /EHsc)
 target_include_directories(admission PRIVATE "{(ROOT/'Engine/include').as_posix()}")
 target_sources(admission PRIVATE FILE_SET CXX_MODULES BASE_DIRS {" ".join('"'+path.as_posix()+'"' for path in owners)} FILES {module_paths})
 enable_testing()
-add_test(NAME actual_planetary_mesh_admission COMMAND admission "{proof.as_posix()}/fixture/{time.time_ns()}/$<CONFIG>")
+add_test(NAME actual_planetary_mesh_admission COMMAND admission "{fixture.as_posix()}/data/$<CONFIG>")
 set_tests_properties(actual_planetary_mesh_admission PROPERTIES TIMEOUT 60)
 ''', encoding="utf-8")
-        identity = hashlib.sha256(code.encode()).hexdigest()[:12]
-        build = proof / "msvc" / identity
+        build = fixture / "build"
         commands = [["cmake", "-S", str(proof), "-B", str(build), "-G", "Visual Studio 17 2022", "-A", "x64"]]
         for config in ("Debug", "Release"):
             commands += [["cmake", "--build", str(build), "--config", config, "--parallel", "1", "--", "/nr:false", "/p:UseMultiToolTask=false", "/p:CL_MPCount=1"], ["ctest", "--test-dir", str(build), "-C", config, "--output-on-failure"]]

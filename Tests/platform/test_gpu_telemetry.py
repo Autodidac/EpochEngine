@@ -8,6 +8,7 @@ import time
 import unittest
 
 from Tests.build.test_opengl_sprite_stream import definition
+from Tests.support.cpp import msvc_2022_root
 
 ROOT = Path(__file__).resolve().parents[2]
 OWNER = ROOT / "Engine/src/platform/platform.work_admission.cpp"
@@ -272,6 +273,11 @@ class GpuTelemetry(unittest.TestCase):
     def test_actual_reader_toolbar_and_optional_build(self):
         if os.name != "nt":
             self.skipTest("Installed Windows SDK/MSVC CPU lane; other platforms remain unavailable")
+        installation = msvc_2022_root()
+        if installation is None:
+            self.skipTest("Installed MSVC compiler unavailable")
+        msbuild = installation / "MSBuild/Current/Bin/amd64/MSBuild.exe"
+        self.assertTrue(msbuild.is_file(), "Installed MSVC is missing x64 MSBuild")
         report = ROOT / "Artifacts/Reports/gpu-telemetry-oct29" / str(time.time_ns())
         report.mkdir(parents=True)
         (report / "consumer.cpp").write_text(consumer(), encoding="utf-8")
@@ -325,11 +331,10 @@ target_compile_definitions(gpu_ports PRIVATE {flag})
 <Import Project="{ROOT/'Tools/MSVC/EpochDiagnostics.props'}"/>
 <Target Name="Print" DependsOnTargets="EpochValidateNvidiaTelemetry"><Message Importance="High" Text="gpu=$(EpochNvidiaTelemetryDefine)"/></Target>
 </Project>''',encoding="utf-8")
-        msbuild="C:/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/MSBuild.exe"
         for value, expected in (("true","1"),("false","0"),("1","1"),("0","0")):
-            checked("flags-"+value, [msbuild,str(project),"/nologo","/t:Print","/p:EpochNvidiaTelemetry="+value])
+            checked("flags-"+value, [str(msbuild),str(project),"/nologo","/t:Print","/p:EpochNvidiaTelemetry="+value])
             self.assertIn("gpu="+expected,(report/("flags-"+value+".log")).read_text(encoding="utf-8"))
-        checked("flags-invalid", [msbuild,str(project),"/nologo","/t:Print","/p:EpochNvidiaTelemetry=2"], expected=1)
+        checked("flags-invalid", [str(msbuild),str(project),"/nologo","/t:Print","/p:EpochNvidiaTelemetry=2"], expected=1)
         self.assertEqual(hashes(),before,"Source changed during actual-owner proof")
         (report/"result.json").write_text(json.dumps({"passed":True,"source_sha256":before,"invocations":invocations,
             "native_nvml_calls":False,"mock_ports":"Only system library resolution and NVML callbacks; actual reader/loader and toolbar bodies, actual platform module+CPP compiled.",

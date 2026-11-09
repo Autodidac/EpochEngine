@@ -8,6 +8,7 @@ import subprocess
 import time
 import unittest
 from Tests.build.test_opengl_sprite_stream import definition
+from Tests.packages.test_planetary_mesh_admission import owner_function
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -32,6 +33,7 @@ def consumer():
         '        [[nodiscard]] std::optional<epochengine::previewgrid::ObjectMarker> project_play_marker_for_entity('))
     owner = legacy[legacy.index('        struct ProjectPlayWaterCache final'):legacy.index('        [[nodiscard]] std::filesystem::path project_runtime_root(')]
     play=(ROOT/'Engine/src/epoch/implementation/epoch.project_play_scene.inl').read_text(encoding='utf-8')
+    owner += '\n' + owner_function(play, '            bool publish_project_play_markers(')
     sampling_start=play.index('                    auto& waterCache=m_waterCaches[ctx.get()];')
     sampling=play[sampling_start:play.index('                    const bool published=',sampling_start)]
     cache_field=re.search(r'            std::unordered_map<const void\*,ProjectPlayWaterCache> m_waterCaches\{\};',play).group()
@@ -41,6 +43,7 @@ def consumer():
 #include <atomic>
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
 #include <fstream>
 #include <limits>
 #include <memory>
@@ -77,8 +80,12 @@ inline Port& get(const char*) {static Port port;return port;}
 namespace epochengine::engine {
 using ProjectRuntimeEntity=scene_runtime::RuntimeEntity;
 HELPERS
+constexpr int m_runtimeViewportWidth=1280,m_runtimeViewportHeight=720;
+// This contract uses nonplanetary Water with no explicit frame camera.
+bool pump_runtime_planetary_frame(const void*,previewgrid::SceneFrameRequest,bool){std::abort();}
 OWNER
 struct ProjectWaterPort {
+ bool m_runtimeWaterVisible{true};
  std::vector<ProjectRuntimeEntity> m_entities; CACHE_FIELD
  void sample(core::Context* raw) { const std::shared_ptr<core::Context> ctx{raw,[](auto*){}}; SAMPLING }
 };

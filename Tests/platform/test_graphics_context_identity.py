@@ -5,7 +5,7 @@ import subprocess
 import tempfile
 import unittest
 from Tests.build.test_opengl_sprite_stream import definition
-from Tests.support.cpp import compile_and_run
+from Tests.support.cpp import compile_and_run, msvc_2022_toolsets
 ROOT = Path(__file__).resolve().parents[2]
 
 class GraphicsContextIdentity(unittest.TestCase):
@@ -150,7 +150,7 @@ int main() {
         declarations = source.split('export namespace epochengine::platform',1)[1].split('    class IGraphicsContext',1)[0] + '}\n'
         self.assertIn('struct GraphicsContextDesc', declarations)
         native = ROOT/'Engine/dep/EpochPlatformEngine/include'
-        toolsets = sorted(Path('C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC').glob('*'))
+        toolsets = msvc_2022_toolsets()
         kits = sorted(Path('C:/Program Files (x86)/Windows Kits/10/Include').glob('*'))
         self.assertTrue(toolsets and kits, 'MSVC and SDK required')
         parent=ROOT/'build/contract-tests';parent.mkdir(parents=True,exist_ok=True)

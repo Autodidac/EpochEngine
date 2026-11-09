@@ -143,13 +143,14 @@ foreach(target candidate_plans offers install_contract)
 endforeach()
 ''',encoding='utf-8')
         commands=[configure_arguments(report,build)]
+        fixture_data=ROOT/'Artifacts/Tests'/f'o{time.time_ns():x}'
         for config in ('Debug','Release'):
-            data=report/config;data.mkdir(exist_ok=True)
+            data=fixture_data/config;data.mkdir(parents=True)
             commands += [['cmake','--build',str(build),'--config',config,'--parallel','1'],[str(executable(build,config,'install_contract'))],[str(executable(build,config,'offers')),str(data/'models')]]
         # This contract appends its own unique versioned-cache tree. Keep the
         # fixture prefix short for ordinary Windows executables without a
         # longPathAware manifest; all temporary data still stays checkout-local.
-        temporary=ROOT/'Artifacts/Intermediate/tmp/model-candidates';temporary.mkdir(parents=True,exist_ok=True)
+        temporary=fixture_data/'tmp';temporary.mkdir(parents=True,exist_ok=True)
         environment=dict(os.environ,TMP=str(temporary),TEMP=str(temporary),TMPDIR=str(temporary))
         records=[];started=time.monotonic()
         for index,command in enumerate(commands):

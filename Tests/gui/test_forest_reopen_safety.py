@@ -203,7 +203,10 @@ void compiler_upgrade(const fs::path& base){
  REQUIRE(forest::apply_forest_profile_edit(doc,forest::ForestProfileProperty::LeafSizeMeters,0.59f));
  const auto newer=library.publish(kDefaultPlantLabLogicalPath,doc);REQUIRE(newer);
  const auto source=read(newer.source.storage_path);auto bytes=read(newer.artifact.storage_path);
- REQUIRE(bytes[8]==3&&bytes[9]==0);bytes[10]=0;bytes[11]=0;bytes[12]=0;bytes[13]=0;reseal(bytes);
+ REQUIRE(bytes.size()>14&&bytes[8]==3&&bytes[9]==0);
+ const std::vector<char> currentHeader(bytes.begin()+8,bytes.begin()+14);
+ REQUIRE(std::any_of(bytes.begin()+10,bytes.begin()+14,[](char byte){return byte!=0;}));
+ std::fill(bytes.begin()+10,bytes.begin()+14,0);reseal(bytes);
  const auto obsolete=newer.artifact.storage_path.parent_path()/artifact_name(bytes);write(obsolete,bytes);
  REQUIRE(fs::remove(newer.artifact.storage_path));
  REQUIRE(library.load_latest(kDefaultPlantLabLogicalPath).code==project_forests::ForestLibraryCode::rebuild_required);
@@ -212,7 +215,7 @@ void compiler_upgrade(const fs::path& base){
  REQUIRE(read(newer.source.storage_path)==source&&read(obsolete)==bytes);
  REQUIRE(library.load_latest(kDefaultPlantLabLogicalPath));
  const auto current=read(s->plantLabPublishedArtifact.storage_path);
- REQUIRE(current[8]==3&&current[10]==1);
+ REQUIRE(current.size()>14&&std::equal(currentHeader.begin(),currentHeader.end(),current.begin()+8));
  // A rehashed current-compiler descriptor is still rejected, never recompiled
  // as though it came from an older compiler.
  auto tampered=current;tampered[tampered.size()-33]^=1;reseal(tampered);

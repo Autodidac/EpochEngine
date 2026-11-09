@@ -2,11 +2,14 @@
 from pathlib import Path
 import json
 import os
+import re
 import subprocess
 import time
 import unittest
 
 from Tools.source.owned_source_text import definition
+
+from Tests.support.cpp import msvc_2022_toolsets
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -15,7 +18,7 @@ class DiscoverySelfTest(unittest.TestCase):
     def test_complete_owner_both_physical_editions(self):
         if os.name != 'nt':
             self.skipTest('Installed MSVC/Windows SDK CPU lane')
-        toolset = sorted(Path('C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC').glob('*'))[-1]
+        toolset = msvc_2022_toolsets()[-1]
         kits = Path('C:/Program Files (x86)/Windows Kits/10')
         kit = sorted((kits / 'Include').glob('*'))[-1]
         report = ROOT / 'Artifacts/Reports/public-discovery-selftest-oct29' / str(time.time_ns())
@@ -66,12 +69,16 @@ class DiscoverySelfTest(unittest.TestCase):
         if recorded_before.exists():
             self.assertEqual(before, recorded_before.read_text(encoding='utf-8'))
         outcomes = []
+        edition_header = (ROOT / 'Engine/include/epoch.edition.hpp').read_text(encoding='utf-8')
         for edition, marker in (('development', '0'), ('public', '1')):
             for configuration in ('Debug', 'Release'):
                 folder = report / (edition + '-' + configuration)
                 folder.mkdir()
-                (folder / 'epoch.edition.hpp').write_text((ROOT / 'Engine/include/epoch.edition.hpp').read_text().replace(
-                    '#define EPOCH_SOURCE_EDITION_PUBLIC 0', '#define EPOCH_SOURCE_EDITION_PUBLIC ' + marker), encoding='utf-8')
+                header, count = re.subn(r'^#define EPOCH_SOURCE_EDITION_PUBLIC [01]$',
+                                        f'#define EPOCH_SOURCE_EDITION_PUBLIC {marker}',
+                                        edition_header, flags=re.M)
+                self.assertEqual(count, 1)
+                (folder / 'epoch.edition.hpp').write_text(header, encoding='utf-8')
                 (folder / 'updater.distribution.hpp').write_bytes((ROOT / 'Engine/include/updater.distribution.hpp').read_bytes())
                 prelude = '#include <optional>\n#include <regex>\n#include <vector>\n#include "updater.distribution.hpp"\n'
                 prelude += '#include "' + (ROOT / 'Engine/dep/EpochPlatformEngine/include/epochplatformengine/types.hpp').as_posix() + '"\n' + version

@@ -143,6 +143,8 @@ const auto sceneRunButtonLabel=project_scene_run_button_label(editor,compiledPro
 RUN_WIDTH
 const float runControlOffset=projectViewportMaximized?8.f:96.f;
 const bool menusBlockedByModal=modal,toolbarControlsBlockedByMenu=false;
+const bool automationInputReserved=false;
+std::optional<int> automationBackgroundInput;
 const std::array<std::string_view,3> kSceneRunModes{"Separate Window","In Editor","In-Editor Full Screen"};
 struct{bool scene_input_captured{};}result;
 WORLD

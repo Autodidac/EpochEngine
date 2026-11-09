@@ -5,17 +5,25 @@ No renderer, native window, model, GPU stress or real-time pacing test is run.
 from Tools.source.owned_source_text import read_owned_source
 from pathlib import Path
 import os
+import re
 import shutil
 import subprocess
 import tempfile
 import unittest
 import hashlib,json,time
-from Tests.support.cpp import compile_and_run
+from Tests.support.cpp import compile_and_run, msvc_2022_toolsets
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 class FrameSubmissionPolicy(unittest.TestCase):
+    def write_edition_marker(self, directory, value):
+        marker = read_owned_source(ROOT / 'Engine/include/epoch.edition.hpp', encoding='utf-8')
+        marker, replaced = re.subn(r'(?m)^#define EPOCH_SOURCE_EDITION_PUBLIC [01]$',
+            f'#define EPOCH_SOURCE_EDITION_PUBLIC {value}', marker)
+        self.assertEqual(replaced, 1)
+        (directory / 'epoch.edition.hpp').write_text(marker, encoding='utf-8')
+
     def test_hosts_use_selected_limiter_without_extra_diagnostic_pause(self):
         # Integration guard: the compiled policy test below proves unlimited has
         # no deadline; host/producer callers must not append a second timer.
@@ -33,11 +41,6 @@ class FrameSubmissionPolicy(unittest.TestCase):
     def test_actual_policy_and_deadline_for_both_editions(self):
         if os.name != 'nt':
             self.skipTest('Installed MSVC CPU lane')
-        toolsets = sorted(Path('C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC').glob('*'))
-        kitroot = Path('C:/Program Files (x86)/Windows Kits/10')
-        kits = sorted((kitroot / 'Include').glob('*'))
-        if not toolsets or not kits:
-            self.skipTest('MSVC/SDK unavailable')
         parent = (ROOT / 'Artifacts/Reports/frame-pacing-fairness-oct30').resolve()
         parent.mkdir(parents=True, exist_ok=True)
         self.assertTrue(parent.is_relative_to(ROOT.resolve()))
@@ -282,11 +285,15 @@ int main() {
         {true,true,frame_pacing_mode::vsync,0.0});
     assert(nativeVsync.effective_mode==frame_pacing_mode::vsync && nativeVsync.effective_hz==0.0);
     assert(!nativeVsync.cpu_deadline_wait);
-    const auto defaultEditor=resolve_frame_pacing(select_frame_pacing_policy(uncapped,0.0,false,false),foreground,false);
-    assert(defaultEditor.effective_hz==120.0 && defaultEditor.cpu_deadline_wait);
+    for(bool standaloneProject : {false,true}) {
+        const auto startup=resolve_frame_pacing(
+            select_frame_pacing_policy(uncapped,0.0,false,standaloneProject),foreground,false);
+        assert(startup.effective_mode==frame_pacing_mode::target_hz);
+        assert(startup.effective_hz==30.0 && startup.cpu_deadline_wait);
+    }
     for(double invalid : {-1.0,std::numeric_limits<double>::infinity(),std::numeric_limits<double>::quiet_NaN()}) {
         const auto safe=resolve_frame_pacing(select_frame_pacing_policy(frame_pacing_mode::target_hz,invalid,true,false),foreground,false);
-        assert(safe.effective_hz==120.0 && safe.cpu_deadline_wait);
+        assert(safe.effective_hz==30.0 && safe.cpu_deadline_wait);
     }
     const double dt=1.0/120.0;
     assert(std::abs(next_frame_deadline(0,100,dt,false)-(100+dt))<1e-12);
@@ -294,13 +301,10 @@ int main() {
     return 0;
 }
 '''
-            toolset, kit = toolsets[-1], kits[-1]
             for edition, value in (('development', 0), ('public', 1)):
                 include = scratch / edition
                 include.mkdir()
-                marker = read_owned_source(ROOT / 'Engine/include/epoch.edition.hpp', encoding='utf-8')
-                (include / 'epoch.edition.hpp').write_text(marker.replace(
-                    '#define EPOCH_SOURCE_EDITION_PUBLIC 0', '#define EPOCH_SOURCE_EDITION_PUBLIC ' + str(value)), encoding='utf-8')
+                self.write_edition_marker(include, value)
                 source = include / 'contract.cpp'
                 source.write_text('#include "epoch.edition.hpp"\n#include <cstdint>\n#include <cmath>\n'
                     '#include <charconv>\n#include <system_error>\n#include <cassert>\n#include <initializer_list>\n#include <limits>\n'
@@ -322,7 +326,7 @@ int main() {
     def test_actual_gl_admission_with_mocked_driver_for_both_editions(self):
         if os.name != 'nt':
             self.skipTest('Installed MSVC CPU lane')
-        toolsets = sorted(Path('C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC').glob('*'))
+        toolsets = msvc_2022_toolsets()
         kitroot = Path('C:/Program Files (x86)/Windows Kits/10')
         kits = sorted((kitroot / 'Include').glob('*'))
         if not toolsets or not kits:
@@ -569,23 +573,21 @@ bool owner_frame(bool uncappedSubmission, frame_admission::State& state, OwnerCo
             for edition, value in (('development', 0), ('public', 1)):
                 lane = scratch / edition
                 lane.mkdir()
-                marker = read_owned_source(ROOT / 'Engine/include/epoch.edition.hpp', encoding='utf-8')
-                (lane / 'epoch.edition.hpp').write_text(marker.replace(
-                    '#define EPOCH_SOURCE_EDITION_PUBLIC 0', '#define EPOCH_SOURCE_EDITION_PUBLIC ' + str(value)), encoding='utf-8')
+                self.write_edition_marker(lane, value)
                 source = lane / 'contract.cpp'
                 source.write_text(contract, encoding='utf-8')
                 binary = lane / 'contract.exe'
                 args = [str(toolset / 'bin/Hostx64/x64/cl.exe'), '/nologo', '/std:c++latest', '/EHsc', '/WX',
                     '/I' + str(toolset / 'include'), '/I' + str(kit / 'ucrt'), '/I' + str(kit / 'shared'),
                     '/I' + str(kit / 'um'), '/I' + str(ROOT / 'Engine/src/renderers/opengl'),
-                    '/I' + str(ROOT / 'Artifacts/Dependencies/vcpkg_installed/x64-windows/include'),
+                    '/I' + str(ROOT / 'Engine/third_party/glad/include'),
                     '/Fo' + str(lane / 'contract.obj'), '/Fe' + str(binary), str(source),
                     '/link', '/LIBPATH:' + str(toolset / 'lib/x64'),
                     '/LIBPATH:' + str(kitroot / 'Lib' / kit.name / 'um/x64'),
                     '/LIBPATH:' + str(kitroot / 'Lib' / kit.name / 'ucrt/x64')]
-                result = subprocess.run(args, cwd=lane, capture_output=True, text=True)
+                result = subprocess.run(args, cwd=lane, capture_output=True, text=True, timeout=90)
                 self.assertEqual(result.returncode, 0, result.stdout[-3500:] + result.stderr)
-                result = subprocess.run([str(binary)], cwd=lane, capture_output=True, text=True)
+                result = subprocess.run([str(binary)], cwd=lane, capture_output=True, text=True, timeout=15)
                 lines = contract.splitlines()
                 failure = lines[result.returncode - 1] if 0 < result.returncode <= len(lines) else ''
                 self.assertEqual(result.returncode, 0, edition + ' GL admission: ' + failure)

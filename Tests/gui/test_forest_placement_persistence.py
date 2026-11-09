@@ -161,16 +161,21 @@ int main(int argc,char** argv){
  const auto ref=*state.entities[*added].meshAsset;
  const auto material=state.entities[*added].textureMaterial;assert(material&&material->valid());
  const auto& atlas=forest::preview_mesh::material_atlas();assert(asset::texture::validate_compiled_artifact(atlas));
- assert(forest::preview_mesh::reference_material_available());
- assert(atlas.mips.size()==1&&atlas.mips[0].width==1024&&atlas.mips[0].height==512);
- assert(atlas.identity.profile.color_space==asset::texture::ColorSpace::srgb);
+ const auto referenceRoot=core::path::engine_asset_dir()/"forest";
+ const bool reference=fs::is_regular_file(referenceRoot/"bark_texture_preview.png")
+  &&fs::is_regular_file(referenceRoot/"foliage_reference_board.png");
+ assert(forest::preview_mesh::reference_material_available()==reference);
+ const auto atlasWidth=reference?1024u:256u,atlasHeight=reference?512u:128u;
+ assert(atlas.mips.size()==1&&atlas.mips[0].width==atlasWidth&&atlas.mips[0].height==atlasHeight);
+ assert(atlas.identity.profile.color_space==(reference?asset::texture::ColorSpace::srgb:asset::texture::ColorSpace::linear));
  assert(material->alpha==scene::SceneTextureAlphaMode::cutout);
- assert(material->color_space==scene::SceneTextureColorSpace::srgb);
+ assert(material->color_space==(reference?scene::SceneTextureColorSpace::srgb:scene::SceneTextureColorSpace::linear));
  unsigned transparent{},covered{};
- for(unsigned y=0;y<512;++y)for(unsigned x=0;x<1024;++x){
-  auto a=std::to_integer<unsigned>(atlas.mips[0].texels[(y*1024u+x)*4u+3u]);
-  if(x<512)assert(a==255);else {transparent+=a==0;covered+=a>=128;}}
- assert(transparent>10000&&covered>1000);
+ for(unsigned y=0;y<atlasHeight;++y)for(unsigned x=0;x<atlasWidth;++x){
+  auto a=std::to_integer<unsigned>(atlas.mips[0].texels[(y*atlasWidth+x)*4u+3u]);
+  if(x<atlasWidth/2u)assert(a==255);else {transparent+=a==0;covered+=a>=128;}}
+ assert(transparent>(reference?10000u:512u)&&covered>(reference?1000u:64u));
+ if(reference){
  const auto originalBark=asset::texture::import_texture_file({.source_path=core::path::engine_asset_dir()/"forest/bark_texture_preview.png"});
  assert(originalBark&&!originalBark.artifact.mips.empty());
  const auto& sourceBark=originalBark.artifact.mips.front();
@@ -224,6 +229,10 @@ int main(int argc,char** argv){
  }
  assert(greenPhoto>10000&&brownStem>50&&paleDetail>50);
  assert(atlas.mips[0].texels[(18u*1024u+530u)*4u+3u]==std::byte{0});
+ }else{
+  for(unsigned tile=0;tile<forest::preview_mesh::kBarkTileCount;++tile)
+   assert(&forest::preview_mesh::material_atlas(tile)==&atlas);
+ }
  assert(material->address_v==scene::SceneTextureAddress::repeat);
  forest::preview_mesh::Geometry sampleGeometry;
  sampleGeometry.segmentCount=1;sampleGeometry.segments[0].start={0,0,0};sampleGeometry.segments[0].end={0,3,0};
@@ -327,22 +336,26 @@ int main(int argc,char** argv){
  // owner, and the published combined material cold-restores with the scene.
  auto custom=make_state(root/"custom");
  project_textures::TextureArtifactLibrary customTextures{custom.projectId,custom.projectRoot};
- assert(customTextures.persist("Assets/custom_bark.png",originalBark.artifact));
- auto customLeaf=atlas;
- auto& leafMip=customLeaf.mips[0];std::vector<std::byte>leafPixels(512u*512u*4u);
- for(unsigned y=0;y<512u;++y)for(unsigned x=0;x<512u;++x)for(unsigned c=0;c<4u;++c)
-  leafPixels[(y*512u+x)*4u+c]=leafMip.texels[(y*1024u+x+512u)*4u+c];
- leafMip.width=512u;leafMip.row_pitch_bytes=2048u;leafMip.texels=std::move(leafPixels);
- leafMip.content=asset::texture::compiled_texture_mip_content(leafMip);
- customLeaf.identity=asset::texture::build_compiled_texture_artifact_identity(
-  {asset::texture::deterministic_content_hash("custom-leaf-fixture",leafMip.texels),1},
-  {.format=asset::texture::ArtifactFormat::rgba8_srgb,.color_space=asset::texture::ColorSpace::srgb},512,512,1);
- customLeaf.identity.compilation_required=false;
- customLeaf.payload_content=asset::texture::compiled_texture_payload_content(customLeaf.identity,customLeaf.mips);
- assert(asset::texture::validate_compiled_artifact(customLeaf));
+ const auto customSource=[&](bool foliage){
+  auto source=atlas;auto& mip=source.mips.front();mip.width=atlasHeight;mip.row_pitch_bytes=atlasHeight*4u;
+  mip.texels.resize(std::size_t{mip.row_pitch_bytes}*mip.height);
+  const auto& input=atlas.mips.front();
+  for(unsigned y=0;y<mip.height;++y)
+   std::copy_n(input.texels.data()+y*input.row_pitch_bytes+(foliage?mip.row_pitch_bytes:0u),
+    mip.row_pitch_bytes,mip.texels.data()+y*mip.row_pitch_bytes);
+  mip.content=asset::texture::compiled_texture_mip_content(mip);
+  source.identity=asset::texture::build_compiled_texture_artifact_identity(
+   {asset::texture::deterministic_content_hash(foliage?"custom-leaf-fixture":"custom-bark-fixture",mip.texels),1},
+   {.format=asset::texture::ArtifactFormat::rgba8_srgb,.color_space=asset::texture::ColorSpace::srgb},mip.width,mip.height,1);
+  source.identity.compilation_required=false;
+  source.payload_content=asset::texture::compiled_texture_payload_content(source.identity,source.mips);
+  assert(asset::texture::validate_compiled_artifact(source));return source;
+ };
+ const auto customBark=customSource(false),customLeaf=customSource(true);
+ assert(customTextures.persist("Assets/custom_bark.png",customBark));
  assert(customTextures.persist("Assets/custom_leaf.png",customLeaf));
  assert(forest::apply_forest_material_edit(custom.plantLabDocument,forest::ForestTextureSlot::bark,
-  {"Assets/custom_bark.png",originalBark.artifact.identity.key.words}));
+  {"Assets/custom_bark.png",customBark.identity.key.words}));
  assert(forest::apply_forest_material_edit(custom.plantLabDocument,forest::ForestTextureSlot::foliage,
   {"Assets/custom_leaf.png",customLeaf.identity.key.words}));
  assert(place_forest_factory_asset(custom)>0);
@@ -392,7 +405,9 @@ int main(int argc,char** argv){
             path = module_map[name]
             selected[name] = path
             pending += re.findall(r'^(?:export )?(?:import|module)\s+([\w.]+);', path.read_text(encoding='utf-8-sig'), re.M)
-        fixture = ROOT / 'Artifacts/Runtime/TestData' / ('f'+f'{time.time_ns():x}'[-8:])
+        # This case nests under the Public release checkout in CI. Keep the
+        # production texture library's temporary path below Windows MAX_PATH.
+        fixture = ROOT / 'Artifacts/Tests' / ('f'+f'{time.time_ns():x}'[-8:])
         modules = '\n'.join('"' + p.as_posix() + '"' for p in selected.values())
         sources = '\n'.join('"' + p.as_posix() + '"' for p in implementations)
         (proof / 'CMakeLists.txt').write_text(f'''cmake_minimum_required(VERSION 3.30)

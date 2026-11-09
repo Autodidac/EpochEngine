@@ -10,8 +10,10 @@ from Tests.packages.test_planetary_scene_units import CODE as UNITS_CODE, owner
 
 ROOT = Path(__file__).resolve().parents[2]
 CODE = UNITS_CODE[:UNITS_CODE.index("// The real Windows translation unit")].replace(
+    "#include <string>", "#include <string>\n#include <string_view>").replace(
     "import render.arcade;", "import render.arcade;\nimport forest.preview_mesh;\nimport forest.factory;") + r'''
 namespace forest=epochengine::forest;
+#define near
 RUNTIME_PUBLICATION
 class RuntimeProbe {
 public:
@@ -25,8 +27,12 @@ public:
  std::optional<project_planetary::Settings> m_meshPlanetarySettings{project_planetary::Settings{}};
  std::unordered_map<std::uint64_t,std::shared_ptr<const asset::mesh::Artifact>> m_meshes;
  std::unordered_map<std::uint64_t,std::shared_ptr<const previewgrid::MeshBaseColorBinding>> m_meshBaseColorTextures;
+ float m_runtimeViewportWidth{1280},m_runtimeViewportHeight{720};
+ // Publication here exercises the ordinary CPU geometry path, with no camera packet.
+ bool pump_runtime_planetary_frame(const void*,previewgrid::SceneFrameRequest,bool){std::abort();}
  RUNTIME_METHODS
 };
+#undef near
 int main(){
  const auto compiled=forest::compile_forest_asset(forest::make_default_plant_lab_document());CHECK(compiled.valid);
  const auto geometry=forest::preview_mesh::build(compiled.graph,compiled.sample);CHECK(geometry.valid);
@@ -102,11 +108,11 @@ int main(){
  const epochengine::core::Context context;const auto* ctx=&context;
  std::vector<previewgrid::ObjectMarker> markers;std::vector<std::uint64_t> managed;
  CHECK(probe.append_planetary_forest_markers(markers,managed,true).empty());
- CHECK(publish_project_play_markers(ctx,probe.m_entities,&probe.m_meshes,{},markers,3,false,{},nullptr,{},nullptr,nullptr,{},managed));
+ CHECK(probe.publish_project_play_markers(ctx,probe.m_entities,&probe.m_meshes,{},markers,3,false,{},nullptr,{},nullptr,nullptr,{},managed));
  auto published=previewgrid::detail::g_objectMarkers.at(ctx).markers;CHECK(published.size()==1&&published[0].mesh==mesh.artifact);
  previewgrid::MeshFrameLimits tiny;tiny.maximum_indices=3;tiny.maximum_bytes=64;
  const auto retained=previewgrid::object_marker_geometry_for(ctx);
- CHECK(!publish_project_play_markers(ctx,probe.m_entities,&probe.m_meshes,tiny,markers,3,false,{},nullptr,{},nullptr,nullptr,{},managed));
+ CHECK(!probe.publish_project_play_markers(ctx,probe.m_entities,&probe.m_meshes,tiny,markers,3,false,{},nullptr,{},nullptr,nullptr,{},managed));
  CHECK(previewgrid::object_marker_geometry_for(ctx)==retained);
  const auto refused=[&]{markers.clear();managed.clear();const auto status=probe.append_planetary_forest_markers(markers,managed,true);
   CHECK(!status.empty()&&markers.empty()&&managed.empty());};
@@ -126,7 +132,7 @@ int main(){
  // Run and single placement likewise use the original ordinary pose exactly.
  probe.m_entities[0]=savedTerrain;probe.m_entities[1]=savedTree;
  probe.m_entities[1].forest_region->recipe+="stale";refused();
- CHECK(publish_project_play_markers(ctx,probe.m_entities,&probe.m_meshes,{},markers,3));
+ CHECK(probe.publish_project_play_markers(ctx,probe.m_entities,&probe.m_meshes,{},markers,3));
  published=previewgrid::detail::g_objectMarkers.at(ctx).markers;CHECK(published.size()==1);
  const auto ordinary=project_play_marker_for_entity(probe.m_entities[1],mesh.artifact,{});CHECK(ordinary);
  CHECK(published[0].preciseTransform==ordinary->preciseTransform);
@@ -154,12 +160,12 @@ class ForestRuntimeFollow(unittest.TestCase):
             "        [[nodiscard]] bool runtime_forest_projection_admitted(",
             "        [[nodiscard]] bool project_play_entity_has_geometry(",
             "        [[nodiscard]] std::optional<epochengine::previewgrid::ObjectMarker> project_play_marker_for_entity(",
-            "        [[nodiscard]] std::optional<previewgrid::ObjectMarker> project_play_forest_marker_for_body(",
-            "        bool publish_project_play_markers("))
+            "        [[nodiscard]] std::optional<previewgrid::ObjectMarker> project_play_forest_marker_for_body("))
         methods = "\n".join(owner(play, marker) for marker in (
             "            [[nodiscard]] const ProjectRuntimeEntity* planetary_entity(",
             "            [[nodiscard]] double planetary_scene_units(",
-            "            [[nodiscard]] std::string append_planetary_forest_markers("))
+            "            [[nodiscard]] std::string append_planetary_forest_markers(",
+            "            bool publish_project_play_markers("))
         self.assertLess(play.index("bool completeManagedFrame="), play.index("m_forestRuntimeStatus=append_planetary_forest_markers"))
         self.assertNotIn("filesystem", methods)
         code = CODE.replace("RUNTIME_PUBLICATION", publication).replace("RUNTIME_METHODS", methods)

@@ -12,6 +12,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from Tests.support.cpp import msvc_2022_toolsets
 
 from Tests.platform.test_child_close_router import definition
 
@@ -28,9 +29,10 @@ class ProjectGuiActivation(unittest.TestCase):
         action = viewport[start:stop]
         api = (ROOT / "Engine/modules/gui.engine.ixx").read_text(encoding="utf-8")
         structures = "\n".join(definition(api, marker, True).replace("export ", "", 1) for marker in (
-            "    export struct InlineButtonSpec", "    export enum class InlineButtonSizing",
+            "    export enum class ButtonIcon", "    export struct InlineButtonSpec", "    export enum class InlineButtonSizing",
             "    export enum class InlineButtonAlignment", "    export struct InlineButtonRowOptions"))
         body = r'''
+#include <algorithm>
 #include <array>
 #include <cassert>
 #include <cstdint>
@@ -83,7 +85,10 @@ for(const float width:{180.f,700.f}){
         try:
             source, binary = scratch / "contract.cpp", scratch / "contract.exe"
             source.write_text(body, encoding="utf-8")
-            tool = sorted(Path("C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC").glob("*"))[-1]
+            tools = msvc_2022_toolsets()
+            if not tools:
+                self.skipTest("Installed MSVC compiler unavailable")
+            tool = tools[-1]
             sdk = Path("C:/Program Files (x86)/Windows Kits/10")
             kit = sorted((sdk / "Include").glob("*"))[-1]
             result = subprocess.run([str(tool / "bin/Hostx64/x64/cl.exe"), "/nologo", "/std:c++latest", "/EHsc",
@@ -465,7 +470,10 @@ int main(){
             self.assertIn(str(obj), linker)
             (scratch / "cl.rsp").write_text(compiler, encoding="utf-8")
             (scratch / "link.rsp").write_text(linker, encoding="utf-8")
-            tool = sorted(Path("C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC").glob("*"))[-1]
+            tools = msvc_2022_toolsets()
+            if not tools:
+                self.skipTest("Installed MSVC compiler unavailable")
+            tool = tools[-1]
             sdk = Path("C:/Program Files (x86)/Windows Kits/10")
             kit = sorted((sdk / "Include").glob("*"))[-1]
             environment = dict(os.environ)

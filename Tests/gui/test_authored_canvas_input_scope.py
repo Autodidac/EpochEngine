@@ -29,7 +29,7 @@ def fixture(owner_text=None):
         frame.index("    Vec2 mouse_position()")]
     # The actual pending-programmatic-selection gate must not consume a future
     # request while a render-only surface paints the same focused text object.
-    select_all = definition(text, "        if (g_frame.modalInput.owner_input_allowed()")
+    select_all = definition(text, "        if (!g_frame.keyboardFocusCancelled && g_frame.modalInput.owner_input_allowed()")
     return r'''
 #include <algorithm>
 #include <array>
@@ -63,6 +63,7 @@ struct Frame{
  bool mouseDown{},prevMouseDown{},mouseRightDown{},prevMouseRightDown{};
  bool justPressed{},justReleased{},rightJustPressed{},rightJustReleased{};
  bool mousePressConsumed{},mouseReleaseConsumed{},rightPressConsumed{},rightReleaseConsumed{};
+ bool keyboardFocusCancelled{};
  int mouseWheelDelta{};Vec2 mousePos{},cursor{};float caretTimer{};bool caretVisible{};
  gui_lib::input::ModalInputArbiter modalInput;
  std::vector<InputEvent> events;
@@ -141,6 +142,10 @@ void selection_request_gate(){
  {gui::ScopedInputSuppression blocked;
  SELECT_ALL
  CHECK(g_textFieldSelectAllStates[textKey]&&!active&&g_contextActiveWidgets.empty());}
+ g_frame.keyboardFocusCancelled=true;
+ SELECT_ALL
+ CHECK(g_textFieldSelectAllStates[textKey]&&!active&&g_contextActiveWidgets.empty());
+ g_frame.keyboardFocusCancelled=false;
  SELECT_ALL
  CHECK(!g_textFieldSelectAllStates[textKey]&&active&&g_contextActiveWidgets[ctxKey]==id);
 }
