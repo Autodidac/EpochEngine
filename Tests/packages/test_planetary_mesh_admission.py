@@ -31,6 +31,7 @@ def owner_function(source, marker):
 CODE = r'''
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -105,7 +106,8 @@ struct EditorEntity {
  std::optional<scene::SceneMeshSnapshot> meshAsset;std::shared_ptr<const mesh::Artifact> meshSnapshot;bool meshLoadAttempted{};
 };
 struct EditorState {
- std::string projectRoot,projectId{"planet"},projectStatus,worldHierarchyStatus;std::uint64_t selectedEntityId{};bool sceneInteractionDirty{};
+ std::string projectRoot,projectId{"planet"},projectStatus,worldHierarchyStatus,worldHierarchyFilter;
+ std::uint64_t selectedEntityId{},worldHierarchyScrollSelection{};bool sceneInteractionDirty{};
  struct {struct Evidence {bool project_selected=true;}value;const Evidence& evidence()const{return value;}}projectLifecycle;
  package_source::Attachment planetaryAttachment;
  struct PlanetaryMeshPolicy {std::string selected_root;project_planetary::SourceGeneration source;project_planetary::Settings settings;std::optional<project_planetary::MeshGenerationIdentity> generated_mesh;std::vector<project_planetary::GeneratedBody> generated_bodies;bool body_inventory_checked{};};
@@ -133,6 +135,7 @@ namespace gui {
  struct Item{std::string_view label,shortcut;Vec2 size;MenuItemIndicator indicator;bool checked{},selected{};float indentation{};};
  std::vector<std::string> labels;std::vector<float> indentations;std::string click;
  void label(std::string_view){}
+ void set_cursor(Vec2){}
  void section_heading(std::string_view,SemanticTone){}
  void wrapped_label(const std::string&,float){}
  bool menu_item(const Item& item){labels.emplace_back(item.label);indentations.push_back(item.indentation);if(item.label!=click)return false;click.clear();return true;}
@@ -141,7 +144,13 @@ struct ContextPort{const void* get()const{return this;}}ctx;
 std::optional<scene_interaction::FocusTarget> lastBodyFocus;
 void select_editor_entity(EditorState& editor,std::size_t index){editor.selectedEntityId=editor.entities.at(index).sceneObjectId;}
 void handle_scene_tool(EditorState& editor,const void*,std::string_view tool){CHECK(tool=="focus_selection");const auto index=editor_entity_index(editor,editor.selectedEntityId);lastBodyFocus=index?editor_planetary_body_focus(editor,editor.entities[*index]):std::nullopt;}
-void render_body_rows(EditorState& editor){const float outlinerWidth=250,hierarchyRowHeight=26;BODY_OUTLINER}
+void render_body_rows(EditorState& editor){
+ const float outlinerWidth=250,hierarchyRowHeight=26,hierarchyRowsHeight=100;
+ const gui::Vec2 hierarchyOrigin{};
+ std::size_t generatedBodyRow{};
+ BODY_FILTER
+ BODY_OUTLINER
+}
 // This mesh-only lane must never ask for a texture. Actual exact-material
 // restore is covered by the base-color consumer; record/refuse that boundary.
 namespace editor_project_textures {
@@ -316,9 +325,11 @@ class PlanetaryMeshAdmission(unittest.TestCase):
             "[[nodiscard]] bool project_play_entity_has_geometry(",
             "[[nodiscard]] std::optional<epochengine::previewgrid::ObjectMarker> project_play_marker_for_entity("))
         publication += "\n" + owner_function(play, "            bool publish_project_play_markers(")
-        outliner = definition((ROOT/'Engine/src/editor/application/editor.frame_outliner.inl').read_text(encoding='utf-8'),
+        outliner_source = (ROOT/'Engine/src/editor/application/editor.frame_outliner.inl').read_text(encoding='utf-8')
+        body_filter = owner_function(outliner_source, 'const auto containsNoCase = [](') + ';'
+        outliner = definition(outliner_source,
             '        if(editor.planetaryMeshPolicy&&!editor.planetaryMeshPolicy->generated_bodies.empty())')
-        code = CODE.replace("GEOMETRY", geometry).replace("EDITOR_FUNCTIONS", functions).replace("RUNTIME_FUNCTION", runtime).replace("PUBLICATION", publication).replace('BODY_OUTLINER',outliner)
+        code = CODE.replace("GEOMETRY", geometry).replace("EDITOR_FUNCTIONS", functions).replace("RUNTIME_FUNCTION", runtime).replace("PUBLICATION", publication).replace('BODY_FILTER',body_filter).replace('BODY_OUTLINER',outliner)
         proof = ROOT / "Artifacts/Reports/planetary-mesh-admission-oct28" / str(time.time_ns())
         proof.mkdir(parents=True, exist_ok=True)
         (proof / "consumer.cpp").write_text(code, encoding="utf-8")

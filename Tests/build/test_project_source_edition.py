@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from Tests.support.cpp import msvc_2022_toolsets, windows_sdk_includes
 
@@ -96,6 +97,12 @@ class ProjectSourceEdition(unittest.TestCase):
             gate.check_source(root, expected)
             with self.assertRaisesRegex(RuntimeError, 'edition differs'):
                 gate.check_source(root, foreign)
+
+    def test_public_checkout_admission_does_not_require_git(self):
+        root = self.fixture(True)
+        (root / '.git').mkdir()
+        with patch('subprocess.run', side_effect=AssertionError('Project admission called an external tool')):
+            gate.check_source(root, PUBLIC)
 
     def test_missing_malformed_and_conflicting_physical_identity_refuse(self):
         root = self.fixture(False)

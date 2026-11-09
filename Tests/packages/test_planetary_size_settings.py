@@ -540,7 +540,11 @@ set_tests_properties(actual_generation_recipe_mesh_identity PROPERTIES TIMEOUT 1
             (report / "result.json").write_text(json.dumps({"passed": run.returncode == 0 and number == len(commands)-1,
                 "scope": "Actual full project.planetary CPP and12module host codec/binding/CLI/cache/stream/frame/filesystem admission, real reviewed optional-provider CPU generate/Save/regenerate identity checks. Synthetic malformed packets; no model or graphics process.",
                 "commands": runs}, indent=2), encoding="utf-8")
-            self.assertEqual(run.returncode, 0, run.stdout[-6000:] + run.stderr[-2000:])
+            detail = ""
+            if run.returncode:
+                for failure in generation_fixture.glob("*/generation-failure.txt"):
+                    detail += "\n" + failure.read_text(encoding="utf-8", errors="replace")[-3000:]
+            self.assertEqual(run.returncode, 0, run.stdout[-6000:] + run.stderr[-2000:] + detail)
         if stage_only:
             self._stage_cases(build,report)
         else:

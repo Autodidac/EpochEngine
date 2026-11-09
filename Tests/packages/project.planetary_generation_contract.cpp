@@ -214,6 +214,8 @@ int main(int argc, char** argv)
             const auto admitted=planet::capture_source_generation(project,dependency.content_hash);
             CHECK(admitted);
             const auto generated=planet::generate(project,provider,engine,settings);
+            if (!generated.ok)
+                write(base / "generation-failure.txt", generated.message + "\n" + generated.build_log.generic_string());
             CHECK(generated.ok);
             const auto artifact=epochengine::asset::mesh::read_artifact_file(generated.artifact_path,planet::artifact_limits(settings));
             CHECK(artifact);

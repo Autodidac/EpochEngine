@@ -11,7 +11,6 @@ import importlib.util
 import json
 from pathlib import Path
 import re
-import subprocess
 
 EDITIONS = {'epoch.public.github.v1': '1', 'epoch.development.site.v1': '0'}
 
@@ -53,7 +52,10 @@ def check_source(root: Path, expected: str) -> None:
     spec = importlib.util.spec_from_file_location('epoch_project_public_source_gate', gate_file)
     gate = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(gate)
-    names = gate.inventory(root, manifest)
+    # Project workers have a restricted PATH and need no Git installation.
+    # Verify the same projected inventory whether the source came from a ZIP
+    # or a checkout. The release gate separately checks tracked Git paths.
+    names = set(manifest['files']) | {gate.MANIFEST}
     gate.check(root, manifest, names)
 
     # Flat ZIP inventory deliberately excludes local build/cache state. Also
@@ -80,8 +82,7 @@ def main() -> int:
     args = parser.parse_args()
     try:
         check_source(args.root, args.edition)
-    except (OSError, RuntimeError, ValueError, KeyError, TypeError,
-            subprocess.SubprocessError) as error:
+    except (OSError, RuntimeError, ValueError, KeyError, TypeError) as error:
         parser.exit(2, 'Generated project source refused: ' + str(error) + '\n')
     print('generated_project_source.result=pass edition=' + args.edition)
     return 0

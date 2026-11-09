@@ -262,10 +262,16 @@ class ProjectGuiKeyboard(unittest.TestCase):
         report = ROOT/"Artifacts/Reports/project-gui-keyboard-oct28"/identity
         report.mkdir(parents=True,exist_ok=True)
         (report/"consumer.cpp").write_text(code,encoding="utf-8")
-        previous = subprocess.run(["git","show","HEAD:Engine/src/project/project.gui_epochgui.cpp"],
-            cwd=ROOT,capture_output=True,text=True,check=True).stdout
-        before_render = definition(previous,"    EpochGuiRenderResult EpochGuiAdapter::render(")
         current_render = definition(ADAPTER.read_text(encoding="utf-8"),"    EpochGuiRenderResult EpochGuiAdapter::render(")
+        # Exercise the regression without depending on a dirty checkout or Git history.
+        keyboard_dispatch = """            const auto keyboard = dispatch_keyboard(runtime, frame);
+            if (keyboard != project_gui_runtime::RuntimeCode::ready
+                && keyboard != project_gui_runtime::RuntimeCode::no_change)
+                result.code = keyboard;
+"""
+        self.assertEqual(current_render.count(keyboard_dispatch), 1)
+        self.assertEqual(code.count(current_render), 1)
+        before_render = current_render.replace(keyboard_dispatch, "", 1)
         before = code[:code.index("int main(){")].replace(current_render,before_render) + r'''
 int main(){auto context=std::make_shared<core::Context>();fresh(context);Adapter adapter;rt::RuntimeSession runtime{source()};
  CHECK(runtime.focus({4})==rt::RuntimeCode::ready);(void)runtime.drain_events();
@@ -280,6 +286,7 @@ int main(){auto context=std::make_shared<core::Context>();fresh(context);Adapter
         sources = [ROOT/"Engine/src/assets/gui/asset.gui_artifact.cpp",ROOT/"Engine/src/project/project.gui_runtime.cpp",ROOT/"Engine/src/project/project.gui_runtime_contract.cpp",
                    portable/"src/epochgui/text_control.cpp",portable/"src/epochgui/input.cpp"]
         (report/"CMakeLists.txt").write_text('cmake_minimum_required(VERSION 3.30)\nproject(ProjectGuiKeyboard LANGUAGES CXX)\n'
+            +'set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT Embedded)\n'
             +'add_executable(keyboard consumer.cpp '+" ".join('"'+p.as_posix()+'"' for p in sources)+')\n'
             +'target_compile_features(keyboard PRIVATE cxx_std_23)\ntarget_compile_options(keyboard PRIVATE /W3 /WX /utf-8 /EHsc)\n'
             +'target_sources(keyboard PRIVATE FILE_SET CXX_MODULES BASE_DIRS "'+ROOT.as_posix()+'" FILES '+" ".join('"'+p.as_posix()+'"' for p in modules)+')\n'
@@ -288,7 +295,7 @@ int main(){auto context=std::make_shared<core::Context>();fresh(context);Adapter
             +'target_compile_features(before PRIVATE cxx_std_23)\ntarget_compile_options(before PRIVATE /W3 /WX /utf-8 /EHsc)\n'
             +'target_sources(before PRIVATE FILE_SET CXX_MODULES BASE_DIRS "'+ROOT.as_posix()+'" FILES '+" ".join('"'+p.as_posix()+'"' for p in modules)+')\n'
             +'enable_testing()\nadd_test(NAME actual_project_gui_keyboard COMMAND keyboard)\n'
-            +'add_test(NAME previous_complete_adapter_misses_tab COMMAND before)\nset_tests_properties(previous_complete_adapter_misses_tab PROPERTIES WILL_FAIL TRUE)\n',encoding="utf-8")
+            +'add_test(NAME adapter_without_ordered_dispatch_misses_tab COMMAND before)\nset_tests_properties(adapter_without_ordered_dispatch_misses_tab PROPERTIES WILL_FAIL TRUE)\n',encoding="utf-8")
         build = ROOT/"Artifacts/Intermediate/cmake/project-gui-keyboard"/identity
         commands = [["cmake","-S",str(report),"-B",str(build),"-G","Visual Studio 17 2022","-A","x64"]]
         for config in ("Debug","Release"):
@@ -308,7 +315,7 @@ int main(){auto context=std::make_shared<core::Context>();fresh(context);Adapter
                 self.assertIn(f"failed line {before_line}",negative.stderr)
                 runs.append({"before_configuration":config,"actual_exit":negative.returncode,
                     "expected_exit":81,"expected_assertion_line":before_line,
-                    "complete_previous_render_sha256":hashlib.sha256(before_render.encode()).hexdigest()})
+                    "negative_render_sha256":hashlib.sha256(before_render.encode()).hexdigest()})
             (report/"result.json").write_text(json.dumps({"passed":completed.returncode==0 and index==len(commands)-1,
                 "scope":"Actual queued input/filter/begin_frame, shared ordered text command/caret owner, actual adapter render/dispatch/widget caller and real artifact+RuntimeSession modules. Neutral drawing/clipboard/metric ports; no native input, renderer or model.",
                 "owners":{str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in [ADAPTER,
