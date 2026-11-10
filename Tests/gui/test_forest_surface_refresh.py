@@ -72,6 +72,7 @@ import scene.persistence;
 import project.planetary;
 import asset.mesh_artifact;
 import editor.task_scheduler;
+import forest.factory;
 #undef assert
 #define assert(value) do {if(!(value)){std::fprintf(stderr,"Forest refresh assertion line %d: %s\n",__LINE__,#value);std::exit(83);}}while(false)
 namespace fixture_ports {
@@ -82,9 +83,6 @@ std::mutex lock;std::condition_variable condition;
 namespace epochengine {
 namespace fs=std::filesystem;
 namespace forest {
-inline constexpr std::size_t kMaximumForestAreaInstances=64;
-struct ForestAreaDistribution {std::uint64_t seed{};double radiusMeters{},densityPerSquareMeter{};};
-std::uint64_t mix_seed(std::uint64_t value,std::uint64_t){return value+1;}
 namespace preview_mesh {
 std::optional<std::array<float,3>> surface_rotation(std::array<double,3>,std::array<double,3>){std::abort();}
 }
@@ -354,7 +352,8 @@ SurfaceBatchResult query_surfaces(const std::filesystem::path&,const SurfaceBatc
             if match:
                 modules[match.group(1)] = path
         excluded = {'core.logger', 'core.mpmc_bounded_queue', 'systems.registry', 'systems.task', 'taskgraph.dotsystem', 'editor.task_scheduler', 'platform.engine'}
-        pending = ['scene.document', 'scene.persistence', 'scene.serializer', 'scene.snapshot', 'asset.mesh_artifact', 'project.planetary']
+        pending = ['scene.document', 'scene.persistence', 'scene.serializer', 'scene.snapshot',
+                   'asset.mesh_artifact', 'project.planetary', 'forest.factory']
         selected = {}
         while pending:
             name = pending.pop()

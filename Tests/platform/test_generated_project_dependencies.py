@@ -88,7 +88,10 @@ const auto repoEngineProjectWin=xml_escape((repoRoot/"Engine/examples/EpochEngin
 const auto repoEpochGuiProjectWin=xml_escape((repoRoot/"Engine/dep/EpochGui/EpochGui.vcxproj").string());
 const auto engineLibraryRelative=epochengine::build_layout::windows_relative_bin(repoRoot,"$(Configuration)").string()+"\\";
 const std::string projectGuid="CCD20673-713B-4657-9844-10381F336490",sourceEdition=EPOCH_EDITION_PUBLIC?"epoch.public.github.v1":"epoch.development.site.v1",artifactStem="DependencyFixture";
-struct{std::string project_name="DependencyFixture";}spec;
+struct {
+    std::string project_id = "dependency-fixture";
+    std::string project_name = "DependencyFixture";
+} spec;
 const std::string windowsProjectText=''' + project_expression + r'''
 const std::string windowsBuildScriptText=''' + script_expression + r'''
 std::ofstream(windowsProject,std::ios::binary)<<windowsProjectText;
