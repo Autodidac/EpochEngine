@@ -10,6 +10,13 @@
 *.cppm linguist-language=C++
 *.css linguist-language=C++
 
+# Keep test-only Python out of the GitHub language breakdown.
+/Tests/**/*.py -linguist-detectable
+/Tools/tests/**/*.py -linguist-detectable
+/Tools/run_tests.py -linguist-detectable
+/Engine/dep/*/tests/**/*.py -linguist-detectable
+/Engine/dep/EpochEngineExtensions/packages/*/tests/**/*.py -linguist-detectable
+
 CMakeLists.txt linguist-language=CMake
 *.cmake linguist-language=CMake
 

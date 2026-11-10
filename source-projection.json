@@ -5,7 +5,7 @@
   "file_hash_algorithm": "sha256-git-text-lf-v1",
   "file_hash_normalization": "Text extensions/basenames listed in Tools/build/verify_public_source.py: replace CRLF with LF only; preserve BOMs, lone CR and all other bytes. Other files are hashed raw. Archive bytes and digests remain raw.",
   "files": {
-    ".gitattributes": "56b32f3d9f79e0819e321a2bc6e13cc976d6d6bc0d86803caeee21c5388a7b6c",
+    ".gitattributes": "cbf613c4985596551afe48c14e6bab8b43698a0784c7e5ae254affaf272a6b2d",
     ".github/workflows/epoch-public.yml": "f59d8c47d219350057e47636742f554edbbe04651826ff2e0767d12950d9e29d",
     ".gitignore": "047c91be68c32eb481f4c22eb601d5fce0f4a7305054535edc8f48b097f205f7",
     "AGENTS.md": "a9e6a23513ee770be38d12db2baf2faf7fd28bf483bae4e80e6ba04093f16924",
@@ -1316,7 +1316,7 @@
     "Engine/vcpkg.json": "92b4ae62cb53dee618b1394d2e688726abfa5f49f57180847e3db4b6bd6102b0",
     "LICENSE": "5ccfd9bd4b10d0bc2e2cabc01950d480ba2972c4af7ab2d3812c29cc9f314b5a",
     "Open-Epoch-Release.cmd": "7f000dde5127ce629fa9969f7d9a5adf9f7c71c8c46fe1a6318781331f545823",
-    "README.md": "e3ace3f264dbdae9d674f561712693ff8eceeeaec067761665c8c44534bf6285",
+    "README.md": "61e8b6300e98de65a187a987445a48e597324faef40e1bc0f9b60c2bb1a3d106",
     "Tests/README.md": "d6f11763ce18e3ece9f59097ab58dd1e61188fb531cf82eed97495bdfbed0db1",
     "Tests/assets/asset.cloud_volume_contract.cpp": "101f2110de1298e57765695bf247f6238fa5ed4b0dcf68fdc0cb9a540276be83",
     "Tests/authoring/test_texture_residency_extraction.py": "bf2b1eed0a35f092a17077bfa5c163cd963cf201c470e19b7293ee175e396e7f",

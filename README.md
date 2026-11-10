@@ -1,12 +1,16 @@
 # Epoch - Creative Software And Game Engine
 
 <p align="left">
-  <a href="https://github.com/Autodidac/EpochEngine/releases/tag/v0.91.04"><img src="https://img.shields.io/badge/Current_Public_Source-v0.91.04-1F7A4C?style=for-the-badge" alt="Current Public source v0.91.04" /></a>
-  <a href="https://github.com/Autodidac/EpochEngine/releases/latest"><img src="https://img.shields.io/badge/Published_Windows_Linux_Runtime-v0.91.03-2C6A8A?style=for-the-badge" alt="Published Windows/Linux runtime v0.91.03" /></a>
+  <img src="https://img.shields.io/badge/Current_Public_Source-v0.91.04-1F7A4C?style=for-the-badge" alt="Current Public source v0.91.04" />
+  <img src="https://img.shields.io/badge/Published_Windows_Linux_Runtime-v0.91.03-2C6A8A?style=for-the-badge" alt="Published Windows/Linux runtime v0.91.03" />
 </p>
 
+EpochEngine Public source is available in this repository. Verified runtime
+packages and updater evidence are distributed separately. EpochGui remains an
+independently published library.
+
 <p align="center">
-  <img src="https://raw.githubusercontent.com/Autodidac/EpochEngine/8bae9b22125f8ce01371a8987365d5d219fc981d/Images/readme/epoch-engine-overview-v08435.png" alt="Epoch Engine overview card from the earlier Public README" />
+  <img src="https://raw.githubusercontent.com/Autodidac/EpochEngine/8bae9b22125f8ce01371a8987365d5d219fc981d/Images/readme/epoch-engine-overview-v08435.png" alt="Epoch Engine overview card" />
 </p>
 
 <p align="left">
@@ -20,8 +24,21 @@
   <img src="https://img.shields.io/badge/Universal_Build_Projects-6D5C36?style=for-the-badge" alt="Universal build projects" />
   <img src="https://img.shields.io/badge/Automatic_Entry_Point_Handling-8A473D?style=for-the-badge" alt="Automatic entry point handling" />
   <img src="https://img.shields.io/badge/Zero--Dependency_Core_Goal-34495E?style=for-the-badge" alt="Zero-dependency core goal" />
+</p>
+
+<p align="center">
+  <strong>Worlds First</strong>
+</p>
+
+<p align="center">
   <img src="https://img.shields.io/badge/AI_Software_Engine-0E7490?style=for-the-badge" alt="AI software engine" />
   <img src="https://img.shields.io/badge/Fully_Featured_Vibe--Coded_Engine-A855F7?style=for-the-badge" alt="Fully featured vibe-coded engine" />
+</p>
+
+---
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/Autodidac/EpochEngine/8bae9b22125f8ce01371a8987365d5d219fc981d/Images/readme/epoch-engine-story-v08431.png" alt="The story of Epoch Engine timeline" />
 </p>
 
 ## What Epoch Is
@@ -35,14 +52,11 @@ The Editor is where you create scenes, edit interfaces, and build and run your
 project. You can use the Assistant for project guidance and review its proposed
 actions before applying them.
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/Autodidac/EpochEngine/8bae9b22125f8ce01371a8987365d5d219fc981d/Images/readme/epoch-engine-story-v08431.png" alt="Illustrated timeline of Epoch Engine's early development" />
-</p>
-
 ## Current Snapshot
 
-This source checkpoint is **0.91.04**. Download runtime packages and check their
-validation results in [GitHub Releases](https://github.com/Autodidac/EpochEngine/releases).
+This source checkpoint is [**0.91.04**](https://github.com/Autodidac/EpochEngine/releases/tag/v0.91.04).
+Windows and Linux packages and their validation results are available in
+[runtime release **0.91.03**](https://github.com/Autodidac/EpochEngine/releases/tag/v0.91.03).
 Public releases and source updates use this GitHub repository without account
 pairing. Each edition accepts only its own update channel.
 
