@@ -33,6 +33,7 @@ independently published library.
 <p align="center">
   <img src="https://img.shields.io/badge/AI_Software_Engine-0E7490?style=for-the-badge" alt="AI software engine" />
   <img src="https://img.shields.io/badge/Fully_Featured_Vibe--Coded_Engine-A855F7?style=for-the-badge" alt="Fully featured vibe-coded engine" />
+  <img src="https://img.shields.io/badge/Self--Coding_Software_Factory-9A4F2A?style=for-the-badge" alt="Self-Coding Software Factory" />
 </p>
 
 ---
