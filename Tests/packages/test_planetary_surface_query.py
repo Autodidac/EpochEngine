@@ -114,6 +114,20 @@ int main(int argc,char** argv){
  CHECK(probe::query_surface(root,q,{}).code==SurfaceCode::ready);
  probe::cancellation=std::stop_source{};probe::mutation="cancel";CHECK(probe::query_surface(root,q,probe::cancellation.get_token()).code==SurfaceCode::cancelled);
  probe::mutation.clear();probe::cancellation=std::stop_source{};
+ const auto beforeShore=probe::executions;
+ CHECK(probe::query_ocean_shoreline(root,q,100.0,{}).code==SurfaceCode::unsupported);
+ CHECK(probe::executions==beforeShore);
+ q.settings.ocean_surface=true;
+ const auto shore=probe::query_ocean_shoreline(root,q,100.0,{});
+ CHECK(shore.code==SurfaceCode::ready&&shore.land.height_meters>0&&shore.water.height_meters<0);
+ CHECK(probe::executions>beforeShore&&probe::executions<=beforeShore+5);
+ const auto& land=shore.land.radial_up;const auto& water=shore.water.radial_up;
+ CHECK(2*q.body.radius_meters*std::asin(std::hypot(land[0]-water[0],land[1]-water[1],land[2]-water[2])*0.5)<=100);
+ const auto again=probe::query_ocean_shoreline(root,q,100.0,{});
+ CHECK(again.code==SurfaceCode::ready&&again.land.radial_up==land&&again.water.radial_up==water);
+ probe::mutation="cancel";
+ CHECK(probe::query_ocean_shoreline(root,q,100.0,probe::cancellation.get_token()).code==SurfaceCode::cancelled);
+ probe::mutation.clear();probe::cancellation=std::stop_source{};q.settings.ocean_surface=false;
  SurfaceBatchQuery batch{q,{}};for(unsigned i=0;i<64;++i){const double angle=i*0.07;batch.directions.push_back({std::cos(angle),std::sin(angle),0});}
  const auto prior=probe::executions;const auto sampled=probe::query_surfaces(root,batch,{});
  CHECK(sampled.code==SurfaceCode::ready&&sampled.operation.ok&&sampled.samples.size()==64&&probe::executions==prior+1);
@@ -154,7 +168,8 @@ class PlanetarySurfaceQuery(unittest.TestCase):
             '        bool source_supports_surface_batch(',
             '        bool surface_generation_is_current(', '        bool parse_surface_receipt(',
             '        bool parse_surface_batch_receipt(', '    SurfaceBatchResult query_surface_samples(',
-            '    SurfaceResult query_surface(', '    SurfaceBatchResult query_surfaces('))
+            '    SurfaceResult query_surface(', '    SurfaceBatchResult query_surfaces(',
+            '    ShorelineResult query_ocean_shoreline('))
         code=CODE.replace('PROVIDER_QUERY',actual_provider).replace('HOST_FUNCTIONS',functions)
         identity=hashlib.sha256(code.encode()+Path(__file__).read_bytes()).hexdigest()[:12]
         proof=ROOT/'Artifacts/Reports/planet-surface-query-oct31'/identity

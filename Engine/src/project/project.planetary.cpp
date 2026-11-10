@@ -1628,6 +1628,72 @@ file(RENAME "${receipt_temporary}" "${runtime}/provider.identity")
         std::stop_token cancellation)
     {return query_surface_samples(project_root,query,cancellation,true);}
 
+    ShorelineResult query_ocean_shoreline(const fs::path& project_root, const SurfaceQuery& query,
+        double maximum_distance_meters, std::stop_token cancellation)
+    {
+        if (cancellation.stop_requested())
+            return {SurfaceCode::cancelled, {.cancelled=true,.message="Shoreline search cancelled."}};
+        if (!query.settings.ocean_surface || query.body.id != 0u)
+            return {SurfaceCode::unsupported, {.message="The selected body has no admitted ocean shoreline."}};
+        if (!std::isfinite(maximum_distance_meters) || maximum_distance_meters <= 0.0
+            || !std::isfinite(query.body.radius_meters) || query.body.radius_meters <= 0.0)
+            return {SurfaceCode::invalid, {.message="Shoreline search requires a valid distance and body radius."}};
+
+        constexpr unsigned sampleCount = 48u;
+        constexpr double goldenAngle = 2.39996322972865332;
+        SurfaceBatchQuery batch{query, {}};
+        batch.directions.reserve(sampleCount);
+        for (unsigned index = 0u; index < sampleCount; ++index)
+        {
+            const double y = 1.0 - 2.0 * (index + 0.5) / sampleCount;
+            const double radial = std::sqrt(1.0 - y * y);
+            const double angle = goldenAngle * index;
+            batch.directions.push_back({radial * std::cos(angle), y, radial * std::sin(angle)});
+        }
+
+        for (unsigned pass = 0u; pass < 5u; ++pass)
+        {
+            auto sampled = query_surface_samples(project_root, batch, cancellation, true);
+            if (sampled.code != SurfaceCode::ready) return {sampled.code, std::move(sampled.operation)};
+            const SurfaceResult* dry{};
+            const SurfaceResult* wet{};
+            double closestChord = 2.0;
+            for (const auto& land : sampled.samples)
+            {
+                if (land.height_meters <= 0.0) continue;
+                for (const auto& water : sampled.samples)
+                {
+                    if (water.height_meters >= 0.0) continue;
+                    const auto& a = land.radial_up;
+                    const auto& b = water.radial_up;
+                    const auto chord = std::hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+                    if (chord < closestChord) { closestChord = chord; dry = &land; wet = &water; }
+                }
+            }
+            if (!dry || !wet) break;
+            const auto distance = 2.0 * query.body.radius_meters * std::asin(closestChord * 0.5);
+            if (distance <= maximum_distance_meters)
+            {
+                sampled.operation.message = "Verified a dry surface point beside ocean water.";
+                return {SurfaceCode::ready, std::move(sampled.operation), *dry, *wet};
+            }
+            // Keep both sides of the crossing and refine between them in
+            // one batch. No sample from a different recipe can fill a gap.
+            batch.directions.clear();
+            for (unsigned index = 0u; index < sampleCount; ++index)
+            {
+                const double t = static_cast<double>(index) / (sampleCount - 1u);
+                std::array<double,3> direction{};
+                for (unsigned axis = 0u; axis < direction.size(); ++axis)
+                    direction[axis] = std::lerp(dry->radial_up[axis], wet->radial_up[axis], t);
+                const auto length = std::hypot(direction[0], direction[1], direction[2]);
+                for (auto& value : direction) value /= length;
+                batch.directions.push_back(direction);
+            }
+        }
+        return {SurfaceCode::unsupported, {.message="The bounded terrain search found no verified ocean shoreline at that distance."}};
+    }
+
     StreamResult stream_step(const fs::path& project_root, Settings settings,
         StreamView view, std::stop_token cancellation)
     {

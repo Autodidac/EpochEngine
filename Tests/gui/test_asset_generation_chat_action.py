@@ -36,23 +36,23 @@ class ChatImageAction(unittest.TestCase):
         owners = {key: path.read_text(encoding="utf-8") for key, path in paths.items()}
         hashes = {path.relative_to(ROOT).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
                   for path in paths.values()}
-        ingress = definition(owners["planning"], "            if (ai::image_generation_request(request))")
+        ingress = definition(owners["planning"], "            if (ai::asset_generation_tool(generationTool))")
         tool_owner = definition(owners["planning"], "        auto request_ai_tool_plan =")
         preflight = tool_owner[tool_owner.index("{")+1:tool_owner.index("            chat.statusRequestKind =")]
         binding_start = tool_owner.index('            chat.append_user_message("Tool plan: "')
-        binding_setup = tool_owner[binding_start:tool_owner.index("            if (ai::image_generation_request(request))")]
+        binding_setup = tool_owner[binding_start:tool_owner.index("            if (ai::asset_generation_tool(generationTool))")]
         self.assertLess(tool_owner.index("editor.assetGenerationPending"), binding_start)
-        self.assertLess(tool_owner.index('editor.aiToolExecution == "asset.image.generate"'), binding_start)
+        self.assertLess(tool_owner.index('ai::asset_generation_tool(editor.aiToolExecution)'), binding_start)
         text_action = definition(owners["planning"], "        const auto queue_text_message_action =", True)
-        branch = definition(owners["runtime"], '            else if(call.tool=="asset.image.generate")')
+        branch = definition(owners["runtime"], '            else if(ai::asset_generation_tool(call.tool))')
         gate_start = owners["runtime"].index("            if (const auto expected = ai::project_lifecycle_request_tool(editor.aiToolBoundRequest);")
         gate_end = owners["runtime"].index('            if((call.tool=="forest.configure"', gate_start)
         gates = owners["runtime"][gate_start:gate_end]
         watch = definition(owners["runtime"], "            auto watch_execution =", True)
-        image_finish = definition(owners["runtime"], '                else if(editor.aiToolExecution=="asset.image.generate")')
+        image_finish = definition(owners["runtime"], '                else if(ai::asset_generation_tool(editor.aiToolExecution))')
         execution_owner = definition(owners["runtime"], '        if (!editor.aiToolExecution.empty())')
         stale_finish = definition(execution_owner, '                if (!current)')
-        queue_start = owners["conversation"].index("        const bool queuedImageHostAction =")
+        queue_start = owners["conversation"].index("        const bool queuedAssetHostAction =")
         queue_literal = owners["conversation"][queue_start:owners["conversation"].index(";", queue_start)+1]
         dispatch_start = owners["conversation"].index("        if (queueOwnerReady && queuedMethodMatches")
         queue_dispatch = owners["conversation"][dispatch_start:owners["conversation"].index("\n        {", dispatch_start)].strip()[3:]
@@ -107,7 +107,7 @@ ACTUAL_MODEL_VALIDATION
 }
 namespace epochengine::ai::asset_jobs {
 enum class Action:std::uint8_t{image,model};
-struct ModelBackend{bool terms_accepted{};};
+struct ModelBackend{std::string id,revision;bool terms_accepted{};};
 struct PreparedJob {Action action{Action::image};image_generation::Request image;image_generation::Configuration image_backend;
  model_generation::Request model;model_generation::Configuration model_backend;std::optional<ModelBackend>alternative_model_backend;
  std::filesystem::path work_directory;std::string backend_name;};
@@ -115,17 +115,19 @@ struct PreparedJob {Action action{Action::image};image_generation::Request image
 namespace editor_asset_generation {
 namespace jobs=ai::asset_jobs;namespace core=epochengine::core;
 enum class Stage:std::uint8_t{idle};enum class View:std::uint8_t{textured,solid,wireframe};
-enum class Action:std::uint8_t{generate_image};
+enum class Action:std::uint8_t{generate_image,generate_model};
 struct SpriteHandle{};namespace previewgrid{struct ObjectMarker{};}
-struct ProjectIdentity{std::string id,root;std::uint64_t generation{};};
+struct ProjectIdentity{std::string root,id;std::uint64_t generation{};bool operator==(const ProjectIdentity&)const=default;};
 struct Completion{bool image{},coding_restored{},retirement_verified{};struct{
  std::filesystem::path output,work_directory;std::string output_sha256;bool valid{};
- explicit operator bool()const{return valid;}}result;};
+ explicit operator bool()const{return valid;}}result;ProjectIdentity project;};
 ACTUAL_STATE
 ACTUAL_PATH_TEXT
 ACTUAL_DIGEST
 ACTUAL_READINESS
 ACTUAL_IMAGE_BINDING
+ACTUAL_CURRENT_PROJECT
+ACTUAL_MODEL_BINDING
 ACTUAL_PREPARE
 }
 enum class EditorMainSurface{Scene,Project,AssetGeneration};
@@ -144,9 +146,9 @@ struct Editor {
  bool aiAuthoringPlanApplied{},aiAuthoringApplyPending{};
  std::string aiProjectScriptDraft;ai::ToolPlanParseResult aiAuthoringPlan;
  std::optional<int>aiToolTestPending;unsigned aiQueuedMessageActionIndex{99};
- std::string aiToolStatus,aiToolImageBinding,aiToolBoundRequest,aiToolExecution;
- std::filesystem::path aiToolImageWork;
- std::uint64_t aiToolImageActivityId{};
+ std::string aiToolStatus,aiToolAssetBinding,aiToolBoundRequest,aiToolExecution;
+ std::filesystem::path aiToolAssetWork;
+ std::uint64_t aiToolAssetActivityId{};
  ai::ToolPlanParseResult aiToolPlan;
  std::optional<EditorMainSurface>requestedMainSurface;
  unsigned projectWorkspaceSection{};
@@ -160,6 +162,9 @@ struct Editor {
  const Evidence& evidence()const{return value;}}projectLifecycle;
 };
 using EditorState=Editor;
+editor_asset_generation::ProjectIdentity asset_generation_project(const Editor& editor){
+ return {editor.projectRoot,editor.projectId,editor.projectLifecycle.evidence().generations.selected_project.generation};}
+std::string display_project_path(const std::filesystem::path&path){return path.generic_string();}
 unsigned backendRestores{};
 void restore_asset_generation_backend_selection(Editor&){++backendRestores;}
 struct Chat{std::vector<int>activeReferenceImages;std::vector<std::string>messages,userMessages;std::string queuedInput,input;
@@ -177,9 +182,10 @@ ai::ToolPlanParseResult admit_ai_project_tool_reply(std::string_view,std::string
 ACTUAL_CONFIRMATION
 bool planetary_project_busy(const Editor& editor){return editor.planetBusy;}
 unsigned dispatched{};bool schedulerAccepts=true;std::optional<ai::asset_jobs::PreparedJob>lastJob;
-void dispatch_asset_generation(Editor& editor,int,editor_asset_generation::Action){
+void dispatch_asset_generation(Editor& editor,int,editor_asset_generation::Action action){
  ++dispatched;
- lastJob=editor_asset_generation::prepare_job(editor.assetGeneration,ai::asset_jobs::Action::image,"owned-working-job",editor.assetGeneration.status);
+ const auto kind=action==editor_asset_generation::Action::generate_image?ai::asset_jobs::Action::image:ai::asset_jobs::Action::model;
+ lastJob=editor_asset_generation::prepare_job(editor.assetGeneration,kind,"owned-working-job",editor.assetGeneration.status);
  if(lastJob&&schedulerAccepts){editor.assetGenerationPending=true;editor.assetGeneration.active_work_directory=lastJob->work_directory;}}
 bool propose(Editor& editor,Chat& chat,std::string_view request){
  ACTUAL_PREFLIGHT
@@ -192,7 +198,6 @@ bool execute(Editor& editor,Chat& chat){const auto call=editor.aiToolPlan.plan.c
  if(false){}ACTUAL_BRANCH
  return true;
 }
-std::string display_project_path(const std::filesystem::path&path){return path.generic_string();}
 void completed(Editor&editor,Chat&chat){if(false){}ACTUAL_IMAGE_FINISH}
 void stale_completed(Editor&editor,Chat&chat){const bool current=false;ACTUAL_STALE_FINISH}
 namespace epochengine::ai{bool is_model_use_confirmed(){return false;}}
@@ -205,7 +210,7 @@ bool submit(Editor&editor,Chat&chat,std::string_view input){
  ACTUAL_TEXT_ACTION
  #undef EPOCH_EDITION_PUBLIC
  if(queue_text_message_action(input))return true;
- if(ai::image_generation_request(input))return propose(editor,chat,input);
+ if(ai::asset_generation_tool(ai::project_lifecycle_request_tool(input)))return propose(editor,chat,input);
  return false;
 }
 bool queue_allowed(const Editor& editor,Chat& chat,bool queueOwnerReady,bool queuedMethodMatches,bool queuedModelMatches,const queue::Status& status){
@@ -228,22 +233,22 @@ int main(){
  CHECK(propose(editor,chat,prompt));CHECK(editor.aiToolPlan&&editor.aiToolPlan.plan.call.tool=="asset.image.generate");
  CHECK(editor.assetGeneration.image_request.prompt==prompt&&gui::oldPrompt=="Old UI draft"&&gui::replacements==1);
  CHECK(dispatched==0&&!editor.assetGenerationPending&&!editor.assetGeneration.reference_approved);
- CHECK(editor.aiToolImageBinding.size()==64&&editor.requestedMainSurface==EditorMainSurface::AssetGeneration);
+ CHECK(editor.aiToolAssetBinding.size()==64&&editor.requestedMainSurface==EditorMainSurface::AssetGeneration);
  CHECK(chat.messages.back().find("No chat-model request was needed")!=std::string::npos);
  CHECK(!chat.activity.stream_live&&chat.activityEnds==0&&!chat.lastActivityFailed&&backendRestores==1);
- const auto original=editor;const auto binding=editor.aiToolImageBinding;
+ const auto original=editor;const auto binding=editor.aiToolAssetBinding;
  std::string diagnostic;CHECK(editor_asset_generation::image_request_binding(editor.assetGeneration,prompt,diagnostic)==binding&&diagnostic.empty());
  chat.inlineHostActivityId=73;
  CHECK(execute(editor,chat));CHECK(dispatched==1&&lastJob&&lastJob->image.prompt==prompt);
  CHECK(lastJob->image.negative_prompt=="No text, no border"&&lastJob->image.seed==42&&lastJob->image.width==512);
- CHECK(editor.aiToolExecution=="asset.image.generate"&&editor.aiToolImageWork=="owned-working-job");
- CHECK(editor.aiToolImageActivityId==73&&chat.activity.stream_live);
+ CHECK(editor.aiToolExecution=="asset.image.generate"&&editor.aiToolAssetWork=="owned-working-job");
+ CHECK(editor.aiToolAssetActivityId==73&&chat.activity.stream_live);
  CHECK(!editor.assetGeneration.reference_approved&&!editor.assetGeneration.generated_model);
  const auto running=editor;const auto firstUsers=chat.userMessages.size();
  const std::string secondPrompt="Generate an oak foliage texture";
  for(unsigned pending=0;pending!=2;++pending){auto busy=running;busy.assetGenerationPending=pending==0;
   CHECK(!propose(busy,chat,secondPrompt));CHECK(chat.userMessages.size()==firstUsers);
-  CHECK(busy.aiToolBoundRequest==prompt&&busy.aiToolImageBinding==binding&&busy.aiToolImageWork=="owned-working-job");
+  CHECK(busy.aiToolBoundRequest==prompt&&busy.aiToolAssetBinding==binding&&busy.aiToolAssetWork=="owned-working-job");
   CHECK(busy.aiToolExecution=="asset.image.generate"&&busy.aiToolPlan.plan.call.tool=="asset.image.generate");
   CHECK(busy.assetGeneration.image_request.prompt==prompt&&busy.aiToolProjectId==running.aiToolProjectId);
   CHECK(busy.aiToolStatus==running.aiToolStatus&&gui::replacements==1&&dispatched==1);
@@ -251,7 +256,7 @@ int main(){
  for(unsigned active=0;active!=3;++active){auto busy=original;Chat c;
   if(active==0)busy.aiToolAwaitingReply=true;if(active==1)c.pending=true;
   if(active==2)busy.aiDeferredRequestKind=AiDeferredRequestKind::Tooling;
-  CHECK(!propose(busy,c,secondPrompt));CHECK(busy.aiToolBoundRequest==prompt&&busy.aiToolImageBinding==binding&&c.userMessages.empty());}
+  CHECK(!propose(busy,c,secondPrompt));CHECK(busy.aiToolBoundRequest==prompt&&busy.aiToolAssetBinding==binding&&c.userMessages.empty());}
  auto complete=editor;complete.assetGeneration.reference.emplace();auto&reference=*complete.assetGeneration.reference;
  reference.coding_restored=reference.retirement_verified=reference.result.valid=true;
  reference.result.output="generated.png";reference.result.work_directory="owned-working-job";
@@ -269,7 +274,7 @@ int main(){
  const std::function<void(Editor&)> failedReceipts[]={
   [](auto&e){e.assetGeneration.reference.reset();},[](auto&e){e.assetGeneration.reference->result.valid=false;},
   [](auto&e){e.assetGeneration.reference->coding_restored=false;},[](auto&e){e.assetGeneration.reference->retirement_verified=false;},
-  [](auto&e){e.aiToolImageWork.clear();},[](auto&e){e.assetGeneration.reference->result.work_directory="old-working-job";}
+  [](auto&e){e.aiToolAssetWork.clear();},[](auto&e){e.assetGeneration.reference->result.work_directory="old-working-job";}
  };
  for(const auto&mutate:failedReceipts){auto failed=complete;mutate(failed);
   CHECK(!propose(failed,chat,secondPrompt));Chat failedTurn;failedTurn.inlineHostActivityId=73;completed(failed,failedTurn);
@@ -278,7 +283,7 @@ int main(){
  // The normal completion owner retires this execution marker only after its receipt is observed.
  complete.assetGenerationPending=false;complete.aiToolExecution.clear();reset_ports();
  CHECK(propose(complete,chat,secondPrompt));CHECK(complete.aiToolBoundRequest==secondPrompt);
- CHECK(complete.aiToolImageBinding!=binding&&complete.aiToolImageWork.empty()&&dispatched==0);
+ CHECK(complete.aiToolAssetBinding!=binding&&complete.aiToolAssetWork.empty()&&dispatched==0);
  const std::function<void(Editor&)> mutations[]={
   [](auto&e){e.aiToolBoundRequest+="!";},[](auto&e){e.assetGeneration.image_request.prompt+="!";},
   [](auto&e){e.assetGeneration.image_request.negative_prompt+="!";},[](auto&e){e.assetGeneration.image_seed="43";},
@@ -291,7 +296,7 @@ int main(){
   [](auto&e){e.assetGeneration.image_settings.reset();},[](auto&e){e.assetGeneration.image_seed="not a seed";},
   [](auto&e){e.assetGeneration.image_request.steps=0;},[](auto&e){e.assetGeneration.image_request.width=513;},
   [](auto&e){e.assetGeneration.image_request.negative_prompt=std::string(4097,'x');},
-  [](auto&e){e.aiToolImageBinding.clear();},[](auto&e){e.projectId="other";},[](auto&e){e.projectRoot="other-root";},
+  [](auto&e){e.aiToolAssetBinding.clear();},[](auto&e){e.projectId="other";},[](auto&e){e.projectRoot="other-root";},
   [](auto&e){++e.projectLifecycle.value.generations.selected_project.generation;},
   [](auto&e){++e.sceneDocumentRevision;},[](auto&e){e.guiDocument=std::make_shared<GuiDoc>(GuiDoc{{7}});},
   [](auto&e){e.aiToolExecution="project.run";},[](auto&e){e.assetGenerationPending=true;},
@@ -306,7 +311,7 @@ int main(){
   if(blocked==1)e.assetGenerationPending=true;
   const std::string request=blocked==2?std::string("Generate a texture ")+std::string(8193,'x'):prompt;
   if(blocked==3)e.assetGeneration.image_settings.reset();
-  CHECK(propose(e,c,request)==(blocked!=1));CHECK(!e.aiToolPlan&&e.aiToolImageBinding.empty()&&dispatched==0);
+  CHECK(propose(e,c,request)==(blocked!=1));CHECK(!e.aiToolPlan&&e.aiToolAssetBinding.empty()&&dispatched==0);
   CHECK(c.activity.stream_live==(blocked==1));CHECK(c.activityEnds==0);
   CHECK(blocked==3||e.assetGeneration.image_request.prompt=="Old UI draft");
   if(blocked==0)CHECK(c.activeReferenceImages.size()==1&&c.messages.back().find("no image was read")!=std::string::npos);
@@ -327,6 +332,52 @@ int main(){
  queued.aiToolPlanApplied=true;CHECK(!queue_allowed(queued,queuedChat,true,true,true,status));
  queued.aiToolPlanApplied=false;queued.aiToolPlan=ai::parse_tool_plan("EPOCH_TOOL_PLAN_V1\nTITLE save\nSUMMARY Save\nCALL project.save\nEND\n");
  CHECK(!queue_allowed(queued,queuedChat,true,true,true,status));
+ const std::string modelRequest="Generate 3D from the approved reference.";
+ auto modelEditor=ready();auto& modelState=modelEditor.assetGeneration;
+ modelState.model_settings.emplace();modelState.model_settings->backend_name="Fixture local 3D runtime";
+ modelState.model_settings->action=ai::asset_jobs::Action::model;
+ modelState.model_settings->model_backend.dinov3_terms_accepted=true;
+ modelState.model_settings_path="3d-settings.json";modelState.model_settings_sha256=std::string(64,'d');
+ modelState.reference.emplace();
+ modelState.reference->image=modelState.reference->result.valid=true;
+ modelState.reference->project=asset_generation_project(modelEditor);
+ modelState.reference->result.output="approved.png";
+ modelState.reference->result.output_sha256=std::string(64,'e');
+ Chat modelChat;reset_ports();
+ CHECK(propose(modelEditor,modelChat,modelRequest));
+ CHECK(!modelEditor.aiToolPlan&&dispatched==0);
+ CHECK(modelEditor.aiToolStatus.find("approve the visible image")!=std::string::npos);
+ modelState.reference_approved=true;
+ CHECK(propose(modelEditor,modelChat,modelRequest));CHECK(modelEditor.aiToolPlan&&dispatched==0);
+ CHECK(modelEditor.aiToolPlan.plan.call.tool=="asset.model.generate");
+ CHECK(modelEditor.aiToolStatus.find("approved.png")!=std::string::npos&&modelEditor.aiToolStatus.find(std::string(64,'e'))!=std::string::npos);
+ CHECK(modelState.image_request.prompt=="Old UI draft"&&gui::replacements==0);
+ const std::function<void(Editor&)> modelChanges[]={
+  [](auto&e){e.assetGeneration.reference_approved=false;},
+  [](auto&e){e.assetGeneration.reference->result.output_sha256[0]='f';},
+  [](auto&e){e.assetGeneration.reference->result.output="different.png";},
+  [](auto&e){++e.assetGeneration.reference->project.generation;},
+  [](auto&e){e.assetGeneration.model_seed="43";},
+  [](auto&e){++e.assetGeneration.model_request.steps;},
+  [](auto&e){e.assetGeneration.model_settings_sha256[0]='f';},
+  [](auto&e){e.assetGeneration.model_settings->model_backend.executable="different-generator.exe";},
+  [](auto&e){e.assetGeneration.model_settings->model_backend.dinov3_terms_accepted=false;}
+ };
+ for(const auto& change:modelChanges){auto stale=modelEditor;change(stale);
+  CHECK(!execute(stale,modelChat));CHECK(dispatched==0&&!lastJob);}
+ queuedChat.queuedInput=modelRequest;CHECK(queue_allowed(modelEditor,queuedChat,true,true,true,status));
+ queuedChat.queuedInput="approve";CHECK(queue_allowed(modelEditor,queuedChat,true,true,true,status));
+ CHECK(execute(modelEditor,modelChat));CHECK(dispatched==1&&lastJob&&lastJob->action==ai::asset_jobs::Action::model);
+ CHECK(lastJob->model.reference_path=="approved.png"&&lastJob->model.approved_reference_sha256==std::string(64,'e'));
+ modelState.generated_model.emplace();auto& model=*modelState.generated_model;
+ model.coding_restored=model.retirement_verified=model.result.valid=true;
+ model.result.output="result.glb";model.result.work_directory="previous-job";
+ Chat wrongJob;completed(modelEditor,wrongJob);
+ CHECK(wrongJob.lastActivityFailed&&modelEditor.aiToolStatus.starts_with("3D generation ended without"));
+ model.result.work_directory=modelEditor.aiToolAssetWork;
+ completed(modelEditor,modelChat);
+ CHECK(!modelChat.lastActivityFailed&&modelEditor.aiToolStatus.find("result.glb")!=std::string::npos);
+ CHECK(modelEditor.aiToolStatus.find("review it before import")!=std::string::npos);
 }
 '''
         pieces = {
@@ -345,6 +396,8 @@ int main(){
             "ACTUAL_DIGEST": definition(owners["generation"], "        std::string digest("),
             "ACTUAL_READINESS": definition(owners["generation"], "    std::string readiness_diagnostic("),
             "ACTUAL_IMAGE_BINDING": definition(owners["generation"], "    std::string image_request_binding("),
+            "ACTUAL_MODEL_BINDING": definition(owners["generation"], "    std::string model_request_binding("),
+            "ACTUAL_CURRENT_PROJECT": definition(owners["generation"], "    bool current_project("),
             "ACTUAL_PREPARE": definition(owners["generation"], "    std::optional<jobs::PreparedJob> prepare_job("),
             "ACTUAL_CONFIRMATION": definition(owners["state"], "        [[nodiscard]] std::optional<bool> ai_chat_confirmation("),
             "ACTUAL_PREFLIGHT": preflight, "ACTUAL_BINDING_SETUP": binding_setup,

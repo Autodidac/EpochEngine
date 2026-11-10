@@ -971,7 +971,7 @@
         // A scene transform/recipe/plant edit invalidates the queued intent.
         [[nodiscard]] bool begin_forest_surface_placement(EditorState& state,const EditorEntity& planet,
             std::size_t ordinal, std::optional<forest::ForestAreaDistribution> area = {},
-            std::optional<std::array<double,3>> brushDirection = {})
+            std::optional<std::array<double,3>> brushDirection = {}, bool findOceanShoreline = false)
         {
             if(state.forestSurfacePending)
             {state.plantLabStatus="A plant surface placement is already running.";return false;}
@@ -988,25 +988,32 @@
                 [&](const auto& value){return value.id==bodyId;});
             if(body==policy.generated_bodies.end())
             {state.plantLabStatus="Select a generated planet body before placing a plant.";return false;}
+            if (findOceanShoreline && (!area || !policy.settings.ocean_surface || body->id != 0u))
+            {state.plantLabStatus="Shoreline placement requires a forest area on the generated ocean-bearing body.";return false;}
             auto context=state.projectRuntimeViewportContext.lock();
-            if(!state.forestPlacementCamera&&!context)
+            if(!findOceanShoreline&&!state.forestPlacementCamera&&!context)
             {state.plantLabStatus="The project camera is unavailable; no plant was placed.";return false;}
-            const auto camera=state.forestPlacementCamera?*state.forestPlacementCamera:previewgrid::camera_for(context.get());
             const auto pivot=scene::world_position(planet.position,planet.positionAnchor);
             if(!pivot)return false;
             const auto transform=previewgrid::make_precise_mesh_transform(*pivot,
                 {planet.scale[0],planet.scale[1],planet.scale[2]},
                 {planet.rotation[0],planet.rotation[1],planet.rotation[2]});
             if(!transform)return false;
-            const auto eye=previewgrid::camera_world_eye(camera);
-            std::array<double,3> direction{};
-            for(std::size_t axis=0;axis<3;++axis)
+            std::array<double,3> direction{0.0,1.0,0.0}, heading{0.0,0.0,1.0};
+            if (!findOceanShoreline)
             {
-                double local{};
-                for(std::size_t row=0;row<3;++row)
-                    local+=transform->rotation[row*3+axis]*(eye[row]-transform->position[row]);
-                direction[axis]=local/transform->scale[axis]
-                    -body->center_meters[axis]+policy.generated_mesh->coordinates.source_origin_meters[axis];
+                const auto camera=state.forestPlacementCamera?*state.forestPlacementCamera:previewgrid::camera_for(context.get());
+                const auto eye=previewgrid::camera_world_eye(camera);
+                for(std::size_t axis=0;axis<3;++axis)
+                {
+                    double local{};
+                    for(std::size_t row=0;row<3;++row)
+                        local+=transform->rotation[row*3+axis]*(eye[row]-transform->position[row]);
+                    direction[axis]=local/transform->scale[axis]
+                        -body->center_meters[axis]+policy.generated_mesh->coordinates.source_origin_meters[axis];
+                }
+                const auto forward=previewgrid::camera_forward(camera);
+                heading={forward.x,forward.y,forward.z};
             }
             if(brushDirection)direction=*brushDirection;
             double square{};for(const auto value:direction)square+=value*value;
@@ -1018,7 +1025,6 @@
             if(terrain&&terrain->key().words!=policy.generated_mesh->artifact_key)terrain.reset();
             const auto terrainPath=planet.meshAsset->logical_path;
             const auto terrainLimits=editor_planetary_mesh_budget(state).artifact;
-            const auto forward=previewgrid::camera_forward(camera);
             EditorState::ForestSurfacePlacement intent;
             intent.projectId=state.projectId;intent.projectRoot=state.projectRoot;
             intent.projectGeneration=state.projectLifecycle.evidence().generations.selected_project.generation;
@@ -1026,15 +1032,16 @@
             intent.plantHash=state.plantLabCompiled.sourceContentHash;
             intent.entity=planet.sceneObjectId;intent.ordinal=ordinal;
             intent.position=planet.position;intent.rotation=planet.rotation;intent.scale=planet.scale;intent.anchor=planet.positionAnchor;
-            intent.heading={forward.x,forward.y,forward.z};
+            intent.heading=heading;
             intent.query={policy.source,policy.settings,*policy.generated_mesh,*body,terrain,direction,++state.forestSurfaceSequence};
             intent.area=area;
+            intent.findOceanShoreline=findOceanShoreline;
             intent.directions=area?forest::forest_area_directions(*area,direction,body->radius_meters)
                 :std::vector<std::array<double,3>>{direction};
             if(intent.directions.empty())
             {state.plantLabStatus="The forest area radius or density is invalid; no trees were placed.";return false;}
             auto submitted=schedule_editor_cancellable_task(state,area?"Paint forest area on planetary ground":"Place plant on generated planetary ground",
-                [root,query=intent.query,directions=intent.directions,area,terrainPath,terrainLimits,
+                [root,query=intent.query,directions=intent.directions,area,findOceanShoreline,terrainPath,terrainLimits,
                     plant=state.plantLabCompiled,profile=state.plantLabDocument.profile,
                     ordinal,projectId=intent.projectId](std::stop_token stop) mutable {
                     EditorState::ForestSurfacePrepared prepared;
@@ -1049,6 +1056,22 @@
                         const auto loaded=asset::mesh::read_project_artifact(root,terrainPath,{query.mesh.artifact_key},terrainLimits);
                         if(!loaded)return refused("The saved terrain mesh could not be verified.");
                         query.artifact=loaded.artifact;
+                    }
+                    if(stop.stop_requested())return refused("Plant placement cancelled.");
+                    if (findOceanShoreline)
+                    {
+                        auto shore = project_planetary::query_ocean_shoreline(root,query,100.0,stop);
+                        if (shore.code != project_planetary::SurfaceCode::ready)
+                        {
+                            prepared.surface.code = shore.code;
+                            prepared.surface.operation = std::move(shore.operation);
+                            prepared.surface.request_id = query.request_id;
+                            return prepared;
+                        }
+                        query.direction = shore.land.radial_up;
+                        directions = forest::forest_area_directions(*area,query.direction,query.body.radius_meters);
+                        if (directions.empty()) return refused("The shoreline forest area is invalid.");
+                        prepared.shorelineCenter = query.direction;
                     }
                     if(stop.stop_requested())return refused("Plant placement cancelled.");
                     prepared.prototype=project_compiled_forest_entities(plant,
@@ -1070,7 +1093,8 @@
             state.forestSurfacePlacement=std::move(intent);
             state.forestSurfaceCancellation=submitted.cancellation;
             state.forestSurfacePending.emplace(std::move(submitted.completion));
-            state.plantLabStatus=area?"Sampling the forest area beneath the project camera (maximum 64 trees)..."
+            state.plantLabStatus=findOceanShoreline?"Finding dry ground beside verified ocean water..."
+                :area?"Sampling the forest area beneath the project camera (maximum 64 trees)..."
                 :"Finding dry terrain beneath the project camera...";
             push_editor_log(state,"[forest] "+state.plantLabStatus);
             return true;
@@ -1294,6 +1318,14 @@
                 {fail(result.code==project_planetary::SurfaceCode::busy
                     ?"Terrain is busy. Retry Add to Scene after its current operation finishes."
                     :"No plant was added: "+result.operation.message);return;}
+                if (intent->findOceanShoreline)
+                {
+                    if (!intent->area || !prepared.shorelineCenter)
+                    {fail("The shoreline search returned no verified location.");return;}
+                    intent->query.direction = *prepared.shorelineCenter;
+                    intent->directions = forest::forest_area_directions(*intent->area,
+                        intent->query.direction,intent->query.body.radius_meters);
+                }
                 if(result.samples.size()!=intent->directions.size())
                 {fail("The terrain returned an incomplete forest sample set; no trees were placed.");return;}
                 const auto pivot=scene::world_position(planet.position,planet.positionAnchor);
@@ -1387,6 +1419,10 @@
                 state.aiGoalForestReceipt = saved;
                 state.plantLabStatus=epochengine::format_text("{} rooted tree(s) added{}.",plantedCount,
                     saved?" and saved":"; scene save failed, retry Save");
+                if (intent->findOceanShoreline)
+                    state.plantLabStatus += epochengine::format_text(
+                        " Ocean shoreline body {} direction ({}, {}, {}).",intent->query.body.id,
+                        intent->query.direction[0],intent->query.direction[1],intent->query.direction[2]);
                 state.forestPlacementFocusPending=!intent->area;
                 push_editor_log(state,"[forest] "+state.plantLabStatus);
             }
@@ -1404,7 +1440,7 @@
             }
         }
 
-        [[nodiscard]] bool paint_forest_factory_area(EditorState& state)
+        [[nodiscard]] bool paint_forest_factory_area(EditorState& state, bool findOceanShoreline = false)
         {
             if(!has_open_project(state)||!ensure_plant_lab_compiled_asset(state))return false;
             const auto selected=editor_entity_index(state,state.selectedEntityId);
@@ -1412,7 +1448,7 @@
             {state.plantLabStatus="Select the generated planet in 3D Objects, then Paint Area beneath the project camera.";return false;}
             const auto ordinal=static_cast<std::size_t>(std::count_if(state.entities.begin(),state.entities.end(),
                 [](const auto& entity){return entity.category=="ForestFactory"&&entity.type=="ForestTrunk";}));
-            return begin_forest_surface_placement(state,state.entities[*selected],ordinal,state.forestArea);
+            return begin_forest_surface_placement(state,state.entities[*selected],ordinal,state.forestArea,{},findOceanShoreline);
         }
 
         [[nodiscard]] bool erase_selected_forest_area(EditorState& state)

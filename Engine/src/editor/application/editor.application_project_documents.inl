@@ -178,9 +178,9 @@
             state.aiAuthoringApplyCancellation = {};
             state.aiToolPlan = {};
             state.aiToolModelRecovery = {};
-            state.aiToolImageBinding.clear();
-            state.aiToolImageWork.clear();
-            state.aiToolImageActivityId = 0u;
+            state.aiToolAssetBinding.clear();
+            state.aiToolAssetWork.clear();
+            state.aiToolAssetActivityId = 0u;
             state.aiPackageRequest.reset();
             state.aiAuthoringAwaitingReply = false;
             state.aiToolAwaitingReply = false;
@@ -274,10 +274,16 @@
             }
 
             const bool loadedScene = load_editor_scene_snapshot(state);
-            if (loadedScene)
-                (void)state.projectLifecycle.record_scene_commit(state.sceneDocumentRevision);
+            if (loadedScene && state.projectLifecycle.record_scene_commit(state.sceneDocumentRevision))
+                state.projectStatus = epochengine::format_text("Loaded saved scene revision {}.", state.sceneDocumentRevision);
             else
-                (void)rebuild_editor_scene_document(state, "Load project scene seed");
+            {
+                state.projectLifecycle.invalidate_scene_commit();
+                if (loadedScene)
+                    state.projectStatus = "The saved scene loaded but its revision could not be verified.";
+                else if (rebuild_editor_scene_document(state, "Load project scene seed"))
+                    state.projectStatus += " Showing the project seed in memory.";
+            }
 
             synchronize_editor_selection(state);
             state.planetaryInitialFramePending = loadedScene && std::any_of(state.entities.begin(),state.entities.end(),
@@ -290,7 +296,7 @@
                     + state.projectName
                     + " -> "
                     + state.activeRuntimeScene
-                    + ".");
+                    + ". " + state.projectStatus);
         }
 
         [[nodiscard]] const EditorScriptProfile* active_script_profile(const EditorState& state) noexcept

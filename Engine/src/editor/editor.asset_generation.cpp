@@ -563,6 +563,40 @@ namespace epochengine::editor_asset_generation
             <<std::quoted(backend.expected_executable.sha256)<<' '<<std::quoted(path_text(backend.models_cache_root));
         const auto bytes=pinned.str();return digest(std::as_bytes(std::span{bytes}));
     }
+    std::string model_request_binding(const State& state,const ProjectIdentity& project,std::string& diagnostic)
+    {
+        diagnostic = readiness_diagnostic(state,jobs::Action::model);
+        if (!diagnostic.empty()) return {};
+        if (!current_project(*state.reference,project))
+        {
+            diagnostic = "The reference belongs to another project. Choose and approve it in this project.";
+            return {};
+        }
+        const auto& settings = *state.model_settings;
+        const auto& request = state.model_request;
+        const auto& reference = state.reference->result;
+        std::ostringstream pinned;
+        pinned << "EPOCH_CHAT_MODEL_REQUEST 1\n"
+            << std::quoted(path_text(reference.output)) << ' ' << std::quoted(reference.output_sha256) << ' '
+            << std::quoted(state.model_seed) << ' ' << request.resolution << ' ' << request.steps << ' '
+            << request.face_budget << ' ' << request.atlas << ' '
+            << std::quoted(path_text(state.model_settings_path)) << ' ' << std::quoted(state.model_settings_sha256) << ' '
+            << std::quoted(settings.backend_name);
+        if (const auto& backend = settings.alternative_model_backend)
+            pinned << ' ' << std::quoted(backend->id) << ' ' << std::quoted(backend->revision);
+        else
+        {
+            const auto& nativeBackend = settings.model_backend;
+            pinned << ' ' << std::quoted(path_text(nativeBackend.executable)) << ' '
+                << nativeBackend.expected_executable.size_bytes << ' '
+                << std::quoted(nativeBackend.expected_executable.sha256) << ' '
+                << std::quoted(path_text(nativeBackend.models_cache_root));
+        }
+        // Both backends are loaded from the pinned settings file. The job
+        // verifies the actual PNG bytes and executable before inference.
+        const auto bytes = pinned.str();
+        return digest(std::as_bytes(std::span{bytes}));
+    }
     std::optional<jobs::PreparedJob> prepare_job(const State& state,jobs::Action action,
         const std::filesystem::path& work,std::string& error)
     {

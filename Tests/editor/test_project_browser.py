@@ -10,7 +10,7 @@ import time
 import unittest
 
 from Tests.platform.test_child_close_router import definition
-from Tests.support.cpp import compile_and_run
+from Tests.support.cpp import compile_and_run, windows_sdk_includes
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -18,6 +18,8 @@ ROOT = Path(__file__).resolve().parents[2]
 class ProjectBrowser(unittest.TestCase):
     def test_actual_discovery_picker_selection_refresh_and_admission(self):
         registry = (ROOT / "Engine/src/editor/implementation/editor.project_registry.inl").read_text(encoding="utf-8")
+        shell = (ROOT / "Engine/src/editor/implementation/editor.project_shell_generation.inl").read_text(encoding="utf-8")
+        filesystem = (ROOT / "Engine/modules/platform.filesystem.ixx").read_text(encoding="utf-8")
         scene = (ROOT / "Engine/src/editor/editor.scene.cpp").read_text(encoding="utf-8")
         core = (ROOT / "Engine/modules/editor.core.ixx").read_text(encoding="utf-8")
         app = (ROOT / "Engine/src/editor/application/editor.application_scripting_renderers.inl").read_text(encoding="utf-8")
@@ -57,11 +59,21 @@ class ProjectBrowser(unittest.TestCase):
             ("    [[nodiscard]] static std::optional<OwnedProjectProfile>\n        parse_manifest_project_profile(", False),
             ("    static void rebuild_project_profile_cache()", False),
             ("    [[nodiscard]] static const std::vector<EditorProjectProfile>& live_project_profiles()", False),
+            ("    [[nodiscard]] static std::string next_generated_project_name(", False),
         ))
         registry_code += "\n".join(take(scene, marker) for marker in (
             "    EditorProjectAdmissionResult editor_admit_project_manifest(",
             "    void editor_refresh_project_profiles()", "    std::filesystem::path editor_projects_root()",
             "    std::span<const EditorProjectProfile> editor_project_profiles()"))
+        native_publication = "\n".join(take(filesystem, marker) for marker in (
+            "    [[nodiscard]] inline bool exclusive_create_and_write(",
+            "    [[nodiscard]] inline bool atomic_publish_new_same_filesystem("))
+        shell_claim = "\n".join(take(shell, marker) for marker in (
+            "    [[nodiscard]] static bool claim_new_project_root(",
+            "    [[nodiscard]] static bool publish_new_project_manifest("))
+        writer = take(shell, "    [[nodiscard]] static EditorProjectCreationResult write_project_shell(")
+        self.assertLess(writer.index("claim_new_project_root(root)"), writer.index("fs::create_directories(worlds"))
+        self.assertLess(writer.index("ok = ensure_project_gui_assets("), writer.index("publish_new_project_manifest(manifest,"))
         gui_types = "\n".join(take(gui, "    export " + marker, True) for marker in (
             "enum class ButtonIcon", "struct InlineButtonSpec", "enum class InlineButtonSizing",
             "enum class InlineButtonAlignment", "struct InlineButtonRowOptions", "struct SelectBoxOptions", "struct SelectBoxResult"))
@@ -78,17 +90,30 @@ class ProjectBrowser(unittest.TestCase):
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <ranges>
+#include <set>
 #include <span>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <utility>
 #include <vector>
+#ifdef _WIN32
+#define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#else
+#include <cerrno>
+#include <fcntl.h>
+#include <unistd.h>
+#endif
 namespace fs=std::filesystem;
 fs::path fixtureRoot, privateData;
 namespace epochengine {
+namespace platform::filesystem { NATIVE_PUBLICATION }
 struct EditorProjectCapabilityPolicy {};
 std::optional<EditorProjectCapabilityPolicy> editor_project_capability_policy(std::string_view s) { if(s=="supported")return EditorProjectCapabilityPolicy{};return {}; }
 namespace core::path { fs::path candidate_data_root(){return privateData;} fs::path engine_asset_dir(){return fixtureRoot/"Engine/assets";} }
@@ -106,6 +131,7 @@ fs::path resolve_epoch_repo_root(const fs::path&){return fixtureRoot;}
 std::string read_env_var(std::string_view){return {};}
 std::string default_world_name(EditorProjectKind){return "Main";}
 REGISTRY
+SHELL_CLAIM
 namespace epochengine::core { struct Context{}; }
 enum class EditorApplicationKind { Editor, GuiEditor };
 enum class TopMenu { None, File };
@@ -125,7 +151,7 @@ void push_editor_log(EditorState&,const std::string&){++logCount;}
 void apply_application_profile(EditorState&,int){} int gui_editor_application(){return 0;}
 fs::path resolve_editor_path(const std::string& p){return fs::path{p};}
 void open_editor_surface(EditorMainSurface,std::string_view){++surfaceCount;}
-namespace platform::filesystem {
+namespace epochengine::platform::filesystem {
 struct Dialog {bool accepted{},cancelled{};fs::path path{};std::string diagnostic{};};
 Dialog nextDialog;int dialogCount{};fs::path initial;
 Dialog open_file_dialog(const wchar_t*,const wchar_t*,const wchar_t*,const fs::path& p){++dialogCount;initial=p;return nextDialog;}
@@ -182,19 +208,48 @@ int main(int argc,char**argv){
  e.projectManifestPathDraft=two.generic_string();gui::begin("Open Path");draw_project_browser(e,ctx,300);assert(openCount==3&&openedId=="game02");
  gui::begin("Hide Advanced Path");draw_project_browser(e,ctx,300);assert(!e.projectPathAdvancedOpen&&gui::edits==0);
  e.projectRoot=one.parent_path().generic_string();platform::filesystem::nextDialog={.cancelled=true};file_open(e,ctx);assert(platform::filesystem::initial==one.parent_path().parent_path());
+ const auto external=fixtureRoot/"Elsewhere/External/project.epoch.json";
+ write(external,manifest("gameproject03","External Game"));
+ assert(editor_admit_project_manifest(external.generic_string()).succeeded);
+ assert(next_generated_project_name(EditorProjectKind::Game,fixtureRoot/"Projects")=="GameProject04");
  privateData=fixtureRoot/"private-data";fs::create_directories(privateData);write(privateData/"Projects/Private/project.epoch.json",manifest("private","Private Game"));
  assert(editor_projects_root()==privateData/"Projects");editor_refresh_project_profiles();e.projectRoot.clear();e.projectPickerId.clear();
  gui::begin();draw_project_browser(e,ctx,300);assert(gui::options.size()==1&&gui::options.front()=="Private Game");
  assert(!open_project_manifest_path(e,ctx,one)&&openCount==3);
  platform::filesystem::nextDialog={.cancelled=true};file_open(e,ctx);assert(platform::filesystem::initial==privateData/"Projects");
  assert(read(one)==oneText&&read(two)==twoText);
- std::ofstream(fixtureRoot/"result.json")<<R"({"discovery_two_saved_projects":true,"selection_never_opens":true,"explicit_refresh_discovers_new":true,"file_menu_uses_same_picker":true,"cancel_preserves_session":true,"busy_and_bad_manifest_refused":true,"manual_path_optional":true,"candidate_root_isolated":true,"project_bytes_unchanged":true})";
+ const auto projects=privateData/"Projects";
+ fs::create_directories(projects/"gameproject01");
+ const auto selected=next_generated_project_name(EditorProjectKind::Game,projects);
+ assert(selected=="GameProject02"&&next_generated_project_name(EditorProjectKind::Game,projects)==selected);
+ const auto reserved=projects/selected, freshManifest=reserved/"project.epoch.json";
+ bool firstClaim{},secondClaim{};
+ {
+  std::jthread firstCreator([&]{firstClaim=claim_new_project_root(reserved);});
+  std::jthread secondCreator([&]{secondClaim=claim_new_project_root(reserved);});
+ }
+ assert(firstClaim!=secondClaim&&fs::is_directory(reserved));
+ assert(next_generated_project_name(EditorProjectKind::Game,projects)=="GameProject03");
+ assert(!fs::exists(freshManifest));
+ editor_refresh_project_profiles();gui::begin();draw_project_browser(e,ctx,300);
+ assert(gui::options.size()==1&&gui::options.front()=="Private Game");
+ const auto firstLanding=manifest(selected,"First Landing");
+ assert(publish_new_project_manifest(freshManifest,firstLanding));
+ assert(!claim_new_project_root(reserved));
+ assert(!publish_new_project_manifest(freshManifest,manifest(selected,"Wrong project")));
+ assert(read(freshManifest)==firstLanding&&!fs::exists(reserved/"project.epoch.json.pending"));
+ editor_refresh_project_profiles();gui::begin();draw_project_browser(e,ctx,300);
+ assert(gui::options.size()==2&&contains(gui::options,"First Landing"));
+ std::ofstream(fixtureRoot/"result.json")<<R"({"discovery_two_saved_projects":true,"selection_never_opens":true,"explicit_refresh_discovers_new":true,"file_menu_uses_same_picker":true,"cancel_preserves_session":true,"busy_and_bad_manifest_refused":true,"manual_path_optional":true,"candidate_root_isolated":true,"project_bytes_unchanged":true,"one_new_project_claim":true,"manifest_published_without_replacement":true,"discovery_requires_publication":true})";
 }
 '''
         body = body.replace("GUI_TYPES", gui_types).replace("TYPES", types).replace("REGISTRY", registry_code).replace("APP", app_code).replace("FILE_MENU", file_menu)
+        body = body.replace("NATIVE_PUBLICATION", native_publication).replace("SHELL_CLAIM", shell_claim)
         source = report / "contract.cpp"
         source.write_text(body, encoding="utf-8")
-        records = compile_and_run(self, source, report, args=lambda config: [report / "data" / config])
+        kits = windows_sdk_includes(Path("C:/Program Files (x86)/Windows Kits/10"))
+        includes = [kits[-1] / folder for folder in ("um", "shared")] if kits else ()
+        records = compile_and_run(self, source, report, includes=includes, args=lambda config: [report / "data" / config])
         (report / "records.json").write_text(json.dumps(records, indent=2), encoding="utf-8")
 
 

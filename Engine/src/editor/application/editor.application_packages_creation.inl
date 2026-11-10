@@ -1490,6 +1490,22 @@
             request_planetary_feature_action(editor, true);
         }
 
+        [[nodiscard]] bool save_ai_planetary_creation_recipe(EditorState& editor, const std::filesystem::path& root)
+        {
+            if (!editor.aiPackageRequest || !editor.aiPackageRequest->save_recipe_before_generation)
+                return true;
+            if (!ai_project_package_generation_current(editor))
+            {
+                editor.planetaryStatus = "The approved creation request changed. No recipe was saved or terrain generation started.";
+                return false;
+            }
+            if (project_planetary::save_settings(root, editor.planetarySettings)
+                && project_planetary::load_settings(root) == editor.planetarySettings)
+                return true;
+            editor.planetaryStatus = "The approved planetary recipe could not be saved and verified. No terrain generation was started.";
+            return false;
+        }
+
         void start_admitted_planetary_generation(EditorState& editor)
         {
             if (const auto blocked = planetary_generation_block_reason(editor); !blocked.empty())
@@ -1509,6 +1525,7 @@
             editor.planetaryStreamFailed = false;
             editor.planetaryStreamContinue = true;
             const auto root = resolve_editor_path(std::filesystem::path{editor.projectRoot});
+            if (!save_ai_planetary_creation_recipe(editor, root)) return;
             const auto source = root / editor.planetaryAttachment.relative_source_root;
             const auto engine = core::path::find_epoch_repo_root(core::path::executable_dir());
             if (engine.empty())
@@ -2897,10 +2914,53 @@
             return found;
         }
 
+        // No value means keep the host-generated name. An empty value means
+        // an explicit name was present but could not be read safely.
+        [[nodiscard]] std::optional<std::string_view> ai_requested_project_display_name(std::string_view request)
+        {
+            const auto lower = ai_project_package_unquoted(ai_project_package_lower(request));
+            if (const auto at = lower.rfind("\nuser clarification:"); at != std::string::npos)
+            {
+                auto answer = ai::authoring_plan_detail::trim(request.substr(at + 20u));
+                const auto folded = ai_project_package_lower(answer);
+                if (folded == "use the generated name" || folded == "use the generated name."
+                    || folded == "use an automatic name" || folded == "use an automatic name.") return std::nullopt;
+                if (folded.starts_with("name:")) return ai::authoring_plan_detail::trim(answer.substr(5u));
+            }
+            auto clause = std::string_view{lower}.substr(0u, lower.find_first_of(";\n"));
+            clause = clause.substr(0u, clause.find(". "));
+            auto marker = clause.find(" named ");
+            if (const auto called = clause.find(" called "); called < marker) marker = called;
+            if (marker == std::string_view::npos)
+            {
+                if (clause.ends_with(" named") || clause.ends_with(" called")) return std::string_view{};
+                return std::nullopt;
+            }
+
+            auto name = ai::authoring_plan_detail::trim(request.substr(marker + 7u, clause.size() - marker - 7u));
+            if (name.empty()) return std::string_view{};
+            if (name.front() == '\'' || name.front() == '"')
+            {
+                const auto end = name.find(name.front(), 1u);
+                if (end == std::string_view::npos) return std::string_view{};
+                return name.substr(1u, end - 1u);
+            }
+            auto remainder = clause.substr(static_cast<std::size_t>(name.data() - request.data()));
+            for (const auto suffix : {" in a new project", " with ", " using ", " as "})
+                remainder = remainder.substr(0u, remainder.find(suffix));
+            name = ai::authoring_plan_detail::trim(name.substr(0u, remainder.size()));
+            if (name.ends_with('.')) name.remove_suffix(1u);
+            return name;
+        }
+
         [[nodiscard]] bool ai_project_creation_uses_defaults(std::string_view request)
         {
             if (ai::project_lifecycle_request_tool(request) != "project.create") return false;
-            const auto lower = ai_project_package_lower(request);
+            auto lower = ai_project_package_lower(request);
+            if (const auto name = ai_requested_project_display_name(request); name && !name->empty())
+                lower.replace(static_cast<std::size_t>(name->data() - request.data()), name->size(), name->size(), ' ');
+            for (const auto marker : {"\nattachment", "\nreference", "\nfile content"})
+                if (const auto at = lower.find(marker); at != std::string::npos) lower.resize(at);
             for (const auto refusal : {"without defaults", "without default settings", "no defaults", "not defaults",
                 "do not use defaults", "do not use the defaults", "do not use default settings",
                 "don't use defaults", "don't use the defaults", "don't use default settings",
@@ -2933,15 +2993,9 @@
                 {"detail", std::move(detail)}, {"ocean", settings.ocean_surface ? "on" : "off"}}};
         }
 
-        [[nodiscard]] std::string_view ai_project_creation_coverage(std::string_view request)
+        [[nodiscard]] std::string_view ai_project_coverage_for_target(std::string_view target)
         {
-            if (ai::project_lifecycle_request_tool(request) != "project.create") return {};
-            const auto text = ai_project_package_unquoted(ai_project_package_lower(request));
-            auto target = ai::project_request_detail::representation_object(text);
-            // Only the affirmative creation target chooses coverage. Examples,
-            // reference descriptions and later save/run instructions do not.
-            const auto end = target.find_first_of(".;\n");
-            target = target.substr(0u, end);
+            target = target.substr(0u, target.find_first_of(".;\n"));
             for (const auto clause : {" not ", " but ", " then "})
                 if (const auto at = target.find(clause); at != std::string_view::npos)
                     target = target.substr(0u, at);
@@ -2952,22 +3006,111 @@
                 if (token == "none") return "none";
                 if (token == "planet") return "planet";
                 if (token == "universe") return "universe";
-                return {}; // An invalid or alternative-valued choice is not a default.
+                return "ambiguous";
             }
             const bool planet = ai_project_package_word(target,"planet")
                 || ai_project_package_word(target,"planetary");
             const bool universe = ai_project_package_word(target,"universe");
             const bool empty = ai_project_package_word(target,"empty")
                 || ai_project_package_word(target,"blank");
-            if (static_cast<unsigned>(planet) + static_cast<unsigned>(universe)
-                + static_cast<unsigned>(empty) != 1u) return {};
-            return planet ? "planet" : universe ? "universe" : "none";
+            const auto choices = static_cast<unsigned>(planet) + static_cast<unsigned>(universe)
+                + static_cast<unsigned>(empty);
+            if (choices > 1u) return "ambiguous";
+            return planet ? "planet" : universe ? "universe" : empty ? "none" : "";
+        }
+
+        [[nodiscard]] std::string ai_adjacent_project_generation_clause(std::string_view tail)
+        {
+            using ai::authoring_plan_detail::trim;
+            tail = trim(tail);
+            std::string clause;
+            while (!tail.empty())
+            {
+                const auto lineEnd = tail.find('\n');
+                auto line = trim(tail.substr(0u, lineEnd));
+                if (line.empty() || std::ranges::any_of(std::array{
+                    "attachment", "reference", "quoted text:", "file content", "example:",
+                    "user clarification:", "user correction:", "original project request:", "prior clarification"},
+                    [&](auto prefix) { return line.starts_with(prefix); })) break;
+                if (!clause.empty() && !ai::project_lifecycle_request_tool(line).empty()) break;
+                const auto end = (std::min)(line.find(". "), line.find(';'));
+                const bool finished = end != std::string_view::npos || line.ends_with('.');
+                line = line.substr(0u, end);
+                if (!clause.empty()) clause += ' ';
+                clause += line;
+                if (finished || lineEnd == std::string_view::npos) break;
+                tail.remove_prefix(lineEnd + 1u);
+            }
+            if (!clause.starts_with("generate ")) return {};
+            return clause;
+        }
+
+        [[nodiscard]] std::string_view ai_project_creation_coverage(std::string_view request)
+        {
+            if (ai::project_lifecycle_request_tool(request) != "project.create") return {};
+            using ai::authoring_plan_detail::trim;
+            using ai::project_request_detail::representation_object;
+            using ai::project_request_detail::subject;
+            auto text = ai_project_package_unquoted(ai_project_package_lower(request));
+            if (const auto name = ai_requested_project_display_name(request); name && !name->empty())
+            {
+                const auto offset = static_cast<std::size_t>(name->data() - request.data());
+                const auto before = trim(std::string_view{text}.substr(0u, offset));
+                const auto begin = before.ends_with(" named") || before.ends_with(" called")
+                    ? static_cast<std::size_t>(before.data() - text.data()) + before.size() - 6u : offset;
+                text.replace(begin, offset + name->size() - begin, offset + name->size() - begin, ' ');
+            }
+            const auto view = trim(text);
+            const auto firstEnd = view.find_first_of(".;\n");
+            auto coverage = ai_project_coverage_for_target(representation_object(view.substr(0u, firstEnd)));
+
+            // A compound game request may declare the world in its next
+            // instruction. Only a direct terrain-generation subject qualifies.
+            if (coverage.empty() && firstEnd != std::string_view::npos)
+            {
+                const auto next = ai_adjacent_project_generation_clause(view.substr(firstEnd + 1u));
+                if (!next.empty() && !ai::explicit_generated_asset_request(next))
+                {
+                    auto target = representation_object(next);
+                    while (target.starts_with("one ") || target.starts_with("single ")
+                        || target.starts_with("custom ") || target.starts_with("seeded "))
+                        target = trim(target.substr(target.find(' ') + 1u));
+                    if (subject(target, "planet") || subject(target, "universe"))
+                        coverage = ai_project_coverage_for_target(target);
+                }
+            }
+            if (!coverage.empty() && coverage != "ambiguous") return coverage;
+
+            constexpr std::string_view clarification = "\nuser clarification:";
+            if (const auto at = view.rfind(clarification); at != std::string_view::npos)
+            {
+                auto answer = trim(view.substr(at + clarification.size()));
+                if (answer.starts_with("use ")) answer.remove_prefix(4u);
+                if (answer.starts_with("coverage=") || subject(answer,"empty project")
+                    || subject(answer,"one planet") || subject(answer,"single planet")
+                    || subject(answer,"a universe") || subject(answer,"universe"))
+                    return ai_project_coverage_for_target(answer);
+            }
+            // The clarification router can retain the original operator text
+            // below a corrected leading action. Honor its explicit field.
+            constexpr std::string_view original = "\noriginal project request:";
+            if (coverage.empty())
+                if (const auto at = view.find(original); at != std::string_view::npos)
+                {
+                    auto objective = view.substr(at + original.size());
+                    objective = objective.substr(0u, objective.find_first_of(".;\n"));
+                    if (const auto field = objective.find(" coverage="); field != std::string_view::npos)
+                        return ai_project_coverage_for_target(objective.substr(field + 1u));
+                }
+            return coverage;
         }
 
         [[nodiscard]] std::string_view ai_project_creation_ocean(std::string_view request)
         {
             if (ai::project_lifecycle_request_tool(request) != "project.create") return {};
             auto text = ai_project_package_unquoted(ai_project_package_lower(request));
+            if (const auto name = ai_requested_project_display_name(request); name && !name->empty())
+                text.replace(static_cast<std::size_t>(name->data() - request.data()), name->size(), name->size(), ' ');
             if (const auto at = text.rfind("\nuser clarification:"); at != std::string::npos)
                 text.erase(0u, at + 20u);
             // Reference descriptions and attached prose are not project settings.
@@ -3011,15 +3154,217 @@
             return choice;
         }
 
+        [[nodiscard]] bool ai_project_initial_landing_forest(std::string_view request)
+        {
+            if (ai_project_creation_coverage(request) != "planet") return false;
+            auto text = ai_project_package_unquoted(ai_project_package_lower(request));
+            text.erase(std::remove(text.begin(),text.end(),'\r'),text.end());
+            // Only the initial world-generation paragraph can request this
+            // stage. The separate custom tree and later reference prose
+            // cannot choose the recipe for the original forest.
+            if (const auto end = text.find("\n\n"); end != std::string::npos) text.resize(end);
+            std::replace(text.begin(),text.end(),'\n',' ');
+            using ai::authoring_plan_detail::trim;
+            auto clause = std::string_view{text};
+            const auto openingEnd = clause.find(". ");
+            if (openingEnd == std::string_view::npos) return false;
+            clause = trim(clause.substr(openingEnd + 2u));
+            const auto terrainEnd = clause.find(". ");
+            if (terrainEnd == std::string_view::npos) return false;
+            const auto terrain = ai_adjacent_project_generation_clause(clause);
+            if (terrain.empty() || ai::explicit_generated_asset_request(terrain)
+                || ai_project_coverage_for_target(terrain) != "planet") return false;
+            clause = trim(clause.substr(terrainEnd + 2u));
+            for (const std::string_view prefix : {"as part of that generation, ",
+                "use plant lab recipes to create native plants and forest factory to "})
+                if (clause.starts_with(prefix)) clause.remove_prefix(prefix.size());
+            clause = trim(clause.substr(0u,clause.find_first_of(".;?!")));
+            return clause == "plant a procedural forest near the landing area"
+                || clause == "plant a forest near the landing area";
+        }
+
+        constexpr std::array<std::string_view, 3u> ai_project_terrain_fields{"seed", "radius_m", "detail"};
+
+        [[nodiscard]] std::string ai_project_terrain_value(std::string_view field, std::string_view value, bool kilometers = false)
+        {
+            if (value.empty()) return "?";
+            if (field == "detail")
+                return value == "compact" || value == "fast" || value == "balanced" || value == "fine"
+                    ? std::string{value} : "?";
+            if (field == "seed")
+            {
+                if (value == "random") return "random";
+                std::uint32_t seed{};
+                const auto end = value.data() + value.size();
+                const auto parsed = std::from_chars(value.data(), end, seed);
+                return parsed.ec == std::errc{} && parsed.ptr == end ? std::to_string(seed) : "?";
+            }
+            if (value == "earth") return "6371000";
+            if (value == "moon") return "1737400";
+            double radius{};
+            const auto end = value.data() + value.size();
+            const auto parsed = std::from_chars(value.data(), end, radius);
+            if (kilometers) radius *= 1000.0;
+            if (parsed.ec != std::errc{} || parsed.ptr != end || !std::isfinite(radius)
+                || radius < 250.0 || radius > 100000000.0) return "?";
+            std::array<char, 32u> normalized{};
+            const auto written = std::to_chars(normalized.data(), normalized.data() + normalized.size(), radius, std::chars_format::fixed);
+            return written.ec == std::errc{} ? std::string{normalized.data(), written.ptr} : "?";
+        }
+
+        using AiProjectTerrainChoices = std::array<std::string, ai_project_terrain_fields.size()>;
+
+        void ai_read_project_terrain_choices(std::string_view text, AiProjectTerrainChoices& choices)
+        {
+            using ai::authoring_plan_detail::trim;
+            const auto next_token = [](std::string_view& rest) {
+                constexpr std::string_view separators = " \t\r\n,;";
+                const auto start = rest.find_first_not_of(separators);
+                if (start == std::string_view::npos) { rest = {}; return std::string_view{}; }
+                rest.remove_prefix(start);
+                const auto end = rest.find_first_of(separators);
+                auto token = rest.substr(0u, end);
+                rest.remove_prefix(token.size());
+                if (token.ends_with('.') || token.ends_with(':')) token.remove_suffix(1u);
+                return token;
+            };
+            text = trim(text);
+            for (const auto stop : {" then ", " with reference ", " using a reference ", " based on ", " for example "})
+                text = text.substr(0u, text.find(stop));
+            if (text.starts_with("example") || text.starts_with("attachment") || text.starts_with("reference")) return;
+
+            const auto record = [&](std::size_t index, std::string_view raw, bool ambiguous, bool kilometers = false) {
+                auto value = ambiguous ? "?" : ai_project_terrain_value(ai_project_terrain_fields[index], raw, kilometers);
+                auto& choice = choices[index];
+                choice = choice.empty() || choice == value ? std::move(value) : "?";
+            };
+            std::string_view previous;
+            auto token = next_token(text);
+            auto next = next_token(text);
+            while (!token.empty())
+            {
+                auto lookahead = text;
+                const auto unit = next_token(lookahead);
+                const bool alternative = previous == "or" || next == "or" || unit == "or";
+                if (const auto equals = token.find('='); equals != std::string_view::npos)
+                {
+                    const auto field = std::ranges::find(ai_project_terrain_fields, token.substr(0u, equals));
+                    if (field != ai_project_terrain_fields.end())
+                        record(static_cast<std::size_t>(field - ai_project_terrain_fields.begin()),
+                            token.substr(equals + 1u), previous == "or" || next == "or");
+                }
+                else if (token == "seed")
+                    record(0u, previous == "random" ? previous : next, alternative);
+                else if (token == "radius")
+                {
+                    const bool alias = previous == "earth" || previous == "moon";
+                    const bool kilometers = unit == "km" || unit == "kilometers" || unit == "kilometres";
+                    const bool meters = unit == "m" || unit == "meters" || unit == "metres";
+                    record(1u, alias ? previous : next,
+                        alternative || (!alias && ((!kilometers && !meters) || next_token(lookahead) == "or")), kilometers);
+                }
+                else if (token == "detail")
+                {
+                    const auto preset = ai_project_terrain_value("detail", previous);
+                    record(2u, preset == "?" ? next : previous, alternative);
+                }
+                previous = token;
+                token = next;
+                next = next_token(text);
+            }
+        }
+
+        [[nodiscard]] AiProjectTerrainChoices ai_requested_project_terrain(std::string_view request)
+        {
+            auto text = ai_project_package_lower(request);
+            if (const auto name = ai_requested_project_display_name(request); name && !name->empty())
+                text.replace(static_cast<std::size_t>(name->data() - request.data()), name->size(), name->size(), ' ');
+            text = ai_project_package_unquoted(text);
+            for (const auto stop : {"\nattachment", "\nreference", "\nfile content"})
+                if (const auto at = text.find(stop); at != std::string::npos) text.resize(at);
+
+            using ai::authoring_plan_detail::trim;
+            const auto sentence_end = [](std::string_view line) { return (std::min)(line.find(". "), line.find('\n')); };
+            const auto first = trim(text);
+            const auto end = sentence_end(first);
+            AiProjectTerrainChoices choices{};
+            ai_read_project_terrain_choices(first.substr(0u, end), choices);
+            if (end != std::string_view::npos)
+            {
+                const auto clause = ai_adjacent_project_generation_clause(first.substr(end + 1u));
+                const auto coverage = ai_project_coverage_for_target(ai::project_request_detail::representation_object(clause));
+                if ((coverage == "planet" || coverage == "universe")
+                    && !ai::explicit_generated_asset_request(clause))
+                    ai_read_project_terrain_choices(clause, choices);
+            }
+            constexpr std::string_view original = "\noriginal project request:";
+            if (const auto at = first.find(original); at != std::string_view::npos)
+            {
+                const auto recovered = trim(first.substr(at + original.size()));
+                ai_read_project_terrain_choices(recovered.substr(0u, sentence_end(recovered)), choices);
+            }
+            for (auto line = std::string_view{text}; !line.empty();)
+            {
+                const auto endOfLine = line.find('\n');
+                const auto current = line.substr(0u, endOfLine);
+                line = endOfLine == std::string_view::npos ? std::string_view{} : line.substr(endOfLine + 1u);
+                for (const std::string_view prefix : {"user clarification:", "user correction:"})
+                    if (current.starts_with(prefix))
+                    {
+                        AiProjectTerrainChoices revised{};
+                        ai_read_project_terrain_choices(current.substr(prefix.size()), revised);
+                        for (std::size_t index{}; index < revised.size(); ++index)
+                            if (!revised[index].empty()) choices[index] = std::move(revised[index]);
+                        break;
+                    }
+            }
+            return choices;
+        }
+
+        enum class AiForestLocation { current_camera, needs_landing_location, ocean_shoreline };
+
+        [[nodiscard]] AiForestLocation ai_forest_location(std::string_view request)
+        {
+            const auto unquoted = ai_project_package_unquoted(ai_project_package_lower(request));
+            auto opening = ai::authoring_plan_detail::trim(std::string_view{unquoted}.substr(0u,unquoted.find_first_of(".;?!\r\n")));
+            if (opening.starts_with("please ")) opening.remove_prefix(7u);
+            if (ai::project_request_detail::subject(opening,"paint a forest at a verified ocean shoreline")
+                || ai::project_request_detail::subject(opening,"paint forest at a verified ocean shoreline"))
+                return AiForestLocation::ocean_shoreline;
+            if (!ai_project_package_word(opening,"near the landing area")
+                && !ai_project_package_word(opening,"at the landing area")) return AiForestLocation::current_camera;
+            constexpr std::string_view marker = "\nuser clarification:";
+            auto history = std::string_view{unquoted};
+            while (true)
+            {
+                const auto at = history.rfind(marker);
+                if (at == std::string_view::npos) break;
+                auto answer = ai::authoring_plan_detail::trim(history.substr(at + marker.size()));
+                if (answer.ends_with('.')) answer.remove_suffix(1u);
+                if (answer == "use the current camera location") return AiForestLocation::current_camera;
+                if (answer == "use a verified ocean shoreline") return AiForestLocation::ocean_shoreline;
+                if (ai_project_package_word(answer,"camera") || ai_project_package_word(answer,"shoreline")) break;
+                history = history.substr(0u,at);
+            }
+            return AiForestLocation::needs_landing_location;
+        }
+
         [[nodiscard]] std::string ai_project_creation_question(std::string_view request)
         {
             const auto operation = ai::project_lifecycle_request_tool(request);
+            if (operation == "forest.paint" && ai_forest_location(request) == AiForestLocation::needs_landing_location)
+                return "The generated planet has no verified lakeside landing location for this forest. Choose 'Use a verified ocean shoreline' to search the ocean-bearing body, or move the camera over an inspected site and reply 'Use the current camera location'.";
             if (operation != "project.create" && operation != "forest.configure") return {};
-            const auto text = ai_project_package_lower(request);
-            const auto has = [&](std::initializer_list<std::string_view> words) {
-                return std::ranges::any_of(words,[&](auto word){return ai_project_package_word(text,word);});
-            };
+            auto text = ai_project_package_lower(request);
+            const auto name = operation == "project.create" ? ai_requested_project_display_name(request) : std::nullopt;
+            if (name && !ai::valid_project_display_name(*name))
+                return "Which display name should I use? Reply with 'Name: Your Project' (up to 64 letters, digits, spaces, hyphens or underscores), or 'Use the generated name'. Nothing was created.";
+            if (name)
+                text.replace(static_cast<std::size_t>(name->data() - request.data()), name->size(), name->size(), ' ');
             const auto unquoted = ai_project_package_unquoted(text);
+            const auto has = [&](std::initializer_list<std::string_view> words) {
+                return std::ranges::any_of(words,[&](auto word){return ai_project_package_word(unquoted,word);});
+            };
             const auto answerAt = unquoted.rfind("\nuser clarification:");
             const std::string_view choices = answerAt == std::string::npos ? std::string_view{unquoted}
                 : std::string_view{unquoted}.substr(answerAt + 20u);
@@ -3039,15 +3384,11 @@
             if (desktopScale && !chosen("procedural world") && !chosen("procedural planet")
                 && !chosen("explorable world") && !chosen("explorable planet"))
                 return "Should this be an explorable procedural planet with Plant Lab trees, or a miniature/generated prop for a desk scene? Please choose the representation and scale before I create anything.";
-            if (has({"named","called","name"}) && text.find("generated name") == std::string::npos
-                && text.find("automatic name") == std::string::npos
-                && text.find("automatically chosen unused name") == std::string::npos
-                && text.find("automatically chosen name") == std::string::npos)
-                return "New Project currently assigns a fresh project name automatically. May I use its generated name, or would you rather create the named project through Project first? Nothing was created.";
             // Explicit permission to choose defaults is still shown as concrete
             // settings in the reviewed call. It is not permission to execute.
-            if (ai_project_creation_uses_defaults(request)) return {};
-            const bool planet = has({"planet","planetary","universe"});
+            const bool defaults = ai_project_creation_uses_defaults(request);
+            const auto coverage = ai_project_creation_coverage(request);
+            const bool planet = coverage == "planet" || coverage == "universe";
             std::string missing;
             const auto need = [&](bool present,std::string_view choice) {
                 if (present) return;
@@ -3055,14 +3396,14 @@
                 missing += choice;
             };
             need(planet || has({"game","tool","software","application"}),"game or software project");
-            need(planet || has({"empty","blank","none"}),"empty project, one planet, or a universe");
+            need(planet || coverage == "none","empty project, one planet, or a universe");
             if (planet)
             {
-                need(has({"planet","universe"}),"one planet or a universe");
-                need(has({"radius_m","radius","earth","moon","meters","metres","kilometers","kilometres","km"}),"planet size");
-                need(has({"seed","random"}),"fixed or random terrain seed");
-                need(has({"compact","fast","balanced","fine"}),"Compact, Fast, Balanced, or Fine detail");
-                need(has({"ocean","water","dry"}),"ocean on or off");
+                const auto terrain = ai_requested_project_terrain(request);
+                constexpr std::array descriptions{"fixed or random terrain seed", "planet size", "Compact, Fast, Balanced, or Fine detail"};
+                for (std::size_t index{}; index < terrain.size(); ++index)
+                    need(terrain[index] != "?" && (defaults || !terrain[index].empty()), descriptions[index]);
+                need(defaults || has({"ocean","water","dry"}),"ocean on or off");
             }
             return missing.empty() ? std::string{}
                 : "Before I create anything, please choose: " + missing
@@ -3075,12 +3416,15 @@
             if (lifecycle == "asset.image.generate")
                 return call.tool==lifecycle ? ai::validate_project_tool_arguments(call)
                     : ai::McpValidation{ai::McpErrorCode::invalid_argument,"This requests an image or texture. Use the image generator; do not replace it with a tree, terrain, scene object or generated 3D mesh."};
-            if (call.tool=="asset.image.generate")
-                return {ai::McpErrorCode::invalid_argument,"No affirmative image-generation request was made. Nothing was generated."};
+            if (lifecycle == "asset.model.generate")
+                return call.tool == lifecycle ? ai::validate_project_tool_arguments(call)
+                    : ai::McpValidation{ai::McpErrorCode::invalid_argument,"This requests a 3D model from the approved reference. Use the reviewed 3D generation action."};
+            if (ai::asset_generation_tool(call.tool))
+                return {ai::McpErrorCode::invalid_argument,"No matching generation request was made. Nothing was generated."};
             if (ai::explicit_generated_asset_request(request)
                 && (call.tool == "forest.configure" || call.tool == "forest.material" || call.tool == "forest.paint"
                     || call.tool == "terrain.generate" || call.tool == "project.create"))
-                return {ai::McpErrorCode::invalid_argument,"This requests a generated prop/model representation. No generated-asset operation is registered in this tool protocol; clarify or use Asset Generation, not procedural terrain or a substituted tree."};
+                return {ai::McpErrorCode::invalid_argument,"This requests a generated prop/model representation. Review a PNG in Asset Generation, then ask to generate 3D from the approved reference."};
             if (lifecycle == "forest.configure")
             {
                 if (call.tool != lifecycle)
@@ -3097,8 +3441,13 @@
             if (call.tool == "forest.configure")
                 return {ai::McpErrorCode::invalid_argument,"No explicit current-tree design request was made. Nothing was configured."};
             if (lifecycle == "forest.paint")
-                return call.tool == lifecycle ? ai::validate_project_tool_arguments(call)
-                    : ai::McpValidation{ai::McpErrorCode::invalid_argument, "Painting a forest requires forest.paint, not regenerating terrain or creating individual objects."};
+            {
+                if (call.tool != lifecycle)
+                    return {ai::McpErrorCode::invalid_argument, "Painting a forest requires forest.paint, not regenerating terrain or creating individual objects."};
+                if (const auto question = ai_project_creation_question(request); !question.empty())
+                    return {ai::McpErrorCode::invalid_argument,question};
+                return ai::validate_project_tool_arguments(call);
+            }
             if (call.tool == "forest.paint")
                 return {ai::McpErrorCode::invalid_argument, "Ask explicitly to paint a forest area before proposing this operation."};
             if (lifecycle == "project.create")
@@ -3107,6 +3456,10 @@
                     return {ai::McpErrorCode::invalid_argument,"Creating a new project requires project.create, not an action on the current project."};
                 if (const auto question = ai_project_creation_question(request); !question.empty())
                     return {ai::McpErrorCode::invalid_argument,question};
+                const auto requestedName = ai_requested_project_display_name(request);
+                const auto* name = ai::authoring_plan_detail::argument(call,"name");
+                if (requestedName ? !name || name->value != *requestedName : name != nullptr)
+                    return {ai::McpErrorCode::invalid_argument,"The project display name changed after review. Nothing was created."};
                 const auto* coverage = ai::authoring_plan_detail::argument(call,"coverage");
                 const auto requestedCoverage = ai_project_creation_coverage(request);
                 if (coverage && !requestedCoverage.empty() && coverage->value != requestedCoverage)
@@ -3118,10 +3471,27 @@
                     return {ai::McpErrorCode::invalid_argument,"The request requires ocean="
                         + std::string{requestedOcean} + "; the proposal selected ocean=" + ocean->value
                         + ". Revise that setting before approval. Nothing was created."};
+                if (requestedCoverage == "planet" || requestedCoverage == "universe")
+                {
+                    const auto terrain = ai_requested_project_terrain(request);
+                    for (std::size_t index{}; index < terrain.size(); ++index)
+                    {
+                        if (terrain[index].empty()) continue;
+                        const auto field = ai_project_terrain_fields[index];
+                        const auto* proposed = ai::authoring_plan_detail::argument(call,field);
+                        if (!proposed || ai_project_terrain_value(field, proposed->value) != terrain[index])
+                            return {ai::McpErrorCode::invalid_argument,"The request requires " + std::string{field} + "="
+                                + terrain[index] + ". Revise that setting before approval. Nothing was created."};
+                    }
+                }
                 return ai::validate_project_tool_arguments(call);
             }
             if (call.tool == "project.create")
                 return {ai::McpErrorCode::invalid_argument,"No affirmative new-project request was made. Nothing was created."};
+            if (!lifecycle.empty() && call.tool != lifecycle)
+                return {ai::McpErrorCode::invalid_argument,
+                    "This request requires " + std::string{lifecycle}
+                    + " as its next operation. Revise the proposal before approval."};
             const auto* requestedPackage=ai_project_requested_package(request);
             const auto intent=ai_project_package_intent(request,
                 ai_project_requested_package(ai_project_package_unquoted(request))!=nullptr);
@@ -3156,13 +3526,19 @@
                     coverage == "planet" || coverage == "universe")
                 {
                     const auto ocean = ai_project_creation_ocean(request);
+                    const auto terrain = ai_requested_project_terrain(request);
+                    std::string explicitTerrain;
+                    for (std::size_t index{}; index < terrain.size(); ++index)
+                        if (!terrain[index].empty() && terrain[index] != "?")
+                            explicitTerrain += " " + std::string{ai_project_terrain_fields[index]} + "=" + terrain[index];
                     text += "\nREQUEST_OPERATION_CONSTRAINT_V1\nThe user requested coverage=" + std::string{coverage}
                         + ". Use this one literal coverage value, not a list of choices.\n"
                         "Concrete request-scoped defaults proposal:\nEPOCH_TOOL_PLAN_V1\nTITLE Create new "
                         + std::string{coverage} + " project\nSUMMARY Request approval for a new game project with the chosen coverage.\n"
                         "CALL project.create kind=game coverage=" + std::string{coverage}
+                        + explicitTerrain
                         + (ocean == "on" || ocean == "off" ? " ocean=" + std::string{ocean} : std::string{})
-                        + "\nEND\nThis CALL includes the explicit ocean choice when given and omits the remaining defaultable generation fields. "
+                        + "\nEND\nThis CALL includes recognized user choices and omits the remaining defaultable generation fields. "
                         "Copy every user-specified seed, radius_m, detail or ocean override into it; Epoch fills only the remaining omitted fields from the host defaults above. "
                         "Do not copy grammar alternatives or angle brackets. Do not save, build or run yet.\nEND_REQUEST_OPERATION_CONSTRAINT_V1\n";
                 }
@@ -3195,12 +3571,29 @@
 
         [[nodiscard]] ai::ToolPlanParseResult admit_ai_project_tool_reply(std::string_view request,std::string_view reply)
         {
-            const auto defaults = ai_project_creation_defaults();
-            auto result=ai::parse_tool_plan(reply, ai_project_creation_uses_defaults(request)
+            const bool useDefaults = ai_project_creation_uses_defaults(request);
+            auto defaults = ai_project_creation_defaults();
+            if (useDefaults)
+            {
+                const auto terrain = ai_requested_project_terrain(request);
+                for (std::size_t index{}; index < terrain.size(); ++index)
+                    if (!terrain[index].empty()) defaults[index].value = terrain[index];
+                if (const auto ocean = ai_project_creation_ocean(request); ocean == "on" || ocean == "off")
+                    defaults.back().value = ocean;
+            }
+            auto result=ai::parse_tool_plan(reply, useDefaults
                 ? std::span<const ai::McpArgument>{defaults} : std::span<const ai::McpArgument>{});
             if(result)
+            {
+                if (result.plan.call.tool == "project.create")
+                    if (const auto name = ai_requested_project_display_name(request); name && ai::valid_project_display_name(*name))
+                        result.plan.call.arguments.push_back({"name", std::string{*name}});
                 if(const auto selected=validate_ai_project_tool_selection(request,result.plan.call);!selected)
                 {result.code=ai::ToolPlanCode::invalid_argument;result.message=selected.message;}
+                else if (result.plan.call.tool == "forest.paint"
+                    && ai_forest_location(request) == AiForestLocation::ocean_shoreline)
+                    result.plan.summary = "Search the selected ocean-bearing body for dry ground within 100 meters of verified ocean water, then paint the reviewed forest area.";
+            }
             return result;
         }
 
@@ -3311,6 +3704,7 @@
             request.project_key = planetary_project_key(editor);
             request.project_generation = editor.projectLifecycle.evidence().generations.selected_project.generation;
             request.generate = generate;
+            request.save_recipe_before_generation = requestedSettings && requestedSettings->ocean_surface;
             if (generate)
             {
                 if (requestedSettings) request.settings = *requestedSettings;
@@ -3384,8 +3778,9 @@
                 if (!terrain)
                 { editor.aiToolStatus = "The requested terrain settings do not fit the provider budget. No project was created."; return false; }
             }
+            const auto* name = ai::authoring_plan_detail::argument(call,"name");
             const auto created = editor_create_project_shell(kind == "game" ? EditorProjectKind::Game : EditorProjectKind::Tool,
-                EditorProjectInputProvision::project_default);
+                EditorProjectInputProvision::project_default, name ? std::string_view{name->value} : std::string_view{});
             if (!created.succeeded)
             { editor.aiToolStatus = "project.create failed: " + created.summary; return false; }
             const auto admitted = editor_admit_project_manifest(created.manifest_path);
@@ -3402,8 +3797,10 @@
                 return true;
             }
             const auto root = resolve_editor_path(std::filesystem::path{editor.projectRoot});
-            if (!project_planetary::save_settings(root,*terrain)
-                || project_planetary::load_settings(root) != terrain)
+            // An ocean recipe needs the admitted Water attachment. The
+            // existing package flow saves it after review and before generation.
+            if (!terrain->ocean_surface && (!project_planetary::save_settings(root,*terrain)
+                || project_planetary::load_settings(root) != terrain))
             {
                 editor.aiToolStatus = "Created project " + created.project_id
                     + ", but its terrain settings could not be saved. No terrain was generated; retry Save Settings in Project.";
@@ -3417,7 +3814,8 @@
             generation.tool = "terrain.generate";
             generation.arguments = {{"coverage",terrain->mode},{"seed",std::to_string(terrain->seed)}};
             const bool queued = dispatch_ai_project_package_tool(editor,generation,context,&*terrain);
-            editor.aiToolStatus = "Created and opened " + created.project_id + "; saved requested terrain settings (seed "
+            editor.aiToolStatus = "Created and opened " + created.project_id
+                + (terrain->ocean_surface ? "; requested an ocean recipe (seed " : "; saved requested terrain settings (seed ")
                 + std::to_string(terrain->seed) + "). " + editor.aiToolStatus;
             return queued;
         }

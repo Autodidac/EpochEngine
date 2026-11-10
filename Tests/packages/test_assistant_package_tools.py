@@ -39,14 +39,28 @@ enum class EditorMainSurface {Project,Scene};
 enum class EditorProjectKind {Game,Tool};
 enum class EditorProjectInputProvision {project_default};
 struct CreationResult {bool succeeded{true};std::string project_id{"Created01"},root_path,manifest_path,summary;};
-CreationResult created;unsigned createCalls{};EditorProjectKind createdKind{};
-CreationResult editor_create_project_shell(EditorProjectKind kind,EditorProjectInputProvision){++createCalls;createdKind=kind;return created;}
+CreationResult created;unsigned createCalls{};EditorProjectKind createdKind{};std::string createdName;
+CreationResult editor_create_project_shell(EditorProjectKind kind,EditorProjectInputProvision,std::string_view name){++createCalls;createdKind=kind;createdName=name;return created;}
 CreationResult editor_admit_project_manifest(const std::string&){return created;}
 bool opened=true;
 bool editor_open_project(const std::shared_ptr<core::Context>&,const std::string&){return opened;}
 std::optional<project_planetary::Settings> persisted;
-bool record_save_settings(const fs::path&,const project_planetary::Settings& settings){persisted=settings;return true;}
-std::optional<project_planetary::Settings> record_load_settings(const fs::path&){return persisted;}
+unsigned saveCalls{};
+bool record_save_settings(const fs::path& root,const project_planetary::Settings& settings){
+ ++saveCalls;
+ if(settings.ocean_surface&&!package_source::load_project_attachment(root,"fft_ocean").source_attached())return false;
+ const auto text=project_planetary::encode_settings(settings);
+ if(text.empty())return false;
+ const auto recipe=root/"Assets/Worlds/Planet.epoch_planet";
+ fs::create_directories(recipe.parent_path());
+ std::ofstream output(recipe,std::ios::binary);output<<text;output.close();
+ if(!output)return false;
+ persisted=settings;return true;
+}
+std::optional<project_planetary::Settings> record_load_settings(const fs::path& root){
+ std::ifstream input(root/"Assets/Worlds/Planet.epoch_planet",std::ios::binary);
+ return project_planetary::decode_settings(std::string{std::istreambuf_iterator<char>{input},{}});
+}
 struct Ticket {std::shared_ptr<std::stop_source> source;bool valid()const{return bool(source);}};
 struct Scheduler {bool cancel(const Ticket& ticket){if(ticket.source)ticket.source->request_stop();return true;}};
 struct Lifecycle {struct Evidence {struct Generations {struct Selected{std::uint64_t generation{7};}selected_project;}generations;bool runtime_active{};}value;
@@ -85,9 +99,14 @@ void add_builtin_project_package(EditorState& editor,const std::shared_ptr<core:
 void open_package_source_review(EditorState& editor,std::string id){
  ++editor.sourceReviewCalls;const auto cached=package_source::inspect_cached_source(editor.cache,id);
  editor.packageSourceReview=cached.inspection;editor.packageSourceStaged=cached.staged;editor.packageSourceReviewCurrent=cached.review_ready();}
+[[nodiscard]] bool ai_project_package_generation_current(const EditorState& editor) noexcept;
+[[nodiscard]] bool save_ai_planetary_creation_recipe(EditorState& editor,const fs::path& root);
 void start_planetary_project_generation(EditorState& editor){
  // Existing production generator is a recorded queue boundary here. This
  // contract proves attachment/approval/fencing, not a CMake/provider build.
+ if(editor.planetarySettings.ocean_surface&&!package_source::load_project_attachment(editor.projectRoot,"fft_ocean").source_attached()){
+  editor.planetaryFeatureReviewPending=1;return;}
+ if(!save_ai_planetary_creation_recipe(editor,editor.projectRoot))return;
  ++editor.generationCalls;editor.planetaryGeneratePending=1;
 }
 template<class F>auto schedule_editor_cancellable_task(EditorState&,std::string_view,F callback){
@@ -157,11 +176,34 @@ int main(int argc,char**argv){
   CHECK(!goal.aiGoalPackageReceipt);}
  EditorState fresh;fresh.projectRoot=(base/"new-planet").generic_string();fresh.cache=cache;
  created.root_path=fresh.projectRoot;created.manifest_path=(fs::path{fresh.projectRoot}/"project.epoch.json").generic_string();
- CHECK(create_ai_project_from_tool(fresh,call("project.create kind=game coverage=planet seed=42 radius_m=1737400 detail=fast ocean=on"),context));
- CHECK(createCalls==1&&createdKind==EditorProjectKind::Game&&persisted);
+ write(created.manifest_path,"{}");
+ auto wetCreate=call("project.create kind=game coverage=planet seed=42 radius_m=1737400 detail=fast ocean=on");
+ wetCreate.arguments.push_back({"name","First Landing"});
+ CHECK(create_ai_project_from_tool(fresh,wetCreate,context));
+ CHECK(createCalls==1&&createdKind==EditorProjectKind::Game&&createdName=="First Landing"&&!persisted&&saveCalls==0);
+ CHECK(fresh.aiPackageRequest&&fresh.aiPackageRequest->save_recipe_before_generation&&fresh.generationCalls==0);
+ CHECK(fresh.showPackageManagerModal&&fresh.aiToolStatus.find("Created01")!=std::string::npos&&fresh.aiToolStatus.find("saved")==std::string::npos);
+ start_planetary_project_attachment(fresh);CHECK(fresh.planetaryAttachmentPending);complete_attachment(fresh);
+ CHECK(fresh.planetaryAttachment.source_attached()&&fresh.planetaryFeatureReviewPending&&!persisted&&saveCalls==0);
+ CHECK(!save_ai_planetary_creation_recipe(fresh,fresh.projectRoot)&&!persisted&&saveCalls==1);
+ const auto waterManifest=repository/"packages/fft_ocean/package.epoch-package.json";
+ write(waterManifest.parent_path()/"CMakeLists.txt","# Inert source fixture");
+ write(waterManifest.parent_path()/"src/unit.cpp","// Never built");
+ write(waterManifest.parent_path()/"scripts/unit.ascript.cpp","// Never run");
+ write(waterManifest,R"json({"id":"fft_ocean","displayName":"Water fixture","summary":"Source admission contract","manifestLicense":"LicenseRef-MIT-NoSell","kind":"code-extension","activation":"package-manager-opt-in","security":{"serverOrListenerAllowed":false,"requiresExplicitNetworkApproval":false,"autoRunAllowed":false,"includeByDefault":false},"source":{"repo":"https://github.com/Autodidac/EpochEngineExtensions","path":"packages/fft_ocean"},"script":{"path":"scripts/unit.ascript.cpp","language":"C++23","api":"epoch_package_script_api","humanGated":true,"autoRunAllowed":false},"build":{"humanGated":true,"sourceFiles":["CMakeLists.txt","src/unit.cpp"]}})json");
+ const auto waterReview=package_source::review_project_feature(fresh.projectRoot,"research_planetary_terrain",package_source::SourceFeature::planetary_ocean,true,cache,repository);
+ CHECK(waterReview.needs_approval());
+ CHECK(!package_source::admit_project_feature(waterReview,{}).sources_admitted()&&!persisted);
+ CHECK(package_source::admit_project_feature(waterReview,waterReview.dependency.inspection.content_hash).sources_admitted());
+ fresh.planetaryFeatureReviewPending.reset();
+ ++fresh.projectLifecycle.value.generations.selected_project.generation;
+ CHECK(!save_ai_planetary_creation_recipe(fresh,fresh.projectRoot)&&!persisted&&saveCalls==1);
+ --fresh.projectLifecycle.value.generations.selected_project.generation;
+ start_planetary_project_generation(fresh);
+ CHECK(persisted&&saveCalls==2&&fresh.generationCalls==1);
  CHECK(persisted->seed==42&&persisted->reference_radius_meters==1737400&&persisted->maximum_level==17&&persisted->ocean_surface);
- CHECK(fresh.aiPackageRequest&&fresh.aiPackageRequest->settings==*persisted&&fresh.generationCalls==0);
- CHECK(fresh.showPackageManagerModal&&fresh.aiToolStatus.find("Created01")!=std::string::npos);
+ CHECK(fresh.aiPackageRequest&&fresh.aiPackageRequest->settings==*persisted);
+ CHECK(record_load_settings(fresh.projectRoot)==persisted);
  CHECK(fresh.requestedMainSurface==EditorMainSurface::Project);
  EditorState empty;CHECK(create_ai_project_from_tool(empty,call("project.create kind=tool coverage=none"),context));
  CHECK(createCalls==2&&createdKind==EditorProjectKind::Tool&&!empty.aiPackageRequest&&empty.generationCalls==0);
@@ -171,6 +213,12 @@ int main(int argc,char**argv){
  CHECK(!create_ai_project_from_tool(empty,call("project.create kind=game coverage=planet seed=3 radius_m=nan detail=fast ocean=on"),context));
  CHECK(createCalls==3);
  CHECK(!create_ai_project_from_tool(empty,call("project.inspect"),context)&&createCalls==3);
+ EditorState dry;dry.projectRoot=(base/"new-dry-planet").generic_string();dry.cache=cache;
+ created.root_path=dry.projectRoot;created.manifest_path=(fs::path{dry.projectRoot}/"project.epoch.json").generic_string();
+ write(created.manifest_path,"{}");
+ CHECK(create_ai_project_from_tool(dry,call("project.create kind=game coverage=planet seed=7 radius_m=25000 detail=compact ocean=off"),context));
+ CHECK(persisted&&persisted->seed==7&&!persisted->ocean_surface&&saveCalls==3&&dry.generationCalls==0);
+ CHECK(record_load_settings(dry.projectRoot)==persisted&&dry.aiPackageRequest&&!dry.aiPackageRequest->save_recipe_before_generation);
  if(argc==3){CHECK(std::string_view{argv[2]}=="--creation-only");return 0;}
  for(const std::string mode:{"classic","tiled","hemisphere","planet","universe"}){
   EditorState editor;editor.projectRoot=(base/("project-"+mode)).generic_string();editor.cache=cache;write(fs::path{editor.projectRoot}/"project.epoch.json","{}");
@@ -290,6 +338,7 @@ def fixture():
         "        void finish_ai_project_package_request(",
         "        [[nodiscard]] bool ai_package_generation_awaiting_attachment(",
         "        [[nodiscard]] std::string ai_project_package_catalog(",
+        "        [[nodiscard]] bool save_ai_planetary_creation_recipe(",
         "        [[nodiscard]] bool dispatch_ai_project_package_tool(",
         "        [[nodiscard]] bool create_ai_project_from_tool(",
         "        [[nodiscard]] std::string ai_project_package_tool_description(",
@@ -301,8 +350,8 @@ def fixture():
     assert len(completion_declarations)==1, "Expected the production completion declaration"
     helpers=completion_declarations[0]+"\n"+"\n".join(
         definition(packages[packages.rfind(marker):],marker) for marker in markers)
-    helpers=helpers.replace('project_planetary::save_settings(root,*terrain)','record_save_settings(root,*terrain)').replace(
-        'project_planetary::load_settings(root) != terrain','record_load_settings(root) != terrain')
+    helpers=helpers.replace('project_planetary::save_settings(', 'record_save_settings(').replace(
+        'project_planetary::load_settings(', 'record_load_settings(')
     attach=definition(packages,"        void start_planetary_project_attachment(")
     cancel=definition(packages,"        void cancel_package_source_task(")
     busy=definition(packages,"        [[nodiscard]] bool planetary_project_busy(")
@@ -315,6 +364,8 @@ class AssistantPackageTools(unittest.TestCase):
         poll=definition(packages,"        void poll_planetary_project_task(")
         self.assertIn("continue_ai_project_package_after_attachment(editor)",poll)
         self.assertLess(poll.index("ai_project_package_generation_current(editor)"),poll.index("import_project_mesh(editor"))
+        generation=definition(packages,"        void start_admitted_planetary_generation(EditorState& editor)\n")
+        self.assertLess(generation.index("save_ai_planetary_creation_recipe"),generation.index("schedule_editor_cancellable_task"))
         runtime=(app/"editor.frame_project_runtime.inl").read_text(encoding="utf-8")
         self.assertIn("validate_project_tool_arguments(call)",runtime)
         self.assertIn("dispatch_ai_project_package_tool(editor, call, ctx)",runtime)

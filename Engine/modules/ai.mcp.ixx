@@ -282,7 +282,7 @@ export namespace epochengine::ai
             McpToolCapability::execute, McpToolRisk::child_process);
         add("project.create", "Create Project", "Create and open a new game/application through the normal project shell; optionally review a fully specified planetary setup.",
             McpToolCapability::author, McpToolRisk::workspace_write,
-            "{\"type\":\"object\",\"properties\":{\"kind\":{\"type\":\"string\",\"enum\":[\"game\",\"tool\"]},\"coverage\":{\"type\":\"string\",\"enum\":[\"none\",\"planet\",\"universe\"]},\"seed\":{\"type\":\"string\"},\"radius_m\":{\"type\":\"string\"},\"detail\":{\"type\":\"string\",\"enum\":[\"compact\",\"fast\",\"balanced\",\"fine\"]},\"ocean\":{\"type\":\"string\",\"enum\":[\"on\",\"off\"]}},\"required\":[\"kind\",\"coverage\"],\"additionalProperties\":false}");
+            "{\"type\":\"object\",\"properties\":{\"kind\":{\"type\":\"string\",\"enum\":[\"game\",\"tool\"]},\"coverage\":{\"type\":\"string\",\"enum\":[\"none\",\"planet\",\"universe\"]},\"seed\":{\"type\":\"string\"},\"radius_m\":{\"type\":\"string\"},\"detail\":{\"type\":\"string\",\"enum\":[\"compact\",\"fast\",\"balanced\",\"fine\"]},\"ocean\":{\"type\":\"string\",\"enum\":[\"on\",\"off\"]},\"name\":{\"type\":\"string\",\"maxLength\":64,\"description\":\"Host-bound display name from the operator's request\"}},\"required\":[\"kind\",\"coverage\"],\"additionalProperties\":false}");
         add("project.save", "Save Project", "Persist the active project and authoring documents.",
             McpToolCapability::author, McpToolRisk::workspace_write);
         add("scene.create", "Create Scene Object", "Create a bounded object through the scene document command gateway.",
@@ -322,7 +322,10 @@ export namespace epochengine::ai
         add("asset.image.generate", "Generate Image", "Generate one local image from the exact chat request and reviewed Asset Generation controls. No reference approval or import.",
             McpToolCapability::author | McpToolCapability::execute, McpToolRisk::child_process,
             "{\"type\":\"object\",\"properties\":{\"source\":{\"type\":\"string\",\"enum\":[\"request\"]}},\"required\":[\"source\"],\"additionalProperties\":false}");
-        add("forest.paint", "Paint Forest Area", "Paint one bounded procedural forest region on the selected generated planet through Forest Factory; uses the current tree recipe and camera location.",
+        add("asset.model.generate", "Generate 3D Model", "Generate one local 3D model from the current approved PNG and reviewed Asset Generation controls. Import is separate.",
+            McpToolCapability::author | McpToolCapability::execute, McpToolRisk::child_process,
+            "{\"type\":\"object\",\"properties\":{\"source\":{\"type\":\"string\",\"enum\":[\"approved_reference\"]}},\"required\":[\"source\"],\"additionalProperties\":false}");
+        add("forest.paint", "Paint Forest Area", "Paint one bounded procedural forest region on the selected generated planet through Forest Factory; uses the current tree recipe and host-reviewed location.",
             McpToolCapability::author, McpToolRisk::workspace_write);
         add("forest.configure", "Configure Plant", "Edit the current Plant Lab recipe through its existing history and asset publication; does not place trees or update painted regions.",
             McpToolCapability::author, McpToolRisk::workspace_write,
@@ -992,38 +995,57 @@ export namespace epochengine::ai
                 std::string_view{"package.install"},
                 std::string_view{"terrain.generate"}, std::string_view{"forest.paint"},
                 std::string_view{"forest.configure"}, std::string_view{"forest.material"},
-                std::string_view{"asset.image.generate"}};
+                std::string_view{"asset.image.generate"}, std::string_view{"asset.model.generate"}};
             return std::find(tools.begin(), tools.end(), name) != tools.end();
         }
     }
 
+    [[nodiscard]] constexpr bool valid_project_display_name(std::string_view name) noexcept
+    {
+        const auto alnum = [](char c) {
+            return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9');
+        };
+        return !name.empty() && name.size() <= 64u && alnum(name.front()) && alnum(name.back())
+            && std::ranges::all_of(name, [&](char c) { return alnum(c) || c == ' ' || c == '-' || c == '_'; });
+    }
+
     // Typed data only. The host resolves registry identity, source hashes,
     // project roots and executable admission; the model cannot supply them.
+    [[nodiscard]] constexpr bool asset_generation_tool(std::string_view tool) noexcept
+    {
+        return tool == "asset.image.generate" || tool == "asset.model.generate";
+    }
+
     [[nodiscard]] inline McpValidation validate_project_tool_arguments(
         const McpToolCall& call)
     {
         using authoring_plan_detail::argument;
-        if (call.tool == "asset.image.generate")
+        if (asset_generation_tool(call.tool))
         {
             const auto* source=argument(call,"source");
-            return call.arguments.size()==1u&&source&&source->value=="request" ? McpValidation{}
-                : McpValidation{McpErrorCode::invalid_argument,"Image generation requires source=request; prompts, paths, backend choices and approvals cannot be supplied by the model."};
+            const auto expected = call.tool == "asset.image.generate" ? "request" : "approved_reference";
+            return call.arguments.size()==1u&&source&&source->value==expected ? McpValidation{}
+                : McpValidation{McpErrorCode::invalid_argument,"Asset generation requires its exact source selector. Paths, backend choices and approvals cannot be supplied by the model."};
         }
         if (call.tool == "project.create")
         {
             const auto* kind = argument(call, "kind");
             const auto* coverage = argument(call, "coverage");
+            const auto* name = argument(call, "name");
             if (!kind || !coverage || (kind->value != "game" && kind->value != "tool"))
                 return {McpErrorCode::invalid_argument, "project.create requires one literal kind (game or tool) and one literal coverage (none, planet or universe). Ask about missing choices before proposing creation; never send alternatives joined with '|'."};
+            if (name && !valid_project_display_name(name->value))
+                return {McpErrorCode::invalid_argument, "Use a display name of up to 64 letters, digits, spaces, hyphens or underscores, starting and ending with a letter or digit."};
+            const auto settingCount = call.arguments.size() - (name ? 1u : 0u);
             if (coverage->value == "none")
-                return call.arguments.size() == 2u ? McpValidation{}
+                return settingCount == 2u ? McpValidation{}
                     : McpValidation{McpErrorCode::invalid_argument, "An empty project takes only kind and coverage=none; no requested settings may be silently ignored."};
             const auto* seed = argument(call, "seed");
             const auto* radius = argument(call, "radius_m");
             const auto* detail = argument(call, "detail");
             const auto* ocean = argument(call, "ocean");
             if (kind->value != "game" || (coverage->value != "planet" && coverage->value != "universe")
-                || !seed || !radius || !detail || !ocean || call.arguments.size() != 6u)
+                || !seed || !radius || !detail || !ocean || settingCount != 6u)
                 return {McpErrorCode::invalid_argument, "Planetary creation requires kind=game, one coverage (planet or universe), seed (an unsigned integer or random), radius_m (meters), one detail (compact, fast, balanced or fine) and one ocean value (on or off). Each field takes one literal value; '|' alternatives are invalid."};
             std::uint32_t parsedSeed{};
             if (seed->value != "random")
@@ -1282,6 +1304,18 @@ export namespace epochengine::ai
             &&(!contains(object,"tree")||contains(object,"tree bark"));
     }
 
+    [[nodiscard]] inline bool approved_reference_model_request(std::string_view request) noexcept
+    {
+        using namespace project_request_detail;
+        request = authoring_plan_detail::trim(request);
+        if (starts(request, "please ")) request.remove_prefix(7u);
+        if (request.ends_with('.') || request.ends_with('!')) request.remove_suffix(1u);
+        for (const auto command : {"generate 3d from the approved reference",
+            "generate a 3d model from the approved reference", "generate the 3d model from the approved reference"})
+            if (equal(request, command)) return true;
+        return false;
+    }
+
     [[nodiscard]] inline bool plant_recipe_request(std::string_view request) noexcept
     {
         using namespace project_request_detail;
@@ -1330,6 +1364,7 @@ export namespace epochengine::ai
             if (input.starts_with(prefix)) { input.remove_prefix(std::string_view{prefix}.size()); break; }
         if (input.starts_with("please ")) input.remove_prefix(7u);
         if (image_generation_request(input)) return "asset.image.generate";
+        if (approved_reference_model_request(input)) return "asset.model.generate";
         if (plant_recipe_request(input))
         {
             const auto object = project_request_detail::representation_object(input);
@@ -1347,9 +1382,35 @@ export namespace epochengine::ai
         // A plain composed world request uses the same New Project action.
         if (planet_forest_project_request(input))
             return "project.create";
-        constexpr std::array<std::pair<std::string_view, std::string_view>, 12u> actions{{
+        // The requested product can come before its explicit new-project
+        // destination. Only the opening instruction can select that action.
+        const auto opening = authoring_plan_detail::trim(input.substr(0u, input.find_first_of(".!?;\r\n")));
+        constexpr std::string_view newProjectDestination = " in a new project";
+        if (opening.ends_with(newProjectDestination))
+        {
+            const auto declaration = opening.substr(0u, opening.size() - newProjectDestination.size());
+            for (const std::string_view verb : {"build ", "create ", "make "})
+            {
+                if (!declaration.starts_with(verb) || declaration.ends_with(" not")) continue;
+                auto product = authoring_plan_detail::trim(declaration.substr(verb.size()));
+                for (auto space = product.find(' '); space != std::string_view::npos; space = product.find(' '))
+                {
+                    const auto qualifier = product.substr(0u, space);
+                    if (qualifier != "a" && qualifier != "an" && qualifier != "new"
+                        && qualifier != "small" && qualifier != "playable" && qualifier != "simple"
+                        && qualifier != "basic" && qualifier != "2d" && qualifier != "3d") break;
+                    product = authoring_plan_detail::trim(product.substr(space + 1u));
+                }
+                const auto title = (std::min)(product.find(" called "), product.find(" named "));
+                const auto kind = product.substr(0u, title);
+                if (kind == "game" || kind == "application" || kind == "tool") return "project.create";
+            }
+        }
+        constexpr std::array<std::pair<std::string_view, std::string_view>, 16u> actions{{
             {"create", "project.create"}, {"make", "project.create"},
-            {"open", "project.open"}, {"load", "project.open"}, {"close", "project.close"},
+            {"open", "project.open"}, {"load", "project.open"},
+            {"reopen", "project.open"}, {"re-open", "project.open"}, {"close", "project.close"},
+            {"save, close and reopen", "project.save"}, {"save, close, and reopen", "project.save"},
             {"stop", "project.stop"}, {"save", "project.save"}, {"run", "project.run"},
             {"build", "project.build"}, {"test", "project.test"},
             {"list", "project.list"}, {"show", "project.list"}}};
@@ -1372,7 +1433,8 @@ export namespace epochengine::ai
                     if (object.starts_with(subject)) return {};
             if (tool == "project.open" && object.starts_with('=')) return tool;
             if (object.starts_with('s')) object.remove_prefix(1u);
-            if (object.empty() || object.front() == ' ' || object.front() == '?' || object.front() == '.') return tool;
+            if (object.empty() || object.front() == ' ' || object.front() == '?'
+                || object.front() == '.' || object.front() == ',') return tool;
         }
         if (input.starts_with("paint forest") || input.starts_with("paint a forest")
             || input.starts_with("plant a forest") || input.starts_with("add a forest area")) return "forest.paint";
@@ -1544,6 +1606,7 @@ export namespace epochengine::ai
                 const auto equals = token.find('=');
                 if (equals == std::string_view::npos || equals == 0u || equals + 1u >= token.size()
                     || token.find('=', equals + 1u) != std::string_view::npos
+                    || (tool == "project.create" && token.substr(0u, equals) == "name")
                     || result.plan.call.arguments.size() >= (tool == "project.create" || tool == "forest.configure" ? 6u
                         : tool == "forest.material" ? 3u : 2u))
                 {
@@ -1671,20 +1734,21 @@ export namespace epochengine::ai
             "SUMMARY one sentence\n"
             "CALL project.inspect\n"
             "END\n"
-            "Choose exactly one CALL from: project.list, project.open, project.create, project.close, project.stop, project.inspect, project.save, project.build, project.run, project.test, diagnostics.read, package.catalog, package.install, terrain.generate, forest.configure, forest.material, forest.paint, asset.image.generate.\n"
+            "Choose exactly one CALL from: project.list, project.open, project.create, project.close, project.stop, project.inspect, project.save, project.build, project.run, project.test, diagnostics.read, package.catalog, package.install, terrain.generate, forest.configure, forest.material, forest.paint, asset.image.generate, asset.model.generate.\n"
             "Each argument takes ONE literal value. Options in this protocol are choices to select from, never text to copy as a value. Do not send '|', angle brackets or multiple alternatives in an argument. Follow REQUEST_OPERATION_CONSTRAINT_V1 when the host supplies one.\n"
             "asset.image.generate requires exactly source=request. It generates a 2D image or texture from the literal user request with the visible Asset Generation backend, Avoidance Prompt, seed and size. No model-written prompt, executable, filesystem path, model download, reference approval or import is accepted. A birch bark texture is an image; a birch tree is a Plant Lab design. Choosing an existing texture is forest.material, not image generation. The host shows the exact settings and requires approval before starting; missing settings open generation setup.\n"
-            "project.create makes a NEW host-named project using the normal New Project action. kind is game or tool. coverage is none for empty, planet for ONE planet, or universe for multiple bodies. Planetary projects require kind=game. These are separate syntax examples, not permission to choose settings:\n"
+            "asset.model.generate requires exactly source=approved_reference and an explicit request to generate 3D from the approved reference. The host binds the currently approved PNG and visible 3D controls. It never approves a reference or imports a model.\n"
+            "project.create makes a NEW project using the normal New Project action. kind is game or tool. coverage is none for empty, planet for ONE planet, or universe for multiple bodies. Planetary projects require kind=game. These are separate syntax examples, not permission to choose settings:\n"
             "Empty game example: CALL project.create kind=game coverage=none\n"
             "Empty software example: CALL project.create kind=tool coverage=none\n"
             "Single-planet example: CALL project.create kind=game coverage=planet seed=42 radius_m=6371000 detail=compact ocean=on\n"
             "Universe example: CALL project.create kind=game coverage=universe seed=42 radius_m=6371000 detail=compact ocean=on\n"
-            "Use the user's chosen coverage and settings, not an unrelated example. seed is an unsigned integer or random; radius_m is meters; detail is compact, fast, balanced or fine; ocean is on or off. Ask which project kind and whether empty, single planet or universe; for a planet ask its size, seed, detail and ocean unless already specified or the user explicitly chose defaults. Only with that explicit choice, Epoch may fill omitted seed/radius_m/detail/ocean from HOST_PROJECT_CREATION_DEFAULTS_V1 before exact-call approval. kind and coverage are never filled by defaults. Keep every specified override explicit; never substitute a default for an invalid value. Earth radius is 6371000 meters and Moon radius is 1737400 meters. The host chooses a fresh project ID and reports it, never a user-selected path. Requested names or unsupported custom settings require clarification; do not claim they were applied. Source/package approval and generation are separate visible gates; creating the shell does not mean terrain has generated. No project build/run occurs from project.create alone.\n"
+            "Use the user's chosen coverage and settings, not an unrelated example. seed is an unsigned integer or random; radius_m is meters; detail is compact, fast, balanced or fine; ocean is on or off. Ask which project kind and whether empty, single planet or universe; for a planet ask its size, seed, detail and ocean unless already specified or the user explicitly chose defaults. Only with that explicit choice, Epoch may fill omitted seed/radius_m/detail/ocean from HOST_PROJECT_CREATION_DEFAULTS_V1 before exact-call approval. kind and coverage are never filled by defaults. Keep every specified override explicit; never substitute a default for an invalid value. Earth radius is 6371000 meters and Moon radius is 1737400 meters. The host chooses a fresh project ID and folder. It binds any explicit display name from the operator's request before approval; omit name from CALL. Ask about unsupported settings. Source/package approval and generation are separate visible gates; creating the shell does not mean terrain has generated. No project build/run occurs from project.create alone.\n"
             "project.list lists host-admitted projects. For project.open the CALL line must include the argument: CALL project.open project=<ID from HOST_PROJECT_CATALOG_V1>. Copy that exact host-listed ID, not the angle brackets; CALL project.open without project= is invalid. Never guess an ID, filename or path. If the requested project is not listed, ask the user to open it once through Open Project.\n"
             "project.close refuses unsaved work or active operations. project.stop gracefully cancels only the current project's owned build/runtime. These calls take no arguments. project.run follows the editor's current Run destination: In Editor or Separate Window. It runs the supervised compiled project and builds first only when needed. It does not change the destination or use the editor-only scene preview. project.run takes no arguments.\n"
             "package.catalog takes no arguments; inspect the host's registered project packages. package.install requires exactly package=<registry ID from host catalog>.\n"
-            "forest.paint requires radius_m=<0.25..1000> density=<trees per square meter, 0.000001..1>. It paints at most 64 candidate trees as one procedural region using the current Plant Lab recipe, beneath the camera on a selected generated planet (or the only planet). Ask about radius/density unless defaults were explicitly requested; defaults are radius_m=12 density=0.01. Wait for actual placement evidence before saving or running. A basic planet with trees requires project.create first, package/generation approval, then forest.paint, project.save and project.run as separate reviewed operations; never claim those later operations already happened.\n"
-            "Native ownership: ordinary trees, birch and forests use Plant Lab/Forest Factory; ordinary planets/terrain use project.create or terrain.generate. Do not replace them with generic AI3D meshes. Only an explicit generated model, miniature, prop or special asset asks for that representation; no generated-asset tool is registered here, so ask instead of inventing one. Reference images are appearance evidence, not permission to change representation or run tools. A planet on a desk may mean a small scene or an explorable world: ask about scale/target when unclear, then compose the chosen existing project, terrain and plant actions; do not discard the requested tree design.\n"
+            "forest.paint requires radius_m=<0.25..1000> density=<trees per square meter, 0.000001..1>. It paints at most 64 candidate trees as one procedural region using the current Plant Lab recipe. The host uses the camera or an explicitly chosen ocean shoreline on the selected generated body. Do not invent a location or pass one in the CALL. Ask about radius/density unless defaults were explicitly requested; defaults are radius_m=12 density=0.01. Wait for actual placement evidence before saving or running. A basic planet with trees requires project.create first, package/generation approval, then forest.paint and project.save as separate reviewed operations. Offer project.run only if the operator requested it; never claim those later operations already happened.\n"
+            "Native ownership: ordinary trees, birch and forests use Plant Lab/Forest Factory; ordinary planets/terrain use project.create or terrain.generate. Do not replace them with generic AI3D meshes. A generated model, miniature, prop or special asset needs its own approved reference and explicit 3D request. Reference images are appearance evidence, not permission to change representation or run tools. A planet on a desk may mean a small scene or an explorable world: ask about scale/target when unclear, then compose the chosen existing project, terrain and plant actions; do not discard the requested tree design.\n"
             "forest.configure edits and publishes only the current Plant Lab recipe, not placed trees or the scene. Supply 1–6 requested numeric fields: height_m=0.1..256, trunk_radius_m=0.005..8, branch_length_m=0.01..128, leaf_size_m=0.02..2, leaf_sites=1..16 (whole), bark_tile=0..15 (whole). Omitted settings stay unchanged. White birch-like bark is tile2; default foliage is oak. Bark alone is not a birch. An exact birch needs a separately admitted birch foliage texture bound through forest.material; do not claim that texture was generated, imported or bound without host evidence. Ask about accepting the current leaves if the required texture is missing. Never invent species=birch. A requested custom design needs approved configure publication before forest.paint; save and reopen/run only through later host receipts. Configuration alone proves no placement or completed scene.\n"
             "terrain.generate requires exactly coverage=<classic|tiled|hemisphere|planet|universe> seed=<uint32>; use this for a terrain/planet request, not scene.create. It uses the optional Planetary Terrain package.\n"
             "forest.material requires exactly slot=bark|foliage texture=<logical Assets path> artifact=<full64 lowercase hex key>, copied from HOST_PLANT_TEXTURE_CATALOG_V1. It binds the existing admitted project texture to the current tree through Plant Lab; no files are downloaded, generated or imported by this action. Never invent an entry/key, use a local filesystem path or treat an attachment as an imported texture. Ask to import/generate a texture first if no suitable verified entry exists. Replacing foliage does not automatically remove a background or prove alpha quality.\n"

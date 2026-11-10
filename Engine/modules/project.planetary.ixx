@@ -183,6 +183,12 @@ export namespace epochengine::project_planetary
         std::uint64_t request_id{};
         std::vector<SurfaceResult> samples{};
     };
+    struct ShorelineResult final
+    {
+        SurfaceCode code{SurfaceCode::invalid};
+        Result operation{};
+        SurfaceResult land{}, water{};
+    };
     inline constexpr std::string_view recipe_relative_path = "Assets/Worlds/Planet.epoch_planet";
     inline constexpr std::array<std::string_view, 5> modes{
         "classic", "tiled", "hemisphere", "planet", "universe"};
@@ -513,6 +519,10 @@ export namespace epochengine::project_planetary
         const SurfaceQuery& query, std::stop_token cancellation = {});
     [[nodiscard]] SurfaceBatchResult query_surfaces(const std::filesystem::path& project_root,
         const SurfaceBatchQuery& query, std::stop_token cancellation = {});
+    // Finds a dry point within the requested surface distance of verified
+    // ocean water. Both samples come from the same admitted terrain recipe.
+    [[nodiscard]] ShorelineResult query_ocean_shoreline(const std::filesystem::path& project_root,
+        const SurfaceQuery& query, double maximum_distance_meters, std::stop_token cancellation = {});
     [[nodiscard]] StreamResult stream_step(const std::filesystem::path& project_root,
         Settings settings, StreamView view, std::stop_token cancellation = {});
 }

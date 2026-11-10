@@ -1232,17 +1232,34 @@
         return generated_project_output_path(root, configuration);
     }
 
-    [[nodiscard]] static std::string next_generated_project_name(EditorProjectKind kind)
+    [[nodiscard]] static std::string next_generated_project_name(EditorProjectKind kind, const fs::path& projects_root)
     {
+        if (projects_root.empty()) return {};
         const std::string prefix = kind == EditorProjectKind::Editor ? "EditorProject"
             : (kind == EditorProjectKind::Tool ? "ToolProject" : "GameProject");
-        const fs::path projectsRoot = resolve_projects_root();
-        for (int ordinal = 1; ordinal < 1000; ++ordinal)
+        const auto folded_name = [](const fs::path& path) {
+            auto name = path.native();
+            for (auto& ch : name)
+                if (ch >= 'A' && ch <= 'Z') ch += 'a' - 'A';
+            return name;
+        };
+        std::set<fs::path::string_type> existing;
+        std::error_code error;
+        auto entry = fs::directory_iterator(projects_root, error);
+        if (error && error != std::errc::no_such_file_or_directory) return {};
+        error.clear();
+        for (; entry != fs::directory_iterator{}; entry.increment(error))
+            existing.insert(folded_name(entry->path().filename()));
+        if (error) return {};
+        for (const auto& profile : live_project_profiles())
+            existing.insert(folded_name(fs::path{profile.id}));
+        for (int ordinal = 1; ordinal <= 1000; ++ordinal)
         {
-            const std::string candidate = prefix + (ordinal < 10 ? "0" : "") + std::to_string(ordinal);
-            if (!fs::exists(projectsRoot / candidate))
+            const std::string candidate = ordinal == 1000 ? prefix + "_overflow"
+                : prefix + (ordinal < 10 ? "0" : "") + std::to_string(ordinal);
+            if (!existing.contains(folded_name(fs::path{candidate})))
                 return candidate;
         }
-        return prefix + "_overflow";
+        return {};
     }
 

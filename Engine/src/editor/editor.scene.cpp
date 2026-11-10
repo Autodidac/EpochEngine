@@ -131,6 +131,7 @@ module editor.core;
 import core.logger;
 import core.path;
 import core.env;
+import ai.mcp;
 import ai.project_profile;
 import authoring.tilemap;
 import authoring.texture;
@@ -1032,18 +1033,24 @@ namespace epochengine
 
     EditorProjectCreationResult editor_create_project_shell(
         EditorProjectKind kind,
-        EditorProjectInputProvision input_provision)
+        EditorProjectInputProvision input_provision,
+        std::string_view display_name)
     {
-        const std::string projectName = next_generated_project_name(kind);
+        if (!display_name.empty() && !ai::valid_project_display_name(display_name))
+            return {.summary = "Invalid project display name. No files were written."};
+        const auto projectsRoot = resolve_projects_root();
+        const std::string projectName = next_generated_project_name(kind, projectsRoot);
+        if (projectName.empty())
+            return {.summary = "No unused project folder could be selected under Projects."};
         const std::string defaultScript = kind == EditorProjectKind::Tool || kind == EditorProjectKind::Editor
             ? "tool_bootstrap"
             : "project_demo_bootstrap";
 
         return write_project_shell(ProjectShellSpec{
             .kind = kind,
-            .project_name = projectName,
+            .project_name = display_name.empty() ? projectName : std::string{display_name},
             .project_id = projectName,
-            .root = resolve_projects_root() / projectName,
+            .root = projectsRoot / projectName,
             .world_file = kind == EditorProjectKind::Tool
                 ? fs::path{ "Projects" } / projectName / "worlds" / "tool.epoch"
                 : fs::path{ "Projects" } / projectName / "worlds" / "main.epoch",
@@ -1062,7 +1069,8 @@ namespace epochengine
                     : "Generated game shell."),
             .demo_model_asset = std::string{},
             .include_engine_arcade_package = false,
-            .overwrite_existing = false
+            .overwrite_existing = false,
+            .require_fresh_root = true
         });
     }
 

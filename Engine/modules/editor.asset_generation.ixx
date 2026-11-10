@@ -99,6 +99,7 @@ export namespace epochengine::editor_asset_generation
     // Pins a literal chat image request to the visible controls and selected
     // backend. Pure input binding only; no file/model/hardware access.
     [[nodiscard]] std::string image_request_binding(const State&,std::string_view prompt,std::string& diagnostic);
+    [[nodiscard]] std::string model_request_binding(const State&,const ProjectIdentity&,std::string& diagnostic);
     [[nodiscard]] std::optional<ai::asset_jobs::PreparedJob> prepare_job(const State&,
         ai::asset_jobs::Action,const std::filesystem::path& new_work,std::string& diagnostic);
     [[nodiscard]] Completion execute(ai::asset_jobs::PreparedJob,ProjectIdentity,

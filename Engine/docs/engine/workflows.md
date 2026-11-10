@@ -190,6 +190,31 @@ review remains part of the test.
 > from the player spawn. If a required step is unavailable or approval is
 > withheld, say what stopped and keep the last valid project state.
 
+The New Project approval shows `First Landing` as the display name. The
+host still assigns the project ID and folder. Answer the clarification about
+planet size, seed, detail and ocean, or explicitly choose defaults for those
+settings. For example, reply `Seed 42, radius 100 km, Fast detail, ocean on`.
+Use `seed=42 radius_m=100000 detail=fast ocean=on` for exact field syntax.
+If you choose defaults for the rest, your specified values still appear in the
+reviewed plan. With Ocean On, approve Planetary Terrain and Water source when
+prompted. The Editor saves the reviewed ocean recipe after Water admission
+and before terrain generation. The initial forest stays queued after
+generation. Until the generator provides a verified lakeside location, the
+Assistant asks where to paint. Reply `Use a verified ocean shoreline.` to
+search for dry terrain within 100 meters of ocean water on the selected
+ocean-bearing body. The forest saves that body-local center with its placement.
+To use an inspected spot, move the camera over it and reply
+`Use the current camera location.` Forest painting needs its own reviewed
+radius and density. This step uses the current Plant Lab recipe. The inland
+lake, player spawn, generated native plant set and custom tree remain separate
+acceptance items. When opening the saved project again, use its host-listed ID.
+
+To verify the saved project on its own, send `Save, close and reopen the project.`
+The Assistant prepares three separate approvals and checks that the same
+project and saved scene revision were restored. Add `, then build and run it`
+before the final period to review Build and Run separately. Run uses the
+accepted executable from that Build and stops if it or its inputs change.
+
 A pass requires all of the following in the same project.
 
 - The saved seed and generator revision reproduce the custom planet, its
@@ -210,10 +235,18 @@ A pass requires all of the following in the same project.
   triggers the win condition. Record the selected provider, model, seed,
   artifact identities, elapsed time by stage and build and run results.
 
-This is an acceptance target. Today Assistant Chat can request 2D generation
-and bind a reviewed project texture to a Plant Lab recipe. Generating a 3D
-model still starts in Asset Generation. Wiring that step through the Assistant
-and proving the complete forest, modeling and play sequence remain open.
+This is an acceptance target. Assistant Chat can request 2D generation and
+bind a reviewed project texture to a Plant Lab recipe. With a configured local
+3D backend, approve a visible PNG in Asset Generation, then send
+`Generate 3D from the approved reference.` Assistant Chat shows the reference
+and 3D controls for approval. The result opens for inspection in Asset
+Generation, with import under separate review. The complete forest, modeling
+and play sequence from a single prompt remains open.
+For the save/close/reopen request, the first reviewed operation is Save.
+Close and reopening the host-listed project require separate reviewed operations.
+Opening a project only completes the Assistant's reopen step after the editor
+restores a saved scene revision. If it can only show the project seed in memory,
+the Assistant reports that fallback and stops the reviewed sequence.
 
 ## Planet and forest generation
 

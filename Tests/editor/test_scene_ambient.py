@@ -22,6 +22,7 @@ def fixture():
     entity = definition(state, "        struct EditorEntity", True)
     functions = "\n".join(definition(transactions, marker) for marker in (
         "        [[nodiscard]] bool project_scene_document_into_editor(",
+        "        [[nodiscard]] bool rebuild_editor_scene_document_from_snapshot(",
         "        [[nodiscard]] bool apply_editor_scene_transaction(",
         "        [[nodiscard]] std::optional<scene::Vec3> parse_editor_ambient_channels(",
         "        [[nodiscard]] bool set_editor_scene_ambient(",
@@ -32,6 +33,12 @@ def fixture():
     functions += "\n" + definition(runtime, "        [[nodiscard]] epochengine::lighting::LightingFrame build_project_play_lighting(")
     functions += "\n" + definition((APP / "editor.application_document_editing.inl").read_text(encoding="utf-8"),
         "        [[nodiscard]] editor_workspace_commands::Surface workspace_command_surface(")
+    functions += "\n" + definition((APP / "editor.application_runtime_source.inl").read_text(encoding="utf-8"),
+        "        [[nodiscard]] bool load_editor_scene_snapshot(")
+    project = (APP / "editor.application_project_documents.inl").read_text(encoding="utf-8")
+    restore = project.index("            const bool loadedScene = load_editor_scene_snapshot(state);")
+    functions += "\nvoid restore_selected_scene(EditorState& state){\n" + project[
+        restore:project.index("            synchronize_editor_selection(state);", restore)] + "\n}\n"
     return r'''
 #include <algorithm>
 #include <array>
@@ -49,6 +56,7 @@ def fixture():
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 import scene.snapshot;
 import scene.serializer;
@@ -58,26 +66,35 @@ import scene.runtime;
 import render.lighting;
 import editor.application;
 import editor.workspace_commands;
+import project.lifecycle;
 void check(bool value,int line){if(!value){std::fprintf(stderr,"Ambient contract failed line %d\n",line);std::exit(83);}}
 #define CHECK(...) check(static_cast<bool>((__VA_ARGS__)),__LINE__)
 namespace epochengine{
 namespace asset::mesh{struct Artifact;}
 namespace previewgrid{struct MeshBaseColorBinding;}
 namespace project_planetary{using GeneratedMeshFrame=scene::SceneMeshCoordinates;}
-template<class...Args>std::string format_text(std::string_view,Args&&...){return "recorded failure";}
+template<class...Args>std::string format_text(std::string_view text,Args&&...){return std::string{text};}
 ENTITY
 struct EditorState{
  authoring::scene::SceneDocument sceneDocument;lighting::LightManager sceneLighting{128};
  std::vector<lighting::LightHandle>sceneLightHandles;std::vector<EditorEntity>entities;
  bool sceneLightingDirty=true,sceneInteractionDirty=false;std::string projectStatus;
  scene::SceneObjectId selectedEntityId{};std::uint64_t sceneDocumentRevision{};
+ std::filesystem::path scenePath;std::size_t selectedEntity{};unsigned seedRebuilds{};
+ project_lifecycle::EvidenceLedger projectLifecycle;
  struct{std::uint64_t frame_index{};double simulated_seconds{};}timeSnapshot;
  EditorApplicationSurface mainSurface=EditorApplicationSurface::Scene;unsigned assetWorkspaceSection{};bool game2DGuiWorkspace{};std::string projectId;
  struct{struct{struct Snapshot{bool configured{};};Snapshot snapshot()const{return {};}}controller;}projectCodeWorkspace;
 };
 using EditorMainSurface=EditorApplicationSurface;
 void synchronize_editor_selection(EditorState&){}void push_editor_log(EditorState&,std::string_view){}
-bool rebuild_editor_scene_document(EditorState&,std::string_view){return false;}
+std::filesystem::path active_editor_scene_path(const EditorState& state){return state.scenePath;}
+void normalize_editor_entity_ids(EditorState&){}
+void select_editor_entity(EditorState&,std::size_t){}
+bool rebuild_editor_scene_document(EditorState& state,std::string_view reason){
+ if(reason!="Load project scene seed")return false;
+ ++state.seedRebuilds;return true;
+}
 scene::SceneObjectId allocate_editor_scene_object_id(EditorState&,std::string_view){CHECK(false);return 0;}
 using ProjectRuntimeEntity=scene_runtime::RuntimeEntity;
 FUNCTIONS
@@ -116,7 +133,8 @@ int main(int argc,char**argv){
  const auto projection=editor.sceneDocument.project_snapshot();CHECK(projection&&projection.snapshot.ambient==edited);
  const std::string saved=scene::serialize_snapshot_text(projection.snapshot);CHECK(saved.starts_with("epoch_snapshot 5\n")&&saved.find("ambient ")!=std::string::npos);
  const auto parsed=scene::parse_snapshot_text(saved);CHECK(parsed.ok&&parsed.snapshot.ambient==edited);
- auto reopened=document::SceneDocument::from_snapshot(parsed.snapshot);CHECK(reopened&&reopened.value.project_settings().ambient==edited&&reopened.value.objects().empty());
+ auto reopenedDocument=document::SceneDocument::from_snapshot(parsed.snapshot);
+ CHECK(reopenedDocument&&reopenedDocument.value.project_settings().ambient==edited&&reopenedDocument.value.objects().empty());
  for(float invalid:{-1.0f,std::numeric_limits<float>::quiet_NaN(),std::numeric_limits<float>::infinity()}){
   const auto before=editor.sceneDocument.revision();auto bad=edited;bad[1]=invalid;
   CHECK(!set_editor_scene_ambient(editor,bad)&&editor.sceneDocument.revision().sequence==before.sequence);
@@ -136,6 +154,24 @@ int main(int argc,char**argv){
  CHECK(scene::persistence::scene_snapshot_semantically_equal(projection.snapshot,loaded.snapshot));
  auto different=loaded.snapshot;different.ambient=scene::kDefaultAmbientLight;CHECK(!scene::persistence::scene_snapshot_semantically_equal(projection.snapshot,different));
  const auto beforeBytes=bytes(path);different.ambient[0]=-1;CHECK(!scene::persistence::save_scene_snapshot_atomic(path,different)&&bytes(path)==beforeBytes);
+ // Fresh Editor state must restore a committed disk revision. Reopening the
+ // same ID with a damaged file must retire the earlier commit evidence.
+ EditorState reopened;reopened.projectId=loaded.snapshot.project_id;reopened.scenePath=path;
+ CHECK(reopened.projectLifecycle.select_project(1));restore_selected_scene(reopened);
+ CHECK(reopened.projectLifecycle.evidence().scene_committed&&reopened.seedRebuilds==0);
+ CHECK(reopened.sceneDocumentRevision==loaded.snapshot.revision&&reopened.sceneDocument.project_settings().ambient==edited);
+ CHECK(reopened.projectLifecycle.evidence().generations.committed_scene_generation==loaded.snapshot.revision);
+ CHECK(reopened.projectLifecycle.record_shell_materialized()&&reopened.projectLifecycle.observe_build_inputs(2));
+ const auto damaged=path.parent_path()/"damaged.epoch";
+ {std::ofstream out(damaged,std::ios::binary);out<<"damaged scene";CHECK(out);}
+ reopened.scenePath=damaged;
+ const auto lastRevision=reopened.sceneDocument.revision().content;
+ CHECK(!load_editor_scene_snapshot(reopened)&&reopened.sceneDocument.revision().content==lastRevision);
+ CHECK(reopened.projectLifecycle.select_project(1));restore_selected_scene(reopened);
+ const auto& invalid=reopened.projectLifecycle.evidence();
+ CHECK(!invalid.scene_committed&&invalid.generations.committed_scene_generation==0&&!invalid.build_inputs_current);
+ CHECK(reopened.seedRebuilds==1&&reopened.projectStatus.find("Showing the project seed in memory")!=std::string::npos);
+ CHECK(bytes(damaged)=="damaged scene"&&bytes(path)==beforeBytes);
  // Deleting every ordinary light leaves the mandatory ambient scene setting untouched.
  auto tier0=document::SceneDocument::make_default_tier0();CHECK(tier0);auto settings=tier0.value.project_settings();settings.ambient=edited;
  const std::array<document::SceneOperation,1> environment{document::ProjectSettingsChangedOperation{settings}};CHECK(tier0.value.apply_transaction(environment,"Ambient"));
@@ -188,7 +224,7 @@ class SceneAmbient(unittest.TestCase):
                 match = re.search(r"^export module\s+([\w.:]+);", path.read_text(encoding="utf-8-sig"), re.M)
                 if match:
                     module_map[match.group(1)] = path
-        pending = ["scene.snapshot", "scene.serializer", "scene.persistence", "scene.document", "scene.runtime", "render.lighting", "editor.application", "editor.workspace_commands"]
+        pending = ["scene.snapshot", "scene.serializer", "scene.persistence", "scene.document", "scene.runtime", "render.lighting", "editor.application", "editor.workspace_commands", "project.lifecycle"]
         selected = {}
         while pending:
             name = pending.pop()
@@ -228,7 +264,7 @@ set_tests_properties(actual_scene_ambient PROPERTIES TIMEOUT 15)
             "sourceIdentity": {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest() for p in selected.values()},
             "commands": results,
             "cases": ["default v4 exact golden and v1-v4 compatibility", "v5 edited HDR roundtrip", "semantic Undo/Redo/hash/no-op",
-                "no entity injection", "save/reopen and failed-save preservation", "invalid numeric/parser/schema values",
+                "no entity injection", "save/reopen and failed-save preservation", "actual editor disk reopen and stale evidence invalidation", "invalid numeric/parser/schema values",
                 "delete every ordinary light preserves ambient", "actual Editor and runtime lighting consume canonical ambient",
                 "actual explicit scratch creation/Undo retains ambient"],
         }, indent=2) + "\n", encoding="utf-8")

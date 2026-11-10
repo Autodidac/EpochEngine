@@ -556,6 +556,13 @@ export namespace epochengine::project_lifecycle
             return true;
         }
 
+        constexpr void invalidate_scene_commit() noexcept
+        {
+            evidence_.scene_committed = false;
+            evidence_.generations.committed_scene_generation = 0u;
+            mark_build_inputs_stale();
+        }
+
         [[nodiscard]] constexpr bool record_shell_materialized() noexcept
         {
             if (!evidence_.project_selected)

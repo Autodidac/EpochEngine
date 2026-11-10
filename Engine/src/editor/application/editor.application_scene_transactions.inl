@@ -54,9 +54,10 @@
                 return false;
             }
 
-            state.sceneDocument = std::move(built.value);
+            auto previousDocument = std::exchange(state.sceneDocument, std::move(built.value));
             if (!project_scene_document_into_editor(state))
             {
+                state.sceneDocument = std::move(previousDocument);
                 state.projectStatus = "Scene document projection failed after a validated rebuild.";
                 push_editor_log(
                     state,

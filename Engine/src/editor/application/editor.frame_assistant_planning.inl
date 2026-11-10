@@ -102,7 +102,7 @@
 
         auto request_ai_tool_plan = [&]() -> bool
         {
-            if (editor.assetGenerationPending || editor.aiToolExecution == "asset.image.generate")
+            if (editor.assetGenerationPending || ai::asset_generation_tool(editor.aiToolExecution))
             {
                 chat.append_status("An asset operation is active. Its approved request and output receipt are retained; wait for completion or use Cancel in Asset Generation.");
                 return false;
@@ -146,28 +146,62 @@
                 return false;
             }
 #endif
-            if (epochengine::ai::planet_forest_project_request(request)
-                && ai::project_lifecycle_request_tool(request) == "project.create")
+            const auto roundTripRequest = epochengine::editor::ai_chat_goal::round_trip_request(request);
+            const bool roundTrip = roundTripRequest != epochengine::editor::ai_chat_goal::RoundTripRequest::none;
+            const bool landingForest = ai_project_initial_landing_forest(request);
+            if (roundTrip || landingForest || (epochengine::ai::planet_forest_project_request(request)
+                && ai::project_lifecycle_request_tool(request) == "project.create"))
             {
                 if (!editor.aiToolExecution.empty() || editor.aiPackageRequest || editor.aiAuthoringApplyPending)
                 {
                     chat.append_status("Finish or cancel the current project action before starting another project goal.");
                     return false;
                 }
+                const auto* currentProfile = roundTrip ? editor_find_project_profile(editor.projectId) : nullptr;
+                if (roundTrip && (!currentProfile || editor.projectRoot.empty() || currentProfile->manifest_path.empty()
+                    || (currentProfile->kind != EditorProjectKind::Game && currentProfile->kind != EditorProjectKind::Tool)
+                    || !ai::validate_project_tool_arguments(ai::McpToolCall{.tool="project.open",.arguments={{"project",editor.projectId}}})))
+                {
+                    chat.append_status("Open an admitted game or application project before requesting save, close and reopen.");
+                    return false;
+                }
                 editor.aiGoalTools = {};
                 editor.aiGoalTools.enabled = true;
-                editor.aiGoalTools.configure_plant = ai::custom_plant_design_requested(request);
+                editor.aiGoalTools.initial_landing_forest = landingForest;
+                editor.aiGoalTools.configure_plant = !landingForest && ai::custom_plant_design_requested(request);
                 editor.aiGoalTools.bind_request(request, editor.projectId, editor.projectRoot,
                     editor.projectLifecycle.evidence().generations.selected_project.generation);
+                if (landingForest) editor.aiGoalTools.run_after_save = false;
                 editor.aiGoalPackageReceipt.reset();
+                if (roundTrip)
+                {
+                    auto& sequence = editor.aiGoalTools;
+                    sequence.round_trip = true;
+                    sequence.build_and_run = roundTripRequest == epochengine::editor::ai_chat_goal::RoundTripRequest::build_and_run;
+                    sequence.reopen_manifest = currentProfile->manifest_path;
+                    sequence.project_id = sequence.origin_project_id;
+                    sequence.project_root = sequence.origin_project_root;
+                    sequence.project_generation = sequence.origin_project_generation;
+                }
                 editor.aiGoal.assign(request);
                 editor.aiGoalDraft = editor.aiGoal;
                 editor.aiGoalActive = editor.aiGoalRunning = true;
                 editor.aiGoalCompletedMilestones = 0u;
                 editor.aiGoalPlanNextQueued = false;
-                chat.append_status(editor.aiGoalTools.configure_plant
-                    ? "Project goal: create the planet, configure and publish the requested tree, paint one forest area, save, then run. Each stage needs its own approval and host result."
-                    : "Project goal: create the planet, paint one forest area, save, then run. Each action and any missing package still needs approval.");
+                if (roundTrip)
+                    chat.append_status(editor.aiGoalTools.build_and_run
+                        ? "Project goal: save, close, reopen, build, then run this project. Each action needs its own approval and host result."
+                        : "Project goal: save, close, then reopen this project. Each action needs its own approval and host result.");
+                else if (landingForest)
+                    chat.append_status("Project goal: create the planet, review where to plant the initial forest with the current Plant Lab recipe, then save. The native plant set, custom textures, the extra tree, the beacon and gameplay remain separate steps.");
+                else
+                {
+                    std::string summary = editor.aiGoalTools.configure_plant
+                        ? "Project goal: create the planet, configure the requested tree, paint one forest area, and save"
+                        : "Project goal: create the planet, paint one forest area, and save";
+                    if (editor.aiGoalTools.run_after_save) summary += ", then run";
+                    chat.append_status(summary + ". Each action and any missing package needs approval.");
+                }
             }
             if (editor.aiGoalActive && editor.aiGoalRunning && editor.aiGoalTools.enabled)
             {
@@ -183,10 +217,11 @@
             editor.aiToolSceneRevision = editor.sceneDocumentRevision;
             editor.aiToolGuiRevision = editor.guiDocument
                 ? editor.guiDocument->revision().sequence : 0u;
-            editor.aiToolImageBinding.clear();
-            editor.aiToolImageWork.clear();
-            editor.aiToolImageActivityId = 0u;
-            if (ai::image_generation_request(request))
+            editor.aiToolAssetBinding.clear();
+            editor.aiToolAssetWork.clear();
+            editor.aiToolAssetActivityId = 0u;
+            const auto generationTool = ai::project_lifecycle_request_tool(request);
+            if (ai::asset_generation_tool(generationTool))
             {
                 // Preparing a local proposal starts no worker. Setup and
                 // approval waits must not leave the turn marked Working.
@@ -194,6 +229,36 @@
                     activity->stream_live=false;
                 editor.requestedMainSurface=EditorMainSurface::AssetGeneration;
                 editor.aiToolPlan={};editor.aiToolPlanApplied=false;editor.aiToolAwaitingReply=false;
+                if (generationTool == "asset.model.generate")
+                {
+                    if (!chat.activeReferenceImages.empty())
+                    {
+                        editor.aiToolStatus = "Review and approve your PNG in Asset Generation first. A chat attachment cannot replace the approved reference.";
+                        chat.append_status(editor.aiToolStatus);
+                        return true;
+                    }
+                    restore_asset_generation_backend_selection(editor);
+                    const auto& state = editor.assetGeneration;
+                    editor.aiToolAssetBinding = editor_asset_generation::model_request_binding(
+                        state,asset_generation_project(editor),editor.aiToolStatus);
+                    if (editor.aiToolAssetBinding.empty())
+                    {
+                        chat.append_status(editor.aiToolStatus);
+                        return true;
+                    }
+                    editor.aiToolPlan = admit_ai_project_tool_reply(request,
+                        "EPOCH_TOOL_PLAN_V1\nTITLE Generate 3D model\nSUMMARY Use the exact approved PNG and current 3D controls. Import requires separate review.\nCALL asset.model.generate source=approved_reference\nEND\n");
+                    editor.aiToolStatus = editor.aiToolPlan
+                        ? "Ready for approval: generate one local 3D model.\nReference: "
+                            + display_project_path(state.reference->result.output) + "\nSHA-256: "
+                            + state.reference->result.output_sha256 + "\nGenerator: " + state.model_settings->backend_name
+                            + " | seed " + state.model_seed + " | resolution " + std::to_string(state.model_request.resolution)
+                            + " | " + std::to_string(state.model_request.steps) + " steps | "
+                            + std::to_string(state.model_request.face_budget) + " faces | atlas " + std::to_string(state.model_request.atlas)
+                        : editor.aiToolPlan.message;
+                    chat.append_status(editor.aiToolStatus);
+                    return static_cast<bool>(editor.aiToolPlan);
+                }
                 if(request.size()>8192u)
                 {editor.aiToolStatus="The image prompt exceeds 8192 bytes. Shorten it; the current generation draft was preserved.";
                  chat.append_status(editor.aiToolStatus);return true;}
@@ -204,8 +269,8 @@
                 }
                 restore_asset_generation_backend_selection(editor);
                 (void)gui::replace_text_in_edit_box(editor.assetGeneration.image_request.prompt,request,8192u);
-                editor.aiToolImageBinding=editor_asset_generation::image_request_binding(editor.assetGeneration,request,editor.aiToolStatus);
-                if(editor.aiToolImageBinding.empty())
+                editor.aiToolAssetBinding=editor_asset_generation::image_request_binding(editor.assetGeneration,request,editor.aiToolStatus);
+                if(editor.aiToolAssetBinding.empty())
                 {
                     editor.aiToolStatus+=" The request is retained. Set up Asset Generation, then retry this request; no model or generator was started.";
                     chat.append_status(editor.aiToolStatus);return true;
@@ -237,12 +302,14 @@
                 chat.append_status(editor.aiToolStatus);
                 return false;
             }
-            // Save/run contain no remaining model decision in this bounded
+            // These stages contain no remaining model decision in this bounded
             // workflow. Use the existing parser and admission, then wait for a
             // fresh exact-call approval without another inference request.
             if (editor.aiGoalActive && editor.aiGoalRunning)
                 if (const auto localPlan = editor.aiGoalTools.local_review_plan(); !localPlan.empty())
                 {
+                    if (editor.aiGoalTools.round_trip && editor.aiGoalTools.operation() == "project.open")
+                        editor.aiToolProjectCatalog = {{editor.aiGoalTools.origin_project_id, editor.aiGoalTools.reopen_manifest}};
                     editor.aiToolPlan = admit_ai_project_tool_reply(request, localPlan);
                     editor.aiToolPlanApplied = false;
                     editor.aiToolAwaitingReply = false;

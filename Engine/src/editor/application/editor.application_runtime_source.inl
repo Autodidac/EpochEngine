@@ -112,7 +112,10 @@
         {
             const auto scenePath = active_editor_scene_path(state);
             if (scenePath.empty())
+            {
+                state.projectStatus = "No saved scene path is configured for this project.";
                 return false;
+            }
 
             auto loaded = scene::persistence::load_scene_snapshot(
                 scenePath,
@@ -120,37 +123,23 @@
                     .requirement = scene::SceneDocumentRequirement::authoring
                 });
             if (!loaded.result)
+            {
+                state.projectStatus = epochengine::format_text(
+                    "Saved scene could not be loaded ({}): {}",
+                    scene::persistence::scene_persistence_status_name(loaded.result.status),
+                    loaded.result.error);
                 return false;
+            }
 
-            scene::SceneSnapshot& snapshot = loaded.snapshot;
+            const scene::SceneSnapshot& snapshot = loaded.snapshot;
             if (!snapshot.project_id.empty()
                 && !state.projectId.empty()
                 && snapshot.project_id != state.projectId)
             {
-                push_editor_log(state, "[scene] Saved scene belongs to another project and was not loaded.");
+                state.projectStatus = "Saved scene belongs to another project and was not loaded.";
                 return false;
             }
 
-            std::vector<EditorEntity> entities{};
-            entities.reserve(snapshot.objects.size());
-            for (const scene::SceneObjectSnapshot& source : snapshot.objects)
-            {
-                entities.push_back(EditorEntity{
-                    .sceneObjectId = source.id,
-                    .name = source.name,
-                    .type = source.type,
-                    .category = source.category,
-                    .position = source.position,
-                    .rotation = source.rotation,
-                    .scale = source.scale,
-                    .visible = source.visible,
-                    .editorOnly = source.editor_only,
-                    .textureMaterial = source.texture_material,
-                    .meshAsset = source.mesh_asset
-                });
-            }
-
-            state.entities = std::move(entities);
             if (!rebuild_editor_scene_document_from_snapshot(
                     state,
                     snapshot,

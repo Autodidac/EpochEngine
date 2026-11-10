@@ -67,11 +67,14 @@ struct EditorState {
  int projectBuildRunCameraMode{},projectBuildRunInputProfile{},projectCameraMode{},inputProfilePreset{};
  Digest projectBuildAcceptedOutputDigest{7};std::uint64_t projectBuildLifecycleGeneration{};
  project_lifecycle::EvidenceLedger projectLifecycle;
+ bool aiGoalActive{},aiGoalRunning{};
+ struct {bool build_and_run{};std::uint64_t accepted_build_generation{};} aiGoalTools;
  struct {project_lifecycle::ProjectStamp project;} projectRuntimeLaunch;
  std::shared_ptr<platform::child_process::ProcessSnapshot> projectRuntimeSnapshot;
 };
 bool selected=true,output_exists=true,launch_allowed=true,inputs_current=true;
-unsigned launches{},focuses{},builds{},tests{},transcripts{},watches{};
+int output_digest=7;
+unsigned launches{},focuses{},builds{},tests{},transcripts{},watches{},scene_saves{},dependency_prepares{};
 std::vector<std::string> logs,notes;
 namespace epochengine {template<class...Args>std::string format_text(std::string_view text,Args&&...){return std::string{text};}}
 void push_editor_log(EditorState&,std::string text){logs.push_back(std::move(text));}
@@ -81,15 +84,16 @@ void clear_completed_editor_builds(EditorState&,std::string_view){}
 std::string script_id_from_source_path(const std::filesystem::path&){return "script";}
 bool project_gui_document_layout(EditorState&){return true;}
 bool save_project_gui_document(EditorState&,bool){return true;}
-bool save_editor_scene_snapshot(EditorState&){return true;}
+bool save_editor_scene_snapshot(EditorState&){++scene_saves;return true;}
 void repair_active_project_evidence(EditorState&){}
 namespace project_planetary {struct Result{bool ok{true};std::string message;};
- Result prepare_runtime_dependency(const std::filesystem::path&){return {};}}
+ Result prepare_runtime_dependency(const std::filesystem::path&){++dependency_prepares;return {};}
+ Result runtime_requirement(const std::filesystem::path&){return {};}}
 std::filesystem::path resolve_editor_path(const std::filesystem::path& path){return path;}
 Freshness project_child_build_freshness(const EditorState&){return {.rebuildRequired=!inputs_current};}
 std::filesystem::path project_existing_output_exe_path(std::string_view,std::string_view){return "child.exe";}
 bool path_exists(const std::filesystem::path&){return output_exists;}
-std::optional<Digest> project_output_digest(const std::filesystem::path&){return output_exists?std::optional{Digest{7}}:std::nullopt;}
+std::optional<Digest> project_output_digest(const std::filesystem::path&){return output_exists?std::optional{Digest{output_digest}}:std::nullopt;}
 bool project_build_targets_selected_project(const EditorState&){return selected;}
 std::filesystem::path resolved_project_build_output(const EditorState&,const EditorProjectBuildResult& build){return build.output_path;}
 bool project_runtime_launch_identity_matches(const EditorState&,const platform::child_process::ProcessSnapshot& snapshot){return snapshot.identity;}
@@ -116,9 +120,9 @@ std::string read_text_tail(const std::filesystem::path&,std::size_t){return "com
 void reset_project_build_request(EditorState& editor){editor.projectBuildRunAfterBuild=editor.projectBuildRunInEditor=false;}
 bool start_ai_project_test(const std::filesystem::path&){++tests;return true;}
 struct Chat{void append_status(std::string_view){}};
-void direct(EditorState& editor,bool inEditor=true){
+void direct(EditorState& editor,bool inEditor=true,std::uint64_t requiredBuild=0){
  LAUNCH
- launch_active_project_context(inEditor);
+ launch_active_project_context(inEditor,requiredBuild);
 }
 void poll(EditorState& editor){Chat chat;
  POLL
@@ -126,17 +130,18 @@ void poll(EditorState& editor){Chat chat;
 }
 bool assistant(EditorState& editor,bool queueBuild=false){
  struct {std::string tool{"project.run"};}call;
- auto launch_active_project_context=[&](bool inEditor){if(queueBuild){
+ auto launch_active_project_context=[&](bool inEditor,std::uint64_t requiredBuild){if(queueBuild){
   std::promise<EditorProjectBuildResult> promise;editor.projectBuildPending.emplace(promise.get_future());
   editor.projectBuildStatus="Building Release...";
- }else if(!editor.projectRuntimeSnapshot)direct(editor,inEditor);};
+ }else if(!editor.projectRuntimeSnapshot)direct(editor,inEditor,requiredBuild);};
  auto watch_execution=[&](std::string_view operation){if(operation=="project.run")++watches;};
  ASSISTANT
  return true;
 }
 void initialize(EditorState& editor){
  selected=output_exists=launch_allowed=inputs_current=true;
- launches=focuses=builds=tests=transcripts=watches=0;logs.clear();notes.clear();
+ output_digest=7;
+ launches=focuses=builds=tests=transcripts=watches=scene_saves=dependency_prepares=0;logs.clear();notes.clear();
  (void)editor.projectLifecycle.select_project(1);
  (void)editor.projectLifecycle.record_scene_commit(1);
  (void)editor.projectLifecycle.record_shell_materialized();
@@ -193,6 +198,19 @@ int main(){
  {EditorState editor;initialize(editor);editor.projectRuntimeSnapshot=std::make_shared<platform::child_process::ProcessSnapshot>();
   editor.projectRuntimeSnapshot->running=true;editor.projectRuntimeLaunch.project={999,999};
   CHECK(!assistant(editor)&&watches==0);}
+ for(const unsigned stale:{0u,1u,2u,3u,4u}){EditorState editor;initialize(editor);
+  editor.aiGoalActive=editor.aiGoalRunning=editor.aiGoalTools.build_and_run=true;
+  editor.aiGoalTools.accepted_build_generation=editor.projectLifecycle.evidence().generations.output_artifact.build_generation;
+  CHECK(editor.aiGoalTools.accepted_build_generation!=0);
+  if(stale==1u)output_exists=false;
+  if(stale==2u)inputs_current=false;
+  if(stale==3u)output_digest=8;
+  if(stale==4u)++editor.aiGoalTools.accepted_build_generation;
+  CHECK(assistant(editor)==(stale==0u));
+  CHECK(builds==0&&scene_saves==0&&dependency_prepares==0);
+  CHECK(launches==(stale==0u?1u:0u)&&watches==launches);
+  if(stale!=0u)CHECK(editor.aiToolStatus.find("accepted build is no longer current")!=std::string::npos);
+ }
 }
 '''
         for key, fragment in {"LIFECYCLE": lifecycle, "SETTLEMENT": settlement,

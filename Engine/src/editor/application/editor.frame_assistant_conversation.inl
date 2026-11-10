@@ -35,9 +35,15 @@
                             || editor.aiGoal != goalCommand.objective;
                         invalidate_ai_goal_work();
                         editor.aiGoalTools = {};
-                        editor.aiGoalTools.enabled = epochengine::ai::planet_forest_project_request(goalCommand.objective);
+                        editor.aiGoalTools.initial_landing_forest = ai_project_initial_landing_forest(goalCommand.objective);
+                        editor.aiGoalTools.enabled = editor.aiGoalTools.initial_landing_forest
+                            || epochengine::ai::planet_forest_project_request(goalCommand.objective);
+                        editor.aiGoalTools.configure_plant = editor.aiGoalTools.enabled
+                            && !editor.aiGoalTools.initial_landing_forest
+                            && ai::custom_plant_design_requested(goalCommand.objective);
                         editor.aiGoalTools.bind_request(goalCommand.objective, editor.projectId, editor.projectRoot,
                             editor.projectLifecycle.evidence().generations.selected_project.generation);
+                        if (editor.aiGoalTools.initial_landing_forest) editor.aiGoalTools.run_after_save = false;
                         editor.aiGoalPackageReceipt.reset();
                         editor.aiGoal.assign(goalCommand.objective);
                         editor.aiGoalDraft = editor.aiGoal;
@@ -454,9 +460,9 @@
         const bool queuedIdleReloadConsentReady = queuedTransport == queue::Transport::native
             && queuedNative.selected && !queuedNative.loaded && !queuedNative.busy
             && queuedNative.idle_reload_available;
-        const bool queuedImageHostAction = ai::image_generation_request(chat.queuedInput)
+        const bool queuedAssetHostAction = ai::asset_generation_tool(ai::project_lifecycle_request_tool(chat.queuedInput))
             || (editor.aiToolPlan&&!editor.aiToolPlanApplied
-                &&editor.aiToolPlan.plan.call.tool=="asset.image.generate"
+                &&ai::asset_generation_tool(editor.aiToolPlan.plan.call.tool)
                 &&ai_chat_confirmation(chat.queuedInput).has_value());
         // Never leave a queued turn parked silently after a provider/model
         // change. Preserve the draft rather than dispatching on an unintended
@@ -501,7 +507,7 @@
             }
         }
         if (queueOwnerReady && queuedMethodMatches
-            && queuedModelMatches && (queuedProviderReady || queuedIdleReloadConsentReady || queuedImageHostAction))
+            && queuedModelMatches && (queuedProviderReady || queuedIdleReloadConsentReady || queuedAssetHostAction))
         {
             if (auto queued = chat.take_queued_input())
             {

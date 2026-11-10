@@ -603,7 +603,8 @@ namespace epochengine
     export [[nodiscard]] EditorProjectCreationResult editor_create_project_shell(EditorProjectKind kind);
     export [[nodiscard]] EditorProjectCreationResult editor_create_project_shell(
         EditorProjectKind kind,
-        EditorProjectInputProvision input_provision);
+        EditorProjectInputProvision input_provision,
+        std::string_view display_name = {});
     export [[nodiscard]] bool editor_project_manifest_capability_contract() noexcept;
     export [[nodiscard]] EditorProjectCreationResult editor_ensure_project_shell(std::string_view project_id);
     export [[nodiscard]] EditorProjectCreationResult editor_stage_engine_arcade_project(

@@ -62,7 +62,7 @@
             return false;
         };
 
-        auto launch_active_project_context = [&](bool inEditor = false)
+        auto launch_active_project_context = [&](bool inEditor = false, std::uint64_t requiredBuild = 0u)
         {
             if (inEditor && !project_runtime_embedding_supported())
             {
@@ -109,24 +109,34 @@
                     "[script] Run retained project ownership while a script asset is selected.");
             }
 
-            (void)project_gui_document_layout(editor);
-            if (!save_project_gui_document(editor, false)
-                || !save_editor_scene_snapshot(editor))
+            if (requiredBuild == 0u)
             {
-                editor.projectBuildStatus =
-                    "Run blocked because GUI and scene source revisions were not both committed.";
-                push_editor_log(
-                    editor, "[project] " + editor.projectBuildStatus);
-                return;
+                (void)project_gui_document_layout(editor);
+                if (!save_project_gui_document(editor, false) || !save_editor_scene_snapshot(editor))
+                {
+                    editor.projectBuildStatus = "Run blocked because GUI and scene source revisions were not both committed.";
+                    push_editor_log(editor, "[project] " + editor.projectBuildStatus);
+                    return;
+                }
             }
             repair_active_project_evidence(editor);
 
-            const auto dependency=project_planetary::prepare_runtime_dependency(
-                resolve_editor_path(std::filesystem::path{editor.projectRoot}));
-            if(!dependency.ok)
+            const auto projectRoot = resolve_editor_path(std::filesystem::path{editor.projectRoot});
+            const auto dependencyError = [&] {
+                if (requiredBuild != 0u)
+                {
+                    const auto dependency = project_planetary::runtime_requirement(projectRoot);
+                    return dependency.ok ? std::string{} : dependency.message.empty()
+                        ? std::string{"Run dependency could not be verified."} : dependency.message;
+                }
+                const auto dependency = project_planetary::prepare_runtime_dependency(projectRoot);
+                return dependency.ok ? std::string{} : dependency.message.empty()
+                    ? std::string{"Run dependency could not be prepared."} : dependency.message;
+            }();
+            if (!dependencyError.empty())
             {
-                editor.projectBuildStatus=dependency.message;
-                push_editor_log(editor,"[project] "+dependency.message);
+                editor.projectBuildStatus = dependencyError;
+                push_editor_log(editor, "[project] " + dependencyError);
                 return;
             }
 
@@ -172,6 +182,14 @@
             const project_lifecycle::Decision decision =
                 editor.projectLifecycle.decision(
                     project_lifecycle::Request::run);
+            if (requiredBuild != 0u && (decision.action != project_lifecycle::Action::launch_runtime
+                || freshness.rebuildRequired || !editor.projectBuildAcceptedOutputDigest.valid()
+                || editor.projectLifecycle.evidence().generations.output_artifact.build_generation != requiredBuild))
+            {
+                editor.projectBuildStatus = "The accepted build is no longer current. Start a fresh reviewed build and run sequence. Nothing was launched.";
+                push_editor_log(editor, "[project] " + editor.projectBuildStatus);
+                return;
+            }
             switch (decision.action)
             {
             case project_lifecycle::Action::build_project:
@@ -286,13 +304,30 @@
         {
             if (!editor.aiGoalActive || !editor.aiGoalTools.enabled
                 || !editor.aiGoalTools.waiting || operation != editor.aiGoalTools.operation()) return;
-            const auto generation = editor.projectLifecycle.evidence().generations.selected_project.generation;
+            const auto& evidence = editor.projectLifecycle.evidence().generations;
             const bool next = editor.aiGoalTools.receipt(operation, succeeded,
-                editor.projectId, editor.projectRoot, generation);
-            editor.aiGoalLastMilestoneReceipt = editor.aiToolStatus;
+                editor.projectId, editor.projectRoot, evidence.selected_project.generation, editor.sceneDocumentRevision,
+                evidence.output_artifact.build_generation);
             editor.aiGoalCompletedMilestones = editor.aiGoalTools.stage;
             editor.aiGoalPlanNextQueued = next && editor.aiGoalRunning;
-            if (!next) editor.aiGoalRunning = false;
+            if (!next)
+            {
+                editor.aiGoalRunning = false;
+                if (editor.aiGoalTools.initial_landing_forest && !editor.aiGoalTools.stopped
+                    && operation == "project.save")
+                    editor.aiToolStatus += " Initial forest saved with the current Plant Lab recipe. The native plant set, custom textures, the extra tree, the beacon and gameplay are still pending.";
+            }
+            editor.aiGoalLastMilestoneReceipt = editor.aiToolStatus;
+        };
+
+        // The canonical project switch clears all project-bound Assistant
+        // state. Restore only the exact approved round trip that caused it.
+        const auto restore_round_trip_goal = [&](epochengine::editor::ai_chat_goal::ToolSequence sequence)
+        {
+            editor.aiGoal = editor.aiGoalDraft = sequence.objective;
+            editor.aiGoalTools = std::move(sequence);
+            editor.aiGoalTools.waiting = true;
+            editor.aiGoalActive = editor.aiGoalRunning = true;
         };
 
         auto dispatch_ai_tool_plan_impl = [&]() -> bool
@@ -309,6 +344,13 @@
             // into project-bound UI state across that canonical transition.
             bool synchronousSuccess = true;
             const auto call = editor.aiToolPlan.plan.call;
+            if (editor.aiGoalActive && editor.aiGoalTools.round_trip && !editor.aiGoalRunning
+                && call.tool == editor.aiGoalTools.operation()
+                && editor.aiToolBoundRequest == editor.aiGoalTools.next_request(editor.aiGoal))
+            {
+                editor.aiToolStatus = "The reviewed project sequence is paused. Resume it or start a fresh request before approving this action.";
+                return false;
+            }
             if (editor.aiGoalTools.enabled && editor.aiGoalActive && editor.aiGoalRunning)
             {
                 if (editor.aiGoalTools.stopped || call.tool != editor.aiGoalTools.operation()
@@ -317,6 +359,13 @@
                 {
                     editor.aiToolStatus = "Goal operation or project does not match the next reviewed stage. Nothing ran.";
                     editor.aiGoalRunning = editor.aiGoalPlanNextQueued = false;
+                    return false;
+                }
+                if (editor.aiGoalTools.round_trip && (call.tool == "project.build" || call.tool == "project.run")
+                    && (editor.sceneDocumentRevision != editor.aiGoalTools.saved_scene_revision
+                        || gui_document_has_unsaved_changes(editor)))
+                {
+                    editor.aiToolStatus = "Project documents changed after Reopen. Start a fresh save, close and reopen request.";
                     return false;
                 }
             }
@@ -412,7 +461,7 @@
                     ? editor.projectLifecycle.evidence().generations.active_build.build_generation : 0u;
                 // Use the normal workspace transition and its companion panes;
                 // this observes the approved canonical job, not another action.
-                if(operation=="asset.image.generate")editor.requestedMainSurface=EditorMainSurface::AssetGeneration;
+                if(ai::asset_generation_tool(operation))editor.requestedMainSurface=EditorMainSurface::AssetGeneration;
                 else
                 {editor.projectWorkspaceSection = 4u;editor.requestedMainSurface = EditorMainSurface::Project;}
             };
@@ -468,9 +517,23 @@
                 }
                 else if (call.tool == "project.close")
                 {
+                    const auto sequence = editor.aiGoalTools;
+                    const bool roundTrip = editor.aiGoalActive && editor.aiGoalRunning && sequence.round_trip;
+                    if (roundTrip && editor.sceneDocumentRevision != sequence.saved_scene_revision)
+                    {
+                        editor.aiToolStatus = "The scene revision changed after Save. Start a fresh save, close and reopen request.";
+                        return false;
+                    }
                     const bool closed = editor_close_project(ctx);
                     editor.aiToolStatus = closed ? "project.close completed; no project is open."
                         : "project.close refused: " + editor.projectStatus;
+                    if (!closed) return false;
+                    if (roundTrip)
+                    {
+                        restore_round_trip_goal(sequence);
+                        complete_tool_goal(call.tool, true);
+                        if (editor.aiGoalTools.stopped) return false;
+                    }
                 }
                 else
                 {
@@ -494,6 +557,14 @@
                     const std::string requestedId = listed->first;
                     const std::filesystem::path manifest{listed->second};
                     const std::string requestedRoot{profile->root_path};
+                    const auto sequence = editor.aiGoalTools;
+                    const bool roundTrip = editor.aiGoalActive && editor.aiGoalRunning && sequence.round_trip;
+                    if (roundTrip && (requestedId != sequence.origin_project_id || requestedRoot != sequence.origin_project_root
+                        || listed->second != sequence.reopen_manifest))
+                    {
+                        editor.aiToolStatus = "The saved project's identity or manifest changed. Nothing was reopened.";
+                        return false;
+                    }
                     const auto inspected = editor_inspect_project_manifest_identity(
                         manifest.generic_string(), requestedId, requestedRoot);
                     if (!inspected.succeeded)
@@ -506,11 +577,26 @@
                     // never switch to a newly returned, unapproved identity.
                     const bool opened = admitted.succeeded && admitted.project_id == requestedId
                         && editor_open_project(ctx, requestedId);
-                    editor.aiToolStatus = opened && editor.projectId == requestedId
-                        ? "project.open completed: " + editor.projectId + " | " + editor.projectName
-                        : "project.open refused: " + editor.projectStatus;
-                    if(opened&&editor.projectId==requestedId)
-                        editor.requestedMainSurface=EditorMainSurface::Scene;
+                    if (!opened || editor.projectId != requestedId)
+                    {
+                        editor.aiToolStatus = "project.open refused: " + editor.projectStatus;
+                        return false;
+                    }
+                    editor.requestedMainSurface = EditorMainSurface::Scene;
+                    const auto& evidence = editor.projectLifecycle.evidence();
+                    const bool restored = evidence.scene_committed
+                        && evidence.generations.committed_scene_generation == editor.sceneDocumentRevision
+                        && (!roundTrip || editor.sceneDocumentRevision == sequence.saved_scene_revision);
+                    editor.aiToolStatus = std::string{restored ? "project.open completed: "
+                        : "project.open selected the project without restoring a verified saved scene: "}
+                        + editor.projectId + " | " + editor.projectName + " | " + editor.projectStatus;
+                    if (roundTrip)
+                    {
+                        restore_round_trip_goal(sequence);
+                        complete_tool_goal(call.tool, restored);
+                        if (editor.aiGoalTools.stopped) return false;
+                    }
+                    if (!restored) return false;
                 }
             }
             else if (call.tool == "project.stop")
@@ -554,24 +640,31 @@
             {
                 if (!dispatch_ai_project_package_tool(editor, call, ctx)) return false;
             }
-            else if(call.tool=="asset.image.generate")
+            else if(ai::asset_generation_tool(call.tool))
             {
+                const bool model = call.tool == "asset.model.generate";
+                const auto label = model ? "3D model" : "image";
                 if(editor.assetGenerationPending||editor.projectBuildPending||editor.scriptBuildPending
                     ||planetary_project_busy(editor)||editor.forestSurfacePending)
-                {editor.aiToolStatus="Finish or cancel the active generation/build operation before starting this image.";return false;}
+                {editor.aiToolStatus="Finish or cancel the active generation/build operation before starting this "+std::string{label}+".";return false;}
                 std::string diagnostic;
-                const auto binding=editor_asset_generation::image_request_binding(editor.assetGeneration,editor.aiToolBoundRequest,diagnostic);
-                if(editor.aiToolImageBinding.empty()||binding!=editor.aiToolImageBinding)
-                {editor.aiToolStatus="The prompt, controls or backend changed after this proposal. Nothing was generated; request and approve the new image settings.";return false;}
-                dispatch_asset_generation(editor,ctx,editor_asset_generation::Action::generate_image);
+                const auto binding = model
+                    ? editor_asset_generation::model_request_binding(editor.assetGeneration,asset_generation_project(editor),diagnostic)
+                    : editor_asset_generation::image_request_binding(editor.assetGeneration,editor.aiToolBoundRequest,diagnostic);
+                if(editor.aiToolAssetBinding.empty()||binding!=editor.aiToolAssetBinding)
+                {editor.aiToolStatus="The input, controls or backend changed after this proposal. Nothing was generated; request and approve the current settings.";return false;}
+                dispatch_asset_generation(editor,ctx,model ? editor_asset_generation::Action::generate_model
+                    : editor_asset_generation::Action::generate_image);
                 if(!editor.assetGenerationPending)
-                {editor.aiToolStatus="Image generation did not start: "+editor.assetGeneration.status;return false;}
-                editor.aiToolImageWork=editor.assetGeneration.active_work_directory;
+                {editor.aiToolStatus=std::string{model ? "3D generation" : "Image generation"}+" did not start: "+editor.assetGeneration.status;return false;}
+                editor.aiToolAssetWork=editor.assetGeneration.active_work_directory;
                 if(auto* activity=chat.ensure_host_activity())
                     activity->stream_live=true;
-                editor.aiToolImageActivityId=chat.inlineHostActivityId;
-                watch_execution("asset.image.generate");
-                editor.aiToolStatus="Image generation queued through Asset Generation. Waiting for validation and coding-model restoration; no image is approved or imported.";
+                editor.aiToolAssetActivityId=chat.inlineHostActivityId;
+                watch_execution(call.tool);
+                editor.aiToolStatus=model
+                    ? "3D generation queued through Asset Generation. The output will need separate model review and import approval."
+                    : "Image generation queued through Asset Generation. Waiting for validation and coding-model restoration; no image is approved or imported.";
             }
             else if (call.tool == "forest.configure" || call.tool == "forest.material")
             {
@@ -612,7 +705,8 @@
                 if(editor.mainSurface!=EditorMainSurface::ForestFactory && ctx)
                     editor.forestPlacementCamera=previewgrid::camera_for(ctx.get());
                 editor.aiGoalForestReceipt = false;
-                if (!paint_forest_factory_area(editor))
+                const bool findOceanShoreline = ai_forest_location(editor.aiToolBoundRequest) == AiForestLocation::ocean_shoreline;
+                if (!paint_forest_factory_area(editor,findOceanShoreline))
                 { editor.aiToolStatus = "forest.paint refused: " + editor.plantLabStatus; return false; }
                 watch_execution("forest.paint");
                 editor.forestTerrainPainting = true;
@@ -628,6 +722,11 @@
             }
             else if (call.tool == "project.build")
             {
+                if (editor.projectBuildPending)
+                {
+                    editor.aiToolStatus = "A build is already active. Wait for it or cancel it before approving another Build.";
+                    return false;
+                }
                 start_project_build(
                     editor,
                     false,
@@ -636,19 +735,28 @@
                     "project.build host status: "
                     + editor.projectBuildStatus;
                 if (editor.projectBuildPending) watch_execution("project.build");
+                else return false;
             }
             else if (call.tool == "project.run")
             {
                 // Use the same selected destination as the viewport Run
                 // control, retaining the owned compiler/runtime lifecycle.
-                launch_active_project_context(editor.sceneRunFullscreenInEditor);
+                const auto requiredBuild = editor.aiGoalActive && editor.aiGoalRunning && editor.aiGoalTools.build_and_run
+                    ? editor.aiGoalTools.accepted_build_generation : 0u;
+                if (requiredBuild != 0u && (editor.projectBuildPending
+                    || (editor.projectRuntimeSnapshot && editor.projectRuntimeSnapshot->active())))
+                {
+                    editor.aiToolStatus = "Finish the active build or stop the runtime before launching the accepted executable.";
+                    return false;
+                }
+                launch_active_project_context(editor.sceneRunFullscreenInEditor, requiredBuild);
                 editor.aiToolStatus =
                     std::string{editor.sceneRunFullscreenInEditor
                         ? "project.run compiled in-editor host status: "
                         : "project.run compiled standalone host status: "}
                     + "runtime=" + editor.projectRuntimeStatus
                     + " | build=" + editor.projectBuildStatus;
-                if (editor.projectBuildPending || (editor.projectRuntimeSnapshot && editor.projectRuntimeSnapshot->active()
+                if ((requiredBuild == 0u && editor.projectBuildPending) || (editor.projectRuntimeSnapshot && editor.projectRuntimeSnapshot->active()
                         && project_runtime_identity_current(editor, *editor.projectRuntimeSnapshot)))
                     watch_execution("project.run");
                 else
@@ -757,7 +865,8 @@
             }
 
             editor.aiToolPlanApplied = true;
-            if (editor.aiGoalTools.enabled && editor.aiGoalActive && editor.aiGoalRunning)
+            if (editor.aiGoalTools.enabled && editor.aiGoalActive && editor.aiGoalRunning
+                && !(editor.aiGoalTools.round_trip && (call.tool == "project.close" || call.tool == "project.open")))
             {
                 editor.aiGoalTools.waiting = true;
                 if (call.tool == "project.save")
@@ -1077,57 +1186,68 @@
                 editor.aiToolExecutionProjectId, editor.aiToolExecutionProjectRoot,
                 editor.aiToolExecutionProjectGeneration, editor.projectId, editor.projectRoot, selected.generation);
             const bool running = editor.projectRuntimeSnapshot && editor.projectRuntimeSnapshot->active();
+            const bool ownedRuntime = running && project_runtime_identity_current(editor, *editor.projectRuntimeSnapshot);
             const bool waiting = current && (editor.projectBuildPending
-                || (editor.aiToolExecution == "asset.image.generate" && editor.assetGenerationPending)
+                || (ai::asset_generation_tool(editor.aiToolExecution) && editor.assetGenerationPending)
                 || (editor.aiToolExecution == "forest.paint" && editor.forestSurfacePending)
                 || (editor.aiToolExecution == "project.stop" && running)
-                || (editor.aiToolExecution == "project.run" && running && editor.projectRuntimeInEditor
+                || (editor.aiToolExecution == "project.run" && ownedRuntime && editor.projectRuntimeInEditor
                     && !editor.projectRuntimeWindow && editor.projectRuntimeAttachmentError.empty()));
             if (!waiting)
             {
+                const auto& generations = editor.projectLifecycle.evidence().generations;
+                const bool acceptedBuild = generations.output_artifact.valid_for(selected, generations.build_inputs)
+                    && editor.aiToolExecutionBuildGeneration != 0u
+                    && generations.output_artifact.build_generation == editor.aiToolExecutionBuildGeneration;
                 if (!current)
                 {
                     editor.aiToolStatus = editor.aiToolExecution + " result ignored after the project selection changed; no later project was affected.";
-                    if(editor.aiToolExecution=="asset.image.generate"&&editor.aiToolImageActivityId!=0u
-                        &&chat.inlineHostActivityId==editor.aiToolImageActivityId)
+                    if(ai::asset_generation_tool(editor.aiToolExecution)&&editor.aiToolAssetActivityId!=0u
+                        &&chat.inlineHostActivityId==editor.aiToolAssetActivityId)
                         chat.end_host_activity(true);
                 }
-                else if(editor.aiToolExecution=="asset.image.generate")
+                else if(ai::asset_generation_tool(editor.aiToolExecution))
                 {
-                    const auto& reference=editor.assetGeneration.reference;
-                    const bool generated=reference&&reference->result&&reference->coding_restored&&reference->retirement_verified
-                        &&!editor.aiToolImageWork.empty()&&reference->result.work_directory==editor.aiToolImageWork;
-                    editor.aiToolStatus=generated
-                        ? "Image generated and checked. Working file: "+display_project_path(reference->result.output)
-                            +". Preview it in Asset Generation, then Save Image As or approve project import. No reference or texture binding was approved."
-                        : "Image generation ended without a newly validated output: "+editor.assetGeneration.status;
+                    const bool model = editor.aiToolExecution == "asset.model.generate";
+                    const auto& output = model ? editor.assetGeneration.generated_model : editor.assetGeneration.reference;
+                    const bool generated=output&&output->result&&output->coding_restored&&output->retirement_verified
+                        &&!editor.aiToolAssetWork.empty()&&output->result.work_directory==editor.aiToolAssetWork;
+                    if (generated)
+                    {
+                        editor.aiToolStatus = std::string{model ? "3D model" : "Image"}
+                            + " generated and checked. Working file: " + display_project_path(output->result.output);
+                        editor.aiToolStatus += model
+                            ? ". Open Asset Generation to inspect and review it before import."
+                            : ". Preview it in Asset Generation, then Save Image As or approve project import. No reference or texture binding was approved.";
+                    }
+                    else
+                        editor.aiToolStatus = std::string{model ? "3D generation" : "Image generation"}
+                            + " ended without a newly validated output: " + editor.assetGeneration.status;
                     // A later chat turn may already own the current activity.
-                    // Only this image job's approval turn may be settled here.
-                    if(editor.aiToolImageActivityId!=0u
-                        &&chat.inlineHostActivityId==editor.aiToolImageActivityId)
+                    // Only this job's approval turn may be settled here.
+                    if(editor.aiToolAssetActivityId!=0u
+                        &&chat.inlineHostActivityId==editor.aiToolAssetActivityId)
                         chat.end_host_activity(!generated);
                 }
                 else if (editor.aiToolExecution == "forest.paint")
                     editor.aiToolStatus = "forest.paint finished its owned operation: " + editor.plantLabStatus;
                 else if (editor.aiToolExecution == "project.build")
-                    editor.aiToolStatus = std::string{editor.projectLifecycle.evidence().generations.output_artifact.verified
-                        && editor.aiToolExecutionBuildGeneration != 0u
-                        && editor.projectLifecycle.evidence().generations.output_artifact.build_generation == editor.aiToolExecutionBuildGeneration
+                    editor.aiToolStatus = std::string{acceptedBuild
                         ? "project.build completed with accepted artifact evidence: " : "project.build ended without accepted artifact evidence: "}
                         + editor.projectBuildStatus;
                 else if (editor.aiToolExecution == "project.run")
-                    editor.aiToolStatus = std::string{running && editor.projectRuntimeAttachmentError.empty()
+                    editor.aiToolStatus = std::string{ownedRuntime && editor.projectRuntimeAttachmentError.empty()
                         ? "project.run active: " : "project.run failed or ended before runtime acceptance: "}
                         + editor.projectRuntimeStatus + " | " + editor.projectBuildStatus
                         + (editor.projectRuntimeAttachmentError.empty() ? std::string{} : " | " + editor.projectRuntimeAttachmentError);
                 else
                     editor.aiToolStatus = "project.stop completed: the owned build/runtime is no longer active. " + editor.projectRuntimeStatus;
                 if (!editor.projectBuildDiagnosticTail.empty() && editor.aiToolExecution != "project.stop"
-                    &&editor.aiToolExecution!="asset.image.generate")
+                    &&!ai::asset_generation_tool(editor.aiToolExecution))
                     editor.aiToolStatus += "\nCompiler output: " + editor.projectBuildDiagnosticTail;
                 // Return to the preview only if the user has not chosen a
                 // different workspace during this project's approved job.
-                if(current&&editor.aiToolExecution!="forest.paint"&&editor.aiToolExecution!="asset.image.generate"&&(editor.mainSurface==EditorMainSurface::Project
+                if(current&&editor.aiToolExecution!="forest.paint"&&!ai::asset_generation_tool(editor.aiToolExecution)&&(editor.mainSurface==EditorMainSurface::Project
                     ||editor.requestedMainSurface==EditorMainSurface::Project))
                     editor.requestedMainSurface=EditorMainSurface::Scene;
                 if(current&&editor.aiToolExecution=="forest.paint"
@@ -1137,10 +1257,11 @@
                 {
                     const bool succeeded = current && (editor.aiToolExecution == "forest.paint"
                         ? editor.aiGoalForestReceipt
-                        : editor.aiToolExecution == "project.run" && running && editor.projectRuntimeAttachmentError.empty());
+                        : editor.aiToolExecution == "project.build" ? acceptedBuild
+                        : editor.aiToolExecution == "project.run" && ownedRuntime && editor.projectRuntimeAttachmentError.empty());
                     complete_tool_goal(editor.aiToolExecution, succeeded);
                 }
-                editor.aiToolImageActivityId=0u;
+                editor.aiToolAssetActivityId=0u;
                 editor.aiToolExecution.clear();
                 chat.append_status(editor.aiToolStatus);
                 push_editor_log(editor, "[ai-tool] " + editor.aiToolStatus);

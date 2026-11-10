@@ -2823,6 +2823,7 @@
                 project_planetary::SurfaceQuery query{};
                 std::optional<forest::ForestAreaDistribution> area{};
                 std::vector<std::array<double,3>> directions{};
+                bool findOceanShoreline{};
                 // Nonempty only for an explicit placement refresh. Keep the
                 // exact authored trees while new procedural ground is sampled.
                 std::uint64_t sceneRevision{};
@@ -2834,6 +2835,7 @@
             {
                 project_planetary::SurfaceBatchResult surface{};
                 std::vector<EditorEntity> prototype{};
+                std::optional<std::array<double,3>> shorelineCenter{};
             };
             std::optional<std::future<ForestSurfacePrepared>> forestSurfacePending{};
             editor_tasks::CancellationTicket forestSurfaceCancellation{};
@@ -2986,9 +2988,9 @@
             epochengine::ai::ToolPlanParseResult aiToolPlan{};
             std::string aiToolProjectId{}, aiToolProjectRoot{};
             std::string aiToolBoundRequest{};
-            std::string aiToolImageBinding{};
-            std::filesystem::path aiToolImageWork{};
-            std::uint64_t aiToolImageActivityId{};
+            std::string aiToolAssetBinding{};
+            std::filesystem::path aiToolAssetWork{};
+            std::uint64_t aiToolAssetActivityId{};
             std::uint64_t aiToolProjectGeneration{}, aiToolSceneRevision{}, aiToolGuiRevision{};
             bool aiToolPlantRecipeBound{};
             std::uint64_t aiToolPlantRevision{}, aiToolPlantHash{};
@@ -3005,7 +3007,7 @@
                 std::uint64_t project_key{}, project_generation{};
                 project_planetary::Settings settings{};
                 Phase phase{Phase::review};
-                bool generate{}, cancelled{};
+                bool generate{}, cancelled{}, save_recipe_before_generation{};
             };
             std::optional<AiPackageRequest> aiPackageRequest{};
 

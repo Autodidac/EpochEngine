@@ -55,8 +55,8 @@ struct EditorState {
  forest::CompiledForestAsset plantLabCompiled=forest::compile_forest_asset(forest::make_default_plant_lab_document());
  struct Policy {project_planetary::Settings settings;std::optional<project_planetary::Mesh>generated_mesh{project_planetary::Mesh{}};std::vector<project_planetary::Body>generated_bodies{project_planetary::Body{}};};
  std::optional<Policy>planetaryMeshPolicy{Policy{}};
- struct ForestSurfacePlacement {std::string projectId="project",projectRoot="root";std::uint64_t projectGeneration=1,plantRevision{},plantHash{},entity=2,ordinal{};std::array<float,3>position{},rotation{},scale{1,1,1};std::optional<std::array<double,3>>anchor;std::array<double,3>heading{0,0,1};project_planetary::SurfaceQuery query;std::optional<forest::ForestAreaDistribution>area{forest::ForestAreaDistribution{}};std::vector<std::array<double,3>>directions{{0,1,0},{0,1,0},{0,1,0}};std::vector<scene::SceneObjectSnapshot> refreshTrees;};
- struct ForestSurfacePrepared {project_planetary::Batch surface;std::vector<EditorEntity>prototype;};
+ struct ForestSurfacePlacement {std::string projectId="project",projectRoot="root";std::uint64_t projectGeneration=1,plantRevision{},plantHash{},entity=2,ordinal{};std::array<float,3>position{},rotation{},scale{1,1,1};std::optional<std::array<double,3>>anchor;std::array<double,3>heading{0,0,1};project_planetary::SurfaceQuery query;std::optional<forest::ForestAreaDistribution>area{forest::ForestAreaDistribution{}};std::vector<std::array<double,3>>directions{{0,1,0},{0,1,0},{0,1,0}};bool findOceanShoreline{};std::vector<scene::SceneObjectSnapshot> refreshTrees;};
+ struct ForestSurfacePrepared {project_planetary::Batch surface;std::vector<EditorEntity>prototype;std::optional<std::array<double,3>>shorelineCenter;};
  std::optional<ForestSurfacePlacement>forestSurfacePlacement;
  std::optional<std::future<ForestSurfacePrepared>>forestSurfacePending;
  struct Scheduler {unsigned calls{};bool cancel(int){++calls;return true;}}scheduler;Scheduler* taskScheduler=&scheduler;int forestSurfaceCancellation{};
@@ -114,6 +114,19 @@ int main(int,char**) {
  CHECK(wet.created[0].positionAnchor==std::array<double,3>{0,6371001,0});
  CHECK(wet.created[0].scale==std::array<float,3>{1,1,1});
  EditorState denied;auto rejected=prepare(denied);denied.allowPublish=false;deliver(denied,std::move(rejected));CHECK(denied.commits==0&&denied.saves==0);
+ EditorState shore;auto coastal=prepare(shore);
+ auto& intent=*shore.forestSurfacePlacement;intent.findOceanShoreline=true;
+ coastal.shorelineCenter=std::array<double,3>{1,0,0};
+ const auto directions=forest::forest_area_directions(*intent.area,*coastal.shorelineCenter,intent.query.body.radius_meters);
+ coastal.surface.samples.resize(directions.size());
+ for(std::size_t i=0;i<directions.size();++i){
+  auto& sample=coastal.surface.samples[i];sample.radial_up=directions[i];
+  for(std::size_t axis=0;axis<3;++axis)sample.point_meters[axis]=sample.radial_up[axis]*6371001.0;
+ }
+ deliver(shore,std::move(coastal));CHECK(shore.commits==1&&shore.saves==1);
+ CHECK(shore.created.front().forestRegion->center_direction==std::array<double,3>{1,0,0});
+ EditorState missing;auto empty=prepare(missing);missing.forestSurfacePlacement->findOceanShoreline=true;
+ deliver(missing,std::move(empty));CHECK(missing.commits==0&&missing.saves==0);
 }
 '''
 CODE=CODE.replace('TRANSFORM',transform).replace('ACTUAL',actual)

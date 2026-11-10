@@ -1361,6 +1361,7 @@
         std::string capability_profile{ "portable" };
         bool include_engine_arcade_package{ false };
         bool overwrite_existing{ true };
+        bool require_fresh_root{};
     };
 
     [[nodiscard]] static std::string make_project_world_scene_text(
@@ -1640,6 +1641,26 @@
         return true;
     }
 
+    [[nodiscard]] static bool claim_new_project_root(const fs::path& root)
+    {
+        std::error_code error;
+        fs::create_directories(root.parent_path(), error);
+        return !error && fs::create_directory(root, error) && !error;
+    }
+
+    [[nodiscard]] static bool publish_new_project_manifest(const fs::path& manifest, std::string_view text)
+    {
+        auto pending = manifest;
+        pending += ".pending";
+        std::error_code error;
+        const auto bytes = std::as_bytes(std::span{text.data(), text.size()});
+        if (!epochengine::platform::filesystem::exclusive_create_and_write(pending, bytes, error)) return false;
+        if (epochengine::platform::filesystem::atomic_publish_new_same_filesystem(pending, manifest, error)) return true;
+        std::error_code cleanup;
+        fs::remove(pending, cleanup);
+        return false;
+    }
+
     [[nodiscard]] static EditorProjectCreationResult write_project_shell(const ProjectShellSpec& spec)
     {
         const fs::path root = resolve_project_root_path(spec.root);
@@ -1788,6 +1809,10 @@
         const std::string declaredWorld = !relativeWorld.empty() && !relativeWorld.is_absolute()
                 && *relativeWorld.begin() != ".."
             ? relativeWorld.generic_string() : worldFile.generic_string();
+
+        if (spec.require_fresh_root && !claim_new_project_root(root))
+            return {.project_id = spec.project_id, .root_path = root.generic_string(),
+                .summary = "Could not reserve an unused project folder. Existing project files were preserved. Try New Project again."};
 
         std::error_code ec;
         fs::create_directories(worlds, ec);
@@ -2301,7 +2326,7 @@
             "    <VCProjectVersion>17.0</VCProjectVersion>\n"
             "    <Keyword>Win32Proj</Keyword>\n"
             "    <ProjectGuid>{" + projectGuid + "}</ProjectGuid>\n"
-            "    <RootNamespace>" + xml_escape(spec.project_name) + "</RootNamespace>\n"
+            "    <RootNamespace>" + xml_escape(spec.project_id) + "</RootNamespace>\n"
             "    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>\n"
             "  </PropertyGroup>\n"
             "  <Import Project=\"$(VCTargetsPath)\\Microsoft.Cpp.Default.props\" />\n"
@@ -2624,7 +2649,7 @@
             "if [[ ! -x \"$runtime_path\" ]]; then echo \"[ERROR] Build completed without executable: $runtime_path\" >&2; exit 6; fi\n"
             "echo \"[INFO] Output: $runtime_path\"\n";
         bool ok = defaultAiProfile
-            && write_text_file_if_allowed(manifest, manifestText, spec.overwrite_existing)
+            && (spec.require_fresh_root || write_text_file_if_allowed(manifest, manifestText, spec.overwrite_existing))
             && write_text_file_if_allowed(readme, readmeText, spec.overwrite_existing)
             && write_text_file_if_allowed(pathsFile, pathsText, spec.overwrite_existing)
             && write_text_file_if_allowed(worldFile, worldText, spec.overwrite_existing)
@@ -2726,6 +2751,13 @@
                 spec.gui_path,
                 materializationDiagnostic);
         }
+        // Discovery uses the manifest as its commit point. A failed new shell
+        // can leave diagnostics on disk but cannot be opened as a complete project.
+        if (ok && spec.require_fresh_root && !publish_new_project_manifest(manifest, manifestText))
+        {
+            ok = false;
+            materializationDiagnostic = "Could not publish the new project manifest without replacing an existing file.";
+        }
         if (ok)
             invalidate_project_profile_cache();
 
@@ -2743,7 +2775,7 @@
             windowsBuildScript.generic_string(),
             scriptFile.generic_string(),
             ok
-                ? (spec.overwrite_existing
+                ? (spec.require_fresh_root || spec.overwrite_existing
                     ? "Created project shell at " + root.string()
                     : (shellAlreadyPresent
                         ? "Verified project shell at " + root.string()
