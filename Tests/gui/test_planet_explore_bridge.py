@@ -79,17 +79,20 @@ int main(){
         protocol = definition(protocol_owner.read_text(encoding='utf-8'),
                               '    [[nodiscard]] inline std::string tool_plan_protocol_prompt()')
         code = r'''
+#include <cstdint>
 #include <memory>
 #include <string>
 PROTOCOL
 struct Snapshot {bool running{},identity{true};bool active()const{return running;}};
 struct EditorState {bool sceneRunFullscreenInEditor{true},projectBuildPending{};
+ bool aiGoalActive{},aiGoalRunning{};
+ struct {bool build_and_run{};std::uint64_t accepted_build_generation{};}aiGoalTools;
  std::string aiToolStatus,projectBuildStatus{"Build accepted"},projectRuntimeStatus{"No runtime"};std::shared_ptr<Snapshot> projectRuntimeSnapshot;};
 bool project_runtime_identity_current(const EditorState&,const Snapshot& snapshot){return snapshot.identity;}
 bool allowLaunch=true,requestedEmbedding{};unsigned launches{},watches{};
 bool invoke(EditorState& editor){
  struct {std::string tool{"project.run"};}call;
- auto launch_active_project_context=[&](bool inEditor=false){++launches;requestedEmbedding=inEditor;editor.projectBuildPending=allowLaunch;};
+ auto launch_active_project_context=[&](bool inEditor,std::uint64_t){++launches;requestedEmbedding=inEditor;editor.projectBuildPending=allowLaunch;};
  auto watch_execution=[&](const char*){++watches;};
 BRANCH
  return true;

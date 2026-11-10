@@ -43,6 +43,10 @@ foreach ($script:failLaunch in @($false, $true)) {
             source = (ROOT / f"Tools/build/stage_epoch_{name}_release.ps1").read_text()
             self.assertIn("[guid]::NewGuid()", source)
             self.assertNotIn("Remove-EpochPackageItem -LiteralPath $verifyLogs", source)
+            archive = "Compress-Archive" if name == "windows" else "$archiveScript ="
+            move = source.index("Move-EpochPackageValidationEvidence -Stage $stage")
+            self.assertLess(source.index("--engine-contract-self-test"), move)
+            self.assertLess(move, source.index(archive))
         linux = (ROOT / "Tools/build/stage_epoch_linux_release.ps1").read_text()
         self.assertIn("export TMPDIR='__LOGS__/scratch'", linux)
         self.assertLess(linux.index("export TMPDIR="), linux.index("./epoch --engine-contract-self-test"))

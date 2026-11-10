@@ -46,8 +46,16 @@ struct EditorState {
  std::vector<std::string> aiGoalAttemptedMilestoneSignatures;
  std::string aiGoalLastMilestoneSignature,aiGoalLastMilestoneReceipt="project.save accepted",aiToolStatus="runtime active";
  int aiToolPlan=17;bool aiToolPlanApplied=true;
- struct {struct {struct {struct {std::uint64_t generation{7};}selected_project;}generations;}data;
-  const auto& evidence()const{return data;}}projectLifecycle;
+ std::uint64_t sceneDocumentRevision{8};
+ struct {
+  struct {
+   struct {
+    struct {std::uint64_t generation{7};}selected_project;
+    struct {std::uint64_t build_generation{11};}output_artifact;
+   }generations;
+  }data;
+  const auto& evidence()const{return data;}
+ }projectLifecycle;
 };
 void reset(EditorState& state){APPROVAL_RESET GOAL_RESET}
 void refresh(EditorState& editor,bool sameId=true,bool sameRoot=true,bool sameScene=true,bool sameGeneration=true){
@@ -63,6 +71,7 @@ void refresh(EditorState& editor,bool sameId=true,bool sameRoot=true,bool sameSc
 void finish(EditorState& editor,bool succeeded){COMPLETE complete_tool_goal("project.run",succeeded);}
 EditorState ready(){
  EditorState editor;editor.aiGoalTools.enabled=true;editor.aiGoalTools.waiting=true;
+ editor.aiGoalTools.bind_request(editor.aiGoal,editor.projectId,editor.projectRoot,7);
  (void)editor.aiGoalTools.receipt("project.create",true,editor.projectId,editor.projectRoot,7);
  editor.aiGoalTools.waiting=true;
  (void)editor.aiGoalTools.receipt("forest.paint",true,editor.projectId,editor.projectRoot,7);

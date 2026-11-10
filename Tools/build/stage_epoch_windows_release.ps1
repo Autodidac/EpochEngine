@@ -187,8 +187,7 @@ if ($contractProcess.ExitCode -ne 0 -or
     throw 'Staged executable did not pass its build-safe engine contracts.'
 }
 
-Remove-EpochPackageItem -LiteralPath (Join-Path $stage 'logs') -PackageRoot $packageRoot -Recurse
-Remove-EpochPackageItem -LiteralPath (Join-Path $stage 'cache') -PackageRoot $packageRoot -Recurse
+Move-EpochPackageValidationEvidence -Stage $stage -VerifyLogs $verifyLogs -PackageRoot $packageRoot
 Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip -Force
 
 $verifyRoot = Join-Path $OutputRoot "verify_$stageName"
@@ -203,8 +202,10 @@ if ($verifiedIdentity.schema -cne 'epoch.distribution.v1' -or $verifiedIdentity.
 }
 Require-Path -Path (Join-Path $verifyRoot 'THIRD_PARTY_NOTICES.txt') -Label 'Third-party notices'
 Require-Path -Path (Join-Path $verifyRoot 'THIRD_PARTY_COMPONENTS.json') -Label 'Third-party component manifest'
-if ((Test-Path -LiteralPath (Join-Path $verifyRoot 'logs')) -or (Test-Path -LiteralPath (Join-Path $verifyRoot 'cache'))) {
-    throw 'Release archive must not include generated logs or runtime cache.'
+foreach ($generatedRoot in @('logs', 'cache', 'build', 'Artifacts')) {
+    if (Test-Path -LiteralPath (Join-Path $verifyRoot $generatedRoot)) {
+        throw "Release archive contains a generated runtime directory: $generatedRoot"
+    }
 }
 if ($edition.Directory -ceq 'public') {
     & python -B (Join-Path $repo 'Tools/build/audit_epoch_runtime_provenance.py') --windows-runtime $verifyRoot
