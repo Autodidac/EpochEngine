@@ -879,7 +879,7 @@
                 return false;
             }
             package_registry::PackageDescriptor package{};
-            package.id = std::string{offer->package_id};
+            package.id = offer->package_id;
             return start_model_package_install(editor, package, true, cache);
         }
 

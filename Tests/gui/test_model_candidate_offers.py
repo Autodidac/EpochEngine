@@ -37,9 +37,11 @@ def consumer():
 #include <vector>
 #include "ai.backend_models_candidate_catalog.hpp"
 import ai.model_install;
+import package.registry;
 #define CHECK(test) do{if(!(test))std::exit(__LINE__);}while(false)
 namespace fs=std::filesystem;
 namespace catalog=epoch_ai::model::catalog;
+namespace package_registry=epochengine::package_registry;
 namespace platform::child_process{
  struct ProcessHandle{bool live{};bool valid()const{return live;}};
  enum class StopMode{graceful};inline unsigned stops{};
@@ -55,7 +57,6 @@ namespace ai{
 }
 STATE
 struct EditorState{std::optional<EditorModelInstallState>packageModelInstall;std::string packageInstallStatus;float packageInstallProgress{};};
-namespace package_registry{struct PackageDescriptor{std::string id;};}
 fs::path cache;unsigned launches{},cheapChecks{},tasks{};bool throwQueue{};
 std::unique_ptr<std::promise<ai::model_install::PublishResult>>promise;
 std::function<ai::model_install::PublishResult()>queuedOperation;
@@ -90,7 +91,7 @@ int main(int argc,char**argv){CHECK(argc==2);cache=fs::absolute(argv[1]);fs::cre
  CHECK(!start_model_offer_registration(e,catalog::offers()[5].id)&&!e.packageModelInstall&&tasks==0);
  CHECK(start_model_offer_install(e,id)&&launches==1&&e.packageModelInstall->plan.package_id==catalog::offers()[0].package_id&&e.packageModelInstall->cacheRoot==cache);
  const auto retained=e.packageModelInstall->plan;CHECK(!start_model_offer_install(e,catalog::offers()[1].id)&&e.packageModelInstall->plan==retained);e.packageModelInstall.reset();
- package_registry::PackageDescriptor legacyPackage;legacyPackage.id=std::string{catalog::offers()[0].package_id};CHECK(start_model_package_install(e,legacyPackage)&&e.packageModelInstall->cacheRoot==cache/"project-resources");e.packageModelInstall.reset();
+ package_registry::PackageDescriptor legacyPackage;legacyPackage.id=catalog::offers()[0].package_id;CHECK(start_model_package_install(e,legacyPackage)&&e.packageModelInstall->cacheRoot==cache/"project-resources");e.packageModelInstall.reset();
  const auto plan=*ai::model_install::plan_for(catalog::offers()[0].package_id);fs::create_directories(ai::model_install::version_root(cache,plan));
  CHECK(start_model_offer_install(e,id)&&cheapChecks==0&&e.packageModelInstall->artifactIndex==plan.artifacts.size());e.packageModelInstall.reset();
  // No verification runs in the frame; it is queued and polling preserves it.
@@ -121,7 +122,7 @@ class ModelCandidateOffers(unittest.TestCase):
         report=ROOT/'Artifacts/Reports/model-candidates-oct29/cpu'/identity;report.mkdir(parents=True,exist_ok=True)
         build=ROOT/'Artifacts/Intermediate/cmake/model-candidate-offers'/identity
         (report/'consumer.cpp').write_text(code,encoding='utf-8')
-        modules=['core.sha256','platform.filesystem','ai.model_install']
+        modules=['core.sha256','platform.filesystem','ai.model_install','package.registry']
         sources=' '.join('"'+(ROOT/'Engine/modules'/(name+'.ixx')).as_posix()+'"' for name in modules)
         (report/'CMakeLists.txt').write_text(f'''cmake_minimum_required(VERSION 4.4)
 project(ModelCandidates LANGUAGES CXX)
@@ -134,6 +135,11 @@ target_include_directories(offers PRIVATE "{(ROOT/'Engine/src/ai/native').as_pos
 add_executable(install_contract "{(ROOT/'Engine/src/ai/ai.model_install_contract.cpp').as_posix()}")
 target_link_libraries(install_contract PRIVATE candidate_plans)
 target_compile_definitions(install_contract PRIVATE EPOCH_AI_MODEL_INSTALL_CONTRACT_MAIN=1)
+if(WIN32)
+ foreach(target offers install_contract)
+  target_sources(${{target}} PRIVATE "{(ROOT/'Engine/resource/epoch.manifest').as_posix()}")
+ endforeach()
+endif()
 foreach(target candidate_plans offers install_contract)
  if(MSVC)
   target_compile_options(${{target}} PRIVATE /utf-8 /EHsc /Z7 /UNDEBUG)
@@ -142,21 +148,27 @@ foreach(target candidate_plans offers install_contract)
  endif()
 endforeach()
 ''',encoding='utf-8')
-        commands=[configure_arguments(report,build)]
+        commands=[(configure_arguments(report,build),report)]
         fixture_data=ROOT/'Artifacts/Tests'/f'o{time.time_ns():x}'
         for config in ('Debug','Release'):
             data=fixture_data/config;data.mkdir(parents=True)
-            commands += [['cmake','--build',str(build),'--config',config,'--parallel','1'],[str(executable(build,config,'install_contract'))],[str(executable(build,config,'offers')),str(data/'models')]]
-        # This contract appends its own unique versioned-cache tree. Keep the
-        # fixture prefix short for ordinary Windows executables without a
-        # longPathAware manifest; all temporary data still stays checkout-local.
-        temporary=fixture_data/'tmp';temporary.mkdir(parents=True,exist_ok=True)
-        environment=dict(os.environ,TMP=str(temporary),TEMP=str(temporary),TMPDIR=str(temporary))
+            commands += [
+                (['cmake','--build',str(build),'--config',config,'--parallel','1'],report),
+                ([str(executable(build,config,'install_contract'))],data),
+                ([str(executable(build,config,'offers')),str(data/'models')],data),
+            ]
+        # This contract appends its own versioned-cache tree, so keep the
+        # fixture prefix short and all temporary data checkout-local.
         records=[];started=time.monotonic()
-        for index,command in enumerate(commands):
-            ran=subprocess.run(command,cwd=report,env=environment,capture_output=True,text=True,timeout=120)
+        for index,(command,working_directory) in enumerate(commands):
+            temporary=fixture_data/'tmp' if working_directory==report else working_directory
+            temporary.mkdir(parents=True,exist_ok=True)
+            environment=dict(os.environ,TMP=str(temporary),TEMP=str(temporary),TMPDIR=str(temporary))
+            ran=subprocess.run(command,cwd=working_directory,env=environment,capture_output=True,text=True,timeout=120)
             (report/f'phase-{index}.log').write_text(ran.stdout+ran.stderr,encoding='utf-8');records.append({'command':command,'exit':ran.returncode})
-            self.assertEqual(ran.returncode,0,(ran.stdout+ran.stderr)[-10000:])
+            failure=working_directory/'model-install-contract-failure.txt'
+            diagnostics=failure.read_text(encoding='utf-8') if failure.exists() else ''
+            self.assertEqual(ran.returncode,0,(ran.stdout+ran.stderr+diagnostics)[-10000:])
             if Path(command[0]).name in ('offers','offers.exe'):
                 actual=[line.split('\t') for line in ran.stdout.splitlines()]
                 wanted=[[str(pin[key]) for key in ('id','repo','revision','filename','sha256','bytes','parameter_count','file_count')] for pin in PINS]

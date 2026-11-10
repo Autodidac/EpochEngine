@@ -55,7 +55,7 @@ actions before applying them.
 
 ## Current Snapshot
 
-This source checkpoint is [**0.91.04**](https://github.com/Autodidac/EpochEngine/releases/tag/v0.91.04).
+This checkout is **0.91.05**. The published source download is [**0.91.04**](https://github.com/Autodidac/EpochEngine/releases/tag/v0.91.04).
 Windows and Linux packages and their validation results are available in
 [runtime release **0.91.03**](https://github.com/Autodidac/EpochEngine/releases/tag/v0.91.03).
 Public releases and source updates use this GitHub repository without account
