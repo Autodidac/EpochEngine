@@ -63,23 +63,46 @@ pairing. Each edition accepts only its own update channel.
 
 ## In Action
 
-These images are from earlier published builds. See the release notes and
-renderer capability matrix for current evidence.
+![Close-up of the Earth-scale world project running inside Epoch Editor on Windows](Images/readme/windows-world-project-v090185.png)
 
-| Windows Editor scene | Windows multicontext Editor | Linux OpenGL Editor |
+*Windows OpenGL, development preview 0.90.185. The Earth-scale project is
+running inside the 3D Preview workspace.*
+
+<details>
+<summary>Earlier Windows and Linux editor captures</summary>
+
+| Windows scene | Windows multicontext Editor | Linux OpenGL Editor |
 | --- | --- | --- |
 | ![Windows scene](https://raw.githubusercontent.com/Autodidac/EpochEngine/8bae9b22125f8ce01371a8987365d5d219fc981d/Images/readme/windows-scene-v09035.png) | ![Windows multicontext Editor](https://raw.githubusercontent.com/Autodidac/EpochEngine/8bae9b22125f8ce01371a8987365d5d219fc981d/Images/readme/windows-multicontext-editor-v08709.png) | ![Linux OpenGL Editor](https://raw.githubusercontent.com/Autodidac/EpochEngine/8bae9b22125f8ce01371a8987365d5d219fc981d/Images/readme/linux-opengl-v08438.png) |
 
+</details>
+
+The current Linux x64 package passed the software OpenGL smoke test.
+See the [release build and test results](https://github.com/Autodidac/EpochEngine/actions/runs/42748833125)
+for the exact Windows and Linux release.
+
 ## What Epoch Provides Right Now
 
-- Author scenes and inspect objects in the 3D Preview workspace.
-- Use separate **2D** and **UI** workspaces for 2D content and GUI documents.
-- Create projects, save their authored data, and build and run through the
-  existing project controls. Runtime options depend on the selected profile
-  and renderer.
-- Configure an optional inference provider or local model for chat and project
-  assistance. Review proposed tool actions before applying them. Ordinary
-  projects do not require an AI service or a loaded model.
+- **3D scenes and worlds.** Place, select and inspect objects in 3D Preview.
+  Author cameras, lights and ambient settings. With the reviewed Planetary
+  Terrain extension, choose a seed and world size, generate terrain, and save
+  the result with the project. Plant Lab and Forest Factory handle plant
+  recipes and terrain placement. FFT ocean is available as an optional package.
+- **2D, UI and time.** Edit 2D scene content and tile maps, and use the separate
+  UI workspace for layouts. The timeline can play, reverse and seek supported
+  scene motion and sampled effects.
+- **Project build and run.** Create or reopen game and software projects, save
+  authored scenes, and build through Project. Run in the editor or in a
+  separate window where the selected platform and renderer support it.
+- **Asset Generation.** With an admitted local backend, generate 2D references,
+  import approved images as textures, and inspect generated 3D assets in
+  textured, solid and wireframe views before approving project import.
+- **Project Assistant.** Use an optional model for project guidance and
+  reviewed actions such as opening projects, requesting 2D generation and
+  configuring plants. Ordinary projects run without a loaded model.
+- **Desktop rendering.** Use OpenGL on Windows and Linux. Windows also has
+  a D3D11 backend, and Epoch has Vulkan and software renderers with
+  feature-specific coverage. See the [renderer matrix](Engine/docs/engine/renderers.md).
 
 Start with the [Editor and project workflows](Engine/docs/engine/workflows.md),
 [GUI guide](Engine/docs/engine/gui.md) and
