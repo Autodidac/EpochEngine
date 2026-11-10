@@ -1,6 +1,6 @@
 # Epoch - Creative Software And Game Engine
 
-<p align="left">
+<p align="center">
   <img src="https://img.shields.io/badge/Current_Public_Source-v0.91.04-1F7A4C?style=for-the-badge" alt="Current Public source v0.91.04" />
   <img src="https://img.shields.io/badge/Published_Windows_Linux_Runtime-v0.91.03-2C6A8A?style=for-the-badge" alt="Published Windows/Linux runtime v0.91.03" />
 </p>
@@ -13,7 +13,7 @@ independently published library.
   <img src="https://raw.githubusercontent.com/Autodidac/EpochEngine/8bae9b22125f8ce01371a8987365d5d219fc981d/Images/readme/epoch-engine-overview-v08435.png" alt="Epoch Engine overview card" />
 </p>
 
-<p align="left">
+<p align="center">
   <img src="https://img.shields.io/badge/Project--Centric_Runtime-1F6F78?style=for-the-badge" alt="Project-centric runtime" />
   <img src="https://img.shields.io/badge/Multicontext_Tooling-486B4A?style=for-the-badge" alt="Multicontext tooling" />
   <img src="https://img.shields.io/badge/AI--Assisted_Engine_Ops-5A4D86?style=for-the-badge" alt="AI-assisted engine operations" />

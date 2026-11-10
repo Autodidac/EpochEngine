@@ -1316,7 +1316,7 @@
     "Engine/vcpkg.json": "92b4ae62cb53dee618b1394d2e688726abfa5f49f57180847e3db4b6bd6102b0",
     "LICENSE": "5ccfd9bd4b10d0bc2e2cabc01950d480ba2972c4af7ab2d3812c29cc9f314b5a",
     "Open-Epoch-Release.cmd": "7f000dde5127ce629fa9969f7d9a5adf9f7c71c8c46fe1a6318781331f545823",
-    "README.md": "c32739b0e2e3c9d3cde8f37baea4131e4e8efedda618897c9683e1dc8558dc60",
+    "README.md": "b310e8d5795d927d42bf6d30e27c8226381095e1e16c9de5460a336251105f84",
     "Tests/README.md": "d6f11763ce18e3ece9f59097ab58dd1e61188fb531cf82eed97495bdfbed0db1",
     "Tests/assets/asset.cloud_volume_contract.cpp": "101f2110de1298e57765695bf247f6238fa5ed4b0dcf68fdc0cb9a540276be83",
     "Tests/authoring/test_texture_residency_extraction.py": "bf2b1eed0a35f092a17077bfa5c163cd963cf201c470e19b7293ee175e396e7f",
