@@ -1,11 +1,27 @@
 # Epoch - Creative Software And Game Engine
 
-[![Latest Public release](https://img.shields.io/github/v/release/Autodidac/EpochEngine?style=for-the-badge&label=Public%20release)](https://github.com/Autodidac/EpochEngine/releases/latest)
-![C++23](https://img.shields.io/badge/C%2B%2B23-365D7D?style=for-the-badge)
-![Multicontext tooling](https://img.shields.io/badge/Multicontext-486B4A?style=for-the-badge)
+<p align="left">
+  <a href="https://github.com/Autodidac/EpochEngine/releases/tag/v0.91.04"><img src="https://img.shields.io/badge/Current_Public_Source-v0.91.04-1F7A4C?style=for-the-badge" alt="Current Public source v0.91.04" /></a>
+  <a href="https://github.com/Autodidac/EpochEngine/releases/latest"><img src="https://img.shields.io/badge/Published_Windows_Linux_Runtime-v0.91.03-2C6A8A?style=for-the-badge" alt="Published Windows/Linux runtime v0.91.03" /></a>
+</p>
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/Autodidac/EpochEngine/8bae9b22125f8ce01371a8987365d5d219fc981d/Images/readme/epoch-engine-overview-v08435.png" alt="Epoch Engine overview card from the earlier Public README" />
+</p>
+
+<p align="left">
+  <img src="https://img.shields.io/badge/Project--Centric_Runtime-1F6F78?style=for-the-badge" alt="Project-centric runtime" />
+  <img src="https://img.shields.io/badge/Multicontext_Tooling-486B4A?style=for-the-badge" alt="Multicontext tooling" />
+  <img src="https://img.shields.io/badge/AI--Assisted_Engine_Ops-5A4D86?style=for-the-badge" alt="AI-assisted engine operations" />
+  <img src="https://img.shields.io/badge/C%2B%2B23_Scripting-8A5C2F?style=for-the-badge" alt="C++23 scripting" />
+  <img src="https://img.shields.io/badge/Functional_Static_Programming-365D7D?style=for-the-badge" alt="Functional static programming" />
+  <img src="https://img.shields.io/badge/AI--Software_Creation-6A4F8A?style=for-the-badge" alt="AI software creation" />
+  <img src="https://img.shields.io/badge/AI--Game_Creation-6B7A32?style=for-the-badge" alt="AI game creation" />
+  <img src="https://img.shields.io/badge/Universal_Build_Projects-6D5C36?style=for-the-badge" alt="Universal build projects" />
+  <img src="https://img.shields.io/badge/Automatic_Entry_Point_Handling-8A473D?style=for-the-badge" alt="Automatic entry point handling" />
+  <img src="https://img.shields.io/badge/Zero--Dependency_Core_Goal-34495E?style=for-the-badge" alt="Zero-dependency core goal" />
+  <img src="https://img.shields.io/badge/AI_Software_Engine-0E7490?style=for-the-badge" alt="AI software engine" />
+  <img src="https://img.shields.io/badge/Fully_Featured_Vibe--Coded_Engine-A855F7?style=for-the-badge" alt="Fully featured vibe-coded engine" />
 </p>
 
 ## What Epoch Is
