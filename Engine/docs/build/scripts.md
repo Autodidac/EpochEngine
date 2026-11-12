@@ -247,29 +247,36 @@ Keep these identities separate:
 - **bootstrap updater-shell release**: the small updater-focused package that
   exists only to move users into the newer runtime
 
-Version numbers belong in:
+### Version advancement
 
-- `Engine/modules/epoch.version.ixx`
-- `Engine/modules/engine.version.ixx` while published updaters consume that
-  compatibility surface for source-version discovery
-- README/public version badges
-- changelog/release notes
-- release tags
-- packaged asset filenames
+1. Record the intended source version, the existing runtime version for each
+   edition and platform, and which release pointers the delivery will advance.
+   Use the same source version for the matching Public and Development snapshots.
+2. Change the source version literals in `Engine/modules/epoch.version.ixx` and
+   all four Windows resource fields in `Engine/resource/WinResource.rc`
+   (`FILEVERSION`, `PRODUCTVERSION`, `FileVersion` and `ProductVersion`).
+   `Engine/modules/engine.version.ixx` re-exports the canonical module.
+   Read the formatted version with `Tools/build/get_epoch_version.ps1` and
+   verify the Windows resource strings and built executable report that value.
+   Packaged version overrides are inputs for the platform and runtime release
+   being staged. Confirm the active runtime versions independently of the source.
+3. Update the owner README's current-source text, the changelog and the release
+   notes. Regenerate the Public README and `source-projection.json` from the
+   reviewed source. Its source badge, alt text and source tag link come from the
+   resource's `ProductVersion`. Its runtime badge and link follow GitHub's latest
+   stable release. Read back the README on GitHub's default branch, including
+   the badge image, alt text and link targets.
+4. Freeze the two reviewed commits. Match each tag or Site source entry, archive
+   filename, checksum sidecar and receipt to its exact edition, version, commit
+   and tree. Mark a GitHub source-only release as a prerelease so the latest
+   stable release continues to identify the packaged runtime. For a runtime
+   release, also check the embedded distribution identity,
+   platform asset names, signed integrity document and updater discovery. Verify
+   the source and runtime links on GitHub, the Public Site and the owner portal.
+5. Verify the live downloads against the approved bytes. Read back the matching
+   source backups and checksums before retiring any superseded local copies.
 
-Version numbers do **not** belong in commit titles.
-
-`Tools/build/get_epoch_version.ps1` is the canonical release-tooling reader for
-`Engine/modules/epoch.version.ixx`. It emits the same zero-padded revision used
-by `GetEngineVersion()`. Hosted and local staging must consume that result
-instead of reconstructing a version string independently.
-
-`Engine/modules/engine.version.ixx` is a thin compatibility module. Keep its
-three source identity macros in lockstep with `epoch.version.ixx`. The Public
-source-version endpoint reads `epoch.version.ixx` from GitHub. Development
-reads the Site's source-version endpoint. Packaged version overrides remain
-release-staging inputs.
-
+### Preserving Development source
 
 Public EpochEngine source and runtime packages are published on
 [GitHub](https://github.com/Autodidac/EpochEngine). Publish the audited Public
@@ -281,6 +288,20 @@ Site. Keep its smart-Git repository, commit/tree browser, source archives,
 runtime downloads and mutable aliases behind server-side authorization. Use
 short-lived authenticated downloads where the Site issues them. Keep
 administrative credentials out of source, manifests, logs and documentation.
+
+- Preserve the full Development commit and its private ancestry in the owner
+  repository. Keep a restricted source backup with commit, tree, archive hashes
+  and a verified readback receipt. Retain the prior accepted checkpoint for
+  rollback. Keep operator state, credentials and withheld private data out of
+  release archives.
+- Build Public from the audited projection in a separate checkout with Public
+  ancestry. Run `Tools/build/verify_public_source.py` and verify the Git tree
+  and release archive agree. Limit public staging and pushes to that checkout.
+- Stage Development archives through the owner-only encrypted intake. Verify
+  archive contents, file modes and decrypted checksums against the approved
+  commit before activating the source pair. Confirm signed-in downloads, anonymous
+  denial with `no-store`, and retirement of any one-use intake grant. Keep earlier
+  release bytes and rollback records intact.
 
 Hosted repositories and source archives must be full committed-source
 snapshots. Freeze the reviewed publishable working set into one commit before

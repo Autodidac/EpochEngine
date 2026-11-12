@@ -1,8 +1,8 @@
 # Epoch - Creative Software And Game Engine
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Current_Public_Source-v0.91.02-1F7A4C?style=for-the-badge" alt="Current Public source v0.91.02" />
-  <img src="https://img.shields.io/badge/Published_Windows_Linux_Runtime-v0.91.03-2C6A8A?style=for-the-badge" alt="Published Windows/Linux runtime v0.91.03" />
+  <a href="https://github.com/Autodidac/EpochEngine/releases/tag/v0.91.07"><img src="https://img.shields.io/badge/Current_Public_Source-v0.91.07-1F7A4C?style=for-the-badge" alt="Current Public source v0.91.07" /></a>
+  <a href="https://github.com/Autodidac/EpochEngine/releases/latest"><img src="https://img.shields.io/github/v/release/Autodidac/EpochEngine?label=Published%20Windows%2FLinux%20runtime&amp;style=for-the-badge&amp;color=2C6A8A" alt="Published Windows/Linux runtime" /></a>
 </p>
 
 EpochEngine Public source is available in this repository. Verified runtime
@@ -55,8 +55,9 @@ actions before applying them.
 
 ## Current Snapshot
 
-This source checkpoint is **0.91.02**. Download runtime packages and check their
-validation results in [GitHub Releases](https://github.com/Autodidac/EpochEngine/releases).
+This source checkpoint is [**0.91.07**](https://github.com/Autodidac/EpochEngine/releases/tag/v0.91.07).
+The [latest stable runtime release](https://github.com/Autodidac/EpochEngine/releases/latest)
+contains the Windows and Linux packages and their validation results.
 Public releases and source updates use this GitHub repository without account
 pairing. Each edition accepts only its own update channel.
 
@@ -75,10 +76,6 @@ running inside the 3D Preview workspace.*
 | ![Windows scene](https://raw.githubusercontent.com/Autodidac/EpochEngine/8bae9b22125f8ce01371a8987365d5d219fc981d/Images/readme/windows-scene-v09035.png) | ![Windows multicontext Editor](https://raw.githubusercontent.com/Autodidac/EpochEngine/8bae9b22125f8ce01371a8987365d5d219fc981d/Images/readme/windows-multicontext-editor-v08709.png) | ![Linux OpenGL Editor](https://raw.githubusercontent.com/Autodidac/EpochEngine/8bae9b22125f8ce01371a8987365d5d219fc981d/Images/readme/linux-opengl-v08438.png) |
 
 </details>
-
-The current Linux x64 package passed the software OpenGL smoke test.
-See the [release build and test results](https://github.com/Autodidac/EpochEngine/actions/runs/42748833125)
-for the exact Windows and Linux release.
 
 ## What Epoch Provides Right Now
 
@@ -236,6 +233,7 @@ Run `python Tools/build/verify_public_source.py` before contributing a source
 snapshot. `source-projection.json` records the admitted file inventory and hash
 policy; the verifier documents intentional manifest refreshes. These source
 checks are separate from build, runtime and release acceptance.
+See the [version advancement checklist](Engine/docs/build/scripts.md#version-advancement).
 
 ## License
 
