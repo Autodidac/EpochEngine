@@ -46,7 +46,8 @@ independently published library.
 
 Epoch is a C++23 engine for software, tools and games, with an optional Editor
 and project Assistant. Reusable platform, GUI, audio and media libraries support
-the Engine. Projects select the services they need.
+the Engine. Projects select the services they need. Epoch also builds temporal
+worlds, with a timeline for playing, reversing and seeking supported scene state.
 
 The Launcher opens projects, picks the runtime profile and checks for updates.
 The Editor is where you create scenes, edit interfaces, and build and run your
@@ -65,8 +66,8 @@ pairing. Each edition accepts only its own update channel.
 
 ![Close-up of the Earth-scale world project running inside Epoch Editor on Windows](Images/readme/windows-world-project-v090185.png)
 
-*Windows OpenGL, development preview 0.90.185. The Earth-scale project is
-running inside the 3D Preview workspace.*
+*Archived Windows OpenGL capture from 0.90.185. It shows an Earth-scale project
+running in 3D Preview at that checkpoint.*
 
 <details>
 <summary>Earlier Windows and Linux editor captures</summary>
@@ -96,15 +97,29 @@ running inside the 3D Preview workspace.*
 - **Project Assistant.** Use an optional model for project guidance and
   reviewed actions such as opening projects, requesting 2D generation and
   configuring plants. Ordinary projects run without a loaded model.
-- **Desktop rendering.** Use OpenGL on Windows and Linux. Windows also has
-  a D3D11 backend, and Epoch has Vulkan and software renderers with
-  feature-specific coverage. See the [renderer matrix](Engine/docs/engine/renderers.md).
+- **Desktop rendering.** Choose an available backend for the Editor or project.
+  Features such as terrain, sampled render targets and volumetric clouds have
+  their own backend coverage.
 
 Start with the [Editor and project workflows](Engine/docs/engine/workflows.md),
 [GUI guide](Engine/docs/engine/gui.md) and
 [documentation index](Engine/docs/README.md).
 The [Assistant small-game acceptance prompt](Engine/docs/engine/workflows.md#assistant-test-prompt-for-a-complete-small-game)
 is a checklist for testing procedural worlds, custom trees, generated assets and play.
+
+## Renderer and Driver Support
+
+| Backend | Current role |
+| --- | --- |
+| OpenGL | Desktop Editor on Windows and the validated Linux release path. Windows uses WGL for the context and can use DXGI for presentation. |
+| Direct3D 11 | Native Windows backend. The **DirectX** option selects D3D11. |
+| Vulkan | Explicit graphics backend with feature-specific coverage. Windows projects can run in a separate window when the Editor uses an incompatible backend. |
+| SDL3, SFML 3, raylib | Library-backed desktop context and presentation adapters. Build availability and feature coverage depend on the target. |
+| Software | CPU raster and presentation path. Headless contracts run without opening a renderer. |
+
+Direct3D 12 and OpenGL ES are planned targets. Multicontext mode is for
+diagnostics. A normal Editor session uses one backend. See the
+[renderer capability matrix](Engine/docs/engine/renderers.md) for per-feature evidence.
 
 ## Evidence
 
@@ -177,7 +192,7 @@ state, `Runtime` holds runnable programs and assets, and `Reports` holds checks.
 
 | Path | Contents |
 | --- | --- |
-| `Engine/src` and `Engine/modules` | Engine, editor and runtime implementation |
+| `Engine/src`, `Engine/modules` and `Engine/include` | Engine, Editor and runtime source, C++ module interfaces and public headers |
 | `Engine/assets` and `Engine/resource` | Runtime assets and build resources |
 | `Engine/dep` | Admitted dependency revisions and optional package source |
 | `Engine/examples` | Engine entry points and integration examples |
