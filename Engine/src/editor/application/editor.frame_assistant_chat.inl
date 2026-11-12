@@ -501,9 +501,24 @@
         else if (methodReady && editor.aiMethodSelection >= 0 && editor.aiMethodSelection <= 2)
             currentAction = "Ready to chat";
         bool codexImageRoute = false;
-        // Visible before Send, including an idle/unsent draft. The model
-        // picker is an explicit override; conditional review never replaces it.
+        if (epochengine::editor::ai_chat_goal::forest_asset_request(chat.input)
+            || has_forest_asset_approval(chat.input))
+            currentAction += "\nSend to: Project Assistant · local forest asset workflow · approvals required";
+        else
+        {
+            // Visible before Send, including an idle/unsent draft. The model
+            // picker is an explicit override; conditional review never replaces it.
+#if EPOCH_EDITION_PUBLIC
+            const auto projectTool = editor.aiToolPlan && !editor.aiToolPlanApplied && ai_chat_confirmation(chat.input).has_value()
+                ? std::string_view{editor.aiToolPlan.plan.call.tool} : ai::local_project_request_tool(chat.input);
+            if (ai::asset_review_tool(projectTool))
+                currentAction += "\nSend to: Asset Generation · local output review · approval required";
+            else if (ai::scene_placement_tool(projectTool))
+                currentAction += "\nSend to: 3D Preview · local scene placement · approval required";
+            else
+#endif
             currentAction += "\nSend to: " + currentModelIdentity;
+        }
         if (nativeReadiness.busy && !nativeReadiness.loaded)
             currentAction += "\nModels are loading. Avoid closing until ready; closing interrupts this load.";
         if (!chat.draftReferenceImages.empty() && editor.aiMethodSelection == 0

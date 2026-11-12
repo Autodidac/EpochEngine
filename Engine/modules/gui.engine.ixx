@@ -1346,6 +1346,7 @@ namespace epochengine::gui
         float row_height{ 28.0f };
         std::size_t max_visible_options{ 8 };
         bool enabled{true};
+        std::string_view closed_label{};
     };
 
     export struct SelectBoxResult

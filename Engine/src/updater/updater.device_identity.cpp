@@ -27,4 +27,6 @@ namespace epochengine::updater::device_identity
     std::string_view protection_name(KeyProtection) noexcept { return "Unavailable"; }
 }
 #else
+import core.path;
+
 #endif // EPOCH_EDITION_PUBLIC

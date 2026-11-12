@@ -23,12 +23,14 @@ class ProjectRuntimeStatus(unittest.TestCase):
             "export module project.lifecycle;", "").replace("export namespace", "namespace")
         launch = definition(source, "        auto launch_active_project_context =", True)
         poll = definition(source, "        auto poll_project_build =", True)
+        deferred = definition(source, "        if (editor.projectRunAfterTerrainPreview && !planetary_project_busy(editor))")
         assistant = definition(source, '            else if (call.tool == "project.run")').replace(
             "else if", "if", 1)
         settlement = "\n".join(definition(runtime, marker) for marker in (
             "        [[nodiscard]] bool settle_project_build_lifecycle(",
             "        void abandon_project_build_lifecycle(",
-            "        [[nodiscard]] bool project_runtime_identity_current("))
+            "        [[nodiscard]] bool project_runtime_identity_current(",
+            "        [[nodiscard]] bool resolve_project_runtime_embedding("))
         code = r'''
 #include <chrono>
 #include <exception>
@@ -57,6 +59,9 @@ struct Digest {int value{};bool valid()const{return value!=0;}explicit operator 
  friend bool operator==(const Digest&,const Digest&)=default;};
 struct EditorState {
  std::optional<std::future<EditorProjectBuildResult>> projectBuildPending;
+ std::optional<bool> projectRunAfterTerrainPreview;
+ bool planetaryStreamPending{};
+ bool planetaryAttachmentPending{},planetaryAttachmentIsInstall{},planetaryAttachmentIsUpdate{};
  bool aiContinuousBuildPending{},projectBuildRunAfterBuild{},projectBuildRunInEditor{},aiToolTestAfterBuild{};
  bool projectRuntimeInEditor{},sceneRunMaximizedInEditor{},projectRuntimeViewportMaximized{},sceneRunFullscreenInEditor{};
  EditorWorkspaceTab workspaceTab{EditorWorkspaceTab::Project};
@@ -79,7 +84,10 @@ std::vector<std::string> logs,notes;
 namespace epochengine {template<class...Args>std::string format_text(std::string_view text,Args&&...){return std::string{text};}}
 void push_editor_log(EditorState&,std::string text){logs.push_back(std::move(text));}
 void append_project_note(EditorState&,std::string_view,std::string_view summary,std::string_view detail){notes.emplace_back(std::string{summary}+" | "+std::string{detail});}
-bool project_runtime_embedding_supported(){return true;}
+namespace core {enum class ContextType{OpenGL,Vulkan};struct Context{ContextType type{ContextType::OpenGL};};}
+auto ctx=std::make_shared<core::Context>();
+bool embedding_supported=true;
+bool project_runtime_embedding_supported(){return embedding_supported;}
 void clear_completed_editor_builds(EditorState&,std::string_view){}
 std::string script_id_from_source_path(const std::filesystem::path&){return "script";}
 bool project_gui_document_layout(EditorState&){return true;}
@@ -99,7 +107,15 @@ std::filesystem::path resolved_project_build_output(const EditorState&,const Edi
 bool project_runtime_launch_identity_matches(const EditorState&,const platform::child_process::ProcessSnapshot& snapshot){return snapshot.identity;}
 SETTLEMENT
 void reconcile_project_runtime(EditorState&){}
-void start_project_build(EditorState&,bool,std::string,bool=false){++builds;}
+void start_project_build(EditorState& editor,bool run,std::string,bool inEditor=false){
+ ++builds;
+ editor.projectBuildLifecycleGeneration=editor.projectLifecycle.begin_build();
+ editor.projectBuildRunAfterBuild=run;editor.projectBuildRunInEditor=inEditor;
+ editor.projectBuildRunBackend=editor.projectRunBackend;
+ editor.projectBuildStatus="Building Release...";
+ std::promise<EditorProjectBuildResult> promise;
+ editor.projectBuildPending.emplace(promise.get_future());promise.set_value({});
+}
 bool focus_project_runtime(EditorState& editor){++focuses;editor.projectRuntimeStatus="Owned runtime focused";return true;}
 std::string project_runtime_scene_id(const EditorState&){return "scene";}
 std::string_view project_run_backend_label(std::string_view backend){return backend;}
@@ -120,9 +136,14 @@ std::string read_text_tail(const std::filesystem::path&,std::size_t){return "com
 void reset_project_build_request(EditorState& editor){editor.projectBuildRunAfterBuild=editor.projectBuildRunInEditor=false;}
 bool start_ai_project_test(const std::filesystem::path&){++tests;return true;}
 struct Chat{void append_status(std::string_view){}};
-void direct(EditorState& editor,bool inEditor=true,std::uint64_t requiredBuild=0){
+bool planetary_project_busy(const EditorState& editor){return editor.planetaryStreamPending||editor.planetaryAttachmentPending;}
+void direct(EditorState& editor,bool inEditor=true,std::uint64_t requiredBuild=0,bool allowTerrainWait=false){
  LAUNCH
- launch_active_project_context(inEditor,requiredBuild);
+ launch_active_project_context(inEditor,requiredBuild,allowTerrainWait);
+}
+void finish_terrain_preview(EditorState& editor){
+ LAUNCH
+ DEFERRED
 }
 void poll(EditorState& editor){Chat chat;
  POLL
@@ -140,6 +161,7 @@ bool assistant(EditorState& editor,bool queueBuild=false){
 }
 void initialize(EditorState& editor){
  selected=output_exists=launch_allowed=inputs_current=true;
+ embedding_supported=true;ctx->type=core::ContextType::OpenGL;
  output_digest=7;
  launches=focuses=builds=tests=transcripts=watches=scene_saves=dependency_prepares=0;logs.clear();notes.clear();
  (void)editor.projectLifecycle.select_project(1);
@@ -159,14 +181,33 @@ void queued(EditorState& editor,EditorProjectBuildResult build={}){
 }
 #define CHECK(condition) do{if(!(condition))return __LINE__;}while(false)
 int main(){
+ {EditorState editor;initialize(editor);editor.planetaryStreamPending=true;
+  direct(editor,false,0,true);
+  CHECK(editor.projectRunAfterTerrainPreview==false&&scene_saves==0&&launches==0);
+  direct(editor,true,0,true);finish_terrain_preview(editor);
+  CHECK(editor.projectRunAfterTerrainPreview==false&&launches==0);
+  editor.planetaryStreamPending=false;finish_terrain_preview(editor);finish_terrain_preview(editor);
+  CHECK(builds==1&&launches==0);poll(editor);
+  CHECK(!editor.projectRunAfterTerrainPreview&&launches==1&&!editor.projectRuntimeInEditor);}
+ {EditorState editor;initialize(editor);editor.planetaryAttachmentPending=true;
+  direct(editor,true,0,true);finish_terrain_preview(editor);
+  CHECK(editor.projectRunAfterTerrainPreview==true&&scene_saves==0&&launches==0);
+  editor.planetaryAttachmentPending=false;finish_terrain_preview(editor);
+  CHECK(builds==1&&launches==0);poll(editor);
+  CHECK(!editor.projectRunAfterTerrainPreview&&launches==1&&editor.projectRuntimeInEditor);}
+ {EditorState editor;initialize(editor);output_exists=false;editor.planetaryStreamPending=true;
+  direct(editor,false,0,true);CHECK(builds==0&&editor.projectRunAfterTerrainPreview==false);
+  editor.planetaryStreamPending=false;finish_terrain_preview(editor);finish_terrain_preview(editor);
+  CHECK(builds==1&&launches==0&&!editor.projectRunAfterTerrainPreview);}
  {EditorState editor;initialize(editor);direct(editor);
-  CHECK(launches==1&&builds==0&&editor.projectBuildStatus=="Release build accepted");
+  CHECK(launches==0&&builds==1&&editor.projectBuildPending);poll(editor);
+  CHECK(launches==1&&builds==1&&editor.projectBuildStatus=="Release build accepted");
   CHECK(editor.projectRuntimeStatus.starts_with("Starting project"));
-  direct(editor);CHECK(focuses==1&&launches==1&&editor.projectBuildStatus=="Release build accepted");
+  direct(editor);CHECK(focuses==1&&launches==1&&builds==1&&editor.projectBuildStatus=="Release build accepted");
   editor.projectRuntimeSnapshot.reset();editor.projectLifecycle.record_runtime_stopped();
   editor.projectRuntimeStatus="Exited with code 0 after 462s.";
   CHECK(editor.projectBuildStatus=="Release build accepted"&&editor.projectRuntimeStatus.starts_with("Exited"));
-  launch_allowed=false;direct(editor);
+  launch_allowed=false;direct(editor);CHECK(builds==2&&launches==1);poll(editor);
   CHECK(editor.projectBuildStatus=="Release build accepted"&&editor.projectRuntimeStatus.starts_with("Launch refused"));
   CHECK(!logs.empty()&&logs.back().find(editor.projectRuntimeStatus)!=std::string::npos);}
  {EditorState editor;queued(editor);poll(editor);
@@ -174,6 +215,16 @@ int main(){
   CHECK(editor.projectBuildStatus=="Release build accepted"&&editor.projectRuntimeStatus.starts_with("Starting project"));
   CHECK(editor.projectLifecycle.evidence().output_exists&&editor.projectLifecycle.evidence().runtime_active);
   CHECK(!notes.empty()&&notes.back().starts_with("Release build accepted"));}
+ {EditorState editor;initialize(editor);editor.projectRunBackend="vulkan";direct(editor);poll(editor);
+  CHECK(launches==1&&!editor.projectRuntimeInEditor&&editor.projectRunBackend=="vulkan");
+  CHECK(logs.front().find("Using Separate Window")!=std::string::npos);}
+ {EditorState editor;initialize(editor);editor.projectRunBackend="vulkan";
+  ctx->type=core::ContextType::Vulkan;direct(editor);poll(editor);
+  CHECK(launches==1&&editor.projectRuntimeInEditor);}
+ {EditorState editor;queued(editor);editor.projectBuildRunBackend="vulkan";poll(editor);
+  CHECK(launches==1&&!editor.projectRuntimeInEditor&&editor.projectBuildRunBackend=="vulkan");}
+ {EditorState editor;initialize(editor);embedding_supported=false;direct(editor);poll(editor);
+  CHECK(launches==1&&!editor.projectRuntimeInEditor);}
  {EditorState editor;queued(editor);launch_allowed=false;poll(editor);
   CHECK(launches==1&&editor.projectBuildStatus=="Release build accepted");
   CHECK(editor.projectRuntimeStatus.starts_with("Launch refused")&&logs.back().find("Runtime launch refused")!=std::string::npos);}
@@ -188,11 +239,11 @@ int main(){
  {EditorState editor;queued(editor);editor.aiToolTestAfterBuild=true;poll(editor);
   CHECK(tests==1&&launches==0&&editor.projectBuildStatus=="Release build accepted");}
  {EditorState editor;initialize(editor);CHECK(assistant(editor));
-  CHECK(watches==1&&editor.aiToolStatus.find("runtime=Starting project")!=std::string::npos);
-  CHECK(editor.aiToolStatus.find("build=Release build accepted")!=std::string::npos);}
- {EditorState editor;initialize(editor);launch_allowed=false;CHECK(!assistant(editor));
-  CHECK(watches==0&&editor.aiToolStatus.find("runtime=Launch refused")!=std::string::npos);
-  CHECK(editor.aiToolStatus.find("build=Release build accepted")!=std::string::npos);}
+  CHECK(watches==1&&builds==1&&launches==0&&editor.aiToolStatus.find("build=Building Release")!=std::string::npos);
+  poll(editor);CHECK(launches==1&&editor.projectRuntimeStatus.starts_with("Starting project"));}
+ {EditorState editor;initialize(editor);launch_allowed=false;CHECK(assistant(editor));
+  CHECK(watches==1&&builds==1&&launches==0);poll(editor);
+  CHECK(editor.projectRuntimeStatus.starts_with("Launch refused")&&editor.projectBuildStatus=="Release build accepted");}
  {EditorState editor;initialize(editor);CHECK(assistant(editor,true));
   CHECK(watches==1&&editor.aiToolStatus.find("build=Building Release")!=std::string::npos);}
  {EditorState editor;initialize(editor);editor.projectRuntimeSnapshot=std::make_shared<platform::child_process::ProcessSnapshot>();
@@ -214,7 +265,8 @@ int main(){
 }
 '''
         for key, fragment in {"LIFECYCLE": lifecycle, "SETTLEMENT": settlement,
-                              "LAUNCH": launch, "POLL": poll, "ASSISTANT": assistant}.items():
+                              "LAUNCH": launch, "POLL": poll, "ASSISTANT": assistant,
+                              "DEFERRED": deferred}.items():
             code = code.replace(key, fragment)
         identity = hashlib.sha256(code.encode()).hexdigest()[:12]
         report = ROOT / "Artifacts/Reports/project-runtime-status84-nov07" / identity

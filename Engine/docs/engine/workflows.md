@@ -29,6 +29,15 @@ remain unchanged. The World workspace/scene viewport is **3D Preview**, and its
 object list is **3D Objects**. The project action is **Run**; its selected build
 configuration remains visible in project settings and Output. These latest
 source changes have build/CPU proof; native acceptance is tracked in active_pass.
+A fresh project Run opens Output and invokes the selected configuration's
+incremental build before launch. Run focuses an already running project.
+For a selected attached mesh, **3D Objects** offers **Detach from Terrain** in
+its context menu. This keeps its world pose and makes the change undoable.
+In **3D Preview**, choose **Inspect LOD** from the camera view menu to move a
+separate camera over the last accepted planetary terrain detail. **Exit Inspect**
+restores the previous camera and resumes streaming. A selected object's transform
+gizmo uses world X, Y and Z, extends past its bounds, and highlights the axis
+chosen in the viewport's move-tool selector.
 October31 source repairs make ordinary Run default to Release when the project
 has no saved configuration. An explicit Debug choice remains Debug, and private
 self-iteration still validates Debug first. Managed build scripts retain minimal
@@ -206,8 +215,48 @@ ocean-bearing body. The forest saves that body-local center with its placement.
 To use an inspected spot, move the camera over it and reply
 `Use the current camera location.` Forest painting needs its own reviewed
 radius and density. This step uses the current Plant Lab recipe. The inland
-lake, player spawn, generated native plant set and custom tree remain separate
-acceptance items. When opening the saved project again, use its host-listed ID.
+lake and generated native plant set remain open. When opening the saved project
+again, use its host-listed ID.
+
+With the desired Plant Lab design open, select a tree from the existing forest
+in **3D Objects**. Send this in Assistant Chat.
+
+```text
+Add a custom textured tree to the selected forest:
+Bark: close-up silver birch bark with charcoal markings, flat and evenly lit
+Foliage: an amber birch leaf cluster with one downward stem
+```
+
+Review bark generation and application, foliage generation and application,
+then placement. Assistant Chat asks the image generator for a magenta margin
+around the foliage and shows the transparent PNG for approval. If the generator
+fails to isolate the foliage, the original PNG is retained and placement waits.
+The recipe changes affect the current Plant Lab design. The new trees save with
+their own recipe, and the original forest keeps its placements and materials.
+Scene Undo removes the addition. After terrain regeneration, use **Refresh
+Forest Placement** before adding another design to the area.
+
+If both textures are already applied, send `Add the current Plant Lab tree to
+the selected forest.` or use **Add Current Plant to Selected Forest** in Forest
+Factory's painting view.
+
+Once the generated beacon GLB is visible, select one painted tree from the
+saved forest in **3D Objects**. Send `Set up landing near the selected forest
+with the current generated 3D model.` in **Assistant Chat**. Review the forest,
+model dimensions and exact GLB. Approval samples a walking approach outside
+the forest. A successful setup imports the solid beacon, places the primary
+PlayerStart facing it, and sets a 5 m reach objective in one undoable change.
+Use **Save Project** before closing. If sampling finds no dry, gentle approach,
+the scene stays as it was. A fresh run uses the new PlayerStart.
+
+To prepare the beacon from text in the same forest, select one of its trees and
+send `Generate and place a landing beacon near the selected forest: a yellow
+tripod beacon with a blue signal lamp.` Review the image request, the PNG,
+3D generation, landing placement, and Save Project as separate actions. The
+sequence retains the forest, scene revision, and the generated file identities.
+If you need to configure a generation backend, do so in Asset Generation,
+then send `Resume Goal` to review the current step. Use the save and run
+sequence below to test the result.
 
 To verify the saved project on its own, send `Save, close and reopen the project.`
 The Assistant prepares three separate approvals and checks that the same
@@ -235,13 +284,91 @@ A pass requires all of the following in the same project.
   triggers the win condition. Record the selected provider, model, seed,
   artifact identities, elapsed time by stage and build and run results.
 
-This is an acceptance target. Assistant Chat can request 2D generation and
-bind a reviewed project texture to a Plant Lab recipe. With a configured local
-3D backend, approve a visible PNG in Asset Generation, then send
-`Generate 3D from the approved reference.` Assistant Chat shows the reference
-and 3D controls for approval. The result opens for inspection in Asset
-Generation, with import under separate review. The complete forest, modeling
-and play sequence from a single prompt remains open.
+The complete forest, modeling and play sequence from a single prompt remains
+open. With a configured local 3D backend, open the PNG in **Asset Generation**
+for the current project. Send `Approve the current PNG as the 3D reference.`
+in **Assistant Chat**, inspect the visible PNG, then approve it. Send
+`Generate 3D from the approved reference.` to review the reference and
+generation settings before starting the backend.
+
+Once the GLB opens in Asset Generation, send
+`Import the current generated 3D model.` Inspect the Textured, Solid and
+Wireframe views and approve the exact GLB. The importer uses metres and
+shows the full model's dimensions in the review. It adds the reviewed mesh
+materials to the current scene. Save Project retains the import.
+
+For a generated world with Ocean On, send
+`Import the current generated 3D model on the ocean shoreline.` Review the
+same model and the named ocean body. Approval starts a search for dry
+procedural terrain within 100 m of water. Escape stops the search. The
+importer places the GLB upright with its lowest local point at the sampled
+elevation. It keeps all parts together and returns to 3D Preview. The parts
+appear beneath the terrain in 3D Objects and follow moves, rotations and
+uniform scale edits to that terrain. During planetary exploration, they
+follow the admitted body and camera rebasing. Save Project retains the
+attachment in snapshot format 9. Older scenes still open in this Editor.
+If the terrain mesh is replaced, the parts keep their authored world pose
+until you refresh them. Select the terrain, one attached model, or PlayerStart
+and choose **Refresh Model and Spawn Placement** in Properties. In Assistant
+Chat, send `Refresh attached model and spawn placement.` and approve.
+The refresh samples the same surface directions, snaps all attached model
+parts and spawns on that terrain to the new ground, and saves them in one
+undoable change. An underwater placement, steep spawn or stale result leaves
+the previous scene intact. Use **Refresh Forest Placement** in Forest Factory
+for the trees. Recheck the walking route and visible contact after regeneration.
+
+Select a shoreline mesh part and enable **Walk collision** in **Properties**,
+or send `Enable walking collision on the selected shoreline model.` in
+**Assistant Chat** and approve. Save Project retains the box. Each enabled
+part uses its rotated mesh bounds and blocks walking, including boosted steps.
+Enable only the parts that should be solid. Flight uses the existing terrain
+physics. Walk collision is off on new imports.
+
+To author a surface start, select one terrain-attached model in **3D Objects**
+and send `Set the player start at the selected shoreline model.` in
+**Assistant Chat**. Approve the placement and save the project. The command
+moves the existing primary PlayerStart to the model and selects PlayerStart
+for adjustment. Place PlayerStart on dry terrain outside the beacon's reach
+radius if you want the player to walk to it. A fresh run starts at PlayerStart
+in Walk mode. A saved **Save Exploration** session resumes its own position.
+If the terrain changed, the point is underwater, or PlayerStart is more than
+100 m from the surface, Play reports the rejection and retains the provider's
+default orbit.
+
+To set the win condition, select one imported beacon mesh in **3D Objects**
+and send `Set the selected model as the reach objective within 5 m.` in
+**Assistant Chat**. The approval shows the target and radius. Omitting the
+distance uses 5 m. Use **Save Project** to retain it. During planetary Play,
+land and switch to **Walk**. The objective panel shows the distance to the
+beacon's solid bounds when collision is enabled, or its pivot otherwise. It
+keeps the completion message visible after you reach it.
+Each new run starts with the objective incomplete. If the target is deleted,
+the panel reports it unavailable. Use `Clear the reach objective.` to remove
+it. Scenes with a reach objective use snapshot format 10. Scenes with a
+walking collider use format 11.
+
+To use the visible PNG as a tree texture, open it for review in **Asset
+Generation** and send `Import and apply the current PNG as bark.` or
+`Import and apply the current PNG as foliage.` in **Assistant Chat**. Review
+the displayed PNG, SHA-256 and slot before approving. The Editor imports or
+reuses the exact project texture and saves its catalog identity in the
+current Plant Lab recipe. For foliage, use a PNG with transparency around the
+leaf. If Plant Lab rejects the material after import, the imported texture
+stays available in the project catalog.
+
+Send `Update Painted Trees.` in Assistant Chat to review applying the current
+recipe to its existing painted trees. The review shows the tree count and
+recipe revision. Approval uses the Forest Factory action and saves the scene.
+Scene Undo restores the previous design.
+
+Send `Import and apply the current PNG as bark, then update painted trees.`
+to review both steps in order. You can also specify `foliage`. Approve the
+import and application first. After the Plant Lab recipe saves, Assistant
+Chat prepares a second review to update the trees that use it. If the
+project, scene or recipe changes between the two reviews, request a fresh
+`Update Painted Trees.` review. If the tree update applies but saving fails,
+retry Save before closing the project.
+
 For the save/close/reopen request, the first reviewed operation is Save.
 Close and reopening the host-listed project require separate reviewed operations.
 Opening a project only completes the Assistant's reopen step after the editor
@@ -255,6 +382,13 @@ place forests as part of generation. Plant Lab owns procedural plant recipes
 and materials. Forest Factory owns forest composition and placement. Both
 planet generation and the Assistant should call those same operations so a
 custom plant can be added to an existing forest using its saved terrain anchors.
+
+In **Forest Factory**, choose **Paint Forest on Terrain**, drag across the
+surface, and release. The terrain worker resolves the stroke in one batch.
+The resulting trees save together and Scene Undo removes the whole stroke.
+Select a placed tree and use **Refresh Selected Tree Material** to rebuild
+its bark and leaves from its exact saved recipe. This action updates that
+tree's material binding and can be undone.
 
 Planet regeneration should let the user preview a different planet type or body
 arrangement before applying it. Preserve project ownership and stable body
@@ -361,25 +495,23 @@ downloads through the authenticated Site; that is not an automatic updater test.
 - packaged Linux releases should follow that same main-runtime rule: the normal
   packaged `epoch` entry is the product path, while updater-shell mode remains
   an explicit bootstrap build instead of the default Linux release identity
-- Smart Update is binary-first. Its toolbar item remains visible from an admitted available
+- Public Smart Update is binary-first. Its toolbar item remains visible from an admitted available
   receipt while checking/installing, disabled while busy, so transient operation
   phases do not remove/reinsert it beside Run. Restart still requires verified
   handoff evidence; this source behavior needs native visual confirmation.
   It discovers the newest matching versioned runtime archive, verifies the
   signed release manifest and complete payload,
-  and stages replacement before considering source. Authorized encrypted source
-  remains both an explicit operator choice and the fallback when a compatible
-  package is absent or fails verification/staging; it never outranks a valid
-  compatible binary.
+  and stages replacement before considering source. Signed Public source is
+  available as an explicit choice or as the fallback when a compatible package
+  is absent or fails verification or staging.
 - the active packaged asset contract is versioned runtime archives such as
   `epoch_win10_x64_vX.Y.Z.zip` and `epoch_linux_x64_vX.Y.Z.tar.gz`
 - the updater extracts the packaged version directly from the archive name
-- Development-edition update discovery and payloads are hosted at
-  `https://epoch.adamrushford.chatgpt.site`: packaged releases come from
-  `/api/epoch/releases`, build admission from `/api/epoch/actions/runs`, and
-  runtime bytes come from immutable release paths. Anonymous EpochEngine Git and
-  source-archive routes are disabled. The public source-version response is only
-  a capped legacy-client lane-selection sentinel; current clients obtain private
+- Development updates rebuild from the owner-authorized source at
+  `https://epoch.adamrushford.chatgpt.site`. The owner portal provides manual
+  Windows and Linux runtime downloads pinned to an exact source release.
+  Anonymous EpochEngine Git and source-archive routes are disabled. The public
+  source-version response is a capped legacy-client lane-selection sentinel. Current clients obtain private
   source metadata exclusively through authorization. The updater has no automatic
   GitHub fallback. Public-edition engine updates use only GitHub
   Autodidac/EpochEngine and require no OpenAI pairing or credential. Standalone EpochGui remains public at
@@ -389,16 +521,16 @@ downloads through the authenticated Site; that is not an automatic updater test.
   standalone library and its consumers before publishing a new shared revision.
   GitHub URLs remain only where an independently owned managed tool, such as
   vcpkg, Git for Windows, LLVM, or 7-Zip, publishes its own payload.
-- packaged release discovery consumes the Site's canonical integrity document,
+- Public packaged release discovery reads GitHub's canonical integrity document,
   requires its pinned-key Ed25519 signature, exact schema/key identity, and
-  same-Site release URL boundary, then hashes the complete payload against the
+  GitHub release URL boundary, then hashes the complete payload against the
   SHA-256 authenticated inside that signed document before extraction or
   replacement. Companion `.sha256` objects remain public for manual tooling;
   Epoch fails closed when signature or digest evidence is absent or invalid
 - WSL is treated as Linux for runtime package selection and should consume the
   same `epoch_linux_x64_vX.Y.Z.tar.gz` asset unless a future package layout
   proves a separate WSL asset is necessary
-- source checkout installs use the same packaged-runtime-first update rule.
+- source checkout installs follow the update rule for their edition.
   Restricted source uses explicit browser approval for first device enrollment.
   Windows persists a signing-only ECDSA P-256 key in CNG, prefers the platform
   provider, falls back to the software KSP, and disables private-key export.
@@ -410,6 +542,12 @@ downloads through the authenticated Site; that is not an automatic updater test.
   not claim non-exportability from protected-at-rest storage alone. Static source
   credentials, bearer tokens, and plaintext archive keys never ship in the
   executable or browser bundle.
+- An Editor with a candidate data root uses one-time owner approval for
+  Development source access. The installed Editor's pairing record and signing
+  key remain outside that workflow. Run installation tests from a disposable
+  runtime copy with its own data root. The updater derives the replacement
+  target from the running executable. Windows and Linux source and packaged
+  restarts forward the explicit data root when they relaunch that replacement.
 - Historical Site v28 verification (not current discovery or release authority):
   the recorded Site commit was
   `1b7e0b2236c2db6cf43228a5425e9431ba11d98e`, deployment
@@ -1273,10 +1411,9 @@ execution.
   gesture, and text/GUI capture suppresses camera input. Existing custom and
   project gameplay bindings remain authoritative. Planetary flight needs the
   matching reviewed provider revision; old project attachments are not rewritten.
-- object dragging uses a horizontal X/Z constraint with a dominant axis; hold
-  Shift for vertical movement. Shift-click still changes selection without a
-  drag. Switching the constraint rebases the gesture, and release records one
-  grouped Undo action. Camera gestures and GUI capture retain their own ownership.
+- choose Move Free for movement in the view plane, or Move X, Y, or Z to
+  constrain a drag to a world axis. Each move records one grouped Undo action.
+  Camera gestures and GUI capture retain their own ownership.
 - hot reload remains a development feature and needs smoke coverage instead of
   trust
 
@@ -1833,7 +1970,8 @@ features over forcing every integration on every machine.
   deliberately entered with keyboard movement. Off-ray objects do not block zoom.
   Intersection uses the matched rendered geometry, including translated planets;
   it remains a bounded linear scan on zoom input, with native performance pending.
-- F focuses the selected stable scene object; Home resets the active view
+- double-click an object in the viewport or World Outliner to focus it.
+  Reset View returns the editor camera to its default framing.
 - Perspective, free Orthographic, Front, Back, Left, Right, Top, and Bottom keep
   independent framing behind one stable logical view identity
 - large-world camera navigation keeps small local coordinates and a double-precision
@@ -2116,8 +2254,10 @@ The scene editor selection model is a set with one primary object.
 
 - Normal click selects one object.
 - `Shift + Left Click` toggles an object's membership.
-- Dragging empty 3D viewport space performs rectangle/marquee selection.
-- Dragging any selected object moves the whole selection through one scene-document transaction.
+- Drag in Select mode to replace the selection with the objects inside the box.
+  Shift-drag adds to the selection, including when the drag starts on terrain.
+- Choose a Move mode and drag a selected object to move the whole selection
+  through one scene-document transaction.
 - +4/+8 Cube actions create and select the batch atomically.
 
 For a repeatable event-render benchmark, select a movable object and use **Properties -> Movement / Benchmark -> Attach Oscillator**. The editable example source is also available in ProjectLauncher's scripts directory. Press Play before interpreting movement-driven dirty-region results.

@@ -165,6 +165,7 @@ import package.catalog;
 import package.registry;
 import package.source_install;
 import project.planetary;
+import project.planetary_runtime;
 import perf.tier;
 import render.arcade;
 import editor.canvas2d_scene;
@@ -263,7 +264,10 @@ namespace epochengine
 #include "application/editor.frame_source_dispatch.inl"
         const auto stopCurrentWork = [&]()
             {
+                const bool hadShorelineImport = editor.modelShorelinePending.has_value();
                 request_editor_automation_stop(editor);
+                if (hadShorelineImport)
+                    chat.append_status("Shoreline import stopped. The scene is unchanged.");
                 epochengine::ai::voice_runtime::stop(static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(&editor)));
                 editor.aiVoiceSession.cancel();
                 editor.aiVoiceConversation = false;
@@ -306,10 +310,16 @@ namespace epochengine
                     chat.append_status("STOP: queued request cancelled before dispatch; draft preserved. Model remains loaded.");
             };
         if (automationEmergencyStopRequested) stopCurrentWork();
+        const bool modelShorelinePlaced = poll_model_shoreline_import(editor, chat);
 #include "application/editor.frame_assistant_planning.inl"
 #include "application/editor.frame_assistant_conversation.inl"
 #include "application/editor.frame_project_runtime.inl"
 #include "application/editor.frame_workspace_docking.inl"
+        if (modelShorelinePlaced)
+        {
+            apply_editor_surface(EditorMainSurface::Scene, "Shoreline model placement");
+            handle_scene_tool(editor, ctx.get(), "focus_selection");
+        }
         if(editor.forestPlacementFocusPending)
         {
             editor.forestPlacementFocusPending=false;

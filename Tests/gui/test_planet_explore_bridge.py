@@ -34,7 +34,8 @@ struct EditorState {std::string projectRoot{"project"},projectStatus,projectBuil
 unsigned launches{},fallbacks{};bool embeddedLaunch{};std::vector<std::string> logs;
 void push_editor_log(EditorState&,std::string message){logs.push_back(message);}
 void invoke(EditorState& editor){
- auto launch_active_project_context=[&](bool inEditor=false){++launches;embeddedLaunch=inEditor;};
+ const bool allowTerrainWait=false;
+ auto launch_active_project_context=[&](bool inEditor,unsigned,bool){++launches;embeddedLaunch=inEditor;};
  const auto requirement=project_planetary::runtime_requirement(std::filesystem::path{editor.projectRoot});
 GUARD
 REQUIRED

@@ -902,15 +902,28 @@
                 review.compiled = asset::model_import::compile_base_color_glb(review.sourceBytes);
                 if (!review.compiled)
                 { editor.projectStatus = "Model review refused: " + review.compiled.diagnostic; return false; }
+                auto minimum = review.compiled.model.primitives.front().geometry->minimum();
+                auto maximum = review.compiled.model.primitives.front().geometry->maximum();
                 for (const auto& primitive : review.compiled.model.primitives)
                 {
                     const auto& sampler = review.compiled.model.materials.at(*primitive.material).base_color_texture->sampler;
                     if ((sampler.min_filter && *sampler.min_filter >= 9984u)
                         || (sampler.min_filter && sampler.mag_filter && sampler.min_filter != sampler.mag_filter))
                     { editor.projectStatus = "This model needs a mipmap or mixed min/mag sampler not yet represented by scene materials."; return false; }
+                    const auto low = primitive.geometry->minimum(), high = primitive.geometry->maximum();
+                    for (std::size_t axis = 0; axis < 3; ++axis)
+                    {
+                        minimum[axis] = (std::min)(minimum[axis], low[axis]);
+                        maximum[axis] = (std::max)(maximum[axis], high[axis]);
+                    }
                 }
+                std::array<double, 3> size{};
+                for (std::size_t axis = 0; axis < size.size(); ++axis)
+                    size[axis] = (double(maximum[axis]) - minimum[axis]) * review.compiled.model.meters_per_unit;
                 editor.modelImportReview = std::move(review);
-                editor.projectStatus = "Exact model bytes reviewed. Approve Import adds ordinary mesh/material objects in metres; native texture rendering is a separate capability.";
+                editor.projectStatus = epochengine::format_text(
+                    "Model bounds {:.3f} × {:.3f} × {:.3f} m (X × Y × Z). Walking collision is off at import.",
+                    size[0], size[1], size[2]);
                 return true;
             }
             catch (...) { editor.projectStatus = "Model review failed; the scene and project assets are unchanged."; return false; }
@@ -960,7 +973,88 @@
             return platform::filesystem::exclusive_create_and_write(path, bytes, error);
         }
 
-        [[nodiscard]] bool approve_project_model_import(EditorState& editor)
+        struct ModelSurfacePose final
+        {
+            std::array<double, 3> pivot{};
+            std::array<float, 3> rotation{};
+            scene::SceneTerrainAttachment attachment{};
+            struct PlayerStart final { std::array<double, 3> pivot{}; std::array<float, 3> rotation{}; };
+            std::optional<PlayerStart> playerStart{};
+        };
+
+        [[nodiscard]] std::optional<ModelSurfacePose> model_surface_pose(
+            const asset::model_import::BaseColorCompilation& compiled,
+            const previewgrid::PreciseMeshTransform& terrain,
+            const project_planetary::SurfaceQuery& query,
+            const project_planetary::SurfaceResult& sample,
+            scene::SceneObjectId terrainId, const project_planetary::SurfaceResult* start = nullptr)
+        {
+            const auto supported = [&](const project_planetary::SurfaceResult& point) {
+                return point.code == project_planetary::SurfaceCode::ready && point.request_id == query.request_id
+                    && std::isfinite(point.height_meters) && (query.body.id != 0u || point.height_meters > 0.0);
+            };
+            if (!compiled || !supported(sample) || (start && !supported(*start))
+                || !previewgrid::valid_precise_mesh_transform(terrain))
+                return {};
+            namespace alignment = scene::surface_alignment;
+            std::optional<alignment::VerticalBounds> bounds;
+            for (const auto& part : compiled.model.primitives)
+            {
+                if (!part.geometry) return {};
+                const alignment::VerticalBounds local{part.geometry->minimum()[1], part.geometry->maximum()[1]};
+                if (!local.valid()) return {};
+                bounds = bounds ? alignment::merge_vertical_bounds(*bounds, local) : std::optional{local};
+            }
+            if (!bounds || compiled.model.meters_per_unit <= 0.0) return {};
+            const auto support = alignment::align_bottom_to_surface(*bounds, 0.0f,
+                static_cast<float>(compiled.model.meters_per_unit), 0.0f);
+            if (!support) return {};
+            scene::SceneTerrainAttachment attachment{
+                .terrain_object_id = terrainId, .body_index = query.body.id,
+                .terrain_artifact_key = query.mesh.artifact_key,
+                .terrain_coordinates = {query.mesh.coordinates.meters_per_unit, query.mesh.coordinates.source_origin_meters}};
+            std::array<double, 3> local{}, up{};
+            for (std::size_t axis = 0; axis < local.size(); ++axis)
+            {
+                attachment.reference_center_meters[axis] =
+                    query.body.center_meters[axis] - query.mesh.coordinates.source_origin_meters[axis];
+                local[axis] = attachment.reference_center_meters[axis] + sample.point_meters[axis];
+            }
+            if (!attachment.valid()) return {};
+            for (std::size_t row = 0; row < up.size(); ++row)
+                for (std::size_t axis = 0; axis < up.size(); ++axis)
+                    up[row] += terrain.rotation[row * 3 + axis] * terrain.scale[axis] * sample.radial_up[axis];
+            const auto length = std::hypot(up[0], up[1], up[2]);
+            if (!std::isfinite(length) || length < 1e-10) return {};
+            for (auto& axis : up) axis /= length;
+            const auto rotation = forest::preview_mesh::surface_rotation(up, {0.0, 0.0, 1.0});
+            if (!rotation) return {};
+            auto pivot = terrain.apply(local);
+            for (std::size_t axis = 0; axis < pivot.size(); ++axis)
+                pivot[axis] += up[axis] * support->origin_y;
+            if (!scene::world_position({}, pivot)) return {};
+            ModelSurfacePose pose{pivot, *rotation, attachment};
+            if (start)
+            {
+                std::array<double, 3> localStart{}, startUp{}, heading{};
+                for (std::size_t axis = 0; axis < localStart.size(); ++axis)
+                    localStart[axis] = attachment.reference_center_meters[axis] + start->point_meters[axis];
+                const auto startPivot = terrain.apply(localStart);
+                for (std::size_t row = 0; row < startUp.size(); ++row)
+                {
+                    for (std::size_t axis = 0; axis < startUp.size(); ++axis)
+                        startUp[row] += terrain.rotation[row * 3 + axis] * start->radial_up[axis];
+                    // The surface rotation aligns +Z, while Play faces -Z.
+                    heading[row] = startPivot[row] - pivot[row];
+                }
+                const auto startRotation = forest::preview_mesh::surface_rotation(startUp, heading);
+                if (!scene::world_position({}, startPivot) || !startRotation) return {};
+                pose.playerStart = ModelSurfacePose::PlayerStart{startPivot, *startRotation};
+            }
+            return pose;
+        }
+
+        [[nodiscard]] bool approve_project_model_import(EditorState& editor, const ModelSurfacePose* placement = nullptr)
         {
             const auto fail = [&](std::string message)
             { editor.projectStatus = std::move(message); push_editor_log(editor, "[asset] " + editor.projectStatus); return false; };
@@ -970,6 +1064,7 @@
             {
                 const auto& review = *editor.modelImportReview;
                 const auto& compiled = review.compiled;
+                const bool landing = placement && placement->playerStart;
                 if (!compiled || core::sha256::hex(core::sha256::hash(std::span{
                         reinterpret_cast<const std::uint8_t*>(review.sourceBytes.data()), review.sourceBytes.size()})) != review.sourceSha256)
                     return fail("The reviewed model snapshot is invalid; no scene change was made.");
@@ -1010,8 +1105,24 @@
                 }
                 std::vector<authoring::scene::SceneOperation> operations;
                 std::vector<EditorEntity> entities;
+                if (landing)
+                {
+                    EditorEntity start{};
+                    start.positionAnchor = placement->playerStart->pivot;
+                    start.rotation = placement->playerStart->rotation;
+                    start.terrainAttachment = placement->attachment;
+                    auto spawn = editor_surface_spawn_operations(editor, start);
+                    if (!spawn) return fail("The project needs a visible primary PlayerStart on the reviewed terrain before setting up landing.");
+                    for (auto& operation : *spawn) operations.push_back(std::move(operation));
+                    const auto used = std::ranges::count_if(editor.entities, [](const EditorEntity& entity) {
+                        return entity.visible && entity.terrainAttachment && entity.terrainAttachment->solid_walk_box;
+                    });
+                    if (static_cast<std::size_t>(used) + compiled.model.primitives.size() > project_planetary_runtime::maximum_walk_boxes)
+                        return fail("The reviewed model would exceed the planetary walking collider budget.");
+                }
                 const auto sourceNameUtf8 = review.source.stem().generic_u8string();
                 const std::string baseName{sourceNameUtf8.begin(), sourceNameUtf8.end()};
+                const auto transactionLabel = landing ? std::string{"Set Up Landing Area"} : "Import model " + baseName;
                 const auto address = [](std::uint32_t wrap) { return wrap == 33071u ? scene::SceneTextureAddress::clamp_to_edge
                     : wrap == 33648u ? scene::SceneTextureAddress::mirrored_repeat : scene::SceneTextureAddress::repeat; };
                 for (std::size_t index{}; index < compiled.model.primitives.size(); ++index)
@@ -1024,6 +1135,13 @@
                     entity.name = make_entity_name(editor, baseName + (compiled.model.primitives.size() == 1u ? "" : " " + std::to_string(index+1u)));
                     entity.type = "IndexedMesh"; entity.category = "World";
                     entity.sceneObjectId = allocate_editor_scene_object_id(editor, entity.name);
+                    if (placement)
+                    {
+                        entity.positionAnchor = placement->pivot;
+                        entity.rotation = placement->rotation;
+                        entity.terrainAttachment = placement->attachment;
+                        entity.terrainAttachment->solid_walk_box = landing;
+                    }
                     entity.meshAsset = scene::SceneMeshSnapshot{
                         "Assets/Mesh/" + asset::texture::content_hash_hex(primitive.geometry->key()) + ".epoch_mesh",
                         primitive.geometry->key().words, static_cast<std::uint32_t>(primitive.geometry->vertices().size()),
@@ -1044,8 +1162,40 @@
                     operations.emplace_back(authoring::scene::ObjectCreatedOperation{.object=*descriptor});
                     entity.meshSnapshot=primitive.geometry;entity.meshLoadAttempted=true;entities.push_back(std::move(entity));
                 }
+                if (landing)
+                {
+                    const auto scale = compiled.model.meters_per_unit;
+                    const auto basis = previewgrid::make_precise_mesh_transform(placement->pivot, {scale, scale, scale},
+                        {placement->rotation[0], placement->rotation[1], placement->rotation[2]});
+                    if (!basis) return fail("The beacon's reviewed bounds could not be measured.");
+                    auto settings = editor.sceneDocument.project_settings();
+                    double nearest = std::numeric_limits<double>::infinity();
+                    for (const auto& part : entities)
+                    {
+                        const auto low = part.meshSnapshot->minimum(), high = part.meshSnapshot->maximum();
+                        std::array<double, 3> closest{};
+                        for (std::size_t axis = 0; axis < closest.size(); ++axis)
+                        {
+                            double coordinate{};
+                            for (std::size_t row = 0; row < closest.size(); ++row)
+                                coordinate += basis->rotation[row * 3 + axis] * (placement->playerStart->pivot[row] - basis->position[row]);
+                            closest[axis] = std::clamp(coordinate / scale, double(low[axis]), double(high[axis]));
+                        }
+                        const auto point = basis->apply(closest);
+                        const auto distance = std::hypot(point[0] - placement->playerStart->pivot[0],
+                            point[1] - placement->playerStart->pivot[1], point[2] - placement->playerStart->pivot[2]);
+                        if (distance < nearest)
+                        {
+                            nearest = distance;
+                            settings.reach_objective = scene::SceneReachObjective{part.sceneObjectId, 5.0};
+                        }
+                    }
+                    if (!std::isfinite(nearest) || nearest <= 5.0)
+                        return fail("PlayerStart needs to be outside the beacon objective's 5 m range.");
+                    operations.emplace_back(authoring::scene::ProjectSettingsChangedOperation{std::move(settings)});
+                }
                 auto trial = editor.sceneDocument;
-                if (!trial.apply_transaction(operations,"Import model "+baseName))
+                if (!trial.apply_transaction(operations,transactionLabel))
                     return fail("The complete model transaction was refused; the previous scene and files are unchanged.");
                 if (!prepare_model_import_directory(root,"Assets/Models")
                     || !prepare_model_import_directory(root,"Assets/Textures")
@@ -1074,7 +1224,7 @@
                 }
                 if (!model_import_review_current(editor)) return fail("The project changed before import commit. Review again.");
                 const auto selected = entities.front().sceneObjectId;
-                if (!apply_editor_scene_transaction(editor,operations,"Import model "+baseName,selected)) return false;
+                if (!apply_editor_scene_transaction(editor,operations,transactionLabel,selected)) return false;
                 for (const auto& imported : entities)
                     if (const auto index = editor_entity_index(editor,imported.sceneObjectId))
                     { editor.entities[*index].meshSnapshot=imported.meshSnapshot;editor.entities[*index].meshLoadAttempted=true; }
@@ -1086,7 +1236,11 @@
                     if (const auto part = editor_entity_index(editor,entities[index].sceneObjectId))
                         add_editor_entity_selection(editor,*part);
                 editor.modelImportReview.reset();
-                editor.projectStatus = "Reviewed model imported in metres with exact mesh and base-color texture references. Undo restores the scene; Save Project retains placement. Terrain-surface placement is separate.";
+                editor.projectStatus = landing
+                    ? "Landing area set up. Save Project retains the solid beacon, PlayerStart and 5 m reach objective."
+                    : placement
+                    ? "Reviewed model attached to the verified dry ocean shoreline. Save Project retains the attachment. Collision requires a separate check."
+                    : "Reviewed model imported in metres with exact mesh and base-color texture references. Undo restores the scene; Save Project retains placement.";
                 push_editor_log(editor,"[asset] "+editor.projectStatus);
                 return true;
             }
@@ -1211,19 +1365,19 @@
             catch (...) { return fail("Could not write the mesh into the active project. Existing source was not replaced."); }
         }
 
-        void import_selected_project_texture(
+        std::optional<editor_project_textures::TextureCatalogEntry> import_selected_project_texture(
             EditorState& editor,
             const std::shared_ptr<core::Context>& ctx,
             const asset::texture::ContentHash& generatedKey = asset::texture::ContentHash())
         {
             auto* controller = project_texture_controller(editor);
             if (!controller)
-                return;
+                return {};
             if (editor.selectedProjectFile.empty())
             {
                 editor.projectTextureStatus =
                     "Select an image or .epoch_texture source under Project/Assets.";
-                return;
+                return {};
             }
 
             const RendererBackendKind backend = renderer_backend_kind(ctx);
@@ -1249,7 +1403,7 @@
                 {
                     editor.projectTextureStatus =
                         "Texture document is outside the active project.";
-                    return;
+                    return {};
                 }
 
                 const auto relativeUtf8 = relativePath.generic_u8string();
@@ -1270,7 +1424,7 @@
                     push_editor_log(
                         editor,
                         "[assets] " + editor.projectTextureStatus);
-                    return;
+                    return {};
                 }
 
                 editor.selectedAssetPath = opened.entry->logical_path;
@@ -1282,7 +1436,7 @@
                 push_editor_log(
                     editor,
                     "[assets] " + editor.projectTextureStatus);
-                return;
+                return opened.entry;
             }
 
             if (!generatedKey.empty())
@@ -1301,25 +1455,26 @@
                     {
                         editor.projectTextureStatus = "The existing generated texture could not be restored or admitted. Nothing was replaced.";
                         push_editor_log(editor, "[assets] " + editor.projectTextureStatus);
-                        return;
+                        return {};
                     }
                     const auto selected = controller->select(retained->logical_path);
                     if (!selected)
                     {
                         editor.projectTextureStatus = "The existing generated texture is no longer selectable. Review the project texture again.";
-                        return;
+                        return {};
                     }
                     editor.selectedAssetPath = selected.entry->logical_path;
                     editor.projectTextureStatus = "Reused the verified project texture " + selected.entry->logical_path + ".";
                     push_editor_log(editor, "[assets] " + editor.projectTextureStatus);
-                    return;
+                    return selected.entry;
                 }
             }
 
             const auto imported = controller->import_source(
                 selectedPath,
                 renderer,
-                budgets);
+                budgets,
+                generatedKey);
             if (!imported)
             {
                 editor.projectTextureStatus = epochengine::format_text(
@@ -1335,7 +1490,7 @@
                 push_editor_log(
                     editor,
                     "[assets] " + editor.projectTextureStatus);
-                return;
+                return {};
             }
 
             editor.selectedAssetPath = imported.entry->logical_path;
@@ -1349,6 +1504,7 @@
             push_editor_log(
                 editor,
                 "[assets] " + editor.projectTextureStatus);
+            return imported.entry;
         }
 
         void browse_project_image_source(
@@ -2025,8 +2181,316 @@
                 editor.assetGeneration.status="Asset task failed. No automatic approval or import was performed; retained job files remain available.";
             }
         }
+        [[nodiscard]] std::string asset_output_review_binding(
+            const EditorState& editor, bool model, std::string& diagnostic)
+        {
+            const auto& state = editor.assetGeneration;
+            const auto& completion = model ? state.generated_model : state.reference;
+            if (!completion || !completion->result || (model ? !completion->model : !completion->image))
+            {
+                diagnostic = model ? "Open or generate a supported GLB in Asset Generation before reviewing its import."
+                    : "Open or generate a PNG in Asset Generation before reviewing it.";
+                return {};
+            }
+            if (!has_open_project(editor) || !editor_asset_generation::current_project(*completion, asset_generation_project(editor)))
+            {
+                diagnostic = "Open the output for review in the current project.";
+                return {};
+            }
+            const auto& result = completion->result;
+            const auto output = display_project_path(result.output);
+            const auto work = display_project_path(result.work_directory);
+            return result.output_sha256 + ":" + std::to_string(output.size()) + ":" + output + work;
+        }
+
+        [[nodiscard]] bool forest_asset_step_current(const EditorState& editor, std::string_view operation)
+        {
+            const auto& sequence = editor.aiGoalTools;
+            if (editor.sceneDocumentRevision != sequence.forest_asset_scene_revision) return false;
+            if (operation == "project.save") return true;
+            const auto* tree = selected_forest_species_target(editor);
+            if (!tree || tree->sceneObjectId != sequence.forest_asset_target) return false;
+            if (sequence.forest_asset_kind == epochengine::editor::ai_chat_goal::ForestAssetKind::tree
+                && (editor.plantLabDocument.revision != sequence.forest_asset_recipe_revision
+                    || editor.plantLabDocument.contentHash != sequence.forest_asset_recipe_hash)) return false;
+            if (operation == "asset.image.generate" || operation == "forest.species.add") return true;
+            std::string diagnostic;
+            const bool model = operation == "asset.model.setup_landing";
+            const auto binding = asset_output_review_binding(editor, model, diagnostic);
+            return !binding.empty() && binding == sequence.forest_asset_output;
+        }
+
+        [[nodiscard]] bool generated_model_review_current(const EditorState& editor)
+        {
+            const auto& model = editor.assetGeneration.generated_model;
+            return model && model->result && model->model
+                && editor_asset_generation::current_project(*model, asset_generation_project(editor))
+                && model_import_review_current(editor)
+                && editor.modelImportReview->source == model->result.output
+                && editor.modelImportReview->sourceSha256 == model->result.output_sha256;
+        }
+
+        [[nodiscard]] bool review_generated_project_model(EditorState& editor)
+        {
+            if (asset_output_review_binding(editor, true, editor.projectStatus).empty()) return false;
+            const auto& result = editor.assetGeneration.generated_model->result;
+            editor.meshImportPathDraft = display_project_path(result.output);
+            if (!review_project_model(editor, result.output)) return false;
+            if (generated_model_review_current(editor)) return true;
+            editor.modelImportReview.reset();
+            editor.projectStatus = "Generated model changed after validation. Review the exact retained model again.";
+            return false;
+        }
+
+        [[nodiscard]] bool model_import_scene_busy(const EditorState& editor)
+        {
+            return editor.projectBuildPending || editor.scriptBuildPending || editor.planetaryGeneratePending
+                || editor.forestSurfacePending || editor.projectRuntimeProcess.valid()
+                || (editor.projectRuntimeSnapshot && editor.projectRuntimeSnapshot->active());
+        }
+
+        [[nodiscard]] bool import_reviewed_generated_model(EditorState& editor)
+        {
+            if (model_import_scene_busy(editor) || editor.modelShorelinePending)
+            {
+                editor.projectStatus = "Stop the project and finish current build or terrain work before importing the model.";
+                return false;
+            }
+            if (generated_model_review_current(editor)) return approve_project_model_import(editor);
+            editor.projectStatus = "Review the exact retained model again before approving project import.";
+            return false;
+        }
+
+        [[nodiscard]] std::optional<previewgrid::PreciseMeshTransform> model_shoreline_terrain_transform(
+            const EditorEntity& terrain)
+        {
+            if (!terrain.visible || terrain.editorOnly
+                || std::ranges::any_of(terrain.scale, [](float scale) { return scale <= 0.0f; })) return {};
+            const auto pivot = scene::world_position(terrain.position, terrain.positionAnchor);
+            return pivot ? previewgrid::make_precise_mesh_transform(*pivot,
+                {terrain.scale[0], terrain.scale[1], terrain.scale[2]},
+                {terrain.rotation[0], terrain.rotation[1], terrain.rotation[2]}) : std::nullopt;
+        }
+
+        [[nodiscard]] bool prepare_model_shoreline_review(EditorState& editor, bool landing = false)
+        {
+            if (!generated_model_review_current(editor) || model_import_scene_busy(editor))
+            {
+                editor.projectStatus = "Stop the project and review the generated GLB before requesting shoreline placement.";
+                return false;
+            }
+            const auto treeIndex = landing && editor.selectedEntityIds.size() <= 1u
+                ? editor_entity_index(editor, editor.selectedEntityId) : std::nullopt;
+            const auto* tree = treeIndex ? &editor.entities[*treeIndex] : nullptr;
+            const auto* forest = tree && tree->visible && tree->forestRegion && tree->forestRegion->valid()
+                ? &*tree->forestRegion : nullptr;
+            if (landing && !forest)
+            {
+                editor.projectStatus = "Select one painted tree to identify the saved forest for this landing area.";
+                return false;
+            }
+            const auto admitted = [&](const auto& entity) {
+                return (!forest || entity.sceneObjectId == forest->terrain_object_id)
+                    && entity.visible && !entity.editorOnly && editor_planetary_stream_identity_matches(editor, entity);
+            };
+            const auto terrain = std::find_if(editor.entities.begin(), editor.entities.end(), admitted);
+            if (terrain == editor.entities.end() || (!landing && !editor.planetaryMeshPolicy->settings.ocean_surface)
+                || editor.sceneDocumentRevision == 0u)
+            {
+                editor.projectStatus = landing ? "Save the admitted planetary terrain and its painted forest before reviewing a landing area."
+                    : "Generate and save planetary terrain with Ocean On before reviewing shoreline placement.";
+                return false;
+            }
+            if (std::any_of(std::next(terrain), editor.entities.end(), admitted))
+            {
+                editor.projectStatus = "Keep one admitted ocean terrain visible before reviewing shoreline placement.";
+                return false;
+            }
+            refresh_editor_planetary_body_inventory(editor, *terrain);
+            const auto& policy = *editor.planetaryMeshPolicy;
+            const auto body = std::find_if(policy.generated_bodies.begin(), policy.generated_bodies.end(),
+                [&](const auto& value) { return value.id == (forest ? forest->body_index : 0u); });
+            const auto transform = model_shoreline_terrain_transform(*terrain);
+            if (body == policy.generated_bodies.end() || !transform)
+            {
+                editor.projectStatus = "The selected body or terrain transform could not be verified.";
+                return false;
+            }
+            double beaconRadius{};
+            if (forest)
+            {
+                if (!policy.generated_mesh || forest->terrain_artifact_key != policy.generated_mesh->artifact_key
+                    || forest->mesh_source_origin_meters != policy.generated_mesh->coordinates.source_origin_meters
+                    || forest->recipe != project_planetary::encode_settings(policy.settings)
+                    || forest->body_radius_meters != body->radius_meters || forest->admitted_body_center_meters != body->center_meters
+                    || policy.source.content_hash != "sha256:" + forest->provider_content_hash
+                    || std::ranges::any_of(terrain->scale, [](float scale) { return std::abs(scale - 1.0f) > 1e-6f; }))
+                {
+                    editor.projectStatus = "Refresh forest placement against the current terrain and use terrain Scale 1, 1, 1 before setting up landing.";
+                    return false;
+                }
+                for (const auto& part : editor.modelImportReview->compiled.model.primitives)
+                {
+                    const auto low = part.geometry->minimum(), high = part.geometry->maximum();
+                    beaconRadius = (std::max)(beaconRadius, std::hypot(double((std::max)(std::abs(low[0]),std::abs(high[0]))),
+                        double((std::max)(std::abs(low[2]),std::abs(high[2])))));
+                }
+                beaconRadius *= editor.modelImportReview->compiled.model.meters_per_unit;
+                if (!std::isfinite(beaconRadius) || beaconRadius <= 0.0)
+                { editor.projectStatus = "The reviewed model has no usable footprint for a landing beacon."; return false; }
+            }
+            auto artifact = terrain->meshSnapshot;
+            if (artifact && artifact->key().words != policy.generated_mesh->artifact_key) artifact.reset();
+            editor.modelImportReview->shoreline = EditorState::ModelShorelineTarget{
+                .terrain = terrain->sceneObjectId, .sceneRevision = editor.sceneDocumentRevision,
+                .workDirectory = editor.assetGeneration.generated_model->result.work_directory, .transform = *transform,
+                .query = {policy.source, policy.settings, *policy.generated_mesh, *body,
+                    std::move(artifact), forest ? forest->center_direction : std::array{0.0, 1.0, 0.0}, editor.sceneDocumentRevision},
+                .forestTree = tree ? tree->sceneObjectId : scene::kInvalidSceneObjectId,
+                .forest = forest ? std::optional{*forest} : std::nullopt, .beaconRadius = beaconRadius};
+            return true;
+        }
+
+        [[nodiscard]] bool model_shoreline_review_current(const EditorState& editor)
+        {
+            if (!generated_model_review_current(editor) || !editor.modelImportReview->shoreline
+                || model_import_scene_busy(editor)) return false;
+            const auto& target = *editor.modelImportReview->shoreline;
+            if (editor.sceneDocumentRevision != target.sceneRevision
+                || editor.assetGeneration.generated_model->result.work_directory != target.workDirectory) return false;
+            if (target.forest)
+            {
+                const auto tree = editor_entity_index(editor, target.forestTree);
+                if (!tree || editor.selectedEntityId != target.forestTree || editor.selectedEntityIds.size() > 1u
+                    || !editor.entities[*tree].visible || editor.entities[*tree].forestRegion != target.forest) return false;
+            }
+            const auto index = editor_entity_index(editor, target.terrain);
+            if (!index || !editor_planetary_stream_identity_matches(editor, editor.entities[*index])) return false;
+            const auto& policy = *editor.planetaryMeshPolicy;
+            return model_shoreline_terrain_transform(editor.entities[*index]) == target.transform
+                && policy.generated_mesh == target.query.mesh && policy.settings == target.query.settings
+                && policy.source.content_hash == target.query.source.content_hash
+                && policy.source.project_root == target.query.source.project_root
+                && policy.source.project_manifest == target.query.source.project_manifest
+                && std::ranges::find(policy.generated_bodies, target.query.body) != policy.generated_bodies.end();
+        }
+
+        [[nodiscard]] bool begin_model_shoreline_import(EditorState& editor)
+        {
+            if (editor.modelShorelinePending || !model_shoreline_review_current(editor))
+            {
+                editor.projectStatus = "The shoreline review expired or is already running. Request a fresh review.";
+                return false;
+            }
+            const auto& target = *editor.modelImportReview->shoreline;
+            const auto index = editor_entity_index(editor, target.terrain);
+            const auto path = editor.entities[*index].meshAsset->logical_path;
+            const auto limits = editor_planetary_mesh_budget(editor).artifact;
+            try
+            {
+                const auto forestRadius = target.forest ? target.forest->radius_meters : 0.0;
+                auto submitted = schedule_editor_cancellable_task(editor,
+                    target.forest ? "Find a walking route outside the reviewed forest" : "Find dry ocean shoreline for model import",
+                    [query = target.query, path, limits, forestRadius, beaconRadius = target.beaconRadius](std::stop_token stop) mutable
+                    {
+                        if (stop.stop_requested()) return EditorState::ModelSurfaceResult{
+                            project_planetary::SurfaceCode::cancelled, {.message = "Shoreline search cancelled."}};
+                        if (!query.artifact)
+                        {
+                            const auto loaded = asset::mesh::read_project_artifact(
+                                query.source.project_root, path, {query.mesh.artifact_key}, limits);
+                            if (!loaded) return EditorState::ModelSurfaceResult{
+                                project_planetary::SurfaceCode::invalid, {.message = "The saved terrain mesh could not be verified."}};
+                            query.artifact = loaded.artifact;
+                        }
+                        if (forestRadius > 0.0)
+                        {
+                            auto site = project_planetary::query_forest_landing_site(query.source.project_root,
+                                query, forestRadius, beaconRadius, stop);
+                            return EditorState::ModelSurfaceResult{site.code, std::move(site.operation),
+                                std::move(site.beacon), std::move(site.player_start)};
+                        }
+                        auto shore = project_planetary::query_ocean_shoreline(query.source.project_root, query, 100.0, stop);
+                        return EditorState::ModelSurfaceResult{shore.code, std::move(shore.operation), std::move(shore.land)};
+                    });
+                editor.modelShorelineCancellation = submitted.cancellation;
+                editor.modelShorelinePending.emplace(std::move(submitted.completion));
+                editor.projectStatus = target.forest ? "Sampling routes from PlayerStart to the beacon outside the reviewed forest."
+                    : "Finding dry ground within 100 m of the reviewed ocean shoreline.";
+                return true;
+            }
+            catch (...)
+            {
+                editor.projectStatus = "The shoreline search could not be scheduled. The scene is unchanged.";
+                return false;
+            }
+        }
+
+        [[nodiscard]] bool poll_model_shoreline_import(EditorState& editor, AiChat& chat)
+        {
+            if (!editor.modelShorelinePending
+                || editor.modelShorelinePending->wait_for(0ms) != std::future_status::ready) return false;
+            auto completion = std::move(*editor.modelShorelinePending);
+            editor.modelShorelinePending.reset();
+            editor.modelShorelineCancellation = {};
+            if (!editor.modelImportReview || !editor.modelImportReview->shoreline) return false;
+            bool placed = false;
+            try
+            {
+                const auto result = completion.get();
+                if (!model_shoreline_review_current(editor))
+                    editor.projectStatus = "The scene, model or terrain changed during the shoreline search. Request a fresh review.";
+                else if (result.code != project_planetary::SurfaceCode::ready)
+                    editor.projectStatus = result.operation.message.empty() ? "No verified dry shoreline was returned." : result.operation.message;
+                else
+                {
+                    const auto& review = *editor.modelImportReview;
+                    const auto& target = *review.shoreline;
+                    const auto pose = bool(target.forest) == bool(result.playerStart)
+                        ? model_surface_pose(review.compiled, target.transform, target.query, result.land, target.terrain,
+                            result.playerStart ? &*result.playerStart : nullptr) : std::nullopt;
+                    if (pose)
+                    {
+                        const auto body = target.query.body.id;
+                        placed = approve_project_model_import(editor, &*pose);
+                        if (placed)
+                            editor.projectStatus += epochengine::format_text(" Body {} at ({}, {}, {}) m.",
+                                body, pose->pivot[0], pose->pivot[1], pose->pivot[2]);
+                    }
+                    else editor.projectStatus = "The returned land sample could not support this model. The scene is unchanged.";
+                }
+            }
+            catch (...)
+            {
+                editor.projectStatus = "The shoreline search failed. Check Output and request a fresh review.";
+            }
+            if (editor.modelImportReview) editor.modelImportReview->shoreline.reset();
+            editor.aiToolStatus = editor.assetGeneration.status = editor.projectStatus;
+            chat.append_status(editor.projectStatus);
+            push_editor_log(editor, "[asset] " + editor.projectStatus);
+            return placed;
+        }
+
+        std::optional<editor_project_textures::TextureCatalogEntry> import_asset_generation_texture(
+            EditorState& editor, const std::shared_ptr<core::Context>& ctx)
+        {
+            auto& state = editor.assetGeneration;
+            if (asset_output_review_binding(editor, false, state.status).empty()) return {};
+            const auto& reference = state.reference->result;
+            const auto added = add_project_image_source(resolve_editor_path(std::filesystem::path{
+                std::u8string{editor.projectRoot.begin(),editor.projectRoot.end()}}), reference.output,
+                std::string_view{reference.output_sha256});
+            state.status = added.diagnostic;
+            if (!added) return {};
+            editor.selectedProjectFile = display_project_path(added.path);
+            editor.selectedAssetPath = editor.selectedProjectFile;
+            auto imported = import_selected_project_texture(editor, ctx, added.generated_texture_key);
+            state.status = editor.projectTextureStatus;
+            return imported;
+        }
+
         void dispatch_asset_generation(EditorState& editor,const std::shared_ptr<core::Context>& ctx,
-            editor_asset_generation::Action action)
+            editor_asset_generation::Action action,bool foliageCutout = false)
         {
             namespace generation=editor_asset_generation;
             auto& state=editor.assetGeneration;
@@ -2117,36 +2581,14 @@
             {(void)generation::approve_reference(state,state.status);return;}
             if(action==generation::Action::import_texture)
             {
-                if(!state.reference||!generation::current_project(*state.reference,asset_generation_project(editor)))
-                {state.status="Project identity changed. Choose the PNG again and review it before importing into this project.";return;}
-                std::string verified;
-                if(!generation::reference_current(state,verified)){state.status=verified;return;}
-                const auto added=add_project_image_source(resolve_editor_path(std::filesystem::path{
-                    std::u8string{editor.projectRoot.begin(),editor.projectRoot.end()}}),state.reference->result.output,
-                    std::string_view{state.reference->result.output_sha256});
-                state.status=added.diagnostic;
-                if(added)
-                {
-                    editor.selectedProjectFile=display_project_path(added.path);editor.selectedAssetPath=editor.selectedProjectFile;
-                    import_selected_project_texture(editor,ctx,added.generated_texture_key);state.status=editor.projectTextureStatus;
-                }
+                (void)import_asset_generation_texture(editor, ctx);
                 return;
             }
             if(action==generation::Action::review_model||action==generation::Action::import_model)
             {
-                if(!state.generated_model||!generation::current_project(*state.generated_model,asset_generation_project(editor)))
-                {state.status="Project identity changed. The retained model must be reviewed through Assets for this project.";return;}
-                const auto path=display_project_path(state.generated_model->result.output);
                 if(action==generation::Action::review_model)
-                {
-                    editor.meshImportPathDraft=path;
-                    if(review_project_model(editor,state.generated_model->result.output)
-                        &&editor.modelImportReview->sourceSha256!=state.generated_model->result.output_sha256)
-                    {editor.modelImportReview.reset();editor.projectStatus="Generated model changed after validation. Import refused.";}
-                }
-                else if(model_import_review_current(editor)&&editor.modelImportReview->sourceSha256==state.generated_model->result.output_sha256)
-                    (void)approve_project_model_import(editor);
-                else editor.projectStatus="Review the exact retained model again before approving project import.";
+                    (void)review_generated_project_model(editor);
+                else (void)import_reviewed_generated_model(editor);
                 state.status=editor.projectStatus;return;
             }
             try
@@ -2191,7 +2633,8 @@
                 const auto phase=state.phase;phase->store(generation::Stage::waiting_for_models);
                 const auto workDirectory=job->work_directory;
                 auto scheduled=schedule_editor_cancellable_task(editor,kind==ai::asset_jobs::Action::image?"Generate 2D asset":"Generate 3D asset",
-                    [job=std::move(*job),project,phase](std::stop_token stop)mutable{return generation::execute(std::move(job),project,phase,stop);});
+                    [job=std::move(*job),project,phase,foliageCutout](std::stop_token stop)mutable
+                    {return generation::execute(std::move(job),project,phase,stop,foliageCutout);});
                 editor.assetGenerationCancellation=scheduled.cancellation;
                 editor.assetGenerationPending=std::move(scheduled.completion);
                 state.active_work_directory=workDirectory;

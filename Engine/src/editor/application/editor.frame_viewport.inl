@@ -1,6 +1,17 @@
 // Epoch feature implementation; included by editor.core application owner only.
 // SPDX-License-Identifier: LicenseRef-MIT-NoSell
 
+        const auto show_project_run_output = [&]()
+        {
+            exit_project_runtime_full_screen(editor);
+            editor.dockStatusTab = EditorWorkspaceTab::Output;
+            editor.outputGeneralOnly = false;
+            editor.outputShowDetails = false;
+            editor.outputSearch.clear();
+            editor.outputFollowTail = true;
+            ++editor.outputScrollToEndGeneration;
+            request_pane_region("pane.output", "Output", pane_dock_region("pane.output"));
+        };
         const auto projectBuildActivity = project_build_activity_label(editor);
         bool guiDocumentWorkspace =
             editor.mainSurface == EditorMainSurface::Game2D
@@ -358,12 +369,15 @@
                 const bool placementRefreshReady=has_open_project(editor)&&!editor.forestSurfacePending
                     &&!editor.projectBuildPending&&!editor.planetaryGeneratePending&&!editor.projectRuntimeProcess.valid();
                 const std::array refreshActions{gui::InlineButtonSpec{"Update Painted Trees",0.0f,refreshReady},
-                    gui::InlineButtonSpec{"Refresh Forest Placement",0.0f,placementRefreshReady}};
+                    gui::InlineButtonSpec{"Refresh Forest Placement",0.0f,placementRefreshReady},
+                    gui::InlineButtonSpec{"Refresh Selected Tree Material",0.0f,placementRefreshReady
+                        &&selected_forest_species_target(editor)}};
                 paintForestHeader(gui::inline_button_row_height(refreshActions,28.0f,6.0f,forestButtons)+8.0f);
                 if(const auto clicked=gui::inline_button_row(refreshActions,28.0f,6.0f,forestButtons))
                 {
                     if(*clicked==0u)(void)refresh_forest_factory_instances(editor);
-                    else (void)begin_forest_surface_refresh(editor);
+                    else if(*clicked==1u)(void)begin_forest_surface_refresh(editor);
+                    else (void)refresh_selected_forest_material(editor);
                 }
                 const std::array paintModeActions{
                     gui::InlineButtonSpec{"Paint Forest on Terrain",0.0f,ready&&has_open_project(editor)}};
@@ -374,6 +388,12 @@
                     editor.forestTerrainPainting=true;
                     if(editor.forestProjectCamera)
                         (void)previewgrid::restore_camera_rig_snapshot(ctx.get(),*editor.forestProjectCamera);
+                }
+                if(editor.forestPlacementSaved)
+                {
+                    const auto receipt=*editor.forestPlacementSaved?"Last tree placement saved":"Last tree placement not saved";
+                    paintForestHeader(gui::measure_section_heading_height(receipt,forestTextWidth));
+                    gui::section_heading(receipt,*editor.forestPlacementSaved?gui::SemanticTone::success:gui::SemanticTone::warning);
                 }
                 paintForestHeader(gui::measure_wrapped_label_height(editor.plantLabStatus,forestTextWidth));
                 gui::wrapped_label(editor.plantLabStatus,forestTextWidth);
@@ -391,7 +411,7 @@
                 };
                 paintForestHeader(gui::measure_section_heading_height("Forest Painting",forestTextWidth));
                 gui::section_heading("Forest Painting");
-                constexpr std::string_view paintHelp="Hold the left mouse button and drag over terrain to paint forest areas. Right-drag moves the camera. Green marks planted regions; amber marks the selected region. Scene Undo removes an area. Done Painting restores the scene.";
+                constexpr std::string_view paintHelp="Drag with the left mouse button over terrain, then release to plant the stroke. Right-drag moves the camera. Green marks planted areas and amber marks the selected area. Scene Undo removes a stroke.";
                 paintForestHeader(gui::measure_wrapped_label_height(paintHelp,forestTextWidth));
                 gui::wrapped_label(paintHelp,forestTextWidth);
                 const auto areaSummary=epochengine::format_text(
@@ -402,13 +422,16 @@
                 gui::wrapped_label(areaSummary,forestTextWidth);
                 const bool areaReady=ready&&has_open_project(editor)&&!editor.forestSurfacePending
                     &&!editor.projectBuildPending&&!editor.projectRuntimeProcess.valid();
-                const std::array<gui::InlineButtonSpec,9> areaActions{{
+                const std::array<gui::InlineButtonSpec,11> areaActions{{
                     {"Radius -",0.0f,areaReady},{"Radius +",0.0f,areaReady},
                     {"Density -",0.0f,areaReady},{"Density +",0.0f,areaReady},{"Seed +",0.0f,areaReady},
                     {"Paint Area",0.0f,areaReady},{"Erase Selected Area",0.0f,areaReady},
                     {"Cancel Placement",0.0f,editor.forestSurfacePending.has_value()},
                     {"Refresh Forest Placement",0.0f,has_open_project(editor)&&!editor.forestSurfacePending
-                        &&!editor.projectBuildPending&&!editor.planetaryGeneratePending&&!editor.projectRuntimeProcess.valid()}}};
+                        &&!editor.projectBuildPending&&!editor.planetaryGeneratePending&&!editor.projectRuntimeProcess.valid()},
+                    {"Add Current Plant to Selected Forest",0.0f,areaReady&&!planetary_project_busy(editor)
+                        &&selected_forest_species_target(editor)},
+                    {"Fill Painted Areas",0.0f,areaReady&&!planetary_project_busy(editor)}}};
                 paintForestHeader(gui::inline_button_row_height(areaActions,28.0f,6.0f,forestButtons)+8.0f);
                 if(const auto clicked=gui::inline_button_row(areaActions,28.0f,6.0f,forestButtons))
                 {
@@ -424,12 +447,25 @@
                     }
                     else if(*clicked==6u)(void)erase_selected_forest_area(editor);
                     else if(*clicked==8u)(void)begin_forest_surface_refresh(editor);
+                    else if(*clicked==9u)(void)add_plant_lab_species_to_forest(editor);
+                    else if(*clicked==10u)
+                    {
+                        editor.forestPlacementCamera=previewgrid::camera_for(ctx.get());
+                        (void)fill_painted_forest_areas(editor);
+                    }
                     else if(editor.taskScheduler)
                     {
                         (void)editor.taskScheduler->cancel(editor.forestSurfaceCancellation);
                         editor.forestSurfacePlacement.reset();
+                        editor.forestPlacementSaved=false;
                         editor.plantLabStatus="Plant placement cancelled; scene unchanged.";
                     }
+                }
+                if(editor.forestPlacementSaved)
+                {
+                    const auto receipt=*editor.forestPlacementSaved?"Last tree placement saved":"Last tree placement not saved";
+                    paintForestHeader(gui::measure_section_heading_height(receipt,forestTextWidth));
+                    gui::section_heading(receipt,*editor.forestPlacementSaved?gui::SemanticTone::success:gui::SemanticTone::warning);
                 }
                 paintForestHeader(gui::measure_wrapped_label_height(editor.plantLabStatus, forestTextWidth));
                 gui::wrapped_label(editor.plantLabStatus, forestTextWidth);
@@ -526,20 +562,36 @@
                 : 96.0f;
             const bool meshDrawSecondRow = showMeshDrawMode
                 && scene_size.x < headerOccupiedLeft + meshDrawWidth + 16.0f;
-            if (meshDrawSecondRow)
+            const float resetButtonWidth = 88.0f;
+            const float pointerModeWidth = 110.0f;
+            const float meshHeaderInset = showMeshDrawMode && !meshDrawSecondRow ? meshDrawWidth + 6.0f : 0.0f;
+            const bool authoringCameraControls = sceneFits && !projectViewportMaximized
+                && !editor_project_viewport_input_reserved(editor) && editor.previewMode == core::ScenePreviewMode::Editor;
+            const bool wantsPointerMode = authoringCameraControls && scene_size.x >= pointerModeWidth + resetButtonWidth + 22.0f
+                && editor.mainSurface != EditorMainSurface::ForestFactory && editor.mainSurface != EditorMainSurface::Game2D;
+            const float toolsWidth = resetButtonWidth + (wantsPointerMode ? pointerModeWidth + 6.0f : 0.0f);
+            const float wrappedToolsY = meshDrawSecondRow ? 50.0f : 26.0f;
+            const bool toolsWrap = authoringCameraControls && scene_size.x >= toolsWidth + 16.0f
+                && scene_size.y >= wrappedToolsY + 28.0f
+                && scene_size.x < headerOccupiedLeft + toolsWidth + meshHeaderInset + 16.0f;
+            const bool showResetView = authoringCameraControls && (toolsWrap
+                || scene_size.x >= headerOccupiedLeft + resetButtonWidth + meshHeaderInset + 16.0f);
+            const bool showPointerMode = wantsPointerMode && (toolsWrap
+                || scene_size.x >= headerOccupiedLeft + toolsWidth + meshHeaderInset + 16.0f);
+            const float sceneNoticeTop = toolsWrap ? wrappedToolsY + 26.0f : meshDrawSecondRow ? 52.0f : 26.0f;
+            if (toolsWrap || meshDrawSecondRow)
             {
                 // Native project children must begin below the wrapped toolbar.
-                const float headerBottom = scene_pos.y + 52.0f;
+                const float headerBottom = scene_pos.y + sceneNoticeTop;
                 const float inset = std::clamp(headerBottom - result.scene_viewport.position.y,
                     0.0f, result.scene_viewport.size.y);
                 result.scene_viewport.position.y += inset;
                 result.scene_viewport.size.y -= inset;
             }
-            const float sceneNoticeTop = meshDrawSecondRow ? 52.0f : 26.0f;
             if (showSceneRun)
             {
                 gui::set_cursor({scene_pos.x + runControlOffset, scene_pos.y + 2.0f});
-                if (editor.projectBuildPending && !compiledProjectRunning)
+                if ((editor.projectBuildPending || editor.projectRunAfterTerrainPreview) && !compiledProjectRunning)
                 {
                     const std::array busyRun{gui::InlineButtonSpec{
                         .label=sceneRunButtonLabel, .width=runButtonWidth, .enabled=false}};
@@ -562,11 +614,15 @@
                         if (compiledProjectRunning)
                             (void)stop_project_runtime(editor,
                                 platform::child_process::StopMode::graceful);
-                        else if (editor.sceneRunFullscreenInEditor
-                            || editor.projectKind == "Engine Development")
-                            play_active_context();
                         else
-                            launch_active_project_context();
+                        {
+                            show_project_run_output();
+                            if (editor.sceneRunFullscreenInEditor
+                                || editor.projectKind == "Engine Development")
+                                play_active_context(true);
+                            else
+                                launch_active_project_context(false, 0u, true);
+                        }
                     }
                 }
                 // A Run click above may have queued the build in this frame.
@@ -574,6 +630,7 @@
                 const auto currentBuildActivity = project_build_activity_label(editor);
                 const std::string runStatus = editor.projectBuildPending
                     ? currentBuildActivity + " " + editor.projectBuildStatus
+                    : editor.projectRunAfterTerrainPreview ? editor.projectBuildStatus
                     : !editor.projectRuntimeAttachmentError.empty()
                         ? editor.projectRuntimeAttachmentError
                         : compiledProjectRunning && !editor.projectRuntimeWindow
@@ -583,6 +640,7 @@
                 {
                     const std::string shortRunStatus = editor.projectBuildPending
                         ? currentBuildActivity
+                        : editor.projectRunAfterTerrainPreview ? "Run queued..."
                         : !editor.projectRuntimeAttachmentError.empty()
                             ? "Project launch failed. See Output."
                             : editor.projectRuntimeForceStopAvailable
@@ -615,14 +673,7 @@
                             : gui::Vec2{statusPosition.x, statusPosition.y + statusTextHeight + 4.0f});
                         if (gui::button("Show Output", {outputButtonWidth, 24.0f})
                             && !menusBlockedByModal && !toolbarControlsBlockedByMenu)
-                        {
-                            exit_project_runtime_full_screen(editor);
-                            editor.dockStatusTab = EditorWorkspaceTab::Output;
-                            editor.outputGeneralOnly = false;
-                            editor.outputShowDetails = false;
-                            editor.outputSearch.clear();
-                            request_pane_region("pane.output", "Output", pane_dock_region("pane.output"));
-                        }
+                            show_project_run_output();
                     }
                 }
                 if (projectViewportMaximized)
@@ -705,7 +756,7 @@
                 if(!authoringView)editor.viewportMeshWireframeRequest.reset();
                 result.scene_input_captured = result.scene_input_captured || drawChoice.opened;
             }
-            constexpr std::array<std::string_view, 8> kEditorViewLabels{
+            constexpr std::array<std::string_view, 9> kEditorViewLabels{
                 "Perspective",
                 "Orthographic",
                 "Front",
@@ -713,7 +764,8 @@
                 "Left",
                 "Right",
                 "Top",
-                "Bottom"
+                "Bottom",
+                "Inspect LOD"
             };
             constexpr std::array<previewgrid::EditorView, 8> kEditorViews{
                 previewgrid::EditorView::Perspective,
@@ -726,45 +778,90 @@
                 previewgrid::EditorView::Bottom
             };
             const float viewSelectWidth = (std::min)(148.0f, (std::max)(112.0f, scene_size.x * 0.22f));
-            const float focusButtonWidth = 58.0f;
-            const float meshHeaderInset = showMeshDrawMode && !meshDrawSecondRow ? meshDrawWidth + 6.0f : 0.0f;
-            const bool authoringCameraControls = !editor_project_viewport_input_reserved(editor)
-                && editor.previewMode == core::ScenePreviewMode::Editor;
-            const bool showViewSelect = sceneFits && !projectViewportMaximized
-                && authoringCameraControls
-                && scene_size.x >= headerOccupiedLeft + viewSelectWidth + focusButtonWidth + meshHeaderInset + 22.0f;
+            const float pointerModeInset = showPointerMode ? pointerModeWidth + 6.0f : 0.0f;
+            const float cameraToolsInset = toolsWrap || !showResetView ? 0.0f : resetButtonWidth + pointerModeInset;
+            const bool showViewSelect = authoringCameraControls
+                && scene_size.x >= headerOccupiedLeft + viewSelectWidth + cameraToolsInset + meshHeaderInset + 22.0f;
             gui::set_cursor({
-                scene_pos.x + scene_size.x - viewSelectWidth - focusButtonWidth - meshHeaderInset - 14.0f,
+                scene_pos.x + scene_size.x - viewSelectWidth - cameraToolsInset - meshHeaderInset - 14.0f,
                 scene_pos.y + 2.0f
             });
             if (showViewSelect)
             {
+            const bool offerInspection = editor.mainSurface == EditorMainSurface::Scene;
+            const auto viewLabels = std::span<const std::string_view>{kEditorViewLabels}.first(
+                offerInspection ? kEditorViewLabels.size() : kEditorViews.size());
             const auto editorViewSelect = gui::select_box(gui::SelectBoxOptions{
                 .id = "scene-viewport-view-select",
                 .placeholder = "Camera view",
-                .selected = previewgrid::editor_view_name(previewgrid::editor_view_for(ctx.get())),
-                .options = std::span<const std::string_view>{ kEditorViewLabels.data(), kEditorViewLabels.size() },
+                .selected = editor.lodInspectionReturnCamera ? kEditorViewLabels.back()
+                    : previewgrid::editor_view_name(previewgrid::editor_view_for(ctx.get())),
+                .options = viewLabels,
                 .size = { viewSelectWidth, 20.0f },
                 .row_height = 26.0f,
-                .max_visible_options = kEditorViewLabels.size()
+                .max_visible_options = viewLabels.size(),
+                .enabled = !menusBlockedByModal && !toolbarControlsBlockedByMenu
             });
-            if (editorViewSelect.changed && editorViewSelect.selected_index
-                && *editorViewSelect.selected_index < kEditorViews.size())
+            if (editorViewSelect.changed && editorViewSelect.selected_index)
             {
-                (void)previewgrid::set_editor_view(
-                    ctx.get(),
-                    kEditorViews[*editorViewSelect.selected_index]);
+                const auto index = *editorViewSelect.selected_index;
+                if (index < kEditorViews.size())
+                {
+                    end_editor_lod_inspection(editor, ctx.get());
+                    (void)previewgrid::set_editor_view(ctx.get(), kEditorViews[index]);
+                }
+                else if (offerInspection && index == kEditorViews.size())
+                    (void)begin_editor_lod_inspection(editor, ctx.get());
             }
-            result.scene_input_captured = result.scene_input_captured || editorViewSelect.opened;
+            result.scene_input_captured = result.scene_input_captured || editorViewSelect.opened || editorViewSelect.changed;
             }
-            gui::set_cursor({ scene_pos.x + scene_size.x - focusButtonWidth - meshHeaderInset - 8.0f, scene_pos.y + 2.0f });
-            if (sceneFits && !projectViewportMaximized && authoringCameraControls
-                && scene_size.x >= headerOccupiedLeft + focusButtonWidth + meshHeaderInset + 16.0f
-                && gui::button("Focus", { focusButtonWidth, 20.0f }))
+            const float toolsRight = scene_pos.x + scene_size.x - (toolsWrap ? 0.0f : meshHeaderInset) - 8.0f;
+            const float toolsY = scene_pos.y + (toolsWrap ? wrappedToolsY : 2.0f);
+            if (toolsWrap)
+                gui::panel_rect({scene_pos.x, toolsY}, {scene_size.x, 24.0f});
+            if (showPointerMode)
             {
-                if (editor.mainSurface == EditorMainSurface::ForestFactory && !editor.forestTerrainPainting)
-                    focus_forest_factory_preview(ctx.get(), editor);
-                else handle_scene_tool(editor, ctx.get(), "focus_selection");
+                constexpr std::array<std::string_view, 5> labels{
+                    "↖ Select", "↔↕ Move Free", "↔ Move X", "↕ Move Y", "↗ Move Z"};
+                constexpr std::array<std::string_view, 5> symbols{"↖", "↔↕", "↔ X", "↕ Y", "↗ Z"};
+                constexpr std::array modes{ScenePointerMode::select, ScenePointerMode::move_free,
+                    ScenePointerMode::move_x, ScenePointerMode::move_y, ScenePointerMode::move_z};
+                const auto current = std::find(modes.begin(), modes.end(), editor.scenePointerMode) - modes.begin();
+                gui::set_cursor({toolsRight - resetButtonWidth - pointerModeInset, toolsY});
+                const auto mode = gui::select_box(gui::SelectBoxOptions{
+                    .id = "scene-viewport-pointer-mode",
+                    .placeholder = "Viewport tool",
+                    .selected = labels[static_cast<std::size_t>(current)],
+                    .options = labels,
+                    .size = {pointerModeWidth, 20.0f},
+                    .fit_content = true,
+                    .row_height = 26.0f,
+                    .max_visible_options = labels.size(),
+                    .enabled = !menusBlockedByModal && !toolbarControlsBlockedByMenu,
+                    .closed_label = symbols[static_cast<std::size_t>(current)]});
+                if (mode.changed && mode.selected_index && *mode.selected_index < modes.size())
+                    editor.scenePointerMode = modes[*mode.selected_index];
+                result.scene_input_captured = result.scene_input_captured || mode.opened || mode.changed;
+            }
+            gui::set_cursor({toolsRight - resetButtonWidth, toolsY});
+            const bool inspectingLod = editor.lodInspectionReturnCamera.has_value();
+            if (showResetView && gui::button(inspectingLod ? "Exit Inspect" : "Reset View", {resetButtonWidth,20.0f})
+                && !menusBlockedByModal && !toolbarControlsBlockedByMenu)
+            {
+                if (inspectingLod) end_editor_lod_inspection(editor, ctx.get());
+                else
+                {
+                    previewgrid::reset_camera(ctx.get());
+                    if (editor.mainSurface == EditorMainSurface::ForestFactory && !editor.forestTerrainPainting)
+                        focus_forest_factory_preview(ctx.get(), editor);
+                    if (editor.mainSurface == EditorMainSurface::Scene)
+                    {
+                        editor.planetaryInitialFramePending = true;
+                        editor.planetaryInitialFrameGeneration =
+                            editor.projectLifecycle.evidence().generations.selected_project.generation;
+                    }
+                }
+                result.scene_input_captured = true;
             }
             ctx->set_scene_preview_mode(sceneFits && !editor_project_viewport_input_reserved(editor)
                 ? editor.previewMode : core::ScenePreviewMode::None);
@@ -876,10 +973,6 @@
             render_preview_context_menu();
             update_forest_brush(ctx,editor,result,modal_visible_now());
             if (!editor_project_viewport_input_reserved(editor)
-                && ctx->action_pressed_safe(input::Action::FrameSelection)
-                && editor.mainSurface != EditorMainSurface::ForestFactory)
-                handle_scene_tool(editor, ctx.get(), "focus_selection");
-            if (!editor_project_viewport_input_reserved(editor)
                 && editor.mainSurface != EditorMainSurface::ForestFactory)
             {
                 update_scene_object_interaction(ctx, editor, result);
@@ -906,8 +999,7 @@
             // only intentional transparent hole; generic document headers and
             // outer scroll regions belong to the other workspaces below.
                 auto& generation=editor.assetGeneration;
-                const bool reviewReady=editor.modelImportReview&&model_import_review_current(editor)
-                    &&generation.generated_model&&editor.modelImportReview->sourceSha256==generation.generated_model->result.output_sha256;
+                const bool reviewReady=generated_model_review_current(editor);
                 const auto generated=editor_asset_generation::draw(generation,viewport_size.x,viewport_size.y,
                     bool(editor.assetGenerationPending),editor_asset_generation::DrawPermissions{
                         .project_open=has_open_project(editor),
@@ -2258,7 +2350,10 @@
                         gui::wrapped_label(editor.projectBuildStatus, centerWidth);
                     }
                     else if (gui::button("Play In Editor", {220.0f, 30.0f}))
+                    {
+                        show_project_run_output();
                         play_active_context();
+                    }
 
                     // Keep both controls in fixed slots as a build settles. A
                     // delayed Cancel click must never land on a new Build.
@@ -2317,6 +2412,7 @@
                     else if (!editor.projectBuildPending && gui::button(
                         "Launch Single Context", {220.0f, 30.0f}))
                     {
+                        show_project_run_output();
                         launch_active_project_context();
                     }
                     gui::wrapped_label(

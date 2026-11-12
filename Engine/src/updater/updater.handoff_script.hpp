@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: LicenseRef-MIT-NoSell
 #pragma once
 #include <string_view>
+#if defined(_WIN32)
+#include <filesystem>
+#include <ostream>
+#endif
 
 namespace epochengine::updater::handoff_script
 {
@@ -172,6 +176,48 @@ try {
     exit 1
 }
 )epoch";
+
+#if defined(_WIN32)
+    inline void write_windows_restart(std::ostream& script, const std::filesystem::path& candidate_data)
+    {
+        std::string_view arguments;
+        if (!candidate_data.empty())
+        {
+            // Use ASCII script text while preserving the path's UTF-16 units.
+            script << "$candidateDataRoot = [string]::new([char[]]@(";
+            const char* separator = "";
+            for (const wchar_t unit : candidate_data.native())
+            {
+                script << separator << static_cast<unsigned>(unit);
+                separator = ",";
+            }
+            script << "))\n";
+            arguments = R"epoch( -ArgumentList @('--candidate-data-root', ('"' + $candidateDataRoot + '"')))epoch";
+        }
+        script << "$restartedProcess = Start-Process -FilePath $targetExe -WorkingDirectory $targetDir -PassThru"
+               << arguments << '\n';
+    }
+
+    inline void write_windows_transaction(std::ostream& script, const std::filesystem::path& candidate_data)
+    {
+        auto transaction = windows;
+        if (!candidate_data.empty())
+        {
+            // PowerShell requires param(...) before the optional restart path.
+            constexpr auto parameter_end = windows.find('\n') + 1u;
+            static_assert(parameter_end != 0u);
+            script << transaction.substr(0, parameter_end);
+            transaction.remove_prefix(parameter_end);
+            script << "if ($env:EPOCH_UPDATE_MODE -eq 'restart') {\n"
+                      "  $ErrorActionPreference = 'Stop'\n"
+                      "  $targetExe = $env:EPOCH_UPDATE_RESTART_EXE\n"
+                      "  $targetDir = [IO.Path]::GetDirectoryName($targetExe)\n";
+            write_windows_restart(script, candidate_data);
+            script << "  exit 0\n}\n";
+        }
+        script << transaction;
+    }
+#endif
 
     inline constexpr std::string_view posix = R"epoch(epoch_payload_hash() {
   if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d ' ' -f 1

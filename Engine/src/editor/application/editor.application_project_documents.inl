@@ -72,18 +72,54 @@
             retire_planetary_preview_publication(state);
         }
 
+        [[nodiscard]] bool begin_editor_lod_inspection(EditorState& state, const void* context)
+        {
+            if (state.lodInspectionReturnCamera) return true;
+            const auto saved = previewgrid::capture_camera_rig_snapshot(context);
+            if (!saved.valid || saved.mode == previewgrid::CameraMode::Canvas2D) return false;
+            auto inspection = saved;
+            inspection.logical_view_id = 0u;
+            if (!previewgrid::restore_camera_rig_snapshot(context, inspection)) return false;
+            previewgrid::set_camera_mode(context, previewgrid::CameraMode::Editor);
+            if (!previewgrid::set_editor_view(context, previewgrid::EditorView::Perspective))
+            {
+                (void)previewgrid::restore_camera_rig_snapshot(context, saved);
+                return false;
+            }
+            state.lodInspectionReturnCamera = saved;
+            state.viewportCameraMode = previewgrid::CameraMode::Editor;
+            return true;
+        }
+
+        void end_editor_lod_inspection(EditorState& state, const void* context)
+        {
+            if (!state.lodInspectionReturnCamera) return;
+            (void)previewgrid::restore_camera_rig_snapshot(context, *state.lodInspectionReturnCamera);
+            state.viewportCameraMode = state.lodInspectionReturnCamera->mode;
+            state.lodInspectionReturnCamera.reset();
+            state.planetaryStreamContinue = true;
+            state.planetaryStreamNextTick = 0u;
+        }
+
         void reset_project_bound_editor_state(
             EditorState& state,
             std::string_view guiStatus)
         {
+            end_editor_lod_inspection(state, state.projectRuntimeViewportContext.lock().get());
+            if (state.modelShorelinePending && state.taskScheduler)
+                (void)state.taskScheduler->cancel(state.modelShorelineCancellation);
+            state.modelImportReview.reset();
             if(state.forestSurfacePending&&state.taskScheduler)
                 (void)state.taskScheduler->cancel(state.forestSurfaceCancellation);
             state.forestSurfacePlacement.reset();
             state.forestPlacementFocusPending=false;
+            state.forestPlacementSaved.reset();
             state.forestTerrainPainting=false;
             state.forestBrushHeld=false;
             state.forestBrushTerrain=scene::kInvalidSceneObjectId;
-            state.forestBrushLastDirection.reset();
+            state.forestBrushDirections.clear();
+            state.projectRunAfterTerrainPreview.reset();
+            state.previousSceneClick.reset();
             state.planetaryCheckedRoot.clear();
             reset_planetary_preview_publication(state);
             state.planetaryAttachment = {};

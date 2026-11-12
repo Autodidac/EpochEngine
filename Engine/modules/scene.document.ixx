@@ -163,6 +163,7 @@ export namespace epochengine::authoring::scene
         std::optional<epochengine::scene::SceneMeshSnapshot> mesh_asset{};
         std::optional<std::array<double, 3>> position_anchor{};
         std::optional<epochengine::scene::SceneForestRegionInstance> forest_region{};
+        std::optional<epochengine::scene::SceneTerrainAttachment> terrain_attachment{};
     };
 
     struct SceneObject final
@@ -208,6 +209,7 @@ export namespace epochengine::authoring::scene
         double fixed_step_seconds{1.0 / 60.0};
         bool start_paused{};
         epochengine::scene::Vec3 ambient{epochengine::scene::kDefaultAmbientLight};
+        std::optional<epochengine::scene::SceneReachObjective> reach_objective{};
 
         friend constexpr bool operator==(
             const ProjectSettings&,
@@ -397,6 +399,7 @@ export namespace epochengine::authoring::scene
         std::optional<epochengine::scene::SceneMeshSnapshot> mesh_asset{};
         std::optional<std::array<double, 3>> position_anchor{};
         std::optional<epochengine::scene::SceneForestRegionInstance> forest_region{};
+        std::optional<epochengine::scene::SceneTerrainAttachment> terrain_attachment{};
     };
 
     struct ProjectSettingsChangedOperation final
@@ -970,6 +973,7 @@ export namespace epochengine::authoring::scene
         converted.mesh_asset = source.mesh_asset;
         converted.position_anchor = source.position_anchor;
         converted.forest_region = source.forest_region;
+        converted.terrain_attachment = source.terrain_attachment;
 
         switch (detail::snapshot_object_kind(source.type))
         {
@@ -1241,6 +1245,16 @@ export namespace epochengine::authoring::scene
                 result.code = ResultCode::invalid_document;
                 return result;
             }
+            if (const auto& attachment = slot.object.terrain_attachment; attachment
+                && (!attachment->valid() || !slot.object.position_anchor
+                    || (!slot.object.mesh_asset && (!slot.object.spawn || attachment->solid_walk_box))
+                    || (attachment->solid_walk_box && slot.object.metadata.generic_type != "IndexedMesh")
+                    || slot.object.forest_region || slot.object.metadata.category == "Planetary Terrain"
+                    || attachment->terrain_object_id == slot.object.id.value))
+            {
+                result.code = ResultCode::invalid_document;
+                return result;
+            }
             if (slot.object.mesh_asset && (!slot.object.mesh_asset->valid()
                 || slot.object.mesh_asset->logical_path.size() > limits.maximum_snapshot_string_bytes))
             {
@@ -1450,7 +1464,8 @@ export namespace epochengine::authoring::scene
             project.fixed_step_seconds <= 0.0 ||
             project.fixed_step_seconds > limits.maximum_fixed_step_seconds ||
             !validRunState ||
-            !epochengine::scene::valid_scene_ambient(project.ambient))
+            !epochengine::scene::valid_scene_ambient(project.ambient) ||
+            (project.reach_objective && !project.reach_objective->valid()))
         {
             result.code = ResultCode::invalid_project_settings;
             return result;
@@ -1526,6 +1541,12 @@ export namespace epochengine::authoring::scene
             for (float channel : state.project.ambient)
                 hash.append_float(channel);
         }
+        if (const auto& objective = state.project.reach_objective; objective)
+        {
+            hash.append_string("scene.reach_objective.v1");
+            detail::append_integral(hash, objective->target);
+            hash.append_double(objective->radius_meters);
+        }
         hash.append_string(state.snapshot_metadata.scene_id);
         hash.append_string(state.snapshot_metadata.project_id);
         hash.append_string(state.snapshot_metadata.world_name);
@@ -1599,6 +1620,17 @@ export namespace epochengine::authoring::scene
                     for(auto value:*vector)hash.append_double(value);
                 for(auto value:region.terrain_artifact_key)detail::append_integral(hash,value);
                 hash.append_string(region.provider_content_hash);hash.append_string(region.recipe);hash.append_string(region.plant_source);
+            }
+            if (const auto& attachment = object->terrain_attachment; attachment)
+            {
+                hash.append_string("scene.terrain_attachment.v1");
+                detail::append_integral(hash, attachment->terrain_object_id);
+                detail::append_integral(hash, attachment->body_index);
+                for (const auto word : attachment->terrain_artifact_key) detail::append_integral(hash, word);
+                hash.append_double(attachment->terrain_coordinates.meters_per_unit);
+                for (const auto value : attachment->terrain_coordinates.source_origin_meters) hash.append_double(value);
+                for (const auto value : attachment->reference_center_meters) hash.append_double(value);
+                if (attachment->solid_walk_box) hash.append_string("scene.terrain_attachment.solid_walk_box.v1");
             }
             detail::append_integral(hash, object->runtime_visible);
             detail::append_integral(hash, object->editor_visible);
@@ -1923,10 +1955,11 @@ export namespace epochengine::authoring::scene
                     if (slot == nullptr)
                         return value.object.valid() ? ResultCode::stale_handle : ResultCode::invalid_handle;
                     inverse = GeometryComponentChangedOperation{value.object, slot->object.mesh_asset,
-                        slot->object.position_anchor, slot->object.forest_region};
+                        slot->object.position_anchor, slot->object.forest_region, slot->object.terrain_attachment};
                     slot->object.mesh_asset = value.mesh_asset;
                     slot->object.position_anchor = value.position_anchor;
                     slot->object.forest_region = value.forest_region;
+                    slot->object.terrain_attachment = value.terrain_attachment;
                     return ResultCode::success;
                 }
                 else
@@ -2313,7 +2346,8 @@ export namespace epochengine::authoring::scene
             .run_state = runnable
                 ? epochengine::scene_tier0::ProjectRunState::ready_to_launch
                 : epochengine::scene_tier0::ProjectRunState::blocked,
-            .ambient = normalized.ambient
+            .ambient = normalized.ambient,
+            .reach_objective = normalized.reach_objective
         };
         seed.snapshot_metadata = SnapshotSourceMetadata{
             .scene_id = normalized.scene_id,
@@ -2468,7 +2502,7 @@ export namespace epochengine::authoring::scene
             return {static_cast<float>((regular?std::atan2(-m[1][2],m[2][2]):std::atan2(m[2][1],m[1][1]))*degrees),
                 static_cast<float>(y*degrees),static_cast<float>((regular?std::atan2(-m[0][1],m[0][0]):0.0)*degrees)};
         }
-        inline bool transform_forest_attachment(const SceneObjectDescriptor& parent,
+        inline bool transform_terrain_attachment(const SceneObjectDescriptor& parent,
             const TransformComponent& next, SceneObjectDescriptor& child)
         {
             const auto& before=parent.transform;
@@ -2511,7 +2545,7 @@ export namespace epochengine::authoring::scene
             transaction.label);
     }
 
-    inline TransactionResult SceneDocument::apply_transaction(
+    TransactionResult SceneDocument::apply_transaction(
         std::span<const SceneOperation> operations,
         std::string_view label)
     {
@@ -2555,20 +2589,37 @@ export namespace epochengine::authoring::scene
             if (const auto* change=std::get_if<ObjectTransformChangedOperation>(&operationCopy))
             {
                 const auto* parent=resolve_slot(candidate,change->object);
-                if(parent && !parent->object.forest_region)
+                if(parent && !parent->object.forest_region && !parent->object.terrain_attachment)
                 {
                     std::vector<SceneOperation> attached;
                     for(std::size_t index=0;index<candidate.slots.size();++index)
                     {
                         const auto& slot=candidate.slots[index];
-                        if(!slot.active || !slot.object.forest_region
-                            || slot.object.forest_region->terrain_object_id!=parent->object.id.value) continue;
-                        auto child=slot.object;
-                        if(!detail::transform_forest_attachment(parent->object,change->value,child))
-                            return {.code=ResultCode::invalid_transform,.revision=revision_};
+                        if (!slot.active) continue;
+                        const auto& forest = slot.object.forest_region;
+                        const auto& surface = slot.object.terrain_attachment;
+                        const bool forestAttached = forest && forest->terrain_object_id == parent->object.id.value;
+                        const bool modelAttached = surface && parent->object.mesh_asset
+                            && parent->object.metadata.category == "Planetary Terrain"
+                            && surface->matches(parent->object.id.value, *parent->object.mesh_asset);
+                        if (!forestAttached && !modelAttached) continue;
                         const ObjectHandle handle{static_cast<std::uint32_t>(index),slot.generation};
+                        bool explicitlyMoved{};
+                        if (modelAttached)
+                            for (const auto& explicitOperation : operations)
+                                if (const auto* transform = std::get_if<ObjectTransformChangedOperation>(&explicitOperation);
+                                    transform && transform->object == handle)
+                                {
+                                    explicitlyMoved = true;
+                                    break;
+                                }
+                        if (explicitlyMoved) continue;
+                        auto child=slot.object;
+                        if(!detail::transform_terrain_attachment(parent->object,change->value,child))
+                            return {.code=ResultCode::invalid_transform,.revision=revision_};
                         attached.emplace_back(ObjectTransformChangedOperation{handle,child.transform});
-                        attached.emplace_back(GeometryComponentChangedOperation{handle,child.mesh_asset,child.position_anchor,child.forest_region});
+                        attached.emplace_back(GeometryComponentChangedOperation{
+                            handle,child.mesh_asset,child.position_anchor,child.forest_region,child.terrain_attachment});
                     }
                     if(forward.size()+attached.size()>limits_.maximum_operations_per_transaction)
                         return {.code=ResultCode::transaction_operation_limit_exceeded,.revision=revision_};
@@ -2924,6 +2975,7 @@ export namespace epochengine::authoring::scene
         snapshot.primary_camera = state_.project.primary_camera.value;
         snapshot.primary_spawn = state_.project.primary_spawn.value;
         snapshot.ambient = state_.project.ambient;
+        snapshot.reach_objective = state_.project.reach_objective;
         snapshot.captured_frame_index = frame_index;
         snapshot.captured_simulated_seconds = simulated_seconds;
         const std::vector<SceneObject> ordered = objects();
@@ -2985,7 +3037,8 @@ export namespace epochengine::authoring::scene
                 .texture_material = source.texture_material,
                 .mesh_asset = source.mesh_asset,
                 .position_anchor = source.position_anchor,
-                .forest_region = source.forest_region
+                .forest_region = source.forest_region,
+                .terrain_attachment = source.terrain_attachment
             });
         }
 
@@ -3158,7 +3211,8 @@ export namespace epochengine::authoring::scene
                 left.visible == right.visible &&
                 left.editor_only == right.editor_only &&
                 left.texture_material == right.texture_material && left.mesh_asset == right.mesh_asset
-                && left.position_anchor == right.position_anchor && left.forest_region == right.forest_region;
+                && left.position_anchor == right.position_anchor && left.forest_region == right.forest_region
+                && left.terrain_attachment == right.terrain_attachment;
         }
 
         [[nodiscard]] inline bool same_snapshot_semantics(
@@ -3173,6 +3227,7 @@ export namespace epochengine::authoring::scene
                 left.revision != right.revision ||
                 left.primary_camera != right.primary_camera ||
                 left.primary_spawn != right.primary_spawn ||
+                left.reach_objective != right.reach_objective ||
                 left.ambient != right.ambient ||
                 left.captured_frame_index != right.captured_frame_index ||
                 left.captured_simulated_seconds !=

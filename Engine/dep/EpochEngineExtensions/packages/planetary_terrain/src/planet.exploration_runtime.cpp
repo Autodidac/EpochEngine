@@ -8,6 +8,7 @@ module;
 #include <limits>
 #include <memory>
 #include <optional>
+#include <span>
 #include <stop_token>
 #include <string>
 #include <string_view>
@@ -75,6 +76,47 @@ namespace epoch::extensions::planetary_terrain::exploration_runtime
                 &&(!input.speed_multiplier||(std::isfinite(*input.speed_multiplier)&&*input.speed_multiplier>0.0))
                 &&static_cast<unsigned>(input.command)<=static_cast<unsigned>(host::Command::toggle_level_assist);
         }
+        [[nodiscard]] bool blocks_walk(const host::WalkBox& box, core::DVec3 from,
+            core::DVec3 to, core::DVec3 radial_up) noexcept
+        {
+            // Sweep a conservative box-space envelope of the 1.8 m walking
+            // capsule. The eye positions and box center share body-local metres.
+            constexpr double eye_to_middle = 0.88, radius = 0.32, half_segment = 0.55;
+            const auto from_mid = vector(from - radial_up * eye_to_middle);
+            const auto to_mid = vector(to - radial_up * eye_to_middle);
+            const auto up = vector(radial_up);
+            double entry = 0.0, exit = 1.0;
+            double from_depth = std::numeric_limits<double>::infinity(), to_depth = from_depth;
+            bool intersects = true;
+            for (std::size_t axis = 0; axis < 3; ++axis)
+            {
+                double start{}, finish{}, vertical{};
+                for (std::size_t row = 0; row < 3; ++row)
+                {
+                    const auto basis = box.rotation[row * 3 + axis];
+                    start += basis * (from_mid[row] - box.center_meters[row]);
+                    finish += basis * (to_mid[row] - box.center_meters[row]);
+                    vertical += basis * up[row];
+                }
+                const auto extent = box.half_extent_meters[axis] + radius + half_segment * std::abs(vertical);
+                from_depth = (std::min)(from_depth, extent - std::abs(start));
+                to_depth = (std::min)(to_depth, extent - std::abs(finish));
+                const auto delta = finish - start;
+                if (std::abs(delta) <= 1e-12)
+                    intersects = intersects && std::abs(start) <= extent;
+                else
+                {
+                    const auto first = (-extent - start) / delta;
+                    const auto second = (extent - start) / delta;
+                    entry = (std::max)(entry, (std::min)(first, second));
+                    exit = (std::min)(exit, (std::max)(first, second));
+                }
+            }
+            // Existing save data can start inside an authored box. Permit
+            // movement that reduces the overlap so the player can get out.
+            if (from_depth >= 0.0) return to_depth > from_depth + 1e-8;
+            return intersects && entry <= exit;
+        }
         class OriginalController final : public host::Controller
         {
             host::Binding binding_;
@@ -84,6 +126,7 @@ namespace epoch::extensions::planetary_terrain::exploration_runtime
             bool cloud_layers_ready_{true};
             double accumulator_{},last_nonzero_scale_{1.0};
             std::shared_ptr<epochengine::water::wave::Provider> water_{};
+            std::vector<host::WalkBox> walk_boxes_{};
         public:
             explicit OriginalController(const host::Binding& binding):binding_(binding),simulation_(binding.seed,
                 {binding.size_reference_body,binding.reference_radius_meters},
@@ -107,6 +150,16 @@ namespace epoch::extensions::planetary_terrain::exploration_runtime
             }
             [[nodiscard]] std::shared_ptr<epochengine::water::wave::Provider> water_provider() const override
             {return water_;}
+            [[nodiscard]] bool set_walk_boxes(std::span<const host::WalkBox> boxes) override
+            {
+                if (boxes.size() > host::maximum_walk_boxes || std::ranges::any_of(boxes, [&](const auto& box) {
+                    return !box.valid() || box.body >= simulation_.world().bodies().size()
+                        || (!binding_.universe && box.body != binding_.initial_body)
+                        || simulation_.world().body(box.body).kind == core::BodyKind::gas;
+                })) return false;
+                walk_boxes_.assign(boxes.begin(), boxes.end());
+                return true;
+            }
             [[nodiscard]] host::Result capture() const override
             {
                 if(!cloud_layers_ready_)return {host::Code::provider_failure,{}};
@@ -167,14 +220,75 @@ namespace epoch::extensions::planetary_terrain::exploration_runtime
                 for(unsigned steps=0;accumulated+1e-12>=fixed_step&&steps<15u;++steps)
                 {
                     if(stop.stop_requested())return {host::Code::cancelled,{}};
-                    if(exploration::advance(next,fixed_step,{input.forward,input.right,input.rise,input.boost},stop)
+                    const exploration::PilotInput pilot{input.forward,input.right,input.rise,input.boost};
+                    const bool check_boxes = next.mode() == exploration::TravelMode::walk && (pilot.forward != 0 || pilot.right != 0)
+                        && std::ranges::any_of(walk_boxes_, [&](const auto& box) { return box.body == next.anchor(); });
+                    auto before = check_boxes ? std::optional{next} : std::nullopt;
+                    if(exploration::advance(next,fixed_step,pilot,stop)
                         !=exploration::StepCode::advanced)return {host::Code::cancelled,{}};
+                    if (before)
+                    {
+                        const auto from = before->state().local_position;
+                        const auto to = next.state().local_position;
+                        const auto up = core::normalized(from);
+                        if (std::ranges::any_of(walk_boxes_, [&](const auto& box) {
+                            return box.body == next.anchor() && blocks_walk(box, from, to, up);
+                        }))
+                        {
+                            next = std::move(*before);
+                            if (exploration::advance(next, fixed_step, {}, stop) != exploration::StepCode::advanced)
+                                return {host::Code::cancelled, {}};
+                        }
+                    }
                     accumulated-=fixed_step;
                 }
                 if(stop.stop_requested())return {host::Code::cancelled,{}};
                 if(!exploration::valid_state(next.state()))return {host::Code::invalid_frame,{}};
                 simulation_=std::move(next);accumulator_=(std::max)(0.0,accumulated);last_nonzero_scale_=lastScale;
                 return capture();
+            }
+            [[nodiscard]] host::Result start_on_surface(const host::SurfaceStart& start) override
+            {
+                const auto& world = simulation_.world();
+                if (start.body >= world.bodies().size()
+                    || (!binding_.universe && start.body != binding_.initial_body))
+                    return {host::Code::invalid_input, {}};
+                const auto& body = world.body(start.body);
+                const core::DVec3 local{start.body_local_position_meters[0], start.body_local_position_meters[1],
+                    start.body_local_position_meters[2]};
+                const core::DVec3 forward{start.body_local_forward[0], start.body_local_forward[1], start.body_local_forward[2]};
+                const auto radius = core::length(local);
+                if (body.kind == core::BodyKind::gas || !core::finite(local) || !core::finite(forward)
+                    || !std::isfinite(radius) || radius <= 0.0)
+                    return {host::Code::invalid_input, {}};
+
+                const auto up = local / radius;
+                const auto height = core::sample_height(body, up);
+                const auto ground = world.ground_radius(start.body, up);
+                if ((body.ocean && height <= 0.0) || std::abs(radius - ground) > 100.0)
+                    return {host::Code::invalid_input, {}};
+
+                auto state = simulation_.state();
+                state.anchor = state.target = start.body;
+                state.mode = exploration::TravelMode::walk;
+                state.local_position = up * (ground + 1.8);
+                const auto radial_heading = forward.x * up.x + forward.y * up.y + forward.z * up.z;
+                state.forward = core::normalized(forward - up * radial_heading, core::tangent(up));
+                state.up = up;
+                state.fall_velocity = {};
+                if (!exploration::valid_state(state)) return {host::Code::invalid_frame, {}};
+
+                auto previous = simulation_;
+                const auto previousAccumulator = accumulator_;
+                simulation_.restore(state);
+                accumulator_ = 0.0;
+                auto result = capture();
+                if (result.code != host::Code::ready)
+                {
+                    simulation_ = std::move(previous);
+                    accumulator_ = previousAccumulator;
+                }
+                return result;
             }
             [[nodiscard]] std::string encode_session() const override
             {

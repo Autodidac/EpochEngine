@@ -1,7 +1,7 @@
 # Epoch - Creative Software And Game Engine
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Current_Public_Source-v0.91.04-1F7A4C?style=for-the-badge" alt="Current Public source v0.91.04" />
+  <img src="https://img.shields.io/badge/Current_Public_Source-v0.91.02-1F7A4C?style=for-the-badge" alt="Current Public source v0.91.02" />
   <img src="https://img.shields.io/badge/Published_Windows_Linux_Runtime-v0.91.03-2C6A8A?style=for-the-badge" alt="Published Windows/Linux runtime v0.91.03" />
 </p>
 
@@ -55,9 +55,8 @@ actions before applying them.
 
 ## Current Snapshot
 
-This checkout is **0.91.06**. The published source download is [**0.91.04**](https://github.com/Autodidac/EpochEngine/releases/tag/v0.91.04).
-Windows and Linux packages and their validation results are available in
-[runtime release **0.91.03**](https://github.com/Autodidac/EpochEngine/releases/tag/v0.91.03).
+This source checkpoint is **0.91.02**. Download runtime packages and check their
+validation results in [GitHub Releases](https://github.com/Autodidac/EpochEngine/releases).
 Public releases and source updates use this GitHub repository without account
 pairing. Each edition accepts only its own update channel.
 

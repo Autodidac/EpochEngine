@@ -28,7 +28,9 @@ class ForestInlinePreview(unittest.TestCase):
             '[[nodiscard]] std::optional<EditorPreviewMeshCacheUsage> editor_preview_mesh_cache_usage(',
             '[[nodiscard]] bool restore_editor_preview_mesh(',
             'void publish_editor_preview_markers(',
-            '[[nodiscard]] bool refresh_forest_factory_instances('))
+            '[[nodiscard]] bool painted_tree_uses_plant_lab(',
+            'struct PaintedTreeUpdateResult final',
+            '[[nodiscard]] PaintedTreeUpdateResult refresh_forest_factory_instances('))
         camera=workspace[workspace.index('const bool changedSurface ='):workspace.index('            if (changedSurface)\n                editor.surfaceSettleFrames')]
         preview=(ROOT/'Engine/modules/render.preview_grid.ixx').read_text(encoding='utf-8')
         camera_owner=(ROOT/'Engine/src/render/render.preview_camera.cpp').read_text(encoding='utf-8')

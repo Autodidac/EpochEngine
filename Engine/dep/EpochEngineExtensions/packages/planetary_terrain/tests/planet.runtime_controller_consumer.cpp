@@ -5,6 +5,7 @@
 #include <fstream>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <stop_token>
 #include <string>
@@ -101,6 +102,67 @@ int main()
         host::Input walk;walk.command=host::Command::land;(void)advance(*banking,walk);
         const auto walking=banking->capture().frame;require(walking.mode==host::TravelMode::walk,"walk fixture did not land");bank.roll=0.5;
         require(distance(advance(*banking,bank).frame.up,walking.up)<1e-12,"manual roll changed grounded walk alignment");
+        auto surface=host::create_controller(binding);
+        const core::Universe spawnWorld{binding.seed};
+        std::optional<core::DVec3> dry,wet;
+        for (std::uint8_t face=0;face<6;++face)
+            for(int x=0;x<11;++x)for(int y=0;y<11;++y)
+            {
+                const auto direction=core::cube_direction(face,double(x)/5.0-1.0,double(y)/5.0-1.0);
+                const auto elevation=core::sample_height(spawnWorld.body(0),direction);
+                if(!dry&&elevation>10)dry=direction;
+                if(!wet&&elevation<-10)wet=direction;
+            }
+        require(bool(dry)&&bool(wet),"surface-start fixtures did not find dry and wet ground");
+        const auto localStart=*dry*spawnWorld.ground_radius(0,*dry);
+        const auto localHeading=core::tangent(*dry);
+        host::SurfaceStart start{.body=0,.body_local_position_meters={localStart.x,localStart.y,localStart.z},
+            .body_local_forward={localHeading.x,localHeading.y,localHeading.z}};
+        const auto initialSession=surface->encode_session();
+        const auto submerged=*wet*spawnWorld.ground_radius(0,*wet);
+        auto invalidStart=start;invalidStart.body_local_position_meters={submerged.x,submerged.y,submerged.z};
+        require(surface->start_on_surface(invalidStart).code==host::Code::invalid_input,"submerged authored start admitted");
+        invalidStart=start;invalidStart.body=4;
+        require(surface->start_on_surface(invalidStart).code==host::Code::invalid_input,"gas giant authored start admitted");
+        invalidStart=start;for(auto& axis:invalidStart.body_local_position_meters)axis*=2;
+        require(surface->start_on_surface(invalidStart).code==host::Code::invalid_input&&surface->encode_session()==initialSession,
+            "distant authored start admitted or rejected start changed the session");
+        const auto surfaceStart=surface->start_on_surface(start);
+        const auto expectedEye=spawnWorld.center(0,0)+localStart+*dry*1.8;
+        require(surfaceStart.code==host::Code::ready&&surfaceStart.frame.mode==host::TravelMode::walk
+            &&surfaceStart.frame.anchor==0&&surfaceStart.frame.target==0&&host::valid_frame(surfaceStart.frame),"valid authored start refused");
+        require(distance(surfaceStart.frame.camera,{expectedEye.x,expectedEye.y,expectedEye.z})<.001
+            &&distance(surfaceStart.frame.forward,start.body_local_forward)<1e-8,"authored start moved away or lost heading");
+        const auto savedStart=surface->encode_session();
+        auto restoredStart=host::create_controller(binding);
+        require(restoredStart->restore_session(savedStart)
+            &&distance(restoredStart->capture().frame.camera,surfaceStart.frame.camera)<.001,"walking start did not restore");
+        for(unsigned tick=0;tick<3;++tick)(void)advance(*surface,{.elapsed_seconds=1.0/60.0,.forward=1});
+        require(distance(surface->capture().frame.camera,surfaceStart.frame.camera)>.1,"authored start could not walk");
+
+        auto collision=host::create_controller(binding);
+        require(collision->start_on_surface(start).code==host::Code::ready,"collision start refused");
+        const auto localEye=[](const host::Frame& frame){
+            const auto& center=frame.bodies[0].center;
+            return std::array{frame.camera[0]-center[0],frame.camera[1]-center[1],frame.camera[2]-center[2]};
+        };
+        const auto boxCenter=localStart+localHeading*2.5+*dry*.8;
+        const auto localRight=core::normalized(core::cross(*dry,localHeading));
+        host::WalkBox obstacle{.body=0,.center_meters={boxCenter.x,boxCenter.y,boxCenter.z},
+            .half_extent_meters={.85,.8,.07},
+            .rotation={localRight.x,dry->x,localHeading.x,localRight.y,dry->y,localHeading.y,localRight.z,dry->z,localHeading.z}};
+        require(collision->set_walk_boxes(std::array{obstacle}),"rotated beacon box refused");
+        auto malformedBox=obstacle;malformedBox.rotation[0]=std::numeric_limits<double>::infinity();
+        require(!collision->set_walk_boxes(std::array{malformedBox}),"invalid box replaced admitted collider");
+        const auto blocked=advance(*collision,{.elapsed_seconds=.25,.forward=1,.boost=true,.speed_multiplier=100}).frame;
+        require(distance(localEye(blocked),localEye(surfaceStart.frame))<.1&&blocked.seconds>surfaceStart.frame.seconds,
+            "swept walking tunneled through the thin box or stopped simulation time");
+        // An exact tick boundary renders the preceding physics pose.
+        const auto around=advance(*collision,{.elapsed_seconds=2.0/60.0,.right=1}).frame;
+        require(distance(localEye(around),localEye(blocked))>.1,"walking could not move around the obstacle");
+        require(collision->start_on_surface(start).code==host::Code::ready&&collision->set_walk_boxes({}),"collision removal refused");
+        const auto clearWalk=advance(*collision,{.elapsed_seconds=2.0/60.0,.forward=1,.boost=true}).frame;
+        require(distance(localEye(clearWalk),localEye(surfaceStart.frame))>2.6,"removing the box left a stale obstacle");
         // Exercise the actual host projection with real original controller
         // frames, never float-subtract astronomical centers in the consumer.
         auto projectionController=host::create_controller(binding);

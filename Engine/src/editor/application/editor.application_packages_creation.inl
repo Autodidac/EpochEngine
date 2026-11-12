@@ -1731,7 +1731,8 @@
         {
             const auto tick = editor_steady_tick_ns();
             const bool covered = editor_project_viewport_input_reserved(editor);
-            if (covered && editor.planetaryStreamPending && editor.taskScheduler)
+            const bool inspecting = editor.lodInspectionReturnCamera.has_value();
+            if ((covered || inspecting) && editor.planetaryStreamPending && editor.taskScheduler)
                 (void)editor.taskScheduler->cancel(editor.planetaryCancellation);
             const auto entityAt = std::find_if(editor.entities.begin(), editor.entities.end(),
                 [](const EditorEntity& entity) { return entity.category == "Planetary Terrain" && entity.meshAsset && entity.visible; });
@@ -1744,10 +1745,10 @@
                 &&editor_planetary_stream_identity_matches(editor,*entityAt);
             const bool enabled = admittedSettings&&generationMatches&&admittedSettings->stream_lod && admittedSettings->mode == "planet"
                 && owners == 1;
-            bool viewValid = enabled;
+            bool viewValid = enabled && !inspecting;
             project_planetary::StreamView desiredView;
             bool changed = true;
-            if (enabled)
+            if (viewValid)
             {
                 desiredView.simulation_seconds = planetary_preview_sample_time(admittedSettings->ocean_surface,editor.timelineState);
                 const auto camera = previewgrid::camera_for(context);
@@ -1779,9 +1780,12 @@
                 else {for(auto& component:localForward)component/=directionLength;view.forward=localForward;}
                 view.up=localUp;
                 if(!project_planetary::valid_stream_up(view))viewValid=false;
-                view.viewport_height = editor.planetaryViewportHeight;
+                // The provider's projected patch size scales linearly with
+                // viewport height. Keep the actual frustum and refine one
+                // quadtree level sooner, using the existing project budgets.
+                view.viewport_height = 2u * std::clamp(editor.planetaryViewportHeight, 64u, 8192u);
                 view.aspect_ratio=std::clamp(double(editor.planetaryViewportWidth)
-                    /double((std::max)(1u,view.viewport_height)),0.1,10.0);
+                    /double((std::max)(1u,editor.planetaryViewportHeight)),0.1,10.0);
                 view.vertical_fov = camera.fovRadians;
                 changed = editor.planetaryStreamEntity != entityAt->sceneObjectId
                     || editor.planetaryStreamSettings != *admittedSettings
@@ -1923,13 +1927,17 @@
                 {
                     editor.planetaryStreamPending.reset();
                     editor.planetaryStreamContinue = true;
-                    editor.planetaryStreamStatus = "Terrain detail cancelled. The previous mesh is retained.";
+                    if (!inspecting)
+                        editor.planetaryStreamStatus = "Terrain detail cancelled. The previous mesh is retained.";
                 }
                 catch (...)
                 {
                     editor.planetaryStreamPending.reset();
-                    editor.planetaryStreamFailed = true;
-                    editor.planetaryStreamStatus = "Planet LOD stopped after a worker failure. The saved terrain remains available.";
+                    if (!inspecting)
+                    {
+                        editor.planetaryStreamFailed = true;
+                        editor.planetaryStreamStatus = "Planet LOD stopped after a worker failure. The saved terrain remains available.";
+                    }
                 }
             }
             // Poll and retire the previous authoring job above, but never
@@ -1975,7 +1983,10 @@
                 entityAt->meshLoadAttempted = true;
                 editor.sceneInteractionDirty = true;
             }
-            if (planetary_project_busy(editor) || editor.planetaryStreamFailed || tick < editor.planetaryStreamNextTick
+            if (inspecting) return;
+            if (planetary_project_busy(editor) || editor.modelShorelinePending || editor.forestSurfacePending
+                || editor.projectRunAfterTerrainPreview
+                || editor.planetaryStreamFailed || tick < editor.planetaryStreamNextTick
                 || editor.projectBuildPending || editor.scriptBuildPending
                 || !(editor.mainSurface==EditorMainSurface::Scene
                     ||(editor.mainSurface==EditorMainSurface::ForestFactory&&editor.forestTerrainPainting))) return;
@@ -2012,27 +2023,9 @@
             try
             {
                 auto submitted = schedule_editor_cancellable_task(editor, "Stream planetary terrain detail",
-                    [root, settings, view, source=editor.planetaryStreamSource,
-                        mesh=editor.planetaryStreamMesh](std::stop_token cancellation) {
-                        project_planetary::StreamResult result;
-                        if (cancellation.stop_requested()) {
-                            result.operation.cancelled = true;
-                            result.operation.message = "Terrain streaming cancelled before source admission.";
-                            return result;
-                        }
-                        if (!project_planetary::mesh_generation_is_current(root, source, settings, mesh)) {
-                            result.operation.message = "Planet LOD paused: its source or saved recipe changed before the worker started. The previous mesh is retained.";
-                            return result;
-                        }
-                        result = project_planetary::stream_step(root, settings, view, cancellation);
-                        if (result.operation.ok
-                            && !project_planetary::mesh_generation_is_current(root, source, settings, mesh)) {
-                            result.operation.ok = false;
-                            result.snapshot_ready = false;
-                            result.snapshot.reset();
-                            result.operation.message = "Planet LOD paused: its source or saved recipe changed during the worker. This snapshot was refused; the previous mesh is retained.";
-                        }
-                        return result;
+                    [root, settings, view, binding=project_planetary::StreamMeshBinding{
+                        editor.planetaryStreamSource, editor.planetaryStreamMesh}](std::stop_token cancellation) {
+                        return project_planetary::stream_step(root, settings, view, cancellation, &binding);
                     });
                 editor.planetaryCancellation = submitted.cancellation;
                 editor.planetaryStreamPending.emplace(std::move(submitted.completion));
@@ -3421,6 +3414,32 @@
                     : ai::McpValidation{ai::McpErrorCode::invalid_argument,"This requests a 3D model from the approved reference. Use the reviewed 3D generation action."};
             if (ai::asset_generation_tool(call.tool))
                 return {ai::McpErrorCode::invalid_argument,"No matching generation request was made. Nothing was generated."};
+            if (ai::asset_review_tool(lifecycle) || ai::asset_review_tool(call.tool))
+                return lifecycle == call.tool ? ai::validate_project_tool_arguments(call)
+                    : ai::McpValidation{ai::McpErrorCode::invalid_argument,
+                        "Request the visible PNG reference approval or generated model import explicitly."};
+            if (ai::scene_placement_tool(lifecycle) || ai::scene_placement_tool(call.tool))
+            {
+                const auto objective = ai::reach_objective_request(request);
+                if (lifecycle != call.tool || (lifecycle == "scene.objective.set_reach" && !objective.radius))
+                    return {ai::McpErrorCode::invalid_argument, "Request a reach objective explicitly, with a range from 0.25 to 1000 m."};
+                return ai::validate_project_tool_arguments(call);
+            }
+            if (lifecycle == "forest.update" || call.tool == "forest.update")
+                return lifecycle == call.tool ? ai::validate_project_tool_arguments(call)
+                    : ai::McpValidation{ai::McpErrorCode::invalid_argument, "Request Update Painted Trees explicitly to review a scene update."};
+            if (lifecycle == "forest.species.add" || call.tool == "forest.species.add")
+                return lifecycle == call.tool ? ai::validate_project_tool_arguments(call)
+                    : ai::McpValidation{ai::McpErrorCode::invalid_argument, "Request the current Plant Lab tree be added to the selected forest explicitly."};
+            if (lifecycle == "forest.material.import" || call.tool == "forest.material.import")
+            {
+                if (lifecycle != call.tool)
+                    return {ai::McpErrorCode::invalid_argument, "Import and Apply requires an explicit request for the visible PNG and a Plant Lab slot."};
+                if (const auto arguments = ai::validate_project_tool_arguments(call); !arguments) return arguments;
+                if (call.arguments.front().value != ai::plant_image_import_request(request).slot)
+                    return {ai::McpErrorCode::invalid_argument, "The proposed texture slot differs from the requested slot."};
+                return {};
+            }
             if (ai::explicit_generated_asset_request(request)
                 && (call.tool == "forest.configure" || call.tool == "forest.material" || call.tool == "forest.paint"
                     || call.tool == "terrain.generate" || call.tool == "project.create"))

@@ -343,6 +343,50 @@ namespace epochengine::forest::preview_mesh
             const auto& base = material_atlas(barkTileIndex);
             if (!supported(base)) return fail("The packaged forest material could not be verified.");
             const bool tintBase = !reference_material_available();
+            std::uint32_t barkLeft{}, barkWidth{};
+            if (bark)
+            {
+                const auto& mip = bark->mips.front();
+                barkWidth = mip.width;
+                // Generated trunk photographs may include background on both
+                // sides. Crop only paired, low-detail margins with a clear
+                // transition to the bark within the outer eighth of the image.
+                if (mip.width >= 64u && mip.height >= 32u)
+                {
+                    const auto margin = [&](bool fromRight) {
+                        const auto limit = mip.width / 8u;
+                        for (std::uint32_t column = 0u; column < limit; ++column)
+                        {
+                            const auto x = fromRight ? mip.width - 1u - column : column;
+                            std::array<unsigned, 64u> samples{};
+                            unsigned total{};
+                            for (std::size_t row = 0u; row < samples.size(); ++row)
+                            {
+                                const auto y = (2u * row + 1u) * mip.height / (2u * samples.size());
+                                const auto offset = y * mip.row_pitch_bytes + x * 4u;
+                                samples[row] = (std::to_integer<unsigned>(mip.texels[offset])
+                                    + 2u * std::to_integer<unsigned>(mip.texels[offset + 1u])
+                                    + std::to_integer<unsigned>(mip.texels[offset + 2u])) / 4u;
+                                total += samples[row];
+                            }
+                            const auto mean = static_cast<int>(total / samples.size());
+                            unsigned deviation{};
+                            for (auto sample : samples)
+                                deviation += static_cast<unsigned>(std::abs(static_cast<int>(sample) - mean));
+                            if (deviation > 10u * samples.size()) return column;
+                        }
+                        return 0u;
+                    };
+                    const auto left = margin(false);
+                    const auto right = margin(true);
+                    if (left >= mip.width / 64u && right >= mip.width / 64u)
+                    {
+                        const auto inset = mip.width / 64u;
+                        barkLeft = left + inset;
+                        barkWidth -= barkLeft + right + inset;
+                    }
+                }
+            }
             FoliagePlacement foliagePlacement;
             if (foliage)
             {
@@ -379,8 +423,8 @@ namespace epochengine::forest::preview_mesh
                     {
                         // Preserve the source pixel aspect and vertical grain;
                         // repeat tall/short bark rather than stretching a square.
-                        sx = local * (mip.width - 1u) / 476u;
-                        sy = static_cast<std::uint32_t>(std::uint64_t{y} * mip.width / 476u) % mip.height;
+                        sx = barkLeft + local * (barkWidth - 1u) / 476u;
+                        sy = static_cast<std::uint32_t>(std::uint64_t{y} * barkWidth / 476u) % mip.height;
                     }
                     else
                     {
@@ -389,15 +433,25 @@ namespace epochengine::forest::preview_mesh
                     }
                     const auto from = std::size_t{sy} * mip.row_pitch_bytes + sx * 4u;
                     const auto to = std::size_t{y} * target.row_pitch_bytes + x * 4u;
+                    const auto seamDistance = (std::min)(local, 476u - local);
+                    constexpr auto seamWidth = 16u;
                     for (std::size_t c = 0u; c < 3u; ++c)
                     {
-                        const auto byte = mip.texels[from+c];
+                        auto byte = mip.texels[from+c];
+                        if (!leaf && barkLeft && seamDistance < seamWidth)
+                        {
+                            const auto opposite = barkLeft + (476u - local) * (barkWidth - 1u) / 476u;
+                            const auto other = mip.texels[std::size_t{sy} * mip.row_pitch_bytes + opposite * 4u + c];
+                            const auto weight = seamWidth - seamDistance;
+                            byte = static_cast<std::byte>((std::to_integer<unsigned>(byte) * (2u * seamWidth - weight)
+                                + std::to_integer<unsigned>(other) * weight) / (2u * seamWidth));
+                        }
                         double value = std::to_integer<unsigned>(byte) / 255.0;
                         if (!custom && tintBase) value *= (leaf ? foliageTint : woodTint)[c];
                         target.texels[to+c] = source.identity.profile.color_space == asset::texture::ColorSpace::linear
                             ? encode(value) : byte;
                     }
-                    target.texels[to+3u] = outside ? std::byte{0u} : mip.texels[from+3u];
+                    target.texels[to+3u] = !leaf ? std::byte{255u} : outside ? std::byte{0u} : mip.texels[from+3u];
                 }
             target.content = asset::texture::compiled_texture_mip_content(target);
             auto& atlas = result.artifact;

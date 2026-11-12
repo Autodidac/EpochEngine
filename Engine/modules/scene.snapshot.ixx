@@ -287,6 +287,33 @@ export namespace epochengine::scene
         friend bool operator==(const SceneForestRegionInstance&,const SceneForestRegionInstance&) = default;
     };
 
+    // The body center is in the admitted mesh's local metre frame.
+    struct SceneTerrainAttachment final
+    {
+        SceneObjectId terrain_object_id{};
+        std::uint32_t body_index{};
+        std::array<std::uint64_t, 4> terrain_artifact_key{};
+        SceneMeshCoordinates terrain_coordinates{};
+        std::array<double, 3> reference_center_meters{};
+        bool solid_walk_box{};
+
+        [[nodiscard]] bool valid() const noexcept
+        {
+            return terrain_object_id != kInvalidSceneObjectId && body_index <= 5u && terrain_coordinates.valid()
+                && std::any_of(terrain_artifact_key.begin(), terrain_artifact_key.end(), [](auto word) { return word != 0u; })
+                && std::all_of(reference_center_meters.begin(), reference_center_meters.end(),
+                    [](double value) { return std::isfinite(value) && std::abs(value) <= 1e15; });
+        }
+
+        [[nodiscard]] bool matches(SceneObjectId parent, const SceneMeshSnapshot& mesh) const noexcept
+        {
+            return terrain_object_id == parent && terrain_artifact_key == mesh.artifact_key
+                && mesh.coordinates && *mesh.coordinates == terrain_coordinates;
+        }
+
+        friend bool operator==(const SceneTerrainAttachment&, const SceneTerrainAttachment&) = default;
+    };
+
     struct SceneObjectSnapshot
     {
         SceneObjectId id{ kInvalidSceneObjectId };
@@ -304,6 +331,7 @@ export namespace epochengine::scene
         // this never changes the asset's source/provenance coordinate frame.
         std::optional<std::array<double, 3>> position_anchor{};
         std::optional<SceneForestRegionInstance> forest_region{};
+        std::optional<SceneTerrainAttachment> terrain_attachment{};
     };
 
     [[nodiscard]] inline std::optional<std::array<double, 3>> world_position(
@@ -341,6 +369,20 @@ export namespace epochengine::scene
         std::string payload{};
     };
 
+    struct SceneReachObjective final
+    {
+        SceneObjectId target{};
+        double radius_meters{5.0};
+
+        [[nodiscard]] bool valid() const noexcept
+        {
+            return target != kInvalidSceneObjectId
+                && std::isfinite(radius_meters) && radius_meters >= 0.25 && radius_meters <= 1000.0;
+        }
+
+        friend bool operator==(const SceneReachObjective&, const SceneReachObjective&) = default;
+    };
+
     struct SceneSnapshot
     {
         std::string scene_id{};
@@ -357,6 +399,7 @@ export namespace epochengine::scene
         std::vector<SceneObjectSnapshot> objects{};
         std::vector<SceneTimelineKey> timeline_keys{};
         Vec3 ambient{kDefaultAmbientLight};
+        std::optional<SceneReachObjective> reach_objective{};
     };
 
     struct SceneDocumentLimits final
@@ -462,7 +505,8 @@ export namespace epochengine::scene
         const SceneDocumentLimits& limits = {}) noexcept
     {
         SceneDocumentValidation result{};
-        result.environment_valid = valid_scene_ambient(snapshot.ambient);
+        result.environment_valid = valid_scene_ambient(snapshot.ambient)
+            && (!snapshot.reach_objective || snapshot.reach_objective->valid());
         result.identity_valid = !snapshot.scene_id.empty()
             && snapshot.revision != 0u
             && (requirement != SceneDocumentRequirement::runnable
@@ -515,6 +559,12 @@ export namespace epochengine::scene
                 && object.scale[2] > 0.0f;
             if (object.forest_region)
                 result.meshes_valid = result.meshes_valid && object.forest_region->valid();
+            if (object.terrain_attachment)
+                result.meshes_valid = result.meshes_valid && object.terrain_attachment->valid()
+                    && object.position_anchor && (object.mesh_asset || (object.type == "Spawn" && !object.terrain_attachment->solid_walk_box))
+                    && (!object.terrain_attachment->solid_walk_box || object.type == "IndexedMesh")
+                    && !object.forest_region
+                    && object.category != "Planetary Terrain" && object.terrain_attachment->terrain_object_id != object.id;
             if (object.mesh_asset)
             {
                 result.strings_bounded = result.strings_bounded && bounded(object.mesh_asset->logical_path);

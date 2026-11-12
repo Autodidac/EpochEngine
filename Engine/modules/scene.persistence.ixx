@@ -117,7 +117,8 @@ namespace epochengine::scene::persistence::detail
             && lhs.editor_only == rhs.editor_only
             && lhs.texture_material == rhs.texture_material
             && lhs.mesh_asset == rhs.mesh_asset
-            && lhs.position_anchor == rhs.position_anchor && lhs.forest_region == rhs.forest_region;
+            && lhs.position_anchor == rhs.position_anchor && lhs.forest_region == rhs.forest_region
+            && lhs.terrain_attachment == rhs.terrain_attachment;
     }
 
     [[nodiscard]] inline bool equal_timeline_key(
@@ -144,6 +145,7 @@ namespace epochengine::scene::persistence::detail
             && lhs.revision == rhs.revision
             && lhs.primary_camera == rhs.primary_camera
             && lhs.primary_spawn == rhs.primary_spawn
+            && lhs.reach_objective == rhs.reach_objective
             && lhs.ambient == rhs.ambient
             && lhs.captured_frame_index == rhs.captured_frame_index
             && lhs.captured_simulated_seconds == rhs.captured_simulated_seconds

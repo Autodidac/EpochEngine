@@ -37,6 +37,7 @@ class PlanetaryFinalAdmission(unittest.TestCase):
 #include <array>
 #include <atomic>
 #include <charconv>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -53,6 +54,7 @@ class PlanetaryFinalAdmission(unittest.TestCase):
 #include <string_view>
 #include <vector>
 namespace fs=std::filesystem;
+using Clock=std::chrono::steady_clock;
 #define CHECK(x) do{if(!(x)){std::fprintf(stderr,"line %d: %s\n",__LINE__,#x);return __LINE__;}}while(false)
 std::string read(const fs::path& path){std::ifstream in{path,std::ios::binary};return {std::istreambuf_iterator<char>{in},{}};}
 void write(const fs::path& path,const std::string& value){fs::create_directories(path.parent_path());std::ofstream out{path,std::ios::binary|std::ios::trunc};out<<value;}
@@ -92,6 +94,8 @@ Attachment load_project_attachment(const fs::path& root,const char*,std::stop_to
 struct Settings{bool ocean_surface{true};unsigned body_index{},resident_megabytes{128},size_reference_body{};double reference_radius_meters{10},patch_pixels{210},lod_hysteresis{.15};};
 struct View{std::uint64_t request_id{42};std::array<double,3> camera{1,2,3};std::optional<double> simulation_seconds{1};std::optional<std::array<double,3>> forward{{0,0,-1}},up{{0,1,0}};double aspect_ratio{1};};
 struct Source{fs::path project_root;std::string project_manifest,content_hash;};
+struct Binding{std::string mesh{"mesh-a"};};
+bool mesh_generation_receipt_matches(const fs::path& root,const Source&,const Settings&,const std::string& mesh){return read(root/"mesh")==mesh;}
 struct GeneratedMeshFrame{double scale;std::array<double,3> origin;};
 struct Operation {bool ok{},cancelled{};std::string message;fs::path artifact_path;std::optional<GeneratedMeshFrame> mesh_frame;};
 struct StreamResult {
@@ -108,7 +112,7 @@ asset::mesh::Limits artifact_limits(const Settings&){return {};}
 project_planetary_snapshot::Limits snapshot_transition_limits(const Settings&){return {};}
 std::string receipt(){return "epoch.planet.stream.v7\nrequest_id=42\nsnapshot_ready=1\nbuilt=1\nreused=5\nresident=6\npending=0\ndraw=6\nmin_level=0\nmax_level=0\nresident_bytes=1024\nmaximum_bytes=134217728\nmeters_to_preview_units=1\nbody_radius_meters=10\nsource_origin_x_meters=1\nsource_origin_y_meters=2\nsource_origin_z_meters=3\nmesh_file=terrain.epoch_mesh\ncontent_key=artifact-key\nvertices=3\nindices=3\nocean_surface=1\nsimulation_seconds=1\npatch_file=terrain.epoch_planet_patch\n";}
 void reset(const fs::path& root){
- write(root/"manifest","manifest-a");write(root/"planet","planet-a");write(root/"recipe","recipe-a");write(root/"water","water-a");
+ write(root/"manifest","manifest-a");write(root/"planet","planet-a");write(root/"recipe","recipe-a");write(root/"water","water-a");write(root/"mesh","mesh-a");
  write(root/"generated/terrain.stream",receipt());write(root/"generated/terrain.epoch_planet_patch","metadata");
  source_checks=water_checks=mesh_decodes=metadata_decodes=materializations=0;
  malformed_mesh=malformed_metadata=refused_transition=refused_materialize=memory_refused=false;
@@ -120,6 +124,9 @@ StreamResult consume(const fs::path& project_root,std::stop_token cancellation,b
  const std::optional<Source> admitted{Source{project_root,"manifest-a","planet-a"}};
  const std::optional<std::string> observedRecipe{"recipe-a"};const std::string recipeKey{"recipe-a"};
  const package_source::Attachment attached{"planet-a"},water{"water-a"};
+ const Binding captured;const auto* binding=old?nullptr:&captured;
+ [[maybe_unused]] double meshDecodeMs{},patchDecodeMs{},cutBuildMs{};
+ const auto elapsedMs=[](Clock::time_point start){return std::chrono::duration<double,std::milli>(Clock::now()-start).count();};
  StreamResult result;auto& operation=result.operation;
  if(old){BASELINE}else{ACTUAL}
  return result;
@@ -131,12 +138,12 @@ int main(){
  reset(root);result=consume(root,{},false,false);CHECK(result.operation.ok&&source_checks==1&&water_checks==0);
  // The actor mutates the real fixture only after the recorded decode port is
  // entered. This exercises the production block's final guards, not timing.
- for(unsigned stage=0;stage<3;++stage)for(unsigned mutation=0;mutation<5;++mutation){
+ for(unsigned stage=0;stage<3;++stage)for(unsigned mutation=0;mutation<6;++mutation){
   reset(root);std::promise<void> arrived,proceed;entered=&arrived;release=proceed.get_future().share();hold_stage=stage;
   std::stop_source stop;auto pending=std::async(std::launch::async,[&]{return consume(root,stop.get_token());});
   arrived.get_future().wait();
-  if(mutation<4)write(root/(mutation==0?"planet":mutation==1?"water":mutation==2?"manifest":"recipe"),"changed");
-  else stop.request_stop();
+  if(mutation==4)stop.request_stop();
+  else write(root/(mutation==0?"planet":mutation==1?"water":mutation==2?"manifest":mutation==3?"recipe":"mesh"),"changed");
   proceed.set_value();result=pending.get();
   CHECK(!result.operation.ok&&!result.snapshot_ready&&!result.snapshot&&!result.patch_snapshot&&!result.verified_source);
   CHECK(result.operation.cancelled==(mutation==4));
@@ -158,7 +165,7 @@ int main(){
  }
  reset(root);write(root/"recipe","changed");result=consume(root,{});CHECK(!result.operation.ok&&source_checks==0&&mesh_decodes==0);
  reset(root);std::stop_source stopped;stopped.request_stop();result=consume(root,stopped.get_token());CHECK(result.operation.cancelled&&!result.operation.ok&&source_checks==0&&mesh_decodes==0);
- std::puts("baseline_source_scans=2 candidate_source_scans=1; decode_stage_source_water_manifest_recipe_cancel_and_retry=15; malformed_refusal_and_retry=9; old_water_decode_race_reproduced=1");
+ std::puts("baseline_source_scans=2 candidate_source_scans=1; decode_stage_source_water_manifest_recipe_cancel_mesh_receipt_and_retry=18; malformed_refusal_and_retry=9; old_water_decode_race_reproduced=1");
 }
 '''.replace('BASELINE', baseline).replace('ACTUAL', actual)
         shared_origin = definition((ROOT / 'Engine/src/project/project.planetary_snapshot.cpp').read_text(encoding='utf-8-sig'),

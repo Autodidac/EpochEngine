@@ -82,17 +82,6 @@
                 push_editor_log(editor, editor.helpersVisible ? "[world] Scene helpers enabled." : "[world] Scene helpers disabled.");
             if (gui::toggle_switch("Rounded controls", editor.roundedRectangles, { 210.0f, 28.0f }))
                 push_editor_log(editor, editor.roundedRectangles ? "[ui] Rounded controls enabled." : "[ui] Rounded controls disabled.");
-            const std::array worldButtons{
-                gui::InlineButtonSpec{ .label = "Focus Selection", .width = 112.0f },
-                gui::InlineButtonSpec{ .label = "Reset View", .width = 86.0f }
-            };
-            if (const auto action = gui::inline_button_row(worldButtons, 26.0f, 4.0f))
-            {
-                if (*action == 0u)
-                    handle_scene_tool(editor, ctx.get(), "focus_selection");
-                else
-                    previewgrid::reset_camera(ctx.get());
-            }
             gui::wrapped_label(
                 "Editor navigation is session-owned. Project, capture, RTT, and portal cameras keep independent immutable view descriptors.",
                 (std::max)(160.0f, pane_size.x - 24.0f));
@@ -678,7 +667,8 @@
                 gui::property_row("Category", entity.category, 84.0f);
                 if (entity.category == "Planetary Terrain")
                 {
-                    gui::label(editor.planetarySettings.stream_lod ? "Camera LOD: On" : "Camera LOD: Off");
+                    gui::label(editor.lodInspectionReturnCamera ? "Camera LOD: Frozen for inspection"
+                        : editor.planetarySettings.stream_lod ? "Camera LOD: On" : "Camera LOD: Off");
                     if (!editor.planetaryStreamStatus.empty())
                         gui::wrapped_label(editor.planetaryStreamStatus, (std::max)(80.0f, pane_size.x - 28.0f));
                 }
@@ -752,6 +742,35 @@
                 gui::wrapped_label(
                     "Movement belongs to scripts/timeline_translation.ascript.cpp in your project. Edit its keys, Run it for this object, then Play, Reverse or seek on the timeline. The host copies the keys; sampling does not call the script.",
                     (std::max)(160.0f, pane_size.x - 24.0f));
+                if (entity.type == "IndexedMesh" && entity.meshAsset && entity.terrainAttachment)
+                {
+                    const bool solid = entity.terrainAttachment->solid_walk_box;
+                    gui::property_row("Walk collision", solid ? "Solid box" : "Off", 108.0f);
+                    const std::array collisionActions{gui::InlineButtonSpec{
+                        .label = solid ? "Disable Walking Collision" : "Enable Walking Collision", .width = 0.0f,
+                        .enabled = editor.selectedEntityIds.size() <= 1u && movementMutationAllowed
+                            && !model_import_scene_busy(editor) && !planetary_project_busy(editor)
+                            && !editor.modelShorelinePending && !editor.assetGenerationPending}};
+                    if (gui::inline_button_row(collisionActions, 27.0f, 4.0f,
+                            {.sizing = gui::InlineButtonSizing::FitContent, .wrap = true,
+                                .available_width = (std::max)(1.0f, pane_size.x - 24.0f)}))
+                    {
+                        if (!set_editor_walk_box(editor, entity, !solid))
+                            push_editor_log(editor, "[scene] Verify the selected terrain attachment before changing walking collision.");
+                    }
+                }
+                if (entity.category == "Planetary Terrain" || entity.terrainAttachment)
+                {
+                    const std::array refreshActions{gui::InlineButtonSpec{
+                        .label = "Refresh Model and Spawn Placement", .width = 0.0f,
+                        .enabled = editor.selectedEntityIds.size() <= 1u && movementMutationAllowed
+                            && !model_import_scene_busy(editor) && !planetary_project_busy(editor)
+                            && !editor.modelShorelinePending && !editor.assetGenerationPending}};
+                    if (gui::inline_button_row(refreshActions, 27.0f, 4.0f,
+                            {.sizing = gui::InlineButtonSizing::FitContent, .wrap = true,
+                                .available_width = (std::max)(1.0f, pane_size.x - 24.0f)}))
+                        (void)begin_forest_surface_refresh(editor, true);
+                }
             }
             else if (!specializedProperties)
             {
@@ -783,9 +802,11 @@
                 gui::label("Viewport Controls");
                 gui::wrapped_label(
                     "Select: left mouse  |  Add/remove: Shift + left mouse  |  "
-                    "Marquee: drag empty viewport  |  Group move: drag any selected object  |  "
+                    "Focus: double-click in the viewport or World Outliner  |  "
+                    "Box select: drag in Select mode  |  Add to selection: Shift + drag  |  "
+                    "Move group: choose Move Free, X, Y, or Z, then drag a selected object  |  "
                     "Pan: middle mouse  |  Orbit: Alt + left mouse  |  "
-                    "Dolly: Alt + right mouse  |  Fly: right mouse + WASD | Roll: Q/E | Up/down: Space/Ctrl  |  Shift: fast | Right mouse + wheel: speed | Focus: F",
+                    "Dolly: Alt + right mouse  |  Fly: right mouse + WASD | Roll: Q/E | Up/down: Space/Ctrl  |  Shift: fast | Right mouse + wheel: speed",
                     (std::max)(160.0f, pane_size.x - 24.0f));
             }
         }

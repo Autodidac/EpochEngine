@@ -1,4 +1,4 @@
-"""Actual managed Run forest projection and ordinary publication; CPU only."""
+"""Actual managed terrain attachments and ordinary Run publication; CPU only."""
 from pathlib import Path
 import hashlib
 import json
@@ -10,8 +10,8 @@ from Tests.packages.test_planetary_scene_units import CODE as UNITS_CODE, owner
 
 ROOT = Path(__file__).resolve().parents[2]
 CODE = UNITS_CODE[:UNITS_CODE.index("// The real Windows translation unit")].replace(
-    "#include <string>", "#include <string>\n#include <string_view>").replace(
-    "import render.arcade;", "import render.arcade;\nimport forest.preview_mesh;\nimport forest.factory;") + r'''
+    "#include <string>", "#include <string>\n#include <string_view>\n#include \"core.stl_types.hpp\"").replace(
+    "import render.arcade;", "import render.arcade;\nimport forest.preview_mesh;\nimport forest.factory;\nimport core.log;") + r'''
 namespace forest=epochengine::forest;
 #define near
 RUNTIME_PUBLICATION
@@ -23,6 +23,12 @@ public:
  std::optional<project_planetary_runtime::PreviewFrame> m_explorationPreview;
  std::optional<previewgrid::Camera> m_explorationRenderCamera{previewgrid::Camera{}};
  std::array<double,3> m_explorationRenderOrigin{};
+ scene_runtime::SceneRuntime m_sceneRuntime;
+ scene_runtime::ReachObjectiveSession m_reachObjective;
+ std::string m_reachTargetName,m_explorationAdvanceStatus;
+ project_planetary_runtime::Frame m_explorationFrame{};
+ bool m_hasPlanetRecipe{true};
+ previewgrid::CameraMode m_cameraMode{previewgrid::CameraMode::FPS};
  std::optional<project_planetary::SourceGeneration> m_meshPlanetarySource{project_planetary::SourceGeneration{}};
  std::optional<project_planetary::Settings> m_meshPlanetarySettings{project_planetary::Settings{}};
  std::unordered_map<std::uint64_t,std::shared_ptr<const asset::mesh::Artifact>> m_meshes;
@@ -71,7 +77,7 @@ int main(){
  probe.m_explorationRenderOrigin={pivot[0],pivot[1]+6371000,pivot[2]};
  const auto savedTree=probe.m_entities[1];const auto savedTerrain=probe.m_entities[0];
  const auto routed=[&]{std::vector<previewgrid::ObjectMarker> markers;std::vector<std::uint64_t> managed;
-  const auto status=probe.append_planetary_forest_markers(markers,managed,true);
+  const auto status=probe.append_planetary_attached_markers(markers,managed,true);
   CHECK(status.empty()&&markers.size()==1&&managed==std::vector<std::uint64_t>{7});return markers[0];};
  auto marker=routed();CHECK(marker.mesh==mesh.artifact&&marker.preciseTransform);
  CHECK(near(marker.preciseTransform->position[0],.03125,1e-6));
@@ -107,14 +113,14 @@ int main(){
  // unchanged real mesh, real budget refusal without duplicate draw geometry.
  const epochengine::core::Context context;const auto* ctx=&context;
  std::vector<previewgrid::ObjectMarker> markers;std::vector<std::uint64_t> managed;
- CHECK(probe.append_planetary_forest_markers(markers,managed,true).empty());
+ CHECK(probe.append_planetary_attached_markers(markers,managed,true).empty());
  CHECK(probe.publish_project_play_markers(ctx,probe.m_entities,&probe.m_meshes,{},markers,3,false,{},nullptr,{},nullptr,nullptr,{},managed));
  auto published=previewgrid::detail::g_objectMarkers.at(ctx).markers;CHECK(published.size()==1&&published[0].mesh==mesh.artifact);
  previewgrid::MeshFrameLimits tiny;tiny.maximum_indices=3;tiny.maximum_bytes=64;
  const auto retained=previewgrid::object_marker_geometry_for(ctx);
  CHECK(!probe.publish_project_play_markers(ctx,probe.m_entities,&probe.m_meshes,tiny,markers,3,false,{},nullptr,{},nullptr,nullptr,{},managed));
  CHECK(previewgrid::object_marker_geometry_for(ctx)==retained);
- const auto refused=[&]{markers.clear();managed.clear();const auto status=probe.append_planetary_forest_markers(markers,managed,true);
+ const auto refused=[&]{markers.clear();managed.clear();const auto status=probe.append_planetary_attached_markers(markers,managed,true);
   CHECK(!status.empty()&&markers.empty()&&managed.empty());};
  for(unsigned failure=0;failure<9;++failure){probe.m_entities[0]=savedTerrain;probe.m_entities[1]=savedTree;
   if(failure==0)probe.m_entities[1].forest_region->provider_content_hash=std::string(64,'b');
@@ -137,9 +143,116 @@ int main(){
  const auto ordinary=project_play_marker_for_entity(probe.m_entities[1],mesh.artifact,{});CHECK(ordinary);
  CHECK(published[0].preciseTransform==ordinary->preciseTransform);
  probe.m_explorationController=false;markers.clear();managed.clear();
- CHECK(probe.append_planetary_forest_markers(markers,managed,true).empty()&&markers.empty()&&managed.empty());
+ CHECK(probe.append_planetary_attached_markers(markers,managed,true).empty()&&markers.empty()&&managed.empty());
  probe.m_explorationController=true;probe.m_entities[1].forest_region.reset();
- CHECK(probe.append_planetary_forest_markers(markers,managed,true).empty()&&markers.empty()&&managed.empty());
+ CHECK(probe.append_planetary_attached_markers(markers,managed,true).empty()&&markers.empty()&&managed.empty());
+ auto& model=probe.m_entities[1];model.category="World";model.type="IndexedMesh";
+ model.position_anchor=std::array<double,3>{1e12+.125,-1e12+.25,1e12+.5};
+ model.transform.position={.03125f,.0625f,.125f};
+ model.terrain_attachment=scene::SceneTerrainAttachment{.terrain_object_id=3,.body_index=0,
+  .terrain_artifact_key=savedTerrain.mesh_asset->artifact_key,.terrain_coordinates=*savedTerrain.mesh_asset->coordinates,
+  .reference_center_meters={1000,-3,4}};
+ const auto savedModel=model;
+ probe.m_explorationPreview->meters_to_preview=.01;
+ probe.m_explorationPreview->bodies[0].center={11,.17,-.03};
+ probe.m_explorationRenderOrigin=*model.position_anchor;
+ marker=routed();CHECK(marker.preciseTransform);
+ CHECK(near(marker.preciseTransform->position[0],100.03125,1e-6));
+ CHECK(near(marker.preciseTransform->position[1],20.0625,1e-6));
+ CHECK(near(marker.preciseTransform->position[2],-6.875,1e-6));
+ probe.m_explorationPreview->bodies[0].center[0]-=10;
+ probe.m_explorationRenderOrigin[0]-=1000;
+ const auto rebased=routed();
+ for(unsigned axis=0;axis<3;++axis)
+  CHECK(near(rebased.preciseTransform->position[axis],marker.preciseTransform->position[axis],1e-6));
+ CHECK(model.position_anchor==savedModel.position_anchor&&model.terrain_attachment==savedModel.terrain_attachment);
+ model.texture_material=scene::SceneTextureMaterialSnapshot{};
+ CHECK(probe.append_planetary_attached_markers(markers,managed,false).empty());
+ CHECK(markers.empty()&&managed.size()==1&&managed.front()==model.source_id);
+ model.texture_material.reset();
+ managed.clear();
+ ++probe.m_entities[0].mesh_asset->artifact_key[0];
+ CHECK(probe.append_planetary_attached_markers(markers,managed,true).find("A model attachment")!=std::string::npos);
+ CHECK(markers.empty()&&managed.empty());
+ CHECK(probe.publish_project_play_markers(ctx,probe.m_entities,&probe.m_meshes,{},markers,3));
+ published=previewgrid::detail::g_objectMarkers.at(ctx).markers;
+ const auto staticModel=project_play_marker_for_entity(model,mesh.artifact,{});
+ CHECK(staticModel&&published.size()==1&&published[0].preciseTransform==staticModel->preciseTransform);
+ probe.m_entities[0]=savedTerrain;
+ ++probe.m_entities[0].mesh_asset->coordinates->source_origin_meters[0];
+ CHECK(probe.append_planetary_attached_markers(markers,managed,true).find("A model attachment")!=std::string::npos);
+ CHECK(markers.empty()&&managed.empty());
+ // The actual runtime samples the published attachment, not its saved pose.
+ probe.m_entities[0]=savedTerrain;
+ scene::SceneSnapshot playable;
+ playable.project_id="reach-project";playable.scene_id="reach-scene";playable.world_name="Reach test";
+ playable.objects.push_back({.id=3,.name="Planet",.type="IndexedMesh",.category="Planetary Terrain",.mesh_asset=savedTerrain.mesh_asset});
+ playable.objects.push_back({.id=7,.name="Beacon",.type="IndexedMesh",.category="World",
+  .position=model.transform.position,.mesh_asset=model.mesh_asset,.position_anchor=model.position_anchor,.terrain_attachment=model.terrain_attachment});
+ playable.objects.push_back({.id=100,.name="Camera",.type="Camera",.category="World"});
+ playable.objects.push_back({.id=101,.name="Spawn",.type="Spawn",.category="World"});
+ playable.primary_camera=100;playable.primary_spawn=101;
+ playable.reach_objective=scene::SceneReachObjective{7,5.0};
+ CHECK(probe.m_sceneRuntime.replace(playable).committed());
+ const auto resetReach=[&]{probe.m_reachObjective.reset(probe.m_sceneRuntime.projection()->source().reach_objective);};
+ resetReach();CHECK(probe.reach_objective_target()&&probe.reach_objective_target()->source_id==7);
+ probe.m_reachTargetName="Beacon";
+ probe.m_explorationRenderCamera->eye={0,0,0};
+ CHECK(probe.append_planetary_attached_markers(markers,managed,true).empty()&&markers.size()==1);
+ const auto sample=[&]{probe.update_reach_objective(ctx,{},markers,managed);};
+ sample();CHECK(!probe.m_reachObjective.distance()&&!probe.m_reachObjective.completed());
+ probe.m_explorationFrame.mode=project_planetary_runtime::TravelMode::walk;
+ sample();CHECK(probe.m_reachObjective.distance()>100&&!probe.m_reachObjective.completed());
+ probe.m_explorationAdvanceStatus="Retained camera";
+ sample();CHECK(!probe.m_reachObjective.distance()&&!probe.m_reachObjective.completed());
+ probe.m_explorationAdvanceStatus.clear();
+ const auto targetPoint=markers.front().preciseTransform->position;
+ for(std::size_t axis=0;axis<targetPoint.size();++axis)probe.m_explorationRenderOrigin[axis]+=targetPoint[axis];
+ probe.m_explorationRenderOrigin[0]-=1;
+ markers.clear();managed.clear();
+ sample();CHECK(!probe.m_reachObjective.distance()&&!probe.m_reachObjective.completed());
+ CHECK(probe.append_planetary_attached_markers(markers,managed,true).empty()&&markers.size()==1);
+ sample();CHECK(probe.m_reachObjective.completed()&&near(*probe.m_reachObjective.distance(),1,1e-6));
+ markers.clear();managed.clear();sample();CHECK(probe.m_reachObjective.completed());
+ resetReach();CHECK(!probe.m_reachObjective.completed()&&!probe.m_reachObjective.distance());
+ playable.objects[1].terrain_attachment->solid_walk_box=true;
+ CHECK(probe.m_sceneRuntime.replace(playable).committed());resetReach();
+ const auto meshLow=mesh.artifact->minimum(),meshHigh=mesh.artifact->maximum();
+ CHECK(meshHigh[1]>0);
+ const auto targetScale=10.0/meshHigh[1];
+ marker.mesh=mesh.artifact;
+ marker.preciseTransform=previewgrid::make_precise_mesh_transform({
+  -.5*(double(meshLow[0])+meshHigh[0]),-11,-.5*(double(meshLow[2])+meshHigh[2])},{1,targetScale,1},{});
+ CHECK(marker.preciseTransform);
+ markers={marker};managed={7};sample();
+ CHECK(probe.m_reachObjective.completed()&&near(*probe.m_reachObjective.distance(),1,1e-6));
+ playable.reach_objective->target=500;
+ CHECK(probe.m_sceneRuntime.replace(playable).committed());
+ resetReach();CHECK(!probe.reach_objective_target());sample();CHECK(!probe.m_reachObjective.completed());
+ auto rotatedTerrain=savedTerrain;
+ rotatedTerrain.transform.rotation={17,31,59};
+ const auto terrainBasis=previewgrid::make_precise_mesh_transform(pivot,{1,1,1},{17,31,59});CHECK(terrainBasis);
+ ProjectRuntimeEntity spawn;spawn.type="Spawn";spawn.transform.rotation=rotatedTerrain.transform.rotation;
+ spawn.terrain_attachment=model.terrain_attachment;spawn.terrain_attachment->body_index=5;
+ const auto referenceCenter=spawn.terrain_attachment->reference_center_meters;
+ spawn.position_anchor=terrainBasis->apply({referenceCenter[0]+123,referenceCenter[1]+456,referenceCenter[2]-789});
+ const auto surfaceStart=project_play_surface_start(spawn,rotatedTerrain);CHECK(surfaceStart&&surfaceStart->body==5);
+ CHECK(near(surfaceStart->body_local_position_meters[0],123,.0005)
+  &&near(surfaceStart->body_local_position_meters[1],456,.0005)&&near(surfaceStart->body_local_position_meters[2],-789,.0005));
+ CHECK(near(surfaceStart->body_local_forward[0],0,1e-7)&&near(surfaceStart->body_local_forward[1],0,1e-7)
+  &&near(surfaceStart->body_local_forward[2],-1,1e-7));
+ auto colliderModel=model;colliderModel.terrain_attachment=spawn.terrain_attachment;
+ colliderModel.terrain_attachment->solid_walk_box=true;
+ colliderModel.position_anchor=spawn.position_anchor;colliderModel.transform.position={};
+ colliderModel.transform.rotation=spawn.transform.rotation;colliderModel.transform.scale={2,3,4};
+ const auto walkBox=project_play_walk_box(colliderModel,rotatedTerrain,*mesh.artifact);CHECK(walkBox&&walkBox->body==5);
+ const auto low=mesh.artifact->minimum(),high=mesh.artifact->maximum();
+ for(std::size_t axis=0;axis<3;++axis){
+  const auto scale=double(colliderModel.transform.scale[axis]);
+  CHECK(near(walkBox->center_meters[axis],surfaceStart->body_local_position_meters[axis]+.5*(double(low[axis])+high[axis])*scale,.0005));
+  CHECK(near(walkBox->half_extent_meters[axis],.5*(double(high[axis])-low[axis])*scale,.0005));}
+ ++colliderModel.mesh_asset->artifact_key[0];CHECK(!project_play_walk_box(colliderModel,rotatedTerrain,*mesh.artifact));
+ ++rotatedTerrain.mesh_asset->artifact_key[0];CHECK(!project_play_surface_start(spawn,rotatedTerrain));
  previewgrid::cleanup_context(ctx);return 0;
 }
 '''
@@ -160,13 +273,19 @@ class ForestRuntimeFollow(unittest.TestCase):
             "        [[nodiscard]] bool runtime_forest_projection_admitted(",
             "        [[nodiscard]] bool project_play_entity_has_geometry(",
             "        [[nodiscard]] std::optional<epochengine::previewgrid::ObjectMarker> project_play_marker_for_entity(",
-            "        [[nodiscard]] std::optional<previewgrid::ObjectMarker> project_play_forest_marker_for_body("))
+            "        [[nodiscard]] std::optional<previewgrid::ObjectMarker> project_play_forest_marker_for_body(",
+            "        [[nodiscard]] std::optional<previewgrid::ObjectMarker> project_play_model_marker_for_body(",
+            "        [[nodiscard]] std::optional<previewgrid::PreciseMeshTransform> project_play_attached_body_transform(",
+            "        [[nodiscard]] std::optional<project_planetary_runtime::SurfaceStart> project_play_surface_start(",
+            "        [[nodiscard]] std::optional<project_planetary_runtime::WalkBox> project_play_walk_box("))
         methods = "\n".join(owner(play, marker) for marker in (
             "            [[nodiscard]] const ProjectRuntimeEntity* planetary_entity(",
             "            [[nodiscard]] double planetary_scene_units(",
-            "            [[nodiscard]] std::string append_planetary_forest_markers(",
+            "            [[nodiscard]] std::string append_planetary_attached_markers(",
+            "            [[nodiscard]] const ProjectRuntimeEntity* reach_objective_target(",
+            "            void update_reach_objective(",
             "            bool publish_project_play_markers("))
-        self.assertLess(play.index("bool completeManagedFrame="), play.index("m_forestRuntimeStatus=append_planetary_forest_markers"))
+        self.assertLess(play.index("bool completeManagedFrame="), play.index("m_terrainAttachmentStatus=append_planetary_attached_markers"))
         self.assertNotIn("filesystem", methods)
         code = CODE.replace("RUNTIME_PUBLICATION", publication).replace("RUNTIME_METHODS", methods)
         identity = hashlib.sha256(code.encode()).hexdigest()[:12]
@@ -182,7 +301,7 @@ class ForestRuntimeFollow(unittest.TestCase):
                     found[match.group(1)] = path
         selected = {}
         pending = re.findall(r"^import\s+([\w.]+);", code, re.M) + ["authoring.texture_detail"]
-        impl = [ROOT / p for p in ("Engine/src/render/render.preview_camera.cpp","Engine/src/assets/texture/asset.texture_artifact.cpp",
+        impl = [ROOT / p for p in ("Engine/src/render/render.preview_camera.cpp", "Engine/src/render/render.preview_lighting.cpp","Engine/src/assets/texture/asset.texture_artifact.cpp",
             "Engine/src/authoring/texture/authoring.texture_document.cpp",
             "Engine/src/authoring/texture/authoring.texture_residency.cpp", "Engine/src/forest/forest.preview_mesh.cpp",
             "Engine/src/assets/texture/asset.texture_import.cpp", "Engine/src/assets/image.stb.cpp",
@@ -222,7 +341,7 @@ set_tests_properties(actual_forest_runtime_follow PROPERTIES TIMEOUT 20)
             (proof / f"lane-{index}.log").write_text(done.stdout + done.stderr, encoding="utf-8")
             runs.append({"command": command, "exit": done.returncode})
             (proof / "result.json").write_text(json.dumps({"passed": done.returncode == 0 and index == len(commands)-1,
-                "scope": "Actual managed forest helper/runtime route/ordinary publisher with real compiled Plant Lab mesh. CPU only; no native renderer, provider or GUI acceptance.",
+                "scope": "Managed forest and model publication, rebased reach objectives, PlayerStart, and solid walking box transforms. CPU only; no native renderer, provider or GUI acceptance.",
                 "commands": runs, "sources": {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest() for p in paths + list(selected.values()) + impl},
                 "extracted_owner_sha256": {"publication": hashlib.sha256(publication.encode()).hexdigest(),
                     "methods": hashlib.sha256(methods.encode()).hexdigest()}}, indent=2), encoding="utf-8")

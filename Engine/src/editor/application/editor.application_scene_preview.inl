@@ -303,7 +303,8 @@
             return true;
         }
         [[nodiscard]] bool publish_plant_lab_project_asset(EditorState& state,
-            const forest::ForestAssetDocument* preparedDocument = nullptr)
+            const forest::ForestAssetDocument* preparedDocument = nullptr,
+            std::string_view logicalPath = kDefaultPlantLabLogicalPath)
         {
             if (!preparedDocument && !ensure_plant_lab_compiled_asset(state))
             {
@@ -321,9 +322,23 @@
                     "The active project's Forest asset library is invalid.";
                 return false;
             }
-            const auto publication = library.publish(
-                kDefaultPlantLabLogicalPath,
-                preparedDocument ? *preparedDocument : state.plantLabDocument);
+            const auto& document = preparedDocument ? *preparedDocument : state.plantLabDocument;
+            if (logicalPath != kDefaultPlantLabLogicalPath)
+            {
+                const auto existing = library.load_source(logicalPath);
+                if (existing.code != project_forests::ForestLibraryCode::not_found)
+                {
+                    const auto stored = existing ? library.load_latest(logicalPath) : project_forests::LoadedForestArtifact{};
+                    if (stored && existing.document.revision == document.revision
+                        && existing.document.contentHash == document.contentHash
+                        && existing.document.genome.stableHash == document.genome.stableHash
+                        && stored.locator.source_revision == document.revision
+                        && stored.locator.source_content_hash == document.contentHash) return true;
+                    state.plantLabAssetStatus = "The saved forest species recipe could not be verified.";
+                    return false;
+                }
+            }
+            const auto publication = library.publish(logicalPath, document);
             if (!publication)
             {
                 state.plantLabAssetStatus = epochengine::format_text(
@@ -332,6 +347,7 @@
                 push_editor_log(state, "[plant] " + state.plantLabAssetStatus);
                 return false;
             }
+            if (logicalPath != kDefaultPlantLabLogicalPath) return true;
             state.plantLabPublishedArtifact = publication.artifact;
             state.plantLabAssetStatus = epochengine::format_text(
                 "{} project Plant Lab revision {} and verified its immutable Library artifact.",
@@ -467,6 +483,27 @@
             return true;
         }
 
+        [[nodiscard]] std::optional<scene::SceneTextureMaterialSnapshot> publish_forest_scene_material(
+            const std::filesystem::path& root, std::string_view projectId,
+            const asset::texture::CompiledTextureArtifact& atlas, std::uint32_t barkTileIndex, bool custom)
+        {
+            project_textures::ProjectTexturePipeline textures{std::string{projectId}, root.string()};
+            std::string logical = forest::preview_mesh::reference_material_available()
+                ? "Textures/Forest/reference_bark_foliage_v1" : "Textures/Forest/bark_foliage_v1";
+            if (barkTileIndex != 0u) logical += "_bark_" + std::to_string(barkTileIndex);
+            if (custom) logical = "Textures/Forest/project_bark_foliage_" + asset::texture::content_hash_hex(atlas.identity.key);
+            const auto published = textures.publish(logical, atlas, texture_artifact::TransferUsage::base_color);
+            if (!published) return {};
+            return scene::SceneTextureMaterialSnapshot{
+                .logical_path = logical,
+                .artifact_key = atlas.identity.key.words,
+                .stable_key = published.logical.asset_key,
+                .address_v = scene::SceneTextureAddress::repeat,
+                .alpha = scene::SceneTextureAlphaMode::cutout,
+                .color_space = atlas.identity.profile.color_space == asset::texture::ColorSpace::srgb
+                    ? scene::SceneTextureColorSpace::srgb : scene::SceneTextureColorSpace::linear};
+        }
+
         [[nodiscard]] bool persist_forest_scene_mesh(const std::filesystem::path& projectRoot,
             std::vector<EditorEntity>& entities, std::string_view projectId, std::uint32_t barkTileIndex = 0u,
             const forest::ForestFactoryProfile* profile = nullptr)
@@ -502,23 +539,9 @@
                 entity.meshAsset = scene::SceneMeshSnapshot{relative, mesh.key().words,
                     static_cast<std::uint32_t>(mesh.vertices().size()),
                     static_cast<std::uint32_t>(mesh.indices().size())};
-                project_textures::ProjectTexturePipeline textures{std::string{projectId}, root.string()};
                 const auto& atlas = custom ? material.artifact : forest::preview_mesh::material_atlas(barkTileIndex);
-                std::string logical = forest::preview_mesh::reference_material_available()
-                    ? "Textures/Forest/reference_bark_foliage_v1" : "Textures/Forest/bark_foliage_v1";
-                if (barkTileIndex != 0u) logical += "_bark_" + std::to_string(barkTileIndex);
-                if(custom)logical="Textures/Forest/project_bark_foliage_"+asset::texture::content_hash_hex(atlas.identity.key);
-                const auto published = textures.publish(logical, atlas, texture_artifact::TransferUsage::base_color);
-                if (!published) return false;
-                entity.textureMaterial = scene::SceneTextureMaterialSnapshot{
-                    .logical_path = logical,
-                    .artifact_key = atlas.identity.key.words,
-                    .stable_key = published.logical.asset_key,
-                    .address_v = scene::SceneTextureAddress::repeat,
-                    .alpha = scene::SceneTextureAlphaMode::cutout,
-                    .color_space = atlas.identity.profile.color_space == asset::texture::ColorSpace::srgb
-                        ? scene::SceneTextureColorSpace::srgb : scene::SceneTextureColorSpace::linear};
-                return true;
+                entity.textureMaterial = publish_forest_scene_material(root, projectId, atlas, barkTileIndex, custom);
+                return entity.textureMaterial.has_value();
             }
             catch (...) { return false; }
         }
@@ -554,7 +577,8 @@
         {
             state.aiToolPlantRecipeBound=false;
             state.aiToolPlantRevision=state.aiToolPlantHash=0u;
-            if(tool!="forest.configure"&&tool!="forest.paint"&&tool!="forest.material")return true;
+            if(tool!="forest.configure"&&tool!="forest.paint"&&tool!="forest.material"
+                &&tool!="forest.material.import"&&tool!="forest.update"&&tool!="forest.species.add")return true;
             if(!has_open_project(state)||!ensure_plant_lab_compiled_asset(state))
             {
                 state.aiToolStatus=!has_open_project(state)?"Open a project before changing or painting its Plant Lab tree."
@@ -857,7 +881,7 @@
                     { entity.meshSnapshot = mesh; entity.meshLoadAttempted = true; }
         }
 
-        [[nodiscard]] std::optional<std::array<double,3>> verified_forest_surface_anchor(
+        [[nodiscard]] bool forest_area_matches_terrain_frame(
             const EditorEntity& terrain,const scene::SceneForestRegionInstance& region,
             const EditorState::PlanetaryMeshPolicy& policy)
         {
@@ -865,14 +889,22 @@
                 ||!terrain.meshAsset->coordinates||!policy.body_inventory_checked
                 ||region.terrain_object_id!=terrain.sceneObjectId
                 ||region.terrain_artifact_key!=terrain.meshAsset->artifact_key
-                ||policy.source.content_hash!="sha256:"+region.provider_content_hash
-                ||region.recipe!=project_planetary::encode_settings(policy.settings)
                 ||region.mesh_source_origin_meters!=terrain.meshAsset->coordinates->source_origin_meters)
-                return {};
+                return false;
             const auto body=std::find_if(policy.generated_bodies.begin(),policy.generated_bodies.end(),
                 [&](const auto& value){return value.id==region.body_index;});
-            if(body==policy.generated_bodies.end()||body->center_meters!=region.admitted_body_center_meters
-                ||body->radius_meters!=region.body_radius_meters)return {};
+            return body!=policy.generated_bodies.end()
+                &&body->center_meters==region.admitted_body_center_meters
+                &&body->radius_meters==region.body_radius_meters;
+        }
+
+        [[nodiscard]] std::optional<std::array<double,3>> verified_forest_surface_anchor(
+            const EditorEntity& terrain,const scene::SceneForestRegionInstance& region,
+            const EditorState::PlanetaryMeshPolicy& policy)
+        {
+            if(!forest_area_matches_terrain_frame(terrain,region,policy)
+                ||policy.source.content_hash!="sha256:"+region.provider_content_hash
+                ||region.recipe!=project_planetary::encode_settings(policy.settings))return {};
             const auto pivot=scene::world_position(terrain.position,terrain.positionAnchor);
             if(!pivot)return {};
             for(const auto scale:terrain.scale)if(!std::isfinite(scale)||scale<=0.0f)return {};
@@ -889,15 +921,27 @@
             return anchor;
         }
 
-        [[nodiscard]] bool refresh_forest_factory_instances(EditorState& state)
+        [[nodiscard]] bool painted_tree_uses_plant_lab(const EditorEntity& entity) noexcept
+        {
+            return entity.category == "ForestFactory" && entity.type == "ForestTrunk"
+                && entity.forestRegion && entity.forestRegion->plant_source == kDefaultPlantLabLogicalPath;
+        }
+
+        struct PaintedTreeUpdateResult final
+        {
+            bool applied{}, saved{};
+            [[nodiscard]] explicit operator bool() const noexcept { return applied; }
+        };
+
+        [[nodiscard]] PaintedTreeUpdateResult refresh_forest_factory_instances(EditorState& state)
         {
             if (!has_open_project(state) || state.forestSurfacePending
                 || state.projectBuildPending || state.projectRuntimeProcess.valid()
-                || !ensure_plant_lab_compiled_asset(state)) return false;
+                || !ensure_plant_lab_compiled_asset(state)) return {};
             auto prototype = project_compiled_forest_entities(state.plantLabCompiled,
                 "ForestRefresh_", "ForestFactory", false, 0.0f, 0.0f, true);
             if (prototype.size() != 1u || !persist_forest_scene_mesh(state, prototype)
-                || !publish_plant_lab_project_asset(state)) return false;
+                || !publish_plant_lab_project_asset(state)) return {};
             // Source/receipt currency is verified once for this explicit edit,
             // never once per instance or implicitly while reopening a project.
             const EditorEntity* verifiedTerrain{};
@@ -922,8 +966,7 @@
                 if (current.category != "ForestFactory") continue;
                 auto entity = current;
                 if (entity.sceneObjectId == state.selectedEntityId) selectedName = entity.name;
-                if (entity.type == "ForestTrunk" && entity.forestRegion
-                    && entity.forestRegion->plant_source == kDefaultPlantLabLogicalPath)
+                if (painted_tree_uses_plant_lab(entity))
                 {
                     entity.meshAsset = prototype.front().meshAsset;
                     entity.meshSnapshot = prototype.front().meshSnapshot;
@@ -950,11 +993,12 @@
             if (updated == 0u)
             {
                 state.plantLabStatus = "No painted trees use this project's Plant Lab design.";
-                return false;
+                return {};
             }
             if (!synchronize_editor_scene_category(state, "ForestFactory", std::move(desired),
-                    "Update painted trees", selectedName)) return false;
-            state.plantLabStatus = save_editor_scene_snapshot(state)
+                    "Update painted trees", selectedName)) return {};
+            const bool saved = save_editor_scene_snapshot(state);
+            state.plantLabStatus = saved
                 ? "Painted trees updated and saved. Scene Undo restores the previous design."
                 : "Painted trees updated; saving failed. Retry Save before closing.";
             if(reattachedRoots)
@@ -964,17 +1008,36 @@
                 state.plantLabStatus+=epochengine::format_text(" {} root{} retained: terrain attachment could not be verified. Use Refresh Forest Placement to resample their existing roots.",
                     unverifiedRoots,unverifiedRoots==1u?"":"s");
             push_editor_log(state, "[forest] " + state.plantLabStatus);
-            return true;
+            return {.applied = true, .saved = saved};
+        }
+
+        [[nodiscard]] project_planetary::SurfaceBatchResult query_forest_surfaces(
+            const std::filesystem::path& root, const project_planetary::SurfaceBatchQuery& request, std::stop_token stop)
+        {
+            auto batch = project_planetary::query_surfaces(root, request, stop);
+            // The passive preview provider may still be retiring when
+            // a forest job takes over its process slot.
+            const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds{1500};
+            while (batch.code == project_planetary::SurfaceCode::busy && !stop.stop_requested()
+                && std::chrono::steady_clock::now() < deadline)
+            {
+                std::this_thread::sleep_for(std::chrono::milliseconds{50});
+                batch = project_planetary::query_surfaces(root, request, stop);
+            }
+            return batch;
         }
 
         // Query exact procedural ground through the existing owned provider.
         // A scene transform/recipe/plant edit invalidates the queued intent.
         [[nodiscard]] bool begin_forest_surface_placement(EditorState& state,const EditorEntity& planet,
             std::size_t ordinal, std::optional<forest::ForestAreaDistribution> area = {},
-            std::optional<std::array<double,3>> brushDirection = {}, bool findOceanShoreline = false)
+            std::optional<std::array<double,3>> brushDirection = {}, bool findOceanShoreline = false,
+            const scene::SceneForestRegionInstance* existingForest = nullptr,
+            std::span<const std::array<double,3>> stroke = {})
         {
             if(state.forestSurfacePending)
             {state.plantLabStatus="A plant surface placement is already running.";return false;}
+            state.forestPlacementSaved=false;
             if(state.projectBuildPending||state.projectRuntimeProcess.valid())
             {state.plantLabStatus="Stop the project before placing a plant.";return false;}
             if(!editor_planetary_stream_identity_matches(state,planet))
@@ -982,7 +1045,15 @@
             refresh_editor_planetary_body_inventory(state,planet);
             const auto& policy=*state.planetaryMeshPolicy;
             auto bodyId=policy.settings.body_index;
-            if(state.planetaryBodySelection&&state.planetaryBodySelection->entity==planet.sceneObjectId)
+            if(existingForest)
+            {
+                // The existing footprint is expressed in the unchanged body frame.
+                // Only the new trees are sampled against the current provider.
+                if(!forest_area_matches_terrain_frame(planet,*existingForest,policy))
+                {state.plantLabStatus="Refresh Forest Placement before adding trees to this area.";return false;}
+                bodyId=existingForest->body_index;
+            }
+            else if(state.planetaryBodySelection&&state.planetaryBodySelection->entity==planet.sceneObjectId)
                 bodyId=state.planetaryBodySelection->body;
             const auto body=std::find_if(policy.generated_bodies.begin(),policy.generated_bodies.end(),
                 [&](const auto& value){return value.id==bodyId;});
@@ -991,7 +1062,7 @@
             if (findOceanShoreline && (!area || !policy.settings.ocean_surface || body->id != 0u))
             {state.plantLabStatus="Shoreline placement requires a forest area on the generated ocean-bearing body.";return false;}
             auto context=state.projectRuntimeViewportContext.lock();
-            if(!findOceanShoreline&&!state.forestPlacementCamera&&!context)
+            if(!existingForest&&!findOceanShoreline&&!state.forestPlacementCamera&&!context)
             {state.plantLabStatus="The project camera is unavailable; no plant was placed.";return false;}
             const auto pivot=scene::world_position(planet.position,planet.positionAnchor);
             if(!pivot)return false;
@@ -1000,7 +1071,8 @@
                 {planet.rotation[0],planet.rotation[1],planet.rotation[2]});
             if(!transform)return false;
             std::array<double,3> direction{0.0,1.0,0.0}, heading{0.0,0.0,1.0};
-            if (!findOceanShoreline)
+            if (existingForest) direction=existingForest->center_direction;
+            else if (!findOceanShoreline)
             {
                 const auto camera=state.forestPlacementCamera?*state.forestPlacementCamera:previewgrid::camera_for(context.get());
                 const auto eye=previewgrid::camera_world_eye(camera);
@@ -1036,12 +1108,32 @@
             intent.query={policy.source,policy.settings,*policy.generated_mesh,*body,terrain,direction,++state.forestSurfaceSequence};
             intent.area=area;
             intent.findOceanShoreline=findOceanShoreline;
-            intent.directions=area?forest::forest_area_directions(*area,direction,body->radius_meters)
-                :std::vector<std::array<double,3>>{direction};
+            intent.existingRegion=existingForest?existingForest->region_id:0u;
+            intent.sceneRevision=state.sceneDocumentRevision;
+            if (area && !stroke.empty())
+            {
+                // Four surrounding samples per candidate fit in one admitted
+                // surface batch for the shoreline setback.
+                constexpr auto maximum = project_planetary::kMaximumSurfaceBatchSamples / 4u;
+                if (stroke.size() > maximum) return false;
+                for (std::size_t i = 0; i < stroke.size(); ++i)
+                {
+                    auto stamp = *area;
+                    stamp.seed = forest::mix_seed(area->seed, i);
+                    const auto candidates = forest::forest_area_directions(stamp, stroke[i], body->radius_meters);
+                    const auto count = (std::min)(candidates.size(), maximum / stroke.size() + (i < maximum % stroke.size()));
+                    intent.directions.insert(intent.directions.end(), candidates.begin(), candidates.begin() + count);
+                    intent.brushCenters.insert(intent.brushCenters.end(), count, stroke[i]);
+                }
+            }
+            else
+                intent.directions=area?forest::forest_area_directions(*area,direction,body->radius_meters)
+                    :std::vector<std::array<double,3>>{direction};
             if(intent.directions.empty())
             {state.plantLabStatus="The forest area radius or density is invalid; no trees were placed.";return false;}
             auto submitted=schedule_editor_cancellable_task(state,area?"Paint forest area on planetary ground":"Place plant on generated planetary ground",
                 [root,query=intent.query,directions=intent.directions,area,findOceanShoreline,terrainPath,terrainLimits,
+                    brush=!stroke.empty(),
                     plant=state.plantLabCompiled,profile=state.plantLabDocument.profile,
                     ordinal,projectId=intent.projectId](std::stop_token stop) mutable {
                     EditorState::ForestSurfacePrepared prepared;
@@ -1080,7 +1172,7 @@
                     if(prepared.prototype.size()!=1||!persist_forest_scene_mesh(root,prepared.prototype,projectId,profile.barkTileIndex,&profile))
                         return refused("The compiled plant mesh could not be prepared safely.");
                     if(stop.stop_requested())return refused("Plant placement cancelled.");
-                    if(area)prepared.surface=project_planetary::query_surfaces(root,{query,directions},stop);
+                    if(area)prepared.surface=query_forest_surfaces(root,{query,directions},stop);
                     else
                     {
                         auto sample=project_planetary::query_surface(root,query,stop);
@@ -1088,61 +1180,176 @@
                         prepared.surface.request_id=sample.request_id;
                         if(sample.code==project_planetary::SurfaceCode::ready)prepared.surface.samples.push_back(std::move(sample));
                     }
+                    if(brush&&query.settings.ocean_surface&&prepared.surface.code==project_planetary::SurfaceCode::ready)
+                    {
+                        // Verify land along four 24-metre offsets around each
+                        // painted root. The provider supplies the real height.
+                        constexpr double setback=24.0;
+                        const double angle=setback/query.body.radius_meters;
+                        const double radial=std::cos(angle),lateral=std::sin(angle);
+                        std::vector<std::array<double,3>> probes;
+                        probes.reserve(directions.size()*4u);
+                        for(const auto& point:directions)
+                        {
+                            std::array<double,3> east=std::abs(point[1])<0.9
+                                ?std::array<double,3>{point[2],0.0,-point[0]}
+                                :std::array<double,3>{0.0,-point[2],point[1]};
+                            const double length=std::hypot(east[0],east[1],east[2]);
+                            for(auto& axis:east)axis/=length;
+                            const std::array<double,3> north{point[1]*east[2]-point[2]*east[1],
+                                point[2]*east[0]-point[0]*east[2],point[0]*east[1]-point[1]*east[0]};
+                            for(const auto& tangent:{east,north})
+                                for(double sign:{-1.0,1.0})
+                                    probes.push_back({point[0]*radial+sign*tangent[0]*lateral,
+                                        point[1]*radial+sign*tangent[1]*lateral,point[2]*radial+sign*tangent[2]*lateral});
+                        }
+                        const auto neighborhood=query_forest_surfaces(root,{query,probes},stop);
+                        if(neighborhood.code!=project_planetary::SurfaceCode::ready
+                            ||neighborhood.request_id!=query.request_id||neighborhood.samples.size()!=probes.size())
+                            return refused("Could not verify the shoreline setback for this stroke.");
+                        for(std::size_t i=0;i<neighborhood.samples.size();i+=4u)
+                        {
+                            const auto first=neighborhood.samples.begin()+i;
+                            prepared.brushInland.push_back(std::all_of(first,first+4,[](const auto& sample){
+                                return sample.code==project_planetary::SurfaceCode::ready&&sample.height_meters>0.0;
+                            }));
+                        }
+                    }
                     return prepared;
                 });
             state.forestSurfacePlacement=std::move(intent);
             state.forestSurfaceCancellation=submitted.cancellation;
             state.forestSurfacePending.emplace(std::move(submitted.completion));
-            state.plantLabStatus=findOceanShoreline?"Finding dry ground beside verified ocean water..."
+            state.forestPlacementSaved.reset();
+            state.plantLabStatus=existingForest?"Sampling space for the current Plant Lab tree in the selected forest..."
+                :findOceanShoreline?"Finding dry ground beside verified ocean water..."
+                :!stroke.empty()?"Checking spacing and shoreline clearance for the painted forest..."
                 :area?"Sampling the forest area beneath the project camera (maximum 64 trees)..."
                 :"Finding dry terrain beneath the project camera...";
             push_editor_log(state,"[forest] "+state.plantLabStatus);
             return true;
         }
 
-        [[nodiscard]] bool begin_forest_surface_refresh(EditorState& state)
+        [[nodiscard]] std::array<double, 3> terrain_radial_direction(const previewgrid::PreciseMeshTransform& terrain,
+            const std::array<double, 3>& direction) noexcept
+        {
+            std::array<double, 3> up{};
+            for (std::size_t row = 0; row < up.size(); ++row)
+                for (std::size_t axis = 0; axis < up.size(); ++axis)
+                    up[row] += terrain.rotation[row * 3 + axis] * terrain.scale[axis] * direction[axis];
+            const auto length = std::hypot(up[0], up[1], up[2]);
+            for (auto& axis : up) axis /= length;
+            return up;
+        }
+
+        [[nodiscard]] std::optional<double> terrain_attachment_support(const scene::SceneObjectSnapshot& object,
+            const asset::mesh::Artifact& mesh, const std::array<double, 3>& worldUp, std::stop_token stop)
+        {
+            const auto scale = scene::mesh_render_scale(object.scale, object.mesh_asset);
+            const auto basis = scale ? previewgrid::make_precise_mesh_transform({}, {(*scale)[0], (*scale)[1], (*scale)[2]},
+                {object.rotation[0], object.rotation[1], object.rotation[2]}) : std::nullopt;
+            if (!basis || mesh.vertices().empty()) return {};
+            double minimum = std::numeric_limits<double>::infinity();
+            std::size_t index{};
+            for (const auto& vertex : mesh.vertices())
+            {
+                if ((index++ & 4095u) == 0u && stop.stop_requested()) return {};
+                const auto p = basis->apply({vertex.position[0], vertex.position[1], vertex.position[2]});
+                minimum = (std::min)(minimum, p[0] * worldUp[0] + p[1] * worldUp[1] + p[2] * worldUp[2]);
+            }
+            return std::isfinite(minimum) ? std::optional{-minimum} : std::nullopt;
+        }
+
+        [[nodiscard]] const EditorEntity* selected_terrain_attachment_refresh_target(const EditorState& state)
+        {
+            if (state.selectedEntityIds.size() > 1u) return nullptr;
+            const auto index = editor_entity_index(state, state.selectedEntityId);
+            if (!index) return nullptr;
+            const auto& entity = state.entities[*index];
+            return entity.category == "Planetary Terrain" || entity.terrainAttachment ? &entity : nullptr;
+        }
+
+        [[nodiscard]] bool begin_forest_surface_refresh(EditorState& state, bool attachments = false)
         {
             const auto fail=[&](std::string message) {
-                state.plantLabStatus=std::move(message);push_editor_log(state,"[forest] "+state.plantLabStatus);return false;
+                auto& status = attachments ? state.projectStatus : state.plantLabStatus;
+                status = std::move(message);
+                push_editor_log(state, (attachments ? "[scene] " : "[forest] ") + status);
+                return false;
             };
             if(!has_open_project(state)||state.forestSurfacePending||state.projectBuildPending
-                ||state.planetaryGeneratePending||state.projectRuntimeProcess.valid())
-                return fail("Stop the project and wait for current terrain work before refreshing forest placement.");
+                ||state.planetaryGeneratePending||state.projectRuntimeProcess.valid()||state.modelShorelinePending
+                ||(state.projectRuntimeSnapshot&&state.projectRuntimeSnapshot->active()))
+                return fail("Stop the project and finish terrain work before refreshing placement.");
             if(!state.sceneDocument.initialized())
                 return fail("Save the current scene before refreshing forest placement.");
+            if(attachments&&!selected_terrain_attachment_refresh_target(state))
+                return fail("Select the generated terrain, an attached model, or PlayerStart.");
             const auto selected=editor_entity_index(state,state.selectedEntityId);
             const auto regionId=selected&&state.entities[*selected].forestRegion
                 ?state.entities[*selected].forestRegion->region_id:0u;
-            const auto terrainId=regionId?state.entities[*selected].forestRegion->terrain_object_id
+            const auto terrainId=attachments && selected && state.entities[*selected].terrainAttachment
+                ? state.entities[*selected].terrainAttachment->terrain_object_id
+                : regionId?state.entities[*selected].forestRegion->terrain_object_id
                 :selected&&state.entities[*selected].category=="Planetary Terrain"?state.selectedEntityId:0u;
+            if (attachments && !terrainId) return fail("Select the generated terrain, an attached model, or PlayerStart.");
             const auto terrain=std::find_if(state.entities.begin(),state.entities.end(),[&](const auto& entity) {
                 return (!terrainId||entity.sceneObjectId==terrainId)&&editor_planetary_stream_identity_matches(state,entity);
             });
-            if(terrain==state.entities.end())return fail("Select the generated terrain or one of its painted trees before Refresh Forest Placement.");
+            if(terrain==state.entities.end())return fail("The selected object has no current generated terrain to refresh against.");
             refresh_editor_planetary_body_inventory(state,*terrain);
             const auto& policy=*state.planetaryMeshPolicy;
-            if(!policy.body_inventory_checked)return fail("The generated terrain body inventory is unavailable; forest placement is unchanged.");
+            if(!policy.body_inventory_checked||!policy.generated_mesh)return fail("The generated terrain body inventory is unavailable; placement is unchanged.");
             EditorState::ForestSurfacePlacement intent;
             intent.projectId=state.projectId;intent.projectRoot=state.projectRoot;
             intent.projectGeneration=state.projectLifecycle.evidence().generations.selected_project.generation;
             intent.sceneRevision=state.sceneDocument.revision().sequence;
+            intent.refreshAttachments=attachments;
             intent.entity=terrain->sceneObjectId;intent.position=terrain->position;intent.rotation=terrain->rotation;
             intent.scale=terrain->scale;intent.anchor=terrain->positionAnchor;
-            for(const auto& tree:state.entities)
+            const auto pivot=scene::world_position(terrain->position,terrain->positionAnchor);
+            const auto transform=pivot?previewgrid::make_precise_mesh_transform(*pivot,
+                {terrain->scale[0],terrain->scale[1],terrain->scale[2]},
+                {terrain->rotation[0],terrain->rotation[1],terrain->rotation[2]}):std::nullopt;
+            if(!transform)return fail("The terrain transform is invalid.");
+            for(const auto& object:state.entities)
             {
-                if(tree.category!="ForestFactory"||tree.type!="ForestTrunk"||!tree.forestRegion
-                    ||tree.forestRegion->terrain_object_id!=intent.entity
-                    ||(regionId&&tree.forestRegion->region_id!=regionId))continue;
-                const auto& region=*tree.forestRegion;
+                std::uint32_t bodyId{};
+                std::array<double,3> direction{};
+                if (attachments)
+                {
+                    if (!object.terrainAttachment || object.terrainAttachment->terrain_object_id != intent.entity) continue;
+                    const auto& attachment = *object.terrainAttachment;
+                    const auto point = scene::world_position(object.position, object.positionAnchor);
+                    if (!point || !attachment.valid() || (object.type != "Spawn" && !object.meshAsset))
+                        return fail("An attached object has no valid saved position or mesh.");
+                    direction = transform->inverse_apply(*point);
+                    for (std::size_t axis = 0; axis < direction.size(); ++axis)
+                        direction[axis] -= attachment.reference_center_meters[axis];
+                    const auto radius = std::hypot(direction[0], direction[1], direction[2]);
+                    if (!std::isfinite(radius) || radius <= 0.0) return fail("An attached object has no recoverable surface direction.");
+                    for (auto& axis : direction) axis /= radius;
+                    bodyId = attachment.body_index;
+                }
+                else
+                {
+                    if(object.category!="ForestFactory"||object.type!="ForestTrunk"||!object.forestRegion
+                        ||object.forestRegion->terrain_object_id!=intent.entity
+                        ||(regionId&&object.forestRegion->region_id!=regionId))continue;
+                    const auto& region=*object.forestRegion;
+                    if(!region.valid()) return fail("A painted tree has no valid surface direction.");
+                    direction=region.radial_up;bodyId=region.body_index;
+                }
                 const auto body=std::find_if(policy.generated_bodies.begin(),policy.generated_bodies.end(),
-                    [&](const auto& value){return value.id==region.body_index;});
-                if(!region.valid()||body==policy.generated_bodies.end()||!state.sceneDocument.find({tree.sceneObjectId}))
-                    return fail("A painted tree has no valid current terrain body; all forest placement is unchanged.");
-                intent.refreshTrees.push_back(editor_entity_snapshot(tree));intent.refreshBodies.push_back(*body);
-                intent.directions.push_back(region.radial_up);
+                    [&](const auto& value){return value.id==bodyId;});
+                if(body==policy.generated_bodies.end()||!state.sceneDocument.find({object.sceneObjectId}))
+                    return fail("A saved object has no matching generated body; placement is unchanged.");
+                intent.refreshObjects.push_back(editor_entity_snapshot(object));intent.refreshBodies.push_back(*body);
+                intent.directions.push_back(direction);
             }
-            if(intent.refreshTrees.empty())return fail("There are no painted trees on the selected terrain or forest area.");
-            if(intent.refreshTrees.size()>forest::kMaximumForestAreaInstances)
+            if(intent.refreshObjects.empty())return fail(attachments ? "This terrain has no attached models or spawns."
+                : "There are no painted trees on the selected terrain or forest area.");
+            if(!attachments&&intent.refreshObjects.size()>project_planetary::kMaximumSurfaceBatchSamples)
                 return fail("Select one forest area to refresh at most 64 trees in a single undoable operation.");
             const auto root=resolve_editor_path(std::filesystem::path{state.projectRoot});
             std::shared_ptr<const asset::mesh::Artifact> artifact=terrain->meshSnapshot;
@@ -1151,9 +1358,11 @@
                 intent.directions.front(),++state.forestSurfaceSequence};
             const auto terrainPath=terrain->meshAsset->logical_path;
             const auto terrainLimits=editor_planetary_mesh_budget(state).artifact;
-            auto submitted=schedule_editor_cancellable_task(state,"Refresh forest placement on generated terrain",
+            auto submitted=schedule_editor_cancellable_task(state,attachments ? "Refresh models and spawns on generated terrain"
+                : "Refresh forest placement on generated terrain",
                 [root,query=intent.query,bodies=intent.refreshBodies,directions=intent.directions,
-                    terrainPath,terrainLimits](std::stop_token stop) mutable {
+                    objects=attachments ? intent.refreshObjects : std::vector<scene::SceneObjectSnapshot>{},
+                    transform=*transform,terrainPath,terrainLimits](std::stop_token stop) mutable {
                     EditorState::ForestSurfacePrepared prepared;
                     auto& result=prepared.surface;result.request_id=query.request_id;
                     const auto refused=[&](std::string message) {
@@ -1175,40 +1384,96 @@
                         std::vector<std::array<double,3>> bodyDirections;std::vector<std::size_t> indices;
                         for(std::size_t index=first;index<bodies.size();++index)
                             if(bodies[index]==bodies[first]){bodyDirections.push_back(directions[index]);indices.push_back(index);}
-                        query.body=bodies[first];query.direction=bodyDirections.front();
-                        auto batch=project_planetary::query_surfaces(root,{query,bodyDirections},stop);
-                        if(batch.code!=project_planetary::SurfaceCode::ready||batch.request_id!=query.request_id
-                            ||batch.samples.size()!=indices.size())
+                        query.body=bodies[first];
+                        for (std::size_t offset = 0; offset < indices.size(); offset += project_planetary::kMaximumSurfaceBatchSamples)
                         {
-                            result=std::move(batch);result.samples.clear();
-                            if(result.code==project_planetary::SurfaceCode::ready)
-                            {result.code=project_planetary::SurfaceCode::invalid;result.operation.message="The terrain returned an incomplete or mismatched forest batch.";}
-                            return prepared;
+                            const auto count = (std::min)(indices.size() - offset, project_planetary::kMaximumSurfaceBatchSamples);
+                            const auto from = bodyDirections.begin() + offset;
+                            query.direction = *from;
+                            auto batch = query_forest_surfaces(root, {query, {from, from + count}}, stop);
+                            if(batch.code!=project_planetary::SurfaceCode::ready||batch.request_id!=query.request_id
+                                ||batch.samples.size()!=count)
+                            {
+                                result=std::move(batch);result.samples.clear();
+                                if(result.code==project_planetary::SurfaceCode::ready)
+                                {result.code=project_planetary::SurfaceCode::invalid;result.operation.message="The terrain returned an incomplete or mismatched placement batch.";}
+                                return prepared;
+                            }
+                            for(std::size_t sample=0u;sample<count;++sample)
+                                result.samples[indices[offset+sample]]=std::move(batch.samples[sample]);
                         }
-                        for(std::size_t sample=0u;sample<indices.size();++sample)
-                            result.samples[indices[sample]]=std::move(batch.samples[sample]);
                     }
-                    if(stop.stop_requested())return refused("Forest refresh cancelled.");
+                    prepared.groundSupports.resize(objects.size());
+                    for (std::size_t index = 0; index < objects.size(); ++index)
+                    {
+                        if(stop.stop_requested())return refused("Placement refresh cancelled.");
+                        const auto& object = objects[index];
+                        if (!object.mesh_asset) continue;
+                        const auto mesh = asset::mesh::read_project_artifact(root, object.mesh_asset->logical_path,
+                            {object.mesh_asset->artifact_key}, terrainLimits);
+                        if (!mesh) return refused("An attached model mesh could not be verified.");
+                        const auto support = terrain_attachment_support(object, *mesh.artifact,
+                            terrain_radial_direction(transform, directions[index]), stop);
+                        if (!support) return refused("An attached model's ground support could not be measured.");
+                        prepared.groundSupports[index] = *support;
+                    }
+                    // Parts imported together share an exact placement. Use
+                    // their lowest vertex across the assembly for one pivot.
+                    std::vector<bool> grouped(objects.size());
+                    for (std::size_t first = 0; first < objects.size(); ++first)
+                    {
+                        if(stop.stop_requested())return refused("Placement refresh cancelled.");
+                        const auto& object = objects[first];
+                        if (grouped[first] || !object.mesh_asset) continue;
+                        const auto& original = *object.terrain_attachment;
+                        std::vector<std::size_t> parts{first};
+                        double support = prepared.groundSupports[first];
+                        for (std::size_t other = first + 1; other < objects.size(); ++other)
+                        {
+                            const auto& part = objects[other];
+                            const auto& link = part.terrain_attachment;
+                            if (!grouped[other] && part.mesh_asset && link && link->body_index == original.body_index
+                                && link->reference_center_meters == original.reference_center_meters
+                                && link->terrain_artifact_key == original.terrain_artifact_key
+                                && link->terrain_coordinates == original.terrain_coordinates
+                                && part.position_anchor == object.position_anchor && part.position == object.position
+                                && part.rotation == object.rotation && part.scale == object.scale)
+                            {
+                                grouped[other] = true;
+                                parts.push_back(other);
+                                support = (std::max)(support, prepared.groundSupports[other]);
+                            }
+                        }
+                        for (const auto part : parts) prepared.groundSupports[part] = support;
+                    }
+                    if(stop.stop_requested())return refused("Placement refresh cancelled.");
                     result.code=project_planetary::SurfaceCode::ready;return prepared;
                 });
-            const auto count=intent.refreshTrees.size();state.forestSurfacePlacement=std::move(intent);
+            const auto count=intent.refreshObjects.size();state.forestSurfacePlacement=std::move(intent);
             state.forestSurfaceCancellation=submitted.cancellation;
             state.forestSurfacePending.emplace(std::move(submitted.completion));
-            state.plantLabStatus=epochengine::format_text("Refreshing {} tree root(s) against current terrain; tree designs and area layout are retained...",count);
-            push_editor_log(state,"[forest] "+state.plantLabStatus);return true;
+            auto& status=attachments ? state.projectStatus : state.plantLabStatus;
+            status=epochengine::format_text(attachments ? "Sampling current ground for {} attached model part(s) or spawns..."
+                : "Refreshing {} tree root(s) against current terrain; tree designs and area layout are retained...",count);
+            push_editor_log(state,(attachments ? "[scene] " : "[forest] ")+status);return true;
         }
 
         void complete_forest_surface_refresh(EditorState& state,const EditorState::ForestSurfacePlacement& intent,
-            const project_planetary::SurfaceBatchResult& result)
+            const project_planetary::SurfaceBatchResult& result, std::span<const double> supports)
         {
+            const bool attachments = intent.refreshAttachments;
+            auto& status = attachments ? state.projectStatus : state.plantLabStatus;
+            const std::string_view log = attachments ? "[scene] " : "[forest] ";
             const auto fail=[&](std::string message) {
-                state.plantLabStatus="Forest placement unchanged: "+std::move(message);push_editor_log(state,"[forest] "+state.plantLabStatus);
+                status=(attachments ? "Model and spawn placement unchanged: " : "Forest placement unchanged: ")+std::move(message);
+                push_editor_log(state,std::string{log}+status);
             };
             const auto index=editor_entity_index(state,intent.entity);
             if(state.projectId!=intent.projectId||state.projectRoot!=intent.projectRoot
                 ||state.projectLifecycle.evidence().generations.selected_project.generation!=intent.projectGeneration
                 ||!index||!state.planetaryMeshPolicy||state.projectRuntimeProcess.valid()||state.projectBuildPending
-                ||state.planetaryGeneratePending||state.sceneDocument.revision().sequence!=intent.sceneRevision)
+                ||state.planetaryGeneratePending||state.sceneDocument.revision().sequence!=intent.sceneRevision
+                ||(state.projectRuntimeSnapshot&&state.projectRuntimeSnapshot->active()))
             {fail("the project, scene or running state changed during refresh.");return;}
             const auto& planet=state.entities[*index];const auto& policy=*state.planetaryMeshPolicy;
             const auto root=resolve_editor_path(std::filesystem::path{state.projectRoot});
@@ -1219,35 +1484,76 @@
                 ||!project_planetary::source_generation_is_current(root,intent.query.source)
                 ||!project_planetary::mesh_generation_is_current(root,intent.query.source,intent.query.settings,intent.query.mesh))
             {fail("the approved terrain source, settings, geometry or transform changed.");return;}
-            if(intent.refreshTrees.empty()||intent.refreshTrees.size()>forest::kMaximumForestAreaInstances
-                ||intent.refreshTrees.size()!=intent.refreshBodies.size()||intent.refreshTrees.size()!=intent.directions.size()
+            const auto& objects = intent.refreshObjects;
+            if(objects.empty()||(!attachments&&objects.size()>project_planetary::kMaximumSurfaceBatchSamples)
+                ||objects.size()!=intent.refreshBodies.size()||objects.size()!=intent.directions.size()
+                ||(attachments && supports.size()!=objects.size())
                 ||result.code!=project_planetary::SurfaceCode::ready||result.request_id!=intent.query.request_id
-                ||result.samples.size()!=intent.refreshTrees.size())
-            {fail(result.operation.message.empty()?"the surface query returned no complete verified batch. Retry Refresh Forest Placement.":result.operation.message);return;}
+                ||result.samples.size()!=objects.size())
+            {fail(result.operation.message.empty()?"the surface query returned no complete verified batch.":result.operation.message);return;}
             const auto pivot=scene::world_position(planet.position,planet.positionAnchor);
             const auto transform=pivot?previewgrid::make_precise_mesh_transform(*pivot,
                 {planet.scale[0],planet.scale[1],planet.scale[2]},
                 {planet.rotation[0],planet.rotation[1],planet.rotation[2]}):std::nullopt;
             if(!transform){fail("the planet transform is invalid.");return;}
-            std::vector<authoring::scene::SceneOperation> operations;operations.reserve(intent.refreshTrees.size());
-            for(std::size_t sampleIndex=0;sampleIndex<intent.refreshTrees.size();++sampleIndex)
+            std::vector<authoring::scene::SceneOperation> operations;operations.reserve(objects.size());
+            for(std::size_t sampleIndex=0;sampleIndex<objects.size();++sampleIndex)
             {
-                const auto& before=intent.refreshTrees[sampleIndex];const auto tree=editor_entity_index(state,before.id);
+                const auto& before=objects[sampleIndex];const auto object=editor_entity_index(state,before.id);
                 const auto& body=intent.refreshBodies[sampleIndex];const auto& sample=result.samples[sampleIndex];
-                if(!tree||!before.forest_region||std::find(policy.generated_bodies.begin(),policy.generated_bodies.end(),body)==policy.generated_bodies.end())
-                {fail("a tree or its generated body changed.");return;}
-                const auto current=editor_entity_snapshot(state.entities[*tree]);
+                if(!object||!(attachments ? before.terrain_attachment.has_value() : before.forest_region.has_value())
+                    ||std::find(policy.generated_bodies.begin(),policy.generated_bodies.end(),body)==policy.generated_bodies.end())
+                {fail("an object or its generated body changed.");return;}
+                const auto current=editor_entity_snapshot(state.entities[*object]);
                 if(current.id!=before.id||current.name!=before.name||current.type!=before.type||current.category!=before.category
                     ||current.position!=before.position||current.rotation!=before.rotation||current.scale!=before.scale
                     ||current.visible!=before.visible||current.editor_only!=before.editor_only
                     ||current.mesh_asset!=before.mesh_asset||current.texture_material!=before.texture_material
-                    ||current.position_anchor!=before.position_anchor||current.forest_region!=before.forest_region)
-                {fail("a painted tree was edited during refresh.");return;}
+                    ||current.position_anchor!=before.position_anchor||current.forest_region!=before.forest_region
+                    ||current.terrain_attachment!=before.terrain_attachment)
+                {fail("an object was edited during refresh.");return;}
                 if(sample.code!=project_planetary::SurfaceCode::ready||sample.request_id!=intent.query.request_id
                     ||!std::isfinite(sample.height_meters))
-                {fail("one terrain sample was not valid; no tree was moved.");return;}
-                if(intent.query.settings.ocean_surface&&sample.height_meters<0.0)
-                {fail("a saved tree root is now underwater. Adjust the terrain or erase that forest area before retrying.");return;}
+                {fail("one terrain sample was invalid.");return;}
+                if((attachments && body.id==0u && sample.height_meters<=0.0)
+                    ||(!attachments && intent.query.settings.ocean_surface&&sample.height_meters<0.0))
+                {fail("a saved placement is now underwater.");return;}
+                for(std::size_t axis=0;axis<sample.radial_up.size();++axis)
+                    if(!std::isfinite(sample.radial_up[axis])||std::abs(sample.radial_up[axis]-intent.directions[sampleIndex][axis])>1e-6)
+                    {fail("the provider returned ground for a different direction.");return;}
+                const auto handle=state.sceneDocument.find({before.id});
+                if(!handle){fail("an object was removed.");return;}
+                if (attachments)
+                {
+                    if (before.type == "Spawn")
+                    {
+                        double grade{};
+                        for (std::size_t axis = 0; axis < 3; ++axis) grade += sample.normal[axis] * sample.radial_up[axis];
+                        if (!std::isfinite(grade) || grade < 0.85)
+                        {fail("the saved spawn is now on a steep slope.");return;}
+                    }
+                    const auto& old = *before.terrain_attachment;
+                    const auto support = supports[sampleIndex];
+                    auto link = old;
+                    link.terrain_artifact_key = intent.query.mesh.artifact_key;
+                    link.terrain_coordinates = {intent.query.mesh.coordinates.meters_per_unit, intent.query.mesh.coordinates.source_origin_meters};
+                    std::array<double, 3> local{};
+                    for (std::size_t axis = 0; axis < local.size(); ++axis)
+                    {
+                        link.reference_center_meters[axis] = body.center_meters[axis] - link.terrain_coordinates.source_origin_meters[axis];
+                        local[axis] = link.reference_center_meters[axis] + sample.point_meters[axis];
+                    }
+                    auto anchor = transform->apply(local);
+                    const auto up = terrain_radial_direction(*transform, sample.radial_up);
+                    for (std::size_t axis = 0; axis < anchor.size(); ++axis)
+                        anchor[axis] += up[axis] * support - before.position[axis];
+                    if (!link.valid() || !scene::world_position(before.position, anchor))
+                    {fail("a refreshed model or spawn position is invalid.");return;}
+                    if (before.position_anchor == std::optional{anchor} && old == link) continue;
+                    operations.emplace_back(authoring::scene::GeometryComponentChangedOperation{
+                        .object=*handle, .mesh_asset=before.mesh_asset, .position_anchor=anchor, .terrain_attachment=link});
+                    continue;
+                }
                 auto region=*before.forest_region;region.body_local_root_meters=sample.point_meters;region.radial_up=sample.radial_up;
                 region.admitted_body_center_meters=body.center_meters;region.body_radius_meters=body.radius_meters;
                 region.mesh_source_origin_meters=intent.query.mesh.coordinates.source_origin_meters;
@@ -1258,29 +1564,27 @@
                 if(!region.valid()){fail("the new ground sample has invalid placement evidence.");return;}
                 std::array<double,3> local{};
                 for(std::size_t axis=0;axis<3u;++axis)
-                {
-                    if(std::abs(sample.radial_up[axis]-intent.directions[sampleIndex][axis])>1e-6)
-                    {fail("the provider returned ground for a different tree direction.");return;}
                     local[axis]=body.center_meters[axis]-region.mesh_source_origin_meters[axis]+sample.point_meters[axis];
-                }
-                const auto anchor=transform->apply(local);
+                auto anchor=transform->apply(local);
+                for (std::size_t axis = 0; axis < anchor.size(); ++axis)
+                    anchor[axis] -= before.position[axis];
                 if(!scene::world_position(before.position,anchor)){fail("the refreshed tree position is invalid.");return;}
-                const auto handle=state.sceneDocument.find({before.id});if(!handle){fail("a painted tree was removed.");return;}
                 if(before.position_anchor==std::optional{anchor}&&before.forest_region==region)continue;
                 operations.emplace_back(authoring::scene::GeometryComponentChangedOperation{
                     .object=*handle,.mesh_asset=before.mesh_asset,.position_anchor=anchor,.forest_region=std::move(region)});
             }
             if(operations.empty())
             {
-                state.plantLabStatus="Forest placement is already current; no trees were changed.";
-                push_editor_log(state,"[forest] "+state.plantLabStatus);return;
+                status="Placement is already current.";
+                push_editor_log(state,std::string{log}+status);return;
             }
-            if(!apply_editor_scene_transaction(state,operations,"Refresh forest placement"))
+            if(!apply_editor_scene_transaction(state,operations,attachments ? "Refresh model and spawn placement" : "Refresh forest placement"))
             {fail("the scene rejected the complete refresh transaction.");return;}
             const auto saved=save_editor_scene_snapshot(state);
-            state.plantLabStatus=epochengine::format_text("{} tree root(s) refreshed{}; designs, materials and area layout retained. Scene Undo restores the previous placement.",
+            status=epochengine::format_text(attachments ? "{} model part(s) or spawns refreshed{}. Undo restores the previous placement."
+                : "{} tree root(s) refreshed{}; designs, materials and area layout retained. Scene Undo restores the previous placement.",
                 operations.size(),saved?" and saved":"; scene save failed, retry Save before closing");
-            push_editor_log(state,"[forest] "+state.plantLabStatus);
+            push_editor_log(state,std::string{log}+status);
         }
 
         void poll_forest_surface_placement(EditorState& state)
@@ -1289,18 +1593,24 @@
             if(!state.forestSurfacePlacement&&state.taskScheduler)
                 (void)state.taskScheduler->cancel(state.forestSurfaceCancellation);
             if(state.forestSurfacePending->wait_for(std::chrono::seconds{0})!=std::future_status::ready)return;
+            const bool attachments = state.forestSurfacePlacement && state.forestSurfacePlacement->refreshAttachments;
             try
             {
                 auto prepared=state.forestSurfacePending->get();state.forestSurfacePending.reset();
                 auto& result=prepared.surface;
                 auto intent=std::move(state.forestSurfacePlacement);state.forestSurfacePlacement.reset();
                 if(!intent)return;
-                if(!intent->refreshTrees.empty())
-                {complete_forest_surface_refresh(state,*intent,result);return;}
-                const auto fail=[&](std::string message){state.plantLabStatus=std::move(message);push_editor_log(state,"[forest] "+state.plantLabStatus);};
+                if(!intent->refreshObjects.empty())
+                {complete_forest_surface_refresh(state,*intent,result,prepared.groundSupports);return;}
+                const auto fail=[&](std::string message){
+                    state.forestPlacementSaved=false;
+                    state.plantLabStatus=std::move(message);
+                    push_editor_log(state,"[forest] "+state.plantLabStatus);
+                };
                 const auto index=editor_entity_index(state,intent->entity);
                 if(state.projectId!=intent->projectId||state.projectRoot!=intent->projectRoot
                     ||state.projectLifecycle.evidence().generations.selected_project.generation!=intent->projectGeneration
+                    ||(intent->existingRegion && state.sceneDocumentRevision!=intent->sceneRevision)
                     ||!index||!state.planetaryMeshPolicy||state.projectRuntimeProcess.valid()||state.projectBuildPending
                     ||!ensure_plant_lab_compiled_asset(state)
                     ||state.plantLabCompiled.sourceRevision!=intent->plantRevision||state.plantLabCompiled.sourceContentHash!=intent->plantHash)
@@ -1326,7 +1636,9 @@
                     intent->directions = forest::forest_area_directions(*intent->area,
                         intent->query.direction,intent->query.body.radius_meters);
                 }
-                if(result.samples.size()!=intent->directions.size())
+                if(result.samples.size()!=intent->directions.size()
+                    ||(!intent->brushCenters.empty()&&intent->brushCenters.size()!=result.samples.size())
+                    ||(!prepared.brushInland.empty()&&prepared.brushInland.size()!=result.samples.size()))
                 {fail("The terrain returned an incomplete forest sample set; no trees were placed.");return;}
                 const auto pivot=scene::world_position(planet.position,planet.positionAnchor);
                 if(!pivot){fail("Planet transform is invalid.");return;}
@@ -1340,12 +1652,8 @@
                 const auto& geometry=*prototype.front().meshSnapshot;
                 const auto perInstance=64u+std::uint64_t{geometry.vertices().size()}*sizeof(asset::mesh::Vertex)
                     +std::uint64_t{geometry.indices().size()}*sizeof(std::uint32_t);
-                // Apply the same ordinary-mesh cache/index limits used by scene
-                // publication. Every instance is charged even when assets share.
-                std::uint64_t ordinaryBytes=perInstance*result.samples.size();
-                std::uint64_t ordinaryIndices=geometry.indices().size()*result.samples.size();
-                std::uint64_t sceneBytes=ordinaryBytes;
-                std::size_t meshEntries=result.samples.size();
+                // Charge each published instance even when the meshes share bytes.
+                std::uint64_t ordinaryBytes{},ordinaryIndices{},sceneBytes{},meshEntries{};
                 for(const auto& entity:state.entities)
                     if(entity.meshAsset)
                     {
@@ -1358,20 +1666,81 @@
                         {ordinaryBytes+=bytes;if(entity.visible)ordinaryIndices+=mesh.index_count;}
                     }
                 const auto budget=editor_planetary_mesh_budget(state);
-                if(meshEntries>64u||ordinaryBytes>16ull*1024u*1024u||ordinaryIndices>196'608u||sceneBytes>budget.cache_bytes)
-                {fail("The forest area exceeds the existing scene mesh budget; reduce radius or density.");return;}
+                const auto available=[](std::uint64_t maximum,std::uint64_t used,std::uint64_t each) {
+                    return each&&maximum>used?(maximum-used)/each:0u;};
+                const auto sceneCapacity=(std::min)({available(64u,meshEntries,1u),
+                    available(16ull*1024u*1024u,ordinaryBytes,perInstance),
+                    available(196'608u,ordinaryIndices,geometry.indices().size()),
+                    available(budget.cache_bytes,sceneBytes,perInstance)});
+                if(!sceneCapacity)
+                {fail("The scene mesh budget is full. No trees were added.");return;}
                 std::vector<EditorEntity> placed;placed.reserve(result.samples.size());
-                auto regionId=scene::stable_scene_object_id(editor_scene_identity(state),
-                    "ForestArea_"+std::to_string(intent->query.request_id)+"_"+std::to_string(intent->ordinal));
-                while(std::any_of(state.entities.begin(),state.entities.end(),[&](const auto& entity){
-                    return entity.forestRegion&&entity.forestRegion->region_id==regionId;}))
-                    regionId=forest::mix_seed(regionId,1u);
+                auto regionId=intent->existingRegion;
+                std::vector<std::array<double,3>> occupiedRoots;
+                std::string plantSource{kDefaultPlantLabLogicalPath};
+                if(regionId)
+                {
+                    for(const auto& entity:state.entities)
+                        if(entity.forestRegion&&entity.forestRegion->region_id==regionId)
+                        {
+                            const auto rootPosition=scene::world_position(entity.position,entity.positionAnchor);
+                            if(!rootPosition){fail("An existing forest root is invalid.");return;}
+                            auto local=transform->inverse_apply(*rootPosition);
+                            for(std::size_t axis=0;axis<local.size();++axis)
+                                local[axis]+=intent->query.mesh.coordinates.source_origin_meters[axis]
+                                    -intent->query.body.center_meters[axis];
+                            const double length=std::hypot(local[0],local[1],local[2]);
+                            if(!std::isfinite(length)||length<=0.0)
+                            {fail("An existing forest root has no valid surface direction.");return;}
+                            for(auto& axis:local)axis/=length;
+                            occupiedRoots.push_back(local);
+                        }
+                    if(occupiedRoots.empty()||occupiedRoots.size()>=forest::kMaximumForestAreaInstances)
+                    {fail("The reviewed forest area is missing or full.");return;}
+                    plantSource=epochengine::format_text("Assets/Forest/species_{}_{}_{}.epoch_forest",
+                        state.plantLabCompiled.genome.stableHash,intent->plantHash,intent->plantRevision);
+                }
+                else
+                {
+                    regionId=scene::stable_scene_object_id(editor_scene_identity(state),
+                        "ForestArea_"+std::to_string(intent->query.request_id)+"_"+std::to_string(intent->ordinal));
+                    while(std::any_of(state.entities.begin(),state.entities.end(),[&](const auto& entity){
+                        return entity.forestRegion&&entity.forestRegion->region_id==regionId;}))
+                        regionId=forest::mix_seed(regionId,1u);
+                    if(!intent->brushCenters.empty())
+                        for(const auto& entity:state.entities)
+                            if(const auto& region=entity.forestRegion;region&&region->valid()
+                                &&region->terrain_object_id==intent->entity&&region->body_index==intent->query.body.id)
+                                occupiedRoots.push_back(region->radial_up);
+                }
+                std::vector<std::size_t> drySamples;
+                drySamples.reserve(result.samples.size());
                 for(std::size_t sampleIndex=0;sampleIndex<result.samples.size();++sampleIndex)
                 {
                     const auto& sample=result.samples[sampleIndex];
                     if(sample.code!=project_planetary::SurfaceCode::ready||!std::isfinite(sample.height_meters))
                     {fail("The terrain returned an invalid sample; no trees were placed.");return;}
                     if(intent->query.settings.ocean_surface&&sample.height_meters<0)continue;
+                    if(!prepared.brushInland.empty()&&(!prepared.brushInland[sampleIndex]||sample.height_meters<2.0))continue;
+                    drySamples.push_back(sampleIndex);
+                }
+                const auto plantBudget = intent->brushCenters.empty() ? drySamples.size()
+                    : (std::min)(drySamples.size(), sceneCapacity);
+                for (std::size_t candidate = 0; candidate < plantBudget; ++candidate)
+                {
+                    const auto sampleIndex = drySamples[candidate * drySamples.size() / plantBudget];
+                    const auto& sample = result.samples[sampleIndex];
+                    if(intent->existingRegion||!intent->brushCenters.empty())
+                    {
+                        if((intent->existingRegion&&occupiedRoots.size()==forest::kMaximumForestAreaInstances)
+                            ||placed.size()==sceneCapacity)break;
+                        const double spacing=intent->existingRegion?1.0:24.0;
+                        // Use surface spacing so a height change cannot put a new tree over an old root.
+                        if(std::ranges::any_of(occupiedRoots,[&](const auto& point){
+                            return std::hypot(point[0]-sample.radial_up[0],point[1]-sample.radial_up[1],
+                                point[2]-sample.radial_up[2])*intent->query.body.radius_meters<spacing;})) continue;
+                        occupiedRoots.push_back(sample.radial_up);
+                    }
                     std::array<double,3> point{},up{};
                     for(std::size_t axis=0;axis<3;++axis)
                         point[axis]=intent->query.body.center_meters[axis]-intent->query.mesh.coordinates.source_origin_meters[axis]+sample.point_meters[axis];
@@ -1381,7 +1750,9 @@
                     const auto rotation=forest::preview_mesh::surface_rotation(up,intent->heading);
                     if(!rotation){fail("Planetary plant orientation is invalid; no trees were placed.");return;}
                     auto entity=prototype.front();
-                    entity.name=intent->area?epochengine::format_text("ForestAsset_{}_{}_Trunk",regionId,sampleIndex)
+                    entity.name=intent->existingRegion
+                        ?epochengine::format_text("ForestAsset_{}_{}_{}_Trunk",regionId,intent->plantHash,sampleIndex)
+                        :intent->area?epochengine::format_text("ForestAsset_{}_{}_Trunk",regionId,sampleIndex)
                         :epochengine::format_text("ForestAsset_{:02}_Trunk",intent->ordinal);
                     entity.positionAnchor=world;entity.rotation=*rotation;
                     if(intent->area)
@@ -1393,7 +1764,8 @@
                         region.body_index=intent->query.body.id;region.candidate_index=static_cast<std::uint32_t>(sampleIndex);
                         region.candidate_count=static_cast<std::uint32_t>(result.samples.size());
                         region.radius_meters=intent->area->radiusMeters;region.density_per_square_meter=intent->area->densityPerSquareMeter;
-                        region.body_radius_meters=intent->query.body.radius_meters;region.center_direction=intent->query.direction;
+                        region.body_radius_meters=intent->query.body.radius_meters;
+                        region.center_direction=intent->brushCenters.empty()?intent->query.direction:intent->brushCenters[sampleIndex];
                         region.body_local_root_meters=sample.point_meters;region.radial_up=sample.radial_up;
                         region.admitted_body_center_meters=intent->query.body.center_meters;
                         region.mesh_source_origin_meters=intent->query.mesh.coordinates.source_origin_meters;
@@ -1402,7 +1774,7 @@
                         if(providerHash.starts_with("sha256:"))providerHash.remove_prefix(7u);
                         region.provider_content_hash=std::string{providerHash};
                         region.recipe=project_planetary::encode_settings(intent->query.settings);
-                        region.plant_source=std::string{kDefaultPlantLabLogicalPath};
+                        region.plant_source=plantSource;
                         if(!region.valid()){fail("The forest area source identity is invalid; no trees were placed.");return;}
                         entity.forestRegion=std::move(region);
                     }
@@ -1411,32 +1783,45 @@
                     placed.push_back(std::move(entity));
                 }
                 const auto plantedCount=placed.size();
-                if(!plantedCount){fail("The sampled area is underwater; no trees were placed.");return;}
-                if(!create_editor_scene_entities(state,std::move(placed),intent->area?"Paint forest area":"Place plant on planetary ground",
-                    [&state]{return publish_plant_lab_project_asset(state);}))
+                if(!plantedCount)
+                {fail(intent->existingRegion?"No dry, unoccupied ground was found in the selected forest."
+                    :!intent->brushCenters.empty()?"No painted roots passed the shoreline and spacing checks."
+                    :"The sampled area is underwater; no trees were placed.");return;}
+                if(plantedCount>sceneCapacity)
+                {fail("The forest area exceeds the existing scene mesh budget. No trees were added.");return;}
+                if(!create_editor_scene_entities(state,std::move(placed),intent->existingRegion?"Add tree species to forest"
+                    :intent->area?"Paint forest area":"Place plant on planetary ground",
+                    [&]{return publish_plant_lab_project_asset(state,nullptr,plantSource);}))
                 {fail("Plant placement could not be committed; the scene is unchanged.");return;}
                 const bool saved=save_editor_scene_snapshot(state);
                 state.aiGoalForestReceipt = saved;
+                state.forestPlacementSaved=saved;
                 state.plantLabStatus=epochengine::format_text("{} rooted tree(s) added{}.",plantedCount,
                     saved?" and saved":"; scene save failed, retry Save");
+                if(intent->existingRegion)
+                    state.plantLabStatus+=" The original forest trees were preserved.";
                 if (intent->findOceanShoreline)
                     state.plantLabStatus += epochengine::format_text(
                         " Ocean shoreline body {} direction ({}, {}, {}).",intent->query.body.id,
                         intent->query.direction[0],intent->query.direction[1],intent->query.direction[2]);
-                state.forestPlacementFocusPending=!intent->area;
+                state.forestPlacementFocusPending=!intent->area||intent->existingRegion!=0u;
                 push_editor_log(state,"[forest] "+state.plantLabStatus);
             }
             catch(const editor_tasks::TaskCancelled&)
             {
                 state.forestSurfacePending.reset();state.forestSurfacePlacement.reset();
+                if(!attachments)state.forestPlacementSaved=false;
                 state.plantLabStatus="Forest surface operation cancelled; the scene is unchanged.";
                 push_editor_log(state,"[forest] "+state.plantLabStatus);
             }
             catch(...)
             {
                 state.forestSurfacePending.reset();state.forestSurfacePlacement.reset();
-                state.plantLabStatus="Plant surface query failed; no object was added.";
-                push_editor_log(state,"[forest] "+state.plantLabStatus);
+                if(!attachments)state.forestPlacementSaved=false;
+                auto& status = attachments ? state.projectStatus : state.plantLabStatus;
+                status=attachments ? "Model and spawn placement refresh failed. The previous scene is retained."
+                    : "Plant surface query failed; no object was added.";
+                push_editor_log(state,(attachments ? "[scene] " : "[forest] ")+status);
             }
         }
 
@@ -1449,6 +1834,123 @@
             const auto ordinal=static_cast<std::size_t>(std::count_if(state.entities.begin(),state.entities.end(),
                 [](const auto& entity){return entity.category=="ForestFactory"&&entity.type=="ForestTrunk";}));
             return begin_forest_surface_placement(state,state.entities[*selected],ordinal,state.forestArea,{},findOceanShoreline);
+        }
+
+        [[nodiscard]] bool fill_painted_forest_areas(EditorState& state)
+        {
+            const auto selected=editor_entity_index(state,state.selectedEntityId);
+            const EditorEntity* terrain=selected ? &state.entities[*selected] : nullptr;
+            if(terrain&&terrain->forestRegion)
+            {
+                const auto parent=editor_entity_index(state,terrain->forestRegion->terrain_object_id);
+                terrain=parent ? &state.entities[*parent] : nullptr;
+            }
+            if(!terrain||terrain->category!="Planetary Terrain"
+                ||!editor_planetary_stream_identity_matches(state,*terrain)||!ensure_plant_lab_compiled_asset(state))
+            {
+                state.plantLabStatus="Select the painted planet or one of its trees to fill painted areas.";
+                return false;
+            }
+            auto area=state.forestArea;
+            const auto& policy=*state.planetaryMeshPolicy;
+            const auto body=state.planetaryBodySelection&&state.planetaryBodySelection->entity==terrain->sceneObjectId
+                ?state.planetaryBodySelection->body:policy.settings.body_index;
+            std::vector<std::array<double,3>> centers;
+            for(const auto& entity:state.entities)
+            {
+                if(!entity.forestRegion)continue;
+                const auto& region=*entity.forestRegion;
+                if(!region.valid()||region.terrain_object_id!=terrain->sceneObjectId||region.body_index!=body
+                    ||region.terrain_artifact_key!=terrain->meshAsset->artifact_key)continue;
+                area.radiusMeters=(std::min)(area.radiusMeters,region.radius_meters);
+                if(std::find(centers.begin(),centers.end(),region.center_direction)==centers.end())
+                    centers.push_back(region.center_direction);
+            }
+            if(centers.empty()||centers.size()>project_planetary::kMaximumSurfaceBatchSamples/4u)
+            {
+                state.plantLabStatus=centers.empty()?"There are no verified painted areas on the selected body."
+                    :"The selected body has more than 16 painted areas. Paint a smaller region per stroke.";
+                return false;
+            }
+            return begin_forest_surface_placement(state,*terrain,state.entities.size(),area,centers.front(),
+                false,nullptr,centers);
+        }
+
+        [[nodiscard]] const EditorEntity* selected_forest_species_target(const EditorState& state)
+        {
+            if(state.selectedEntityIds.size()>1u)return nullptr;
+            const auto selected=editor_entity_index(state,state.selectedEntityId);
+            if(!selected)return nullptr;
+            const auto& tree=state.entities[*selected];
+            return tree.visible&&tree.forestRegion&&tree.forestRegion->valid()?&tree:nullptr;
+        }
+
+        [[nodiscard]] bool refresh_selected_forest_material(EditorState& state)
+        {
+            const auto report = [&](std::string message, bool success = false) {
+                state.plantLabStatus = std::move(message);
+                push_editor_log(state, "[forest] " + state.plantLabStatus);
+                return success;
+            };
+            const auto* tree = selected_forest_species_target(state);
+            if (!tree || !has_open_project(state) || state.forestSurfacePending
+                || state.projectBuildPending || state.planetaryGeneratePending || state.projectRuntimeProcess.valid())
+                return report("Select one placed tree and finish build or placement work before refreshing its material.");
+            const auto& region = *tree->forestRegion;
+            const auto handle = state.sceneDocument.find({tree->sceneObjectId});
+            if (!handle) return report("The selected tree no longer exists in the scene.");
+            try
+            {
+                const auto root = resolve_editor_path(std::filesystem::path{state.projectRoot});
+                project_forests::ForestAssetLibrary library{state.projectId, root};
+                const auto saved = library.load_source(region.plant_source);
+                if (!saved || saved.document.revision != region.plant_revision
+                    || saved.document.contentHash != region.plant_hash
+                    || saved.document.genome.stableHash != region.plant_genome)
+                    return report("The exact saved design is unavailable for the selected tree.");
+                const auto& profile = saved.document.profile;
+                if (profile.barkTexture.empty() && profile.foliageTexture.empty())
+                    return report("The selected tree already uses the packaged material.", true);
+                const auto atlas = prepare_plant_material_atlas(root, state.projectId, profile);
+                if (!atlas) return report(atlas.diagnostic);
+                if (tree->textureMaterial && tree->textureMaterial->artifact_key == atlas.artifact.identity.key.words)
+                    return report("The selected tree material is already current.", true);
+                const auto material = publish_forest_scene_material(root, state.projectId, atlas.artifact, profile.barkTileIndex, true);
+                if (!material) return report("The refreshed material could not be published to this project.");
+                const std::array<authoring::scene::SceneOperation, 1u> operations{
+                    authoring::scene::TextureMaterialComponentChangedOperation{*handle, material}};
+                if (!apply_editor_scene_transaction(state, operations, "Refresh selected tree material"))
+                    return report("The scene rejected the material update.");
+                const bool persisted = save_editor_scene_snapshot(state);
+                return report(persisted ? "Selected tree material refreshed and saved. Scene Undo restores its previous material."
+                    : "Selected tree material refreshed. Retry Save before closing.", persisted);
+            }
+            catch (...) { return report("The selected tree's saved material could not be refreshed."); }
+        }
+
+        [[nodiscard]] bool add_plant_lab_species_to_forest(EditorState& state)
+        {
+            if(!has_open_project(state)||!ensure_plant_lab_compiled_asset(state))return false;
+            const auto* target=selected_forest_species_target(state);
+            if(!target)
+            {state.plantLabStatus="Select a tree from the forest you want to add to.";return false;}
+            const auto& region=*target->forestRegion;
+            const auto terrain=editor_entity_index(state,region.terrain_object_id);
+            if(!terrain)
+            {state.plantLabStatus="The selected forest has no generated terrain.";return false;}
+            std::size_t regionSize{};
+            for(const auto& entity:state.entities)
+            {
+                if(!entity.forestRegion||entity.forestRegion->region_id!=region.region_id)continue;
+                ++regionSize;
+                if(entity.forestRegion->plant_hash==state.plantLabCompiled.sourceContentHash)
+                {state.plantLabStatus="This forest already contains the current Plant Lab design.";return false;}
+            }
+            if(regionSize>=forest::kMaximumForestAreaInstances)
+            {state.plantLabStatus="The selected forest area has reached its tree limit.";return false;}
+            const forest::ForestAreaDistribution area{region.radius_meters,region.density_per_square_meter,
+                forest::mix_seed(region.seed,state.plantLabCompiled.sourceContentHash)};
+            return begin_forest_surface_placement(state,state.entities[*terrain],state.entities.size(),area,{},false,&region);
         }
 
         [[nodiscard]] bool erase_selected_forest_area(EditorState& state)
@@ -2243,15 +2745,16 @@
             else if(terrain.meshAsset&&terrain.meshAsset->coordinates) {
                 view->origin=terrain.meshAsset->coordinates->source_origin_meters;
                 view->meters_per_unit=terrain.meshAsset->coordinates->meters_per_unit; }
-            std::vector<std::uint64_t> admitted;
+            std::vector<std::pair<std::uint64_t, std::array<double,3>>> admitted;
             for(const auto& tree:state.entities)
             {
                 if(!tree.forestRegion||!tree.forestRegion->valid())continue;
                 const auto& region=*tree.forestRegion;
+                const auto cap = std::pair{region.region_id, region.center_direction};
                 if(region.terrain_object_id!=terrain.sceneObjectId||!terrain.meshAsset
                     ||region.terrain_artifact_key!=terrain.meshAsset->artifact_key
-                    ||std::find(admitted.begin(),admitted.end(),region.region_id)!=admitted.end())continue;
-                admitted.push_back(region.region_id);
+                    ||std::find(admitted.begin(),admitted.end(),cap)!=admitted.end())continue;
+                admitted.push_back(cap);
                 const bool selected=std::any_of(state.entities.begin(),state.entities.end(),[&](const auto& instance){
                     return instance.forestRegion&&instance.forestRegion->region_id==region.region_id
                         &&editor_entity_selected(state,instance.sceneObjectId);});
@@ -2457,6 +2960,80 @@
             return restore_editor_preview_mesh(state,entity,budget,false,*usage);
         }
 
+        [[nodiscard]] const std::shared_ptr<const asset::mesh::Artifact>& editor_forest_silhouette()
+        {
+            static const auto silhouette=[] {
+                std::array<asset::mesh::Vertex,8> vertices{};
+                vertices[0].position={0.0f,1.0f,0.0f};
+                vertices[7].position={0.0f,0.25f,0.0f};
+                std::array<std::uint32_t,36> indices{};
+                for(std::uint32_t side=0;side<6u;++side)
+                {
+                    const float angle=static_cast<float>(side)*1.04719755f;
+                    const float x=std::cos(angle),z=std::sin(angle);
+                    const auto current=side+1u,next=(side+1u)%6u+1u;
+                    vertices[current].position={0.5f*x,0.25f,0.5f*z};
+                    vertices[current].normal={x,0.5f,z};
+                    const std::array face{0u,next,current,7u,current,next};
+                    std::copy(face.begin(),face.end(),indices.begin()+6u*side);
+                }
+                for(auto& vertex:vertices)vertex.color={0.16f,0.31f,0.13f};
+                return asset::mesh::build_artifact(vertices,indices).artifact;
+            }();
+            return silhouette;
+        }
+
+        void append_editor_translation_gizmo(std::vector<previewgrid::ObjectMarker>& markers,
+            const EditorState& state, const EditorEntity& entity,
+            const previewgrid::ObjectMarker& marker, const std::array<double,3>& renderOrigin)
+        {
+            auto center = marker.preciseTransform ? marker.preciseTransform->position
+                : std::array<double,3>{marker.position.x,marker.position.y,marker.position.z};
+            double radius = std::hypot(marker.scale.x, marker.scale.y, marker.scale.z) * 0.5;
+            if (const auto body = editor_planetary_body_focus(state, entity))
+            {
+                center = {body->target.x,body->target.y,body->target.z};
+                const auto anchor = entity.positionAnchor.value_or(std::array<double,3>{});
+                for (std::size_t axis = 0; axis < center.size(); ++axis)
+                    center[axis] += anchor[axis] - renderOrigin[axis];
+                radius = body->radius;
+            }
+            else if (marker.mesh)
+            {
+                const auto low = marker.mesh->minimum(), high = marker.mesh->maximum();
+                const auto transform = marker.preciseTransform ? marker.preciseTransform
+                    : previewgrid::make_precise_mesh_transform(center,
+                        {marker.scale.x,marker.scale.y,marker.scale.z}, marker.rotationDegrees);
+                if (!transform) return;
+                std::array<double,3> half{};
+                std::array<double,3> midpoint{};
+                for (std::size_t axis = 0; axis < half.size(); ++axis)
+                {
+                    midpoint[axis] = (double(low[axis]) + high[axis]) * 0.5;
+                    half[axis] = (double(high[axis]) - low[axis]) * std::abs(transform->scale[axis]) * 0.5;
+                }
+                center = transform->apply(midpoint);
+                radius = std::hypot(half[0],half[1],half[2]);
+            }
+            const double extent = (std::max)(radius * 1.25, 0.5);
+            const double maximum = (std::numeric_limits<float>::max)();
+            if (!std::isfinite(extent) || extent > maximum) return;
+            for (const double component : center)
+                if (!std::isfinite(component) || std::abs(component) > maximum - extent) return;
+
+            const auto mode = state.sceneDragActive ? state.sceneDragMode : state.scenePointerMode;
+            constexpr std::array axisModes{ScenePointerMode::move_x,ScenePointerMode::move_y,ScenePointerMode::move_z};
+            constexpr std::array rotations{previewgrid::Vec3{},previewgrid::Vec3{0,0,90},previewgrid::Vec3{0,-90,0}};
+            constexpr std::array colors{previewgrid::Vec3{1.0f,0.28f,0.24f},
+                previewgrid::Vec3{0.26f,1.0f,0.38f},previewgrid::Vec3{0.26f,0.61f,1.0f}};
+            const bool locked = std::find(axisModes.begin(),axisModes.end(),mode) != axisModes.end();
+            for (std::size_t axis = 0; axis < axisModes.size(); ++axis)
+                markers.push_back({.position={float(center[0]),float(center[1]),float(center[2])},
+                    .color=previewgrid::scale(colors[axis],locked && mode != axisModes[axis] ? 0.32f : 1.0f),
+                    .scale={float(extent),1,1},.rotationDegrees=rotations[axis],
+                    .primitive=previewgrid::ObjectPreviewPrimitive::TranslationArrow,.editorOnly=true});
+        }
+
         void publish_editor_preview_markers(const core::Context* ctx, EditorState& state)
         {
             // Build/Play owns a stable scene. Retain the last authoring packet
@@ -2477,6 +3054,10 @@
             epochengine::previewgrid::set_lighting_frame(ctx, sceneLighting);
 
             std::vector<epochengine::previewgrid::ObjectMarker> markers{};
+            const EditorEntity* gizmoEntity{};
+            std::size_t gizmoMarker{};
+            const auto camera=previewgrid::camera_for(ctx);
+            const auto cameraEye=previewgrid::camera_world_eye(camera);
             const bool forestPainting = state.mainSurface == EditorMainSurface::ForestFactory && state.forestTerrainPainting;
             const bool forestPreview = state.mainSurface == EditorMainSurface::ForestFactory && !forestPainting;
             if (forestPreview) (void)ensure_forest_factory_preview(state);
@@ -2515,8 +3096,6 @@
                     continue;
 
                 if(entity.meshAsset&&!restore_editor_preview_mesh(state,entity,meshBudget,awaitingPlanetaryBudget,*meshUsage))continue;
-
-                if (!forestPainting && !restore_editor_mesh_base_color(ctx,state,entity)) continue;
 
                 std::array<float, 3> previewPosition = entity.position;
                 const auto groupMotion = state.scriptCubeOscillators.find(entity.sceneObjectId);
@@ -2560,6 +3139,40 @@
                     state.projectStatus = "Mesh coordinates exceed the supported preview range; the previous scene is retained.";
                     return;
                 }
+                const auto worldPivot=scene::world_position(previewPosition,entity.positionAnchor);
+                if(!worldPivot)return;
+                if(!forestPreview&&entity.forestRegion&&entity.meshSnapshot&&!selected
+                    &&camera.projection==render_camera::ProjectionKind::perspective)
+                {
+                    const auto minimum=entity.meshSnapshot->minimum();
+                    const auto maximum=entity.meshSnapshot->maximum();
+                    const std::array<double,3> size{
+                        (maximum[0]-minimum[0])*std::abs((*meshScale)[0]),
+                        (maximum[1]-minimum[1])*std::abs((*meshScale)[1]),
+                        (maximum[2]-minimum[2])*std::abs((*meshScale)[2])};
+                    const double distance=std::hypot((*worldPivot)[0]-cameraEye[0],
+                        (*worldPivot)[1]-cameraEye[1],(*worldPivot)[2]-cameraEye[2]);
+                    const double focal=double(state.planetaryViewportHeight)/(2.0*std::tan(camera.fovRadians*0.5));
+                    const double pixels=size[1]*focal/(std::max)(1.0,distance);
+                    if(pixels<1.5)continue;
+                    if(pixels<24.0)
+                    {
+                        const previewgrid::Vec3 rotation{entity.rotation[0],entity.rotation[1],entity.rotation[2]};
+                        const auto transform=previewgrid::make_precise_mesh_transform(*worldPivot,
+                            {(*meshScale)[0],(*meshScale)[1],(*meshScale)[2]},rotation);
+                        if(!transform)continue;
+                        const auto base=transform->apply({(minimum[0]+maximum[0])*0.5,
+                            minimum[1],(minimum[2]+maximum[2])*0.5});
+                        auto proxy=previewgrid::ObjectMarker{
+                            .color={0.16f,0.31f,0.13f},
+                            .rotationDegrees=rotation,.primitive=previewgrid::ObjectPreviewPrimitive::IndexedMesh,
+                            .mesh=editor_forest_silhouette(),.wireframe=meshWireframe};
+                        proxy.preciseTransform=previewgrid::make_precise_mesh_transform(base,size,rotation);
+                        if(proxy.mesh&&proxy.preciseTransform)markers.push_back(std::move(proxy));
+                        continue;
+                    }
+                }
+                if (!forestPainting && !restore_editor_mesh_base_color(ctx,state,entity)) continue;
                 markers.push_back(epochengine::previewgrid::ObjectMarker{
                     .position{
                         previewPosition[0],
@@ -2585,11 +3198,10 @@
                     .sampledRenderSurface = entity.category == "EngineArcade" && entity.name == epochengine::render_arcade::kScreenSceneNode.name,
                     .mesh = entity.meshSnapshot,
                     .wireframe = forestPainting ? false : meshWireframe,
-                    .baseColorTexture = forestPainting ? nullptr : entity.meshBaseColorTexture
+                    .baseColorTexture = forestPainting ? nullptr : entity.meshBaseColorTexture,
+                    .forestLighting = entity.type == "ForestTrunk" && bool(entity.meshSnapshot)
                 });
                 if(forestPainting)markers.back().paintView=forest_paint_view(state,entity);
-                const auto worldPivot=scene::world_position(previewPosition,entity.positionAnchor);
-                if(!worldPivot)return;
                 if(entity.positionAnchor)
                 {
                     markers.back().preciseTransform=previewgrid::make_precise_mesh_transform(*worldPivot,
@@ -2607,6 +3219,12 @@
                     markers.back().preciseTransform=previewgrid::make_precise_mesh_transform(translated,
                         {(*meshScale)[0],(*meshScale)[1],(*meshScale)[2]},markers.back().rotationDegrees);
                     if(!markers.back().preciseTransform)return;
+                }
+                if (selected && entity.sceneObjectId == state.selectedEntityId && state.helpersVisible
+                    && state.mainSurface == EditorMainSurface::Scene)
+                {
+                    gizmoEntity = &entity;
+                    gizmoMarker = markers.size() - 1u;
                 }
             }
 
@@ -2666,7 +3284,6 @@
                     }
                 }
             }
-            const auto camera=previewgrid::camera_for(ctx);
             const bool planetaryFrame=!forestPreview
                 &&(std::any_of(previewEntities.begin(),previewEntities.end(),[](const auto& entity){
                     return entity.visible&&entity.positionAnchor.has_value();})
@@ -2722,6 +3339,7 @@
                 }
                 if(valid)
                 {
+                    if (gizmoEntity) append_editor_translation_gizmo(markers,state,*gizmoEntity,markers[gizmoMarker],origin);
                     for(auto& cloud:cloudVolumes)for(unsigned axis=0;axis<3u;++axis)cloud.center[axis]-=origin[axis];
                     previewgrid::SceneFrameRequest request{std::move(markers),relativeCamera,
                         std::move(relativeLighting),{meshBudget.frame_indices,meshBudget.frame_bytes},origin,std::move(cloudVolumes)};
@@ -2735,6 +3353,7 @@
             }
             else
             {
+                if (gizmoEntity) append_editor_translation_gizmo(markers,state,*gizmoEntity,markers[gizmoMarker],{});
                 // Inline previews replace this same context's planetary packet.
                 // Retire its cached request so returning to an unchanged planet
                 // still queues a fresh publication, and old work cannot commit.
@@ -2753,7 +3372,8 @@
             }
             state.viewportMeshWireframe = meshWireframe;
             state.viewportMeshWireframeRequest.reset();
-            if(state.planetaryInitialFramePending &&state.mainSurface==EditorMainSurface::Scene)
+            if (state.planetaryInitialFramePending && !state.lodInspectionReturnCamera
+                && state.mainSurface == EditorMainSurface::Scene)
             {
                 const auto viewport=ctx->scene_viewport();
                 if(viewport.width<=0||viewport.height<=0)return;

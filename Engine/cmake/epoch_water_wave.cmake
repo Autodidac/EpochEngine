@@ -4,6 +4,22 @@ function(epoch_admit_water_wave target engine_root)
         target_link_libraries(${target} PUBLIC epoch)
         return()
     endif()
+    # Older reviewed Planetary packages share the SDK's snapshot modules
+    # through this entry point. Complete their module set when the current SDK
+    # adds cloud recipes, without changing the attached package source.
+    if(target STREQUAL "epoch_planet_mesh_format")
+        get_target_property(mesh_modules ${target} CXX_MODULE_SET_engine_mesh_modules)
+        list(FILTER mesh_modules INCLUDE REGEX "(^|/)asset[.]cloud_volume[.]ixx$")
+        set(cloud_owner "${engine_root}/Engine/modules/asset.cloud_volume.ixx")
+        if(NOT mesh_modules AND EXISTS "${cloud_owner}")
+            target_sources(${target} PUBLIC FILE_SET engine_mesh_modules TYPE CXX_MODULES
+                BASE_DIRS "${engine_root}/Engine/modules" FILES "${cloud_owner}")
+            if(MSVC)
+                set_source_files_properties("${cloud_owner}" PROPERTIES VS_SETTINGS
+                    "ObjectFileName=$(IntDir)asset.cloud_volume.ixx.obj;ModuleDependenciesFile=$(IntDir)asset.cloud_volume.ixx.module.json;ModuleOutputFile=$(IntDir)asset.cloud_volume.ixx.ifc")
+            endif()
+        endif()
+    endif()
     if(NOT TARGET epoch_water_wave)
         set(owner "${engine_root}/Engine/modules/water.wave.ixx")
         if(NOT EXISTS "${owner}")

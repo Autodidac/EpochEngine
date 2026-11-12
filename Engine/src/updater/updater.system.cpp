@@ -994,15 +994,18 @@ namespace epochengine::updater
         std::filesystem::path helper;
         std::filesystem::path manifest;
         std::filesystem::path work;
+        std::filesystem::path candidate_data;
         std::string manifest_sha256;
     };
 
     [[nodiscard]] std::optional<BinaryHandoff> prepare_binary_handoff(
         const std::filesystem::path& target, const std::filesystem::path& source,
         const bool include_payload = false,
-        const std::filesystem::path& repository_assets = {})
+        const std::filesystem::path& repository_assets = {},
+        const std::filesystem::path& candidate_data = {})
     {
         BinaryHandoff result{};
+        result.candidate_data = candidate_data;
         result.helper = system_detail::make_temp_script_path("binary_handoff");
         result.helper.replace_extension(".ps1");
         result.manifest = result.helper;
@@ -1067,7 +1070,7 @@ namespace epochengine::updater
         result.manifest_sha256 = *manifest_digest;
 #if defined(_WIN32)
         std::ofstream helper(result.helper, std::ios::binary);
-        helper << handoff_script::windows;
+        handoff_script::write_windows_transaction(helper, result.candidate_data);
         helper.close();
         if (!helper) return std::nullopt;
 #endif
@@ -1096,6 +1099,26 @@ namespace epochengine::updater
             << "if errorlevel 1 exit /b 1\r\n"
             << ">> \"%LOG%\" echo [INFO] Runtime installed; rollback files and recovery journal retained in %EPOCH_UPDATE_WORK%.\r\n";
     }
+
+    void append_windows_restart(std::ostream& out, const BinaryHandoff& handoff,
+        const std::string_view target_variable, const std::string_view ordinary_start)
+    {
+        if (handoff.candidate_data.empty())
+            out << ordinary_start;
+        else
+            out << "set \"EPOCH_UPDATE_RESTART_EXE=%" << target_variable << "%\"\r\n"
+                << "set \"EPOCH_UPDATE_MODE=restart\"\r\n"
+                << "powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \""
+                << handoff.helper.string() << "\"\r\n";
+        out << "if errorlevel 1 (\r\n"
+               "  >> \"%LOG%\" echo [ERROR] Failed to restart updated runtime.\r\n"
+               "  exit /b 1\r\n"
+               ")\r\n";
+        if (handoff.candidate_data.empty())
+            out << "powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command \"$target=$env:"
+                << target_variable
+                << "; Start-Sleep -Milliseconds 900; try { $name=[IO.Path]::GetFileNameWithoutExtension($target); $p=Get-Process -Name $name -ErrorAction SilentlyContinue ^| Sort-Object StartTime -Descending ^| Select-Object -First 1; if ($p) { $shell=New-Object -ComObject WScript.Shell; [void]$shell.AppActivate($p.Id) } } catch { }\" >nul 2>&1\r\n";
+    }
 #else
     void append_binary_stage(std::ostream& out, const BinaryHandoff& handoff,
         const std::filesystem::path& target, const std::filesystem::path&)
@@ -1117,6 +1140,12 @@ namespace epochengine::updater
             << "  exit 1\nfi\n"
             << "echo \"[INFO] Runtime installed; rollback files and recovery journal retained in $EPOCH_UPDATE_WORK.\" >> \"$LOG\"\n";
     }
+
+    [[nodiscard]] std::string posix_restart_arguments(const std::filesystem::path& candidate_data)
+    {
+        return candidate_data.empty() ? std::string{}
+            : " --candidate-data-root " + system_detail::quote_shell_arg(candidate_data.string());
+    }
 #endif
 
     bool replace_binary_from_script(
@@ -1124,7 +1153,8 @@ namespace epochengine::updater
         const std::filesystem::path& new_binary,
         const UpdateHandoffMode handoff_mode = UpdateHandoffMode::LaunchImmediately)
     {
-        const auto handoff = prepare_binary_handoff(target_binary, new_binary);
+        const auto handoff = prepare_binary_handoff(target_binary, new_binary, false, {},
+            epochengine::core::path::candidate_data_root());
         if (!handoff) return false;
 #if defined(_WIN32)
         const auto script_path = handoff_mode == UpdateHandoffMode::StageForRestart
@@ -1168,10 +1198,9 @@ namespace epochengine::updater
         append_binary_commit(bat, *handoff);
         bat
             << ">> \"%LOG%\" echo [INFO] Replacement executable copied successfully.\r\n"
-            << "set \"EPOCH_POST_UPDATE_STARTUP_DELAY_MS=3000\"\r\n"
-            << "start \"\" \"%TARGET%\"\r\n"
-            << "powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command \"$target=$env:TARGET; Start-Sleep -Milliseconds 900; try { $name=[IO.Path]::GetFileNameWithoutExtension($target); $p=Get-Process -Name $name -ErrorAction SilentlyContinue ^| Sort-Object StartTime -Descending ^| Select-Object -First 1; if ($p) { $shell=New-Object -ComObject WScript.Shell; [void]$shell.AppActivate($p.Id) } } catch { }\" >nul 2>&1\r\n"
-            << "set \"EPOCH_POST_UPDATE_STARTUP_DELAY_MS=\"\r\n"
+            << "set \"EPOCH_POST_UPDATE_STARTUP_DELAY_MS=3000\"\r\n";
+        append_windows_restart(bat, *handoff, "TARGET", "start \"\" \"%TARGET%\"\r\n");
+        bat << "set \"EPOCH_POST_UPDATE_STARTUP_DELAY_MS=\"\r\n"
             << ">> \"%LOG%\" echo [INFO] Restarted updated executable.\r\n"
             << "del /F /Q \"%NEWBIN%\" >nul 2>&1\r\n"
             << "del /F /Q \"%~f0\" >nul 2>&1\r\n";
@@ -1213,7 +1242,8 @@ namespace epochengine::updater
         append_binary_stage(sh, *handoff, target_binary, new_binary);
         append_binary_commit(sh, *handoff);
         sh
-            << "EPOCH_POST_UPDATE_STARTUP_DELAY_MS=3000 \"$TARGET\" &\n"
+            << "EPOCH_POST_UPDATE_STARTUP_DELAY_MS=3000 \"$TARGET\""
+            << posix_restart_arguments(handoff->candidate_data) << " &\n"
             << "rm -f \"$0\"\n";
 
         sh.close();
@@ -1246,7 +1276,8 @@ namespace epochengine::updater
             system_detail::log_error("Packaged replacement refused a missing, malformed, foreign-edition or wrong-version runtime identity.");
             return false;
         }
-        const auto handoff = prepare_binary_handoff(target_binary, extracted_binary, true);
+        const auto handoff = prepare_binary_handoff(target_binary, extracted_binary, true, {},
+            epochengine::core::path::candidate_data_root());
         if (!handoff) return false;
 #if defined(_WIN32)
         const auto target_dir = target_binary.parent_path();
@@ -1307,14 +1338,9 @@ namespace epochengine::updater
             << (chain_after_restart
                 ? ("set \"EPOCH_UPDATER_SHELL_AUTO_COMMAND="
                     + system_detail::powershell_escape_single_quoted(std::string{ restart_auto_command }) + "\"\r\n")
-                : std::string{})
-            << "start \"\" /D \"%TARGETDIR%\" \"%TARGETEXE%\"\r\n"
-            << "if errorlevel 1 (\r\n"
-            << "  >> \"%LOG%\" echo [ERROR] Failed to restart updated runtime.\r\n"
-            << "  exit /b 1\r\n"
-            << ")\r\n"
-            << "powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command \"$target=$env:TARGETEXE; Start-Sleep -Milliseconds 900; try { $name=[IO.Path]::GetFileNameWithoutExtension($target); $p=Get-Process -Name $name -ErrorAction SilentlyContinue ^| Sort-Object StartTime -Descending ^| Select-Object -First 1; if ($p) { $shell=New-Object -ComObject WScript.Shell; [void]$shell.AppActivate($p.Id) } } catch { }\" >nul 2>&1\r\n"
-            << "set \"EPOCH_POST_UPDATE_STARTUP_DELAY_MS=\"\r\n"
+                : std::string{});
+        append_windows_restart(bat, *handoff, "TARGETEXE", "start \"\" /D \"%TARGETDIR%\" \"%TARGETEXE%\"\r\n");
+        bat << "set \"EPOCH_POST_UPDATE_STARTUP_DELAY_MS=\"\r\n"
             << (chain_after_restart
                 ? "set \"EPOCH_UPDATER_SHELL_AUTO_COMMAND=\"\r\n"
                 : "")
@@ -1392,9 +1418,10 @@ namespace epochengine::updater
             << "cd \"$TARGETDIR\"\n"
             << (chain_after_restart
                 ? ("EPOCH_UPDATER_SHELL_AUTO_COMMAND="
-                    + system_detail::quote_shell_arg(std::string{ restart_auto_command })
-                    + " EPOCH_POST_UPDATE_STARTUP_DELAY_MS=3000 \"$TARGETEXE\" >/dev/null 2>&1 &\n")
-                : "EPOCH_POST_UPDATE_STARTUP_DELAY_MS=3000 \"$TARGETEXE\" >/dev/null 2>&1 &\n")
+                    + system_detail::quote_shell_arg(std::string{ restart_auto_command }) + " ")
+                : std::string{})
+            << "EPOCH_POST_UPDATE_STARTUP_DELAY_MS=3000 \"$TARGETEXE\""
+            << posix_restart_arguments(handoff->candidate_data) << " >/dev/null 2>&1 &\n"
             << "if [ $? -ne 0 ]; then\n"
             << "  echo \"[ERROR] Failed to restart updated runtime.\" >> \"$LOG\"\n"
             << "  exit 1\n"
@@ -1429,7 +1456,8 @@ namespace epochengine::updater
         const std::filesystem::path& package_archive)
     {
         const auto built_binary = system_detail::resolve_runtime_binary_path(built_runtime_dir, target_binary);
-        const auto handoff = prepare_binary_handoff(target_binary, built_binary, true, system_detail::source_manifest_root(source_root) / "assets");
+        const auto handoff = prepare_binary_handoff(target_binary, built_binary, true,
+            system_detail::source_manifest_root(source_root) / "assets", epochengine::core::path::candidate_data_root());
         if (!handoff) return false;
         if (!std::filesystem::exists(built_binary))
         {
@@ -1478,14 +1506,9 @@ namespace epochengine::updater
             << ">> \"%LOG%\" echo [INFO] Source runtime files copied successfully.\r\n"
             << "del /F /Q \"%ARCHIVE%\" >nul 2>&1\r\n"
             << "set \"EPOCH_UPDATER_SHELL_AUTO_COMMAND=\"\r\n"
-            << "set \"EPOCH_EDITOR_AUTO_COMMAND=\"\r\n"
-            << "start \"\" /D \"%TARGETDIR%\" \"%TARGETEXE%\"\r\n"
-            << "if errorlevel 1 (\r\n"
-            << "  >> \"%LOG%\" echo [ERROR] Failed to restart updated runtime.\r\n"
-            << "  exit /b 1\r\n"
-            << ")\r\n"
-            << "powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command \"$target=$env:TARGETEXE; Start-Sleep -Milliseconds 900; try { $name=[IO.Path]::GetFileNameWithoutExtension($target); $p=Get-Process -Name $name -ErrorAction SilentlyContinue ^| Sort-Object StartTime -Descending ^| Select-Object -First 1; if ($p) { $shell=New-Object -ComObject WScript.Shell; [void]$shell.AppActivate($p.Id) } } catch { }\" >nul 2>&1\r\n"
-            << ">> \"%LOG%\" echo [INFO] Restarted updated runtime.\r\n"
+            << "set \"EPOCH_EDITOR_AUTO_COMMAND=\"\r\n";
+        append_windows_restart(bat, *handoff, "TARGETEXE", "start \"\" /D \"%TARGETDIR%\" \"%TARGETEXE%\"\r\n");
+        bat << ">> \"%LOG%\" echo [INFO] Restarted updated runtime.\r\n"
             << "rmdir /S /Q \"%SRCROOT%\" >nul 2>&1\r\n"
             << "del /F /Q \"%~f0\" >nul 2>&1\r\n";
 
@@ -1547,7 +1570,8 @@ namespace epochengine::updater
             << "rm -f \"$ACTIVE\" \"$CANCEL\"\n"
             << "cd \"$TARGETDIR\"\n"
             << "unset EPOCH_UPDATER_SHELL_AUTO_COMMAND EPOCH_EDITOR_AUTO_COMMAND || true\n"
-            << "env -u EPOCH_UPDATER_SHELL_AUTO_COMMAND -u EPOCH_EDITOR_AUTO_COMMAND \"$TARGETEXE\" >/dev/null 2>&1 &\n"
+            << "env -u EPOCH_UPDATER_SHELL_AUTO_COMMAND -u EPOCH_EDITOR_AUTO_COMMAND \"$TARGETEXE\""
+            << posix_restart_arguments(handoff->candidate_data) << " >/dev/null 2>&1 &\n"
             << "if [ $? -ne 0 ]; then\n"
             << "  echo \"[ERROR] Failed to restart updated runtime.\" >> \"$LOG\"\n"
             << "  exit 1\n"

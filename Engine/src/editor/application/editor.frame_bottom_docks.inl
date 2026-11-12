@@ -336,10 +336,7 @@
         case EditorWorkspaceTab::Systems:
         {
             const auto orderedSystems = epochengine::systems::Registry::instance().ordered_systems();
-            const std::size_t hardwareThreadCount = (std::max)(std::size_t{ 1 },
-                std::thread::hardware_concurrency() > 0
-                ? static_cast<std::size_t>(std::thread::hardware_concurrency())
-                : std::size_t{ 6 });
+            const std::size_t hardwareThreadCount = std::thread::hardware_concurrency();
             const std::size_t liveThreadCount = epochengine::systems::threading::live_thread_count();
             const std::string supportTier = recommended_support_tier(ctx, hardwareThreadCount);
 
@@ -353,7 +350,8 @@
                 dockLine("[context] Recommendation", editor.passiveContextRecommendation),
                 dockLine("[systems] Registered systems", std::to_string(orderedSystems.size)),
                 dockLine("[systems] Live threads", std::to_string(liveThreadCount)),
-                dockLine("[systems] CPU threads", std::to_string(hardwareThreadCount)),
+                dockLine("[systems] CPU threads", hardwareThreadCount
+                    ? std::to_string(hardwareThreadCount) : "Unavailable"),
                 dockLine("[systems] Support tier", supportTier),
                 dockLine("[visual] Profile", std::string(epochengine::visuals::active_profile_name())),
                 dockLine("[visual] Parity gate", std::string(epochengine::visuals::parity_gate())),

@@ -32,7 +32,8 @@ def workspace_fixture():
         '        void restore_asset_generation_backend_selection(',
         '        void remember_asset_generation_backend_selection('))
     selection_helpers=selection_helpers.replace('EditorState&','DraftAdapter&').replace('core::path::candidate_data_root()','draft_dialog::initial').replace('core::path::executable_dir()','draft_dialog::initial')
-    return '#include <atomic>\n#include <charconv>\n#include <limits>\n#include <iomanip>\n#include <unordered_set>\n#include "'+str(ROOT/'Engine/include/epoch.edition.hpp').replace('\\','/')+'"\n#include "'+str(ROOT/'Engine/include/core.utf8.hpp').replace('\\','/')+'"\n'+fixture+r'''
+    image_codec = (ROOT/'Engine/src/assets/image.decode.hpp').as_posix()
+    return '#include <atomic>\n#include <charconv>\n#include <limits>\n#include <iomanip>\n#include <unordered_set>\n#include "'+str(ROOT/'Engine/include/epoch.edition.hpp').replace('\\','/')+'"\n#include "'+str(ROOT/'Engine/include/core.utf8.hpp').replace('\\','/')+'"\n#include "'+image_codec+'"\n'+fixture+r'''
 namespace epochengine {
 // Explicit UI type ports only; draw/marker geometry are not executed here.
 struct SpriteHandle{};

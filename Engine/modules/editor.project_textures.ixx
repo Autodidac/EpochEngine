@@ -309,7 +309,8 @@ export namespace epochengine::editor_project_textures
         [[nodiscard]] ControllerResult import_source(
             const std::filesystem::path& sourcePath,
             const capability::SubsystemProfile& renderer,
-            const Budgets& platformBudgets) noexcept;
+            const Budgets& platformBudgets,
+            const asset::texture::ContentHash& expectedKey = {}) noexcept;
         [[nodiscard]] ControllerResult create_editable(
             std::string_view logicalPath,
             authoring::texture::CanvasDescriptor descriptor,

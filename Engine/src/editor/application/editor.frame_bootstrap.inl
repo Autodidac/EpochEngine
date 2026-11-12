@@ -1046,7 +1046,7 @@
                 toolbarOs,
 #endif
                 build_configuration_label()),
-            toolbarFps,
+            "Editor " + toolbarFps,
             epochengine::format_text("Thread {} / Queued {} / Idle {}",
                 toolbarRunning, toolbarQueued, toolbarActivity.idle_workers),
             renderer_name(ctx),
@@ -1119,6 +1119,8 @@
             : editor.chromeFpsSample >= 50.0 ? gui::SemanticTone::success
             : editor.chromeFpsSample >= 25.0 ? gui::SemanticTone::warning
             : editor.chromeFpsMeasured ? gui::SemanticTone::error : gui::SemanticTone::neutral;
+        toolbarStatusItems[toolbarFpsIndex].tooltip =
+            "Editor window presentation rate. The project has its own frame limit in Project Run Settings.";
         // Keep status on the PRIMARY chrome row. Reserve the right-hand
         // width before laying out the menu, allowing its existing overflow
         // handling to work without pushing status onto a second row.

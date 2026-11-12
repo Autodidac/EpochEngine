@@ -56,16 +56,27 @@ int main(int argc,char** argv) {
  auto built=document::SceneDocument::from_snapshot(snapshot);CHECK(built);
  auto doc=built.value;const auto originalHash=doc.revision().content;
  std::vector<document::SceneOperation> operations;
- for(unsigned i=0;i<64;++i) {
+ for(unsigned i=0;i<63;++i) {
   scene::SceneObjectSnapshot tree;tree.id=100+i;tree.name="Tree"+std::to_string(i);tree.type="ForestTrunk";tree.category="ForestFactory";
   tree.position_anchor=std::array<double,3>{6371000.125+double(i),.25,.5};tree.forest_region=region(i);
   tree.mesh_asset=snapshot.objects.back().mesh_asset;
   const auto descriptor=document::descriptor_from_snapshot_object(tree,static_cast<std::uint32_t>(snapshot.objects.size())+i);CHECK(descriptor);
   operations.emplace_back(document::ObjectCreatedOperation{.object=*descriptor});
  }
- CHECK(doc.apply_transaction(operations,"Paint forest area"));CHECK(doc.objects().size()==snapshot.objects.size()+64);
+ CHECK(doc.apply_transaction(operations,"Paint forest area"));CHECK(doc.objects().size()==snapshot.objects.size()+63);
  const auto paintedHash=doc.revision().content;CHECK(paintedHash!=originalHash);
  CHECK(doc.undo()&&doc.revision().content==originalHash);CHECK(doc.redo()&&doc.revision().content==paintedHash);
+ auto customRegion=region(0);customRegion.plant_hash=123;customRegion.plant_revision=7;customRegion.seed=2338;
+ customRegion.plant_source="Assets/Forest/species_fixture.epoch_forest";
+ scene::SceneObjectSnapshot custom;custom.id=163;custom.name="Custom tree";custom.type="ForestTrunk";custom.category="ForestFactory";
+ custom.position_anchor=std::array<double,3>{6371099.0,.25,.5};custom.forest_region=customRegion;
+ custom.mesh_asset=snapshot.objects.back().mesh_asset;
+ const auto customDescriptor=document::descriptor_from_snapshot_object(custom,static_cast<std::uint32_t>(doc.objects().size()));
+ CHECK(customDescriptor);
+ const std::array<document::SceneOperation,1> addition{document::ObjectCreatedOperation{.object=*customDescriptor}};
+ CHECK(doc.apply_transaction(addition,"Add tree species to forest"));
+ const auto mixedHash=doc.revision().content;CHECK(mixedHash!=paintedHash);
+ CHECK(doc.undo()&&doc.revision().content==paintedHash);CHECK(doc.redo()&&doc.revision().content==mixedHash);
  const auto projected=doc.project_snapshot();CHECK(projected);
  const auto text=scene::serialize_snapshot_text(projected.snapshot);CHECK(text.starts_with("epoch_snapshot 8\n"));
  const auto parsed=scene::parse_snapshot_text(text);CHECK(parsed&&scene::serialize_snapshot_text(parsed.snapshot)==text);
@@ -73,15 +84,17 @@ int main(int argc,char** argv) {
  CHECK(scene::persistence::save_scene_snapshot_atomic(root/"forest.epoch",projected.snapshot));
  const auto disk=scene::persistence::load_scene_snapshot(root/"forest.epoch");CHECK(disk.result);
  CHECK(scene::persistence::scene_snapshot_semantically_equal(projected.snapshot,disk.snapshot));
- auto reopened=document::SceneDocument::from_snapshot(disk.snapshot);CHECK(reopened&&reopened.value.revision().content==paintedHash);
+ auto reopened=document::SceneDocument::from_snapshot(disk.snapshot);CHECK(reopened&&reopened.value.revision().content==mixedHash);
+ const auto* restoredCustom=scene::find_object_by_id(disk.snapshot,163);
+ CHECK(restoredCustom&&restoredCustom->forest_region==customRegion&&restoredCustom->position_anchor==custom.position_anchor);
  auto changed=disk.snapshot;++changed.objects.back().forest_region->seed;
- auto changedDoc=document::SceneDocument::from_snapshot(changed);CHECK(changedDoc&&changedDoc.value.revision().content!=paintedHash);
+ auto changedDoc=document::SceneDocument::from_snapshot(changed);CHECK(changedDoc&&changedDoc.value.revision().content!=mixedHash);
  CHECK(!scene::persistence::scene_snapshot_semantically_equal(changed,disk.snapshot));
  runtime::SceneRuntime runtime;CHECK(runtime.replace(disk.snapshot).committed());CHECK(runtime.projection()->find(100)->position_anchor==tree->position_anchor);CHECK(runtime.projection()->find(100)->forest_region==tree->forest_region);
  operations.clear();for(const auto& object:doc.objects())if(object.descriptor.forest_region)
   operations.emplace_back(document::ObjectDestroyedOperation{object.handle});
  CHECK(operations.size()==64&&doc.apply_transaction(operations,"Erase forest area"));
- CHECK(doc.objects().size()==snapshot.objects.size());CHECK(doc.undo()&&doc.revision().content==paintedHash);
+ CHECK(doc.objects().size()==snapshot.objects.size());CHECK(doc.undo()&&doc.revision().content==mixedHash);
  CHECK(doc.redo()&&doc.objects().size()==snapshot.objects.size());
  for(unsigned kind=0;kind<8;++kind) {
   auto bad=projected.snapshot;auto& r=*bad.objects.back().forest_region;

@@ -551,7 +551,7 @@ class PlanetarySceneUnits(unittest.TestCase):
         self.assertIn("binding->reference_radius_meters!=settings.reference_radius_meters", source["play"])
         self.assertIn(".size_reference_body=settings->size_reference_body", source["legacy"])
         implementation_paths = [ROOT / path for path in (
-            "Engine/src/render/render.preview_camera.cpp",
+            "Engine/src/render/render.preview_camera.cpp", "Engine/src/render/render.preview_lighting.cpp",
             "Engine/src/assets/texture/asset.texture_artifact.cpp",
             "Engine/src/authoring/texture/authoring.texture_document.cpp",
             "Engine/src/authoring/texture/authoring.texture_residency.cpp")]

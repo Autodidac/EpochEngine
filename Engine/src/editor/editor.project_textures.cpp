@@ -740,7 +740,8 @@ namespace epochengine::editor_project_textures
     ControllerResult ProjectTextureController::import_source(
         const fs::path& sourcePath,
         const capability::SubsystemProfile& renderer,
-        const Budgets& platformBudgets) noexcept
+        const Budgets& platformBudgets,
+        const asset::texture::ContentHash& expectedKey) noexcept
     {
         if (!valid())
             return reject(ControllerCode::invalid_controller);
@@ -790,6 +791,8 @@ namespace epochengine::editor_project_textures
                     ControllerCode::import_rejected,
                     imported.status);
             }
+            if (!expectedKey.empty() && imported.artifact.identity.key != expectedKey)
+                return reject(ControllerCode::source_rejected);
 
             const project_textures::TextureAdmissionDecision admission =
                 project_textures::assess_texture_admission(

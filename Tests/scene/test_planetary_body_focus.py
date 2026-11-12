@@ -130,7 +130,7 @@ class PlanetaryBodyFocus(unittest.TestCase):
         (P/'CMakeLists.txt').write_text(f'''cmake_minimum_required(VERSION 3.30)
         set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT Embedded)
         project(PlanetBodyFocus LANGUAGES CXX)
-        add_executable(focus consumer.cpp "{(ROOT/'Engine/src/render/render.preview_camera.cpp').as_posix()}" "{(ROOT/'Engine/src/assets/texture/asset.texture_artifact.cpp').as_posix()}" "{(ROOT/'Engine/src/authoring/texture/authoring.texture_document.cpp').as_posix()}" "{(ROOT/'Engine/src/authoring/texture/authoring.texture_residency.cpp').as_posix()}")
+        add_executable(focus consumer.cpp "{(ROOT/'Engine/src/render/render.preview_camera.cpp').as_posix()}" "{(ROOT/'Engine/src/render/render.preview_lighting.cpp').as_posix()}" "{(ROOT/'Engine/src/assets/texture/asset.texture_artifact.cpp').as_posix()}" "{(ROOT/'Engine/src/authoring/texture/authoring.texture_document.cpp').as_posix()}" "{(ROOT/'Engine/src/authoring/texture/authoring.texture_residency.cpp').as_posix()}")
         target_compile_features(focus PRIVATE cxx_std_23)
         target_compile_options(focus PRIVATE /EHsc /utf-8)
         target_sources(focus PRIVATE FILE_SET CXX_MODULES BASE_DIRS {bases} FILES {files})

@@ -311,6 +311,20 @@
 #endif
         }
 
+        [[nodiscard]] bool resolve_project_runtime_embedding(EditorState& editor,
+            const core::Context* host, bool requested, std::string_view projectBackend)
+        {
+            if (!requested) return false;
+            std::string_view reason;
+            if (!project_runtime_embedding_supported())
+                reason = "This Editor window cannot host a project window.";
+            else if (host && host->type == core::ContextType::OpenGL && projectBackend == "vulkan")
+                reason = "Vulkan project presentation is unreliable inside the OpenGL Editor.";
+            if (reason.empty()) return true;
+            push_editor_log(editor, "[project] " + std::string{reason} + " Using Separate Window.");
+            return false;
+        }
+
         [[nodiscard]] unsigned scene_run_mode_index(const EditorState& editor) noexcept
         {
             return !editor.sceneRunFullscreenInEditor ? 0u
@@ -321,6 +335,7 @@
             bool running)
         {
             if (running) return "Stop";
+            if (editor.projectRunAfterTerrainPreview) return "Run queued...";
             if (!editor.projectBuildPending) return "Run";
             return editor.projectBuildStatus.starts_with("Cancel") ? "Cancelling..." : "Building...";
         }

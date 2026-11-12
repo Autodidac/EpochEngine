@@ -821,23 +821,35 @@
             return center;
         }
 
-        // Forest gestures never enter ordinary object picking/dragging. Each
-        // spaced stamp uses the existing terrain worker and region transaction.
+        // Collect the gesture while the pointer is down. One verified provider
+        // request and one undoable scene transaction commit the released stroke.
         void update_forest_brush(const std::shared_ptr<core::Context>& ctx,
             EditorState& state, EditorFrameResult& frame, bool modalVisible)
         {
             const bool held=ctx->is_mouse_button_held_safe(input::MouseButton::MouseLeft);
             const bool pressed=held&&!state.forestBrushHeld;
             state.forestBrushHeld=held;
-            if(!held)
-            {state.forestBrushLastDirection.reset();state.forestBrushTerrain=scene::kInvalidSceneObjectId;return;}
             if(state.mainSurface!=EditorMainSurface::ForestFactory||!state.forestTerrainPainting
-                ||frame.scene_input_captured||modalVisible||!ctx->has_input_focus_safe()
-                ||state.projectBuildPending||state.projectRuntimeProcess.valid()
+                ||modalVisible||!ctx->has_input_focus_safe()||state.projectBuildPending||state.projectRuntimeProcess.valid()
+                ||state.forestSurfacePending
                 ||ctx->is_mouse_button_held_safe(input::MouseButton::MouseRight)
                 ||ctx->is_mouse_button_held_safe(input::MouseButton::MouseMiddle)
                 ||ctx->is_key_held_safe(input::Key::LeftAlt)||ctx->is_key_held_safe(input::Key::RightAlt))
-            {state.forestBrushTerrain=scene::kInvalidSceneObjectId;state.forestBrushLastDirection.reset();return;}
+            {state.forestBrushTerrain=scene::kInvalidSceneObjectId;state.forestBrushDirections.clear();return;}
+            if(!held)
+            {
+                const auto selected=editor_entity_index(state,state.forestBrushTerrain);
+                state.forestBrushTerrain=scene::kInvalidSceneObjectId;
+                auto stroke=std::exchange(state.forestBrushDirections,{});
+                if(!selected||stroke.empty()||frame.scene_input_captured||!ensure_plant_lab_compiled_asset(state))return;
+                const auto ordinal=static_cast<std::size_t>(std::count_if(state.entities.begin(),state.entities.end(),
+                    [](const auto& entity){return entity.category=="ForestFactory"&&entity.type=="ForestTrunk";}));
+                state.forestPlacementCamera=previewgrid::camera_for(ctx.get());
+                (void)begin_forest_surface_placement(state,state.entities[*selected],ordinal,state.forestArea,
+                    stroke.front(),false,nullptr,stroke);
+                return;
+            }
+            if(frame.scene_input_captured)return;
             int x{},y{};ctx->get_mouse_position_safe(x,y);
             const gui::Vec2 pointer{static_cast<float>(x),static_cast<float>(y)};
             const auto& viewport=frame.scene_viewport;
@@ -845,7 +857,7 @@
                 ||pointer.x>=viewport.position.x+viewport.size.x||pointer.y>=viewport.position.y+viewport.size.y)return;
             if(pressed)
             {
-                state.forestBrushLastDirection.reset();
+                state.forestBrushDirections.clear();
                 auto selected=editor_entity_index(state,state.selectedEntityId);
                 if(selected&&state.entities[*selected].forestRegion)
                     selected=editor_entity_index(state,state.entities[*selected].forestRegion->terrain_object_id);
@@ -859,7 +871,7 @@
                 }
             }
             const auto selected=editor_entity_index(state,state.forestBrushTerrain);
-            if(!selected||state.forestSurfacePending||!ensure_plant_lab_compiled_asset(state))return;
+            if(!selected)return;
             const auto& planet=state.entities[*selected];
             if(!editor_planetary_stream_identity_matches(state,planet))return;
             refresh_editor_planetary_body_inventory(state,planet);
@@ -898,20 +910,22 @@
             // terrain elevation and rejects underwater roots before committing.
             const auto hit=forest_brush_surface_direction(origin,direction,body->radius_meters);
             if(!hit)return;
+            gui::titlebar_rect({pointer.x-3.0f,pointer.y-3.0f},{6.0f,6.0f});
             const auto& center=*hit;
-            if(state.forestBrushLastDirection)
+            auto& stroke=state.forestBrushDirections;
+            constexpr std::size_t maximumCenters=16u;
+            if(stroke.size()==maximumCenters)return;
+            if(!stroke.empty())
             {
                 double chord{};
                 for(std::size_t axis=0;axis<3;++axis)
-                {const auto d=center[axis]-(*state.forestBrushLastDirection)[axis];chord+=d*d;}
+                {const auto d=center[axis]-stroke.back()[axis];chord+=d*d;}
                 const auto spacing=(std::max)(0.25,state.forestArea.radiusMeters);
                 if(chord*body->radius_meters*body->radius_meters<spacing*spacing)return;
             }
-            state.forestPlacementCamera=camera;
-            const auto ordinal=static_cast<std::size_t>(std::count_if(state.entities.begin(),state.entities.end(),
-                [](const auto& entity){return entity.category=="ForestFactory"&&entity.type=="ForestTrunk";}));
-            if(begin_forest_surface_placement(state,planet,ordinal,state.forestArea,center))
-                state.forestBrushLastDirection=center;
+            stroke.push_back(center);
+            if(stroke.size()==1u)state.plantLabStatus="Release the brush to plant this stroke.";
+            else if(stroke.size()==maximumCenters)state.plantLabStatus="Brush stroke is full. Release to plant, then begin another stroke.";
         }
 
         [[nodiscard]] std::optional<epochengine::previewgrid::Vec3> screen_point_to_world_plane(
@@ -948,11 +962,13 @@
         }
 
         [[nodiscard]] epochengine::previewgrid::Vec3 scene_drag_plane_normal(
-            const core::Context* ctx, bool vertical = false) noexcept
+            const core::Context* ctx, ScenePointerMode mode) noexcept
         {
-            if (!vertical) return {0.0f, 1.0f, 0.0f};
+            if (mode == ScenePointerMode::move_x || mode == ScenePointerMode::move_z)
+                return {0.0f, 1.0f, 0.0f};
             const auto camera = epochengine::previewgrid::camera_for(ctx);
             auto normal = epochengine::previewgrid::camera_forward(camera);
+            if (mode == ScenePointerMode::move_free) return normal;
             normal.y = 0.0f;
             return epochengine::previewgrid::dot(normal, normal) > 1.0e-6f
                 ? epochengine::previewgrid::normalize(normal)
@@ -960,12 +976,10 @@
         }
 
         void anchor_scene_group_drag(const core::Context* ctx, EditorState& editor,
-            const gui::WidgetBounds& viewport, gui::Vec2 mouse, bool vertical)
+            const gui::WidgetBounds& viewport, gui::Vec2 mouse)
         {
             editor.sceneDragStartMouse = mouse;
             editor.sceneDragStartPosition = editor.entities[editor.sceneDragEntity].position;
-            editor.sceneDragVertical = vertical;
-            editor.sceneDragHorizontalAxis = 0u;
             editor.sceneDragStartPositions.clear();
             editor.sceneDragStartPositions.reserve(editor.selectedEntityIds.size());
             for (const auto id : editor.selectedEntityIds)
@@ -973,10 +987,26 @@
                     editor.sceneDragStartPositions.emplace_back(id, editor.entities[*index].position);
             const auto& position = editor.sceneDragStartPosition;
             const auto hit = screen_point_to_world_plane(ctx, viewport, mouse,
-                {position[0], position[1], position[2]}, scene_drag_plane_normal(ctx, vertical),
+                {position[0], position[1], position[2]}, scene_drag_plane_normal(ctx, editor.sceneDragMode),
                 editor.entities[editor.sceneDragEntity].positionAnchor.value_or(std::array<double, 3>{}));
             editor.sceneDragHasPlaneHit = hit.has_value();
             if (hit) editor.sceneDragStartHit = {hit->x, hit->y, hit->z};
+        }
+
+        [[nodiscard]] bool complete_scene_click(EditorState& editor, scene::SceneObjectId entity,
+            gui::Vec2 position, bool outliner = false, std::optional<std::uint32_t> body = {}) noexcept
+        {
+            const auto now = std::chrono::steady_clock::now();
+            const auto& previous = editor.previousSceneClick;
+            const bool doubleClick = previous && previous->entity == entity && previous->body == body
+                && previous->outliner == outliner && now - previous->time <= std::chrono::milliseconds{500}
+                && std::abs(position.x - previous->position.x) <= 6.0f
+                && std::abs(position.y - previous->position.y) <= 6.0f;
+            if (doubleClick)
+                editor.previousSceneClick.reset();
+            else
+                editor.previousSceneClick = EditorState::SceneClick{entity, body, position, now, outliner};
+            return doubleClick;
         }
 
         [[nodiscard]] std::optional<scene::SceneObjectId> pick_editor_scene_entity(
@@ -1056,27 +1086,36 @@
             EditorState& editor,
             const gui::WidgetBounds& viewport) noexcept
         {
-            const float left = (std::min)(
-                editor.sceneMarqueeStart.x, editor.sceneMarqueeCurrent.x);
-            const float right = (std::max)(
-                editor.sceneMarqueeStart.x, editor.sceneMarqueeCurrent.x);
-            const float top = (std::min)(
-                editor.sceneMarqueeStart.y, editor.sceneMarqueeCurrent.y);
-            const float bottom = (std::max)(
-                editor.sceneMarqueeStart.y, editor.sceneMarqueeCurrent.y);
+            const float left = (std::max)(viewport.position.x,
+                (std::min)(editor.sceneMarqueeStart.x, editor.sceneMarqueeCurrent.x));
+            const float right = (std::min)(viewport.position.x + viewport.size.x,
+                (std::max)(editor.sceneMarqueeStart.x, editor.sceneMarqueeCurrent.x));
+            const float top = (std::max)(viewport.position.y,
+                (std::min)(editor.sceneMarqueeStart.y, editor.sceneMarqueeCurrent.y));
+            const float bottom = (std::min)(viewport.position.y + viewport.size.y,
+                (std::max)(editor.sceneMarqueeStart.y, editor.sceneMarqueeCurrent.y));
 
             if (!editor.sceneMarqueeAdditive)
-            {
-                editor.selectedEntityIds.clear();
-                editor.selectedEntityId = scene::kInvalidSceneObjectId;
-                editor.selectedEntity = 0u;
-            }
+                clear_editor_selection(editor);
 
+            const auto eye = previewgrid::camera_world_eye(previewgrid::camera_for(ctx));
             for (std::size_t index = 0u; index < editor.entities.size(); ++index)
             {
                 const EditorEntity& entity = editor.entities[index];
                 if (!entity.visible || is_screen_space_gui_entity(entity))
                     continue;
+                if (entity.category == "Planetary Terrain")
+                {
+                    if (editor_planetary_outliner_only(editor, entity)) continue;
+                    if (const auto body = editor_planetary_body_focus(editor, entity))
+                    {
+                        const auto& bounds = body->bounds;
+                        if (eye[0] >= bounds.minimum.x && eye[0] <= bounds.maximum.x
+                            && eye[1] >= bounds.minimum.y && eye[1] <= bounds.maximum.y
+                            && eye[2] >= bounds.minimum.z && eye[2] <= bounds.maximum.z)
+                            continue;
+                    }
+                }
                 const auto projected = project_editor_world_to_screen(
                     ctx, viewport, entity.position, entity.positionAnchor);
                 if (!projected
@@ -1197,6 +1236,7 @@
                 editor.sceneDragEntityId = scene::kInvalidSceneObjectId;
                 editor.sceneMarqueeActive = false;
                 editor.sceneLeftWasHeld = false;
+                editor.previousSceneClick.reset();
                 return;
             }
 
@@ -1211,6 +1251,8 @@
                 editor.sceneDragStartPositions.clear();
                 editor.sceneDragHasPlaneHit = false;
                 editor.sceneMarqueeActive = false;
+                if (editor.previousSceneClick && !editor.previousSceneClick->outliner)
+                    editor.previousSceneClick.reset();
                 editor.sceneLeftWasHeld = ctx->is_mouse_button_held_safe(
                     epochengine::input::MouseButton::MouseLeft);
                 return;
@@ -1245,31 +1287,29 @@
 
             if (leftPressed && mouseInScene && !rightHeld && !middleHeld && !altHeld)
             {
-                const auto pickedId = pick_editor_scene_entity(
-                    ctx.get(), editor, viewport, mouse);
+                const bool moving = !shiftHeld && editor.scenePointerMode != ScenePointerMode::select;
+                const auto pickedId = moving
+                    ? pick_editor_scene_entity(ctx.get(), editor, viewport, mouse) : std::nullopt;
                 const auto picked = pickedId
                     ? editor_entity_index(editor, *pickedId)
                     : std::nullopt;
                 if (picked && pickedId)
                 {
+                    if (!editor_entity_selected(editor, *pickedId))
+                        select_editor_entity(editor, *picked);
+                    else
                     {
-                        if (!shiftHeld && !editor_entity_selected(editor, *pickedId))
-                            select_editor_entity(editor, *picked);
-                        else if (!shiftHeld)
-                        {
-                            editor.selectedEntity = *picked;
-                            editor.selectedEntityId = *pickedId;
-                            apply_editor_primary_selection_side_effects(editor);
-                        }
-
-                        editor.sceneDragActive = true;
-                        editor.sceneDragEntity = *picked;
-                        editor.sceneDragEntityId = *pickedId;
-                        editor.sceneDragMoved = false;
-                        editor.sceneDragPendingToggle = shiftHeld;
-                        anchor_scene_group_drag(ctx.get(), editor, viewport, mouse, shiftHeld);
-                        result.scene_input_captured = true;
+                        editor.selectedEntity = *picked;
+                        editor.selectedEntityId = *pickedId;
+                        apply_editor_primary_selection_side_effects(editor);
                     }
+                    editor.sceneDragActive = true;
+                    editor.sceneDragEntity = *picked;
+                    editor.sceneDragEntityId = *pickedId;
+                    editor.sceneDragMoved = false;
+                    editor.sceneDragMode = editor.scenePointerMode;
+                    anchor_scene_group_drag(ctx.get(), editor, viewport, mouse);
+                    result.scene_input_captured = true;
                 }
                 else
                 {
@@ -1294,18 +1334,8 @@
                     || std::abs(mouse.y - editor.sceneDragStartMouse.y) >= 4.0f))
             {
                 result.scene_input_captured = true;
-                if (!editor.sceneDragMoved && editor.sceneDragPendingToggle
-                    && !editor_entity_selected(editor, editor.sceneDragEntityId))
-                {
-                    add_editor_entity_selection(editor, editor.sceneDragEntity);
-                    editor.sceneDragStartPositions.emplace_back(editor.sceneDragEntityId,
-                        editor.entities[editor.sceneDragEntity].position);
-                }
                 editor.sceneDragMoved = true;
-                // Switching constraints starts from the current pose: no jump
-                // back to the press origin and still only one history commit.
-                if (editor.sceneDragVertical != shiftHeld)
-                    anchor_scene_group_drag(ctx.get(), editor, viewport, mouse, shiftHeld);
+                editor.previousSceneClick.reset();
 
                 const float dx = mouse.x - editor.sceneDragStartMouse.x;
                 const float dy = mouse.y - editor.sceneDragStartMouse.y;
@@ -1323,7 +1353,7 @@
                             editor.sceneDragStartPosition[1],
                             editor.sceneDragStartPosition[2]
                         },
-                        scene_drag_plane_normal(ctx.get(), editor.sceneDragVertical),
+                        scene_drag_plane_normal(ctx.get(), editor.sceneDragMode),
                         editor.entities[editor.sceneDragEntity].positionAnchor.value_or(std::array<double, 3>{}));
                     if (currentHit)
                     {
@@ -1340,7 +1370,7 @@
                     const auto camera = epochengine::previewgrid::camera_for(ctx.get());
                     auto forward = epochengine::previewgrid::normalize(
                         epochengine::previewgrid::subtract(camera.target, camera.eye));
-                    forward.y = 0.0f;
+                    if (editor.sceneDragMode != ScenePointerMode::move_free) forward.y = 0.0f;
                     forward = epochengine::previewgrid::normalize(forward);
                     if (epochengine::previewgrid::dot(forward, forward) <= 1.0e-6f)
                         forward = { 0.0f, 0.0f, -1.0f };
@@ -1348,7 +1378,8 @@
                     constexpr epochengine::previewgrid::Vec3 kWorldUp{
                         0.0f, 1.0f, 0.0f };
                     auto right = epochengine::previewgrid::normalize(
-                        epochengine::previewgrid::cross(forward, kWorldUp));
+                        epochengine::previewgrid::cross(forward,
+                            editor.sceneDragMode == ScenePointerMode::move_free ? camera.up : kWorldUp));
                     if (epochengine::previewgrid::dot(right, right) <= 1.0e-6f)
                         right = { 1.0f, 0.0f, 0.0f };
 
@@ -1356,30 +1387,22 @@
                         epochengine::previewgrid::camera_distance_for(ctx.get()) * 0.00175f,
                         0.004f,
                         0.045f);
-                    delta = epochengine::previewgrid::add(
-                        epochengine::previewgrid::scale(right, dx * dragScale),
-                        epochengine::previewgrid::scale(forward, -dy * dragScale));
-                    if (editor.sceneDragVertical) delta = {0.0f, -dy * dragScale, 0.0f};
+                    const auto vertical = editor.sceneDragMode == ScenePointerMode::move_free
+                        ? epochengine::previewgrid::normalize(epochengine::previewgrid::cross(right, forward)) : forward;
+                    delta = epochengine::previewgrid::add(epochengine::previewgrid::scale(right, dx * dragScale),
+                        epochengine::previewgrid::scale(vertical, -dy * dragScale));
+                    if (editor.sceneDragMode == ScenePointerMode::move_y) delta = {0.0f, -dy * dragScale, 0.0f};
                     haveDelta = true;
                 }
 
                 if (haveDelta && std::isfinite(delta.x) && std::isfinite(delta.y) && std::isfinite(delta.z))
                 {
-                    if (editor.sceneDragVertical) delta.x = delta.z = 0.0f;
-                    else
+                    switch (editor.sceneDragMode)
                     {
-                        delta.y = 0.0f;
-                        if (editor.sceneDragHorizontalAxis == 0u && (delta.x != 0.0f || delta.z != 0.0f))
-                        {
-                            const auto camera = epochengine::previewgrid::camera_for(ctx.get());
-                            const auto right = epochengine::previewgrid::cross(
-                                epochengine::previewgrid::subtract(camera.target, camera.eye), camera.up);
-                            editor.sceneDragHorizontalAxis = std::abs(delta.x) == std::abs(delta.z)
-                                ? (std::abs(right.x) >= std::abs(right.z) ? 1u : 2u)
-                                : (std::abs(delta.x) > std::abs(delta.z) ? 1u : 2u);
-                        }
-                        if (editor.sceneDragHorizontalAxis == 1u) delta.z = 0.0f;
-                        else if (editor.sceneDragHorizontalAxis == 2u) delta.x = 0.0f;
+                    case ScenePointerMode::move_x: delta.y = delta.z = 0.0f; break;
+                    case ScenePointerMode::move_y: delta.x = delta.z = 0.0f; break;
+                    case ScenePointerMode::move_z: delta.x = delta.y = 0.0f; break;
+                    default: break;
                     }
                     for (const auto& [id, startPosition] : editor.sceneDragStartPositions)
                     {
@@ -1399,10 +1422,10 @@
             if (!leftHeld && editor.sceneDragActive)
             {
                 const std::size_t movedCount = editor.sceneDragStartPositions.size();
-                if (editor.sceneDragPendingToggle && !editor.sceneDragMoved)
+                if (!editor.sceneDragMoved)
                 {
-                    if (const auto picked = editor_entity_index(editor, editor.sceneDragEntityId))
-                        toggle_editor_entity_selection(editor, *picked);
+                    if (mouseInScene && complete_scene_click(editor, editor.sceneDragEntityId, mouse))
+                        handle_scene_tool(editor, ctx.get(), "focus_selection");
                 }
                 else if (editor.sceneDragMoved && commit_scene_group_drag(editor))
                 {
@@ -1429,6 +1452,7 @@
                     editor.sceneMarqueeCurrent.y - editor.sceneMarqueeStart.y);
                 if (width >= 4.0f || height >= 4.0f)
                 {
+                    editor.previousSceneClick.reset();
                     apply_scene_marquee_selection(
                         ctx.get(), editor, viewport);
                     push_editor_log(
@@ -1437,9 +1461,28 @@
                             "[scene] Marquee selected {} object(s).",
                             editor.selectedEntityIds.size()));
                 }
-                else if (!editor.sceneMarqueeAdditive)
+                else
                 {
-                    clear_editor_selection(editor);
+                    const auto pickedId = mouseInScene
+                        ? pick_editor_scene_entity(ctx.get(), editor, viewport, editor.sceneMarqueeStart)
+                        : std::nullopt;
+                    const auto picked = pickedId ? editor_entity_index(editor, *pickedId) : std::nullopt;
+                    if (!picked)
+                    {
+                        editor.previousSceneClick.reset();
+                        if (!editor.sceneMarqueeAdditive) clear_editor_selection(editor);
+                    }
+                    else if (editor.sceneMarqueeAdditive)
+                    {
+                        editor.previousSceneClick.reset();
+                        toggle_editor_entity_selection(editor, *picked);
+                    }
+                    else
+                    {
+                        select_editor_entity(editor, *picked);
+                        if (complete_scene_click(editor, *pickedId, mouse))
+                            handle_scene_tool(editor, ctx.get(), "focus_selection");
+                    }
                 }
                 editor.sceneMarqueeActive = false;
                 result.scene_input_captured = true;

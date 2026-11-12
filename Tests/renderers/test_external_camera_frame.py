@@ -5,23 +5,44 @@ import os
 import re
 import subprocess
 import unittest
+from Tests.build.test_opengl_sprite_stream import definition
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 def fixture():
+    editor = ROOT / 'Engine/src/editor/application'
+    documents = (editor / 'editor.application_project_documents.inl').read_text(encoding='utf-8')
+    scene = (editor / 'editor.application_scene_preview.inl').read_text(encoding='utf-8')
+    owners = '\n'.join((definition(documents, '        [[nodiscard]] bool begin_editor_lod_inspection('),
+                       definition(documents, '        void end_editor_lod_inspection('),
+                       definition(scene, '        void append_editor_translation_gizmo(')))
     return r'''
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>
 #include <limits>
+#include <optional>
 #include <span>
 #include <tuple>
+#include <vector>
 import render.preview_grid;
 import asset.mesh_artifact;
 namespace preview=epochengine::previewgrid;
+namespace previewgrid=preview;
 namespace camera=epochengine::render_camera;
+enum class ScenePointerMode{select,move_free,move_x,move_y,move_z};
+struct EditorState{
+ std::optional<preview::CameraRigSnapshot> lodInspectionReturnCamera;
+ preview::CameraMode viewportCameraMode{preview::CameraMode::Editor};
+ bool planetaryStreamContinue{},sceneDragActive{};std::uint64_t planetaryStreamNextTick{999};
+ ScenePointerMode scenePointerMode{ScenePointerMode::select},sceneDragMode{ScenePointerMode::select};
+};
+struct Body{preview::Vec3 target;float radius;};
+struct EditorEntity{std::optional<std::array<double,3>> positionAnchor;std::optional<Body> body;};
+std::optional<Body> editor_planetary_body_focus(const EditorState&,const EditorEntity& entity){return entity.body;}
+EDITOR_OWNERS
 #define CHECK(value) do {if(!(value))return __LINE__;}while(false)
 bool same_vec(preview::Vec3 a,preview::Vec3 b) {return a.x==b.x&&a.y==b.y&&a.z==b.z;}
 bool same(const preview::Camera&a,const preview::Camera&b) {
@@ -31,6 +52,44 @@ bool same(const preview::Camera&a,const preview::Camera&b) {
   &&a.orthographicVerticalSize==b.orthographicVerticalSize;
 }
 int main() {
+ int inspection{};EditorState editor;
+ preview::set_camera_mode(&inspection,preview::CameraMode::Editor);
+ CHECK(preview::set_editor_view(&inspection,preview::EditorView::Front));
+ const auto saved=preview::capture_camera_rig_snapshot(&inspection);
+ CHECK(begin_editor_lod_inspection(editor,&inspection));
+ const auto utility=preview::capture_camera_rig_snapshot(&inspection);
+ CHECK(utility.logical_view_id!=saved.logical_view_id&&preview::editor_view_for(&inspection)==preview::EditorView::Perspective);
+ CHECK(preview::focus_camera(&inspection,{80,90,100},4));
+ CHECK(begin_editor_lod_inspection(editor,&inspection)&&editor.lodInspectionReturnCamera->logical_view_id==saved.logical_view_id);
+ end_editor_lod_inspection(editor,&inspection);
+ const auto restored=preview::capture_camera_rig_snapshot(&inspection);
+ CHECK(!editor.lodInspectionReturnCamera&&editor.planetaryStreamContinue&&editor.planetaryStreamNextTick==0);
+ CHECK(restored.logical_view_id==saved.logical_view_id&&same_vec(restored.focus,saved.focus)&&restored.orientation==saved.orientation);
+ preview::set_camera_mode(&inspection,preview::CameraMode::FPS);
+ const auto previousEye=preview::camera_world_eye(preview::camera_for(&inspection));
+ CHECK(begin_editor_lod_inspection(editor,&inspection)&&preview::camera_mode_for(&inspection)==preview::CameraMode::Editor);
+ end_editor_lod_inspection(editor,&inspection);
+ CHECK(editor.viewportCameraMode==preview::CameraMode::FPS&&preview::camera_world_eye(preview::camera_for(&inspection))==previousEye);
+ preview::cleanup_context(&inspection);
+ int gizmo{};EditorEntity entity;editor.scenePointerMode=ScenePointerMode::move_z;
+ const preview::ObjectMarker object{.position={2,4,8},.scale={4,2,6}};
+ std::vector<preview::ObjectMarker> arrows;
+ append_editor_translation_gizmo(arrows,editor,entity,object,{});
+ CHECK(arrows.size()==3&&arrows[2].color.z>arrows[0].color.x&&arrows[2].scale.x>std::sqrt(14.0f));
+ CHECK(preview::set_object_markers(&gizmo,arrows));
+ const auto lines=preview::object_marker_geometry_for(&gizmo);
+ CHECK(lines&&lines->size()==30);
+ for(unsigned axis=0;axis<3;++axis){
+  CHECK(same_vec((*lines)[axis*10].position,object.position));
+  auto tip=object.position;
+  (axis==0?tip.x:axis==1?tip.y:tip.z)+=arrows[axis].scale.x;
+  const auto error=preview::subtract((*lines)[axis*10+1].position,tip);
+  CHECK(preview::dot(error,error)<1e-10f);
+ }
+ arrows.clear();entity.positionAnchor=std::array<double,3>{1e12,2e12,3e12};entity.body=Body{{10,20,30},6371000};
+ append_editor_translation_gizmo(arrows,editor,entity,object,{1e12+9,2e12+19,3e12+29});
+ CHECK(arrows.size()==3&&same_vec(arrows[0].position,{1,1,1})&&arrows[0].scale.x>6371000);
+ preview::cleanup_context(&gizmo);
  // Switching navigation styles must not teleport a planetary editor view
  // to the world origin. A large FPS eye still needs a representable target.
  int switching{};
@@ -264,7 +323,7 @@ int main() {
  CHECK(same(preview::fit_visible_depth_range(orbit,{}),orbit));
  return 0;
 }
-'''
+'''.replace('EDITOR_OWNERS', owners)
 
 
 class ExternalCameraFrame(unittest.TestCase):
@@ -294,7 +353,7 @@ class ExternalCameraFrame(unittest.TestCase):
         (proof / "CMakeLists.txt").write_text(f'''cmake_minimum_required(VERSION 3.30)
 set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT Embedded)
 project(ExternalCamera LANGUAGES CXX)
-add_executable(camera_contract "{source.as_posix()}" "{(ROOT / 'Engine/src/render/render.preview_camera.cpp').as_posix()}" "{(ROOT / 'Engine/src/assets/texture/asset.texture_artifact.cpp').as_posix()}" "{(ROOT / 'Engine/src/authoring/texture/authoring.texture_document.cpp').as_posix()}")
+add_executable(camera_contract "{source.as_posix()}" "{(ROOT / 'Engine/src/render/render.preview_camera.cpp').as_posix()}" "{(ROOT / 'Engine/src/render/render.preview_lighting.cpp').as_posix()}" "{(ROOT / 'Engine/src/assets/texture/asset.texture_artifact.cpp').as_posix()}" "{(ROOT / 'Engine/src/authoring/texture/authoring.texture_document.cpp').as_posix()}")
 target_compile_features(camera_contract PRIVATE cxx_std_23)
 target_sources(camera_contract PRIVATE FILE_SET CXX_MODULES BASE_DIRS {roots} FILES {modules})
 target_include_directories(camera_contract PRIVATE "{(ROOT / 'Engine').as_posix()}" "{(ROOT / 'Engine/include').as_posix()}" "{(ROOT / 'Engine/src').as_posix()}")

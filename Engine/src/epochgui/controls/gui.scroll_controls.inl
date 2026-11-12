@@ -14,11 +14,13 @@
             ? (std::max)(96.0f, options.size.x)
             : availableWidth;
         const float rowWidth = (std::max)(1.0f, (std::min)(requestedWidth, availableWidth));
+        const auto displayLabel = options.closed_label.empty()
+            ? (options.selected.empty() ? options.placeholder : options.selected)
+            : options.closed_label;
         float width = rowWidth;
         if (options.fit_content)
         {
-            const auto label = options.selected.empty() ? options.placeholder : options.selected;
-            const float fittedWidth = measure_text_width(label, kFontScale)
+            const float fittedWidth = measure_text_width(displayLabel, kFontScale)
                 + (std::max)(measure_text_width("  v", kFontScale),
                     measure_text_width("  ^", kFontScale))
                 + 2.0f * kContentPadding + 12.0f;
@@ -49,9 +51,7 @@
             ~SelectPointerScope() { slot = old; }
         } pointerScope{g_frame.selectPopupOwnsInput, state.open && options.enabled};
 
-        std::string selectedLabel = options.selected.empty()
-            ? std::string(options.placeholder)
-            : std::string(options.selected);
+        std::string selectedLabel{displayLabel};
         selectedLabel += state.open ? "  ^" : "  v";
 
         bool toggledThisFrame = false;

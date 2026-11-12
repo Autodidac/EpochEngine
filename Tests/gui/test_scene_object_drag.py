@@ -10,6 +10,7 @@ class SceneObjectDrag(unittest.TestCase):
   folder=ROOT/'Engine/src/editor/application'
   source=(folder/'editor.application_document_editing.inl').read_text(encoding='utf-8')
   selection=(folder/'editor.application_scene_selection.inl').read_text(encoding='utf-8')
+  state=(folder/'editor.application_state.inl').read_text(encoding='utf-8')
   selection_functions='\n'.join(definition(selection,marker) for marker in (
    '        [[nodiscard]] std::optional<std::size_t> editor_entity_index(',
    '        void clear_editor_selection(',
@@ -18,15 +19,18 @@ class SceneObjectDrag(unittest.TestCase):
    '        void toggle_editor_entity_selection('))
   plane=source.index('        [[nodiscard]] std::optional<epochengine::previewgrid::Vec3> screen_point_to_world_plane(')
   normal=source.index('        [[nodiscard]] epochengine::previewgrid::Vec3 scene_drag_plane_normal(',plane)
-  functions=source[plane:normal]+'\n'.join(definition(source,marker) for marker in (
+  click=source[source.index('        [[nodiscard]] bool complete_scene_click('):source.index('        [[nodiscard]] std::optional<scene::SceneObjectId> pick_editor_scene_entity(')]
+  functions=source[plane:normal]+click+'\n'.join(definition(source,marker) for marker in (
    '        [[nodiscard]] epochengine::previewgrid::Vec3 scene_drag_plane_normal(',
    '        void anchor_scene_group_drag(',
+   '        void apply_scene_marquee_selection(',
    '        [[nodiscard]] bool commit_scene_group_drag(',
    '        void update_scene_object_interaction('))
   code=r'''
 #include "core.format_text.hpp"
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <memory>
@@ -56,20 +60,26 @@ Vec3 normalize(Vec3 v){return render_math::normalize(v,{0,0,0});}
 struct Camera{Vec3 eye{0,10,10},target{},up{0,1,0};};Camera camera;
 Vec3 camera_forward(const Camera& value){return epochengine::previewgrid::normalize(subtract(value.target,value.eye));}
 Camera camera_for(const core::Context*){return camera;}
+std::array<double,3> camera_world_eye(const Camera& c){return {c.eye.x,c.eye.y,c.eye.z};}
 float camera_distance_for(const core::Context*){return 10;}
 }
-struct EditorEntity{scene::SceneObjectId sceneObjectId{};std::array<float,3>position{},rotation{},scale{1,1,1};std::optional<std::array<double,3>> positionAnchor{};};
+struct EditorEntity{scene::SceneObjectId sceneObjectId{};std::array<float,3>position{},rotation{},scale{1,1,1};std::optional<std::array<double,3>> positionAnchor{};
+ bool visible{true};std::string category;};
+POINTER_MODE
 struct EditorState {
  core::ScenePreviewMode previewMode=core::ScenePreviewMode::Editor;
  std::vector<EditorEntity>entities;authoring::scene::SceneDocument sceneDocument;
  std::size_t selectedEntity{},sceneDragEntity{};scene::SceneObjectId selectedEntityId=1,sceneDragEntityId{};
  std::vector<scene::SceneObjectId>selectedEntityIds{1};
- bool sceneDragActive{},sceneDragMoved{},sceneDragPendingToggle{},sceneDragVertical{},sceneLeftWasHeld{},sceneDragHasPlaneHit{},sceneMarqueeActive{},sceneMarqueeAdditive{},sceneLightingDirty{},sceneInteractionDirty{},textureBrushActive{};
- unsigned sceneDragHorizontalAxis{},guiSelectedWidget{},guiContentEditorWidget{};
+ CLICK_STATE
+ std::optional<SceneClick> previousSceneClick{};
+ ScenePointerMode scenePointerMode{ScenePointerMode::select},sceneDragMode{ScenePointerMode::select};
+ bool sceneDragActive{},sceneDragMoved{},sceneLeftWasHeld{},sceneDragHasPlaneHit{},sceneMarqueeActive{},sceneMarqueeAdditive{},sceneLightingDirty{},sceneInteractionDirty{},textureBrushActive{};
+ unsigned guiSelectedWidget{},guiContentEditorWidget{};
  gui::Vec2 sceneDragStartMouse{},sceneMarqueeStart{},sceneMarqueeCurrent{};
  std::array<float,3>sceneDragStartPosition{},sceneDragStartHit{};
  std::vector<std::pair<scene::SceneObjectId,std::array<float,3>>>sceneDragStartPositions;
- unsigned commits{};
+ unsigned commits{},focuses{};
 };
 struct EditorFrameResult{bool scene_input_captured{};gui::WidgetBounds scene_viewport;};
 void apply_editor_primary_selection_side_effects(EditorState& e)noexcept;
@@ -78,8 +88,15 @@ void apply_editor_primary_selection_side_effects(EditorState& e)noexcept{if(auto
 void select_editor_entity(EditorState&e,std::size_t i)noexcept{e.selectedEntityIds={e.entities[i].sceneObjectId};e.selectedEntityId=e.selectedEntityIds[0];e.selectedEntity=i;}
 void synchronize_editor_selection(EditorState&e){apply_editor_primary_selection_side_effects(e);}
 void push_editor_log(EditorState&,const std::string&){}
-void apply_scene_marquee_selection(const core::Context*,EditorState&,const gui::WidgetBounds&){} // Unchanged marquee owner, not this gesture.
-std::optional<scene::SceneObjectId>pick_editor_scene_entity(const core::Context*c,EditorState&,const gui::WidgetBounds&,const gui::Vec2&){return c->picked?std::optional<scene::SceneObjectId>{c->picked}:std::nullopt;}
+void handle_scene_tool(EditorState& e,const core::Context*,std::string_view){++e.focuses;}
+bool is_screen_space_gui_entity(const EditorEntity& e){return e.category=="UI";}
+bool editor_planetary_outliner_only(const EditorState&,const EditorEntity&){return false;}
+struct BodyFocus{struct {previewgrid::Vec3 minimum,maximum;} bounds;};
+std::optional<BodyFocus> editor_planetary_body_focus(const EditorState&,const EditorEntity&){return BodyFocus{{{-100,-100,-100},{100,100,100}}};}
+std::optional<gui::Vec2> project_editor_world_to_screen(const core::Context*,const gui::WidgetBounds&,
+    const std::array<float,3>& position,const std::optional<std::array<double,3>>&){return gui::Vec2{position[0],position[1]};}
+unsigned rayPicks{};
+std::optional<scene::SceneObjectId>pick_editor_scene_entity(const core::Context*c,EditorState&,const gui::WidgetBounds&,const gui::Vec2&){++rayPicks;return c->picked?std::optional<scene::SceneObjectId>{c->picked}:std::nullopt;}
 struct RayPort{render_math::Float3 origin,direction;float minimumDistance=0,maximumDistance=10000;};
 bool parallelRay{};
 std::optional<RayPort>screen_point_to_world_ray(const core::Context*,const gui::WidgetBounds&,const gui::Vec2&m,const std::array<double,3>&){
@@ -95,10 +112,16 @@ EditorState fresh(){EditorState e;e.entities={{1},{2,{2,0,0}}};scene::SceneSnaps
 void tick(std::shared_ptr<core::Context>c,EditorState&e,bool captured=false){EditorFrameResult r;r.scene_input_captured=captured;update_scene_object_interaction(c,e,r);}
 int main(){
  auto c=std::make_shared<core::Context>();
- {auto e=fresh();CHECK(e.sceneDocument.initialized());c->left=true;tick(c,e);c->x+=2;tick(c,e);c->left=false;tick(c,e);CHECK(e.commits==0&&e.entities[0].position[0]==0);}
+ {auto e=fresh();CHECK(e.sceneDocument.initialized());
+  c->left=true;tick(c,e);c->x+=2;tick(c,e);c->left=false;tick(c,e);
+  CHECK(e.commits==0&&e.focuses==0&&e.entities[0].position[0]==0);
+  c->left=true;tick(c,e);c->left=false;tick(c,e);CHECK(e.focuses==1);
+  c->left=true;tick(c,e);c->left=false;tick(c,e);CHECK(e.focuses==1);
+  e.previousSceneClick->time-=std::chrono::seconds{1};
+  c->left=true;tick(c,e);c->left=false;tick(c,e);CHECK(e.focuses==1);}
  c=std::make_shared<core::Context>();
- {auto e=fresh();e.selectedEntityIds={1,2};c->left=true;tick(c,e);c->x+=20;c->y+=4;tick(c,e);
-  CHECK(e.sceneDragHorizontalAxis==1&&e.entities[0].position[0]>.19f&&e.entities[0].position[1]==0&&e.entities[0].position[2]==0);
+ {auto e=fresh();e.scenePointerMode=ScenePointerMode::move_x;e.selectedEntityIds={1,2};c->left=true;tick(c,e);c->x+=20;c->y+=4;tick(c,e);
+  CHECK(e.sceneDragMode==ScenePointerMode::move_x&&e.entities[0].position[0]>.19f&&e.entities[0].position[1]==0&&e.entities[0].position[2]==0);
   c->y+=100;tick(c,e);CHECK(e.entities[0].position[2]==0&&e.commits==0);c->left=false;tick(c,e);
   CHECK(e.commits==1&&e.sceneDocument.history().size()==1&&e.selectedEntityIds.size()==2);
   auto h=e.sceneDocument.find({1});CHECK(h);auto before=e.sceneDocument.object(*h);CHECK(before&&before->descriptor.transform.position.x>.19f);
@@ -109,26 +132,37 @@ int main(){
  {auto e=fresh();e.selectedEntityIds={1,2};c->shift=true;c->left=true;tick(c,e);CHECK(e.selectedEntityIds.size()==2);c->left=false;tick(c,e);CHECK(e.selectedEntityIds.size()==1&&e.selectedEntityIds[0]==2&&e.commits==0);
   c->picked=1;c->left=true;tick(c,e);c->left=false;tick(c,e);CHECK(e.selectedEntityIds.size()==2&&e.commits==0);}
  c=std::make_shared<core::Context>();
- {auto e=fresh();e.selectedEntityIds={1,2};c->shift=true;c->left=true;tick(c,e);c->y-=20;tick(c,e);
+ {auto e=fresh();e.scenePointerMode=ScenePointerMode::move_y;e.selectedEntityIds={1,2};c->left=true;tick(c,e);c->y-=20;tick(c,e);
   CHECK(e.entities[0].position[1]>.19f&&e.entities[0].position[0]==0&&e.entities[0].position[2]==0);
   CHECK(e.entities[1].position[1]==e.entities[0].position[1]&&e.entities[1].position[0]==2);c->left=false;tick(c,e);CHECK(e.commits==1&&e.selectedEntityIds.size()==2);}
  c=std::make_shared<core::Context>();
- {auto e=fresh();c->left=true;tick(c,e);c->x+=20;tick(c,e);const auto horizontal=e.entities[0].position;
-  c->shift=true;tick(c,e);CHECK(e.entities[0].position==horizontal);c->y-=20;tick(c,e);const auto vertical=e.entities[0].position;CHECK(vertical[0]==horizontal[0]&&vertical[1]>.19f);
-  c->shift=false;tick(c,e);CHECK(e.entities[0].position==vertical);c->x+=20;tick(c,e);CHECK(e.entities[0].position[0]>horizontal[0]&&e.entities[0].position[1]==vertical[1]);c->left=false;tick(c,e);CHECK(e.commits==1&&e.sceneDocument.history().size()==1);CHECK(e.sceneDocument.undo());CHECK(e.sceneDocument.object(*e.sceneDocument.find({1}))->descriptor.transform.position.y==0);}
+ {auto e=fresh();e.scenePointerMode=ScenePointerMode::move_free;
+  c->left=true;tick(c,e);c->x+=20;c->y-=20;tick(c,e);const auto moved=e.entities[0].position;
+  CHECK(moved[0]>.19f&&moved[1]>.05f&&moved[2]<-.05f);
+  c->shift=true;tick(c,e);CHECK(e.entities[0].position==moved&&e.sceneDragMode==ScenePointerMode::move_free);
+  c->left=false;tick(c,e);CHECK(e.commits==1&&e.sceneDocument.history().size()==1);}
  c=std::make_shared<core::Context>();parallelRay=true;
- {auto e=fresh();c->shift=true;c->left=true;tick(c,e);c->y-=20;tick(c,e);CHECK(e.entities[0].position[1]>0&&e.entities[0].position[0]==0);c->left=false;tick(c,e);CHECK(e.commits==1);}
+ {auto e=fresh();e.scenePointerMode=ScenePointerMode::move_y;c->left=true;tick(c,e);c->y-=20;tick(c,e);CHECK(e.entities[0].position[1]>0&&e.entities[0].position[0]==0);c->left=false;tick(c,e);CHECK(e.commits==1);}
  parallelRay=false;c=std::make_shared<core::Context>();
- {auto e=fresh();c->left=true;tick(c,e);c->x+=20;tick(c,e);const auto moved=e.entities[0].position;
+ {auto e=fresh();e.scenePointerMode=ScenePointerMode::move_x;c->left=true;tick(c,e);c->x+=20;tick(c,e);const auto moved=e.entities[0].position;
   c->x+=30;tick(c,e,true);CHECK(!e.sceneDragActive&&e.commits==1&&e.entities[0].position==moved);
   CHECK(e.sceneDocument.history().size()==1&&e.sceneDocument.undo());CHECK(e.sceneDocument.object(*e.sceneDocument.find({1}))->descriptor.transform.position.x==0);c->left=false;tick(c,e);CHECK(e.commits==1);}
  c=std::make_shared<core::Context>();
- {auto e=fresh();c->picked=2;c->shift=true;c->left=true;tick(c,e);CHECK(e.selectedEntityIds.size()==1);c->y-=20;tick(c,e);CHECK(e.selectedEntityIds.size()==2&&e.entities[0].position[1]>0&&e.entities[0].position[1]==e.entities[1].position[1]);c->left=false;tick(c,e);CHECK(e.commits==1);}
+ {auto e=fresh();e.entities[0].category="Planetary Terrain";e.entities[0].position={105,105,0};
+  e.entities[1].position={115,110,0};e.entities.push_back({3,{300,300,0}});
+  e.selectedEntityIds={1,3};c->picked=1;rayPicks=0;c->left=true;tick(c,e);c->x+=30;c->y+=30;tick(c,e);
+  CHECK(e.sceneMarqueeActive&&!e.sceneDragActive);c->left=false;tick(c,e);
+  CHECK(e.commits==0&&rayPicks==0&&e.selectedEntityIds==std::vector<scene::SceneObjectId>{2});
+  e.scenePointerMode=ScenePointerMode::move_z;e.selectedEntityIds={3};e.selectedEntityId=3;
+  c->x=100;c->y=100;c->shift=true;c->left=true;tick(c,e);c->x+=30;c->y+=30;c->left=false;tick(c,e);
+  CHECK(e.commits==0&&rayPicks==0&&e.selectedEntityIds==std::vector<scene::SceneObjectId>{3,2});}
  c=std::make_shared<core::Context>();
  for(unsigned blocked=0;blocked<4;++blocked){auto e=fresh();c->left=true;c->right=blocked==1;c->middle=blocked==2;c->alt=blocked==3;tick(c,e,blocked==0);c->x+=30;tick(c,e,blocked==0);c->left=false;tick(c,e);CHECK(e.commits==0&&!e.sceneDragActive);}
  return 0;
 }
-'''.replace('SELECTION',selection_functions).replace('FUNCTIONS',functions)
+'''.replace('SELECTION',selection_functions).replace('FUNCTIONS',functions).replace(
+    'POINTER_MODE',definition(state,'        enum class ScenePointerMode',True)).replace(
+    'CLICK_STATE',definition(state,'            struct SceneClick final',True))
   report=ROOT/'Artifacts/Reports/scene-object-drag-oct29'/str(time.time_ns());report.mkdir(parents=True)
   (report/'consumer.cpp').write_text(code,encoding='utf-8')
   module_map={}

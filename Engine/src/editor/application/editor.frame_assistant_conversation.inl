@@ -33,6 +33,18 @@
                     {
                         const bool changed = !editor.aiGoalActive
                             || editor.aiGoal != goalCommand.objective;
+                        const bool textureUpdate = ai::plant_image_import_request(goalCommand.objective).update_painted_trees;
+                        if (textureUpdate && !has_open_project(editor))
+                        {
+                            chat.append_status("Open a project before requesting a Plant Lab texture and painted-tree update.");
+                            return true;
+                        }
+                        if (textureUpdate && !changed && editor.aiGoalTools.texture_update
+                            && !editor.aiGoalTools.operation().empty())
+                        {
+                            chat.append_status("This texture goal is already active. Review its current step or say Resume goal.");
+                            return true;
+                        }
                         invalidate_ai_goal_work();
                         editor.aiGoalTools = {};
                         editor.aiGoalTools.initial_landing_forest = ai_project_initial_landing_forest(goalCommand.objective);
@@ -42,7 +54,7 @@
                             && !editor.aiGoalTools.initial_landing_forest
                             && ai::custom_plant_design_requested(goalCommand.objective);
                         editor.aiGoalTools.bind_request(goalCommand.objective, editor.projectId, editor.projectRoot,
-                            editor.projectLifecycle.evidence().generations.selected_project.generation);
+                            editor.projectLifecycle.evidence().generations.selected_project.generation, textureUpdate);
                         if (editor.aiGoalTools.initial_landing_forest) editor.aiGoalTools.run_after_save = false;
                         editor.aiGoalPackageReceipt.reset();
                         editor.aiGoal.assign(goalCommand.objective);
@@ -92,9 +104,13 @@
                         auto resumed = editor.aiGoalTools;
                         const auto generation = editor.projectLifecycle.evidence().generations.selected_project.generation;
                         if (!resumed.resume(editor.aiGoal, editor.projectId, editor.projectRoot, generation)
-                            || (!editor.aiToolBoundRequest.empty()
+                            || (!resumed.forest_asset_target && !resumed.texture_update && !editor.aiToolBoundRequest.empty()
                                 && editor.aiToolBoundRequest != resumed.next_request(editor.aiGoal))
-                            || (editor.aiGoalTools.stopped
+                            || (resumed.texture_update && resumed.stage == 1u
+                                && !resumed.matches_imported_recipe(editor.sceneDocumentRevision,
+                                    editor.plantLabDocument.revision, editor.plantLabDocument.contentHash))
+                            || (resumed.forest_asset_target && !forest_asset_step_current(editor, resumed.operation()))
+                            || (!resumed.forest_asset_target && editor.aiGoalTools.stopped
                                 && (editor.aiToolSceneRevision != editor.sceneDocumentRevision
                                     || editor.aiToolGuiRevision != (editor.guiDocument ? editor.guiDocument->revision().sequence : 0u)
                                     || (editor.aiToolPlantRecipeBound && !ai_forest_recipe_binding_current(editor)))))
@@ -108,7 +124,7 @@
                         }
                         const auto request = resumed.next_request(editor.aiGoal);
                         ai::ToolPlanParseResult retry{};
-                        if (editor.aiToolPlan && editor.aiToolPlan.plan.call.tool == resumed.operation()
+                        if (!resumed.forest_asset_target && editor.aiToolPlan && editor.aiToolPlan.plan.call.tool == resumed.operation()
                             && editor.aiToolBoundRequest == request
                             && ai::project_tool_selection_matches(editor.aiToolProjectId, editor.aiToolProjectRoot,
                                 editor.aiToolProjectGeneration, editor.projectId, editor.projectRoot, generation)
@@ -133,7 +149,8 @@
                         editor.aiGoalPackageReceipt.reset();
                         editor.aiGoalForestReceipt = false;
                         editor.aiGoalTools = std::move(resumed);
-                        editor.aiGoalRunning = static_cast<bool>(retry) || editor.aiMethodSelection == 0;
+                        editor.aiGoalRunning = static_cast<bool>(retry) || editor.aiGoalTools.texture_update || editor.aiGoalTools.forest_asset_target
+                            || editor.aiMethodSelection == 0;
                         editor.aiGoalPlanNextQueued = !retry && editor.aiGoalRunning;
                         if (!editor.aiGoalRunning) editor.aiGoalTools.stopped = true;
                         if (retry)
@@ -145,6 +162,8 @@
                                 editor.aiToolStatus += " " + argument.name + "=" + argument.value;
                             chat.append_status(editor.aiToolStatus + ". No operation or model request was sent; completed goal steps are retained.");
                         }
+                        else if (editor.aiGoalTools.texture_update || editor.aiGoalTools.forest_asset_target)
+                            chat.append_status("The uncompleted asset step is queued for local review and fresh approval.");
                         else
                             chat.append_status(editor.aiGoalRunning
                                 ? "Goal resumed at its uncompleted step. One fresh Native model proposal is queued and will need approval; completed steps will not repeat."
@@ -265,6 +284,12 @@
                 return true;
             }
 
+            if (epochengine::editor::ai_chat_goal::forest_asset_request(input))
+            {
+                editor.aiToolRequest = input;
+                return request_ai_tool_plan();
+            }
+            if (has_forest_asset_approval(input) && queue_text_message_action(input)) return true;
             // A direct answer to a host/model clarification owns the next
             // message.  Only when no clarification is pending may a short
             // yes/no reply operate the currently staged approval controls.
@@ -460,9 +485,11 @@
         const bool queuedIdleReloadConsentReady = queuedTransport == queue::Transport::native
             && queuedNative.selected && !queuedNative.loaded && !queuedNative.busy
             && queuedNative.idle_reload_available;
-        const bool queuedAssetHostAction = ai::asset_generation_tool(ai::project_lifecycle_request_tool(chat.queuedInput))
+        const bool queuedProjectHostAction = !ai::local_project_request_tool(chat.queuedInput).empty()
+            || epochengine::editor::ai_chat_goal::forest_asset_request(chat.queuedInput)
+            || has_forest_asset_approval(chat.queuedInput)
             || (editor.aiToolPlan&&!editor.aiToolPlanApplied
-                &&ai::asset_generation_tool(editor.aiToolPlan.plan.call.tool)
+                &&ai::local_project_tool(editor.aiToolPlan.plan.call.tool)
                 &&ai_chat_confirmation(chat.queuedInput).has_value());
         // Never leave a queued turn parked silently after a provider/model
         // change. Preserve the draft rather than dispatching on an unintended
@@ -507,7 +534,7 @@
             }
         }
         if (queueOwnerReady && queuedMethodMatches
-            && queuedModelMatches && (queuedProviderReady || queuedIdleReloadConsentReady || queuedAssetHostAction))
+            && queuedModelMatches && (queuedProviderReady || queuedIdleReloadConsentReady || queuedProjectHostAction))
         {
             if (auto queued = chat.take_queued_input())
             {

@@ -338,32 +338,43 @@
             }
         }
 
-        [[nodiscard]] static std::string recommended_support_tier(
+        [[nodiscard]] static perf::tier recommended_editor_performance_tier(
             const std::shared_ptr<core::Context>& ctx,
             std::size_t workerCount)
         {
             if (!ctx)
-                return "Baseline";
+                return perf::tier::mobile_30;
 
             if (workerCount >= 10
                 && (ctx->type == core::ContextType::Vulkan
                     || ctx->type == core::ContextType::OpenGL))
             {
-                return "Extended";
+                return perf::tier::editor_120;
             }
 
             switch (ctx->type)
             {
             case core::ContextType::Vulkan:
-                return workerCount >= 8 ? "Standard" : "Baseline";
+                return workerCount >= 8 ? perf::tier::desktop_60 : perf::tier::mobile_30;
             case core::ContextType::OpenGL:
             case core::ContextType::RayLib:
             case core::ContextType::SFML:
             case core::ContextType::SDL:
-                return workerCount >= 6 ? "Standard" : "Baseline";
+                return workerCount >= 6 ? perf::tier::desktop_60 : perf::tier::mobile_30;
             case core::ContextType::Software:
             default:
-                return "Baseline";
+                return perf::tier::mobile_30;
+            }
+        }
+
+        [[nodiscard]] static std::string recommended_support_tier(
+            const std::shared_ptr<core::Context>& ctx, std::size_t workerCount)
+        {
+            switch (recommended_editor_performance_tier(ctx, workerCount))
+            {
+            case perf::tier::editor_120: return "Extended";
+            case perf::tier::desktop_60: return "Standard";
+            default: return "Baseline";
             }
         }
 

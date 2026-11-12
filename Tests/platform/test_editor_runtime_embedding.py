@@ -387,6 +387,7 @@ struct EditorState {
  std::uintptr_t projectRuntimeWindow{};std::uint64_t projectRuntimeWindowProcess{};
  std::string projectRuntimeStatus,projectRuntimeAttachmentError,projectRuntimeOutputLog;
  std::optional<int> projectBuildPending;std::string projectBuildStatus;
+ std::optional<bool> projectRunAfterTerrainPreview;
  core::sha256::Digest projectBuildAcceptedOutputDigest;
  Lifecycle projectLifecycle;
  EditorMainSurface mainSurface{EditorMainSurface::Scene};
@@ -428,7 +429,8 @@ bool actual_runtime_reuse_guard(EditorState& editor,bool inEditor){
 void begin_build(EditorState& editor,bool runInEditor){CAPTURE}
 bool finish_build(EditorState& editor){POLL_CAPTURE reset_project_build_request(editor);return runInEditor;}
 void actual_run_branch(EditorState& editor,bool needs_runtime){struct {bool requires_project_runtime;std::string message;} requirement{needs_runtime,"compiled provider"};
- LAUNCH_SIGNATURE {editor.route=inEditor?1:2;};
+ const bool allowTerrainWait=false;
+ LAUNCH_SIGNATURE {(void)requiredBuild;(void)allowTerrainWait;editor.route=inEditor?1:2;};
  RUN_BRANCH
  editor.route=3;
 }

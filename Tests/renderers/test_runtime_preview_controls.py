@@ -1664,17 +1664,21 @@ bool source_generation_is_current(const fs::path& root,const SourceGeneration& s
   &&read(root/"provider.txt")==source.content_hash;
 }
 std::optional<std::string> recipe_guard(const fs::path& root){return read(root/"recipe.txt");}
+bool mesh_generation_receipt_matches(const fs::path&,const SourceGeneration&,const Settings&,const MeshGenerationIdentity&){
+ throw std::logic_error("Runtime fixture unexpectedly received an Editor mesh binding");
+}
 StreamResult final_admission(const fs::path& project_root,const std::optional<SourceGeneration>& admitted,
- const std::optional<std::string>& observedRecipe,StreamResult result,std::stop_token cancellation) {
+ const std::optional<std::string>& observedRecipe,const Settings& settings,StreamResult result,std::stop_token cancellation) {
  auto& operation=result.operation;
  const bool providerWater=true;const package_source::Attachment water;
+ const StreamMeshBinding* binding=nullptr;
  FINAL_ADMISSION
  if(omit_receipt)result.verified_source.reset();
  return result;
 }
 // Recorded provider boundary. The actual worker admission block above and
 // actual owner below are compiled unchanged; no producer process is launched.
-StreamResult stream_step(const fs::path& root,Settings,StreamView view,std::stop_token stop) {
+StreamResult stream_step(const fs::path& root,Settings settings,StreamView view,std::stop_token stop) {
  ++producer_calls;
  const auto admitted=SourceGeneration{root,read(root/"project.epoch.json"),read(root/"provider.txt")};
  const auto recipe=recipe_guard(root);
@@ -1682,7 +1686,7 @@ StreamResult stream_step(const fs::path& root,Settings,StreamView view,std::stop
  if(release.valid())release.wait();
  if(throw_worker)throw std::runtime_error("recorded worker failure");
  StreamResult result;result.request_id=view.request_id;result.snapshot_ready=true;result.snapshot=replacement;
- return final_admission(root,admitted,recipe,std::move(result),stop);
+ return final_admission(root,admitted,recipe,settings,std::move(result),stop);
 }
 }
 struct Transform {std::array<float,3>position{},rotation{},scale{1,1,1};};
@@ -2106,7 +2110,7 @@ add_test(NAME planetary_look_direction COMMAND yaw_contract)
         (proof / "CMakeLists.txt").write_text(f'''cmake_minimum_required(VERSION 3.30)
 set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT Embedded)
 project(RuntimePreview LANGUAGES CXX)
-add_executable(wire_contract preview.wire_contract.cpp "{(ROOT / 'Engine/src/render/render.preview_camera.cpp').as_posix()}" "{(ROOT / 'Engine/src/assets/texture/asset.texture_artifact.cpp').as_posix()}" "{(ROOT / 'Engine/src/authoring/texture/authoring.texture_document.cpp').as_posix()}" "{(ROOT / 'Engine/src/authoring/texture/authoring.texture_residency.cpp').as_posix()}")
+add_executable(wire_contract preview.wire_contract.cpp "{(ROOT / 'Engine/src/render/render.preview_camera.cpp').as_posix()}" "{(ROOT / 'Engine/src/render/render.preview_lighting.cpp').as_posix()}" "{(ROOT / 'Engine/src/assets/texture/asset.texture_artifact.cpp').as_posix()}" "{(ROOT / 'Engine/src/authoring/texture/authoring.texture_document.cpp').as_posix()}" "{(ROOT / 'Engine/src/authoring/texture/authoring.texture_residency.cpp').as_posix()}")
 target_sources(wire_contract PRIVATE FILE_SET CXX_MODULES BASE_DIRS {bases} FILES {modules})
 target_include_directories(wire_contract PRIVATE "{(ROOT / 'Engine/include').as_posix()}")
 if(MSVC)
@@ -2115,7 +2119,7 @@ endif()
 include("{(ROOT / 'Engine/cmake/epoch_task_scheduler.cmake').as_posix()}")
 epoch_admit_task_scheduler(wire_contract "{ROOT.as_posix()}")
 add_executable(shortcut_contract runtime.shortcuts_contract.cpp)
-add_executable(source_receipt_contract runtime.source_receipt_contract.cpp "{(ROOT / 'Engine/src/render/render.preview_camera.cpp').as_posix()}" "{(ROOT / 'Engine/src/assets/texture/asset.texture_artifact.cpp').as_posix()}" "{(ROOT / 'Engine/src/authoring/texture/authoring.texture_document.cpp').as_posix()}" "{(ROOT / 'Engine/src/authoring/texture/authoring.texture_residency.cpp').as_posix()}")
+add_executable(source_receipt_contract runtime.source_receipt_contract.cpp "{(ROOT / 'Engine/src/render/render.preview_camera.cpp').as_posix()}" "{(ROOT / 'Engine/src/render/render.preview_lighting.cpp').as_posix()}" "{(ROOT / 'Engine/src/assets/texture/asset.texture_artifact.cpp').as_posix()}" "{(ROOT / 'Engine/src/authoring/texture/authoring.texture_document.cpp').as_posix()}" "{(ROOT / 'Engine/src/authoring/texture/authoring.texture_residency.cpp').as_posix()}")
 target_sources(source_receipt_contract PRIVATE FILE_SET CXX_MODULES BASE_DIRS {bases} FILES {modules})
 target_include_directories(source_receipt_contract PRIVATE "{(ROOT / 'Engine/include').as_posix()}")
 target_link_libraries(source_receipt_contract PRIVATE Epoch::TaskScheduler)

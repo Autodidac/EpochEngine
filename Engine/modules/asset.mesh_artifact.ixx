@@ -7,6 +7,7 @@ module;
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <limits>
@@ -113,8 +114,14 @@ namespace epochengine::asset::mesh::detail
         std::size_t& offset) noexcept
     {
         std::uint32_t value{};
-        for (unsigned shift = 0u; shift < 32u; shift += 8u)
-            value |= std::to_integer<std::uint32_t>(bytes[offset++]) << shift;
+        if constexpr (std::endian::native == std::endian::little)
+        {
+            std::memcpy(&value, bytes.data() + offset, sizeof(value));
+            offset += sizeof(value);
+        }
+        else
+            for (unsigned shift = 0u; shift < 32u; shift += 8u)
+                value |= std::to_integer<std::uint32_t>(bytes[offset++]) << shift;
         return value;
     }
     [[nodiscard]] inline Vertex read_vertex(std::span<const std::byte> bytes,
@@ -128,9 +135,9 @@ namespace epochengine::asset::mesh::detail
         for (auto& value : vertex.color) value = real();
         return vertex;
     }
-    template<class VertexAt, class IndexAt>
+    template<class VertexAt, class IndexAt, class PositionAt>
     [[nodiscard]] inline bool valid_geometry(std::size_t vertex_count,
-        std::size_t index_count, VertexAt vertex_at, IndexAt index_at) noexcept
+        std::size_t index_count, VertexAt vertex_at, IndexAt index_at, PositionAt position_at) noexcept
     {
         for (std::size_t index = 0u; index < vertex_count; ++index)
         {
@@ -153,7 +160,7 @@ namespace epochengine::asset::mesh::detail
             const auto a = index_at(index), b = index_at(index + 1u), c = index_at(index + 2u);
             if (a >= vertex_count || b >= vertex_count || c >= vertex_count
                 || a == b || b == c || a == c) return false;
-            const auto p = vertex_at(a).position, q = vertex_at(b).position, r = vertex_at(c).position;
+            const auto p = position_at(a), q = position_at(b), r = position_at(c);
             const double x = (double(q[1])-p[1])*(double(r[2])-p[2])-(double(q[2])-p[2])*(double(r[1])-p[1]);
             const double y = (double(q[2])-p[2])*(double(r[0])-p[0])-(double(q[0])-p[0])*(double(r[2])-p[2]);
             const double z = (double(q[0])-p[0])*(double(r[1])-p[1])-(double(q[1])-p[1])*(double(r[0])-p[0]);
@@ -164,17 +171,30 @@ namespace epochengine::asset::mesh::detail
     inline void append_payload(std::vector<std::byte>& bytes,
         std::span<const Vertex> vertices, std::span<const std::uint32_t> indices)
     {
-        append32(bytes, static_cast<std::uint32_t>(vertices.size()));
-        append32(bytes, static_cast<std::uint32_t>(indices.size()));
+        const auto start = bytes.size();
+        bytes.resize(start + 8u + vertices.size() * 44u + indices.size() * 4u);
+        auto* cursor = bytes.data() + start;
+        const auto write32 = [&cursor](std::uint32_t value) {
+            if constexpr (std::endian::native == std::endian::little)
+            {
+                std::memcpy(cursor, &value, sizeof(value));
+                cursor += sizeof(value);
+            }
+            else
+                for (unsigned shift = 0u; shift < 32u; shift += 8u)
+                    *cursor++ = static_cast<std::byte>((value >> shift) & 0xffu);
+        };
+        write32(static_cast<std::uint32_t>(vertices.size()));
+        write32(static_cast<std::uint32_t>(indices.size()));
         for (const auto& vertex : vertices)
         {
-            const auto real = [&](float value) { append32(bytes, std::bit_cast<std::uint32_t>(value == 0.0f ? 0.0f : value)); };
+            const auto real = [&](float value) { write32(std::bit_cast<std::uint32_t>(value == 0.0f ? 0.0f : value)); };
             for (float value : vertex.position) real(value);
             for (float value : vertex.normal) real(value);
             for (float value : vertex.uv) real(value);
             for (float value : vertex.color) real(value);
         }
-        for (const auto index : indices) append32(bytes, index);
+        for (const auto index : indices) write32(index);
     }
     [[nodiscard]] inline ContentHash content_key(std::span<const Vertex> vertices,
         std::span<const std::uint32_t> indices)
@@ -194,7 +214,8 @@ export namespace epochengine::asset::mesh
             return {Code::limit_exceeded};
         if (!detail::valid_geometry(vertices.size(), indices.size(),
                 [&](std::size_t index) -> const Vertex& { return vertices[index]; },
-                [&](std::size_t index) { return indices[index]; })) return {};
+                [&](std::size_t index) { return indices[index]; },
+                [&](std::size_t index) { return vertices[index].position; })) return {};
         try
         {
             auto artifact = std::shared_ptr<Artifact>{new Artifact{}};
@@ -250,12 +271,18 @@ export namespace epochengine::asset::mesh
             auto at = static_cast<std::size_t>(detail::header_bytes + std::uint64_t(vertex_count) * 44u + index * 4u);
             return detail::read32(bytes, at);
         };
-        if (!detail::valid_geometry(vertex_count, index_count, vertex_at, index_at)) return {};
+        const auto position_at = [&](std::size_t index)
+        {
+            auto at = static_cast<std::size_t>(detail::header_bytes + index * 44u);
+            std::array<float, 3> position{};
+            for (auto& value : position) value = std::bit_cast<float>(detail::read32(bytes, at));
+            return position;
+        };
+        // Keep malformed geometry allocation-free. Triangle validation
+        // needs positions only; the full vertex channels are checked once.
+        if (!detail::valid_geometry(vertex_count, index_count, vertex_at, index_at, position_at)) return {};
         try
         {
-            // The complete immutable byte span already passed the same geometry
-            // checks above, before any allocation. Decode into its final owner
-            // rather than revalidate and copy a second vertex/index inventory.
             auto artifact = std::shared_ptr<Artifact>{new Artifact{}};
             artifact->vertices_.resize(vertex_count);
             artifact->indices_.resize(index_count);

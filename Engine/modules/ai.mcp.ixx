@@ -10,6 +10,7 @@ module;
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -325,6 +326,14 @@ export namespace epochengine::ai
         add("asset.model.generate", "Generate 3D Model", "Generate one local 3D model from the current approved PNG and reviewed Asset Generation controls. Import is separate.",
             McpToolCapability::author | McpToolCapability::execute, McpToolRisk::child_process,
             "{\"type\":\"object\",\"properties\":{\"source\":{\"type\":\"string\",\"enum\":[\"approved_reference\"]}},\"required\":[\"source\"],\"additionalProperties\":false}");
+        add("asset.reference.approve", "Approve 3D Reference", "Review the exact PNG visible in Asset Generation for use as the 3D reference.",
+            McpToolCapability::author, McpToolRisk::workspace_write);
+        add("asset.model.import", "Import Generated Model", "Review the exact generated GLB visible in Asset Generation and import it through the project model importer.",
+            McpToolCapability::author, McpToolRisk::workspace_write);
+        add("asset.model.import_shoreline", "Import Model on Ocean Shoreline", "Place the reviewed generated GLB upright on dry ground beside the admitted ocean, through the project model importer.",
+            McpToolCapability::author, McpToolRisk::workspace_write);
+        add("asset.model.setup_landing", "Set Up Landing Area", "Use the reviewed generated GLB as a solid beacon outside the selected forest. Move PlayerStart and set a 5 m reach objective in one transaction.",
+            McpToolCapability::author, McpToolRisk::workspace_write);
         add("forest.paint", "Paint Forest Area", "Paint one bounded procedural forest region on the selected generated planet through Forest Factory; uses the current tree recipe and host-reviewed location.",
             McpToolCapability::author, McpToolRisk::workspace_write);
         add("forest.configure", "Configure Plant", "Edit the current Plant Lab recipe through its existing history and asset publication; does not place trees or update painted regions.",
@@ -333,6 +342,25 @@ export namespace epochengine::ai
         add("forest.material", "Set Plant Texture", "Bind one exact admitted project texture to the current tree bark or foliage; uses the existing texture and Plant Lab owners.",
             McpToolCapability::author, McpToolRisk::workspace_write,
             "{\"type\":\"object\",\"properties\":{\"slot\":{\"type\":\"string\",\"enum\":[\"bark\",\"foliage\"]},\"texture\":{\"type\":\"string\"},\"artifact\":{\"type\":\"string\"}},\"required\":[\"slot\",\"texture\",\"artifact\"],\"additionalProperties\":false}");
+        add("forest.material.import", "Import and Apply Plant Texture", "Import the reviewed PNG visible in Asset Generation and bind its project texture to the current Plant Lab recipe.",
+            McpToolCapability::author, McpToolRisk::workspace_write,
+            "{\"type\":\"object\",\"properties\":{\"slot\":{\"type\":\"string\",\"enum\":[\"bark\",\"foliage\"]}},\"required\":[\"slot\"],\"additionalProperties\":false}");
+        add("forest.update", "Update Painted Trees", "Use the reviewed Plant Lab recipe to update its existing painted trees and save the current scene.",
+            McpToolCapability::author, McpToolRisk::workspace_write);
+        add("forest.species.add", "Add Plant to Selected Forest", "Add the current Plant Lab design to the selected saved forest area and preserve its existing trees.",
+            McpToolCapability::author, McpToolRisk::workspace_write);
+        add("scene.objective.set_reach", "Set Reach Objective", "Use the reviewed selected mesh and explicit range as the scene's reach objective.",
+            McpToolCapability::author, McpToolRisk::workspace_write);
+        add("scene.objective.clear", "Clear Reach Objective", "Remove the scene's reviewed reach objective.",
+            McpToolCapability::author, McpToolRisk::workspace_write);
+        add("scene.spawn.set_surface", "Set Planetary Player Start", "Move the primary PlayerStart to the reviewed shoreline model's terrain position.",
+            McpToolCapability::author, McpToolRisk::workspace_write);
+        add("scene.attachments.refresh", "Refresh Model and Spawn Placement", "Resample and save the terrain attachments on the selected planet, in one undoable change.",
+            McpToolCapability::author, McpToolRisk::workspace_write);
+        add("scene.collision.enable", "Enable Walking Collision", "Use the reviewed shoreline mesh bounds as a solid walking obstacle.",
+            McpToolCapability::author, McpToolRisk::workspace_write);
+        add("scene.collision.disable", "Disable Walking Collision", "Remove the walking obstacle from the reviewed shoreline mesh.",
+            McpToolCapability::author, McpToolRisk::workspace_write);
         add("terrain.generate", "Generate Terrain", "Build and generate an approved optional provider. Missing source must first pass visible package review and attachment.",
             McpToolCapability::author | McpToolCapability::build, McpToolRisk::child_process);
         return registry;
@@ -995,7 +1023,15 @@ export namespace epochengine::ai
                 std::string_view{"package.install"},
                 std::string_view{"terrain.generate"}, std::string_view{"forest.paint"},
                 std::string_view{"forest.configure"}, std::string_view{"forest.material"},
-                std::string_view{"asset.image.generate"}, std::string_view{"asset.model.generate"}};
+                std::string_view{"forest.material.import"},
+                std::string_view{"forest.update"}, std::string_view{"forest.species.add"},
+                std::string_view{"asset.image.generate"}, std::string_view{"asset.model.generate"},
+                std::string_view{"asset.reference.approve"}, std::string_view{"asset.model.import"},
+                std::string_view{"asset.model.import_shoreline"}, std::string_view{"asset.model.setup_landing"},
+                std::string_view{"scene.objective.set_reach"},
+                std::string_view{"scene.objective.clear"}, std::string_view{"scene.spawn.set_surface"},
+                std::string_view{"scene.attachments.refresh"},
+                std::string_view{"scene.collision.enable"}, std::string_view{"scene.collision.disable"}};
             return std::find(tools.begin(), tools.end(), name) != tools.end();
         }
     }
@@ -1014,6 +1050,29 @@ export namespace epochengine::ai
     [[nodiscard]] constexpr bool asset_generation_tool(std::string_view tool) noexcept
     {
         return tool == "asset.image.generate" || tool == "asset.model.generate";
+    }
+
+    [[nodiscard]] constexpr bool asset_review_tool(std::string_view tool) noexcept
+    {
+        return tool == "asset.reference.approve" || tool == "asset.model.import"
+            || tool == "asset.model.import_shoreline" || tool == "asset.model.setup_landing";
+    }
+
+    [[nodiscard]] constexpr bool walk_collision_tool(std::string_view tool) noexcept
+    {
+        return tool == "scene.collision.enable" || tool == "scene.collision.disable";
+    }
+
+    [[nodiscard]] constexpr bool scene_placement_tool(std::string_view tool) noexcept
+    {
+        return tool == "scene.objective.set_reach" || tool == "scene.objective.clear"
+            || tool == "scene.spawn.set_surface" || tool == "scene.attachments.refresh" || walk_collision_tool(tool);
+    }
+
+    [[nodiscard]] constexpr bool local_project_tool(std::string_view tool) noexcept
+    {
+        return asset_generation_tool(tool) || asset_review_tool(tool) || scene_placement_tool(tool)
+            || tool == "forest.material.import" || tool == "forest.update" || tool == "forest.species.add";
     }
 
     [[nodiscard]] inline McpValidation validate_project_tool_arguments(
@@ -1085,6 +1144,13 @@ export namespace epochengine::ai
                     return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_'; }))
                 return {McpErrorCode::invalid_argument, "package.install requires exactly package=<known registry ID>; paths and URLs are not accepted."};
             return {};
+        }
+        if (call.tool == "forest.material.import")
+        {
+            const auto* slot = argument(call, "slot");
+            return call.arguments.size() == 1u && slot && (slot->value == "bark" || slot->value == "foliage")
+                ? McpValidation{}
+                : McpValidation{McpErrorCode::invalid_argument, "Choose exactly one slot, bark or foliage. The Editor supplies the reviewed PNG."};
         }
         if (call.tool == "forest.material")
         {
@@ -1235,7 +1301,7 @@ export namespace epochengine::ai
                 if (starts(text,prefix)) { text = authoring_plan_detail::trim(text.substr(std::string_view{prefix}.size())); break; }
             if (starts(text,"please ")) text = authoring_plan_detail::trim(text.substr(7u));
             std::string_view object;
-            for (const auto verb : {"create ", "make ", "generate ", "add ", "configure ", "adjust ", "set ", "change ", "update "})
+            for (const auto verb : {"create ", "make ", "generate ", "add ", "configure ", "adjust ", "set ", "change ", "update ", "design "})
             {
                 if (creation_only && std::string_view{verb} != "create " && std::string_view{verb} != "make ") continue;
                 if (starts(text,verb)) { object = authoring_plan_detail::trim(text.substr(std::string_view{verb}.size())); break; }
@@ -1316,11 +1382,53 @@ export namespace epochengine::ai
         return false;
     }
 
+    struct PlantImageImportRequest final
+    {
+        std::string_view slot{};
+        bool update_painted_trees{};
+    };
+
+    [[nodiscard]] inline PlantImageImportRequest plant_image_import_request(std::string_view request) noexcept
+    {
+        using namespace project_request_detail;
+        request = authoring_plan_detail::trim(request);
+        for (const auto prefix : {"please ", "can you ", "could you ", "i want you to "})
+            if (starts(request, prefix)) { request.remove_prefix(std::string_view{prefix}.size()); break; }
+        if (starts(request, "please ")) request.remove_prefix(7u);
+        if (request.ends_with('.') || request.ends_with('!') || request.ends_with('?')) request.remove_suffix(1u);
+        constexpr std::string_view updateSuffix = ", then update painted trees";
+        const bool update = request.size() >= updateSuffix.size()
+            && equal(request.substr(request.size() - updateSuffix.size()), updateSuffix);
+        if (update) request.remove_suffix(updateSuffix.size());
+        for (const std::string_view prefix : {"import and apply the current image as ",
+            "import and apply the generated image as ", "import and apply the current png as "})
+        {
+            if (!starts(request, prefix)) continue;
+            const auto slot = request.substr(prefix.size());
+            if (equal(slot, "bark")) return {"bark", update};
+            if (equal(slot, "foliage")) return {"foliage", update};
+        }
+        return {};
+    }
+
     [[nodiscard]] inline bool plant_recipe_request(std::string_view request) noexcept
     {
         using namespace project_request_detail;
         if (explicit_generated_asset_request(request)) return false;
-        const auto object = action_object(request);
+        auto object = action_object(request);
+        const auto modifierEnd = object.find(' ');
+        const auto modifier = object.substr(0u, modifierEnd);
+        const auto unitStart = modifier.find('-');
+        if (modifierEnd != std::string_view::npos && unitStart != std::string_view::npos
+            && (equal(modifier.substr(unitStart + 1u), "meter") || equal(modifier.substr(unitStart + 1u), "metre")
+                || equal(modifier.substr(unitStart + 1u), "m")))
+        {
+            double height{};
+            const auto end = modifier.data() + unitStart;
+            const auto number = std::from_chars(modifier.data(), end, height, std::chars_format::fixed);
+            if (number.ec == std::errc{} && number.ptr == end && std::isfinite(height) && height > 0.0)
+                object = authoring_plan_detail::trim(object.substr(modifierEnd + 1u));
+        }
         if (contains(object,"theme") || contains(object,"script") || contains(object,"documentation")
             || contains(object,"file") || contains(object,"label")) return false;
         return subject(object,"tree") || subject(object,"birch") || subject(object,"oak")
@@ -1353,6 +1461,42 @@ export namespace epochengine::ai
             && !contains(desired,"theme") && !contains(desired,"script");
     }
 
+    struct ReachObjectiveRequest final
+    {
+        std::string_view tool{};
+        std::optional<double> radius{};
+    };
+
+    [[nodiscard]] inline ReachObjectiveRequest reach_objective_request(std::string_view request) noexcept
+    {
+        using namespace project_request_detail;
+        request = authoring_plan_detail::trim(request);
+        for (const std::string_view prefix : {"please ", "can you ", "could you ", "i want you to "})
+            if (starts(request, prefix)) { request.remove_prefix(prefix.size()); break; }
+        if (starts(request, "please ")) request.remove_prefix(7u);
+        if (request.ends_with('.') || request.ends_with('!') || request.ends_with('?'))
+            request.remove_suffix(1u);
+        if (equal(request, "clear the reach objective") || equal(request, "clear reach objective"))
+            return {"scene.objective.clear"};
+        constexpr std::string_view command = "set the selected model as the reach objective";
+        if (!starts(request, command)) return {};
+        request.remove_prefix(command.size());
+        constexpr std::string_view set = "scene.objective.set_reach";
+        if (request.empty()) return {set, 5.0};
+        if (!starts(request, " within ")) return {set};
+        request.remove_prefix(8u);
+        const auto unit = request.rfind(' ');
+        if (unit == std::string_view::npos) return {set};
+        const auto suffix = request.substr(unit + 1u);
+        if (!equal(suffix, "m") && !equal(suffix, "meters") && !equal(suffix, "metres")) return {set};
+        request = request.substr(0, unit);
+        double radius{};
+        const auto parsed = std::from_chars(request.data(), request.data() + request.size(), radius);
+        if (parsed.ec != std::errc{} || parsed.ptr != request.data() + request.size()
+            || !std::isfinite(radius) || radius < 0.25 || radius > 1000.0) return {set};
+        return {set, radius};
+    }
+
     // Only leading action requests select a lifecycle tool. Explanations,
     // negations and quoted examples remain conversation, not execution intent.
     [[nodiscard]] inline std::string_view project_lifecycle_request_tool(std::string_view request)
@@ -1363,8 +1507,38 @@ export namespace epochengine::ai
         for (const auto prefix : {"please ", "can you ", "could you ", "i want you to "})
             if (input.starts_with(prefix)) { input.remove_prefix(std::string_view{prefix}.size()); break; }
         if (input.starts_with("please ")) input.remove_prefix(7u);
+        if (const auto objective = reach_objective_request(input); !objective.tool.empty()) return objective.tool;
         if (image_generation_request(input)) return "asset.image.generate";
         if (approved_reference_model_request(input)) return "asset.model.generate";
+        auto assetReview = input;
+        if (assetReview.ends_with('.') || assetReview.ends_with('!') || assetReview.ends_with('?'))
+            assetReview.remove_suffix(1u);
+        if (assetReview == "set the player start at the selected shoreline model")
+            return "scene.spawn.set_surface";
+        if (assetReview == "refresh attached model and spawn placement")
+            return "scene.attachments.refresh";
+        if (assetReview == "enable walking collision on the selected shoreline model")
+            return "scene.collision.enable";
+        if (assetReview == "disable walking collision on the selected shoreline model")
+            return "scene.collision.disable";
+        if (assetReview == "approve the current png as the 3d reference"
+            || assetReview == "approve the visible png as the 3d reference")
+            return "asset.reference.approve";
+        if (assetReview == "import the current generated 3d model"
+            || assetReview == "import the visible generated 3d model")
+            return "asset.model.import";
+        if (assetReview == "import the current generated 3d model on the ocean shoreline"
+            || assetReview == "import the visible generated 3d model on the ocean shoreline")
+            return "asset.model.import_shoreline";
+        if (assetReview == "set up landing near the selected forest with the current generated 3d model")
+            return "asset.model.setup_landing";
+        if (!plant_image_import_request(input).slot.empty()) return "forest.material.import";
+        auto forestUpdate = input;
+        if (forestUpdate.ends_with('.') || forestUpdate.ends_with('!') || forestUpdate.ends_with('?'))
+            forestUpdate.remove_suffix(1u);
+        if (forestUpdate == "update painted trees" || forestUpdate == "update the painted trees"
+            || forestUpdate == "update painted trees with the current plant lab recipe") return "forest.update";
+        if (forestUpdate == "add the current plant lab tree to the selected forest") return "forest.species.add";
         if (plant_recipe_request(input))
         {
             const auto object = project_request_detail::representation_object(input);
@@ -1440,6 +1614,14 @@ export namespace epochengine::ai
             || input.starts_with("plant a forest") || input.starts_with("add a forest area")) return "forest.paint";
         if (input.starts_with("cancel project build")) return "project.stop";
         return {};
+    }
+
+    [[nodiscard]] inline std::string_view local_project_request_tool(std::string_view request)
+    {
+        request = authoring_plan_detail::trim(request);
+        if (request.starts_with("/tool ")) request.remove_prefix(6u);
+        const auto tool = project_lifecycle_request_tool(request);
+        return local_project_tool(tool) ? tool : std::string_view{};
     }
 
     // Only a host that has explicit permission to use creation defaults may

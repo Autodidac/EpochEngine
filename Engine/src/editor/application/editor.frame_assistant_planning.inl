@@ -102,9 +102,11 @@
 
         auto request_ai_tool_plan = [&]() -> bool
         {
-            if (editor.assetGenerationPending || ai::asset_generation_tool(editor.aiToolExecution))
+            if (editor.assetGenerationPending || editor.modelShorelinePending || ai::asset_generation_tool(editor.aiToolExecution))
             {
-                chat.append_status("An asset operation is active. Its approved request and output receipt are retained; wait for completion or use Cancel in Asset Generation.");
+                chat.append_status(editor.modelShorelinePending
+                    ? "A shoreline import is active. Wait for its result or press Escape to stop."
+                    : "An asset operation is active. Its approved request and output receipt are retained; wait for completion or use Cancel in Asset Generation.");
                 return false;
             }
             if (editor.aiToolAwaitingReply || chat.pending
@@ -146,15 +148,84 @@
                 return false;
             }
 #endif
+            const auto forestAssetRequest = epochengine::editor::ai_chat_goal::forest_asset_request(request);
+            if (forestAssetRequest)
+            {
+                const bool tree = forestAssetRequest.kind == epochengine::editor::ai_chat_goal::ForestAssetKind::tree;
+                if (forestAssetRequest.image.empty() || (tree && forestAssetRequest.foliage.empty()))
+                {
+                    chat.append_status(tree ? "Provide Bark: and Foliage: prompts on separate lines."
+                        : "Provide an image description after the landing beacon request.");
+                    return true;
+                }
+                const auto* target = selected_forest_species_target(editor);
+                if (!has_open_project(editor) || !target || !editor.sceneDocument.initialized()
+                    || editor.sceneDocumentRevision == 0u || model_import_scene_busy(editor)
+                    || editor.aiPackageRequest || editor.aiAuthoringApplyPending || !editor.aiToolExecution.empty())
+                {
+                    chat.append_status("Open a stopped planetary project and select one tree from the saved forest.");
+                    return true;
+                }
+                if (editor.aiGoalTools.forest_asset_target && editor.aiGoalTools.objective == request
+                    && !editor.aiGoalTools.operation().empty())
+                {
+                    chat.append_status("This forest asset sequence is already staged. Review the current action or say Resume Goal to continue it.");
+                    return true;
+                }
+                if (tree && !capture_ai_forest_recipe_binding(editor, "forest.species.add"))
+                {
+                    chat.append_status(editor.aiToolStatus);
+                    return true;
+                }
+                editor.aiGoalTools = {};
+                auto& sequence = editor.aiGoalTools;
+                sequence.enabled = true;
+                const auto generation = editor.projectLifecycle.evidence().generations.selected_project.generation;
+                sequence.bind_request(request, editor.projectId, editor.projectRoot, generation);
+                sequence.project_id = editor.projectId;
+                sequence.project_root = editor.projectRoot;
+                sequence.project_generation = generation;
+                sequence.forest_asset_target = target->sceneObjectId;
+                sequence.forest_asset_scene_revision = editor.sceneDocumentRevision;
+                sequence.forest_asset_kind = forestAssetRequest.kind;
+                if (tree)
+                {
+                    sequence.forest_asset_recipe_revision = editor.plantLabDocument.revision;
+                    sequence.forest_asset_recipe_hash = editor.plantLabDocument.contentHash;
+                }
+                editor.aiGoal = editor.aiGoalDraft = sequence.objective;
+                editor.aiGoalActive = editor.aiGoalRunning = editor.aiGoalPlanNextQueued = true;
+                editor.aiGoalCompletedMilestones = 0u;
+                editor.aiToolPlan = {};
+                editor.aiToolPlanApplied = false;
+                chat.append_user_message(std::string{request});
+                chat.append_status(tree ? "Custom tree queued. Review each texture generation and application separately, then approve adding the tree to the selected forest."
+                    : "Landing beacon queued. Review image generation, reference approval, 3D generation, placement and Save separately.");
+                return true;
+            }
             const auto roundTripRequest = epochengine::editor::ai_chat_goal::round_trip_request(request);
             const bool roundTrip = roundTripRequest != epochengine::editor::ai_chat_goal::RoundTripRequest::none;
             const bool landingForest = ai_project_initial_landing_forest(request);
-            if (roundTrip || landingForest || (epochengine::ai::planet_forest_project_request(request)
+            const bool textureUpdate = ai::plant_image_import_request(request).update_painted_trees;
+            const bool existingTextureUpdate = textureUpdate && editor.aiGoalActive && editor.aiGoalTools.texture_update
+                && editor.aiGoalTools.objective == request && !editor.aiGoalTools.operation().empty();
+            if (existingTextureUpdate && editor.aiGoalTools.stage != 0u)
+            {
+                chat.append_status("The texture is already applied. Review Update Painted Trees, or resume the goal to prepare that review.");
+                return true;
+            }
+            const bool startTextureUpdate = textureUpdate && (!existingTextureUpdate || !editor.aiGoalRunning);
+            if (roundTrip || landingForest || startTextureUpdate || (epochengine::ai::planet_forest_project_request(request)
                 && ai::project_lifecycle_request_tool(request) == "project.create"))
             {
                 if (!editor.aiToolExecution.empty() || editor.aiPackageRequest || editor.aiAuthoringApplyPending)
                 {
                     chat.append_status("Finish or cancel the current project action before starting another project goal.");
+                    return false;
+                }
+                if (startTextureUpdate && !has_open_project(editor))
+                {
+                    chat.append_status("Open a project before requesting a Plant Lab texture and painted-tree update.");
                     return false;
                 }
                 const auto* currentProfile = roundTrip ? editor_find_project_profile(editor.projectId) : nullptr;
@@ -170,7 +241,7 @@
                 editor.aiGoalTools.initial_landing_forest = landingForest;
                 editor.aiGoalTools.configure_plant = !landingForest && ai::custom_plant_design_requested(request);
                 editor.aiGoalTools.bind_request(request, editor.projectId, editor.projectRoot,
-                    editor.projectLifecycle.evidence().generations.selected_project.generation);
+                    editor.projectLifecycle.evidence().generations.selected_project.generation, startTextureUpdate);
                 if (landingForest) editor.aiGoalTools.run_after_save = false;
                 editor.aiGoalPackageReceipt.reset();
                 if (roundTrip)
@@ -194,6 +265,8 @@
                         : "Project goal: save, close, then reopen this project. Each action needs its own approval and host result.");
                 else if (landingForest)
                     chat.append_status("Project goal: create the planet, review where to plant the initial forest with the current Plant Lab recipe, then save. The native plant set, custom textures, the extra tree, the beacon and gameplay remain separate steps.");
+                else if (startTextureUpdate)
+                    chat.append_status("Review the texture import and Plant Lab application first. After the recipe saves, review the painted-tree update separately.");
                 else
                 {
                     std::string summary = editor.aiGoalTools.configure_plant
@@ -220,7 +293,254 @@
             editor.aiToolAssetBinding.clear();
             editor.aiToolAssetWork.clear();
             editor.aiToolAssetActivityId = 0u;
+            editor.aiToolPlacementTarget = scene::kInvalidSceneObjectId;
             const auto generationTool = ai::project_lifecycle_request_tool(request);
+            if (editor.aiGoalRunning && editor.aiGoalTools.forest_asset_target
+                && (generationTool != editor.aiGoalTools.operation() || request != editor.aiGoalTools.next_request(editor.aiGoal)
+                    || !forest_asset_step_current(editor, generationTool)))
+            {
+                editor.aiToolPlan = {};
+                editor.aiGoalTools.stopped = true;
+                editor.aiGoalRunning = editor.aiGoalPlanNextQueued = false;
+                chat.append_status("The forest asset request, selected forest, scene, recipe or generated output changed. The pending action was not prepared.");
+                return true;
+            }
+            if (ai::scene_placement_tool(generationTool))
+            {
+                editor.requestedMainSurface = EditorMainSurface::Scene;
+                editor.aiToolPlan = {};
+                editor.aiToolPlanApplied = editor.aiToolAwaitingReply = false;
+                if (auto* activity = chat.ensure_host_activity()) activity->stream_live = false;
+                const auto objective = ai::reach_objective_request(request);
+                const bool clear = generationTool == "scene.objective.clear";
+                const bool spawn = generationTool == "scene.spawn.set_surface";
+                const bool collision = ai::walk_collision_tool(generationTool);
+                const bool refresh = generationTool == "scene.attachments.refresh";
+                const auto* target = refresh ? selected_terrain_attachment_refresh_target(editor)
+                    : clear ? nullptr : selected_editor_reach_model(editor);
+                if (!has_open_project(editor) || !editor.sceneDocument.initialized())
+                    editor.aiToolStatus = "Open a game scene before reviewing placement.";
+                else if ((spawn || collision) && (!target || !target->terrainAttachment))
+                    editor.aiToolStatus = "Select one model attached to the shoreline before reviewing this change.";
+                else if (refresh && !target)
+                    editor.aiToolStatus = "Select the generated terrain, an attached model, or PlayerStart.";
+                else if (!spawn && !collision && !refresh && !clear && !objective.radius)
+                    editor.aiToolStatus = "Use a reach radius from 0.25 to 1000 m, for example: Set the selected model as the reach objective within 5 m.";
+                else if (!clear && !target)
+                    editor.aiToolStatus = "Select one visible model object in 3D Objects before reviewing a reach objective.";
+                else if (refresh)
+                {
+                    editor.aiToolPlacementTarget = target->sceneObjectId;
+                    editor.aiToolPlan = admit_ai_project_tool_reply(request,
+                        "EPOCH_TOOL_PLAN_V1\nTITLE Refresh Model and Spawn Placement\n"
+                        "SUMMARY Snap the attached models and spawns on the selected terrain to their current ground. Save the scene after the complete refresh.\n"
+                        "CALL scene.attachments.refresh\nEND\n");
+                    editor.aiToolStatus = !editor.aiToolPlan ? editor.aiToolPlan.message
+                        : epochengine::format_text("Review {}. Approval snaps and saves all models and spawns attached to its terrain. Undo restores their prior placement.", target->name);
+                }
+                else if (collision)
+                {
+                    const bool enable = generationTool == "scene.collision.enable";
+                    editor.aiToolPlacementTarget = target->sceneObjectId;
+                    editor.aiToolPlan = admit_ai_project_tool_reply(request, enable
+                        ? "EPOCH_TOOL_PLAN_V1\nTITLE Enable Walking Collision\nSUMMARY Use the reviewed mesh bounds as a walking obstacle.\nCALL scene.collision.enable\nEND\n"
+                        : "EPOCH_TOOL_PLAN_V1\nTITLE Disable Walking Collision\nSUMMARY Remove the walking obstacle from the reviewed mesh.\nCALL scene.collision.disable\nEND\n");
+                    editor.aiToolStatus = !editor.aiToolPlan ? editor.aiToolPlan.message
+                        : epochengine::format_text("Review {} walking collision for {}. Save Project retains the change.",
+                            enable ? "enabling" : "disabling", target->name);
+                }
+                else
+                {
+                    if (target) editor.aiToolPlacementTarget = target->sceneObjectId;
+                    editor.aiToolPlan = admit_ai_project_tool_reply(request, spawn
+                        ? "EPOCH_TOOL_PLAN_V1\nTITLE Set Planetary Player Start\nSUMMARY Move the primary PlayerStart to the reviewed shoreline model.\nCALL scene.spawn.set_surface\nEND\n" : clear
+                        ? "EPOCH_TOOL_PLAN_V1\nTITLE Clear Reach Objective\nSUMMARY Remove the current scene objective.\nCALL scene.objective.clear\nEND\n"
+                        : "EPOCH_TOOL_PLAN_V1\nTITLE Set Reach Objective\nSUMMARY Complete the objective when the player reaches the reviewed model.\nCALL scene.objective.set_reach\nEND\n");
+                    editor.aiToolStatus = !editor.aiToolPlan ? editor.aiToolPlan.message : spawn
+                        ? epochengine::format_text("Review moving the primary PlayerStart to {}. Save Project retains the placement.", target->name) : clear
+                        ? "Review clearing the scene's reach objective. Save Project retains the change."
+                        : epochengine::format_text("Review reaching {} within {} m. The scene uses this exact object. Save Project retains the objective.",
+                            target->name, *objective.radius);
+                }
+                chat.append_status(editor.aiToolStatus);
+                return true;
+            }
+            if (ai::asset_review_tool(generationTool))
+            {
+                editor.requestedMainSurface = EditorMainSurface::AssetGeneration;
+                editor.aiToolPlan = {};
+                editor.aiToolPlanApplied = editor.aiToolAwaitingReply = false;
+                if (auto* activity = chat.ensure_host_activity()) activity->stream_live = false;
+                if (!chat.activeReferenceImages.empty())
+                {
+                    chat.append_status("Review the output visible in Asset Generation. Chat attachments cannot choose the output for this approval.");
+                    return true;
+                }
+                const bool shoreline = generationTool == "asset.model.import_shoreline";
+                const bool landing = generationTool == "asset.model.setup_landing";
+                const bool model = shoreline || landing || generationTool == "asset.model.import";
+                editor.aiToolAssetBinding = asset_output_review_binding(editor, model, editor.aiToolStatus);
+                if (editor.aiToolAssetBinding.empty())
+                {
+                    chat.append_status(editor.aiToolStatus);
+                    return true;
+                }
+                auto& state = editor.assetGeneration;
+                if (model && (!review_generated_project_model(editor)
+                    || ((shoreline || landing) && !prepare_model_shoreline_review(editor, landing))))
+                {
+                    state.status = editor.aiToolStatus = editor.projectStatus;
+                    chat.append_status(editor.aiToolStatus);
+                    return true;
+                }
+                editor.aiToolPlan = admit_ai_project_tool_reply(request, landing
+                    ? "EPOCH_TOOL_PLAN_V1\nTITLE Set Up Landing Area\n"
+                      "SUMMARY Place the solid beacon and PlayerStart outside the reviewed forest and set a 5 m reach objective.\n"
+                      "CALL asset.model.setup_landing\nEND\n"
+                    : shoreline
+                    ? "EPOCH_TOOL_PLAN_V1\nTITLE Import Model on Ocean Shoreline\n"
+                      "SUMMARY Find dry ground beside the reviewed ocean and place the GLB upright. Save Project retains it.\n"
+                      "CALL asset.model.import_shoreline\nEND\n"
+                    : model
+                    ? "EPOCH_TOOL_PLAN_V1\nTITLE Import Generated Model\n"
+                      "SUMMARY Import this reviewed GLB and its mesh materials into the current scene in metres.\n"
+                      "CALL asset.model.import\nEND\n"
+                    : "EPOCH_TOOL_PLAN_V1\nTITLE Approve 3D Reference\n"
+                      "SUMMARY Use the visible PNG as the 3D reference.\nCALL asset.reference.approve\nEND\n");
+                const auto& output = (model ? state.generated_model : state.reference)->result;
+                const auto instructions = landing
+                    ? "Review the exact GLB. Approval samples a walking route outside the selected forest. If a route is found, it imports the solid beacon, moves PlayerStart, and replaces the current objective with a 5 m reach objective. Save Project retains the setup.\nGLB: "
+                    : shoreline
+                    ? "Inspect the Textured, Solid and Wireframe views. Approval searches for dry terrain. Verify collision in the built project.\nGLB: "
+                    : model ? "Inspect the Textured, Solid and Wireframe views before approving import in metres. "
+                              "Terrain placement and collision are separate checks.\nGLB: "
+                            : "Inspect the visible PNG before approving it as the 3D reference.\nPNG: ";
+                editor.aiToolStatus = editor.aiToolPlan
+                    ? instructions
+                        + display_project_path(output.output) + "\nSHA-256: " + output.output_sha256
+                    : editor.aiToolPlan.message;
+                if (editor.aiToolPlan && model && !editor.projectStatus.empty())
+                {
+                    state.status = editor.projectStatus;
+                    editor.aiToolStatus += "\n" + editor.projectStatus;
+                }
+                if (editor.aiToolPlan && shoreline)
+                    editor.aiToolStatus += "\nTarget: dry ocean shoreline on "
+                        + editor.modelImportReview->shoreline->query.body.name + ".";
+                if (editor.aiToolPlan && landing)
+                {
+                    const auto& target = *editor.modelImportReview->shoreline;
+                    editor.aiToolStatus += epochengine::format_text("\nTarget: selected forest on {} ({} m radius).",
+                        target.query.body.name, target.forest->radius_meters);
+                }
+                chat.append_status(editor.aiToolStatus);
+                return static_cast<bool>(editor.aiToolPlan);
+            }
+            if (generationTool == "forest.material.import")
+            {
+                editor.requestedMainSurface = EditorMainSurface::AssetGeneration;
+                editor.aiToolPlan = {};
+                editor.aiToolPlanApplied = editor.aiToolAwaitingReply = false;
+                if (auto* activity = chat.ensure_host_activity()) activity->stream_live = false;
+                if (!chat.activeReferenceImages.empty())
+                {
+                    editor.aiToolStatus = "Open the PNG in Asset Generation to review it in the current project. Chat attachments do not select the import source.";
+                    chat.append_status(editor.aiToolStatus);
+                    return true;
+                }
+                editor.aiToolAssetBinding = asset_output_review_binding(editor, false, editor.aiToolStatus);
+                if (editor.aiToolAssetBinding.empty() || !capture_ai_forest_recipe_binding(editor, generationTool))
+                {
+                    chat.append_status(editor.aiToolStatus);
+                    return true;
+                }
+                const std::string slot{ai::plant_image_import_request(request).slot};
+                editor.aiToolPlan = admit_ai_project_tool_reply(request,
+                    "EPOCH_TOOL_PLAN_V1\nTITLE Import and apply Plant Lab texture\n"
+                    "SUMMARY Import the visible PNG and save it in the current Plant Lab recipe.\n"
+                    "CALL forest.material.import slot=" + slot + "\nEND\n");
+                const auto& result = editor.assetGeneration.reference->result;
+                editor.aiToolStatus = editor.aiToolPlan
+                    ? "Review the visible PNG before approving import and applying it to " + slot
+                        + " in the current Plant Lab recipe.\nPNG: " + display_project_path(result.output)
+                        + "\nSHA-256: " + result.output_sha256
+                    : editor.aiToolPlan.message;
+                chat.append_status(editor.aiToolStatus);
+                return static_cast<bool>(editor.aiToolPlan);
+            }
+            if (generationTool == "forest.species.add")
+            {
+                editor.requestedMainSurface = EditorMainSurface::ForestFactory;
+                editor.aiToolPlan = {};
+                editor.aiToolPlanApplied = editor.aiToolAwaitingReply = false;
+                if (auto* activity = chat.ensure_host_activity()) activity->stream_live = false;
+                const auto* target = selected_forest_species_target(editor);
+                if (!target)
+                    editor.aiToolStatus = "Select one tree from the saved forest before reviewing an addition.";
+                else if (capture_ai_forest_recipe_binding(editor, generationTool))
+                {
+                    editor.aiToolPlacementTarget = target->sceneObjectId;
+                    editor.aiToolPlan = admit_ai_project_tool_reply(request,
+                        "EPOCH_TOOL_PLAN_V1\nTITLE Add Plant to Selected Forest\n"
+                        "SUMMARY Sample unoccupied ground in the selected forest and save the current Plant Lab design alongside its original trees.\n"
+                        "CALL forest.species.add\nEND\n");
+                    editor.aiToolStatus = !editor.aiToolPlan ? editor.aiToolPlan.message
+                        : epochengine::format_text("Review the forest containing {} and Plant Lab revision {}. Approval adds rooted trees within the saved area.",
+                            target->name, editor.aiToolPlantRevision);
+                }
+                chat.append_status(editor.aiToolStatus);
+                return true;
+            }
+            if (generationTool == "forest.update")
+            {
+                editor.requestedMainSurface = EditorMainSurface::ForestFactory;
+                editor.aiToolPlan = {};
+                editor.aiToolPlanApplied = editor.aiToolAwaitingReply = false;
+                if (auto* activity = chat.ensure_host_activity()) activity->stream_live = false;
+                if (!capture_ai_forest_recipe_binding(editor, generationTool))
+                {
+                    if (editor.aiGoalRunning && editor.aiGoalTools.texture_update)
+                    {
+                        editor.aiGoalTools.stopped = true;
+                        editor.aiGoalRunning = editor.aiGoalPlanNextQueued = false;
+                    }
+                    chat.append_status(editor.aiToolStatus);
+                    return true;
+                }
+                if (editor.aiGoalRunning && editor.aiGoalTools.texture_update
+                    && !editor.aiGoalTools.matches_imported_recipe(editor.sceneDocumentRevision,
+                        editor.plantLabDocument.revision, editor.plantLabDocument.contentHash))
+                {
+                    editor.aiGoalTools.stopped = true;
+                    editor.aiGoalRunning = editor.aiGoalPlanNextQueued = false;
+                    editor.aiToolStatus = "The scene or recipe changed after the texture was applied. Request a fresh Update Painted Trees review for the current recipe.";
+                    chat.append_status(editor.aiToolStatus);
+                    return true;
+                }
+                const auto treeCount = std::ranges::count_if(editor.entities, painted_tree_uses_plant_lab);
+                if (treeCount == 0)
+                {
+                    if (editor.aiGoalRunning && editor.aiGoalTools.texture_update)
+                    {
+                        editor.aiGoalTools.stopped = true;
+                        editor.aiGoalRunning = editor.aiGoalPlanNextQueued = false;
+                    }
+                    editor.aiToolStatus = "No painted trees use this project's Plant Lab recipe. Paint a forest area first.";
+                    chat.append_status(editor.aiToolStatus);
+                    return true;
+                }
+                editor.aiToolPlan = admit_ai_project_tool_reply(request,
+                    "EPOCH_TOOL_PLAN_V1\nTITLE Update Painted Trees\n"
+                    "SUMMARY Apply the current Plant Lab recipe to its painted trees and save the current scene.\n"
+                    "CALL forest.update\nEND\n");
+                editor.aiToolStatus = editor.aiToolPlan
+                    ? "Review an update for " + std::to_string(treeCount) + (treeCount == 1 ? " painted tree" : " painted trees")
+                        + " using Plant Lab recipe revision " + std::to_string(editor.aiToolPlantRevision)
+                        + ". Approval applies the recipe and saves the current scene. Scene Undo restores the previous design."
+                    : editor.aiToolPlan.message;
+                chat.append_status(editor.aiToolStatus);
+                return static_cast<bool>(editor.aiToolPlan);
+            }
             if (ai::asset_generation_tool(generationTool))
             {
                 // Preparing a local proposal starts no worker. Setup and
@@ -1077,6 +1397,12 @@
             default:
                 return false;
             }
+        };
+        const auto has_forest_asset_approval = [&](std::string_view request) {
+            return editor.aiGoalActive && editor.aiGoalTools.forest_asset_target
+                && editor.aiToolPlan && !editor.aiToolPlanApplied
+                && editor.aiToolPlan.plan.call.tool == editor.aiGoalTools.operation()
+                && ai_chat_confirmation(request).has_value();
         };
         const auto queue_text_message_action = [&](std::string_view request) -> bool
         {

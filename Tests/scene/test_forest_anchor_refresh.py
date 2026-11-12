@@ -26,7 +26,10 @@ class ForestAnchorRefresh(unittest.TestCase):
         helper_marker = "[[nodiscard]] std::optional<std::array<double,3>> verified_forest_surface_anchor("
         if helper_marker in production:
             functions += "\n" + definition(production, helper_marker)
-        functions += "\n" + definition(production, "[[nodiscard]] bool refresh_forest_factory_instances(")
+        for marker in ("[[nodiscard]] bool painted_tree_uses_plant_lab(",
+                       "struct PaintedTreeUpdateResult final",
+                       "[[nodiscard]] PaintedTreeUpdateResult refresh_forest_factory_instances("):
+            functions += "\n" + definition(production, marker, marker.startswith("struct "))
         preview = (ROOT / "Engine/modules/render.preview_grid.ixx").read_text(encoding="utf-8")
         camera = (ROOT / "Engine/src/render/render.preview_camera.cpp").read_text(encoding="utf-8")
         precise = definition(preview, "    export struct PreciseMeshTransform final", True).replace("export ", "")
@@ -228,7 +231,8 @@ int main(){using namespace epochengine;
  assert(refresh_forest_factory_instances(rotated));const auto anchored=tree(rotated,10);
  assert(std::abs((*anchored.positionAnchor)[0]-(10-2*6371000.0))<1e-5&&std::abs((*anchored.positionAnchor)[1]-20)<1e-5&&(*anchored.positionAnchor)[2]==30);
  assert(anchored.position==original.position&&anchored.rotation==original.rotation&&anchored.scale==original.scale);
- auto failedSave=fixture();saving=false;assert(refresh_forest_factory_instances(failedSave));assert(failedSave.plantLabStatus.find("saving failed")!=std::string::npos);
+ auto failedSave=fixture();saving=false;const auto unsaved=refresh_forest_factory_instances(failedSave);
+ assert(unsaved.applied&&!unsaved.saved&&failedSave.plantLabStatus.find("saving failed")!=std::string::npos);
  return 0;}
 '''
 

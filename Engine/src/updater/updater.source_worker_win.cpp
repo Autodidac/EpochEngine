@@ -15,6 +15,7 @@ module updater.system;
 
 import updater.config;
 import updater.source_access;
+import core.path;
 
 #if defined(_WIN32)
 namespace epochengine::updater
@@ -1138,9 +1139,9 @@ Invoke-SourceHandoff 'commit'
             << "Remove-Item -LiteralPath $activeRunPath -Force -ErrorAction SilentlyContinue\n"
             << "Remove-Item Env:EPOCH_UPDATER_SHELL_AUTO_COMMAND -Force -ErrorAction SilentlyContinue\n"
             << "Remove-Item Env:EPOCH_EDITOR_AUTO_COMMAND -Force -ErrorAction SilentlyContinue\n"
-            << "$env:EPOCH_POST_UPDATE_STARTUP_DELAY_MS = '3000'\n"
-            << "$restartedProcess = Start-Process -FilePath $targetExe -WorkingDirectory $targetDir -PassThru\n"
-            << "Remove-Item Env:EPOCH_POST_UPDATE_STARTUP_DELAY_MS -Force -ErrorAction SilentlyContinue\n"
+            << "$env:EPOCH_POST_UPDATE_STARTUP_DELAY_MS = '3000'\n";
+        handoff_script::write_windows_restart(ps, epochengine::core::path::candidate_data_root());
+        ps  << "Remove-Item Env:EPOCH_POST_UPDATE_STARTUP_DELAY_MS -Force -ErrorAction SilentlyContinue\n"
             << "Start-Sleep -Milliseconds 900\n"
             << "try {\n"
             << "  $focusShell = New-Object -ComObject WScript.Shell\n"

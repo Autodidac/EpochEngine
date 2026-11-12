@@ -98,6 +98,7 @@
             }
 
             const bool changedSurface = editor.mainSurface != surface;
+            if (changedSurface) end_editor_lod_inspection(editor, ctx.get());
             if (changedSurface && editor.mainSurface == EditorMainSurface::ForestFactory
                 && editor.forestProjectCamera && ctx)
             {

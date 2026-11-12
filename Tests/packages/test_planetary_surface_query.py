@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import subprocess
+import tempfile
 import time
 import unittest
 from Tests.build.test_opengl_sprite_stream import definition
@@ -41,10 +42,11 @@ PROVIDER_QUERY
 namespace probe {
 using namespace epochengine::project_planetary;
 using Clock=std::chrono::steady_clock;std::atomic_uint64_t sequence{};
-unsigned executions{},providerAdmissions{};bool sourceCurrent=true,meshCurrent=true,bodyCurrent=true,providerReady=true,receiptBound=true,mutateAfter=false;
+unsigned executions{},providerAdmissions{},failAtExecution{};bool sourceCurrent=true,meshCurrent=true,bodyCurrent=true,providerReady=true,receiptBound=true,mutateAfter=false;
 std::string recipe="recipe-a",mutation;std::vector<GeneratedBody> bodies;
 std::stop_source cancellation;
 namespace process {
+constexpr std::size_t maximum_arguments=64u;
 struct ExecutableIdentity {int id=1;};struct EnvironmentVariable{};
 struct Active {bool active()const{return true;}};bool busy{};
 std::optional<Active> active_in_group(std::string_view){return busy?std::optional{Active{}}:std::nullopt;}
@@ -64,7 +66,9 @@ struct AdmittedProvider {fs::path executable="provider.exe",working=".";std::opt
 std::optional<AdmittedProvider> admitted_provider(const fs::path&,const std::string&,Result&,bool require_receipt=false,std::string_view={}){++providerAdmissions;CHECK(require_receipt);if(!providerReady)return {};AdmittedProvider value;if(!receiptBound)value.identity.reset();return value;}
 bool execute(const fs::path&,std::vector<std::string> args,const fs::path&,const fs::path&,std::stop_token,
  const std::vector<process::EnvironmentVariable>&,std::uint64_t timeout,Result&,std::optional<process::ExecutableIdentity> identity){
- ++executions;CHECK(timeout==2'000'000'000ull&&identity);args.insert(args.begin(),"provider");std::vector<char*> raw;for(auto& a:args)raw.push_back(a.data());
+ ++executions;CHECK(timeout==2'000'000'000ull&&identity&&args.size()<=process::maximum_arguments);
+ if(executions==failAtExecution)return false;
+ args.insert(args.begin(),"provider");std::vector<char*> raw;for(auto& a:args)raw.push_back(a.data());
  const auto code=planet_surface_query_main(int(raw.size()),raw.data());if(code)return false;
  if(!mutation.empty()&&mutation!="cancel"){std::ifstream in(args[2],std::ios::binary);std::string data{std::istreambuf_iterator<char>{in},{}};in.close();
   if(mutation=="trailing")data+="extra=1\n";
@@ -120,20 +124,43 @@ int main(int argc,char** argv){
  q.settings.ocean_surface=true;
  const auto shore=probe::query_ocean_shoreline(root,q,100.0,{});
  CHECK(shore.code==SurfaceCode::ready&&shore.land.height_meters>0&&shore.water.height_meters<0);
- CHECK(probe::executions>beforeShore&&probe::executions<=beforeShore+5);
+ CHECK(probe::executions>beforeShore&&probe::executions<=beforeShore+15);
  const auto& land=shore.land.radial_up;const auto& water=shore.water.radial_up;
  CHECK(2*q.body.radius_meters*std::asin(std::hypot(land[0]-water[0],land[1]-water[1],land[2]-water[2])*0.5)<=100);
  const auto again=probe::query_ocean_shoreline(root,q,100.0,{});
  CHECK(again.code==SurfaceCode::ready&&again.land.radial_up==land&&again.water.radial_up==water);
+ q.direction=land;
+ const auto beforeLanding=probe::executions;
+ const auto site=probe::query_forest_landing_site(root,q,20.0,1.5,{});
+ CHECK(site.code==SurfaceCode::ready&&site.beacon.height_meters>0&&site.player_start.height_meters>0);
+ CHECK(probe::executions==beforeLanding+4);
+ const auto arc=[&](const auto& a,const auto& b){return 2*q.body.radius_meters*std::asin(
+  std::hypot(a[0]-b[0],a[1]-b[1],a[2]-b[2])*.5);};
+ CHECK(std::abs(arc(q.direction,site.beacon.radial_up)-29.5)<1e-5);
+ CHECK(std::abs(arc(site.beacon.radial_up,site.player_start.radial_up)-19.5)<1e-5);
+ const auto second=probe::query_forest_landing_site(root,q,20.0,1.5,{});
+ CHECK(second.code==SurfaceCode::ready&&second.beacon.radial_up==site.beacon.radial_up
+  &&second.player_start.radial_up==site.player_start.radial_up);
+ CHECK(probe::query_forest_landing_site(root,q,20.0,q.body.radius_meters,{}).code==SurfaceCode::invalid);
+ probe::sourceCurrent=false;
+ CHECK(probe::query_forest_landing_site(root,q,20.0,1.5,{}).code==SurfaceCode::stale);
+ probe::sourceCurrent=true;
+ std::stop_source cancelledLanding;cancelledLanding.request_stop();
+ CHECK(probe::query_forest_landing_site(root,q,20.0,1.5,cancelledLanding.get_token()).code==SurfaceCode::cancelled);
+ q.direction={1,0,0};
  probe::mutation="cancel";
  CHECK(probe::query_ocean_shoreline(root,q,100.0,probe::cancellation.get_token()).code==SurfaceCode::cancelled);
  probe::mutation.clear();probe::cancellation=std::stop_source{};q.settings.ocean_surface=false;
  SurfaceBatchQuery batch{q,{}};for(unsigned i=0;i<64;++i){const double angle=i*0.07;batch.directions.push_back({std::cos(angle),std::sin(angle),0});}
  const auto prior=probe::executions;const auto sampled=probe::query_surfaces(root,batch,{});
- CHECK(sampled.code==SurfaceCode::ready&&sampled.operation.ok&&sampled.samples.size()==64&&probe::executions==prior+1);
+ CHECK(sampled.code==SurfaceCode::ready&&sampled.operation.ok&&sampled.samples.size()==64&&probe::executions==prior+4);
  const core::Universe world{q.settings.seed,{q.settings.size_reference_body,q.settings.reference_radius_meters}};
  for(unsigned i=0;i<64;++i){const auto& d=batch.directions[i];const auto expected=core::sample_surface(world.body(q.body.id),{d[0],d[1],d[2]});
   CHECK(std::abs(sampled.samples[i].height_meters-expected.height)<1e-8&&sampled.samples[i].request_id==q.request_id);}
+ probe::failAtExecution=probe::executions+2;
+ const auto partial=probe::query_surfaces(root,batch,{});
+ CHECK(partial.code==SurfaceCode::provider_failure&&partial.samples.empty()&&probe::executions==probe::failAtExecution);
+ probe::failAtExecution=0;
  const auto no_batch_execution=[&](SurfaceCode code){const auto before=probe::executions;const auto value=probe::query_surfaces(root,batch,{});CHECK(value.code==code&&value.samples.empty()&&probe::executions==before);};
  auto kept=batch.directions;batch.directions.clear();no_batch_execution(SurfaceCode::invalid);batch.directions=kept;
  batch.directions.push_back({1,0,0});no_batch_execution(SurfaceCode::invalid);batch.directions.pop_back();
@@ -149,7 +176,7 @@ int main(int argc,char** argv){
  probe::cancellation.request_stop();
  const auto cancelled=probe::query_surfaces(root,batch,probe::cancellation.get_token());CHECK(cancelled.code==SurfaceCode::cancelled&&cancelled.samples.empty());
  probe::cancellation=std::stop_source{};probe::mutation="cancel";const auto stopped=probe::query_surfaces(root,batch,probe::cancellation.get_token());CHECK(stopped.code==SurfaceCode::cancelled&&stopped.samples.empty());
- std::cout<<"ready_samples="<<ready<<" batch_samples=64 single_batch_execution=1 stale_cancel_packet_bounds=pass\n";
+ std::cout<<"ready_samples="<<ready<<" batch_samples=64 bounded_worker_executions=4 stale_cancel_packet_bounds=pass\n";
 }
 '''
 
@@ -169,7 +196,9 @@ class PlanetarySurfaceQuery(unittest.TestCase):
             '        bool surface_generation_is_current(', '        bool parse_surface_receipt(',
             '        bool parse_surface_batch_receipt(', '    SurfaceBatchResult query_surface_samples(',
             '    SurfaceResult query_surface(', '    SurfaceBatchResult query_surfaces(',
-            '    ShorelineResult query_ocean_shoreline('))
+            '    ShorelineResult query_ocean_shoreline(', '    LandingSiteResult query_forest_landing_site('))
+        # The extracted owner lives in probe, while ADL also sees the imported module declaration.
+        functions=functions.replace(' = query_surfaces(project_root,', ' = probe::query_surfaces(project_root,')
         code=CODE.replace('PROVIDER_QUERY',actual_provider).replace('HOST_FUNCTIONS',functions)
         identity=hashlib.sha256(code.encode()+Path(__file__).read_bytes()).hexdigest()[:12]
         proof=ROOT/'Artifacts/Reports/planet-surface-query-oct31'/identity
@@ -195,20 +224,21 @@ include("{(ROOT/'Engine/cmake/epoch_task_scheduler.cmake').as_posix()}")
 epoch_admit_task_scheduler(surface_provider "{ROOT.as_posix()}")
 ''',encoding='utf-8')
         build=ROOT/'Artifacts/Intermediate/cmake/planet-surface-query'/identity
+        run_root=Path(tempfile.mkdtemp(prefix='run-', dir=proof))
         source_paths=owners+modules+[host,provider,PACKAGE/'tools/planet.stream_export.cpp',Path(__file__)]
         pins={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in source_paths}
         runs=[]
         def run(command,expected=0):
             start=time.monotonic();result=subprocess.run(command,cwd=proof,capture_output=True,text=True,timeout=180)
-            log=proof/f'lane-{len(runs)}.log';log.write_text(result.stdout+result.stderr,encoding='utf-8')
+            log=run_root/f'lane-{len(runs)}.log';log.write_text(result.stdout+result.stderr,encoding='utf-8')
             runs.append({'command':command,'exit':result.returncode,'seconds':time.monotonic()-start,'log':str(log)})
-            (proof/'result.json').write_text(json.dumps({'runs':runs,'source_before':pins,'scope':'Actual complete query/provider function bodies with recording source/process ports; real world sampler linked. Procedural contact is not displayed triangle contact.'},indent=2),encoding='utf-8')
+            (run_root/'result.json').write_text(json.dumps({'runs':runs,'source_before':pins,'scope':'Actual complete query/provider function bodies with recording source/process ports; real world sampler linked. Procedural contact is not displayed triangle contact.'},indent=2),encoding='utf-8')
             self.assertEqual(result.returncode,expected,result.stdout[-5000:]+result.stderr[-2000:])
             return result
         run(['cmake','-S',str(proof),'-B',str(build),'-G','Visual Studio 17 2022','-A','x64'])
         for config in ('Debug','Release'):
             run(['cmake','--build',str(build),'--config',config,'--parallel','1'])
-            data=proof/config;data.mkdir(exist_ok=True)
+            data=run_root/config;data.mkdir()
             run([str(build/config/'surface_consumer.exe'),str(data),str(provider)])
             binary=build/config/'surface_provider.exe'
             receipt=data/'cli.surface'
@@ -223,5 +253,5 @@ epoch_admit_task_scheduler(surface_provider "{ROOT.as_posix()}")
             self.assertFalse((data/'invalid.batch').exists())
         after={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in source_paths}
         self.assertEqual(pins,after)
-        (proof/'source-freeze.json').write_text(json.dumps({'passed':True,'source_before':pins,'source_after':after,'runs':runs,'canonical_provider_source':str(provider)},indent=2),encoding='utf-8')
+        (run_root/'source-freeze.json').write_text(json.dumps({'passed':True,'source_before':pins,'source_after':after,'runs':runs,'canonical_provider_source':str(provider)},indent=2),encoding='utf-8')
 if __name__=='__main__':unittest.main()

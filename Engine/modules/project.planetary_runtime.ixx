@@ -8,6 +8,7 @@ module;
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <span>
 #include <stop_token>
 #include <string>
 #include <string_view>
@@ -92,12 +93,45 @@ export namespace epochengine::project_planetary_runtime
     enum class Code : std::uint8_t { ready, cancelled, invalid_input, invalid_frame, unavailable, provider_failure };
     struct Result final { Code code{Code::unavailable}; Frame frame{}; };
 
+    struct SurfaceStart final
+    {
+        std::uint32_t body{};
+        std::array<double, 3> body_local_position_meters{}, body_local_forward{};
+    };
+
+    inline constexpr std::size_t maximum_walk_boxes = 256u;
+    struct WalkBox final
+    {
+        std::uint32_t body{};
+        std::array<double, 3> center_meters{}, half_extent_meters{};
+        std::array<double, 9> rotation{1,0,0,0,1,0,0,0,1};
+
+        [[nodiscard]] bool valid() const noexcept
+        {
+            if (body > 5u) return false;
+            for (const auto value : center_meters)
+                if (!std::isfinite(value) || std::abs(value) > 1e15) return false;
+            for (const auto value : half_extent_meters)
+                if (!std::isfinite(value) || value < 0.0 || value > 1e6) return false;
+            for (std::size_t a = 0; a < 3; ++a)
+                for (std::size_t b = a; b < 3; ++b)
+                {
+                    double dot{};
+                    for (std::size_t row = 0; row < 3; ++row) dot += rotation[row * 3 + a] * rotation[row * 3 + b];
+                    if (!std::isfinite(dot) || std::abs(dot - (a == b ? 1.0 : 0.0)) > 1e-6) return false;
+                }
+            return true;
+        }
+    };
+
     class Controller
     {
     public:
         virtual ~Controller() = default;
         [[nodiscard]] virtual Result advance(const Input&, std::stop_token = {}) = 0;
         [[nodiscard]] virtual Result capture() const = 0;
+        [[nodiscard]] virtual Result start_on_surface(const SurfaceStart&) { return {}; }
+        [[nodiscard]] virtual bool set_walk_boxes(std::span<const WalkBox> boxes) { return boxes.empty(); }
         [[nodiscard]] virtual std::string encode_session() const = 0;
         [[nodiscard]] virtual bool restore_session(std::string_view) = 0;
         [[nodiscard]] virtual std::shared_ptr<water::wave::Provider> water_provider() const {return {};}

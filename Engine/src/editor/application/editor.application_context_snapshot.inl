@@ -138,7 +138,8 @@
         snapshot.systems_task_zoom = finite_or(editor.systems.taskZoom, 1.15f);
         snapshot.systems_render_pan = editor.systems.renderPan;
         snapshot.systems_task_pan = editor.systems.taskPan;
-        snapshot.camera = previewgrid::capture_camera_rig_snapshot(ctx);
+        snapshot.camera = editor.lodInspectionReturnCamera
+            ? *editor.lodInspectionReturnCamera : previewgrid::capture_camera_rig_snapshot(ctx);
         return snapshot;
     }
 

@@ -3,6 +3,7 @@ module;
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -88,6 +89,7 @@ export namespace epochengine::scene_runtime
         std::optional<epochengine::scene::SceneMeshSnapshot> mesh_asset{};
         std::optional<std::array<double, 3>> position_anchor{};
         std::optional<epochengine::scene::SceneForestRegionInstance> forest_region{};
+        std::optional<epochengine::scene::SceneTerrainAttachment> terrain_attachment{};
 
         [[nodiscard]] constexpr bool visible() const noexcept
         {
@@ -134,6 +136,41 @@ export namespace epochengine::scene_runtime
         SceneObjectId primary_camera{epochengine::scene::kInvalidSceneObjectId};
         SceneObjectId primary_spawn{epochengine::scene::kInvalidSceneObjectId};
         Vec3 ambient{epochengine::scene::kDefaultAmbientLight};
+        std::optional<epochengine::scene::SceneReachObjective> reach_objective{};
+    };
+
+    class ReachObjectiveSession final
+    {
+    public:
+        void reset(std::optional<epochengine::scene::SceneReachObjective> objective = std::nullopt) noexcept
+        {
+            objective_ = objective && objective->valid() ? objective : std::nullopt;
+            completed_ = false;
+            distance_.reset();
+        }
+
+        [[nodiscard]] bool sample(const std::optional<std::array<double, 3>>& player,
+            const std::optional<std::array<double, 3>>& target) noexcept
+        {
+            if (!objective_ || completed_) return false;
+            distance_.reset();
+            if (!player || !target) return false;
+            const auto distance = std::hypot((*player)[0] - (*target)[0],
+                (*player)[1] - (*target)[1], (*player)[2] - (*target)[2]);
+            if (!std::isfinite(distance)) return false;
+            distance_ = distance;
+            completed_ = distance <= objective_->radius_meters;
+            return completed_;
+        }
+
+        [[nodiscard]] const auto& objective() const noexcept { return objective_; }
+        [[nodiscard]] const auto& distance() const noexcept { return distance_; }
+        [[nodiscard]] bool completed() const noexcept { return completed_; }
+
+    private:
+        std::optional<epochengine::scene::SceneReachObjective> objective_{};
+        std::optional<double> distance_{};
+        bool completed_{};
     };
 
     struct RuntimePrimaryReferences final
@@ -387,7 +424,8 @@ export namespace epochengine::scene_runtime
                 .source_object_count = snapshot.objects.size(),
                 .primary_camera = snapshot.primary_camera,
                 .primary_spawn = snapshot.primary_spawn,
-                .ambient = snapshot.ambient
+                .ambient = snapshot.ambient,
+                .reach_objective = snapshot.reach_objective
             };
 
             std::vector<const epochengine::scene::SceneObjectSnapshot*> included{};
@@ -444,7 +482,8 @@ export namespace epochengine::scene_runtime
                     .texture_material = source.texture_material,
                     .mesh_asset = source.mesh_asset,
                     .position_anchor = source.position_anchor,
-                    .forest_region = source.forest_region
+                    .forest_region = source.forest_region,
+                    .terrain_attachment = source.terrain_attachment
                 });
 
                 if (const auto kind = detail::classify_light(source.type, source.category))

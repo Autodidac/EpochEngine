@@ -16,7 +16,7 @@
         enum class OutlinerCommand : std::uint64_t
         {
             deselect=1u, cube, ground, light, water, four_cubes, eight_cubes,
-            spawn, camera, open_world, focus, undo, redo, duplicate, erase, ambient
+            spawn, camera, open_world, undo, redo, duplicate, erase, ambient, detach_model
         };
         const auto route_selected_hierarchy_action =
             [&](editor_hierarchy::Action action) -> bool
@@ -98,6 +98,8 @@
 
         if (editor.outlinerToolTab == OutlinerToolTab::World)
         {
+        const bool releasedInOutlinerFrame = gui::was_mouse_released();
+        bool objectRowClicked = false;
         const gui::Vec2 outlinerToolbarOrigin = gui::cursor_position();
         const float outlinerToolExtent = (std::min)(28.0f, outlinerWidth * 0.25f);
         const float outlinerToolGap = (std::min)(4.0f, outlinerWidth * 0.0625f);
@@ -135,6 +137,15 @@
         for (std::size_t index = 0u; index < editor.entities.size(); ++index)
         {
             const EditorEntity& entity = editor.entities[index];
+            scene::SceneObjectId parent{};
+            if (entity.forestRegion && editor_entity_index(editor, entity.forestRegion->terrain_object_id))
+                parent = entity.forestRegion->terrain_object_id;
+            if (const auto& attachment = entity.terrainAttachment; attachment)
+                if (const auto owner = editor_entity_index(editor, attachment->terrain_object_id);
+                    owner && editor.entities[*owner].category == "Planetary Terrain"
+                    && editor.entities[*owner].meshAsset && attachment->matches(
+                        editor.entities[*owner].sceneObjectId, *editor.entities[*owner].meshAsset))
+                    parent = attachment->terrain_object_id;
             hierarchyEntities.push_back(editor_hierarchy::EntityRecord{
                 .canonical_id = entity.sceneObjectId,
                 .label = entity.name,
@@ -143,8 +154,7 @@
                 .order = static_cast<std::uint64_t>(index),
                 .visible = entity.visible,
                 .locked = !application.allow_entity_authoring,
-                .parent_id = entity.forestRegion && editor_entity_index(editor,entity.forestRegion->terrain_object_id)
-                    ? entity.forestRegion->terrain_object_id : 0u});
+                .parent_id = parent});
         }
         const editor_hierarchy::Result hierarchyRefresh =
             editor.worldHierarchy.refresh(
@@ -311,11 +321,9 @@
                                 toggled.code));
                     }
                     else editor.worldHierarchyStatus = "Hierarchy synchronized.";
-                    continue;
+                    break; // Expansion rebuilds the visible row storage.
                 }
 
-                if (row.has_children)
-                    (void)editor.worldHierarchy.toggle_expanded(row.node_id);
                 const editor_hierarchy::Route routed =
                     editor.worldHierarchy.route(
                         editor_hierarchy::Action::select,
@@ -331,6 +339,11 @@
                 if (const auto index = editor_entity_index(
                         editor, routed.targets.front()))
                 {
+                    const std::string rowLabel{row.label};
+                    objectRowClicked = true;
+                    const bool focus = complete_scene_click(editor, routed.targets.front(), gui::mouse_position(), true);
+                    if (row.has_children && !focus)
+                        (void)editor.worldHierarchy.toggle_expanded(row.node_id);
                     select_editor_entity(editor, *index);
                     editor.worldHierarchyStatus = "Hierarchy synchronized.";
                     (void)editor.worldHierarchy.synchronize_selection(
@@ -339,7 +352,10 @@
                         routed.targets.front();
                     push_editor_log(
                         editor,
-                        std::string("[select] ") + row.label);
+                        std::string("[select] ") + rowLabel);
+                    if (focus && !editor_project_viewport_input_reserved(editor))
+                        handle_scene_tool(editor, ctx.get(), "focus_selection");
+                    break; // Selection synchronization rebuilds the visible row storage.
                 }
             }
         }
@@ -376,14 +392,22 @@
                         .indicator=gui::MenuItemIndicator::Radio,.checked=selected,.selected=selected,
                         .indentation=child?14.0f:0.0f}))
                     {
+                        objectRowClicked = true;
+                        const bool focus = complete_scene_click(editor, entity.sceneObjectId,
+                            gui::mouse_position(), true, body.id);
                         if(select_editor_planetary_body(editor,index,body.id))
                         {
                             editor.worldHierarchyStatus="Hierarchy synchronized.";
                             (void)editor.worldHierarchy.synchronize_selection(entity.sceneObjectId);
                             editor.worldHierarchyScrollSelection=entity.sceneObjectId;
-                            handle_scene_tool(editor,ctx.get(),"focus_selection");
+                            if (focus && !editor_project_viewport_input_reserved(editor))
+                                handle_scene_tool(editor, ctx.get(), "focus_selection");
                         }
-                        else editor.worldHierarchyStatus="Body selection refused: its project, source or mesh changed. Reload the project before retrying.";
+                        else
+                        {
+                            editor.previousSceneClick.reset();
+                            editor.worldHierarchyStatus="Body selection refused: its project, source or mesh changed. Reload the project before retrying.";
+                        }
                     }
                 }
             }
@@ -396,6 +420,8 @@
             gui::wrapped_label(bodyInventoryText, outlinerWidth);
         gui::set_cursor({hierarchyOrigin.x, hierarchyOrigin.y + hierarchyContentHeight});
         gui::end_scroll_area();
+        if (releasedInOutlinerFrame && !objectRowClicked && editor.previousSceneClick && editor.previousSceneClick->outliner)
+            editor.previousSceneClick.reset();
 
         }
         else if (editor.outlinerToolTab == OutlinerToolTab::Assets)
@@ -2847,6 +2873,11 @@
                 == editor_workspace_commands::Surface::world;
             const bool canAuthor = application.allow_entity_authoring && worldSurfaceActive;
             const bool hasSelection = editor_has_selection(editor);
+            const auto selected = editor.selectedEntityIds.size() == 1u
+                ? editor_entity_index(editor,editor.selectedEntityId) : std::nullopt;
+            const bool canDetachModel = canAuthor && selected
+                && editor.entities[*selected].type == "IndexedMesh"
+                && editor.entities[*selected].terrainAttachment && !editor.entities[*selected].forestRegion;
             const auto id=[](OutlinerCommand command){return static_cast<std::uint64_t>(command);};
             const std::array createCommands{
                 gui::MenuItemOptions{.label="Cube",.enabled=canAuthor,.command_id=id(OutlinerCommand::cube)},
@@ -2859,20 +2890,20 @@
                 gui::MenuItemOptions{.label="Camera",.enabled=canAuthor,.command_id=id(OutlinerCommand::camera)},
                 gui::MenuItemOptions{.label="Open 3D Preview",.enabled=!worldSurfaceActive,.separator_before=true,.command_id=id(OutlinerCommand::open_world)}};
             const std::array actionCommands{
-                gui::MenuItemOptions{.label="Focus",.enabled=worldSurfaceActive&&hasSelection,.command_id=id(OutlinerCommand::focus)},
                 gui::MenuItemOptions{.label="Deselect",.enabled=hasSelection,.command_id=id(OutlinerCommand::deselect)},
                 gui::MenuItemOptions{.label="Undo",.enabled=canAuthor&&editor.sceneDocument.can_undo(),.separator_before=true,.command_id=id(OutlinerCommand::undo)},
                 gui::MenuItemOptions{.label="Redo",.enabled=canAuthor&&editor.sceneDocument.can_redo(),.command_id=id(OutlinerCommand::redo)},
                 gui::MenuItemOptions{.label="Duplicate",.enabled=canAuthor&&hasSelection,.separator_before=true,.command_id=id(OutlinerCommand::duplicate)},
                 gui::MenuItemOptions{.label="Delete",.enabled=canAuthor&&hasSelection,.command_id=id(OutlinerCommand::erase)},
                 gui::MenuItemOptions{.label="Ambient Lighting",.separator_before=true,.command_id=id(OutlinerCommand::ambient)}};
-            const std::array selectionCommands{gui::MenuItemOptions{
-                .label="Deselect",.enabled=hasSelection,.command_id=id(OutlinerCommand::deselect)}};
+            const std::array selectionCommands{
+                gui::MenuItemOptions{.label="Deselect",.enabled=hasSelection,.command_id=id(OutlinerCommand::deselect)},
+                gui::MenuItemOptions{.label="Detach from Terrain",.enabled=canDetachModel,.command_id=id(OutlinerCommand::detach_model)}};
             const std::span<const gui::MenuItemOptions> commands = menu.kind==EditorState::OutlinerContextMenu::Kind::create
                 ? std::span<const gui::MenuItemOptions>{createCommands}
                 : menu.kind==EditorState::OutlinerContextMenu::Kind::actions
                     ? std::span<const gui::MenuItemOptions>{actionCommands}
-                    : std::span<const gui::MenuItemOptions>{selectionCommands};
+                    : std::span<const gui::MenuItemOptions>{selectionCommands}.first(canDetachModel ? 2u : 1u);
             const auto popup = gui::command_menu(menu.menu, commands, gui::CommandMenuOptions{
                 .owner = {.position = menu.anchor, .size = {1.0f, 1.0f}},
                 .viewport_size = {w, h}, .open_requested = open,
@@ -2906,20 +2937,16 @@
                     if(route_selected_hierarchy_action(editor_hierarchy::Action::delete_entity))
                         (void)execute_surface_edit(editor,ctx.get(),SurfaceEditAction::delete_selection);
                     break;
-                case OutlinerCommand::focus:
-                    if(route_selected_hierarchy_action(editor_hierarchy::Action::focus))
-                    {
-                        if(application.allow_entity_authoring)
-                            (void)execute_surface_edit(editor,ctx.get(),SurfaceEditAction::focus_selection);
-                        else handle_scene_tool(editor,ctx.get(),"focus_selection");
-                    }
-                    break;
                 case OutlinerCommand::deselect:
                     if(route_selected_hierarchy_action(editor_hierarchy::Action::deselect))
                     {
                         clear_editor_selection(editor);
                         push_editor_log(editor,"[edit] World selection cleared.");
                     }
+                    break;
+                case OutlinerCommand::detach_model:
+                    if (canDetachModel && detach_editor_model_from_terrain(editor,editor.entities[*selected]))
+                        push_editor_log(editor,"[edit] Model detached from terrain at its current world position.");
                     break;
                 case OutlinerCommand::ambient:
                 {

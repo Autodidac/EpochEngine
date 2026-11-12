@@ -141,10 +141,11 @@ class PreviewDepthFrustum(unittest.TestCase):
             pending.extend(re.findall(r"^(?:export\s+)?import\s+([\w.:]+);", module_map[name].read_text(encoding="utf-8-sig"), re.M))
         modules = " ".join('"' + module_map[name].as_posix() + '"' for name in sorted(closure))
         roots = " ".join('"' + path.as_posix() + '"' for path in (ROOT / "Engine/modules", ROOT / "Engine/dep/EpochPlatformEngine/modules", report.parent / "baseline"))
+        lighting_source = '' if baseline else f'"{(ROOT / "Engine/src/render/render.preview_lighting.cpp").as_posix()}"'
         (report / "CMakeLists.txt").write_text(f'''cmake_minimum_required(VERSION 3.30)
 set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT Embedded)
 project(PreviewDepthFrustum LANGUAGES CXX)
-add_executable(depth_contract "{source.as_posix()}" "{camera_source.as_posix()}" "{(ROOT / 'Engine/src/assets/texture/asset.texture_artifact.cpp').as_posix()}" "{(ROOT / 'Engine/src/authoring/texture/authoring.texture_document.cpp').as_posix()}")
+add_executable(depth_contract "{source.as_posix()}" "{camera_source.as_posix()}" {lighting_source} "{(ROOT / 'Engine/src/assets/texture/asset.texture_artifact.cpp').as_posix()}" "{(ROOT / 'Engine/src/authoring/texture/authoring.texture_document.cpp').as_posix()}")
 target_compile_features(depth_contract PRIVATE cxx_std_23)
 target_sources(depth_contract PRIVATE FILE_SET CXX_MODULES BASE_DIRS {roots} FILES {modules})
 target_include_directories(depth_contract PRIVATE "{(ROOT / 'Engine').as_posix()}" "{(ROOT / 'Engine/include').as_posix()}" "{(ROOT / 'Engine/src').as_posix()}")
@@ -158,7 +159,9 @@ endif()
             commands.extend([(configuration + "-build", ["cmake", "--build", str(build), "--config", configuration, "--parallel", "1", "--", "/nr:false", "/p:UseMultiToolTask=false", "/p:CL_MPCount=1"]),
                              (configuration + "-contract", [str(build / configuration / "depth_contract.exe")])])
         completed = []
-        environment = dict(os.environ, MSBUILDDISABLENODEREUSE="1", TEMP=str(report), TMP=str(report), TMPDIR=str(report))
+        temporary = report.parent / "compiler-temp"
+        temporary.mkdir(exist_ok=True)
+        environment = dict(os.environ, MSBUILDDISABLENODEREUSE="1", TEMP=str(temporary), TMP=str(temporary), TMPDIR=str(temporary))
         for phase, command in commands:
             started = time.monotonic()
             result = subprocess.run(command, cwd=ROOT, env=environment, capture_output=True, text=True, timeout=180)

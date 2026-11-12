@@ -7,9 +7,11 @@ import re
 import shutil
 import subprocess
 import tempfile
+import time
 import unittest
 
-from Tests.support.cpp import msvc_2022_toolsets, windows_sdk_includes
+from Tests.support.cpp import compile_and_run, msvc_2022_toolsets, windows_sdk_includes
+from Tools.source.owned_source_text import definition
 
 ROOT = Path(__file__).resolve().parents[2]
 REPORT = ROOT / "Artifacts/Reports/updater-handoff-nov07"
@@ -226,6 +228,123 @@ class ExecutableHandoff(unittest.TestCase):
 
 @unittest.skipUnless(os.name == "nt", "Windows source update worker")
 class WindowsSourceWorkerHandoff(unittest.TestCase):
+    def test_windows_restarts_retain_disposable_data_root(self):
+        REPORT.mkdir(parents=True, exist_ok=True)
+        root = Path(tempfile.mkdtemp(prefix="source-restart-", dir=REPORT))
+        owner = (ROOT / "Engine/src/updater/updater.source_worker_win.cpp").read_text(encoding="utf-8")
+        self.assertIn("handoff_script::write_windows_restart(ps, epochengine::core::path::candidate_data_root());", owner)
+        system = (ROOT / "Engine/src/updater/updater.system.cpp").read_text(encoding="utf-8")
+        self.assertEqual(system.count('append_windows_restart(bat, *handoff,'), 3)
+        handoff = definition(system, "    struct BinaryHandoff") + ";"
+        producer = definition(system, "    void append_windows_restart(")
+        source = root / "restart.cpp"
+        source.write_text(r'''
+#include <filesystem>
+#include <fstream>
+#include <string_view>
+#include "updater.handoff_script.hpp"
+#pragma comment(linker, "/subsystem:windows")
+#pragma comment(linker, "/entry:wmainCRTStartup")
+''' + handoff + producer + r'''
+int wmain(int argc, wchar_t** argv)
+{
+    namespace fs = std::filesystem;
+    namespace script = epochengine::updater::handoff_script;
+    const auto candidate = fs::current_path() / L"disposable \u96ea \U0001F4A7 %&!' data";
+    if (argc == 3 && std::wstring_view{argv[1]} == L"--emit")
+    {
+        const auto suffix = fs::path{argv[2]}.string();
+        fs::create_directory(candidate);
+        std::ofstream ordinary("ordinary-" + suffix + ".ps1", std::ios::binary);
+        std::ofstream disposable("candidate-" + suffix + ".ps1", std::ios::binary);
+        script::write_windows_restart(ordinary, {});
+        script::write_windows_restart(disposable, candidate);
+        ordinary.close();
+        disposable.close();
+        BinaryHandoff handoff{.helper="transaction-" + suffix + ".ps1", .candidate_data=candidate};
+        std::ofstream transaction(handoff.helper, std::ios::binary);
+        script::write_windows_transaction(transaction, candidate);
+        transaction.close();
+        std::ofstream packaged("packaged-" + suffix + ".bat", std::ios::binary);
+        packaged << "@echo off\r\nsetlocal\r\nset \"TARGETEXE=%EPOCH_FIXTURE_RESTART_EXE%\"\r\n"
+                    "set \"LOG=%~dp0packaged.log\"\r\n";
+        append_windows_restart(packaged, handoff, "TARGETEXE", "exit /b 5\r\n");
+        packaged.close();
+        return ordinary && disposable && transaction && packaged ? 0 : 1;
+    }
+    const bool expect_candidate = fs::exists("expect-candidate");
+    if (!expect_candidate) return argc == 1 ? 0 : 2;
+    const bool correct = argc == 3 && std::wstring_view{argv[1]} == L"--candidate-data-root"
+        && fs::path{argv[2]} == candidate;
+    if (fs::exists("expect-packaged"))
+    {
+        std::ofstream receipt("packaged-result.tmp");
+        receipt << (correct ? "ok" : "bad");
+        receipt.close();
+        fs::rename("packaged-result.tmp", "packaged-result");
+    }
+    return correct ? 0 : 3;
+}
+''', encoding="utf-8")
+        compile_and_run(self, source, root, args=lambda mode: ("--emit", mode),
+                        includes=(ROOT / "Engine/src/updater",))
+        command = r'''
+$ErrorActionPreference = 'Stop'
+$targetExe = $env:EPOCH_FIXTURE_RESTART_EXE
+$targetDir = (Get-Location).Path
+. $env:EPOCH_FIXTURE_RESTART_SCRIPT
+if (!$restartedProcess.WaitForExit(5000)) { $restartedProcess.Kill(); exit 4 }
+exit $restartedProcess.ExitCode
+'''
+        for configuration in ("Debug", "Release"):
+            for candidate in (False, True):
+                with self.subTest(configuration=configuration, candidate=candidate):
+                    marker = root / "expect-candidate"
+                    if candidate:
+                        marker.touch()
+                    else:
+                        marker.unlink(missing_ok=True)
+                    result = subprocess.run(
+                        ["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", command],
+                        cwd=root, env=dict(os.environ,
+                            EPOCH_FIXTURE_RESTART_EXE=str(root / (configuration + ".exe")),
+                            EPOCH_FIXTURE_RESTART_SCRIPT=str(root / f"{'candidate' if candidate else 'ordinary'}-{configuration}.ps1")),
+                        capture_output=True, text=True, timeout=15, creationflags=subprocess.CREATE_NO_WINDOW)
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            with self.subTest(configuration=configuration, candidate="packaged"):
+                (root / "expect-packaged").touch()
+                receipt = root / "packaged-result"
+                receipt.unlink(missing_ok=True)
+                executable = root / f"{configuration}.exe"
+                installed = root / f"installed-{configuration}.exe"
+                installed.write_bytes(b"previous disposable runtime")
+                manifest = root / f"payload-{configuration}.tsv"
+                manifest.write_text(f"{executable}\t{installed.name}\t{hashlib.sha256(executable.read_bytes()).hexdigest()}\n",
+                                    encoding="utf-8")
+                work = root / f".packaged-handoff-{configuration}"
+                for operation in ("stage", "commit"):
+                    applied = subprocess.run(
+                        ["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+                         "-File", str(root / f"transaction-{configuration}.ps1"), "-Attempts", "1"],
+                        cwd=root, env=dict(os.environ, EPOCH_UPDATE_ROOT=str(root), EPOCH_UPDATE_WORK=str(work),
+                            EPOCH_UPDATE_PLAN=str(manifest), EPOCH_UPDATE_PLAN_SHA256=hashlib.sha256(manifest.read_bytes()).hexdigest(),
+                            EPOCH_UPDATE_MODE=operation), capture_output=True, text=True, timeout=15,
+                        creationflags=subprocess.CREATE_NO_WINDOW)
+                    self.assertEqual(applied.returncode, 0, applied.stdout + applied.stderr)
+                self.assertEqual((work / "backup" / installed.name).read_bytes(), b"previous disposable runtime")
+                self.assertEqual(installed.read_bytes(), executable.read_bytes())
+                result = subprocess.run(
+                    ["cmd.exe", "/d", "/c", f"packaged-{configuration}.bat"], cwd=root,
+                    env=dict(os.environ, EPOCH_FIXTURE_RESTART_EXE=str(installed)),
+                    capture_output=True, text=True, timeout=15, creationflags=subprocess.CREATE_NO_WINDOW)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                deadline = time.monotonic() + 5
+                while not receipt.is_file() and time.monotonic() < deadline:
+                    time.sleep(0.05)
+                self.assertTrue(receipt.is_file(), "Packaged restart never launched its replacement")
+                self.assertEqual(receipt.read_text(), "ok")
+                (root / "expect-packaged").unlink()
+
     def test_cancel_after_staging_preserves_install_and_retry_recovers(self):
         REPORT.mkdir(parents=True, exist_ok=True)
         root = Path(tempfile.mkdtemp(prefix="source-worker-", dir=REPORT))

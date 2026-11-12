@@ -28,7 +28,7 @@ class EditorMeshDrawMode(unittest.TestCase):
   publish_begin=scene.index('                published=epochengine::previewgrid::set_object_markers(',begin)
   publish_end=scene.index(');',publish_begin)+2
   commit_begin=scene.index('            if (!published)',publish_end)
-  commit_end=scene.index('            if(state.planetaryInitialFramePending',commit_begin)
+  commit_end=scene.index('            if (state.planetaryInitialFramePending',commit_begin)
   publish='            bool published{};\n'+scene[publish_begin:publish_end]+'\n'+scene[commit_begin:commit_end]
   gui_types='\n'.join(definition(api,m,True).replace('export ','',1) for m in (
    '    export enum class ButtonIcon','    export struct InlineButtonSpec',
@@ -61,6 +61,7 @@ enum class EditorView{Perspective,FreeOrthographic,Front,Back,Left,Right,Top,Bot
 EditorView editor_view_for(const core::Context*){return EditorView::Perspective;}
 std::string_view editor_view_name(EditorView){return "Perspective";}
 bool set_editor_view(const core::Context*,EditorView){return true;}
+void reset_camera(const core::Context*){}
 bool admit=true;std::vector<ObjectMarker> published;unsigned publications{};
 bool set_object_markers(const core::Context*,std::vector<ObjectMarker> value,MeshFrameLimits){++publications;if(!admit)return false;published=std::move(value);return true;}
 void clear_object_markers(const core::Context*){}
@@ -73,13 +74,20 @@ enum class MeshDrawMode{solid,wireframe};
 struct RuntimeControlSnapshot{RuntimeControlStatus status{RuntimeControlStatus::unavailable};MeshDrawMode acknowledged_mode{MeshDrawMode::solid};};
 struct ProcessSnapshot{RuntimeControlSnapshot runtime_control;};}
 enum class EditorMainSurface{Scene,Game2D,ForestFactory};
+enum class ScenePointerMode{select,move_free,move_x,move_y,move_z};
 struct EditorState{bool forestTerrainPainting{};FIELDS
 EditorMainSurface mainSurface{EditorMainSurface::Scene};core::ScenePreviewMode previewMode{core::ScenePreviewMode::Editor};std::string projectStatus;bool projectBuildPending{},covered{},reserved{};
+ScenePointerMode scenePointerMode{ScenePointerMode::select};std::optional<int> lodInspectionReturnCamera;
+bool planetaryInitialFramePending{};unsigned planetaryInitialFrameGeneration{};
+struct Lifecycle{struct Evidence{struct{struct{unsigned generation;}selected_project;}generations;};
+ Evidence evidence()const{return {{{3}}};}}projectLifecycle;
 std::optional<platform::child_process::ProcessSnapshot>projectRuntimeSnapshot;unsigned runtimeRequests{};bool lastRuntimeWire{};};
+bool begin_editor_lod_inspection(EditorState&s,const core::Context*){s.lodInspectionReturnCamera=1;return true;}
+void end_editor_lod_inspection(EditorState&s,const core::Context*){s.lodInspectionReturnCamera.reset();}
 bool editor_project_viewport_input_reserved(const EditorState&s){return s.reserved;}
 bool editor_project_viewport_covered(const EditorState&s){return s.covered;}
 bool request_project_runtime_mesh_mode(EditorState&s,bool wire){++s.runtimeRequests;s.lastRuntimeWire=wire;return true;}
-struct Entity{std::array<float,3>rotation{};bool editorOnly{};std::string category,name;bool meshAsset{};std::shared_ptr<const epochengine::asset::mesh::Artifact>meshSnapshot;std::shared_ptr<const previewgrid::MeshBaseColorBinding>meshBaseColorTexture;};
+struct Entity{std::array<float,3>rotation{};bool editorOnly{};std::string category,name,type;bool meshAsset{};std::shared_ptr<const epochengine::asset::mesh::Artifact>meshSnapshot;std::shared_ptr<const previewgrid::MeshBaseColorBinding>meshBaseColorTexture;};
 previewgrid::Vec3 selection_color_for_entity(const Entity&,bool){return{};}float marker_radius_for_entity(const Entity&){return 1;}
 bool marker_selected_for_entity(const Entity&,bool selected){return selected;}bool is_plant_lab_preview_entity(const Entity&){return false;}
 previewgrid::ObjectPreviewPrimitive preview_primitive_for_entity(const Entity&){return previewgrid::ObjectPreviewPrimitive::Cube;}
@@ -96,15 +104,17 @@ void publish_mode(EditorState&state,bool available=true){if(editor_project_viewp
 }
 namespace gui{struct Vec2{float x{},y{};};TYPES
 struct Rect{Vec2 position,size;std::string label;};std::vector<Rect>draws;
-Vec2 cursor;unsigned mode_calls{},camera_calls{};bool choose{};std::size_t choice{};bool illegal{};std::string disabled_reason,lastModeLabel;bool modeEnabled{};
+Vec2 cursor;unsigned mode_calls{},camera_calls{};bool choose{},chooseView{},exitInspect{};std::size_t choice{},viewChoice{};bool illegal{};std::string disabled_reason,lastModeLabel,pointerSymbol;bool modeEnabled{};
 void set_cursor(Vec2 value){cursor=value;}
 void panel_rect(Vec2,Vec2){}
 SelectBoxResult select_box(const SelectBoxOptions&o){draws.push_back({cursor,o.size,std::string(o.id)});
+ if(o.id=="scene-viewport-pointer-mode")pointerSymbol=o.closed_label;
+ if(o.id=="scene-viewport-view-select"&&chooseView&&o.enabled)return {false,true,viewChoice};
  const bool mode=o.id=="scene-mesh-draw-mode";if(mode){++mode_calls;lastModeLabel=o.selected;modeEnabled=o.enabled;}else++camera_calls;
  return {mode&&choose,mode&&choose&&(o.enabled||illegal),mode&&choose?std::optional<std::size_t>{choice}:std::nullopt};}
 std::optional<std::size_t>inline_button_row(std::span<const InlineButtonSpec>items,float height,float,const InlineButtonRowOptions&){
  for(const auto&i:items){draws.push_back({cursor,{i.width,height},std::string(i.label)});if(!i.enabled)disabled_reason=i.tooltip;}return{};}
-bool button(std::string_view label,Vec2 size){draws.push_back({cursor,size,std::string(label)});return false;}
+bool button(std::string_view label,Vec2 size){draws.push_back({cursor,size,std::string(label)});return exitInspect&&label=="Exit Inspect";}
 }
 void focus_forest_factory_preview(core::Context*,EditorState&){}void handle_scene_tool(EditorState&,core::Context*,std::string_view){}
 bool same_rect_overlap(const gui::Rect&a,const gui::Rect&b){return a.position.x<b.position.x+b.size.x-.01f&&b.position.x<a.position.x+a.size.x-.01f&&a.position.y<b.position.y+b.size.y-.01f&&b.position.y<a.position.y+a.size.y-.01f;}
@@ -132,6 +142,10 @@ int draw(EditorState&editor,float width,bool running,bool modal,bool run,bool ma
  return 0;
 }
 int main(){EditorState e,other;CHECK(!e.viewportMeshWireframe&&!e.viewportMeshWireframeRequest);
+ gui::chooseView=true;gui::viewChoice=8;CHECK(draw(e,900,false,false,false)==0&&e.lodInspectionReturnCamera);
+ gui::chooseView=false;gui::exitInspect=true;CHECK(draw(e,900,false,false,false)==0&&!e.lodInspectionReturnCamera);
+ gui::exitInspect=false;e.scenePointerMode=ScenePointerMode::move_z;
+ CHECK(draw(e,900,false,false,false)==0&&gui::pointerSymbol=="↗ Z");
  gui::choose=true;gui::choice=1;CHECK(draw(e,900,false,false,false)==0);CHECK(e.viewportMeshWireframeRequest&&*e.viewportMeshWireframeRequest&&!e.viewportMeshWireframe);
  publish_mode(e);CHECK(e.viewportMeshWireframe&&!e.viewportMeshWireframeRequest&&previewgrid::published.size()==1&&previewgrid::published[0].wireframe);
  CHECK(!other.viewportMeshWireframe);

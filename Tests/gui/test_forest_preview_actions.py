@@ -123,6 +123,7 @@ struct Editor {EditorMainSurface mainSurface=EditorMainSurface::ForestFactory;
  std::uint64_t compiledRevision{},compiledHash{};
  int forestDesignCamera{};std::optional<int> forestProjectCamera;
  std::string plantLabStatus;
+ std::optional<bool> forestPlacementSaved;
  struct {double radiusMeters=12,densityPerSquareMeter=.01;unsigned long long seed=1337;}forestArea;
  std::optional<int> forestSurfacePending,forestSurfacePlacement;bool projectBuildPending{},planetaryGeneratePending{};
  struct {bool valid()const{return false;}}projectRuntimeProcess;
@@ -191,7 +192,12 @@ SliderResult slider(const SliderOptions& options){
  return result;
 }
 float measure_section_heading_height(std::string_view text,float width){headingWidth=width;return measure_wrapped_label_height(text,width)*1.22f+8;}
-void section_heading(std::string_view text){foreground(measure_wrapped_label_height(text,headingWidth)*1.22f+8);}
+enum class SemanticTone{neutral,success,warning};
+SemanticTone placementTone{};
+void section_heading(std::string_view text,SemanticTone tone=SemanticTone::neutral){
+ if(text.starts_with("Last tree placement"))placementTone=tone;
+ foreground(measure_wrapped_label_height(text,headingWidth)*1.22f+8);
+}
 float inline_button_row_height(std::span<const InlineButtonSpec> items,float height,float gap,const InlineButtonRowOptions& options){
  assert(options.sizing==InlineButtonSizing::FitContent&&options.alignment==InlineButtonAlignment::Center&&options.wrap);
  assert(options.available_width>0&&options.available_width<=available);
@@ -214,9 +220,12 @@ void paint(Editor& editor,float width,std::string_view action={},Input input={})
  const gui::Vec2 viewport_pos{31,71},viewport_size{width,1600};
  const auto forestControlPosition=viewport_pos,forestControlSize=viewport_size;
  gui::cursor=viewport_pos;gui::available=width;gui::panels.clear();gui::seen.clear();gui::sliders.clear();gui::labels.clear();gui::requested=action;
+ gui::placementTone=gui::SemanticTone::neutral;
  gui::down=input.down;gui::pressed=input.pressed;gui::released=input.released;gui::sliderHovered=input.hovered;
  gui::sliderRequested=input.slider;gui::sliderValue=input.value;
  if(!input.down&&!input.released)gui::captured={}; // Native focus/ownership cancellation.
+ auto selected_forest_species_target=[](const Editor&)->const Editor*{return nullptr;};
+ auto refresh_selected_forest_material=[](Editor&){assert(false);return false;};
  auto place_forest_factory_asset=[](Editor&){assert(false);return std::size_t{};};
  auto save_editor_scene_snapshot=[](Editor&){assert(false);return false;};
  auto apply_editor_surface=[](EditorMainSurface,std::string_view){assert(false);};
@@ -225,7 +234,9 @@ void paint(Editor& editor,float width,std::string_view action={},Input input={})
 ACTUAL
  };
  paint();
- assert(gui::panels.size()==10);
+ assert(gui::panels.size()==10+std::size_t(editor.forestPlacementSaved.has_value()));
+ assert(gui::placementTone==(editor.forestPlacementSaved
+    ?(*editor.forestPlacementSaved?gui::SemanticTone::success:gui::SemanticTone::warning):gui::SemanticTone::neutral));
  float end=viewport_pos.y;
  for(const auto& rect:gui::panels){assert(rect.position.x==viewport_pos.x&&std::abs(rect.position.y-end)<.001f);
   end+=rect.size.y;assert(end<=gui::cursor.y+.001f);}
@@ -341,7 +352,12 @@ int main(){for(float width:{160.0f,320.0f,900.0f})for(bool project:{false,true})
  for(auto action:{"Reduce branches","Undo","Add to Scene","Create Project & Add Plant...","Update Painted Trees","Paint Forest on Terrain"}){
   run(width,"Preview geometry refused; previous preview retained.",project,action,8);
   run(width,"Source reopen refused.",project,action,8,false);
- }}for(float width:{160.f,320.f,900.f})gestures(width);}
+ }}for(float width:{160.f,320.f,900.f}){
+  gestures(width);
+  auto editor=seeded();editor.plantLabStatus="A tree was added.";
+  editor.forestPlacementSaved=true;paint(editor,width);
+  editor.forestPlacementSaved=false;paint(editor,width);
+ }}
 '''.replace('ACTUAL', actual).replace('FOREST_TYPES', forest_types).replace('FOREST_FUNCTIONS', forest_functions).replace('DRAFT', draft).replace('LEAVING', leaving)
         self._compile_and_run(source)
 
@@ -381,22 +397,23 @@ enum class InlineButtonAlignment {Start,End,Center};
 struct InlineButtonRowOptions {InlineButtonSizing sizing{};InlineButtonAlignment alignment{};
  bool wrap{};float available_width{};};
 inline std::size_t requested;
-inline std::array<InlineButtonSpec,5> seen;inline bool refreshEnabled,placementRefreshEnabled;
+inline std::array<InlineButtonSpec,5> seen;inline bool refreshEnabled,placementRefreshEnabled,materialRefreshEnabled;
 template<std::size_t N>float inline_button_row_height(const std::array<InlineButtonSpec,N>& specs,float,float,const InlineButtonRowOptions& options){
  assert(options.sizing==InlineButtonSizing::FitContent&&options.alignment==InlineButtonAlignment::Center&&options.wrap&&options.available_width==320);
  for(const auto& spec:specs)assert(spec.width==0);return 28;}
 template<std::size_t N>std::optional<std::size_t> inline_button_row(const std::array<InlineButtonSpec,N>& specs,float height,float gap,const InlineButtonRowOptions& options) {
  (void)inline_button_row_height(specs,height,gap,options);
  if constexpr(N==5){seen=specs;return requested<5&&specs[requested].enabled ? std::optional{requested}:std::nullopt;}
- else {static_assert(N==2);assert(specs[0].label=="Update Painted Trees");refreshEnabled=specs[0].enabled;
+ else {static_assert(N==3);assert(specs[0].label=="Update Painted Trees");refreshEnabled=specs[0].enabled;
  assert(specs[1].label=="Refresh Forest Placement");placementRefreshEnabled=specs[1].enabled;
- return requested>=5&&requested<7&&specs[requested-5].enabled?std::optional<std::size_t>{requested-5}:std::nullopt;}
+ assert(specs[2].label=="Refresh Selected Tree Material");materialRefreshEnabled=specs[2].enabled;
+ return requested>=5&&requested<8&&specs[requested-5].enabled?std::optional<std::size_t>{requested-5}:std::nullopt;}
 }
 }
 void run(bool project,bool ready,std::size_t action,int busy=0,bool editable=true) {
  const bool initialReady=ready;
  Editor editor{project};if(busy==1)editor.forestSurfacePending=1;editor.projectBuildPending=busy==2;editor.projectRuntimeProcess.running=busy==3;editor.planetaryGeneratePending=busy==4;auto ctx=std::make_unique<Context>();Result result;
- unsigned placementCalls{},saveCalls{},focusCalls{},surfaceCalls{},refreshCalls{},creationCalls{},paintedRefreshCalls{},placementRefreshCalls{};
+ unsigned placementCalls{},saveCalls{},focusCalls{},surfaceCalls{},refreshCalls{},creationCalls{},paintedRefreshCalls{},placementRefreshCalls{},materialRefreshCalls{};
  forest::undoCalls=forest::redoCalls=0;
  EditorMainSurface surface=EditorMainSurface::Scene;
  gui::requested=action;
@@ -405,6 +422,8 @@ void run(bool project,bool ready,std::size_t action,int busy=0,bool editable=tru
  auto ensure_forest_factory_preview=[&](Editor&) {++refreshCalls;return true;};
  auto refresh_forest_factory_instances=[&](Editor&) {++paintedRefreshCalls;return true;};
  auto begin_forest_surface_refresh=[&](Editor&) {++placementRefreshCalls;return true;};
+ auto selected_forest_species_target=[&](const Editor& candidate) {return editable ? &candidate : nullptr;};
+ auto refresh_selected_forest_material=[&](Editor&) {++materialRefreshCalls;return true;};
  auto begin_forest_project_creation=[&](Editor&) {++creationCalls;return true;};
  auto apply_editor_surface=[&](EditorMainSurface value,std::string_view) { ++surfaceCalls;surface=value; };
  auto focus_forest_factory_placement=[&](Context*,Editor&) { assert(surfaceCalls==1&&surface==EditorMainSurface::Scene);++focusCalls;return true; };
@@ -417,8 +436,10 @@ ACTUAL
  assert(gui::seen[3].enabled&&gui::seen[4].enabled==editable);
  assert(gui::refreshEnabled==(ready&&project&&(busy==0||busy==4)));
  assert(gui::placementRefreshEnabled==(project&&busy==0));
- if(action==5||action==6){assert(paintedRefreshCalls==(action==5&&ready&&project&&(busy==0||busy==4)?1u:0u));
+ assert(gui::materialRefreshEnabled==(project&&busy==0&&editable));
+ if(action>=5){assert(paintedRefreshCalls==(action==5&&ready&&project&&(busy==0||busy==4)?1u:0u));
   assert(placementRefreshCalls==(action==6&&project&&busy==0?1u:0u));
+  assert(materialRefreshCalls==(action==7&&project&&busy==0&&editable?1u:0u));
   assert(placementCalls==0&&saveCalls==0&&surfaceCalls==0&&focusCalls==0&&refreshCalls==0);return;}
  assert(paintedRefreshCalls==0);
  if(!gui::seen[action].enabled) {
@@ -434,7 +455,7 @@ ACTUAL
 }
 int main() {
  for(bool project:{false,true})for(bool ready:{false,true})
-  for(std::size_t action:{0u,1u,2u,3u,4u,5u,6u})for(int busy:{0,1,2,3,4})for(bool editable:{false,true})run(project,ready,action,busy,editable);
+  for(std::size_t action:{0u,1u,2u,3u,4u,5u,6u,7u})for(int busy:{0,1,2,3,4})for(bool editable:{false,true})run(project,ready,action,busy,editable);
 }
 '''.replace('ACTUAL', actual)
         self._compile_and_run(source)

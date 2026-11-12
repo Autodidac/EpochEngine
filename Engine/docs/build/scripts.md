@@ -394,12 +394,13 @@ Before publishing a Windows packaged runtime zip:
 
 Before publishing a Linux/WSL2 asset:
 
-- `stage_epoch_linux_release.ps1 -SkipRuntimeSmoke` is a deliberate build-safe
-  packaging lane for sessions where opening a renderer would disrupt the
-  operator. It still verifies version, engine contracts, notices, dependencies,
-  `$ORIGIN/lib`, GLIBC baseline, archive contents, and checksums, but the result
-  must be reported as lacking fresh runtime-smoke evidence. Omit the switch for
-  a fully runtime-smoked release candidate.
+- Use `stage_epoch_linux_release.ps1 -SoftwareOpenGLSmoke` for the required
+  offscreen graphics test. The bounded software-renderer test runs without
+  separate approval and records evidence for the exact staged executable.
+  `-SkipRuntimeSmoke` is for build-only preflight. It still verifies version,
+  engine contracts, notices, dependencies, `$ORIGIN/lib`, GLIBC baseline,
+  archive contents, and checksums. Release acceptance requires a graphics
+  smoke receipt.
 - rebuild from the same bumped production source that will be tagged; a closing
   docs-only commit must carry an exact production-input comparison and both
   build-commit and release-commit identities in provenance. If a README is

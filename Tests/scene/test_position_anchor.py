@@ -10,10 +10,60 @@ from Tests.scene.test_mesh_coordinates import CODE as COORDINATE_CODE
 from Tests.build.test_opengl_sprite_stream import definition
 
 ROOT = Path(__file__).resolve().parents[2]
+PLAY_SCENE = (ROOT / 'Engine/src/epoch/implementation/epoch.project_play_scene.inl').read_text(encoding='utf-8')
+SPAWN_FOCUS = definition(PLAY_SCENE, '            static void focus_project_spawn(')
 CODE = COORDINATE_CODE[:COORDINATE_CODE.index("int main(")] + r'''
 import scene.interaction;
 import forest.preview_mesh;
 namespace interaction=epochengine::scene_interaction;
+namespace previewgrid {
+struct Vec3 { float x{}, y{}, z{}; };
+struct SpawnCamera {
+ std::array<double, 3> eye{};
+ bool precise{};
+};
+bool focus_camera(const void* context, Vec3 eye, float radius) {
+ CHECK(radius == 0.f);
+ auto& camera = *const_cast<SpawnCamera*>(static_cast<const SpawnCamera*>(context));
+ camera = {{eye.x, eye.y, eye.z}, false};
+ return true;
+}
+bool focus_camera_precise(const void* context, const std::array<double, 3>& eye, float radius) {
+ CHECK(radius == 0.f);
+ auto& camera = *const_cast<SpawnCamera*>(static_cast<const SpawnCamera*>(context));
+ camera = {eye, true};
+ return true;
+}
+}
+ACTUAL_SPAWN_FOCUS
+void project_spawn_contract(const fs::path& root) {
+ auto source = legacy_source();
+ source.objects.push_back({.id=4, .name="Primary Landing", .type="Spawn",
+                           .position={0.03125f, 0.125f, -0.25f},
+                           .position_anchor=std::array<double, 3>{6371000.125, 12.375, -0.25}});
+ source.primary_spawn = 4;
+ const auto authored = document::SceneDocument::from_snapshot(source);
+ CHECK(authored);
+ const auto projected = authored.value.project_snapshot();
+ CHECK(projected && projected.snapshot.primary_spawn == 4);
+ const auto path = root / "primary-spawn.epoch";
+ CHECK(scene::persistence::save_scene_snapshot_atomic(path, projected.snapshot));
+ const auto reopened = scene::persistence::load_scene_snapshot(path);
+ CHECK(reopened.result && reopened.snapshot.primary_spawn == 4);
+ CHECK(scene::persistence::scene_snapshot_semantically_equal(projected.snapshot, reopened.snapshot));
+ runtime::SceneRuntime compiled;
+ CHECK(compiled.replace(reopened.snapshot).committed());
+ previewgrid::SpawnCamera camera;
+ focus_project_spawn(&camera, *compiled.projection());
+ CHECK(camera.precise);
+ CHECK(camera.eye == std::array<double, 3>{6371000.15625, 12.5 + double(1.65f), -0.5});
+
+ source.objects.back().position_anchor.reset();
+ CHECK(compiled.replace(source).committed());
+ focus_project_spawn(&camera, *compiled.projection());
+ CHECK(!camera.precise);
+ CHECK(camera.eye == std::array<double, 3>{0.03125, double(0.125f + 1.65f), -0.25});
+}
 void surface_rotation_contract() {
  namespace forest=epochengine::forest::preview_mesh;
  const auto matches=[](std::array<double,3> up,std::array<double,3> heading) {
@@ -142,6 +192,7 @@ int main(int argc,char** argv) {
  CHECK(argc==2);geometry_change_contract();legacy_contract();scale_contract();interaction_contract();surface_rotation_contract();forest_parent_contract();
  CHECK(runtime::run_scene_runtime_contract_checks());
  const fs::path root{argv[1]};fs::create_directories(root);
+ project_spawn_contract(root);
  auto seed=legacy_source();const auto canonical=document::SceneDocument::from_snapshot(seed);CHECK(canonical);
  auto canonicalSnapshot=canonical.value.project_snapshot();CHECK(canonicalSnapshot);
  auto source=canonicalSnapshot.snapshot;auto& tree=source.objects.back();
@@ -246,6 +297,7 @@ void geometry_change_contract(){
 
 }
 '''.replace('ACTUAL_DESCRIPTOR_OPS',_descriptor_ops)
+CODE=CODE.replace('ACTUAL_SPAWN_FOCUS', SPAWN_FOCUS)
 CODE=CODE.replace('int main(int argc,char** argv)',_geometry_contract+'\nint main(int argc,char** argv)')
 
 class ScenePositionAnchor(unittest.TestCase):

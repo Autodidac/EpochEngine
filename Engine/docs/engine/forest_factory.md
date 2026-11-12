@@ -73,6 +73,14 @@ through the admitted planetary provider. It does not launch one child per tree.
 Underwater candidates are skipped. Current placement aligns to radial gravity;
 no slope suitability or foliage/material acceptance is claimed.
 
+Freehand strokes and **Fill Painted Areas** keep new roots 24 metres apart.
+On ocean terrain, the surface provider checks four points 24 metres around each
+root and skips the root if any check reaches water. **Fill Painted Areas**
+samples saved paint on the selected body in one undoable operation. In
+perspective World view, nearby trees use their authored mesh. Trees below
+24 projected pixels use a small silhouette mesh, and trees below 1.5 pixels
+leave the render list. Selected trees retain their full mesh for editing.
+
 Each accepted tree is an ordinary persistent ForestFactory scene object, sharing
 the published mesh asset and carrying its region identity, source/recipe/body,
 selected plant revision, distribution seed/radius/density and candidate index.

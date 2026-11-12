@@ -22,11 +22,15 @@ class GeneratedBodyOutliner(unittest.TestCase):
             pane.index('        if (editor.selectedEntityId != editor.worldHierarchyScrollSelection)')]
         bodies = pane[pane.index('        std::size_t generatedBodyRow = 0u;'):
             pane.index('\n\n        }\n        else if (editor.outlinerToolTab == OutlinerToolTab::Assets)')]
+        document = (ROOT/'Engine/src/editor/application/editor.application_document_editing.inl').read_text(encoding='utf-8')
+        click = document[document.index('        [[nodiscard]] bool complete_scene_click('):
+            document.index('        [[nodiscard]] std::optional<scene::SceneObjectId> pick_editor_scene_entity(')].replace('EditorState', 'Editor')
         self.assertNotIn('world-outliner-status-bodies', pane)
         self.assertLess(pane.index('        std::size_t generatedBodyRow = 0u;'),
             pane.index('        gui::end_scroll_area();', pane.index('        std::size_t generatedBodyRow = 0u;')))
         source = r'''
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <optional>
@@ -41,6 +45,7 @@ DECLARATIONS
 Vec2 cursor{};std::vector<MenuItemOptions> drawn;std::vector<float> rowY;
 std::string click;int ends{};
 Vec2 cursor_position(){return cursor;}void set_cursor(Vec2 p){cursor=p;}
+Vec2 mouse_position(){return {20,60};}
 float measure_wrapped_label_height(std::string_view,float){return 22.f;}
 void label(std::string_view){cursor.y+=22.f;}
 void wrapped_label(std::string_view,float){cursor.y+=22.f;}
@@ -53,10 +58,16 @@ struct Entity{bool visible=true;std::string category="Planetary Terrain";std::op
 struct Policy{std::vector<Body> generated_bodies;};
 struct BodySelection{int entity;std::string mesh_key;std::uint32_t body;};
 struct Hierarchy{void synchronize_selection(int) {}};
+namespace scene {using SceneObjectId=std::uint64_t;}
 struct Editor{std::vector<Entity> entities{Entity{}};std::optional<Policy> planetaryMeshPolicy=Policy{};
  std::string worldHierarchyFilter,worldHierarchyStatus="Hierarchy synchronized.";int selectedEntityId=-1,worldHierarchyScrollSelection=-1;
- std::optional<BodySelection> planetaryBodySelection;Hierarchy worldHierarchy;};
+ std::optional<BodySelection> planetaryBodySelection;Hierarchy worldHierarchy;
+ struct SceneClick{scene::SceneObjectId entity;std::optional<std::uint32_t> body;gui::Vec2 position;
+  std::chrono::steady_clock::time_point time;bool outliner;};
+ std::optional<SceneClick> previousSceneClick;};
+CLICK
 bool identity=true,admitted=true;int focusCalls{},selectedBody=-1;
+bool editor_project_viewport_input_reserved(const Editor&){return false;}
 bool editor_planetary_stream_identity_matches(const Editor&,const Entity&){return identity;}
 std::string_view editor_planetary_restore_progress(const Editor&){return {};}
 bool select_editor_planetary_body(Editor& e,std::size_t i,std::uint32_t id){
@@ -85,6 +96,8 @@ EXTENT
   const gui::Vec2 hierarchyOrigin{10,54-(hierarchyContentHeight-hierarchyViewportHeight)};
   gui::drawn.clear();gui::rowY.clear();gui::click="Body 11";admitted=scenario!=2;
   const int previousFocus=focusCalls;
+  const bool releasedInOutlinerFrame=true;
+  bool objectRowClicked=false;
 BODIES
   CHECK(gui::ends==scenario+1);
   CHECK(gui::cursor.y<=pane_pos.y+pane_size.y-4.f+.01f);
@@ -93,11 +106,11 @@ BODIES
    CHECK(gui::rowY.back()+hierarchyRowHeight<=pane_pos.y+pane_size.y-4.f+.01f);
    CHECK(gui::drawn.back().shortcut=="Satellite");
    if(scenario==2){CHECK(focusCalls==previousFocus);CHECK(editor.worldHierarchyStatus.starts_with("Body selection refused"));}
-   else {CHECK(focusCalls==previousFocus+1&&selectedBody==11);CHECK(editor.worldHierarchyScrollSelection==7);}
+   else {CHECK(focusCalls==previousFocus+(scenario==1?1:0)&&selectedBody==11);CHECK(editor.worldHierarchyScrollSelection==7);}
   }else CHECK(gui::drawn.empty());
  }
 }
-'''.replace('DECLARATIONS', declarations).replace('EXTENT', extent).replace('BODIES', bodies)
+'''.replace('DECLARATIONS', declarations).replace('EXTENT', extent).replace('BODIES', bodies).replace('CLICK', click)
         report = ROOT/'Artifacts/Reports/outliner-generated-bodies'/str(time.time_ns())
         report.mkdir(parents=True)
         cpp = report/'consumer.cpp'

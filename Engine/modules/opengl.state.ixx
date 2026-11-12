@@ -197,6 +197,7 @@ export namespace epochengine::openglstate
 
         GLuint sceneShader = 0;
         GLint sceneMvpLoc = -1;
+        GLint sceneWireLoc = -1;
         GLuint sceneVao = 0;
         GLuint sceneVbo = 0;
         GLuint sceneEbo = 0;

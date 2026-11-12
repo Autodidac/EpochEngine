@@ -3,9 +3,8 @@
 // Epoch Editor: keep editor state and source changes within their owning workflows.
 #pragma once
 
-// Explicit, model-independent project-goal instructions for the chat composer.
-// This only recognizes instructions about the persistent goal lifecycle;
-// ordinary project requests must retain normal intent routing.
+// Explicit project-goal instructions and reviewed host-tool sequences for
+// the chat composer. Ordinary requests retain their normal intent routing.
 
 #include <cstddef>
 #include <string_view>
@@ -130,6 +129,31 @@ namespace epochengine::editor::ai_chat_goal
     // execution authority: every stage still needs its own exact-call approval.
     enum class RoundTripRequest : unsigned char { none, reopen, build_and_run };
 
+    enum class ForestAssetKind : unsigned char { none, beacon, tree };
+
+    struct ForestAssetRequest
+    {
+        ForestAssetKind kind{};
+        std::string_view image{}, foliage{};
+        [[nodiscard]] constexpr explicit operator bool() const noexcept { return kind != ForestAssetKind::none; }
+    };
+
+    [[nodiscard]] constexpr ForestAssetRequest forest_asset_request(std::string_view text) noexcept
+    {
+        text = trim(text);
+        if (starts_with(text, "please ")) text.remove_prefix(7u);
+        constexpr std::string_view beacon = "Generate and place a landing beacon near the selected forest:";
+        if (starts_with(text, beacon)) return {ForestAssetKind::beacon, trim(text.substr(beacon.size()))};
+        constexpr std::string_view tree = "Add a custom textured tree to the selected forest:";
+        if (!starts_with(text, tree)) return {};
+        const auto prompts = trim(text.substr(tree.size()));
+        const auto split = prompts.find('\n');
+        if (!starts_with(prompts, "Bark:") || split == std::string_view::npos) return {ForestAssetKind::tree};
+        const auto foliage = trim(prompts.substr(split + 1u));
+        if (!starts_with(foliage, "Foliage:")) return {ForestAssetKind::tree};
+        return {ForestAssetKind::tree, trim(prompts.substr(5u, split - 5u)), trim(foliage.substr(8u))};
+    }
+
     [[nodiscard]] constexpr RoundTripRequest round_trip_request(std::string_view text) noexcept
     {
         text = trim(text);
@@ -218,17 +242,34 @@ namespace epochengine::editor::ai_chat_goal
         std::uint64_t origin_project_generation{};
         std::string step_request{};
         unsigned request_stage{};
-        bool round_trip{}, build_and_run{};
+        bool round_trip{}, build_and_run{}, texture_update{};
         std::string reopen_manifest{};
         std::uint64_t saved_scene_revision{}, accepted_build_generation{};
+        std::uint64_t import_scene_revision{}, imported_recipe_revision{}, imported_recipe_hash{};
+        std::uint64_t forest_asset_target{}, forest_asset_scene_revision{};
+        ForestAssetKind forest_asset_kind{ForestAssetKind::beacon};
+        std::uint64_t forest_asset_recipe_revision{}, forest_asset_recipe_hash{};
+        std::string forest_asset_output{}, beacon_reference_sha256{};
+        [[nodiscard]] bool generates_foliage_cutout() const noexcept
+        {
+            return enabled && !stopped && forest_asset_target && forest_asset_kind == ForestAssetKind::tree && stage == 2u;
+        }
         void bind_request(std::string_view request, std::string_view id,
-            std::string_view root, std::uint64_t generation)
+            std::string_view root, std::uint64_t generation, bool update_texture = false)
         {
             objective = request;
             origin_project_id = id;
             origin_project_root = root;
             origin_project_generation = generation;
             run_after_save = requests_project_run(request);
+            texture_update = update_texture;
+            if (texture_update)
+            {
+                enabled = true;
+                project_id = origin_project_id;
+                project_root = origin_project_root;
+                project_generation = generation;
+            }
         }
         bool remember_request(std::string_view operation_name, std::string_view request)
         {
@@ -242,18 +283,48 @@ namespace epochengine::editor::ai_chat_goal
         {
             constexpr std::string_view operations[]{"project.create", "forest.configure", "forest.paint", "project.save", "project.run"};
             constexpr std::string_view roundTripOperations[]{"project.save", "project.close", "project.open", "project.build", "project.run"};
+            constexpr std::string_view beaconOperations[]{"asset.image.generate", "asset.reference.approve",
+                "asset.model.generate", "asset.model.setup_landing", "project.save"};
+            constexpr std::string_view treeOperations[]{"asset.image.generate", "forest.material.import",
+                "asset.image.generate", "forest.material.import", "forest.species.add"};
             if (!enabled || stage >= operation_count()) return {};
+            if (forest_asset_target) return forest_asset_kind == ForestAssetKind::tree ? treeOperations[stage] : beaconOperations[stage];
+            if (texture_update) return stage == 0u ? "forest.material.import" : "forest.update";
             if (round_trip) return roundTripOperations[stage];
             return operations[stage + (!configure_plant && stage > 0u ? 1u : 0u)];
         }
         [[nodiscard]] unsigned operation_count() const noexcept
-        { return round_trip ? (build_and_run ? 5u : 3u) : 3u + unsigned(configure_plant) + unsigned(run_after_save); }
+        {
+            if (forest_asset_target) return 5u;
+            if (texture_update) return 2u;
+            return round_trip ? (build_and_run ? 5u : 3u) : 3u + unsigned(configure_plant) + unsigned(run_after_save);
+        }
         [[nodiscard]] std::string next_request(std::string_view original) const
         {
             const auto tool = operation();
             if (tool.empty()) return {};
+            if (forest_asset_target)
+            {
+                if (tool == "asset.image.generate")
+                {
+                    const auto prompts = forest_asset_request(objective);
+                    if (forest_asset_kind == ForestAssetKind::tree && stage == 2u)
+                        return "Generate an image with " + std::string{prompts.foliage}
+                            + ". Isolate the foliage and its downward stem against a flat vivid pure magenta (#FF00FF) background. "
+                              "Leave a clear magenta margin on all four edges. No magenta on the plant, no shadows, text or border.";
+                    return "Generate an image with " + std::string{prompts.image};
+                }
+                if (tool == "forest.material.import")
+                    return stage == 1u ? "Import and apply the current PNG as bark." : "Import and apply the current PNG as foliage.";
+                if (tool == "forest.species.add") return "Add the current Plant Lab tree to the selected forest.";
+                if (tool == "asset.reference.approve") return "Approve the current PNG as the 3D reference.";
+                if (tool == "asset.model.generate") return "Generate 3D from the approved reference.";
+                if (tool == "asset.model.setup_landing") return "Set up landing near the selected forest with the current generated 3D model.";
+            }
             if (!step_request.empty() && request_stage == stage) return step_request;
             if (tool == "project.create") return std::string{original};
+            if (tool == "forest.material.import") return std::string{original};
+            if (tool == "forest.update") return "Update Painted Trees.";
             if (tool == "project.save") return "save project";
             if (tool == "project.close") return "close project";
             if (tool == "project.open") return "reopen project=" + origin_project_id;
@@ -268,8 +339,14 @@ namespace epochengine::editor::ai_chat_goal
         }
         [[nodiscard]] bool matches(std::string_view id, std::string_view root, std::uint64_t generation) const noexcept
         {
-            return (!round_trip && stage == 0u && project_id.empty())
+            return (!round_trip && !texture_update && stage == 0u && project_id.empty())
                 || (id == project_id && root == project_root && generation == project_generation);
+        }
+        [[nodiscard]] bool matches_imported_recipe(std::uint64_t scene_revision,
+            std::uint64_t recipe_revision, std::uint64_t recipe_hash) const noexcept
+        {
+            return texture_update && stage == 1u && scene_revision == import_scene_revision
+                && recipe_revision == imported_recipe_revision && recipe_hash == imported_recipe_hash;
         }
         // Explicit resume keeps the next uncompleted stage. A created shell
         // whose later generation failed must not create another project.
@@ -287,7 +364,7 @@ namespace epochengine::editor::ai_chat_goal
         }
         [[nodiscard]] std::string local_review_plan() const
         {
-            if (!enabled || stopped || waiting) return {};
+            if (!enabled || stopped || waiting || texture_update) return {};
             if (round_trip)
             {
                 if (operation() == "project.save")
@@ -309,7 +386,9 @@ namespace epochengine::editor::ai_chat_goal
                 return {};
             }
             if (operation() == "project.save")
-                return "EPOCH_TOOL_PLAN_V1\nTITLE Save the created project\n"
+                return forest_asset_target
+                    ? "EPOCH_TOOL_PLAN_V1\nTITLE Save the landing area\nSUMMARY Save the reviewed beacon, PlayerStart and reach objective.\nCALL project.save\nEND\n"
+                    : "EPOCH_TOOL_PLAN_V1\nTITLE Save the created project\n"
                     "SUMMARY Save the verified planet and painted forest in the current project.\n"
                     "CALL project.save\nEND\n";
             if (operation() == "project.run")
@@ -320,10 +399,49 @@ namespace epochengine::editor::ai_chat_goal
         }
         bool receipt(std::string_view operation_name, bool success, std::string_view id,
             std::string_view root, std::uint64_t generation, std::uint64_t scene_revision = 0u,
-            std::uint64_t build_generation = 0u)
+            std::uint64_t build_generation = 0u, std::uint64_t recipe_revision = 0u,
+            std::uint64_t recipe_hash = 0u)
         {
             if (!enabled || stopped || !waiting || operation_name != operation()) return false;
             waiting = false;
+            if (forest_asset_target)
+            {
+                const bool tree = forest_asset_kind == ForestAssetKind::tree;
+                const bool imported = operation_name == "forest.material.import";
+                const bool placed = operation_name == "asset.model.setup_landing" || operation_name == "forest.species.add";
+                if (!success || !matches(id, root, generation) || scene_revision == 0u
+                    || (placed ? scene_revision == forest_asset_scene_revision : scene_revision != forest_asset_scene_revision)
+                    || (operation_name != "project.save" && operation_name != "forest.species.add" && forest_asset_output.empty())
+                    || (!tree && operation_name != "project.save" && beacon_reference_sha256.empty())
+                    || (tree && (recipe_revision == 0u || (!imported && (recipe_revision != forest_asset_recipe_revision
+                        || recipe_hash != forest_asset_recipe_hash)))))
+                { stopped = true; return false; }
+                if (placed) forest_asset_scene_revision = scene_revision;
+                if (imported)
+                {
+                    forest_asset_recipe_revision = recipe_revision;
+                    forest_asset_recipe_hash = recipe_hash;
+                    forest_asset_output.clear();
+                }
+                ++stage;
+                return stage < operation_count();
+            }
+            if (texture_update)
+            {
+                if (!success || id.empty() || root.empty() || !matches(id, root, generation)
+                    || (stage == 0u && (scene_revision == 0u || recipe_revision == 0u))
+                    || (stage == 1u && (recipe_revision != imported_recipe_revision
+                        || recipe_hash != imported_recipe_hash)))
+                { stopped = true; return false; }
+                if (stage == 0u)
+                {
+                    import_scene_revision = scene_revision;
+                    imported_recipe_revision = recipe_revision;
+                    imported_recipe_hash = recipe_hash;
+                }
+                ++stage;
+                return stage < operation_count();
+            }
             if (round_trip)
             {
                 bool accepted = false;

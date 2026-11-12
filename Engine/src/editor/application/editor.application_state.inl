@@ -69,6 +69,11 @@
             BottomColumns
         };
 
+        enum class ScenePointerMode : unsigned char
+        {
+            select, move_free, move_x, move_y, move_z
+        };
+
         enum class EditorToolDockRegion : std::uint8_t
         {
             Left = 0,
@@ -2045,6 +2050,7 @@
             std::shared_ptr<const previewgrid::MeshBaseColorBinding> meshBaseColorTexture{};
             std::optional<std::array<double,3>> positionAnchor{};
             std::optional<scene::SceneForestRegionInstance> forestRegion{};
+            std::optional<scene::SceneTerrainAttachment> terrainAttachment{};
         };
 
         [[nodiscard]] std::optional<EditorWorkspaceTab> requested_editor_workspace_tab() noexcept
@@ -2323,6 +2329,7 @@
             bool scriptEditorDirty{ false };
             bool aiTasksDetailsVisible{false};
             std::optional<std::future<EditorProjectBuildResult>> projectBuildPending{};
+            std::optional<bool> projectRunAfterTerrainPreview{};
             editor_tasks::CancellationTicket projectBuildCancellation{};
             std::chrono::steady_clock::time_point projectBuildProgressSample{};
             project_lifecycle::EvidenceLedger projectLifecycle{};
@@ -2374,6 +2381,7 @@
             FrameLimitEditState projectFrameLimitEdit{};
             previewgrid::CameraMode projectCameraMode{ previewgrid::CameraMode::Editor };
             previewgrid::CameraMode viewportCameraMode{ previewgrid::CameraMode::Editor };
+            std::optional<previewgrid::CameraRigSnapshot> lodInspectionReturnCamera{};
             bool viewportMeshWireframe{};
             std::optional<bool> viewportMeshWireframeRequest{};
             input::ProfilePreset inputProfilePreset{ input::ProfilePreset::EditorDefault };
@@ -2403,6 +2411,24 @@
             std::optional<previewgrid::CameraRigSnapshot> assetGenerationPreviousCamera{};
             bool meshImportOpen{};
             std::string meshImportPathDraft{};
+            struct ModelShorelineTarget final
+            {
+                scene::SceneObjectId terrain{};
+                std::uint64_t sceneRevision{};
+                std::filesystem::path workDirectory{};
+                previewgrid::PreciseMeshTransform transform{};
+                project_planetary::SurfaceQuery query{};
+                scene::SceneObjectId forestTree{};
+                std::optional<scene::SceneForestRegionInstance> forest{};
+                double beaconRadius{};
+            };
+            struct ModelSurfaceResult final
+            {
+                project_planetary::SurfaceCode code{project_planetary::SurfaceCode::invalid};
+                project_planetary::Result operation{};
+                project_planetary::SurfaceResult land{};
+                std::optional<project_planetary::SurfaceResult> playerStart{};
+            };
             struct ModelImportReview final
             {
                 std::string requestedPath{}, projectId{}, projectRoot{}, sourceSha256{};
@@ -2412,8 +2438,11 @@
                 asset::model_import::BaseColorCompilation compiled{};
                 SpriteHandle texturePreview{};
                 bool texturePreviewAttempted{};
+                std::optional<ModelShorelineTarget> shoreline{};
             };
             std::optional<ModelImportReview> modelImportReview{};
+            std::optional<std::future<ModelSurfaceResult>> modelShorelinePending{};
+            editor_tasks::CancellationTicket modelShorelineCancellation{};
             std::string assetBrowserFolder{};
             std::size_t assetCategory{};
             std::size_t assetWorkspaceSection{};
@@ -2540,7 +2569,7 @@
             bool forestTerrainPainting{};
             bool forestBrushHeld{};
             scene::SceneObjectId forestBrushTerrain{scene::kInvalidSceneObjectId};
-            std::optional<std::array<double,3>> forestBrushLastDirection{};
+            std::vector<std::array<double,3>> forestBrushDirections{};
             std::optional<previewgrid::Camera> forestPlacementCamera{};
             std::string plantLabStatus{
                 "Plant Lab document is ready to initialize."};
@@ -2599,9 +2628,19 @@
             bool outputFilterGeneral{};
             bool outputShowDetails{};
             bool helpersVisible{ true };
+            struct SceneClick final
+            {
+                scene::SceneObjectId entity{};
+                std::optional<std::uint32_t> body{};
+                gui::Vec2 position{};
+                std::chrono::steady_clock::time_point time{};
+                bool outliner{};
+            };
+            std::optional<SceneClick> previousSceneClick{};
+            ScenePointerMode scenePointerMode{ScenePointerMode::select};
             bool sceneDragActive{ false };
-            bool sceneDragMoved{}, sceneDragPendingToggle{}, sceneDragVertical{};
-            unsigned sceneDragHorizontalAxis{}; //0 undecided,1 X,2 Z.
+            bool sceneDragMoved{};
+            ScenePointerMode sceneDragMode{ScenePointerMode::select};
             bool sceneLeftWasHeld{ false };
             std::size_t sceneDragEntity{ 0 };
             scene::SceneObjectId sceneDragEntityId{ scene::kInvalidSceneObjectId };
@@ -2823,11 +2862,13 @@
                 project_planetary::SurfaceQuery query{};
                 std::optional<forest::ForestAreaDistribution> area{};
                 std::vector<std::array<double,3>> directions{};
+                std::vector<std::array<double,3>> brushCenters{};
                 bool findOceanShoreline{};
-                // Nonempty only for an explicit placement refresh. Keep the
-                // exact authored trees while new procedural ground is sampled.
+                std::uint64_t existingRegion{};
+                // Keep the exact authored objects while new ground is sampled.
                 std::uint64_t sceneRevision{};
-                std::vector<scene::SceneObjectSnapshot> refreshTrees{};
+                bool refreshAttachments{};
+                std::vector<scene::SceneObjectSnapshot> refreshObjects{};
                 std::vector<project_planetary::GeneratedBody> refreshBodies{};
             };
             std::optional<ForestSurfacePlacement> forestSurfacePlacement{};
@@ -2836,12 +2877,15 @@
                 project_planetary::SurfaceBatchResult surface{};
                 std::vector<EditorEntity> prototype{};
                 std::optional<std::array<double,3>> shorelineCenter{};
+                std::vector<double> groundSupports{};
+                std::vector<bool> brushInland{};
             };
             std::optional<std::future<ForestSurfacePrepared>> forestSurfacePending{};
             editor_tasks::CancellationTicket forestSurfaceCancellation{};
             std::uint64_t forestSurfaceSequence{};
             forest::ForestAreaDistribution forestArea{};
             bool forestPlacementFocusPending{};
+            std::optional<bool> forestPlacementSaved{};
             std::string planetarySeedDraft{"1337"};
             std::string planetaryRadiusDraft{"6371000"};
             double planetaryRadiusSynced{6371000.0};
@@ -2992,6 +3036,7 @@
             std::filesystem::path aiToolAssetWork{};
             std::uint64_t aiToolAssetActivityId{};
             std::uint64_t aiToolProjectGeneration{}, aiToolSceneRevision{}, aiToolGuiRevision{};
+            scene::SceneObjectId aiToolPlacementTarget{};
             bool aiToolPlantRecipeBound{};
             std::uint64_t aiToolPlantRevision{}, aiToolPlantHash{};
             // Catalog identities are host-owned snapshots, never model paths.

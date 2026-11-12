@@ -321,6 +321,7 @@
                 object.mesh_asset = entity.meshAsset;
                 object.position_anchor = entity.positionAnchor;
                 object.forest_region = entity.forestRegion;
+                object.terrain_attachment = entity.terrainAttachment;
                 snapshot.objects.emplace_back(std::move(object));
             }
 

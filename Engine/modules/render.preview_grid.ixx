@@ -108,7 +108,8 @@ namespace epochengine::previewgrid
         ForestBranch,
         ForestLeafCluster,
         EngineArcadeCabinet,
-        IndexedMesh
+        IndexedMesh,
+        TranslationArrow
     };
 
     // A single tapered primitive always fits the renderer's fixed eight-sided
@@ -158,6 +159,8 @@ namespace epochengine::previewgrid
                 .selection_wire = true,
                 .sampled_surface = false
             };
+        case ObjectPreviewPrimitive::TranslationArrow:
+            return {.marker_wire = true};
         case ObjectPreviewPrimitive::Spawn:
             return ObjectPreviewGeometryRoute{
                 .solid_scene = true,
@@ -304,6 +307,17 @@ namespace epochengine::previewgrid
                 position[1]+rotation[3]*local[0]+rotation[4]*local[1]+rotation[5]*local[2],
                 position[2]+rotation[6]*local[0]+rotation[7]*local[1]+rotation[8]*local[2]};
         }
+        [[nodiscard]] std::array<double, 3> inverse_apply(const std::array<double, 3>& point) const noexcept
+        {
+            std::array<double, 3> result{};
+            for (std::size_t axis = 0; axis < result.size(); ++axis)
+            {
+                for (std::size_t row = 0; row < result.size(); ++row)
+                    result[axis] += rotation[row * 3 + axis] * (point[row] - position[row]);
+                result[axis] /= scale[axis];
+            }
+            return result;
+        }
         friend bool operator==(const PreciseMeshTransform&,const PreciseMeshTransform&) noexcept = default;
     };
     export [[nodiscard]] bool valid_precise_mesh_transform(const PreciseMeshTransform& value) noexcept;
@@ -327,6 +341,7 @@ namespace epochengine::previewgrid
         std::shared_ptr<const MeshBaseColorBinding> baseColorTexture{};
         std::optional<PreciseMeshTransform> preciseTransform{};
         std::shared_ptr<const MeshPaintView> paintView{};
+        bool forestLighting{};
     };
 
     // Presentation-only paint colors. Geometry, depth and authored materials stay intact.
@@ -886,7 +901,7 @@ namespace epochengine::previewgrid
                 && lhs.rotationDegrees.z == rhs.rotationDegrees.z
                 && lhs.radius == rhs.radius && lhs.primitive == rhs.primitive && lhs.selected == rhs.selected
                 && lhs.editorOnly == rhs.editorOnly && lhs.sampledRenderSurface == rhs.sampledRenderSurface
-                && lhs.wireframe == rhs.wireframe
+                && lhs.wireframe == rhs.wireframe && lhs.forestLighting == rhs.forestLighting
                 && lhs.preciseTransform == rhs.preciseTransform
                 && bool(lhs.paintView)==bool(rhs.paintView)
                 && (!lhs.paintView || *lhs.paintView==*rhs.paintView)
@@ -2812,6 +2827,21 @@ namespace epochengine::previewgrid
             {
                 switch (marker.primitive)
                 {
+                case ObjectPreviewPrimitive::TranslationArrow:
+                {
+                    const float length = marker.scale.x;
+                    const auto rotation = detail::euler_rotation(marker.rotationDegrees);
+                    const auto at = [&](Vec3 point)
+                    {
+                        return add(center, detail::rotate_euler(scale(point, length), rotation));
+                    };
+                    const auto tip = at({1.0f,0.0f,0.0f});
+                    push_line(center, tip, color);
+                    for (const auto wing : {Vec3{0.86f,0.06f,0.0f}, Vec3{0.86f,-0.06f,0.0f},
+                        Vec3{0.86f,0.0f,0.06f}, Vec3{0.86f,0.0f,-0.06f}})
+                        push_line(tip, at(wing), color);
+                    break;
+                }
                 case ObjectPreviewPrimitive::Light:
                     push_line({ center.x - radius, center.y, center.z }, { center.x + radius, center.y, center.z }, lit(color, 1.2f));
                     push_line({ center.x, center.y - radius, center.z }, { center.x, center.y + radius, center.z }, lit(color, 1.2f));
@@ -2935,6 +2965,16 @@ namespace epochengine::previewgrid
         return out;
     }
 
+    namespace detail
+    {
+        inline constexpr std::size_t kMaxForestShadowVertices = 12000u;
+        struct ForestShadow;
+        [[nodiscard]] const ForestShadow* prepare_forest_shadow(ObjectMarker& localMarker,
+            const EulerRotation& rotation, const epochengine::lighting::LightingFrame& frame,
+            const epochengine::lighting::LightDesc*& sun);
+        [[nodiscard]] float forest_shadow_visibility(const ForestShadow& shadow, Vec3 local) noexcept;
+    }
+
     inline std::vector<Vertex> detail::build_marker_solids(std::span<const ObjectMarker> markers,
         const epochengine::lighting::LightingFrame& lightingFrame,const Camera& camera,
         std::vector<TexturedVertex>* textured, bool wire_depth)
@@ -2967,11 +3007,13 @@ namespace epochengine::previewgrid
                 (std::clamp)(color.z * factor + 0.08f, 0.0f, 1.0f)
             };
         };
-        const auto shade_surface = [&](Vec3 position, Vec3 normal, Vec3 albedo) noexcept
+        const auto shade_surface = [&](Vec3 position, Vec3 normal, Vec3 albedo,
+            bool forest = false, bool foliage = false, const epochengine::lighting::LightDesc* sun = nullptr,
+            float visibility = 1.0f) noexcept
         {
             if (lightingFrame.revision == 0u && lightingFrame.lights.empty())
             {
-                const float facing = 0.70f + (std::max)(0.0f, normal.y) * 0.46f;
+                const float facing = 0.70f + (foliage ? std::abs(normal.y) : (std::max)(0.0f, normal.y)) * 0.46f;
                 return lit(albedo, facing);
             }
 
@@ -2986,8 +3028,11 @@ namespace epochengine::previewgrid
                         camera.eye.z - position.z
                     },
                     .albedo{ albedo.x, albedo.y, albedo.z },
-                    .specularColor{ 0.18f, 0.18f, 0.18f },
-                    .shininess = 24.0f
+                    .specularColor = forest ? epochengine::lighting::Color3{} : epochengine::lighting::Color3{0.18f, 0.18f, 0.18f},
+                    .shininess = 24.0f,
+                    .twoSidedDiffuse = foliage,
+                    .shadowedLight = sun,
+                    .directVisibility = visibility
                 });
             return Vec3{
                 (std::clamp)(result.combined.r, 0.0f, 1.0f),
@@ -3162,8 +3207,8 @@ namespace epochengine::previewgrid
                 continue;
 
             const float radius = (std::clamp)(marker.radius, 0.16f, 1.75f);
-            const bool forestPrimitive =
-                marker.primitive == ObjectPreviewPrimitive::ForestTrunk
+            const bool forestPrimitive = marker.forestLighting
+                || marker.primitive == ObjectPreviewPrimitive::ForestTrunk
                 || marker.primitive == ObjectPreviewPrimitive::ForestBranch
                 || marker.primitive == ObjectPreviewPrimitive::ForestLeafCluster;
             Vec3 color = marker.selected && !forestPrimitive ? visual_rgb(epochengine::visuals::object_selected()) : marker.color;
@@ -3205,6 +3250,14 @@ namespace epochengine::previewgrid
                 std::vector<Vertex> transformed;
                 transformed.reserve((std::min)(vertices.size(), marker.mesh->indices().size()));
                 const auto indices=marker.mesh->indices();
+                const epochengine::lighting::LightDesc* sun{};
+                const detail::ForestShadow* shadow{};
+                ObjectMarker localMarker;
+                if (marker.forestLighting)
+                {
+                    localMarker = marker;
+                    shadow = detail::prepare_forest_shadow(localMarker, rotation, lightingFrame, sun);
+                }
                 for(std::size_t triangle=0;triangle<indices.size();triangle+=3u)
                 {
                     for(std::size_t corner=0;corner<3u;++corner)
@@ -3223,9 +3276,12 @@ namespace epochengine::previewgrid
                     Vec3 albedo = marker.paintView ? mesh_paint_albedo(*marker.paintView,source.position)
                         : marker.baseColorTexture && !marker.baseColorTexture->modulate_vertex_color
                             ? Vec3{1.0f,1.0f,1.0f} : Vec3{source.color[0], source.color[1], source.color[2]};
-                    if (marker.selected) albedo = add(scale(albedo, 0.85f), scale(color, 0.15f));
+                    if (marker.selected && !marker.forestLighting) albedo = add(scale(albedo, 0.85f), scale(color, 0.15f));
                     mapped[index] = static_cast<std::uint32_t>(transformed.size());
-                    transformed.push_back(make_vertex(position, shade_surface(position, normal, albedo)));
+                    const auto visibility = shadow ? detail::forest_shadow_visibility(*shadow,
+                        detail::mesh_vertex_position(localMarker, source.position, rotation)) : 1.0f;
+                    transformed.push_back(make_vertex(position, shade_surface(position, normal, albedo, marker.forestLighting,
+                        marker.forestLighting && source.uv[0] >= 0.5f, sun, visibility)));
                     if (marker.baseColorTexture) textured->push_back({transformed.back().position,
                         transformed.back().color, source.uv});
                     else out.push_back(transformed.back());
@@ -3331,23 +3387,11 @@ namespace epochengine::previewgrid
     export inline constexpr std::uint64_t maximum_solid_cache_working_bytes=128ull*1024ull*1024ull;
     namespace detail
     {
-        [[nodiscard]] inline bool same_solid_lighting(const epochengine::lighting::LightingFrame& a,
-            const epochengine::lighting::LightingFrame& b) noexcept
-        {
-            if(a.revision!=b.revision||!epochengine::lighting::same_environment(a.environment,b.environment)
-                ||a.lights.size()!=b.lights.size()) return false;
-            for(std::size_t i=0;i<a.lights.size();++i)
-                if(!epochengine::lighting::same_light_desc(a.lights[i].desc,b.lights[i].desc)) return false;
-            return true;
-        }
-        [[nodiscard]] inline bool same_eye(Vec3 a,Vec3 b) noexcept
-        {return a.x==b.x&&a.y==b.y&&a.z==b.z;}
-        [[nodiscard]] inline bool solid_uses_eye(const ObjectMarker& marker,
-            const epochengine::lighting::LightingFrame& lights) noexcept
-        {
-            return marker.primitive==ObjectPreviewPrimitive::EngineArcadeCabinet
-                ||std::ranges::any_of(lights.lights,[](const auto& light){return light.desc.enabled&&light.desc.intensity>0.0f;});
-        }
+        [[nodiscard]] bool same_solid_lighting(const epochengine::lighting::LightingFrame& a,
+            const epochengine::lighting::LightingFrame& b) noexcept;
+        [[nodiscard]] bool same_eye(Vec3 a, Vec3 b) noexcept;
+        [[nodiscard]] bool solid_uses_eye(const ObjectMarker& marker,
+            const epochengine::lighting::LightingFrame& lights) noexcept;
         [[nodiscard]] inline bool same_solid_frame(const SolidGeometryFrame& cached,
             std::span<const ObjectMarker> markers,const epochengine::lighting::LightingFrame& lights,Vec3 eye) noexcept
         {
@@ -3431,7 +3475,8 @@ namespace epochengine::previewgrid
                     ||!admit(marker.mesh->indices().size(),2u*sizeof(std::uint32_t))))return true;
                 if(object_marker_uses_solid_fill(marker))
                     scratch=(std::max)(scratch,marker.mesh->vertices().size()*sizeof(std::uint32_t)
-                        +(std::min)(marker.mesh->vertices().size(),marker.mesh->indices().size())*sizeof(Vertex));
+                        +(std::min)(marker.mesh->vertices().size(),marker.mesh->indices().size())*sizeof(Vertex)
+                        +(marker.forestLighting ? (std::min)(marker.mesh->vertices().size(), kMaxForestShadowVertices)*sizeof(Vec3) : 0u));
             }
             return !admit(scratch,1u);
         }
@@ -3505,7 +3550,8 @@ namespace epochengine::previewgrid
                     +marker.mesh->indices().size()*sizeof(std::uint32_t),1u)) return false;
                 if(!reuseAggregate&&!reused&&marker.mesh&&solid)
                     scratch=(std::max)(scratch,marker.mesh->vertices().size()*sizeof(std::uint32_t)
-                        +(std::min)(marker.mesh->vertices().size(),marker.mesh->indices().size())*sizeof(Vertex));
+                        +(std::min)(marker.mesh->vertices().size(),marker.mesh->indices().size())*sizeof(Vertex)
+                        +(marker.forestLighting ? (std::min)(marker.mesh->vertices().size(), kMaxForestShadowVertices)*sizeof(Vec3) : 0u));
             }
             return admit(frame.markers.size()>1u&&!reuseAggregate?vertices:0u,sizeof(Vertex))&&admit(scratch,1u);
         }

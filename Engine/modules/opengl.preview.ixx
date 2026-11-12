@@ -302,6 +302,7 @@ export namespace epochengine::openglpreview
 
         state.sceneShader = 0;
         state.sceneMvpLoc = -1;
+        state.sceneWireLoc = -1;
         state.sceneVao = 0;
         state.sceneVbo = 0;
         state.sceneEbo = 0;
@@ -345,15 +346,31 @@ layout(location = 0) in vec3 aPos;
 layout(location = 1) in vec3 aColor;
 uniform mat4 uMvp;
 out vec3 vColor;
+noperspective out vec3 vWireBarycentric;
 void main() {
     gl_Position = uMvp * vec4(aPos, 1.0);
     vColor = aColor;
+    int corner = gl_VertexID % 3;
+    vWireBarycentric = vec3(corner == 0, corner == 1, corner == 2);
 })";
             fragmentSource = R"(#version 330 core
 in vec3 vColor;
+noperspective in vec3 vWireBarycentric;
+uniform bool uWireEdges;
 out vec4 outColor;
 void main() {
     outColor = vec4(vColor, 1.0);
+    if (uWireEdges) {
+        vec3 dx = dFdx(vWireBarycentric);
+        vec3 dy = dFdy(vWireBarycentric);
+        vec3 slope = max(sqrt(dx * dx + dy * dy), vec3(1e-6));
+        vec3 distanceToEdge = vWireBarycentric / slope;
+        float nearestEdge = min(distanceToEdge.x, min(distanceToEdge.y, distanceToEdge.z));
+        float inradius = 1.0 / (slope.x + slope.y + slope.z);
+        // A mesh finer than the pixel grid otherwise turns into a solid patch.
+        float densityFade = smoothstep(0.20, 0.85, inradius);
+        outColor.a = densityFade * (1.0 - smoothstep(0.25, 0.85, nearestEdge));
+    }
 })";
         }
         else
@@ -461,6 +478,7 @@ void main() {
         glBindVertexArray(0);
 
         state.sceneMvpLoc = glGetUniformLocation(state.sceneShader, "uMvp");
+        state.sceneWireLoc = glGetUniformLocation(state.sceneShader, "uWireEdges");
         return state.sceneShader != 0 && state.sceneMvpLoc >= 0;
     }
 
@@ -945,11 +963,11 @@ void main() {
         glEnable(GL_DEPTH_TEST); glDepthFunc(GL_LEQUAL);
         glEnable(GL_CULL_FACE); glCullFace(GL_BACK); glFrontFace(GL_CW);
         glBindVertexArray(state.sceneMarkerVao); glBindBuffer(GL_ARRAY_BUFFER,state.sceneMarkerVbo);
-        // Both passes rasterize the same front-facing triangles. GL_LINES
-        // cannot be face-culled and would expose back-side silhouette edges.
+        const bool shaderEdges = state.sceneWireLoc >= 0;
         glPolygonMode(GL_FRONT_AND_BACK,GL_FILL);
         glColorMask(GL_FALSE,GL_FALSE,GL_FALSE,GL_FALSE); glDepthMask(GL_TRUE);
-        glEnable(GL_POLYGON_OFFSET_FILL); glPolygonOffset(1.0f,1.0f);
+        if (shaderEdges) glDisable(GL_POLYGON_OFFSET_FILL);
+        else { glEnable(GL_POLYGON_OFFSET_FILL); glPolygonOffset(1.0f,1.0f); }
         const auto& triangles=*frame.depth_triangles;
         glBufferData(GL_ARRAY_BUFFER,static_cast<GLsizeiptr>(triangles.size()*sizeof(triangles[0])),triangles.data(),GL_DYNAMIC_DRAW);
         glDrawArrays(GL_TRIANGLES,0,static_cast<GLsizei>(triangles.size()));
@@ -958,11 +976,48 @@ void main() {
         state.meshUploadBytesSubmitted+=triangles.size()*sizeof(triangles[0]);
         glDisable(GL_POLYGON_OFFSET_FILL);
         glColorMask(GL_TRUE,GL_TRUE,GL_TRUE,GL_TRUE); glDepthMask(GL_FALSE);
-        glPolygonMode(GL_FRONT_AND_BACK,GL_LINE);
-        glDrawArrays(GL_TRIANGLES,0,static_cast<GLsizei>(triangles.size()));
+        if (shaderEdges)
+        {
+            // Fill rasterization is identical in both passes. Test the true
+            // surface depth so grazing water cannot reveal hidden terrain edges.
+            glDepthFunc(GL_EQUAL);
+            struct ScopedWireEdges final
+            {
+                GLint location, srcRgb{}, dstRgb{}, srcAlpha{}, dstAlpha{}, equationRgb{}, equationAlpha{};
+                GLboolean blendEnabled{};
+                explicit ScopedWireEdges(GLint uniform) : location{uniform}
+                {
+                    blendEnabled = glIsEnabled(GL_BLEND);
+                    glGetIntegerv(GL_BLEND_SRC_RGB, &srcRgb);
+                    glGetIntegerv(GL_BLEND_DST_RGB, &dstRgb);
+                    glGetIntegerv(GL_BLEND_SRC_ALPHA, &srcAlpha);
+                    glGetIntegerv(GL_BLEND_DST_ALPHA, &dstAlpha);
+                    glGetIntegerv(GL_BLEND_EQUATION_RGB, &equationRgb);
+                    glGetIntegerv(GL_BLEND_EQUATION_ALPHA, &equationAlpha);
+                    glEnable(GL_BLEND);
+                    glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
+                    glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ZERO, GL_ONE);
+                    glUniform1i(location, GL_TRUE);
+                }
+                ~ScopedWireEdges()
+                {
+                    glUniform1i(location, GL_FALSE);
+                    glBlendFuncSeparate(srcRgb, dstRgb, srcAlpha, dstAlpha);
+                    glBlendEquationSeparate(equationRgb, equationAlpha);
+                    if (blendEnabled == GL_FALSE) glDisable(GL_BLEND);
+                }
+            } edges{state.sceneWireLoc};
+            glDrawArrays(GL_TRIANGLES,0,static_cast<GLsizei>(triangles.size()));
+        }
+        else
+        {
+            glPolygonMode(GL_FRONT_AND_BACK,GL_LINE);
+            glDrawArrays(GL_TRIANGLES,0,static_cast<GLsizei>(triangles.size()));
+            glPolygonMode(GL_FRONT_AND_BACK,GL_FILL);
+        }
         state.meshTrianglesSubmitted+=triangles.size()/3u;
         ++state.meshDrawCallsSubmitted;
-        glPolygonMode(GL_FRONT_AND_BACK,GL_FILL);
+        glDepthFunc(GL_LEQUAL);
     }
 
     inline void render_scene_preview_conventional(

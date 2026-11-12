@@ -30,6 +30,11 @@
                     it->second.editorFrameLimitFps = core::cli::frame_limit_fps;
                     it->second.editorFrameVsyncRequested = core::cli::frame_vsync_requested;
                 }
+                else
+                {
+                    it->second.editorFrameLimitFps = perf::target_fps_for(
+                        recommended_editor_performance_tier(ctx, std::thread::hardware_concurrency()));
+                }
                 it->second.automationCommand = read_editor_automation_command();
                 it->second.timeControl.fixed_dt_seconds = 1.0 / 60.0;
                 it->second.timeControl.time_scale = 1.0;
@@ -126,10 +131,15 @@
             if (editor.taskScheduler)
                 for (const auto ticket : {editor.scriptBuildCancellation,
                     editor.planetaryCancellation, editor.planetaryPreviewCancellation,
-                    editor.assetGenerationCancellation, editor.aiDirectRuntimeCancellation,
+                    editor.assetGenerationCancellation, editor.modelShorelineCancellation, editor.aiDirectRuntimeCancellation,
                     editor.aiAuthoringApplyCancellation, editor.aiToolTestCancellation,
                     editor.aiContinuousBuildCancellation})
                     if (ticket.valid()) (void)editor.taskScheduler->cancel(ticket);
+            if (editor.modelShorelinePending && editor.modelImportReview)
+            {
+                editor.modelImportReview->shoreline.reset();
+                editor.aiToolStatus = editor.assetGeneration.status = "Shoreline import stopped. The scene is unchanged.";
+            }
         }
 
         // Called by the owning context while parking, or after detachment for
@@ -146,6 +156,7 @@
                 || editor.projectBuildPending.has_value()
                 || (editor.aiProjectScriptRunAfterBuild && editor.scriptBuildPending.has_value())
                 || editor.assetGenerationPending.has_value()
+                || editor.modelShorelinePending.has_value()
                 || editor.forestSurfacePending.has_value()
                 || editor.planetaryAttachmentPending.has_value()
                 || editor.planetaryGeneratePending.has_value()
@@ -161,6 +172,8 @@
             request_editor_task_session_stop(editor);
             if (editor.taskScheduler && editor.forestSurfaceCancellation.valid())
                 (void)editor.taskScheduler->cancel(editor.forestSurfaceCancellation);
+            if (editor.forestSurfacePlacement && editor.forestSurfacePlacement->refreshAttachments)
+                editor.projectStatus = "Model and spawn placement refresh cancelled.";
             // A ready result can no longer observe cancellation. Revoke its
             // scene commit now; the normal poll still owns future retirement.
             editor.forestSurfacePlacement.reset();

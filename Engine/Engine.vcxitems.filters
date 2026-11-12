@@ -1528,6 +1528,9 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\render\render.preview_camera.cpp">
       <Filter>Source Files\render</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\render\render.preview_lighting.cpp">
+      <Filter>Source Files\render</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\render.lighting.ixx">
       <Filter>Module Files\render</Filter>
     </ClCompile>

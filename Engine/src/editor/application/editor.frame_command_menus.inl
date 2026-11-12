@@ -70,7 +70,6 @@
             const std::string menuUndoLabel = menuUndo.enabled ? "Undo " + menuUndo.operation_label : "Undo";
             const std::string menuRedoLabel = menuRedo.enabled ? "Redo " + menuRedo.operation_label : "Redo";
             const auto remove = resolve_surface_edit(editor, SurfaceEditAction::delete_selection);
-            const auto focus = resolve_surface_edit(editor, SurfaceEditAction::focus_selection);
             menu_item(menuUndoLabel, [&]() {
                 (void)execute_surface_edit(editor, ctx.get(), SurfaceEditAction::undo);
             }, {.shortcut = "Ctrl+Z", .enabled = menuUndo.enabled});
@@ -84,9 +83,6 @@
                 clear_editor_selection(editor);
                 push_editor_log(editor, "[edit] Selection cleared.");
             }, {.shortcut = "Esc", .enabled = editor_has_selection(editor)});
-            menu_item("Focus Selection", [&]() {
-                (void)execute_surface_edit(editor, ctx.get(), SurfaceEditAction::focus_selection);
-            }, {.enabled = focus.enabled});
             menu_item("Reset Camera", [&]() {
                 handle_scene_tool(editor, ctx.get(), "reset_camera");
                 epochengine::previewgrid::reset_camera(ctx.get());

@@ -23,6 +23,7 @@ module;
 #include <epoch.edition.hpp>
 #include "../ai/ai.native_runtime.hpp"
 #include "../../include/core.utf8.hpp"
+#include "../assets/image.decode.hpp"
 module editor.asset_generation;
 import asset.texture_import;
 import core.sha256;
@@ -617,7 +618,7 @@ namespace epochengine::editor_asset_generation
         return request;
     }
     Completion execute(jobs::PreparedJob job,ProjectIdentity project,
-        std::shared_ptr<std::atomic<Stage>> progress,std::stop_token stop)
+        std::shared_ptr<std::atomic<Stage>> progress,std::stop_token stop,bool foliageCutout)
     {
         const auto started=std::chrono::steady_clock::now();
         Completion result;result.project=std::move(project);result.backend=job.backend_name;
@@ -657,6 +658,38 @@ namespace epochengine::editor_asset_generation
         if(result.result&&stop.stop_requested())
         {result.result.code=jobs::Code::cancelled;result.result.diagnostic="Cancelled after output verification. Files are retained; nothing was approved or imported.";}
         if(result.result&&result.retirement_verified)decode_output(result);
+        if (foliageCutout && result.result && result.retirement_verified && result.coding_restored)
+        {
+            auto& output = result.result;
+            const auto fail = [&](std::string diagnostic) {
+                output.code = stop.stop_requested() ? jobs::Code::cancelled : jobs::Code::invalid_output;
+                output.diagnostic = std::move(diagnostic);
+                result.image = {};
+            };
+            if (!result.image || output.output.parent_path() != output.work_directory)
+                fail("The foliage image was not available in its verified work directory.");
+            else
+            {
+                auto& mip = result.image.mips.front();
+                if (mip.row_pitch_bytes != mip.width * 4u || !image_codec::make_magenta_cutout(mip.texels, mip.width, mip.height))
+                    fail("Foliage generation needs a visible plant on a solid magenta background or an existing alpha cutout. The original image was retained.");
+                else
+                {
+                    const auto bytes = image_codec::encode_rgba_png(mip.texels, mip.width, mip.height);
+                    auto path = output.work_directory / "foliage-cutout.png";
+                    std::error_code error;
+                    if (bytes.empty() || stop.stop_requested() || !platform::filesystem::exclusive_create_and_write(path,bytes,error))
+                        fail("The foliage cutout could not be retained. The original image was preserved.");
+                    else
+                    {
+                        output.output = std::move(path);
+                        output.output_sha256 = digest(bytes);
+                        decode_output(result);
+                        if (output) output.diagnostic += " Review the transparent foliage PNG before applying it.";
+                    }
+                }
+            }
+        }
         result.wall_ms=static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-started).count());
         progress->store(Stage::idle);return result;
     }

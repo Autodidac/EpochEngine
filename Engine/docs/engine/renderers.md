@@ -70,6 +70,11 @@ Actual-owner Debug/Release contracts and dependency validation pass. Native pixe
 acceptance remains open; no WGL fallback, frame cap or GPU setting change is used
 as a claimed fix. Both owned processes retired normally in that run.
 
+Run opens a Vulkan project in a separate window when the Editor uses OpenGL.
+The same fallback applies when the current Editor window lacks native docking
+support. Run keeps the project's selected backend and frame limit. Compatible
+In Editor requests use the existing child-window attachment path.
+
 November1 LOD allocation accepts optional body-local forward/up and aspect ratio.
 From orbit it favors a broad central region. Near the surface it smoothly blends
 toward three bounded surface queries: forward, 45 degrees down in the rolled
@@ -132,10 +137,12 @@ Each indexed mesh uses one source front-face convention. Reliable surface normal
 establish it once before emission; nearly tangent skirt normals cannot flip single
 triangles. Entirely ambiguous normals keep the existing clockwise fallback. Source
 artifact bytes/UVs stay unchanged; reflected transforms retain their parity correction.
-OpenGL solid, textured and wireframe passes enable back-face culling. Wireframe
-uses the same triangles for its depth and polygon-line passes, rather than an
-uncullable list of every mesh edge. The preview scope restores winding, cull mode
-and polygon mode before GUI replay. DirectX, Software, Raylib, SDL, SFML and
+OpenGL solid, textured and wireframe passes enable back-face culling. With GLSL
+3.30 or newer, wireframe rasterizes filled triangles in both passes. The color
+pass shades edges at the exact visible depth and fades subpixel triangles to
+avoid solid-looking patches. The legacy shader uses a polygon-line pass. The
+preview restores winding, cull mode, polygon mode and blend state before GUI
+replay. DirectX, Software, Raylib, SDL, SFML and
 Vulkan reuse the shared camera-facing triangle-edge visitor; helper gizmos remain
 separate overlays. Non-OpenGL hidden-surface wire occlusion is still unverified.
 The wire packet owns one combined line stream, helper lines and depth triangles;
@@ -347,7 +354,7 @@ order.
 | Material semantics | Partial | Material handles and named logical texture slots flow through graph/device contracts. Portable sprite material, sampler, alpha, cutout, and color-space declarations exist; backend shader/blend consumption and broader PBR/normal/ORM semantics remain incomplete. |
 | Camera and transforms | Present | One renderer-neutral stable view descriptor carries scene, purpose, projection, orientation, clipping, and revision state. The editor owns perspective, free orthographic, six locked axis views, independent framing, LMB selection, Alt+LMB orbit, MMB pan, Alt+RMB dolly, RMB fly with WASD/QE and speed modifiers, Focus, and Reset. Authored project-camera persistence, oriented axis grids, mobile/console bindings, and live all-context eye proof remain follow-up. |
 | Portal and mirror views | Partial | Stable portal identity, shared camera descriptors, recursive cycle/depth/pixel budgeting, clip-plane intent, logical RTT outputs, disposable physical cache state, metrics, and render-pass view bindings are contract-proven. Native oblique/stencil clipping, traversal, presentation, and live backend pixels are not yet present. |
-| Lighting | Partial | `render.lighting` owns stable directional/point/spot lights, bounded frames, environment state, metrics, Euler conversion, and reference raster evaluation. Editor and project previews publish shared lighting frames but still use truthful reference-solid shading. Native light buffers, shaders, PBR, and shadows are Missing. |
+| Lighting | Partial | `render.lighting` owns stable directional/point/spot lights, bounded frames, environment state, metrics, Euler conversion, and reference raster evaluation. The shared solid preview lights both leaf faces consistently and computes per-tree self-shadowing from the strongest directional light. OpenGL uses the admitted foliage cutout for coverage. Other solid-stream drivers use the forest mesh and its fallback colors. Native light buffers, PBR, scene-wide shadow maps, and native pixel acceptance remain open. |
 | CPU ray/spatial queries | Partial | `render.ray` owns validated AABB, sphere, triangle, scene, and voxel-DDA reference queries with explicit status/metrics. Editor selection consumes persistent scene identity through that query spine. Hardware ray query/RT are Missing. |
 | Picking and Focus | Present | Editor picking resolves through persistent scene IDs and shared ray queries; Focus changes the active preview camera across presenting child contexts. Higher-tier GPU picking remains optional work, not the accepted baseline. |
 | Physics | Partial | `physics.manager`, `physics.solver2d`, and `project.actor2d_runtime` prove stable bodies, deterministic fixed-step AABB/circle collision, layers/masks, bounded static maps, stable contacts, pause/reset, snapshots, map collision, and renderer-neutral actor publication. Authored one-way/slope/custom-box collision, staged editor controls, and exact source/Library/runtime restoration are build-proven (v0.89.23). Native control interaction and the full playable-project acceptance remain unverified. |

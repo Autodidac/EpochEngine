@@ -529,7 +529,9 @@ namespace epochengine::scene::detail
         bool hasMesh = false,
         bool hasMeshCoordinates = false,
         bool hasPositionAnchor = false,
-        bool hasForestRegion = false)
+        bool hasForestRegion = false,
+        bool hasTerrainAttachment = false,
+        bool hasSolidWalkBoxes = false)
     {
         std::size_t position = 0;
         if (!consume_literal(line, position, "object "))
@@ -608,6 +610,27 @@ namespace epochengine::scene::detail
                     if(!consume_literal(line,position," ")||!parse_quoted_value(line,position,*value,maximumStringBytes))return false;
                 if(!region.valid())return false;
                 object.forest_region=std::move(region);
+            }
+        }
+        if (hasTerrainAttachment)
+        {
+            unsigned kind{};
+            if (!consume_literal(line, position, " terrain_attachment ")
+                || !parse_number_token(line, position, kind) || kind > (hasSolidWalkBoxes ? 2u : 1u)) return false;
+            if (kind != 0u)
+            {
+                SceneTerrainAttachment attachment;
+                attachment.solid_walk_box = kind == 2u;
+                const auto number = [&](auto& value) {
+                    return consume_literal(line, position, " ") && parse_number_token(line, position, value);
+                };
+                if (!number(attachment.terrain_object_id) || !number(attachment.body_index)) return false;
+                for (auto& word : attachment.terrain_artifact_key) if (!number(word)) return false;
+                if (!number(attachment.terrain_coordinates.meters_per_unit)) return false;
+                for (auto& axis : attachment.terrain_coordinates.source_origin_meters) if (!number(axis)) return false;
+                for (auto& axis : attachment.reference_center_meters) if (!number(axis)) return false;
+                if (!attachment.valid()) return false;
+                object.terrain_attachment = attachment;
             }
         }
         return position == line.size();
@@ -937,7 +960,10 @@ namespace epochengine::scene::detail
         bool hasEnvironment = false,
         bool hasMeshCoordinates = false,
         bool hasPositionAnchor = false,
-        bool hasForestRegion = false)
+        bool hasForestRegion = false,
+        bool hasTerrainAttachment = false,
+        bool hasReachObjective = false,
+        bool hasSolidWalkBoxes = false)
     {
         SceneSnapshot snapshot{};
         std::string_view line{};
@@ -1004,6 +1030,22 @@ namespace epochengine::scene::detail
                 || !valid_scene_ambient(snapshot.ambient))
                 return failure("invalid v5 ambient environment line");
         }
+        if (hasReachObjective)
+        {
+            if (!read_line(text, position, line)) return failure("missing reach objective");
+            if (!hasSolidWalkBoxes || line != "reach_objective none")
+            {
+                SceneReachObjective objective;
+                std::size_t field{};
+                if (!consume_literal(line, field, "reach_objective ")
+                    || !parse_number_token(line, field, objective.target)
+                    || !consume_literal(line, field, " ")
+                    || !parse_number_token(line, field, objective.radius_meters)
+                    || field != line.size() || !objective.valid())
+                    return failure("invalid reach objective");
+                snapshot.reach_objective = objective;
+            }
+        }
 
         std::size_t packageCount{};
         if (!read_line(text, position, line)
@@ -1042,7 +1084,8 @@ namespace epochengine::scene::detail
             SceneObjectSnapshot object{};
             if (!read_line(text, position, line)
                 || !parse_snapshot_object_line(
-                    line, object, maximumStringBytes, true, hasTextureMaterial, hasMesh, hasMeshCoordinates,hasPositionAnchor,hasForestRegion))
+                    line, object, maximumStringBytes, true, hasTextureMaterial, hasMesh, hasMeshCoordinates,
+                    hasPositionAnchor, hasForestRegion, hasTerrainAttachment, hasSolidWalkBoxes))
             {
                 return failure(
                     "invalid v2 object line " + std::to_string(index));
@@ -1223,7 +1266,13 @@ export namespace epochengine::scene
                 return {};
 
             detail::BoundedTextWriter writer{limits.maximum_text_bytes};
-            const bool hasForestRegion = std::any_of(snapshot.objects.begin(),snapshot.objects.end(),
+            const bool hasReachObjective = snapshot.reach_objective.has_value();
+            const bool hasSolidWalkBoxes = std::ranges::any_of(snapshot.objects, [](const SceneObjectSnapshot& object) {
+                return object.terrain_attachment && object.terrain_attachment->solid_walk_box;
+            });
+            const bool hasTerrainAttachment = hasReachObjective || std::ranges::any_of(snapshot.objects,
+                [](const SceneObjectSnapshot& object) { return object.terrain_attachment.has_value(); });
+            const bool hasForestRegion = hasTerrainAttachment || std::any_of(snapshot.objects.begin(),snapshot.objects.end(),
                 [](const SceneObjectSnapshot& object) noexcept { return object.forest_region.has_value(); });
             const bool hasPositionAnchor = hasForestRegion || std::any_of(snapshot.objects.begin(), snapshot.objects.end(),
                 [](const SceneObjectSnapshot& object) noexcept { return object.position_anchor.has_value(); });
@@ -1233,7 +1282,9 @@ export namespace epochengine::scene
                     return object.mesh_asset && object.mesh_asset->coordinates.has_value();
                 });
             const bool hasEnvironment = hasPositionAnchor || hasMeshCoordinates || snapshot.ambient != kDefaultAmbientLight;
-            if (!writer.append(hasForestRegion ? "epoch_snapshot 8\n" : hasPositionAnchor ? "epoch_snapshot 7\n" : hasMeshCoordinates ? "epoch_snapshot 6\n"
+            if (!writer.append(hasSolidWalkBoxes ? "epoch_snapshot 11\n" : hasReachObjective ? "epoch_snapshot 10\n" : hasTerrainAttachment ? "epoch_snapshot 9\n"
+                    : hasForestRegion ? "epoch_snapshot 8\n"
+                    : hasPositionAnchor ? "epoch_snapshot 7\n" : hasMeshCoordinates ? "epoch_snapshot 6\n"
                     : hasEnvironment ? "epoch_snapshot 5\n" : "epoch_snapshot 4\n")
                 || !detail::append_quoted_line(
                     writer, "scene", snapshot.scene_id)
@@ -1262,6 +1313,12 @@ export namespace epochengine::scene
                     || !writer.append_vec3(snapshot.ambient)
                     || !writer.append("\n")))
                 return {};
+            if (const auto& objective = snapshot.reach_objective; objective
+                && (!writer.append("reach_objective ") || !writer.append_integer(objective->target)
+                    || !writer.append(" ") || !writer.append_floating(objective->radius_meters)
+                    || !writer.append("\n")))
+                return {};
+            if (hasSolidWalkBoxes && !hasReachObjective && !writer.append("reach_objective none\n")) return {};
             if (!detail::append_number_line(
                     writer, "packages", snapshot.packages.size()))
                 return {};
@@ -1405,6 +1462,23 @@ export namespace epochengine::scene
                             if(!writer.append(" ")||!writer.append_quoted(*value))return {};
                     }
                 }
+                if (hasTerrainAttachment)
+                {
+                    const auto& attachment = object.terrain_attachment;
+                    const unsigned kind = attachment ? (attachment->solid_walk_box ? 2u : 1u) : 0u;
+                    if (!writer.append(" terrain_attachment ") || !writer.append_integer(kind)) return {};
+                    if (attachment)
+                    {
+                        const auto integer = [&](auto value) { return writer.append(" ") && writer.append_integer(value); };
+                        if (!integer(attachment->terrain_object_id) || !integer(attachment->body_index)) return {};
+                        for (const auto word : attachment->terrain_artifact_key) if (!integer(word)) return {};
+                        if (!writer.append(" ") || !writer.append_floating(attachment->terrain_coordinates.meters_per_unit)) return {};
+                        for (const auto axis : attachment->terrain_coordinates.source_origin_meters)
+                            if (!writer.append(" ") || !writer.append_floating(axis)) return {};
+                        for (const auto axis : attachment->reference_center_meters)
+                            if (!writer.append(" ") || !writer.append_floating(axis)) return {};
+                    }
+                }
                 if (!writer.append("\n"))
                     return {};
             }
@@ -1456,6 +1530,12 @@ export namespace epochengine::scene
             std::string_view headerLine{};
             if (!detail::read_line(text, position, headerLine))
                 return detail::failure("missing snapshot header");
+            if (headerLine == "epoch_snapshot 11")
+                return detail::parse_v2_body(text, position, limits, true, true, true, true, true, true, true, true, true);
+            if (headerLine == "epoch_snapshot 10")
+                return detail::parse_v2_body(text, position, limits, true, true, true, true, true, true, true, true);
+            if (headerLine == "epoch_snapshot 9")
+                return detail::parse_v2_body(text, position, limits, true, true, true, true, true, true, true);
             if (headerLine == "epoch_snapshot 8")
                 return detail::parse_v2_body(text, position, limits, true, true, true, true, true, true);
             if (headerLine == "epoch_snapshot 7")

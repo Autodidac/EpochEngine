@@ -2330,7 +2330,8 @@ namespace epochengine::core
                 .rotationDegrees={entity.transform.rotation[0],entity.transform.rotation[1],entity.transform.rotation[2]},
                 .radius=runtime_marker_radius_for_entity(entity),
                 .primitive=mesh?previewgrid::ObjectPreviewPrimitive::IndexedMesh:runtime_preview_primitive_for_entity(entity),
-                .sampledRenderSurface=entity.category=="EngineArcade"&&entity.name=="EngineArcadeScreen",.mesh=std::move(mesh)};
+                .sampledRenderSurface=entity.category=="EngineArcade"&&entity.name=="EngineArcadeScreen",.mesh=std::move(mesh),
+                .forestLighting=entity.type=="ForestTrunk"&&entity.mesh_asset.has_value()};
             if((precise||entity.position_anchor.has_value())&&marker.mesh)
             {
                 marker.preciseTransform=previewgrid::make_precise_mesh_transform(
@@ -2382,6 +2383,93 @@ namespace epochengine::core
                 marker->preciseTransform->scale,marker->rotationDegrees);
             if(!marker->preciseTransform)return {};
             return marker;
+        }
+        [[nodiscard]] std::optional<previewgrid::ObjectMarker> project_play_model_marker_for_body(
+            const ProjectRuntimeEntity& model, const ProjectRuntimeEntity& terrain,
+            const project_planetary_runtime::PreviewBody& body, double scene_units,
+            const std::array<double, 3>& render_origin, std::shared_ptr<const asset::mesh::Artifact> mesh) noexcept
+        {
+            const auto& attachment = model.terrain_attachment;
+            if (!attachment || !attachment->valid() || !mesh || !model.mesh_asset || !terrain.mesh_asset
+                || !attachment->matches(terrain.source_id, *terrain.mesh_asset)
+                || attachment->body_index != body.id || !std::isfinite(scene_units) || scene_units <= 0.0)
+                return {};
+            auto world = scene::world_position(model.transform.position, model.position_anchor);
+            const auto linear = previewgrid::make_precise_mesh_transform({},
+                {terrain.transform.scale[0], terrain.transform.scale[1], terrain.transform.scale[2]},
+                {terrain.transform.rotation[0], terrain.transform.rotation[1], terrain.transform.rotation[2]});
+            if (!world || !linear) return {};
+            std::array<double, 3> localShift{};
+            for (std::size_t axis = 0; axis < localShift.size(); ++axis)
+            {
+                localShift[axis] = body.center[axis] * scene_units - attachment->reference_center_meters[axis];
+            }
+            const auto shift = linear->apply(localShift);
+            for (std::size_t axis = 0; axis < shift.size(); ++axis)
+                (*world)[axis] = ((*world)[axis] - render_origin[axis]) + shift[axis];
+            return project_play_marker_for_entity(model, std::move(mesh), {}, true, &*world);
+        }
+        [[nodiscard]] std::optional<previewgrid::PreciseMeshTransform> project_play_attached_body_transform(
+            const ProjectRuntimeEntity& object, const ProjectRuntimeEntity& terrain) noexcept
+        {
+            const auto& attachment = object.terrain_attachment;
+            if (!attachment || !attachment->valid() || !terrain.mesh_asset
+                || !attachment->matches(terrain.source_id, *terrain.mesh_asset)) return {};
+
+            const auto point = scene::world_position(object.transform.position, object.position_anchor);
+            const auto pivot = scene::world_position(terrain.transform.position, terrain.position_anchor);
+            const auto basis = pivot ? previewgrid::make_precise_mesh_transform(*pivot,
+                {terrain.transform.scale[0], terrain.transform.scale[1], terrain.transform.scale[2]},
+                {terrain.transform.rotation[0], terrain.transform.rotation[1], terrain.transform.rotation[2]}) : std::nullopt;
+            const auto scale = scene::mesh_render_scale(object.transform.scale, object.mesh_asset);
+            const auto facing = previewgrid::make_precise_mesh_transform({}, {1, 1, 1},
+                {object.transform.rotation[0], object.transform.rotation[1], object.transform.rotation[2]});
+            if (!point || !pivot || !basis || !scale || !facing) return {};
+            const auto terrainScale = basis->scale[0];
+            if (terrainScale <= 0.0 || basis->scale[1] != terrainScale || basis->scale[2] != terrainScale) return {};
+
+            previewgrid::PreciseMeshTransform result;
+            const auto local = basis->inverse_apply(*point);
+            for (std::size_t axis = 0; axis < 3; ++axis)
+            {
+                result.scale[axis] = (*scale)[axis] / terrainScale;
+                for (std::size_t row = 0; row < 3; ++row)
+                {
+                    double rotated{};
+                    for (std::size_t term = 0; term < 3; ++term)
+                        rotated += basis->rotation[term * 3 + axis] * facing->rotation[term * 3 + row];
+                    result.rotation[axis * 3 + row] = rotated;
+                }
+                result.position[axis] = local[axis] - attachment->reference_center_meters[axis];
+            }
+            return previewgrid::valid_precise_mesh_transform(result) ? std::optional{result} : std::nullopt;
+        }
+        [[nodiscard]] std::optional<project_planetary_runtime::SurfaceStart> project_play_surface_start(
+            const ProjectRuntimeEntity& spawn, const ProjectRuntimeEntity& terrain) noexcept
+        {
+            const auto transform = project_play_attached_body_transform(spawn, terrain);
+            if (!transform) return {};
+            return project_planetary_runtime::SurfaceStart{.body = spawn.terrain_attachment->body_index,
+                .body_local_position_meters = transform->position,
+                .body_local_forward = {-transform->rotation[2], -transform->rotation[5], -transform->rotation[8]}};
+        }
+        [[nodiscard]] std::optional<project_planetary_runtime::WalkBox> project_play_walk_box(
+            const ProjectRuntimeEntity& object, const ProjectRuntimeEntity& terrain, const asset::mesh::Artifact& mesh) noexcept
+        {
+            if (!object.terrain_attachment || !object.terrain_attachment->solid_walk_box || !object.mesh_asset
+                || object.mesh_asset->artifact_key != mesh.key().words) return {};
+            const auto transform = project_play_attached_body_transform(object, terrain);
+            if (!transform) return {};
+            const auto low = mesh.minimum(), high = mesh.maximum();
+            std::array<double, 3> center{}, half{};
+            for (std::size_t axis = 0; axis < 3; ++axis)
+            {
+                center[axis] = (double(low[axis]) + high[axis]) * 0.5;
+                half[axis] = (double(high[axis]) - low[axis]) * 0.5 * std::abs(transform->scale[axis]);
+            }
+            const project_planetary_runtime::WalkBox box{.body = object.terrain_attachment->body_index,
+                .center_meters = transform->apply(center), .half_extent_meters = half, .rotation = transform->rotation};
+            return box.valid() ? std::optional{box} : std::nullopt;
         }
         // Bounds are in the same current-frame, rebased coordinates as published
         // geometry. Unknown primitives retain the conservative camera floor.

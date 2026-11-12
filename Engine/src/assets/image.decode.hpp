@@ -18,4 +18,8 @@ namespace epochengine::image_codec
     // The caller declares linear/sRGB intent when compiling its texture artifact.
     [[nodiscard]] PngResult decode_png(std::span<const std::byte> source,
         std::uint32_t maximum_dimension, std::uint64_t maximum_decoded_bytes) noexcept;
+    [[nodiscard]] std::vector<std::byte> encode_rgba_png(std::span<const std::byte> rgba,
+        std::uint32_t width, std::uint32_t height) noexcept;
+    [[nodiscard]] bool make_magenta_cutout(std::span<std::byte> rgba,
+        std::uint32_t width, std::uint32_t height) noexcept;
 }

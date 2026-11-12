@@ -24,6 +24,10 @@ class ForestSurfaceRefresh(unittest.TestCase):
         context = (OWNER / 'editor.application_context_session.inl').read_text(encoding='utf-8')
         stop = definition(context, '        void request_editor_automation_stop(')
         refresh = '\n'.join(definition(source, marker) for marker in (
+            '        [[nodiscard]] std::array<double, 3> terrain_radial_direction(',
+            '        [[nodiscard]] std::optional<double> terrain_attachment_support(',
+            '        [[nodiscard]] const EditorEntity* selected_terrain_attachment_refresh_target(',
+            '        [[nodiscard]] project_planetary::SurfaceBatchResult query_forest_surfaces(',
             '        [[nodiscard]] bool begin_forest_surface_refresh(',
             '        void complete_forest_surface_refresh(',
             '        void poll_forest_surface_placement('))
@@ -98,17 +102,23 @@ struct EditorEntity {
  decltype(scene::SceneObjectSnapshot{}.mesh_asset) meshAsset{};
  bool meshLoadAttempted{};std::shared_ptr<const asset::mesh::Artifact> meshSnapshot;
  std::optional<std::array<double,3>> positionAnchor;std::optional<scene::SceneForestRegionInstance>forestRegion;
+ std::optional<scene::SceneTerrainAttachment>terrainAttachment;
 };
 struct EditorState {
  std::string projectId{"refresh-forest"},projectRoot,projectStatus,plantLabStatus;
  std::vector<EditorEntity> entities;authoring::scene::SceneDocument sceneDocument;
  std::uint64_t selectedEntityId{100},sceneDocumentRevision{},forestSurfaceSequence{};
+ std::vector<scene::SceneObjectId> selectedEntityIds;
  bool sceneInteractionDirty{},sceneLightingDirty{},projectBuildPending{},planetaryGeneratePending{};
  bool forestPlacementFocusPending{},aiGoalForestReceipt{},saveFails{};unsigned saveCalls{},plantCalls{};
+ std::optional<bool> forestPlacementSaved;
  bool aiGoalRunning{true},aiGoalPlanNextQueued{true};unsigned taskStopCalls{};
  struct {bool stopped{},waiting{true};}aiGoalTools;
  struct PackageRequest {bool cancelled{};};std::optional<PackageRequest>aiPackageRequest{PackageRequest{}};
  struct {bool valid()const{return running;}bool running{};}projectRuntimeProcess;
+ struct RuntimeSnapshot {bool active()const{return true;}};
+ std::optional<RuntimeSnapshot> projectRuntimeSnapshot;
+ bool modelShorelinePending{};
  struct {std::uint64_t frame_index{};double simulated_seconds{};}timeSnapshot;
  struct {struct Evidence {struct {struct {std::uint64_t generation{9};}selected_project;}generations;}value;
   const Evidence& evidence()const{return value;}}projectLifecycle;
@@ -149,7 +159,7 @@ bool save_editor_scene_snapshot(EditorState&s){
  return bool(scene::persistence::save_scene_snapshot_atomic(fs::path{s.projectRoot}/"main.epoch",projection.snapshot));}
 bool ensure_plant_lab_compiled_asset(EditorState&s){++s.plantCalls;std::abort();}
 template<class...T>bool create_editor_scene_entities(T&&...){std::abort();}
-bool publish_plant_lab_project_asset(EditorState&){std::abort();}
+bool publish_plant_lab_project_asset(EditorState&,const forest::ForestAssetDocument*,std::string_view){std::abort();}
 constexpr std::string_view kDefaultPlantLabLogicalPath="Assets/Forest/default.epoch_forest";
 void request_editor_task_session_stop(EditorState&s){++s.taskStopCalls;}
 STOP
@@ -215,9 +225,9 @@ void success_contract(const fs::path&root,bool multiple){
   assert(region==expected&&region.radial_up==old.forest_region->radial_up);
   const auto x=body.center_meters[0]-6500+region.radial_up[0]*(body.radius_meters+8);
   const auto y=-100+region.radial_up[1]*(body.radius_meters+8);const auto z=-50.0;
-  assert(std::abs((*now.positionAnchor)[0]-(1e12+2-2*y))<.001);
-  assert(std::abs((*now.positionAnchor)[1]-(-2e12+3+2*x))<.001);
-  assert(std::abs((*now.positionAnchor)[2]-(3e12+4+2*z))<.001);
+  assert(std::abs((*now.positionAnchor)[0]+now.position[0]-(1e12+2-2*y))<.001);
+  assert(std::abs((*now.positionAnchor)[1]+now.position[1]-(-2e12+3+2*x))<.001);
+  assert(std::abs((*now.positionAnchor)[2]+now.position[2]-(3e12+4+2*z))<.001);
  }
  const auto updated=scene_bytes(s);assert(updated!=initial&&s.plantLabStatus.find("and saved")!=std::string::npos);
  assert(s.sceneDocument.undo());assert(project_scene_document_into_editor(s));
@@ -245,6 +255,9 @@ int main(int argc,char**argv){
  _CrtSetReportMode(_CRT_ASSERT,_CRTDBG_MODE_FILE);_CrtSetReportFile(_CRT_ASSERT,_CRTDBG_FILE_STDERR);
  using namespace epochengine;assert(argc==2);const auto root=fs::path{argv[1]};assert(root.is_absolute());
  success_contract(root/"one",false);success_contract(root/"two",true);
+ reset_ports(9);auto contended=make_state(root/"contended");
+ assert(begin_forest_surface_refresh(contended));wait_entered();finish(contended);
+ assert(fixture_ports::calls==2&&contended.saveCalls==1);
  for(int mode=1;mode<=7;++mode)refusal_contract(root/std::to_string(mode),mode);
  refusal_contract(root/"source",0,[](auto&){fixture_ports::source_current=false;});
  refusal_contract(root/"mesh",0,[](auto&){fixture_ports::mesh_current=false;});
@@ -285,10 +298,70 @@ int main(int argc,char**argv){
  assert(scene_bytes(unsaved)!=old&&unsaved.plantLabStatus.find("scene save failed")!=std::string::npos);
  assert(unsaved.sceneDocument.undo());assert(!fs::exists(root/"save-fail/main.epoch"));
  reset_ports();auto selected=make_state(root/"selected");selected.selectedEntityId=200;
- assert(begin_forest_surface_refresh(selected));assert(selected.forestSurfacePlacement->refreshTrees.size()==5);wait_entered();finish(selected);
+ assert(begin_forest_surface_refresh(selected));assert(selected.forestSurfacePlacement->refreshObjects.size()==5);wait_entered();finish(selected);
  assert(selected.selectedEntityId==200&&selected.entities.size()==6);
  reset_ports();auto invalid=make_state(root/"invalid");invalid.entities[1].forestRegion->radial_up={};
  assert(!begin_forest_surface_refresh(invalid)&&!invalid.forestSurfacePending&&fixture_ports::calls==0);
+ auto attached=make_state(root/"attached");
+ auto authored=attached.sceneDocument.project_snapshot().snapshot;
+ const auto& planet=authored.objects[0];
+ const auto pivot=scene::world_position(planet.position,planet.position_anchor);assert(pivot);
+ const auto parent=previewgrid::make_precise_mesh_transform(*pivot,{2,2,2},{0,0,90});assert(parent);
+ const auto oldRoot=parent->apply({300,979,50});
+ const scene::SceneTerrainAttachment link{.terrain_object_id=100,.body_index=0,.terrain_artifact_key={11,12,13,14},
+  .terrain_coordinates={1,{6100,-40,0}},.reference_center_meters={300,-20,50}};
+ for(unsigned part=0;part<2;++part){
+  const float floor=part==0?-1.0f:-3.0f;
+  const std::array<asset::mesh::Vertex,3> vertices{{{{0,floor,0}},{{1,floor,0}},{{0,1,1}}}};
+  const std::array<std::uint32_t,3> indices{0,1,2};const auto artifact=asset::mesh::build_artifact(vertices,indices);assert(artifact);
+  const auto name="Assets/Mesh/part"+std::to_string(part)+".epoch_mesh";
+  {std::ofstream out(root/"attached"/name,std::ios::binary);const auto bytes=asset::mesh::encode_artifact(*artifact.artifact);
+   out.write(reinterpret_cast<const char*>(bytes.data()),bytes.size());assert(out);}
+  scene::SceneObjectSnapshot model{.id=300u+part,.name="Beacon "+std::to_string(part),.type="IndexedMesh",.category="World",
+   .position={.125f,0,0},.rotation={0,0,90},.mesh_asset=scene::SceneMeshSnapshot{name,artifact.artifact->key().words,3,3},
+   .position_anchor=std::array{oldRoot[0]-.125,oldRoot[1],oldRoot[2]},.terrain_attachment=link};
+  model.terrain_attachment->solid_walk_box=part==0;authored.objects.push_back(model);
+ }
+ authored.objects.push_back({.id=302,.name="PlayerStart",.type="Spawn",.category="Gameplay",
+  .rotation={0,0,45},.position_anchor=parent->apply({1297,-20,50}),.terrain_attachment=link});
+ authored.primary_spawn=302;authored.reach_objective=scene::SceneReachObjective{300,5};
+ auto attachedDocument=authoring::scene::SceneDocument::from_snapshot(authored);assert(attachedDocument);
+ attached.sceneDocument=std::move(attachedDocument.value);assert(project_scene_document_into_editor(attached));
+ const auto originalSnapshot=attached.sceneDocument.project_snapshot().snapshot;
+ const auto attachedOriginal=scene_bytes(attached);
+ reset_ports(3);assert(begin_forest_surface_refresh(attached,true));wait_entered();finish(attached);
+ assert(scene_bytes(attached)==attachedOriginal&&attached.saveCalls==0&&attached.projectStatus.find("underwater")!=std::string::npos);
+ reset_ports(8);assert(begin_forest_surface_refresh(attached,true));wait_entered();finish(attached);
+ assert(scene_bytes(attached)==attachedOriginal&&attached.saveCalls==0&&attached.projectStatus.find("steep slope")!=std::string::npos);
+ reset_ports();attached.selectedEntityId=302;
+ assert(begin_forest_surface_refresh(attached,true)&&attached.forestSurfacePlacement->refreshObjects.size()==3);wait_entered();finish(attached);
+ assert(attached.saveCalls==1&&fixture_ports::calls==1&&attached.projectStatus.find("and saved")!=std::string::npos);
+ const auto landed=attached.sceneDocument.project_snapshot().snapshot;
+ const auto model1=std::ranges::find(landed.objects,300u,&scene::SceneObjectSnapshot::id);
+ const auto model2=std::ranges::find(landed.objects,301u,&scene::SceneObjectSnapshot::id);
+ const auto spawn=std::ranges::find(landed.objects,302u,&scene::SceneObjectSnapshot::id);
+ assert(model1!=landed.objects.end()&&model2!=landed.objects.end()&&spawn!=landed.objects.end());
+ assert(model1->position_anchor==model2->position_anchor&&model1->position==model2->position);
+ auto expected=parent->apply({500,908,-50});expected[0]-=3.0;
+ assert(scene::world_position(*model1)==std::optional{expected});
+ const auto expectedStart=parent->apply({1508,-100,-50});
+ assert(scene::world_position(*spawn)==std::optional{expectedStart});
+ assert(model1->terrain_attachment->solid_walk_box&&!model2->terrain_attachment->solid_walk_box&&spawn->rotation[2]==45);
+ assert(landed.reach_objective==authored.reach_objective&&landed.primary_spawn==authored.primary_spawn);
+ assert(model1->terrain_attachment->matches(100,*landed.objects.front().mesh_asset));
+ assert(scene::persistence::scene_snapshot_semantically_equal(scene::persistence::load_scene_snapshot(root/"attached/main.epoch").snapshot,landed));
+ assert(attached.sceneDocument.undo());
+ auto undone=attached.sceneDocument.project_snapshot().snapshot;undone.revision=originalSnapshot.revision;
+ assert(scene::persistence::scene_snapshot_semantically_equal(undone,originalSnapshot));
+ auto many=make_state(root/"many-attachments");
+ auto large=many.sceneDocument.project_snapshot().snapshot;
+ for(unsigned i=0;i<65;++i)large.objects.push_back({.id=500u+i,.name="Spawn "+std::to_string(i),
+  .type="Spawn",.category="Gameplay",.position_anchor=parent->apply({1297,-20,50}),.terrain_attachment=link});
+ large.primary_spawn=500;
+ auto manyDocument=authoring::scene::SceneDocument::from_snapshot(large);assert(manyDocument);
+ many.sceneDocument=std::move(manyDocument.value);assert(project_scene_document_into_editor(many));
+ reset_ports();assert(begin_forest_surface_refresh(many,true));wait_entered();finish(many);
+ assert(fixture_ports::calls==2&&many.saveCalls==1&&many.projectStatus.find("65 model")!=std::string::npos);
  std::ofstream result(root/"case-result.json");result<<"{\"five_ids_preserved\":true,\"actual_scheduler\":true,\"actual_scene_history_and_persistence\":true,\"actual_common_stop_ready_result_revoked\":true,\"native_acceptance\":false}";
 }
 '''.replace('TRANSFORM', transform).replace('STRUCTS', structs).replace('TRANSACTIONS', transaction_functions).replace('STOP', stop).replace('REFRESH', refresh)
@@ -322,7 +395,8 @@ SurfaceBatchResult query_surfaces(const std::filesystem::path&,const SurfaceBatc
   fixture_ports::condition.wait_for(guard,std::chrono::milliseconds{2});}
  SurfaceBatchResult out;out.request_id=batch.query.request_id;
  if(stop.stop_requested()){out.code=SurfaceCode::cancelled;out.operation.message="cancelled";return out;}
- if(fixture_ports::mode==1){out.code=SurfaceCode::busy;out.operation.message="Terrain busy; retry Refresh Forest Placement.";return out;}
+ if(fixture_ports::mode==1||(fixture_ports::mode==9&&fixture_ports::calls==1)){
+  out.code=SurfaceCode::busy;out.operation.message="Terrain busy; retry Refresh Forest Placement.";return out;}
  out.code=SurfaceCode::ready;
  for(const auto&direction:batch.directions){
   SurfaceResult sample;sample.code=SurfaceCode::ready;sample.request_id=out.request_id;sample.radial_up=direction;sample.normal=direction;sample.height_meters=8;
@@ -337,6 +411,7 @@ SurfaceBatchResult query_surfaces(const std::filesystem::path&,const SurfaceBatc
  if(fixture_ports::mode==5)++out.request_id;
  if(fixture_ports::mode==6&&!out.samples.empty())++out.samples.back().request_id;
  if(fixture_ports::mode==7&&!out.samples.empty())out.samples.back().radial_up={0,0,1};
+ if(fixture_ports::mode==8&&!out.samples.empty())out.samples.back().normal={0,0,1};
  return out;
 }
 }

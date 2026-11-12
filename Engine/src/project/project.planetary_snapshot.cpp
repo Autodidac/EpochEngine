@@ -149,11 +149,13 @@ namespace epochengine::project_planetary_snapshot
 
     bool valid_metadata(const Metadata& data,const asset::mesh::Artifact& artifact,Limits limits) noexcept
     {
+        const auto vertices=artifact.vertices();
+        const auto indices=artifact.indices();
         if(!identity(data.identity)||data.identity.artifact_key!=artifact.key()||data.patches.size()<6u
             ||limits.maximum_patches>4096u||data.patches.size()>limits.maximum_patches
-            ||artifact.vertices().size()>limits.artifact.maximum_vertices||artifact.indices().size()>limits.artifact.maximum_indices
-            ||48u+artifact.vertices().size()*44u+artifact.indices().size()*4u>limits.artifact.maximum_bytes
-            ||data.parent_delta.size()!=artifact.vertices().size()
+            ||vertices.size()>limits.artifact.maximum_vertices||indices.size()>limits.artifact.maximum_indices
+            ||48u+vertices.size()*44u+indices.size()*4u>limits.artifact.maximum_bytes
+            ||data.parent_delta.size()!=vertices.size()
             ||metadata_bytes(data)>limits.maximum_metadata_bytes)return false;
         if(data.cloud)
         {
@@ -201,7 +203,7 @@ namespace epochengine::project_planetary_snapshot
             if(!valid_key(p.key)||p.key.body!=body||p.first_vertex!=vertex_end||p.first_index!=index_end
                 ||p.vertex_count<3u||p.index_count<3u||p.index_count%3u)return false;
             vertex_end+=p.vertex_count;index_end+=p.index_count;
-            if(vertex_end>artifact.vertices().size()||index_end>artifact.indices().size())return false;
+            if(vertex_end>vertices.size()||index_end>indices.size())return false;
             for(const auto n:p.neighbors)if(!valid_key(n)||n.body!=body||n.level!=p.key.level||n==p.key)return false;
             if(p.key.level&&!find(data,parent(p.key)))return false;
             for(std::size_t j=0;j<i;++j)
@@ -219,7 +221,7 @@ namespace epochengine::project_planetary_snapshot
                     ||std::uint64_t(p.first_water_triangle)+p.water_triangles>data.water_triangles.size())return false;
                 water_end+=p.terrain_vertices;water_triangle_end+=p.water_triangles;
                 for(std::uint32_t j=0;j<p.terrain_indices;++j)
-                    if(artifact.indices()[p.first_index+j]>=p.first_vertex+p.terrain_vertices)return false;
+                    if(indices[p.first_index+j]>=p.first_vertex+p.terrain_vertices)return false;
                 for(std::uint32_t j=0;j<p.terrain_vertices;++j)
                     if(const auto id=data.water_vertices[p.first_water_vertex+j].surface_vertex;
                         id<p.first_water_vertex||id>=p.first_water_vertex+p.terrain_vertices)return false;
@@ -234,13 +236,13 @@ namespace epochengine::project_planetary_snapshot
             }
             else if(p.first_water_vertex||p.first_water_triangle)return false;
             for(std::uint64_t j=p.first_index;j<index_end;++j)
-                if(artifact.indices()[j]<p.first_vertex||artifact.indices()[j]>=vertex_end)return false;
+                if(indices[j]<p.first_vertex||indices[j]>=vertex_end)return false;
             for(std::uint64_t j=p.first_vertex;j<vertex_end;++j)
                 for(unsigned axis=0;axis<3u;++axis)
                     if(!std::isfinite(data.parent_delta[j][axis])||std::abs(data.parent_delta[j][axis])>1e9f
-                        ||!std::isfinite(artifact.vertices()[j].position[axis]+data.parent_delta[j][axis]))return false;
+                        ||!std::isfinite(vertices[j].position[axis]+data.parent_delta[j][axis]))return false;
         }
-        if(vertex_end!=artifact.vertices().size()||index_end!=artifact.indices().size()
+        if(vertex_end!=vertices.size()||index_end!=indices.size()
             ||water_end!=data.water_vertices.size()||water_triangle_end!=data.water_triangles.size())return false;
         for(const auto value:area)if(value!=(std::uint64_t{1}<<40u))return false;
         for(const auto& p:data.patches)if(p.target)
@@ -612,14 +614,18 @@ namespace epochengine::project_planetary_snapshot
             {
                 if(stop.stop_requested())return {};
                 const auto& p=patch(d);const auto base=static_cast<std::uint32_t>(vertices.size());
-                for(std::uint32_t i=0;i<p.vertex_count;++i)
+                const auto sourceVertices=d.snapshot->artifact->vertices().subspan(p.first_vertex,p.vertex_count);
+                const auto sourceIndices=d.snapshot->artifact->indices().subspan(p.first_index,p.index_count);
+                if(d.morph==0.0f)
+                    vertices.insert(vertices.end(),sourceVertices.begin(),sourceVertices.end());
+                else for(std::uint32_t i=0;i<p.vertex_count;++i)
                 {
-                    auto vertex=d.snapshot->artifact->vertices()[p.first_vertex+i];
+                    auto vertex=sourceVertices[i];
                     const auto delta=d.snapshot->metadata.parent_delta[p.first_vertex+i];
                     for(unsigned axis=0;axis<3u;++axis)vertex.position[axis]+=delta[axis]*d.morph;
                     vertices.push_back(vertex);
                 }
-                for(std::uint32_t i=0;i<p.index_count;++i)indices.push_back(base+d.snapshot->artifact->indices()[p.first_index+i]-p.first_vertex);
+                for(const auto index:sourceIndices)indices.push_back(base+index-p.first_vertex);
             }
             const auto result=asset::mesh::build_artifact(vertices,indices,limits_.artifact);
             return stop.stop_requested()?nullptr:result.artifact;

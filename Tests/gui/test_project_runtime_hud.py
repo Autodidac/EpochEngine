@@ -149,7 +149,7 @@ struct Scene {
  std::optional<Scheduler>m_planetaryScheduler;std::optional<int>m_planetaryPending;
  bool m_planetaryFailed{},m_planetaryPaused{},m_planetaryContinue{},m_runtimeInspectionLight{},m_runtimeCloudsVisible{true},m_runtimeWaterVisible{true},m_hasPlanetRecipe{true},m_planetaryPublishedOcean{true};
  int m_planetaryEntity{1},m_planetaryCancellation{},m_planetaryNextTick{},m_screenshotAfterFrames{};
- std::string m_projectName{"Runtime"},m_projectRoot,m_runtimeViewStatus,m_forestRuntimeStatus,m_screenshotStatus,m_planetaryStatus,m_planetaryWaterStatus,m_explorationStatus,m_explorationAdvanceStatus;
+ std::string m_projectName{"Runtime"},m_projectRoot,m_runtimeViewStatus,m_terrainAttachmentStatus,m_screenshotStatus,m_planetaryStatus,m_planetaryWaterStatus,m_explorationStatus,m_explorationAdvanceStatus;
  std::optional<int>m_meshPlanetarySource;ExplorationSession m_explorationSession;
  struct Body{unsigned id;std::string name;};
  struct Frame{unsigned body_count{2},anchor{1},target{2};project_planetary_runtime::TravelMode mode{};double altitude{1.8},speed{0},seconds{0},time_scale{1};bool gravity_enabled{true},level_assist{true};std::array<Body,2>bodies{{{1,"VERDANT"},{2,"MOON"}}};}m_explorationFrame;
@@ -197,7 +197,7 @@ void stable(const std::map<std::string,WidgetBounds>&before,const std::map<std::
 void statuses(Scene&s,bool longStatus){
  std::string status=longStatus?std::string(1000,'x'):"ready";
  s.m_explorationStatus=status;s.m_explorationAdvanceStatus=status;s.m_planetaryStatus=status;s.m_runtimeViewStatus=status;
- s.m_forestRuntimeStatus=status;s.m_screenshotStatus=status;s.m_planetaryWaterStatus="Water: "+status+"~";
+ s.m_terrainAttachmentStatus=status;s.m_screenshotStatus=status;s.m_planetaryWaterStatus="Water: "+status+"~";
  s.m_explorationFrame.altitude=longStatus?999999999999.8:1.8;s.m_explorationFrame.speed=longStatus?999999999999.0:0;
  s.m_explorationFrame.seconds=longStatus?999999999999.9:0;s.m_explorationFrame.time_scale=longStatus?999999999.0:1;
 }
@@ -266,7 +266,7 @@ void buffered_diagnostics(const std::shared_ptr<core::Context>&context){
    s.m_explorationAdvanceStatus=empty?"":lengthy?"Planet exploration provider is unavailable; the last camera is retained.":"Ready";
    s.m_explorationStatus=empty?"":lengthy?"Planet exploration needs object Scale 1, 1, 1. Use World Size / Radius to resize it while preserving walking speed and distances.":"Ready";
    s.m_runtimeViewStatus=empty?"":lengthy?"Scene geometry was not admitted. The previous mesh display is retained; check the terrain and asset diagnostics.":"Ready";
-   s.m_forestRuntimeStatus=empty?"":lengthy?"Forest area no longer matches terrain; regenerate/repaint to attach it. Authored poses are retained.":"Ready";
+   s.m_terrainAttachmentStatus=empty?"":lengthy?"Forest area no longer matches terrain; regenerate/repaint to attach it. Authored poses are retained.":"Ready";
    s.m_screenshotStatus=empty?"":lengthy?"The screenshot could not be copied. The clipboard is busy; try Copy Screenshot again.":"Copied";
    s.m_waterCaches[context.get()].diagnostic=empty?"":lengthy?"Water could not update. The previous surface is retained; check the terrain and asset diagnostics.":"Ready";
    s.m_planetaryStatus=empty?"":lengthy?"Planet LOD 0–24 | 999999 visible patches | 999999 loading | patch cache 999999.9 / 999999 MiB\nLast LOD build: 4/4 workers, 3600000 ms provider":"Planet LOD 0–1 | 1 visible patches | 0 loading | patch cache 0.0 / 128 MiB\nLast LOD build: 1/4 workers, 4 ms provider";

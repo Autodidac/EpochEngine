@@ -28,7 +28,7 @@ struct EditorCancelProbe {
  std::string planetaryStreamStatus;
  std::uint64_t planetaryStreamNextTick{};
 };
-void actual_editor_completion(EditorCancelProbe& editor) {
+void actual_editor_completion(EditorCancelProbe& editor, bool inspecting=false) {
  const std::uint64_t tick=1000;
  editor.planetaryStreamNextTick=tick+250'000'000ull;
  try {(void)editor.planetaryStreamPending->get();editor.planetaryStreamPending.reset();}
@@ -66,6 +66,10 @@ void actual_editor_completion(EditorCancelProbe& editor) {
   actual_editor_completion(editor);
   CHECK(!editor.planetaryStreamFailed&&!editor.planetaryStreamPending&&editor.planetaryStreamContinue);
   CHECK(editor.planetaryStreamNextTick==250'001'000ull);
+  auto stale=scheduler.submit("Worker retired during inspection",[]()->int{throw std::runtime_error("stale failure");});
+  editor.planetaryStreamPending.emplace(std::move(stale));
+  CHECK(editor.planetaryStreamPending->wait_for(std::chrono::seconds{3})==std::future_status::ready);
+  actual_editor_completion(editor,true);CHECK(!editor.planetaryStreamFailed&&!editor.planetaryStreamPending);
   // A genuine worker exception must still stop automatic retries.
   auto failed=scheduler.submit("Genuine editor worker failure",[]()->int{throw std::runtime_error("worker failed");});
   editor.planetaryStreamPending.emplace(std::move(failed));
@@ -101,7 +105,7 @@ class PlanetaryCancelRecovery(unittest.TestCase):
             pending.extend(re.findall(r'^(?:export\s+)?import\s+([\w.:]+);', module_map[name].read_text(encoding='utf-8-sig'), re.M))
         modules = ' '.join('"' + module_map[name].as_posix() + '"' for name in sorted(closure))
         bases = ' '.join('"' + path.as_posix() + '"' for path in owners)
-        sources = ('Engine/src/render/render.preview_camera.cpp', 'Engine/src/assets/texture/asset.texture_artifact.cpp',
+        sources = ('Engine/src/render/render.preview_camera.cpp', 'Engine/src/render/render.preview_lighting.cpp', 'Engine/src/assets/texture/asset.texture_artifact.cpp',
                    'Engine/src/authoring/texture/authoring.texture_document.cpp', 'Engine/src/authoring/texture/authoring.texture_residency.cpp')
         source_list = ' '.join('"' + (ROOT / path).as_posix() + '"' for path in sources)
         (proof / 'CMakeLists.txt').write_text(f'''cmake_minimum_required(VERSION 3.30)

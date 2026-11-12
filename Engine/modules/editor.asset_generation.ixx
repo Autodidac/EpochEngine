@@ -103,7 +103,7 @@ export namespace epochengine::editor_asset_generation
     [[nodiscard]] std::optional<ai::asset_jobs::PreparedJob> prepare_job(const State&,
         ai::asset_jobs::Action,const std::filesystem::path& new_work,std::string& diagnostic);
     [[nodiscard]] Completion execute(ai::asset_jobs::PreparedJob,ProjectIdentity,
-        std::shared_ptr<std::atomic<Stage>>,std::stop_token);
+        std::shared_ptr<std::atomic<Stage>>,std::stop_token,bool foliageCutout = false);
     [[nodiscard]] Completion inspect_reference(const std::filesystem::path&,ProjectIdentity,std::stop_token);
     void accept_completion(State&,Completion);
     [[nodiscard]] bool reference_current(const State&,std::string& diagnostic);

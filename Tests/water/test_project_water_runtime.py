@@ -172,7 +172,7 @@ class ProjectWaterRuntime(unittest.TestCase):
             name=pending.pop()
             if name in selected:continue
             selected[name]=modules[name];pending+=re.findall(r'^(?:export )?import\s+([\w.]+);',modules[name].read_text(encoding='utf-8-sig'),re.M)
-        implementations=[ROOT/'Engine/src/render/render.preview_camera.cpp',ROOT/'Engine/src/water/water.system.cpp',ROOT/'Engine/src/water/water.surface.cpp',ROOT/'Engine/src/assets/texture/asset.texture_artifact.cpp',ROOT/'Engine/dep/EpochPlatformEngine/src/core/core.time.cpp',ROOT/'Engine/src/authoring/texture/authoring.texture_document.cpp',ROOT/'Engine/src/authoring/texture/authoring.texture_residency.cpp']
+        implementations=[ROOT/'Engine/src/render/render.preview_camera.cpp', ROOT/'Engine/src/render/render.preview_lighting.cpp',ROOT/'Engine/src/water/water.system.cpp',ROOT/'Engine/src/water/water.surface.cpp',ROOT/'Engine/src/assets/texture/asset.texture_artifact.cpp',ROOT/'Engine/dep/EpochPlatformEngine/src/core/core.time.cpp',ROOT/'Engine/src/authoring/texture/authoring.texture_document.cpp',ROOT/'Engine/src/authoring/texture/authoring.texture_residency.cpp']
         paths=' '.join('"'+p.as_posix()+'"' for p in implementations)
         (report/'CMakeLists.txt').write_text(f'''cmake_minimum_required(VERSION 3.30)
 cmake_policy(SET CMP0141 NEW)

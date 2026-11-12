@@ -333,6 +333,7 @@ if(BUILD_TESTING)
     add_executable(epoch_mesh_artifact_contract
         src/assets/mesh/asset.mesh_artifact_contract.cpp
         src/render/render.preview_camera.cpp
+        src/render/render.preview_lighting.cpp
         src/assets/texture/asset.texture_artifact.cpp
         src/authoring/texture/authoring.texture_document.cpp)
     target_sources(epoch_mesh_artifact_contract PRIVATE
@@ -835,6 +836,7 @@ set(EPOCH_SOURCES
     src/project/project.motion_track.cpp
     src/project/project.sprite_animation_contract.cpp
     src/render/render.preview_camera.cpp
+    src/render/render.preview_lighting.cpp
     src/render/render.portal_contract.cpp
     src/renderers/core/core.context_command_queue.cpp
     src/renderers/core/engine.context.cpp
@@ -1178,6 +1180,11 @@ if(MSVC)
     )
 
     target_compile_options(epoch PRIVATE /wd4251 /wd4275 /wd4834)
+
+    if(WIN32 AND NOT EPOCH_BUILD_STATIC_RUNTIME)
+        # The unoptimized Editor dispatches Forest asset verification on its UI thread.
+        target_link_options(epoch PRIVATE /STACK:4194304)
+    endif()
 
     set_source_files_properties(
         src/editor/editor.application.cpp

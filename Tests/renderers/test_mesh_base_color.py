@@ -16,6 +16,7 @@ def consumer():
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstddef>
 #include <cstdio>
 #include <cstdlib>
 #include <memory>
@@ -24,6 +25,7 @@ def consumer():
 #include <vector>
 #include "epoch/planet/terrain.hpp"
 import render.preview_grid;
+import render.lighting;
 import render.texture_artifact;
 import render.canvas2d;
 import render.device;
@@ -53,6 +55,40 @@ void check_cutout(const std::shared_ptr<preview::MeshBaseColorBinding>& binding)
  invalid=*binding;invalid.alpha_cutout=true;CHECK(preview::valid_mesh_base_color_binding(invalid));
 
 }
+void check_forest_shadow(const std::shared_ptr<preview::MeshBaseColorBinding>& binding){
+ namespace light=epochengine::lighting;
+ std::array<mesh::Vertex,9> vertices{};
+ const std::array<std::array<float,3>,9> points{{
+  {0,0,0},{.1f,0,0},{0,.1f,0},{3,0,0},{3.1f,0,0},{3,.1f,0},{-2,-2,1},{2,-2,1},{0,2,1}}};
+ for(std::size_t i=0;i<vertices.size();++i){
+  vertices[i].position=points[i];vertices[i].normal={0,0,i<3?1.0f:-1.0f};
+  vertices[i].uv={.75f,.5f};vertices[i].color={1,1,1};
+ }
+ const std::array<std::uint32_t,9> indices{0,1,2,3,4,5,6,7,8};
+ const auto mesh=mesh::build_artifact(vertices,indices);CHECK(mesh);
+ preview::ObjectMarker marker;marker.primitive=preview::ObjectPreviewPrimitive::IndexedMesh;
+ marker.mesh=mesh.artifact;marker.forestLighting=true;
+ int context{};light::LightingFrame lighting;lighting.revision=1;
+ lighting.environment.ambient={.1f,.1f,.1f};
+ lighting.lights.push_back({.handle={0,1},.desc={.intensity=.7f,.direction={0,0,-1}}});
+ preview::set_lighting_frame(&context,lighting);
+ CHECK(preview::set_object_markers(&context,std::span{&marker,1u}));
+ const auto shadowed=preview::object_solid_geometry_for(&context);CHECK(shadowed->size()==9);
+ for(std::size_t i=0;i<3;++i){
+  CHECK(std::abs((*shadowed)[i].color.x-.1f)<1e-4f); // blocked by the front card
+  CHECK(std::abs((*shadowed)[3+i].color.x-.8f)<1e-4f); // opposite leaf normals retain diffuse
+ }
+ auto cutout=std::make_shared<preview::MeshBaseColorBinding>(*binding);
+ cutout->alpha_cutout=true;cutout->alpha_cutoff=1.0f;
+ const auto& mip=cutout->artifact.artifact()->mips[0];
+ CHECK(std::to_integer<unsigned>(mip.texels[4*mip.row_pitch_bytes+6*4+3])<255u);
+ marker.baseColorTexture=cutout;
+ CHECK(preview::set_object_markers(&context,std::span{&marker,1u}));
+ const auto transparent=preview::object_solid_frame_for(&context)->markers[0].textured;
+ CHECK(transparent&&transparent->size()==9);
+ for(std::size_t i=0;i<6;++i)CHECK(std::abs((*transparent)[i].color.x-.8f)<1e-4f);
+ preview::cleanup_context(&context);
+}
 int main(){
  CHECK(transfer::texture_artifact_transfer_runtime_contract_failure()==transfer::TransferContractFailure::none);
  auto compiled=artifact();const auto original=compiled.mips[0].texels;
@@ -68,6 +104,7 @@ int main(){
  invalid=*binding;invalid.sampler.mipmapped=true;CHECK(!preview::valid_mesh_base_color_binding(invalid));
  invalid=*binding;invalid.sampler.maximum_anisotropy=2;CHECK(!preview::valid_mesh_base_color_binding(invalid));
  check_cutout(binding);
+ check_forest_shadow(binding);
  std::array<mesh::Vertex,3> vertices{};
  vertices[0].position={0,0,0};vertices[1].position={1,0,0};vertices[2].position={0,1,0};
  for(auto& vertex:vertices){vertex.normal={0,0,1};vertex.color={0.25f,0.5f,0.75f};}
@@ -275,7 +312,7 @@ class MeshBaseColorTests(unittest.TestCase):
         (proof / "CMakeLists.txt").write_text(f'''cmake_minimum_required(VERSION 3.30)
 set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT Embedded)
 project(MeshBaseColor LANGUAGES CXX)
-add_executable(contract render.mesh_base_color_contract.cpp "{(ROOT / 'Engine/src/render/render.preview_camera.cpp').as_posix()}" "{(ROOT / 'Engine/src/assets/texture/asset.texture_artifact.cpp').as_posix()}" "{(ROOT / 'Engine/src/authoring/texture/authoring.texture_document.cpp').as_posix()}" "{(ROOT / 'Engine/src/authoring/texture/authoring.texture_residency.cpp').as_posix()}")
+add_executable(contract render.mesh_base_color_contract.cpp "{(ROOT / 'Engine/src/render/render.preview_camera.cpp').as_posix()}" "{(ROOT / 'Engine/src/render/render.preview_lighting.cpp').as_posix()}" "{(ROOT / 'Engine/src/assets/texture/asset.texture_artifact.cpp').as_posix()}" "{(ROOT / 'Engine/src/authoring/texture/authoring.texture_document.cpp').as_posix()}" "{(ROOT / 'Engine/src/authoring/texture/authoring.texture_residency.cpp').as_posix()}")
 target_sources(contract PRIVATE "{(ROOT / 'Engine/dep/EpochEngineExtensions/packages/planetary_terrain/upstream/EpochPlanet-0.2.3/src/core/terrain.cpp').as_posix()}" "{(ROOT / 'Engine/dep/EpochEngineExtensions/packages/planetary_terrain/upstream/EpochPlanet-0.2.3/src/core/world.cpp').as_posix()}")
 target_include_directories(contract PRIVATE "{(ROOT / 'Engine/dep/EpochEngineExtensions/packages/planetary_terrain/upstream/EpochPlanet-0.2.3/include').as_posix()}")
 target_sources(contract PRIVATE FILE_SET CXX_MODULES BASE_DIRS {bases} FILES {files})

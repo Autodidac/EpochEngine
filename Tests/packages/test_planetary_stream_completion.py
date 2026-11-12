@@ -26,7 +26,8 @@ class PlanetaryStreamCompletion(unittest.TestCase):
         source=path.read_text(encoding='utf-8')
         pump=definition(source,'        void pump_planetary_stream(')
         marker='if (planetary_project_busy(editor)'
-        guard='if (planetary_project_busy(editor)'+condition(pump,marker)+') return;'
+        guard=pump[pump.index('if (inspecting) return;'):pump.index(marker)+len(marker)]
+        guard+=condition(pump,marker)+') return;'
         code=r'''#include <cstdint>
 #include <optional>
 #include <initializer_list>
@@ -34,26 +35,32 @@ enum class EditorMainSurface {Scene,ForestFactory,Game2D,Gui,Automation,AssetGen
 struct EditorState{
  EditorMainSurface mainSurface{EditorMainSurface::Scene};bool forestTerrainPainting{};
  std::optional<int>planetaryAttachmentPending,planetaryGeneratePending,planetaryStreamPending,
-  planetaryFeatureReviewPending,planetaryFeatureAdmissionPending,waterAttachmentPending;
+  planetaryFeatureReviewPending,planetaryFeatureAdmissionPending,waterAttachmentPending,modelShorelinePending,forestSurfacePending;
+ std::optional<bool> projectRunAfterTerrainPreview;
  bool planetaryStreamFailed{},projectBuildPending{},scriptBuildPending{},submitted{};
  std::uint64_t planetaryStreamNextTick{};
 };
 BUSY
-void actual_request_gate(EditorState&editor){const std::uint64_t tick=1000;GUARD editor.submitted=true;}
+void actual_request_gate(EditorState&editor,bool inspecting=false){const std::uint64_t tick=1000;GUARD editor.submitted=true;}
 #define CHECK(x) do{if(!(x))return __LINE__;}while(false)
 int main(){
  EditorState scene;actual_request_gate(scene);CHECK(scene.submitted);
+ EditorState inspection;actual_request_gate(inspection,true);CHECK(!inspection.submitted);
+ actual_request_gate(inspection);CHECK(inspection.submitted);
  EditorState paint;paint.mainSurface=EditorMainSurface::ForestFactory;paint.forestTerrainPainting=true;
  actual_request_gate(paint);CHECK(paint.submitted);
  auto preview=paint;preview.submitted=false;preview.forestTerrainPainting=false;actual_request_gate(preview);CHECK(!preview.submitted);
  for(const auto surface:{EditorMainSurface::Game2D,EditorMainSurface::Gui,EditorMainSurface::Automation,EditorMainSurface::AssetGeneration}){
   auto other=paint;other.submitted=false;other.mainSurface=surface;actual_request_gate(other);CHECK(!other.submitted);}
- for(unsigned reason=0;reason<10;++reason){auto blocked=paint;blocked.submitted=false;
+ for(unsigned reason=0;reason<13;++reason){auto blocked=paint;blocked.submitted=false;
   if(reason==0)blocked.planetaryAttachmentPending=1;if(reason==1)blocked.planetaryGeneratePending=1;
   if(reason==2)blocked.planetaryStreamPending=1;if(reason==3)blocked.planetaryFeatureReviewPending=1;
   if(reason==4)blocked.planetaryFeatureAdmissionPending=1;if(reason==5)blocked.waterAttachmentPending=1;
   if(reason==6)blocked.planetaryStreamFailed=true;if(reason==7)blocked.projectBuildPending=true;
   if(reason==8)blocked.scriptBuildPending=true;if(reason==9)blocked.planetaryStreamNextTick=1001;
+  if(reason==10)blocked.modelShorelinePending=1;
+  if(reason==11)blocked.projectRunAfterTerrainPreview=false;
+  if(reason==12)blocked.forestSurfacePending=1;
   actual_request_gate(blocked);CHECK(!blocked.submitted);}
 }
 '''.replace('BUSY',definition(source,'        [[nodiscard]] bool planetary_project_busy(')).replace('GUARD',guard)
@@ -115,14 +122,15 @@ int main(){
         (proof/'result.json').write_text(json.dumps({'passed':True,'scope':'Actual request-bound provider receipt parser and completed-work label; no graphics, no active-thread counts',
             'source_sha256':hashlib.sha256(path.read_bytes()).hexdigest(),'runs':runs},indent=2)+'\n')
 
-    def test_actual_worker_exact_source_pre_and_post_admission(self):
+    def test_actual_worker_delegates_exact_source_binding(self):
         path=ROOT/'Engine/src/editor/application/editor.application_packages_creation.inl'
         source=path.read_text(encoding='utf-8')
-        worker=definition(source,'[root, settings, view, source=editor.planetaryStreamSource,')
+        # The aggregate capture has braces before the lambda body.
+        start=source.index('[root, settings, view, binding=project_planetary::StreamMeshBinding{')
+        body=source.index('](std::stop_token cancellation) {',start)
+        worker=source[start:source.index('});',body)+1]
         pump=definition(source,'        void pump_planetary_stream(')
-        # The only full disk/source verifier in this frame owner is inside its
-        # submitted worker. No cached bool authorizes execution or publication.
-        self.assertEqual(pump.count('project_planetary::mesh_generation_is_current('),worker.count('project_planetary::mesh_generation_is_current('))
+        self.assertNotIn('project_planetary::mesh_generation_is_current(',pump)
         self.assertNotIn('editor_planetary_mesh_policy_current(',pump)
         code=r'''#include <filesystem>
 #include <memory>
@@ -131,14 +139,13 @@ int main(){
 namespace project_planetary {
 struct Settings{int seed{7};};struct View{unsigned request_id{1};};
 struct Source{std::string hash{"approved"};};struct MeshIdentity{std::string key{"saved"};};
+struct StreamMeshBinding{Source source;MeshIdentity mesh;};
 struct StreamResult{struct Operation{bool ok{},cancelled{};std::string message;}operation;bool snapshot_ready{};std::shared_ptr<int> snapshot;};
-unsigned verifies{},launches{};bool changedDuring{},providerFails{};std::string diskSource{"approved"},diskMesh{"saved"};
-bool mesh_generation_is_current(const std::filesystem::path&,const Source& source,const Settings& settings,const MeshIdentity& mesh){
- ++verifies;return source.hash==diskSource&&mesh.key==diskMesh&&settings.seed==7;
-}
-StreamResult stream_step(const std::filesystem::path&,Settings,View,std::stop_token){
- ++launches;if(changedDuring)diskSource="changed";
- return {{!providerFails,false,{}},true,std::make_shared<int>(1)};
+unsigned calls{};bool capturedExpected{};
+StreamResult stream_step(const std::filesystem::path& root,Settings settings,View view,std::stop_token stop,const StreamMeshBinding* binding){
+ ++calls;capturedExpected=root=="project"&&settings.seed==7&&view.request_id==1
+    &&binding&&binding->source.hash=="approved"&&binding->mesh.key=="saved";
+ return {{capturedExpected&&!stop.stop_requested(),stop.stop_requested(),{}},!stop.stop_requested(),{}};
 }
 }
 struct Editor{project_planetary::Source planetaryStreamSource;project_planetary::MeshIdentity planetaryStreamMesh;};
@@ -147,16 +154,11 @@ auto make_worker(Editor& editor){const std::filesystem::path root{"project"};con
 }
 #define CHECK(x) do{if(!(x))return __LINE__;}while(false)
 int main(){using namespace project_planetary;Editor editor;
- auto worker=make_worker(editor);auto result=worker({});CHECK(result.operation.ok&&result.snapshot&&verifies==2&&launches==1);
- verifies=launches=0;diskSource="changed";result=worker({});CHECK(!result.operation.ok&&!result.snapshot&&verifies==1&&launches==0);
- diskSource="approved";verifies=launches=0;changedDuring=true;result=worker({});
- CHECK(!result.operation.ok&&!result.snapshot_ready&&!result.snapshot&&verifies==2&&launches==1);
- changedDuring=false;diskSource="approved";verifies=launches=0;std::stop_source cancelled;cancelled.request_stop();result=worker(cancelled.get_token());
- CHECK(result.operation.cancelled&&!result.snapshot&&verifies==0&&launches==0);
- verifies=launches=0;providerFails=true;result=worker({});CHECK(!result.operation.ok&&verifies==1&&launches==1);providerFails=false;
- verifies=launches=0;diskMesh="changed";result=worker({});CHECK(!result.operation.ok&&verifies==1&&launches==0);diskMesh="saved";
- // Selection mutation cannot rewrite an already captured approved request.
- editor.planetaryStreamSource.hash="other";result=worker({});CHECK(result.operation.ok);
+ auto worker=make_worker(editor);
+ editor.planetaryStreamSource.hash="other";editor.planetaryStreamMesh.key="other";
+ auto result=worker({});CHECK(result.operation.ok&&capturedExpected&&calls==1);
+ std::stop_source cancelled;cancelled.request_stop();result=worker(cancelled.get_token());
+ CHECK(result.operation.cancelled&&!result.snapshot_ready&&capturedExpected&&calls==2);
 }
 '''.replace('WORKER',worker)
         proof=ROOT/'Artifacts/Reports/terrain-selection-lod-oct29/worker-admission'
@@ -388,6 +390,8 @@ int main(){
  {Fixture f;f.editor.planetaryMeshPolicy->source.project_manifest="changed";CHECK(!f.editor_accepts());}
  {Fixture f;f.editor.planetaryStreamMesh.vertex_count++;CHECK(!f.editor_accepts());}
  {Fixture f;f.m_planetaryPaused=true;f.enabled=false;CHECK(!f.runtime_accepts()&&!f.editor_accepts());}
+ {Fixture f;f.viewValid=false;CHECK(f.runtime_accepts()&&!f.editor_accepts());
+  f.viewValid=true;CHECK(f.editor_accepts());}
  {Fixture f;f.result.operation.cancelled=true;f.streamed.operation.cancelled=true;CHECK(!f.runtime_accepts()&&!f.editor_accepts());}
  {Fixture f;f.result.request_id=2;f.streamed.request_id=2;CHECK(!f.runtime_accepts()&&!f.editor_accepts());}
  {Fixture f;f.m_planetarySequence=2;f.editor.planetaryStreamSequence=2;CHECK(!f.runtime_accepts()&&!f.editor_accepts());}

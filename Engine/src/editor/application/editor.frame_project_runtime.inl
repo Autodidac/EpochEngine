@@ -62,14 +62,9 @@
             return false;
         };
 
-        auto launch_active_project_context = [&](bool inEditor = false, std::uint64_t requiredBuild = 0u)
+        auto launch_active_project_context = [&](bool inEditor = false, std::uint64_t requiredBuild = 0u,
+            bool allowTerrainWait = false)
         {
-            if (inEditor && !project_runtime_embedding_supported())
-            {
-                editor.projectBuildStatus = "Run In Editor requires a dock-capable host on this platform. Choose Separate Window to run externally.";
-                push_editor_log(editor, "[project] " + editor.projectBuildStatus);
-                return;
-            }
             clear_completed_editor_builds(editor, "run request");
             if (editor.projectBuildPending)
             {
@@ -89,6 +84,23 @@
                     "[project] Run request blocked while AI engine development build is active.");
                 return;
             }
+            const bool checkingSavedTerrain = editor.planetaryAttachmentPending
+                && !editor.planetaryAttachmentIsInstall && !editor.planetaryAttachmentIsUpdate;
+            if (allowTerrainWait && (editor.planetaryStreamPending || checkingSavedTerrain
+                || editor.projectRunAfterTerrainPreview))
+            {
+                if (!editor.projectRunAfterTerrainPreview)
+                {
+                    editor.projectRunAfterTerrainPreview = inEditor;
+                    editor.projectBuildStatus = "Run queued. Waiting for the current terrain preview.";
+                    push_editor_log(editor, "[project] " + editor.projectBuildStatus);
+                }
+                return;
+            }
+
+            const std::string runBackend = editor.projectRunBackend.empty()
+                ? std::string{"opengl"} : editor.projectRunBackend;
+            inEditor = resolve_project_runtime_embedding(editor, ctx.get(), inEditor, runBackend);
 
             const bool selectedScriptAsset = !editor.selectedAssetPath.empty()
                 && std::filesystem::path{editor.selectedAssetPath}
@@ -215,6 +227,11 @@
                 (void)focus_project_runtime(editor);
                 return;
             case project_lifecycle::Action::launch_runtime:
+                if (requiredBuild == 0u)
+                {
+                    start_project_build(editor,true,"Run incremental build check",inEditor);
+                    return;
+                }
                 break;
             default:
                 editor.projectBuildStatus = epochengine::format_text(
@@ -227,8 +244,6 @@
             }
 
             const std::string sceneId = project_runtime_scene_id(editor);
-            const std::string runBackend = editor.projectRunBackend.empty()
-                ? std::string{"opengl"} : editor.projectRunBackend;
             if (!launch_project_runtime(
                     editor,
                     outputExe,
@@ -257,7 +272,7 @@
                 "Launching the accepted child artifact through the owned runtime supervisor.",
                 editor.projectRuntimeStatus);
         };
-        auto play_active_context = [&]()
+        auto play_active_context = [&](bool allowTerrainWait = false)
         {
             const auto requirement=project_planetary::runtime_requirement(std::filesystem::path{editor.projectRoot});
             if(!requirement.ok)
@@ -270,7 +285,7 @@
             {
                 editor.projectStatus=requirement.message;
                 push_editor_log(editor,"[project] "+requirement.message);
-                launch_active_project_context(true);
+                launch_active_project_context(true, 0u, allowTerrainWait);
                 return;
             }
             if (!save_editor_scene_snapshot(editor))
@@ -307,7 +322,7 @@
             const auto& evidence = editor.projectLifecycle.evidence().generations;
             const bool next = editor.aiGoalTools.receipt(operation, succeeded,
                 editor.projectId, editor.projectRoot, evidence.selected_project.generation, editor.sceneDocumentRevision,
-                evidence.output_artifact.build_generation);
+                evidence.output_artifact.build_generation, editor.plantLabDocument.revision, editor.plantLabDocument.contentHash);
             editor.aiGoalCompletedMilestones = editor.aiGoalTools.stage;
             editor.aiGoalPlanNextQueued = next && editor.aiGoalRunning;
             if (!next)
@@ -344,7 +359,7 @@
             // into project-bound UI state across that canonical transition.
             bool synchronousSuccess = true;
             const auto call = editor.aiToolPlan.plan.call;
-            if (editor.aiGoalActive && editor.aiGoalTools.round_trip && !editor.aiGoalRunning
+            if (editor.aiGoalActive && (editor.aiGoalTools.round_trip || editor.aiGoalTools.forest_asset_target) && !editor.aiGoalRunning
                 && call.tool == editor.aiGoalTools.operation()
                 && editor.aiToolBoundRequest == editor.aiGoalTools.next_request(editor.aiGoal))
             {
@@ -366,6 +381,20 @@
                         || gui_document_has_unsaved_changes(editor)))
                 {
                     editor.aiToolStatus = "Project documents changed after Reopen. Start a fresh save, close and reopen request.";
+                    return false;
+                }
+                if (editor.aiGoalTools.texture_update && call.tool == "forest.update"
+                    && !editor.aiGoalTools.matches_imported_recipe(editor.sceneDocumentRevision,
+                        editor.plantLabDocument.revision, editor.plantLabDocument.contentHash))
+                {
+                    editor.aiToolStatus = "The scene or recipe changed after the texture was applied. Request a fresh Update Painted Trees review.";
+                    return false;
+                }
+                if (editor.aiGoalTools.forest_asset_target
+                    && (editor.aiToolBoundRequest != editor.aiGoalTools.next_request(editor.aiGoal)
+                        || !forest_asset_step_current(editor, call.tool)))
+                {
+                    editor.aiToolStatus = "The reviewed forest asset request, scene, recipe or generated output changed. Nothing ran.";
                     return false;
                 }
             }
@@ -398,7 +427,9 @@
                 editor.aiToolStatus = "An approved project operation is still running. Wait for its result or request project.stop.";
                 return false;
             }
-            if((call.tool=="forest.configure"||call.tool=="forest.paint"||call.tool=="forest.material")&&!ai_forest_recipe_binding_current(editor))
+            if((call.tool=="forest.configure"||call.tool=="forest.paint"||call.tool=="forest.material"
+                ||call.tool=="forest.material.import"||call.tool=="forest.update"
+                ||call.tool=="forest.species.add")&&!ai_forest_recipe_binding_current(editor))
             {
                 editor.aiToolStatus="The Plant Lab recipe changed after this request. Nothing ran; review a fresh forest plan.";
                 return false;
@@ -440,11 +471,11 @@
             if (editor.projectTextures)
                 if (const auto texture = editor.projectTextures->editable_state()) unsavedOther = unsavedOther || texture->dirty;
 #if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
-            if (editor.tileMapWorkspace)
-                unsavedOther = unsavedOther || editor.tileMapWorkspace->dirty()
-                    || editor.tileMapWorkspace->selected_layer_draft_dirty()
-                    || editor.tileMapWorkspace->selected_palette_collision_draft_dirty()
-                    || editor.tileMapWorkspace->selected_object_draft_dirty();
+            const bool unsavedTileMap = editor.tileMapWorkspace && (editor.tileMapWorkspace->dirty()
+                || editor.tileMapWorkspace->selected_layer_draft_dirty()
+                || editor.tileMapWorkspace->selected_palette_collision_draft_dirty()
+                || editor.tileMapWorkspace->selected_object_draft_dirty());
+            unsavedOther = unsavedOther || unsavedTileMap;
 #endif
             if (unsavedOther && (call.tool == "project.save" || call.tool == "project.build"
                     || call.tool == "project.run" || call.tool == "project.test"))
@@ -640,6 +671,92 @@
             {
                 if (!dispatch_ai_project_package_tool(editor, call, ctx)) return false;
             }
+            else if (ai::scene_placement_tool(call.tool))
+            {
+                if (!has_open_project(editor) || model_import_scene_busy(editor) || editor.modelShorelinePending
+                    || editor.assetGenerationPending || planetary_project_busy(editor))
+                {
+                    editor.aiToolStatus = "Stop the project and finish scene work before changing placement.";
+                    return false;
+                }
+                const bool spawn = call.tool == "scene.spawn.set_surface";
+                const bool clear = call.tool == "scene.objective.clear";
+                const bool collision = ai::walk_collision_tool(call.tool);
+                const bool refresh = call.tool == "scene.attachments.refresh";
+                const auto* target = refresh ? selected_terrain_attachment_refresh_target(editor)
+                    : clear ? nullptr : selected_editor_reach_model(editor);
+                if (!clear && (!target || target->sceneObjectId != editor.aiToolPlacementTarget))
+                {
+                    editor.aiToolStatus = "The reviewed scene selection changed. Request a fresh review.";
+                    return false;
+                }
+                if (refresh)
+                {
+                    const bool queued = begin_forest_surface_refresh(editor, true);
+                    editor.aiToolStatus = editor.projectStatus;
+                    if (!queued) return false;
+                    watch_execution(call.tool);
+                }
+                else if (collision)
+                {
+                    const bool enable = call.tool == "scene.collision.enable";
+                    if (!set_editor_walk_box(editor, *target, enable))
+                    {
+                        editor.aiToolStatus = "Walking collision could not be changed. Verify the selected terrain attachment.";
+                        return false;
+                    }
+                    editor.aiToolStatus = enable ? "Walking collision enabled. Save Project retains it."
+                        : "Walking collision disabled. Save Project retains the change.";
+                }
+                else
+                {
+                    std::optional<scene::SceneReachObjective> objective;
+                    if (!spawn && !clear)
+                    {
+                        const auto request = ai::reach_objective_request(editor.aiToolBoundRequest);
+                        if (!request.radius) return false;
+                        objective = scene::SceneReachObjective{target->sceneObjectId, *request.radius};
+                    }
+                    if (!(spawn ? set_editor_surface_spawn(editor, *target) : set_editor_reach_objective(editor, objective)))
+                    {
+                        editor.aiToolStatus = spawn ? "PlayerStart was not changed. Check the primary spawn and current terrain attachment."
+                            : "The scene objective could not be changed. Inspect Output and retry.";
+                        return false;
+                    }
+                    editor.aiToolStatus = spawn ? "Planetary PlayerStart set. Save Project retains the placement."
+                        : objective ? "Reach objective set. Save Project retains it for the next run."
+                        : "Reach objective cleared. Save Project retains the change.";
+                }
+                editor.requestedMainSurface = EditorMainSurface::Scene;
+            }
+            else if (ai::asset_review_tool(call.tool))
+            {
+                auto& state = editor.assetGeneration;
+                const bool surfacePlacement = call.tool == "asset.model.import_shoreline" || call.tool == "asset.model.setup_landing";
+                const bool model = surfacePlacement || call.tool == "asset.model.import";
+                if (editor.assetGenerationPending || editor.modelShorelinePending)
+                {
+                    editor.aiToolStatus = "Wait for the current Asset Generation task to finish before approving its output.";
+                    return false;
+                }
+                std::string diagnostic;
+                const auto binding = asset_output_review_binding(editor, model, diagnostic);
+                if (binding.empty() || binding != editor.aiToolAssetBinding)
+                {
+                    editor.aiToolStatus = binding.empty() ? std::move(diagnostic)
+                        : "The visible output changed after review. Request a fresh approval.";
+                    return false;
+                }
+                const bool accepted = surfacePlacement ? begin_model_shoreline_import(editor)
+                    : model ? import_reviewed_generated_model(editor)
+                    : editor_asset_generation::approve_reference(state, state.status);
+                if (model) state.status = editor.projectStatus;
+                editor.aiToolStatus = state.status;
+                if (!accepted) return false;
+                if (call.tool == "asset.model.setup_landing" && editor.aiGoalRunning && editor.aiGoalTools.forest_asset_target)
+                    watch_execution(call.tool);
+                editor.requestedMainSurface = EditorMainSurface::AssetGeneration;
+            }
             else if(ai::asset_generation_tool(call.tool))
             {
                 const bool model = call.tool == "asset.model.generate";
@@ -654,7 +771,8 @@
                 if(editor.aiToolAssetBinding.empty()||binding!=editor.aiToolAssetBinding)
                 {editor.aiToolStatus="The input, controls or backend changed after this proposal. Nothing was generated; request and approve the current settings.";return false;}
                 dispatch_asset_generation(editor,ctx,model ? editor_asset_generation::Action::generate_model
-                    : editor_asset_generation::Action::generate_image);
+                    : editor_asset_generation::Action::generate_image,
+                    !model && editor.aiGoalRunning && editor.aiGoalTools.generates_foliage_cutout());
                 if(!editor.assetGenerationPending)
                 {editor.aiToolStatus=std::string{model ? "3D generation" : "Image generation"}+" did not start: "+editor.assetGeneration.status;return false;}
                 editor.aiToolAssetWork=editor.assetGeneration.active_work_directory;
@@ -666,17 +784,99 @@
                     ? "3D generation queued through Asset Generation. The output will need separate model review and import approval."
                     : "Image generation queued through Asset Generation. Waiting for validation and coding-model restoration; no image is approved or imported.";
             }
-            else if (call.tool == "forest.configure" || call.tool == "forest.material")
+            else if (call.tool == "forest.configure" || call.tool == "forest.material" || call.tool == "forest.material.import")
             {
                 if(!has_open_project(editor)||editor.projectBuildPending||editor.scriptBuildPending
                     ||planetary_project_busy(editor)||editor.forestSurfacePending
                     ||editor.projectRuntimeProcess.valid()
                     ||(editor.projectRuntimeSnapshot&&editor.projectRuntimeSnapshot->active()))
                 {editor.aiToolStatus="Tree configuration requires an open, stopped project with no pending generation or placement.";return false;}
-                if(!(call.tool=="forest.configure"?configure_ai_forest_recipe(editor,call):assign_ai_forest_material(editor,call)))return false;
+                if (call.tool == "forest.material.import")
+                {
+                    if (editor.assetGenerationPending)
+                    {
+                        editor.aiToolStatus = "Finish the active asset operation before importing a texture.";
+                        return false;
+                    }
+                    std::string diagnostic;
+                    const auto binding = asset_output_review_binding(editor, false, diagnostic);
+                    if (binding.empty() || binding != editor.aiToolAssetBinding)
+                    {
+                        editor.aiToolStatus = binding.empty() ? diagnostic : "The visible PNG changed. Review a fresh import plan.";
+                        return false;
+                    }
+                    const auto imported = import_asset_generation_texture(editor, ctx);
+                    if (!imported)
+                    {
+                        editor.aiToolStatus = editor.assetGeneration.status;
+                        return false;
+                    }
+                    const auto slot = call.arguments.front().value == "bark"
+                        ? forest::ForestTextureSlot::bark : forest::ForestTextureSlot::foliage;
+                    if (!change_plant_lab_texture(editor, slot, {imported->logical_path, imported->artifact_key.words}))
+                    {
+                        editor.aiToolStatus = "The project texture " + imported->logical_path
+                            + " is available. Plant Lab could not apply it: " + editor.plantLabStatus;
+                        return false;
+                    }
+                    editor.aiToolStatus = "Project texture " + imported->logical_path + " is ready. " + editor.plantLabStatus;
+                }
+                else if (!(call.tool == "forest.configure" ? configure_ai_forest_recipe(editor, call)
+                    : assign_ai_forest_material(editor, call))) return false;
                 editor.forestTerrainPainting=false;
                 editor.requestedMainSurface=EditorMainSurface::ForestFactory;
                 if(ctx)focus_forest_factory_preview(ctx.get(),editor);
+            }
+            else if (call.tool == "forest.update")
+            {
+                if (!has_open_project(editor) || editor.projectBuildPending || editor.scriptBuildPending
+                    || planetary_project_busy(editor) || editor.forestSurfacePending
+                    || editor.projectRuntimeProcess.valid()
+                    || (editor.projectRuntimeSnapshot && editor.projectRuntimeSnapshot->active()))
+                {
+                    editor.aiToolStatus = "Stop the project and finish current terrain or build work before updating painted trees.";
+                    return false;
+                }
+#if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
+                if ((editor.mainSurface == EditorMainSurface::Game2D
+                        ? !editor.game2DGuiWorkspace : editor.outlinerToolTab == OutlinerToolTab::TileMap)
+                    && unsavedTileMap)
+                {
+                    editor.aiToolStatus = "Save the edited tile-map drafts in their editor before updating painted trees and saving the scene.";
+                    return false;
+                }
+#endif
+                const auto refreshed = refresh_forest_factory_instances(editor);
+                if (!refreshed)
+                {
+                    editor.aiToolStatus = "Forest Factory could not update the painted trees. Check the Plant Lab and scene status.";
+                    return false;
+                }
+                synchronousSuccess = refreshed.saved;
+                editor.aiToolStatus = editor.plantLabStatus;
+                editor.forestTerrainPainting = false;
+                editor.requestedMainSurface = EditorMainSurface::ForestFactory;
+            }
+            else if (call.tool == "forest.species.add")
+            {
+                if (model_import_scene_busy(editor) || planetary_project_busy(editor) || editor.modelShorelinePending)
+                {
+                    editor.aiToolStatus = "Finish current build, terrain or scene work before adding a forest species.";
+                    return false;
+                }
+                const auto* target = selected_forest_species_target(editor);
+                if (!target || target->sceneObjectId != editor.aiToolPlacementTarget)
+                {
+                    editor.aiToolStatus = "The reviewed forest selection changed. Request a fresh review.";
+                    return false;
+                }
+                editor.aiGoalForestReceipt = false;
+                const bool queued = add_plant_lab_species_to_forest(editor);
+                editor.aiToolStatus = editor.plantLabStatus;
+                if (!queued) return false;
+                watch_execution(call.tool);
+                editor.forestTerrainPainting = true;
+                editor.requestedMainSurface = EditorMainSurface::ForestFactory;
             }
             else if (call.tool == "forest.paint")
             {
@@ -873,12 +1073,14 @@
                     complete_tool_goal(call.tool, synchronousSuccess && editor.projectLifecycle.evidence().scene_committed
                         && editor.sceneDocumentRevision == editor.projectLifecycle.evidence().generations.committed_scene_generation
                         && !gui_document_has_unsaved_changes(editor));
-                else if(call.tool=="forest.configure"||call.tool=="forest.material")
+                else if(call.tool=="forest.configure"||call.tool=="forest.material"||call.tool=="forest.material.import")
                 {
                     complete_tool_goal(call.tool,synchronousSuccess&&bool(editor.plantLabPublishedArtifact)
                         &&editor.plantLabPublishedArtifact.source_revision==editor.plantLabDocument.revision
                         &&editor.plantLabPublishedArtifact.source_content_hash==editor.plantLabDocument.contentHash);
                 }
+                else if (call.tool == "forest.update" || call.tool == "asset.reference.approve")
+                    complete_tool_goal(call.tool, synchronousSuccess);
             }
             editor.aiToolStatus += " Only this approved operation was dispatched; any remaining steps require a new reviewed plan.";
             push_editor_log(
@@ -889,9 +1091,11 @@
 
         auto dispatch_ai_tool_plan = [&]() -> bool
         {
+            const bool dispatchingTextureGoal = editor.aiGoalRunning && editor.aiGoalTools.texture_update;
             const bool dispatched = dispatch_ai_tool_plan_impl();
             if (!dispatched && editor.aiGoalTools.enabled)
             {
+                if (dispatchingTextureGoal) editor.aiToolPlan = {};
                 editor.aiGoalTools.stopped = true;
                 editor.aiGoalRunning = editor.aiGoalPlanNextQueued = false;
             }
@@ -1036,6 +1240,7 @@
                     return;
                 }
 
+                const bool inEditor = resolve_project_runtime_embedding(editor, ctx.get(), runInEditor, runBackend);
                 if (!launch_project_runtime(
                         editor,
                         output,
@@ -1044,7 +1249,7 @@
                         runFrameLimit,
                         runCameraMode,
                         runInputProfile,
-                        runInEditor))
+                        inEditor))
                 {
                     push_editor_log(
                         editor,
@@ -1055,7 +1260,7 @@
 
                 push_editor_log(
                     editor,
-                    std::string{runInEditor ? "[project] Accepted build started; in-editor attachment requested using " : "[project] Accepted build launched in standalone "}
+                    std::string{inEditor ? "[project] Accepted build started; in-editor attachment requested using " : "[project] Accepted build launched in standalone "}
                         + std::string{project_run_backend_label(runBackend)}
                         + " mode.");
             }
@@ -1177,6 +1382,12 @@
                 "[ai-tool] " + editor.aiToolStatus);
         };
         poll_project_build();
+        if (editor.projectRunAfterTerrainPreview && !planetary_project_busy(editor))
+        {
+            const bool inEditor = *editor.projectRunAfterTerrainPreview;
+            editor.projectRunAfterTerrainPreview.reset();
+            launch_active_project_context(inEditor);
+        }
         pump_ai_tool_test();
         reconcile_project_runtime(editor);
         if (!editor.aiToolExecution.empty())
@@ -1187,14 +1398,19 @@
                 editor.aiToolExecutionProjectGeneration, editor.projectId, editor.projectRoot, selected.generation);
             const bool running = editor.projectRuntimeSnapshot && editor.projectRuntimeSnapshot->active();
             const bool ownedRuntime = running && project_runtime_identity_current(editor, *editor.projectRuntimeSnapshot);
+            const bool forestPlacement = editor.aiToolExecution == "forest.paint" || editor.aiToolExecution == "forest.species.add";
+            const bool landingPlacement = editor.aiToolExecution == "asset.model.setup_landing";
             const bool waiting = current && (editor.projectBuildPending
                 || (ai::asset_generation_tool(editor.aiToolExecution) && editor.assetGenerationPending)
-                || (editor.aiToolExecution == "forest.paint" && editor.forestSurfacePending)
+                || ((forestPlacement || editor.aiToolExecution == "scene.attachments.refresh")
+                    && editor.forestSurfacePending)
+                || (landingPlacement && editor.modelShorelinePending)
                 || (editor.aiToolExecution == "project.stop" && running)
                 || (editor.aiToolExecution == "project.run" && ownedRuntime && editor.projectRuntimeInEditor
                     && !editor.projectRuntimeWindow && editor.projectRuntimeAttachmentError.empty()));
             if (!waiting)
             {
+                bool assetSucceeded = false;
                 const auto& generations = editor.projectLifecycle.evidence().generations;
                 const bool acceptedBuild = generations.output_artifact.valid_for(selected, generations.build_inputs)
                     && editor.aiToolExecutionBuildGeneration != 0u
@@ -1212,7 +1428,21 @@
                     const auto& output = model ? editor.assetGeneration.generated_model : editor.assetGeneration.reference;
                     const bool generated=output&&output->result&&output->coding_restored&&output->retirement_verified
                         &&!editor.aiToolAssetWork.empty()&&output->result.work_directory==editor.aiToolAssetWork;
-                    if (generated)
+                    assetSucceeded = generated;
+                    auto& sequence = editor.aiGoalTools;
+                    if (generated && sequence.forest_asset_target && sequence.waiting)
+                    {
+                        std::string diagnostic;
+                        auto binding = asset_output_review_binding(editor, model, diagnostic);
+                        assetSucceeded = !binding.empty() && (!model || output->reference_sha256 == sequence.beacon_reference_sha256);
+                        if (assetSucceeded)
+                        {
+                            sequence.forest_asset_output = std::move(binding);
+                            if (!model && sequence.forest_asset_kind == epochengine::editor::ai_chat_goal::ForestAssetKind::beacon)
+                                sequence.beacon_reference_sha256 = output->result.output_sha256;
+                        }
+                    }
+                    if (assetSucceeded)
                     {
                         editor.aiToolStatus = std::string{model ? "3D model" : "Image"}
                             + " generated and checked. Working file: " + display_project_path(output->result.output);
@@ -1222,15 +1452,23 @@
                     }
                     else
                         editor.aiToolStatus = std::string{model ? "3D generation" : "Image generation"}
-                            + " ended without a newly validated output: " + editor.assetGeneration.status;
+                            + (generated ? " returned an output outside the reviewed forest asset sequence."
+                                : " ended without a newly validated output: " + editor.assetGeneration.status);
                     // A later chat turn may already own the current activity.
                     // Only this job's approval turn may be settled here.
                     if(editor.aiToolAssetActivityId!=0u
                         &&chat.inlineHostActivityId==editor.aiToolAssetActivityId)
-                        chat.end_host_activity(!generated);
+                        chat.end_host_activity(!assetSucceeded);
                 }
                 else if (editor.aiToolExecution == "forest.paint")
                     editor.aiToolStatus = "forest.paint finished its owned operation: " + editor.plantLabStatus;
+                else if (editor.aiToolExecution == "forest.species.add")
+                    editor.aiToolStatus = editor.plantLabStatus;
+                else if (landingPlacement)
+                    editor.aiToolStatus = modelShorelinePlaced ? editor.projectStatus
+                        : "Landing placement ended without a committed scene. " + editor.projectStatus;
+                else if (editor.aiToolExecution == "scene.attachments.refresh")
+                    editor.aiToolStatus = editor.projectStatus;
                 else if (editor.aiToolExecution == "project.build")
                     editor.aiToolStatus = std::string{acceptedBuild
                         ? "project.build completed with accepted artifact evidence: " : "project.build ended without accepted artifact evidence: "}
@@ -1243,6 +1481,8 @@
                 else
                     editor.aiToolStatus = "project.stop completed: the owned build/runtime is no longer active. " + editor.projectRuntimeStatus;
                 if (!editor.projectBuildDiagnosticTail.empty() && editor.aiToolExecution != "project.stop"
+                    && editor.aiToolExecution != "forest.species.add"
+                    && editor.aiToolExecution != "scene.attachments.refresh"
                     &&!ai::asset_generation_tool(editor.aiToolExecution))
                     editor.aiToolStatus += "\nCompiler output: " + editor.projectBuildDiagnosticTail;
                 // Return to the preview only if the user has not chosen a
@@ -1255,7 +1495,9 @@
                     editor.requestedMainSurface=EditorMainSurface::Scene;
                 if (editor.aiGoalTools.enabled && editor.aiGoalTools.waiting)
                 {
-                    const bool succeeded = current && (editor.aiToolExecution == "forest.paint"
+                    const bool succeeded = current && (landingPlacement ? modelShorelinePlaced
+                        : ai::asset_generation_tool(editor.aiToolExecution) ? assetSucceeded
+                        : forestPlacement
                         ? editor.aiGoalForestReceipt
                         : editor.aiToolExecution == "project.build" ? acceptedBuild
                         : editor.aiToolExecution == "project.run" && ownedRuntime && editor.projectRuntimeAttachmentError.empty());

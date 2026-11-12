@@ -428,6 +428,7 @@ namespace epochengine
         std::optional<scene::SceneMeshSnapshot> mesh_asset{};
         std::optional<std::array<double,3>> position_anchor{};
         std::optional<scene::SceneForestRegionInstance> forest_region{};
+        std::optional<scene::SceneTerrainAttachment> terrain_attachment{};
     };
 
     export struct EditorCanvas2DProjectSnapshot

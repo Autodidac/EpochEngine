@@ -71,6 +71,17 @@ void set_target_fps(int value) { target=value; ++configurations; }
             sanitize = diagnostics.split('        [[nodiscard]] static double snapshot_frame_limit(', 1)[1].split(
                 '        [[nodiscard]] static canvas2d::ProjectSettings', 1)[0]
             sanitize = '        [[nodiscard]] static double snapshot_frame_limit(' + sanitize
+            tier_start = diagnostics.index('        [[nodiscard]] static perf::tier recommended_editor_performance_tier(')
+            tier_end = diagnostics.index('        [[nodiscard]] static std::string recommended_support_tier(', tier_start)
+            recommend_tier = diagnostics[tier_start:tier_end]
+            fps_for_tier = module[module.index('    double target_fps_for(tier t) noexcept\n'):
+                module.index('    double target_fps_for(frame_limit_preset preset) noexcept\n')]
+            session = read_owned_source(ROOT / 'Engine/src/editor/application/editor.application_context_session.inl')
+            startup_selection = session[session.index('                if (core::cli::frame_limit_explicit)'):
+                session.index('                it->second.automationCommand =')].replace(
+                    'std::thread::hardware_concurrency()', 'hardwareThreadCount')
+            startup_publish = session[session.index('                if (ctx && ctx->windowData)'):
+                session.index('                if (const auto requestedWorkspace')]
             snapshot_source = read_owned_source(
                 ROOT / 'Engine/src/editor/application/editor.application_context_snapshot.inl')
             capture = snapshot_source.split('        snapshot.editor_frame_limit_fps =', 1)[1].split(
@@ -89,8 +100,20 @@ namespace pacing_fixture {
 namespace perf=epochengine::perf;
 SANITIZE
 struct Window {perf::frame_pacing_override editorFramePacingOverride;};
-struct Context {std::shared_ptr<Window> windowData=std::make_shared<Window>();};
+namespace core {
+enum class ContextType {OpenGL,Vulkan,RayLib,SFML,SDL,Software};
+struct Context {std::shared_ptr<Window> windowData=std::make_shared<Window>();ContextType type{ContextType::OpenGL};};
+namespace cli {bool frame_limit_explicit{},frame_vsync_requested{};double frame_limit_fps{};}
+}
+using core::Context;
+RECOMMEND_TIER
 struct Editor {double editorFrameLimitFps=120.0;bool editorFrameVsyncRequested=false;};
+Editor start(const std::shared_ptr<Context>& ctx,unsigned hardwareThreadCount){
+struct Slot {Editor second;};Slot slot;auto* it=&slot;
+STARTUP_SELECTION
+STARTUP_PUBLISH
+return slot.second;
+}
 struct Snapshot {double editor_frame_limit_fps=120.0;bool editor_frame_vsync_requested=false;};
 Snapshot capture(const Editor& editor) {Snapshot snapshot;
 CAPTURE
@@ -108,7 +131,9 @@ MANUAL
 }
 }
 '''.replace('SANITIZE', finite + sanitize).replace('CAPTURE', capture).replace(
-                'RESTORE', restore).replace('MANUAL', manual)
+                'RESTORE', restore).replace('MANUAL', manual).replace('RECOMMEND_TIER', recommend_tier).replace(
+                'STARTUP_SELECTION', startup_selection).replace('STARTUP_PUBLISH', startup_publish)
+            persistence = 'namespace epochengine::perf {\n' + fps_for_tier + '}\n' + persistence
             clock = '''namespace epochengine::core::time {
 inline double now{},readStep=0.00005; inline unsigned reads{}, sleeps{};inline bool zeroSleep{};
 // The independent monotonic clock advances on observation, even when the OS
@@ -170,6 +195,19 @@ int main() {
     const auto standalone=resolve_frame_pacing(select_frame_pacing_policy(uncapped,0.0,true,true),foreground,false);
     assert(standalone.effective_mode==uncapped && standalone.effective_hz==0.0);
     assert(!standalone.cpu_deadline_wait);
+    auto editorContext=std::make_shared<pacing_fixture::Context>();
+    assert(pacing_fixture::start(editorContext,12u).editorFrameLimitFps==120.0);
+    const auto autoPolicy=with_frame_pacing_override(target_hz_policy(30),editorContext->windowData->editorFramePacingOverride);
+    assert(resolve_frame_pacing(autoPolicy,foreground,false).effective_hz==120.0);
+    assert(resolve_frame_pacing(autoPolicy,frame_activity::background,false).effective_hz==30.0);
+    assert(pacing_fixture::start(editorContext,6u).editorFrameLimitFps==60.0);
+    assert(pacing_fixture::start(editorContext,0u).editorFrameLimitFps==30.0);
+    assert(pacing_fixture::start({},16u).editorFrameLimitFps==30.0);
+    editorContext->type=pacing_fixture::core::ContextType::Software;
+    assert(pacing_fixture::start(editorContext,16u).editorFrameLimitFps==30.0);
+    pacing_fixture::core::cli::frame_limit_explicit=true;
+    pacing_fixture::core::cli::frame_limit_fps=75.0;
+    assert(pacing_fixture::start(editorContext,0u).editorFrameLimitFps==75.0);
     // Compile Raylib's actual native-admission callback against the actual
     // policy and deadline. Epoch's custom frame-control path never waits in
     // SetTargetFPS, so fixed/background/minimized rates must reach the host.

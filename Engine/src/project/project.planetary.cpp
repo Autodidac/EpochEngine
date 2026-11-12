@@ -491,6 +491,18 @@ namespace epochengine::project_planetary
             return read_small(path,4096u)==record->bytes;
         }
 
+        bool mesh_generation_receipt_matches(const fs::path& project_root,const SourceGeneration& source,
+            const Settings& settings,const MeshGenerationIdentity& mesh)
+        {
+            const auto record=mesh_generation_record(source,settings,mesh);
+            const auto directory=record?project_directory(project_root,"Assets/Mesh",false):std::nullopt;
+            if(!directory)return false;
+            const auto path=*directory/record->filename;
+            const auto status=fs::symlink_status(path);
+            return fs::is_regular_file(status)&&!fs::is_symlink(status)&&fs::hard_link_count(path)==1u
+                &&read_small(path,4096u)==record->bytes;
+        }
+
         bool write_mesh_generation_bodies(const fs::path& root,const SourceGeneration& source,
             const Settings& settings,const MeshGenerationIdentity& mesh,std::string_view bytes)
         {
@@ -1077,14 +1089,8 @@ file(RENAME "${receipt_temporary}" "${runtime}/provider.identity")
         const Settings& settings,const MeshGenerationIdentity& mesh)
     {
         try {
-            if(load_settings(project_root)!=settings||!source_generation_is_current(project_root,source))return false;
-            const auto record=mesh_generation_record(source,settings,mesh);
-            const auto directory=record?project_directory(project_root,"Assets/Mesh",false):std::nullopt;
-            if(!directory)return false;
-            const auto path=*directory/record->filename;
-            const auto status=fs::symlink_status(path);
-            return fs::is_regular_file(status)&&!fs::is_symlink(status)&&fs::hard_link_count(path)==1u
-                &&read_small(path,4096u)==record->bytes;
+            return load_settings(project_root)==settings&&source_generation_is_current(project_root,source)
+                &&mesh_generation_receipt_matches(project_root,source,settings,mesh);
         }catch(...){return false;}
     }
 
@@ -1626,7 +1632,47 @@ file(RENAME "${receipt_temporary}" "${runtime}/provider.identity")
 
     SurfaceBatchResult query_surfaces(const fs::path& project_root,const SurfaceBatchQuery& query,
         std::stop_token cancellation)
-    {return query_surface_samples(project_root,query,cancellation,true);}
+    {
+        constexpr std::size_t headerArguments = 8u;
+        constexpr std::size_t argumentsPerSample = 3u;
+        constexpr auto samplesPerWorker = (process::maximum_arguments - headerArguments) / argumentsPerSample;
+        static_assert(samplesPerWorker > 0u);
+        if (query.directions.size() <= samplesPerWorker || query.directions.size() > kMaximumSurfaceBatchSamples)
+            return query_surface_samples(project_root, query, cancellation, true);
+
+        SurfaceBatchResult result{.request_id=query.query.request_id};
+        if (cancellation.stop_requested())
+            return {.code=SurfaceCode::cancelled, .operation={.cancelled=true,.message="Surface query cancelled."},
+                .request_id=query.query.request_id};
+        auto sampleQuery = query.query;
+        for (const auto& direction : query.directions)
+        {
+            sampleQuery.direction = direction;
+            if (!valid_surface_query(sampleQuery))
+            {
+                result.operation.message = "Surface query requires an admitted mesh and finite unit body-local directions.";
+                return result;
+            }
+        }
+
+        result.samples.reserve(query.directions.size());
+        double generationSeconds{};
+        const auto end = query.directions.end();
+        for (auto first = query.directions.begin(); first != end;)
+        {
+            const auto remaining = static_cast<std::size_t>(end - first);
+            const auto last = first + (std::min)(remaining, samplesPerWorker);
+            auto part = query_surface_samples(project_root, {query.query, {first, last}}, cancellation, true);
+            if (part.code != SurfaceCode::ready) return part;
+            generationSeconds += part.operation.generation_seconds;
+            result.operation = std::move(part.operation);
+            for (auto& sample : part.samples) result.samples.push_back(std::move(sample));
+            first = last;
+        }
+        result.operation.generation_seconds = generationSeconds;
+        result.code = SurfaceCode::ready;
+        return result;
+    }
 
     ShorelineResult query_ocean_shoreline(const fs::path& project_root, const SurfaceQuery& query,
         double maximum_distance_meters, std::stop_token cancellation)
@@ -1653,7 +1699,7 @@ file(RENAME "${receipt_temporary}" "${runtime}/provider.identity")
 
         for (unsigned pass = 0u; pass < 5u; ++pass)
         {
-            auto sampled = query_surface_samples(project_root, batch, cancellation, true);
+            auto sampled = query_surfaces(project_root, batch, cancellation);
             if (sampled.code != SurfaceCode::ready) return {sampled.code, std::move(sampled.operation)};
             const SurfaceResult* dry{};
             const SurfaceResult* wet{};
@@ -1694,8 +1740,72 @@ file(RENAME "${receipt_temporary}" "${runtime}/provider.identity")
         return {SurfaceCode::unsupported, {.message="The bounded terrain search found no verified ocean shoreline at that distance."}};
     }
 
+    LandingSiteResult query_forest_landing_site(const fs::path& project_root, const SurfaceQuery& query,
+        double forest_radius_meters, double beacon_radius_meters, std::stop_token cancellation)
+    {
+        if (cancellation.stop_requested())
+            return {SurfaceCode::cancelled, {.cancelled=true,.message="Landing site search cancelled."}};
+        const auto radius = query.body.radius_meters;
+        const auto center = query.direction;
+        const auto centerLength = std::hypot(center[0], center[1], center[2]);
+        const auto beaconOffset = forest_radius_meters + beacon_radius_meters + 8.0;
+        const auto startOffset = beaconOffset + beacon_radius_meters + 18.0;
+        if (!std::isfinite(radius) || radius <= 0 || !std::isfinite(centerLength) || std::abs(centerLength - 1.0) > 1e-6
+            || !std::isfinite(forest_radius_meters) || forest_radius_meters <= 0.0
+            || !std::isfinite(beacon_radius_meters) || beacon_radius_meters <= 0.0 || startOffset >= radius)
+            return {SurfaceCode::invalid, {.message="The forest and model footprints do not fit a nearby landing route."}};
+
+        std::array<double, 3> east = std::abs(center[1]) < 0.9
+            ? std::array<double, 3>{center[2], 0.0, -center[0]} : std::array<double, 3>{0.0, -center[2], center[1]};
+        const auto eastLength = std::hypot(east[0], east[1], east[2]);
+        for (auto& axis : east) axis /= eastLength;
+        const std::array<double, 3> north{center[1]*east[2]-center[2]*east[1],
+            center[2]*east[0]-center[0]*east[2], center[0]*east[1]-center[1]*east[0]};
+
+        constexpr std::size_t bearings = 12, samplesPerBearing = 5;
+        SurfaceBatchQuery batch{query, {}};
+        batch.directions.reserve(bearings * samplesPerBearing);
+        for (std::size_t bearing = 0; bearing < bearings; ++bearing)
+        {
+            const double angle = double(bearing) * 6.283185307179586 / bearings;
+            for (std::size_t step = 0; step < samplesPerBearing; ++step)
+            {
+                const auto arc = std::lerp(beaconOffset, startOffset, double(step) / (samplesPerBearing - 1)) / radius;
+                std::array<double, 3> direction{};
+                for (std::size_t axis = 0; axis < 3; ++axis)
+                    direction[axis] = center[axis] * std::cos(arc)
+                        + (east[axis] * std::cos(angle) + north[axis] * std::sin(angle)) * std::sin(arc);
+                batch.directions.push_back(direction);
+            }
+        }
+        auto sampled = query_surfaces(project_root, batch, cancellation);
+        if (sampled.code != SurfaceCode::ready) return {sampled.code, std::move(sampled.operation)};
+        const double maximumRise = (startOffset - beaconOffset) * 0.5 / (samplesPerBearing - 1);
+        for (std::size_t index = 0; index < sampled.samples.size(); index += samplesPerBearing)
+        {
+            bool usable = true;
+            for (std::size_t step = 0; step < samplesPerBearing; ++step)
+            {
+                const auto& sample = sampled.samples[index + step];
+                double up{};
+                for (std::size_t axis = 0; axis < 3; ++axis) up += sample.normal[axis] * sample.radial_up[axis];
+                if ((query.body.id == 0u && sample.height_meters <= 0.0) || up < 0.85
+                    || (step && std::abs(sample.height_meters - sampled.samples[index + step - 1].height_meters) > maximumRise))
+                { usable = false; break; }
+            }
+            if (usable)
+            {
+                sampled.operation.message = "Verified dry, gentle terrain samples from the player start to the beacon.";
+                return {SurfaceCode::ready, std::move(sampled.operation), sampled.samples[index], sampled.samples[index + samplesPerBearing - 1]};
+            }
+        }
+        sampled.operation.ok = false;
+        sampled.operation.message = "No nearby dry, gentle approach was found outside the reviewed forest.";
+        return {SurfaceCode::unsupported, std::move(sampled.operation)};
+    }
+
     StreamResult stream_step(const fs::path& project_root, Settings settings,
-        StreamView view, std::stop_token cancellation)
+        StreamView view, std::stop_token cancellation, const StreamMeshBinding* binding)
     {
         StreamResult result;
         auto& operation = result.operation;
@@ -1742,6 +1852,12 @@ file(RENAME "${receipt_temporary}" "${runtime}/provider.identity")
             const auto observedRecipe=recipe_guard(project_root);
             if(!observedRecipe){operation.message="The saved terrain settings are unavailable or redirected.";return result;}
             const auto authoredSettings=decode_settings(*observedRecipe);
+            if(binding&&(*admitted!=binding->source||authoredSettings!=settings
+                ||!mesh_generation_receipt_matches(project_root,*admitted,settings,binding->mesh)))
+            {
+                operation.message="Planet LOD paused: its source or saved terrain changed before streaming. The previous mesh is retained.";
+                return result;
+            }
             // The compiled provider belongs to the authored project's dependency
             // set. A dry selected body still uses that exact Water-linked binary.
             const bool providerWater=settings.ocean_surface||(authoredSettings&&authoredSettings->ocean_surface);
@@ -1853,7 +1969,12 @@ file(RENAME "${receipt_temporary}" "${runtime}/provider.identity")
             if (!execute(producer, std::move(streamArguments),
                 working, operation.build_log, cancellation, *environment, 30'000'000'000ull, operation, expectedProvider, retainedLease))
             { result.waiting_for_worker = operation.worker_busy; return result; }
-            operation.generation_seconds = std::chrono::duration<double>(Clock::now() - started).count();
+            const auto consumeStarted=Clock::now();
+            operation.generation_seconds = std::chrono::duration<double>(consumeStarted - started).count();
+            const auto elapsedMs=[](Clock::time_point start) {
+                return std::chrono::duration<double,std::milli>(Clock::now()-start).count();
+            };
+            double meshDecodeMs{},patchDecodeMs{},cutBuildMs{};
             // Decode only bounded worker output here. One full source check
             // below binds the completed decode/materialization to the captured
             // project, rather than rehashing the same package on both sides.
@@ -1993,13 +2114,16 @@ file(RENAME "${receipt_temporary}" "${runtime}/provider.identity")
                     result.waiting_for_worker = true;
                     return result;
                 }
+                const auto meshStarted=Clock::now();
                 const auto decoded = asset::mesh::read_artifact_file(operation.artifact_path, artifact_limits(settings));
+                meshDecodeMs=elapsedMs(meshStarted);
                 if (!decoded || decoded.artifact->vertices().size() != vertices || decoded.artifact->indices().size() != indices
                     || asset::texture::content_hash_hex(decoded.artifact->key()) != *key)
                 { operation.message = "Terrain streaming mesh failed content validation."; return result; }
                 result.snapshot = decoded.artifact;
                 if(patchTransport)
                 {
+                    const auto patchStarted=Clock::now();
                     const auto patchLimits=snapshot_transition_limits(settings);
                     auto encoded=read_small(run/"generated/terrain.epoch_planet_patch",
                         static_cast<std::size_t>(patchLimits.maximum_metadata_bytes));
@@ -2014,6 +2138,8 @@ file(RENAME "${receipt_temporary}" "${runtime}/provider.identity")
                         ||metadata->water_meters_to_artifact!=scale||metadata->water_origin_meters!=sourceOrigin))
                     {operation.message="Terrain water coordinates do not match the admitted stream frame.";result.snapshot.reset();return result;}
                     std::string{}.swap(encoded);
+                    patchDecodeMs=elapsedMs(patchStarted);
+                    const auto cutStarted=Clock::now();
                     auto admitted=std::make_shared<const project_planetary_snapshot::Snapshot>(
                         project_planetary_snapshot::Snapshot{decoded.artifact,std::move(*metadata)});
                     project_planetary_snapshot::Transition initial{patchLimits};
@@ -2025,10 +2151,12 @@ file(RENAME "${receipt_temporary}" "${runtime}/provider.identity")
                         ||(result.snapshot=initial.materialize(cancellation))==nullptr)
                     {operation.message="Terrain patch hierarchy exceeds the retained snapshot budget.";result.snapshot.reset();return result;}
                     result.patch_snapshot=std::move(admitted);
+                    cutBuildMs=elapsedMs(cutStarted);
                 }
                 if(meshFrame)operation.mesh_frame=GeneratedMeshFrame{1.0/scale,sourceOrigin};
             }
             result.snapshot_ready = ready != 0u;
+            const auto admissionStarted=Clock::now();
             if(cancellation.stop_requested()||!source_generation_is_current(project_root,*admitted,cancellation)
                 ||recipe_guard(project_root)!=observedRecipe)
             {
@@ -2044,15 +2172,27 @@ file(RENAME "${receipt_temporary}" "${runtime}/provider.identity")
                     operation.message="Approved Water source changed during patch admission. The previous terrain was retained.";return result;
                 }
             }
+            if(binding&&!mesh_generation_receipt_matches(project_root,*admitted,settings,binding->mesh))
+            {
+                result.snapshot.reset();result.patch_snapshot.reset();result.snapshot_ready=false;
+                operation.message="Planet LOD paused: its saved terrain changed during streaming. The previous mesh is retained.";
+                return result;
+            }
             result.verified_source = *admitted;
             operation.ok = true;
+            const auto finalAdmissionMs=elapsedMs(admissionStarted);
+            const auto consumeMs=elapsedMs(consumeStarted);
             operation.message = "Planet LOD " + std::to_string(result.minimum_level) + "–" + std::to_string(result.maximum_level)
                 + " | " + std::to_string(result.draw) + " visible patches | " + std::to_string(result.pending) + " loading";
             constexpr std::uint64_t mib = 1024u * 1024u;
             operation.message += " | patch cache " + std::to_string(result.resident_bytes / mib)
                 + "." + std::to_string((result.resident_bytes % mib) * 10u / mib)
                 + " / " + std::to_string(result.maximum_bytes / mib) + " MiB";
-            if(cloudTransport&&!densityTransport)
+            if(result.snapshot_ready)
+                operation.message+=" | "+std::to_string(static_cast<std::uint64_t>(consumeMs+0.5))+" ms delivery";
+            if(!cloudTransport)
+                operation.message+="\nThe attached Planetary source has no clouds. Review the current Planetary Terrain source in Package Manager, then choose Update Project Source and Build & Generate.";
+            else if(!densityTransport)
                 operation.message+="\nClouds use the project's older geometric source. In Package Manager, review Planetary Terrain and choose Update Project Source, then Build & Generate for volumetric clouds. Saved settings and terrain are retained.";
             // Provider jobs use a separate scheduler from the Editor toolbar.
             // Show measured completed work, never configured threads as active.
@@ -2086,7 +2226,10 @@ file(RENAME "${receipt_temporary}" "${runtime}/provider.identity")
                 if(evidence)evidence<<std::setprecision(17)<<"epoch.planet.host-stream-performance.v1\nrequest_id="<<view.request_id
                     <<"\nbody="<<settings.body_index<<"\ncamera_x="<<view.camera[0]<<"\ncamera_y="<<view.camera[1]<<"\ncamera_z="<<view.camera[2]
                     <<"\nprovider_seconds="<<operation.generation_seconds
-                    <<"\nconsume_seconds="<<std::chrono::duration<double>(Clock::now()-started).count()-operation.generation_seconds
+                    <<"\nconsume_seconds="<<consumeMs/1000.0
+                    <<"\nhost_consume_ms="<<consumeMs<<"\nhost_mesh_decode_ms="<<meshDecodeMs
+                    <<"\nhost_patch_decode_ms="<<patchDecodeMs<<"\nhost_cut_build_ms="<<cutBuildMs
+                    <<"\nhost_final_admission_ms="<<finalAdmissionMs
                     <<"\nbuilt="<<result.built<<"\nreused="<<result.reused<<"\nresident="<<result.resident
                     <<"\npending="<<result.pending<<"\ndraw="<<result.draw<<"\nvertices="<<vertices<<"\nindices="<<indices
                     <<"\n"<<performance

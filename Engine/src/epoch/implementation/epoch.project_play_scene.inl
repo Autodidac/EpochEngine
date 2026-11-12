@@ -72,6 +72,11 @@
                 prepare_planetary_runtime();
                 prepare_gameplay();
                 prepare_runtime_input();
+                const auto* projection = m_sceneRuntime.projection();
+                m_reachObjective.reset(projection ? projection->source().reach_objective : std::nullopt);
+                m_reachTargetName.clear();
+                if (const auto* target = reach_objective_target())
+                    m_reachTargetName = target->name;
             }
 
             void unload() override
@@ -79,6 +84,8 @@
                 shutdown_planetary_runtime();
                 m_runtimeInspectionLight=false;
                 shutdown_gameplay();
+                m_reachObjective.reset();
+                m_reachTargetName.clear();
                 retire_canvas2d_scenes();
                 m_cameraApplied.clear();
                 m_meshes.clear();
@@ -195,11 +202,8 @@
                     epochengine::previewgrid::set_camera_mode(ctx.get(), m_cameraMode);
                     if (m_cameraMode == epochengine::previewgrid::CameraMode::FPS)
                     {
-                        if (const auto spawn = project_spawn_position(
-                            std::span<const ProjectRuntimeEntity>{ m_entities.data(), m_entities.size() }))
-                        {
-                            (void)epochengine::previewgrid::focus_camera(ctx.get(), *spawn, 0.0f);
-                        }
+                        if (const auto* projection = m_sceneRuntime.projection())
+                            focus_project_spawn(ctx.get(), *projection);
                     }
                     else if(m_cameraMode==previewgrid::CameraMode::Editor&&m_seedCamerasUnchanged&&m_hasPlanetRecipe)
                     {
@@ -291,11 +295,11 @@
                         completeManagedFrame=append_planetary_cloud_markers(planetaryMarkers,cloudVolumes,
                             ctx->type==core::ContextType::OpenGL,
                             ctx->simulation_sample_time().value_or(0.0));
-                    std::vector<std::uint64_t> managedForestEntities;
+                    std::vector<std::uint64_t> managedTerrainAttachments;
                     if(rebased&&completeManagedFrame)
-                        m_forestRuntimeStatus=append_planetary_forest_markers(planetaryMarkers,managedForestEntities,
+                        m_terrainAttachmentStatus=append_planetary_attached_markers(planetaryMarkers,managedTerrainAttachments,
                             ctx->type == core::ContextType::OpenGL);
-                    else m_forestRuntimeStatus.clear();
+                    else m_terrainAttachmentStatus.clear();
                     if(rebased)for(std::size_t axis=0;axis<3;++axis)sceneOrigin[axis]-=m_explorationRenderOrigin[axis];
                     update_planetary_sunlight();
                     auto frameLighting=project_play_lighting_for_origin(m_lightingFrame,sceneOrigin);
@@ -312,9 +316,11 @@
                         rebased&&!planetaryMarkers.empty() ? m_planetaryEntity : 0u, requestedWireframe,
                         sceneOrigin, &m_meshBaseColorTextures, waterCache.mesh,
                         rebased?&*m_explorationRenderCamera:nullptr,&*frameLighting,
-                        m_explorationRenderOrigin,managedForestEntities,cloudVolumes);
+                        m_explorationRenderOrigin,managedTerrainAttachments,cloudVolumes);
                     const bool preparing=rebased&&planetary_frame_preparing(ctx.get());
                     if(published||!preparing)finish_runtime_mesh_display(published,requestedWireframe);
+                    if (published)
+                        update_reach_objective(ctx.get(), sceneOrigin, planetaryMarkers, managedTerrainAttachments);
                     if(m_runtimeCloudBackendUnavailable)
                         m_runtimeViewStatus="Volumetric clouds currently require OpenGL; this backend has no density pass.";
                     if(!published&&rebased&&previewgrid::advance_scene_frame_camera(ctx.get(),
@@ -324,13 +330,18 @@
                             :"New geometry was not admitted; the previous terrain remains visible with live camera controls.";
                     if(!completeManagedFrame)
                         m_runtimeViewStatus="Planet exploration frame is incomplete; the previous view is retained.";
-                    else if (!published)
+                    else if (published && ctx->type != core::ContextType::OpenGL
+                        && std::any_of(m_entities.begin(),m_entities.end(),[](const auto& entity)
+                        {
+                            return project_play_entity_has_geometry(entity,0u) && entity.mesh_asset
+                                && entity.texture_material && entity.type != "ForestTrunk";
+                        }))
+                        m_runtimeViewStatus = "Textured objects are hidden on this backend. Run with OpenGL to view them.";
+                    else if (!published && ctx->type == core::ContextType::OpenGL)
                     {
                         const auto needsTexture = [](const auto& entity)
                         { return entity.visible() && entity.mesh_asset && entity.texture_material; };
-                        if (ctx->type != core::ContextType::OpenGL && std::any_of(m_entities.begin(),m_entities.end(),needsTexture))
-                            m_runtimeViewStatus = "Textured meshes currently require OpenGL. No color substitute was drawn.";
-                        else if (std::any_of(m_entities.begin(),m_entities.end(),[&](const auto& entity)
+                        if (std::any_of(m_entities.begin(),m_entities.end(),[&](const auto& entity)
                             { return needsTexture(entity) && !m_meshBaseColorTextures.contains(entity.source_id); }))
                             m_runtimeViewStatus = "Textured mesh drawing refused: its exact opaque/cutout base-color texture is unavailable.";
                     }
@@ -591,7 +602,7 @@
                         }
                         runtimeLabel(m_runtimeViewStatus,controlsContentWidth,
                             "Scene geometry was not admitted. The previous mesh display is retained; check the terrain and asset diagnostics.");
-                        if(m_hasPlanetRecipe||!m_forestRuntimeStatus.empty())runtimeLabel(m_forestRuntimeStatus,controlsContentWidth,
+                        if(m_hasPlanetRecipe||!m_terrainAttachmentStatus.empty())runtimeLabel(m_terrainAttachmentStatus,controlsContentWidth,
                             "Forest area no longer matches terrain; regenerate/repaint to attach it. Authored poses are retained.");
                         constexpr std::string_view inspectionStatus=
                             "Inspection Light brightens this view only. Scene lights and planetary time are unchanged.";
@@ -783,6 +794,7 @@
                     }
                     gui::end_window();
                 }
+                draw_reach_objective();
                 gui::end_top_layer();
 
                 gui::end_frame();
@@ -886,21 +898,128 @@
                 if(m_planetaryContinue)return "Terrain: refinement queued";
                 return "Terrain: ready";
             }
-            [[nodiscard]] static std::optional<epochengine::previewgrid::Vec3> project_spawn_position(
-                std::span<const ProjectRuntimeEntity> entities) noexcept
+            [[nodiscard]] const ProjectRuntimeEntity* reach_objective_target() const
             {
-                for (const ProjectRuntimeEntity& entity : entities)
+                const auto& objective = m_reachObjective.objective();
+                const auto* projection = m_sceneRuntime.projection();
+                const auto* entity = objective && projection ? projection->find(objective->target) : nullptr;
+                return entity && entity->mesh_asset && project_play_entity_has_geometry(*entity, 0u) ? entity : nullptr;
+            }
+
+            void update_reach_objective(const void* context, const std::array<double, 3>& sceneOrigin,
+                std::span<const previewgrid::ObjectMarker> planetaryMarkers,
+                std::span<const std::uint64_t> managed)
+            {
+                if (!m_reachObjective.objective() || m_reachObjective.completed()) return;
+                const auto* target = reach_objective_target();
+                std::optional<std::array<double, 3>> player{}, point{};
+                if (target && m_meshes.contains(target->source_id))
                 {
-                    if (entity.visible() && !entity.editor_only() && entity.type == "Spawn")
+                    if (m_explorationController)
                     {
-                        return epochengine::previewgrid::Vec3{
-                            entity.transform.position[0],
-                            entity.transform.position[1] + 1.65f,
-                            entity.transform.position[2]
-                        };
+                        if (m_explorationRenderCamera && m_explorationAdvanceStatus.empty()
+                            && m_explorationFrame.mode == project_planetary_runtime::TravelMode::walk)
+                        {
+                            player = previewgrid::camera_world_eye(*m_explorationRenderCamera);
+                            if (target->terrain_attachment)
+                            {
+                                // The managed objects occupy the tail in managed-ID order.
+                                // Use the exact published rebased transform for the objective.
+                                const auto found = std::find(managed.begin(), managed.end(), target->source_id);
+                                if (found != managed.end() && managed.size() <= planetaryMarkers.size())
+                                {
+                                    const auto& marker = planetaryMarkers[planetaryMarkers.size() - managed.size()
+                                        + static_cast<std::size_t>(found - managed.begin())];
+                                    if (marker.preciseTransform)
+                                    {
+                                        const auto& transform = *marker.preciseTransform;
+                                        point = transform.position;
+                                        if (player && target->terrain_attachment->solid_walk_box && marker.mesh)
+                                        {
+                                            const auto low = marker.mesh->minimum(), high = marker.mesh->maximum();
+                                            std::array<double, 3> closest{};
+                                            for (std::size_t axis = 0; axis < closest.size(); ++axis)
+                                            {
+                                                double projected{};
+                                                for (std::size_t row = 0; row < closest.size(); ++row)
+                                                    projected += transform.rotation[row * 3 + axis] * ((*player)[row] - transform.position[row]);
+                                                closest[axis] = std::clamp(projected / transform.scale[axis], double(low[axis]), double(high[axis]));
+                                            }
+                                            point = transform.apply(closest);
+                                        }
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                point = scene::world_position(target->transform.position, target->position_anchor);
+                                if (point)
+                                    for (std::size_t axis = 0; axis < point->size(); ++axis)
+                                        (*point)[axis] += sceneOrigin[axis];
+                            }
+                        }
+                    }
+                    else if (m_cameraMode == previewgrid::CameraMode::FPS && (!target->terrain_attachment || !m_hasPlanetRecipe))
+                    {
+                        player = previewgrid::camera_world_eye(previewgrid::camera_for(context));
+                        point = scene::world_position(target->transform.position, target->position_anchor);
                     }
                 }
-                return std::nullopt;
+                if (m_reachObjective.sample(player, point))
+                {
+                    const auto message = "Reach objective complete: " + m_reachTargetName;
+                    core::log::info("Engine.Project.Play", epochengine::string_view{message.data(), message.size()});
+                }
+            }
+
+            void draw_reach_objective() const
+            {
+                if (!m_reachObjective.objective()) return;
+                std::string text;
+                if (m_reachTargetName.empty())
+                    text = "Objective target unavailable";
+                else if (m_reachObjective.completed())
+                    text = "Objective complete · " + m_reachTargetName;
+                else
+                {
+                    text = "Reach " + m_reachTargetName;
+                    if (const auto distance = m_reachObjective.distance(); distance)
+                        text += epochengine::format_text("\n{:.1f} m away", *distance);
+                    else if (m_explorationController && m_explorationFrame.mode != project_planetary_runtime::TravelMode::walk)
+                        text += "\nLand and switch to Walk";
+                }
+                const float width = (std::max)(1.0f, (std::min)(400.0f, m_runtimeViewportWidth - 32.0f));
+                const float textWidth = (std::max)(1.0f, width - 20.0f);
+                const float height = gui::measure_wrapped_label_height(text, textWidth) + 16.0f;
+                const gui::Vec2 origin{(std::max)(0.0f, m_runtimeViewportWidth - width - 16.0f),
+                    (std::max)(0.0f, m_runtimeViewportHeight - height - 16.0f)};
+                const auto cursor = gui::cursor_position();
+                gui::panel_rect(origin, {width, height});
+                gui::set_cursor({origin.x + 10.0f, origin.y + 8.0f});
+                gui::wrapped_label(text, textWidth);
+                gui::set_cursor(cursor);
+            }
+
+            static void focus_project_spawn(const void* context,
+                const epochengine::scene_runtime::CompiledSceneProjection& projection) noexcept
+            {
+                const auto* spawn = projection.resolve(projection.primary().spawn);
+                if (!spawn)
+                    return;
+
+                constexpr float eyeHeight = 1.65f;
+                const auto& position = spawn->transform.position;
+                if (spawn->position_anchor)
+                {
+                    if (auto eye = scene::world_position(position, spawn->position_anchor))
+                    {
+                        (*eye)[1] += static_cast<double>(eyeHeight);
+                        (void)previewgrid::focus_camera_precise(context, *eye, 0.0f);
+                    }
+                    return;
+                }
+                (void)previewgrid::focus_camera(context,
+                    {position[0], position[1] + eyeHeight, position[2]}, 0.0f);
             }
             [[nodiscard]] static std::optional<epochengine::lighting::LightingFrame> project_play_lighting_for_origin(
                 epochengine::lighting::LightingFrame frame,const std::array<double,3>& origin_offset)
@@ -1123,17 +1242,48 @@
                 {m_explorationStatus="Planet exploration was not started: the linked provider belongs to different project source or settings.";return;}
                 auto controller=project_planetary_runtime::create_controller(*binding);
                 if(!controller){m_explorationStatus="Planet exploration provider is unavailable. The saved terrain remains visible.";return;}
+                const auto* terrain = planetary_entity();
+                std::vector<project_planetary_runtime::WalkBox> boxes;
+                bool refusedBox{};
+                for (const auto& entity : m_entities)
+                {
+                    if (!entity.terrain_attachment || !entity.terrain_attachment->solid_walk_box
+                        || !project_play_entity_has_geometry(entity, m_planetaryEntity)) continue;
+                    const auto mesh = m_meshes.find(entity.source_id);
+                    const auto box = terrain && mesh != m_meshes.end() && mesh->second
+                        ? project_play_walk_box(entity, *terrain, *mesh->second) : std::nullopt;
+                    if (box && boxes.size() < project_planetary_runtime::maximum_walk_boxes) boxes.push_back(*box);
+                    else refusedBox = true;
+                }
+                if (!boxes.empty() && !controller->set_walk_boxes(boxes)) refusedBox = true;
                 auto session=project_planetary::load_exploration_session(m_projectRoot);
                 if(!session.ok||(session.present&&!controller->restore_session(session.bytes)))
                 {m_explorationStatus=session.ok?"The saved planet exploration state is invalid; it was preserved.":session.message;return;}
-                const auto captured=controller->capture();
+                auto captured=controller->capture();
+                std::string startStatus;
+                const auto* projection = m_sceneRuntime.projection();
+                const auto* spawn = projection ? projection->resolve(projection->primary().spawn) : nullptr;
+                if (!session.present && spawn && spawn->terrain_attachment)
+                {
+                    const auto start = terrain ? project_play_surface_start(*spawn, *terrain) : std::nullopt;
+                    const auto placed = start ? controller->start_on_surface(*start) : project_planetary_runtime::Result{};
+                    if (placed.code == project_planetary_runtime::Code::ready)
+                    {
+                        captured = placed;
+                        startStatus = "Started at " + spawn->name + " in Walk mode.";
+                    }
+                    else startStatus = "Player start unavailable. Verify the saved terrain and move PlayerStart onto dry ground.";
+                }
                 if(captured.code!=project_planetary_runtime::Code::ready||!project_planetary_runtime::valid_frame(captured.frame)
                     ||(settings.original_sunlight&&!captured.frame.sunlight))
                 {m_explorationStatus="Planet exploration returned an invalid initial camera.";return;}
                 m_explorationController=std::move(controller);m_explorationSession=std::move(session);
                 m_explorationFrame=captured.frame;m_explorationPreview=project_planetary_runtime::preview_frame(captured.frame);
                 configure_exploration_stream(captured.frame.anchor);
-                m_explorationStatus="Right-drag to look. Move with the project movement keys. Choose a body, then Orbit, Land or Cruise.";
+                m_explorationStatus=startStatus.empty()
+                    ? "Right-drag to look. Move with the project movement keys. Choose a body, then Orbit, Land or Cruise."
+                    : std::move(startStatus);
+                if (refusedBox) m_explorationStatus += " Some saved walking colliders could not be loaded.";
             }
             void configure_exploration_stream(std::uint32_t body)
             {
@@ -1447,46 +1597,56 @@
                 }
                 return true;
             }
-            [[nodiscard]] std::string append_planetary_forest_markers(
+            [[nodiscard]] std::string append_planetary_attached_markers(
                 std::vector<previewgrid::ObjectMarker>& markers,std::vector<std::uint64_t>& managed,
                 bool texturedMeshes) const
             {
                 if(!m_explorationController||!m_explorationPreview||!m_explorationRenderCamera)return {};
                 const auto* terrain=planetary_entity();
-                bool refused{};
+                bool forestRefused{}, modelRefused{};
                 std::string_view providerHash=m_meshPlanetarySource?m_meshPlanetarySource->content_hash:std::string_view{};
                 if(providerHash.size()==71u&&providerHash.starts_with("sha256:"))providerHash.remove_prefix(7u);
                 else providerHash={};
                 const auto recipe=m_meshPlanetarySettings?project_planetary::encode_settings(*m_meshPlanetarySettings):std::string{};
-                for(const auto& tree:m_entities)
+                for(const auto& entity:m_entities)
                 {
-                    if(!tree.forest_region||!project_play_entity_has_geometry(tree,0u))continue;
-                    const auto& region=*tree.forest_region;
+                    const auto& forest = entity.forest_region;
+                    const auto& attachment = entity.terrain_attachment;
+                    if ((!forest && !attachment) || !project_play_entity_has_geometry(entity, 0u)) continue;
+                    auto& refused = forest ? forestRefused : modelRefused;
                     // The immutable authored mesh reference is the provenance
                     // key; a streamed LOD artifact legitimately has another key.
-                    if(!terrain||!m_meshPlanetarySource||!m_meshPlanetarySettings||!region.valid()
-                        ||region.provider_content_hash!=providerHash||region.recipe!=recipe)
+                    if (!terrain || !m_meshPlanetarySource || !m_meshPlanetarySettings
+                        || (forest && (!forest->valid() || forest->provider_content_hash != providerHash || forest->recipe != recipe)))
                     {refused=true;continue;}
+                    const auto bodyIndex = forest ? forest->body_index : attachment->body_index;
                     const project_planetary_runtime::PreviewBody* body{};
                     for(std::uint32_t i=0;i<m_explorationPreview->body_count&&i<m_explorationPreview->bodies.size();++i)
-                        if(m_explorationPreview->bodies[i].id==region.body_index)body=&m_explorationPreview->bodies[i];
-                    const auto mesh=m_meshes.find(tree.source_id);
+                        if(m_explorationPreview->bodies[i].id==bodyIndex)body=&m_explorationPreview->bodies[i];
+                    const auto mesh=m_meshes.find(entity.source_id);
                     if(!body||mesh==m_meshes.end()){refused=true;continue;}
-                    auto marker=project_play_forest_marker_for_body(tree,*terrain,*body,planetary_scene_units(),
-                        m_explorationRenderOrigin,mesh->second);
+                    auto marker = forest
+                        ? project_play_forest_marker_for_body(entity,*terrain,*body,planetary_scene_units(),m_explorationRenderOrigin,mesh->second)
+                        : project_play_model_marker_for_body(entity,*terrain,*body,planetary_scene_units(),m_explorationRenderOrigin,mesh->second);
                     if(!marker){refused=true;continue;}
-                    if(tree.texture_material && (texturedMeshes
-                        || (tree.texture_material->logical_path != "Textures/Forest/bark_foliage_v1"
-                            && tree.texture_material->logical_path != "Textures/Forest/reference_bark_foliage_v1")))
+                    if(entity.texture_material && (texturedMeshes || !marker->forestLighting))
                     {
-                        const auto binding=m_meshBaseColorTextures.find(tree.source_id);
+                        if(!texturedMeshes)
+                        {
+                            managed.push_back(entity.source_id);
+                            continue;
+                        }
+                        const auto binding=m_meshBaseColorTextures.find(entity.source_id);
                         if(binding==m_meshBaseColorTextures.end()||!binding->second){refused=true;continue;}
                         marker->baseColorTexture=binding->second;
                     }
                     markers.push_back(std::move(*marker));
-                    managed.push_back(tree.source_id);
+                    managed.push_back(entity.source_id);
                 }
-                return refused?"Forest area no longer matches terrain; regenerate/repaint to attach it. Authored poses are retained.":"";
+                if (forestRefused && modelRefused) return "Some terrain attachments are unavailable. Authored poses are retained.";
+                if (forestRefused) return "Forest area no longer matches terrain; regenerate/repaint to attach it. Authored poses are retained.";
+                if (modelRefused) return "A model attachment no longer matches terrain. Its authored pose is retained.";
+                return {};
             }
             void draw_planetary_exploration_controls(float contentWidth)
             {
@@ -1580,7 +1740,7 @@
                 m_explorationController.reset();m_explorationPreview.reset();m_explorationFrame={};m_runtimePresentation.reset();
                 m_explorationRenderCamera.reset();m_explorationRenderOrigin={};
                 m_explorationInput={};m_explorationSession={};m_explorationStatus.clear();m_explorationAdvanceStatus.clear();
-                m_forestRuntimeStatus.clear();
+                m_terrainAttachmentStatus.clear();
                 m_explorationMouseHeld=false;m_planetaryLodBody.reset();
                 m_planetaryMeshFrame.reset();
                 m_planetarySettings.reset();m_planetaryRequestSettings.reset();m_planetaryEntity=0u;
@@ -1663,11 +1823,10 @@
                     auto marker=project_play_marker_for_entity(entity,std::move(mesh),origin_offset,frame_camera!=nullptr);
                     if(!marker)return false;
                     if (entity.mesh_asset && entity.texture_material
-                        && !(ctx->type != core::ContextType::OpenGL
-                            && (entity.texture_material->logical_path == "Textures/Forest/bark_foliage_v1"
-                                || entity.texture_material->logical_path == "Textures/Forest/reference_bark_foliage_v1")))
+                        && (ctx->type == core::ContextType::OpenGL || !marker->forestLighting))
                     {
-                        if (!base_colors || ctx->type != core::ContextType::OpenGL) return false;
+                        if (ctx->type != core::ContextType::OpenGL) continue;
+                        if (!base_colors) return false;
                         const auto binding = base_colors->find(entity.source_id);
                         if (binding == base_colors->end() || !binding->second) return false;
                         marker->baseColorTexture = binding->second;
@@ -1676,8 +1835,7 @@
                 }
 
                 for(const auto& marker:additional)
-                    if(marker.baseColorTexture&&ctx->type!=core::ContextType::OpenGL)return false;
-                markers.insert(markers.end(), additional.begin(), additional.end());
+                    if(ctx->type==core::ContextType::OpenGL||!marker.baseColorTexture)markers.push_back(marker);
                 for (auto& marker : markers)
                     marker.wireframe = mesh_wireframe;
 
@@ -2663,7 +2821,9 @@
             bool m_runtimeCloudsVisible{true},m_runtimeWaterVisible{true},m_planetaryPublishedOcean{};
             bool m_runtimeCloudBackendUnavailable{};
             std::string m_runtimeViewStatus{};
-            std::string m_forestRuntimeStatus{};
+            std::string m_terrainAttachmentStatus{};
+            scene_runtime::ReachObjectiveSession m_reachObjective{};
+            std::string m_reachTargetName{};
             int m_screenshotAfterFrames{};
             std::string m_screenshotStatus{};
             previewgrid::MeshFrameLimits m_meshFrameLimits{};

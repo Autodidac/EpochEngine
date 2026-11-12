@@ -561,6 +561,9 @@ export namespace epochengine::lighting
         Color3 albedo{1.0f, 1.0f, 1.0f};
         Color3 specularColor{1.0f, 1.0f, 1.0f};
         float shininess{32.0f};
+        bool twoSidedDiffuse{};
+        const LightDesc* shadowedLight{};
+        float directVisibility{1.0f};
     };
 
     struct LightingResult final
@@ -596,6 +599,8 @@ export namespace epochengine::lighting
         const Vec3 normal = epochengine::render_math::normalize(sample.normal);
         const Vec3 view = epochengine::render_math::normalize(sample.viewDirection, {0.0f, 0.0f, 1.0f});
         const float shininess = (std::clamp)(sample.shininess, 1.0f, 2048.0f);
+        const bool specular = sample.specularColor.r != 0.0f || sample.specularColor.g != 0.0f
+            || sample.specularColor.b != 0.0f;
 
         for (const FrameLight& frameLight : lights)
         {
@@ -630,7 +635,10 @@ export namespace epochengine::lighting
                 }
             }
 
-            const float diffuseAmount = (std::max)(0.0f, epochengine::render_math::dot(normal, surfaceToLight));
+            if (&light == sample.shadowedLight)
+                attenuation *= (std::clamp)(sample.directVisibility, 0.0f, 1.0f);
+            const float facing = epochengine::render_math::dot(normal, surfaceToLight);
+            const float diffuseAmount = sample.twoSidedDiffuse ? std::abs(facing) : (std::max)(0.0f, facing);
             if (diffuseAmount <= 0.0f || attenuation <= 0.0f)
             {
                 continue;
@@ -641,6 +649,7 @@ export namespace epochengine::lighting
                 result.diffuse,
                 epochengine::render_math::scale(epochengine::render_math::multiply(sample.albedo, incident), diffuseAmount));
 
+            if (!specular) continue;
             const Vec3 halfVector = epochengine::render_math::normalize(epochengine::render_math::add(surfaceToLight, view), normal);
             const float specularAmount = std::pow(
                 (std::max)(0.0f, epochengine::render_math::dot(normal, halfVector)),

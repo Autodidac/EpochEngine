@@ -51,7 +51,7 @@ def fixture():
                      view.index("                std::vector<gui::AssetGridItem> gridItems")]
     png_owner = (ROOT / "Engine/src/assets/texture/asset.texture_import.cpp").read_text(encoding="utf-8")
     png = re.search(r"constexpr std::array<unsigned char, 80> pngSource\{(.*?)\};", png_owner, re.S).group(1)
-    import_action = definition(owner, "        void import_selected_project_texture(")
+    import_action = definition(owner, "        std::optional<editor_project_textures::TextureCatalogEntry> import_selected_project_texture(")
     # This port supplies the active renderer profile only; the source capture,
     # admission, immutable artifacts, catalog and selection are real owners.
     import_action = import_action.replace("core::Context", "ContextPort").replace("editor_project_textures::", "epochengine::editor_project_textures::")
@@ -225,7 +225,11 @@ int main(int argc,char** argv){
  CHECK(firstAdded&&secondAdded&&firstAdded.path!=secondAdded.path&&!firstAdded.generated_texture_key.empty()&&!secondAdded.generated_texture_key.empty());
  CHECK(firstAdded.path.filename()=="generated-"+firstSha+".png"&&secondAdded.path.filename()=="generated-"+secondSha+".png");
  CHECK(read(firstAdded.path)==bytes&&read(secondAdded.path)==different&&!fs::exists(generatedProject/"Assets/Images/generated.png"));
- generated.selectedProjectFile=display_project_path(firstAdded.path);import_selected_project_texture(generated,{},firstAdded.generated_texture_key);
+ generated.selectedProjectFile=display_project_path(firstAdded.path);
+ CHECK(!import_selected_project_texture(generated,{},secondAdded.generated_texture_key));
+ CHECK(generated.projectTextures->catalog().empty());
+ const auto admitted=import_selected_project_texture(generated,{},firstAdded.generated_texture_key);
+ CHECK(admitted&&admitted->artifact_key==firstAdded.generated_texture_key);
  stage(generated.projectTextureStatus);
  CHECK(generated.projectTextures->catalog().size()==1u&&generated.projectTextures->selected());
  const auto originalEntry=*generated.projectTextures->selected();
@@ -235,7 +239,9 @@ int main(int argc,char** argv){
  CHECK(repeated&&repeated.path==firstAdded.path&&repeated.generated_texture_key==originalEntry.artifact_key);
  const auto uppercase=external/"chosen-reference.PNG";write(uppercase,bytes);
  CHECK(add_project_image_source(generatedProject,uppercase,std::string_view{firstSha}).path==repeated.path);
- generated.selectedProjectFile=display_project_path(repeated.path);import_selected_project_texture(generated,{},repeated.generated_texture_key);
+ generated.selectedProjectFile=display_project_path(repeated.path);
+ const auto reused=import_selected_project_texture(generated,{},repeated.generated_texture_key);
+ CHECK(reused&&reused->logical_path==originalEntry.logical_path&&reused->artifact_key==originalEntry.artifact_key);
  CHECK(generated.projectTextureStatus.starts_with("Reused the verified")&&generated.projectTextures->catalog().size()==2u);
  CHECK(generated.projectTextures->selected()->source_sequence==originalEntry.source_sequence&&generated.projectTextures->selected()->artifact_key==originalEntry.artifact_key);
  const auto retainedBytes=read(firstAdded.path);write(firstAdded.path,different);

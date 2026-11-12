@@ -149,7 +149,7 @@ class CloudVolumeRendering(unittest.TestCase):
          closure.add(name);pending+=re.findall(r'^(?:export\s+)?import\s+([\w.:]+);',module_map[name].read_text(encoding='utf-8-sig'),re.M)
         paths='\n'.join('"'+module_map[name].as_posix()+'"' for name in sorted(closure))
         bases=' '.join('"'+owner.as_posix()+'"' for owner in owners)
-        sources=' '.join('"'+(repo/p).as_posix()+'"' for p in ['Engine/src/render/render.preview_camera.cpp','Engine/src/assets/texture/asset.texture_artifact.cpp','Engine/src/authoring/texture/authoring.texture_document.cpp','Engine/src/authoring/texture/authoring.texture_residency.cpp'])
+        sources=' '.join('"'+(repo/p).as_posix()+'"' for p in ['Engine/src/render/render.preview_camera.cpp', 'Engine/src/render/render.preview_lighting.cpp','Engine/src/assets/texture/asset.texture_artifact.cpp','Engine/src/authoring/texture/authoring.texture_document.cpp','Engine/src/authoring/texture/authoring.texture_residency.cpp'])
         (report/'CMakeLists.txt').write_text(f'''cmake_minimum_required(VERSION 3.30)
         set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT Embedded)
         project(CloudPacketContract LANGUAGES CXX)

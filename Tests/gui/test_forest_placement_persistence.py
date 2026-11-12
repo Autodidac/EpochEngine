@@ -36,6 +36,7 @@ class ForestPlacementPersistence(unittest.TestCase):
             '        [[nodiscard]] bool publish_plant_lab_project_asset(',
             '        [[nodiscard]] std::vector<EditorEntity>\n            project_compiled_forest_entities(',
             '        [[nodiscard]] forest::preview_mesh::MaterialAtlasResult prepare_plant_material_atlas(',
+            '        [[nodiscard]] std::optional<scene::SceneTextureMaterialSnapshot> publish_forest_scene_material(',
             '        [[nodiscard]] bool persist_forest_scene_mesh(const std::filesystem::path&',
             '        [[nodiscard]] bool persist_forest_scene_mesh(EditorState&',
             '        [[nodiscard]] bool focus_forest_factory_placement(',
@@ -99,6 +100,7 @@ struct EditorEntity {
  decltype(scene::SceneObjectSnapshot{}.mesh_asset) meshAsset{};
  bool meshLoadAttempted{};std::shared_ptr<const asset::mesh::Artifact> meshSnapshot;
  std::optional<std::array<double,3>> positionAnchor;std::optional<scene::SceneForestRegionInstance>forestRegion;
+ std::optional<scene::SceneTerrainAttachment> terrainAttachment;
 };
 struct EditorState {
  std::string projectId{"inline-forest"},projectRoot,projectStatus,plantLabStatus,plantLabAssetStatus;
@@ -147,7 +149,7 @@ std::string bytes(const fs::path& p){std::ifstream in(p,std::ios::binary);return
 int main(int argc,char** argv){
  _CrtSetReportMode(_CRT_ASSERT,_CRTDBG_MODE_FILE);_CrtSetReportFile(_CRT_ASSERT,_CRTDBG_FILE_STDERR);
  using namespace epochengine;
- assert(argc==2);const auto root=fs::path{argv[1]};assert(root.is_absolute());fs::create_directories(root);
+ assert(argc==2||argc==4);const auto root=fs::path{argv[1]};assert(root.is_absolute());fs::create_directories(root);
  auto state=make_state(root/"project");const auto source=fs::path{state.projectRoot}/kDefaultPlantLabLogicalPath;
  const float originalHeight=state.plantLabDocument.profile.config.targetHeightMeters;
  const auto originalJournal=state.plantLabDocument.journal.size();const auto originalCursor=state.plantLabDocument.historyCursor;
@@ -209,19 +211,25 @@ int main(int argc,char** argv){
  assert(&forest::preview_mesh::material_atlas(99u)==&atlas);
 
 
- // The admitted photo supplies every RGB pixel, including natural veins
- // and stem; only its border-connected checkerboard becomes transparent.
+ // The admitted oak cell supplies the artwork after the cutout is fitted
+ // around the petiole. The source colors and the attachment both survive.
  const auto originalLeaf=asset::texture::import_texture_file({.source_path=core::path::engine_asset_dir()/"forest/foliage_reference_board.png"});
  assert(originalLeaf&&!originalLeaf.artifact.mips.empty());
  const auto& sourceLeaf=originalLeaf.artifact.mips.front();assert(sourceLeaf.width==1254&&sourceLeaf.height==1254);
+ const auto rgbKey=[](unsigned r,unsigned g,unsigned b){return (r<<16u)|(g<<8u)|b;};
+ std::set<unsigned> sourceColors;
+ for(unsigned y=4;y<310;++y)for(unsigned x=4;x<310;++x){
+  const auto offset=y*sourceLeaf.row_pitch_bytes+x*4u;
+  sourceColors.insert(rgbKey(std::to_integer<unsigned>(sourceLeaf.texels[offset]),
+   std::to_integer<unsigned>(sourceLeaf.texels[offset+1u]),std::to_integer<unsigned>(sourceLeaf.texels[offset+2u])));
+ }
  unsigned greenPhoto{},brownStem{},paleDetail{};
  for(unsigned y=18;y<=494;++y)for(unsigned x=18;x<=494;++x){
-  const auto sx=4u+(x-18u)*305u/476u,sy=4u+(y-18u)*305u/476u;
-  const auto offset=(y*1024u+512u+x)*4u,sourceOffset=sy*sourceLeaf.row_pitch_bytes+sx*4u;
-  for(unsigned channel=0;channel<3;++channel)assert(atlas.mips[0].texels[offset+channel]==sourceLeaf.texels[sourceOffset+channel]);
+  const auto offset=(y*1024u+512u+x)*4u;
   const auto alpha=std::to_integer<unsigned>(atlas.mips[0].texels[offset+3u]);assert(alpha==0||alpha==255);
   if(alpha==255){
    const auto r=std::to_integer<unsigned>(atlas.mips[0].texels[offset]),g=std::to_integer<unsigned>(atlas.mips[0].texels[offset+1u]),b=std::to_integer<unsigned>(atlas.mips[0].texels[offset+2u]);
+   assert(sourceColors.contains(rgbKey(r,g,b)));
    greenPhoto+=g>r&&g>b;
    brownStem+=r>g&&g>b;
    paleDetail+=r>130&&g>130&&b>80;
@@ -229,6 +237,7 @@ int main(int argc,char** argv){
  }
  assert(greenPhoto>10000&&brownStem>50&&paleDetail>50);
  assert(atlas.mips[0].texels[(18u*1024u+530u)*4u+3u]==std::byte{0});
+ assert(atlas.mips[0].texels[(494u*1024u+768u)*4u+3u]==std::byte{255});
  }else{
   for(unsigned tile=0;tile<forest::preview_mesh::kBarkTileCount;++tile)
    assert(&forest::preview_mesh::material_atlas(tile)==&atlas);
@@ -297,6 +306,16 @@ int main(int argc,char** argv){
  const auto savedBytes=bytes(source);const auto oldArtifact=state.plantLabPublishedArtifact.storage_path;
  const auto artifactBytes=bytes(oldArtifact);const auto objects=state.entities.size();
  assert(forest::apply_forest_profile_edit(state.plantLabDocument,forest::ForestProfileProperty::TargetHeightMeters,originalHeight+1.0f));
+ const auto speciesPath="Assets/Forest/species_fixture.epoch_forest";
+ assert(publish_plant_lab_project_asset(state,nullptr,speciesPath));
+ const auto savedSpecies=library.load_source(speciesPath);assert(savedSpecies);
+ assert(savedSpecies.document.contentHash==state.plantLabDocument.contentHash);
+ assert(library.load_latest(speciesPath)&&bytes(source)==savedBytes);
+ const auto speciesBytes=bytes(savedSpecies.locator.storage_path);
+ assert(publish_plant_lab_project_asset(state,nullptr,speciesPath));
+ assert(!publish_plant_lab_project_asset(state,&reopened.document,speciesPath));
+ assert(bytes(savedSpecies.locator.storage_path)==speciesBytes&&bytes(source)==savedBytes);
+ assert(state.plantLabPublishedArtifact.storage_path==oldArtifact);
  // Break only this fixture's artifact directory. Failed publication must leave
  // canonical source/previous artifact bytes and all scene objects unchanged.
  const auto artifactDir=fs::path{state.projectRoot}/"Library/Forest";const auto held=artifactDir.parent_path()/"Forest-retained";
@@ -351,7 +370,14 @@ int main(int argc,char** argv){
   source.payload_content=asset::texture::compiled_texture_payload_content(source.identity,source.mips);
   assert(asset::texture::validate_compiled_artifact(source));return source;
  };
- const auto customBark=customSource(false),customLeaf=customSource(true);
+ const auto testTexture=[&](bool foliage){
+  if(argc==2)return customSource(foliage);
+  const std::string_view path{argv[foliage?3:2]};
+  auto image=asset::texture::import_texture_file({.source_path=fs::path{std::u8string{path.begin(),path.end()}}});
+  assert(image);
+  return std::move(image.artifact);
+ };
+ const auto customBark=testTexture(false),customLeaf=testTexture(true);
  assert(customTextures.persist("Assets/custom_bark.png",customBark));
  assert(customTextures.persist("Assets/custom_leaf.png",customLeaf));
  assert(forest::apply_forest_material_edit(custom.plantLabDocument,forest::ForestTextureSlot::bark,
@@ -410,6 +436,8 @@ int main(int argc,char** argv){
         fixture = ROOT / 'Artifacts/Tests' / ('f'+f'{time.time_ns():x}'[-8:])
         modules = '\n'.join('"' + p.as_posix() + '"' for p in selected.values())
         sources = '\n'.join('"' + p.as_posix() + '"' for p in implementations)
+        native_textures = [os.environ.get(key) for key in ('EPOCH_TEST_NATIVE_BARK_PNG', 'EPOCH_TEST_NATIVE_FOLIAGE_PNG')]
+        native_args = ''.join(f' "{Path(path).resolve(strict=True).as_posix()}"' for path in native_textures) if all(native_textures) else ''
         (proof / 'CMakeLists.txt').write_text(f'''cmake_minimum_required(VERSION 3.30)
 project(ForestPlacementPersistence LANGUAGES CXX)
 add_executable(forest_placement consumer.cpp {sources})
@@ -419,7 +447,7 @@ target_compile_options(forest_placement PRIVATE /W3 /WX /utf-8 /UNDEBUG /Z7)
 target_include_directories(forest_placement PRIVATE "{(ROOT/'Engine/include').as_posix()}" "{(ROOT/'Engine/dep/EpochPlatformEngine/include').as_posix()}")
 target_sources(forest_placement PRIVATE FILE_SET CXX_MODULES BASE_DIRS "{(ROOT/'Engine/modules').as_posix()}" "{(ROOT/'Engine/dep/EpochPlatformEngine/modules').as_posix()}" FILES {modules})
 enable_testing()
-add_test(NAME actual_forest_placement_persistence COMMAND forest_placement "{fixture.as_posix()}/$<CONFIG>")
+add_test(NAME actual_forest_placement_persistence COMMAND forest_placement "{fixture.as_posix()}/$<CONFIG>"{native_args})
 set_tests_properties(actual_forest_placement_persistence PROPERTIES TIMEOUT 60)
 ''', encoding='utf-8')
         build=ROOT/'Artifacts/Intermediate/tests/forest-placement'

@@ -45,6 +45,7 @@ class ProjectRuntimePresentation(unittest.TestCase):
             '        [[nodiscard]] std::string project_scene_run_button_label(',
             '        void select_scene_run_mode(', '        void exit_project_runtime_full_screen('))
         world = definition(viewport, "            if (showSceneRun)")
+        show_run_output = definition(viewport, "        const auto show_project_run_output =", True)
         chrome = (ROOT / 'Engine/src/epochgui/controls/gui.navigation_chrome.inl').read_text(encoding='utf-8')
         measure = '\n'.join(definition(chrome, marker) for marker in (
             '    [[nodiscard]] static float segmented_button_width(',
@@ -89,7 +90,10 @@ struct Handle{bool live{};bool valid()const{return live;}};
 enum class EditorLayoutDrag{None};
 enum class EditorWorkspaceTab{Output,Project};
 struct EditorState{bool projectBuildPending{},projectRuntimeInEditor{},sceneRunFullscreenInEditor{},sceneRunMaximizedInEditor{},projectRuntimeViewportMaximized{};
-bool projectRuntimeForceStopAvailable{},outputGeneralOnly{},outputShowDetails{};std::string outputSearch,outputLastRunDetail;EditorWorkspaceTab dockStatusTab{EditorWorkspaceTab::Project};
+std::optional<bool> projectRunAfterTerrainPreview;
+bool projectRuntimeForceStopAvailable{},outputGeneralOnly{},outputShowDetails{},outputFollowTail{};
+std::uint64_t outputScrollToEndGeneration{};
+std::string outputSearch,outputLastRunDetail;EditorWorkspaceTab dockStatusTab{EditorWorkspaceTab::Project};
 EditorLayoutDrag layoutDrag{};int surfaceSettleFrames{};
 std::uintptr_t projectRuntimeWindow{};std::string projectRuntimeStatus,projectRuntimeAttachmentError;
 Handle projectRuntimeProcess;std::string projectKind="game",projectBuildStatus="Building project (7s elapsed). Cancel is available.",projectBuildConfiguration="Debug",projectBuildRequestedConfiguration,projectRuntimeBuildConfiguration;};
@@ -126,11 +130,13 @@ Selection select_box(const SelectBoxOptions&){return {};}
 void fresh(){buttons.clear();labels.clear();enabled.clear();panel_size={};}
 }
 namespace platform::child_process {enum class StopMode{graceful};}
-unsigned runs{},plays{},stops{};
+unsigned runs{},plays{},stops{},output_requests_at_launch{};
 bool queue_on_run{};EditorState* run_editor{};
 bool stop_project_runtime(EditorState&,platform::child_process::StopMode){++stops;return true;}
-void play_active_context(){++plays;}
-void launch_active_project_context(){++runs;if(queue_on_run&&run_editor)run_editor->projectBuildPending=true;}
+void play_active_context(bool=false){++plays;output_requests_at_launch=output_requests;}
+void launch_active_project_context(bool=false,std::uint64_t=0,bool=false){
+ ++runs;output_requests_at_launch=output_requests;
+ if(queue_on_run&&run_editor)run_editor->projectBuildPending=true;}
 void world_controls(EditorState& editor,float width,float height,bool modal=false){
 run_editor=&editor;
 const auto projectBuildActivity=project_build_activity_label(editor);
@@ -147,10 +153,12 @@ const bool automationInputReserved=false;
 std::optional<int> automationBackgroundInput;
 const std::array<std::string_view,3> kSceneRunModes{"Separate Window","In Editor","In-Editor Full Screen"};
 struct{bool scene_input_captured{};}result;
+SHOW_RUN_OUTPUT
 WORLD
 }
 void project_controls(EditorState& editor,float centerWidth){
 const auto projectBuildActivity=project_build_activity_label(editor);
+SHOW_RUN_OUTPUT
 PROJECT_PLAY
 }
 int main(){
@@ -187,7 +195,11 @@ CHECK(gui::panel_position.y+gui::panel_size.y<=40+height);
 if(width==900.f)CHECK(gui::panel_size.x<400.f&&gui::panel_size.y<=24.f);
 gui::fresh();project_controls(e,width);CHECK(plays==0&&gui::buttons.front()=="Building Debug..."&&!gui::enabled.front());
 }
-e.projectBuildPending=false;gui::fresh();world_controls(e,900,400);CHECK(runs==1&&gui::buttons.front()=="Run");
+CHECK(output_requests==0);
+e.projectBuildPending=false;e.outputSearch="old query";e.outputShowDetails=true;e.outputGeneralOnly=true;
+gui::fresh();world_controls(e,900,400);CHECK(runs==1&&gui::buttons.front()=="Run");
+CHECK(output_requests==1&&output_requests_at_launch==1&&e.dockStatusTab==EditorWorkspaceTab::Output);
+CHECK(e.outputSearch.empty()&&!e.outputShowDetails&&!e.outputGeneralOnly&&e.outputFollowTail&&e.outputScrollToEndGeneration==1);
 e.projectBuildPending=true;e.projectBuildStatus="Cancelling project build...";
 CHECK(project_scene_run_button_label(e,false)=="Cancelling...");
 e.projectBuildPending=false;e.projectBuildStatus="Building project (7s elapsed). Cancel is available.";
@@ -195,9 +207,15 @@ e.projectBuildPending=false;e.projectBuildStatus="Building project (7s elapsed).
 // Its notice must still be visible immediately, and the next click cannot launch twice.
 queue_on_run=true;gui::fresh();world_controls(e,900,400);
 CHECK(e.projectBuildPending&&!gui::labels.empty()&&gui::labels.front()=="Building Debug...");
+CHECK(output_requests==2&&output_requests_at_launch==2);
 const auto accepted_runs=runs;gui::fresh();world_controls(e,900,400);
-CHECK(runs==accepted_runs&&gui::buttons.front()=="Building..."&&!gui::enabled.front());
+CHECK(runs==accepted_runs&&gui::buttons.front()=="Building..."&&!gui::enabled.front()&&output_requests==2);
 queue_on_run=false;e.projectBuildPending=false;runs=1;
+e.projectRunAfterTerrainPreview=false;e.projectBuildStatus="Run queued. Waiting for the current terrain preview.";
+gui::fresh();world_controls(e,900,400);
+CHECK(runs==1&&gui::buttons.front()=="Run queued..."&&!gui::enabled.front());
+CHECK(!gui::labels.empty()&&gui::labels.front()=="Run queued...");
+e.projectRunAfterTerrainPreview.reset();
 CHECK(e.projectBuildConfiguration=="Debug");
 gui::fresh();world_controls(e,900,400,true);CHECK(runs==1);
 e.projectRuntimeInEditor=true;e.projectRuntimeProcess.live=true;
@@ -210,8 +228,8 @@ CHECK(!gui::labels.empty()&&gui::labels.front()=="Project launch failed. See Out
 CHECK(run_details.back().find(e.projectRuntimeAttachmentError)!=std::string::npos);
 const auto detail_count=run_details.size();gui::fresh();world_controls(e,900,400,true);CHECK(run_details.size()==detail_count);
 e.outputSearch="old query";e.outputShowDetails=true;e.outputGeneralOnly=true;e.projectRuntimeViewportMaximized=true;
-gui::click_output=true;gui::fresh();world_controls(e,900,400,true);CHECK(output_requests==0&&e.outputSearch=="old query");
-gui::fresh();world_controls(e,900,400);CHECK(output_requests==1&&e.outputSearch.empty()&&!e.outputShowDetails&&!e.outputGeneralOnly&&!e.projectRuntimeViewportMaximized&&e.dockStatusTab==EditorWorkspaceTab::Output);
+gui::click_output=true;gui::fresh();world_controls(e,900,400,true);CHECK(output_requests==2&&e.outputSearch=="old query");
+gui::fresh();world_controls(e,900,400);CHECK(output_requests==3&&e.outputSearch.empty()&&!e.outputShowDetails&&!e.outputGeneralOnly&&!e.projectRuntimeViewportMaximized&&e.dockStatusTab==EditorWorkspaceTab::Output);
 gui::click_output=false;
 e.projectRuntimeAttachmentError.clear();
 const auto stopsBeforeBusy=stops;e.projectBuildPending=true;gui::fresh();world_controls(e,900,400);
@@ -222,12 +240,13 @@ e.projectRuntimeViewportMaximized=true;
 gui::fresh();world_controls(e,260,200);CHECK(!e.projectRuntimeViewportMaximized);
 CHECK(gui::buttons.front()=="Stop"&&gui::buttons.back()=="Exit (Esc)");
 CHECK(e.projectBuildConfiguration=="Release"&&e.projectRuntimeBuildConfiguration=="Debug");
-gui::fresh();project_controls(e,900);CHECK(plays==1);
+CHECK(output_requests==3);
+gui::fresh();project_controls(e,900);CHECK(plays==1&&output_requests==4&&output_requests_at_launch==4);
 return 0;
 }
 '''
         for key, value in {"CAPABILITY_TYPES":types,"CAPABILITY_NAMES":names,"GUI_TYPES":gui_types,
-                           "SUMMARY":summary,"ACTIVITY_LABEL":label,"RUN_HELPERS":run_helpers,"RECORD_OUTPUT":record_output,"WORLD":world,"PROJECT_PLAY":play,"MEASURE":measure,"RUN_WIDTH":run_width}.items():
+                           "SUMMARY":summary,"ACTIVITY_LABEL":label,"RUN_HELPERS":run_helpers,"RECORD_OUTPUT":record_output,"WORLD":world,"PROJECT_PLAY":play,"MEASURE":measure,"RUN_WIDTH":run_width,"SHOW_RUN_OUTPUT":show_run_output}.items():
             cpp=cpp.replace(key,value)
         lane=ROOT/"Artifacts/Reports/project-runtime-presentation-oct28"/str(time.time_ns())
         lane.mkdir(parents=True)

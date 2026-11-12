@@ -26,7 +26,8 @@
                     .textureMaterial = source.texture_material,
                     .meshAsset = source.mesh_asset,
                     .positionAnchor = source.position_anchor,
-                    .forestRegion = source.forest_region
+                    .forestRegion = source.forest_region,
+                    .terrainAttachment = source.terrain_attachment
                 });
             }
             state.sceneDocumentRevision = projection.snapshot.revision;
@@ -94,7 +95,8 @@
                 .texture_material = entity.textureMaterial,
                 .mesh_asset = entity.meshAsset,
                 .position_anchor = entity.positionAnchor,
-                .forest_region = entity.forestRegion
+                .forest_region = entity.forestRegion,
+                .terrain_attachment = entity.terrainAttachment
             };
         }
 
@@ -159,6 +161,100 @@
                 return false;
             }
             return true;
+        }
+
+        [[nodiscard]] const EditorEntity* selected_editor_reach_model(const EditorState& state)
+        {
+            if (state.selectedEntityIds.size() > 1u) return nullptr;
+            const auto index = editor_entity_index(state, state.selectedEntityId);
+            if (!index) return nullptr;
+            const auto& entity = state.entities[*index];
+            return entity.type == "IndexedMesh" && entity.visible && !entity.editorOnly && entity.meshAsset
+                && entity.category != "Planetary Terrain" ? &entity : nullptr;
+        }
+
+        [[nodiscard]] bool set_editor_reach_objective(EditorState& state,
+            const std::optional<scene::SceneReachObjective>& objective)
+        {
+            if (!state.sceneDocument.initialized()) return false;
+            auto settings = state.sceneDocument.project_settings();
+            if (settings.reach_objective == objective) return true;
+            settings.reach_objective = objective;
+            const std::array<authoring::scene::SceneOperation, 1> change{
+                authoring::scene::ProjectSettingsChangedOperation{std::move(settings)}};
+            return apply_editor_scene_transaction(state, change, objective ? "Set Reach Objective" : "Clear Reach Objective");
+        }
+
+        [[nodiscard]] std::optional<std::array<authoring::scene::SceneOperation, 2>> editor_surface_spawn_operations(
+            const EditorState& state, const EditorEntity& model)
+        {
+            namespace document = authoring::scene;
+            auto attachment = model.terrainAttachment;
+            if (!attachment || !model.positionAnchor || !state.sceneDocument.initialized()) return {};
+            const auto terrainIndex = editor_entity_index(state, attachment->terrain_object_id);
+            if (!terrainIndex) return {};
+            const auto& terrain = state.entities[*terrainIndex];
+            if (!terrain.visible || !terrain.meshAsset || !attachment->matches(terrain.sceneObjectId, *terrain.meshAsset))
+                return {};
+
+            const auto id = state.sceneDocument.project_settings().primary_spawn;
+            const auto handle = state.sceneDocument.find(id);
+            const auto spawn = handle ? state.sceneDocument.object(*handle) : std::nullopt;
+            if (!spawn || !spawn->descriptor.spawn || !spawn->descriptor.runtime_visible || spawn->descriptor.editor_only)
+                return {};
+
+            attachment->solid_walk_box = false;
+            auto transform = spawn->descriptor.transform;
+            transform.position = {model.position[0], model.position[1], model.position[2]};
+            transform.rotation_degrees = {model.rotation[0], model.rotation[1], model.rotation[2]};
+            return std::array<document::SceneOperation, 2>{
+                document::GeometryComponentChangedOperation{.object = *handle,
+                    .position_anchor = model.positionAnchor, .terrain_attachment = attachment},
+                document::ObjectTransformChangedOperation{*handle, transform}};
+        }
+
+        [[nodiscard]] bool set_editor_surface_spawn(EditorState& state, const EditorEntity& model)
+        {
+            const auto changes = editor_surface_spawn_operations(state, model);
+            return changes && apply_editor_scene_transaction(state, *changes, "Set Planetary Player Start",
+                state.sceneDocument.project_settings().primary_spawn.value);
+        }
+
+        [[nodiscard]] bool set_editor_walk_box(EditorState& state, const EditorEntity& model, bool solid)
+        {
+            namespace document = authoring::scene;
+            auto attachment = model.terrainAttachment;
+            if (!attachment || !model.meshAsset || !model.positionAnchor || model.type != "IndexedMesh"
+                || model.editorOnly || !state.sceneDocument.initialized()) return false;
+            if (attachment->solid_walk_box == solid) return true;
+            if (solid)
+            {
+                const auto terrainIndex = editor_entity_index(state, attachment->terrain_object_id);
+                if (!terrainIndex) return false;
+                const auto& terrain = state.entities[*terrainIndex];
+                if (!terrain.visible || !terrain.meshAsset || !attachment->matches(terrain.sceneObjectId, *terrain.meshAsset))
+                    return false;
+            }
+            const auto handle = state.sceneDocument.find({model.sceneObjectId});
+            if (!handle) return false;
+            attachment->solid_walk_box = solid;
+            const std::array<document::SceneOperation, 1> change{
+                document::GeometryComponentChangedOperation{.object = *handle, .mesh_asset = model.meshAsset,
+                    .position_anchor = model.positionAnchor, .terrain_attachment = attachment}};
+            return apply_editor_scene_transaction(state, change, solid ? "Enable Walking Collision" : "Disable Walking Collision");
+        }
+
+        [[nodiscard]] bool detach_editor_model_from_terrain(EditorState& state, const EditorEntity& model)
+        {
+            namespace document = authoring::scene;
+            if (model.type != "IndexedMesh" || !model.terrainAttachment || model.forestRegion
+                || !model.meshAsset || !model.positionAnchor) return false;
+            const auto handle = state.sceneDocument.find({model.sceneObjectId});
+            if (!handle) return false;
+            const std::array<document::SceneOperation, 1> change{
+                document::GeometryComponentChangedOperation{.object = *handle, .mesh_asset = model.meshAsset,
+                    .position_anchor = model.positionAnchor}};
+            return apply_editor_scene_transaction(state, change, "Detach Model from Terrain", model.sceneObjectId);
         }
 
         [[nodiscard]] std::optional<scene::Vec3> parse_editor_ambient_channels(
@@ -242,10 +338,12 @@
                     .object = current.handle, .value = next.texture_material});
             if (current.descriptor.mesh_asset != next.mesh_asset
                 || current.descriptor.position_anchor != next.position_anchor
-                || current.descriptor.forest_region != next.forest_region)
+                || current.descriptor.forest_region != next.forest_region
+                || current.descriptor.terrain_attachment != next.terrain_attachment)
                 operations.emplace_back(document::GeometryComponentChangedOperation{
                     .object = current.handle, .mesh_asset = next.mesh_asset,
-                    .position_anchor = next.position_anchor, .forest_region = next.forest_region});
+                    .position_anchor = next.position_anchor, .forest_region = next.forest_region,
+                    .terrain_attachment = next.terrain_attachment});
             if (current.descriptor.metadata != next.metadata)
             {
                 operations.emplace_back(document::ObjectMetadataChangedOperation{
@@ -584,14 +682,14 @@
 
         [[nodiscard]] bool undo_editor_scene(EditorState& state)
         {
-            // A queued brush stamp must not commit after the user's Undo and
+            // A queued or unfinished brush stroke must not commit after Undo and
             // appear to restore the very area they just removed.
+            state.forestBrushTerrain=scene::kInvalidSceneObjectId;
+            state.forestBrushDirections.clear();
             if(state.forestSurfacePending)
             {
                 if(state.taskScheduler)(void)state.taskScheduler->cancel(state.forestSurfaceCancellation);
                 state.forestSurfacePlacement.reset();
-                state.forestBrushTerrain=scene::kInvalidSceneObjectId;
-                state.forestBrushLastDirection.reset();
             }
             if (const auto grouped = try_grouped_gui_world_history(
                     state, {1u}, editor_authoring_history::Direction::undo))
@@ -652,7 +750,8 @@
                 .texture_material = entity.textureMaterial,
                 .mesh_asset = entity.meshAsset,
                 .position_anchor = entity.positionAnchor,
-                .forest_region = entity.forestRegion
+                .forest_region = entity.forestRegion,
+                .terrain_attachment = entity.terrainAttachment
             };
         }
 
@@ -671,7 +770,8 @@
                 .textureMaterial = entity.texture_material,
                 .meshAsset = entity.mesh_asset,
                 .positionAnchor = entity.position_anchor,
-                .forestRegion = entity.forest_region
+                .forestRegion = entity.forest_region,
+                .terrainAttachment = entity.terrain_attachment
             };
         }
 

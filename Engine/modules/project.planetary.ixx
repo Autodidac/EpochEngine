@@ -129,6 +129,12 @@ export namespace epochengine::project_planetary
     {
         std::filesystem::path project_root{};
         std::string project_manifest{}, content_hash{};
+        [[nodiscard]] friend bool operator==(const SourceGeneration&, const SourceGeneration&) = default;
+    };
+    struct StreamMeshBinding final
+    {
+        SourceGeneration source{};
+        MeshGenerationIdentity mesh{};
     };
     struct StreamResult final
     {
@@ -188,6 +194,12 @@ export namespace epochengine::project_planetary
         SurfaceCode code{SurfaceCode::invalid};
         Result operation{};
         SurfaceResult land{}, water{};
+    };
+    struct LandingSiteResult final
+    {
+        SurfaceCode code{SurfaceCode::invalid};
+        Result operation{};
+        SurfaceResult beacon{}, player_start{};
     };
     inline constexpr std::string_view recipe_relative_path = "Assets/Worlds/Planet.epoch_planet";
     inline constexpr std::array<std::string_view, 5> modes{
@@ -523,6 +535,10 @@ export namespace epochengine::project_planetary
     // ocean water. Both samples come from the same admitted terrain recipe.
     [[nodiscard]] ShorelineResult query_ocean_shoreline(const std::filesystem::path& project_root,
         const SurfaceQuery& query, double maximum_distance_meters, std::stop_token cancellation = {});
+    [[nodiscard]] LandingSiteResult query_forest_landing_site(const std::filesystem::path& project_root,
+        const SurfaceQuery& query, double forest_radius_meters, double beacon_radius_meters,
+        std::stop_token cancellation = {});
     [[nodiscard]] StreamResult stream_step(const std::filesystem::path& project_root,
-        Settings settings, StreamView view, std::stop_token cancellation = {});
+        Settings settings, StreamView view, std::stop_token cancellation = {},
+        const StreamMeshBinding* binding = nullptr);
 }

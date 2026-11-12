@@ -59,6 +59,10 @@ namespace
 #pragma GCC diagnostic ignored "-Wunused-function"
 #endif
 #include "../stb/stb_image.h"
+#define STB_IMAGE_WRITE_STATIC
+#define STBI_WRITE_NO_STDIO
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "../stb/stb_image_write.h"
 #if defined(_MSC_VER)
 #pragma warning(pop)
 #elif defined(__GNUC__)
@@ -67,6 +71,71 @@ namespace
 
 namespace epochengine::image_codec
 {
+    bool make_magenta_cutout(std::span<std::byte> rgba, std::uint32_t width, std::uint32_t height) noexcept
+    {
+        if (!width || !height || width > 2048u || height > 2048u
+            || rgba.size() != std::size_t{width} * height * 4u) return false;
+        const auto keyed = [](const std::byte* pixel) {
+            const auto red = std::to_integer<unsigned>(pixel[0]);
+            const auto green = std::to_integer<unsigned>(pixel[1]);
+            const auto blue = std::to_integer<unsigned>(pixel[2]);
+            return red >= 120u && blue >= 100u && red >= green + 35u && blue >= green + 35u && blue + 60u >= red;
+        };
+        std::size_t background{}, transparent{}, border{}, keyedBorder{};
+        for (std::uint32_t y{}; y < height; ++y)
+            for (std::uint32_t x{}; x < width; ++x)
+            {
+                const auto* pixel = rgba.data() + (std::size_t{y} * width + x) * 4u;
+                const bool key = keyed(pixel);
+                background += key;
+                transparent += std::to_integer<unsigned>(pixel[3]) < 128u;
+                if (x == 0u || y == 0u || x + 1u == width || y + 1u == height)
+                { ++border; keyedBorder += key; }
+            }
+        const auto pixels = rgba.size() / 4u;
+        if (transparent) return transparent < pixels;
+        if (keyedBorder * 4u < border * 3u || background * 20u < pixels || background * 20u > pixels * 19u)
+            return false;
+        for (std::size_t offset{}; offset < rgba.size(); offset += 4u)
+            if (keyed(rgba.data() + offset))
+                for (std::size_t channel{}; channel < 4u; ++channel) rgba[offset + channel] = std::byte{};
+        // Suppress magenta spill only on the new cutout edge. Interior foliage
+        // colors and pre-existing alpha images keep their original samples.
+        const auto stride = std::size_t{width} * 4u;
+        for (std::uint32_t y{}; y < height; ++y)
+            for (std::uint32_t x{}; x < width; ++x)
+            {
+                const auto offset = std::size_t{y} * stride + x * 4u;
+                auto* pixel = rgba.data() + offset;
+                if (pixel[3] == std::byte{} || pixel[0] <= pixel[1] || pixel[2] <= pixel[1]) continue;
+                if ((x && rgba[offset - 1u] == std::byte{})
+                    || (x + 1u < width && rgba[offset + 7u] == std::byte{})
+                    || (y && rgba[offset - stride + 3u] == std::byte{})
+                    || (y + 1u < height && rgba[offset + stride + 3u] == std::byte{}))
+                    pixel[2] = pixel[1];
+            }
+        return true;
+    }
+
+    std::vector<std::byte> encode_rgba_png(std::span<const std::byte> rgba,
+        std::uint32_t width, std::uint32_t height) noexcept
+    {
+        if (!width || !height || width > 2048u || height > 2048u
+            || rgba.size() != std::size_t{width} * height * 4u) return {};
+        int size{};
+        auto* encoded = stbi_write_png_to_mem(reinterpret_cast<const unsigned char*>(rgba.data()),
+            int(width * 4u), int(width), int(height), 4, &size);
+        std::vector<std::byte> bytes;
+        if (encoded && size > 0)
+        {
+            const auto* begin = reinterpret_cast<const std::byte*>(encoded);
+            try { bytes.assign(begin, begin + size); }
+            catch (...) { bytes.clear(); }
+        }
+        std::free(encoded);
+        return bytes;
+    }
+
     namespace
     {
         std::uint32_t be32(std::span<const std::byte> source, std::size_t offset) noexcept

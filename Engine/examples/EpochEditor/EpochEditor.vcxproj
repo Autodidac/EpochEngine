@@ -111,6 +111,8 @@
       <AdditionalManifestFiles>$(MSBuildThisFileDirectory)..\..\resource\epoch.manifest;%(AdditionalManifestFiles)</AdditionalManifestFiles>
     </Manifest>
     <Link>
+      <!-- The unoptimized Editor dispatches Forest asset verification on its UI thread. -->
+      <StackReserveSize>4194304</StackReserveSize>
       <AdditionalDependencies>opengl32.lib;glad.lib;SDL3.lib;userenv.lib;bcrypt.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
