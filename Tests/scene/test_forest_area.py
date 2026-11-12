@@ -132,7 +132,7 @@ def run_forest_cpu_contract(test, code, lane, project, filename):
     )]
     found = {}
     for folder in roots:
-        for path in folder.glob('*.ixx'):
+        for path in folder.rglob('*.ixx'):
             match = re.search(r'^export module\s+([\w.:]+);', path.read_text(encoding='utf-8-sig'), re.M)
             if match:
                 found[match.group(1)] = path

@@ -16,7 +16,7 @@ OWNER = ROOT / "Engine/src/epochgui/controls/gui.buttons_images.inl"
 
 def fixture(owner_text=None):
     source = owner_text or OWNER.read_text(encoding="utf-8")
-    api = (ROOT / "Engine/modules/gui.engine.ixx").read_text(encoding="utf-8")
+    api = (ROOT / "Engine/modules/gui/gui.engine.ixx").read_text(encoding="utf-8")
     base = origin_fixture()
     base = base.replace('namespace gui {','namespace epochengine::gui_lib{'+child_view_definition()+'}\nnamespace gui {',1)
     base = base[:base.index("int main(){origin_contract();}")]

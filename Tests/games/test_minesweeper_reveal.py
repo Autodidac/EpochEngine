@@ -125,8 +125,8 @@ class MinesweeperReveal(unittest.TestCase):
         selected = Path(os.environ.get("EPOCH_MINESWEEPER_SOURCE_ROOT", ROOT)).resolve()
         self.assertTrue(selected == ROOT or ROOT in selected.parents,
                         "Candidate source must remain inside this checkout")
-        owner = selected / "Engine/modules/game.minesweeper_like.ixx"
-        grid_owner = selected / "Engine/modules/game.core.ixx"
+        owner = selected / "Engine/modules/game/game.minesweeper_like.ixx"
+        grid_owner = selected / "Engine/modules/game/game.core.ixx"
         source = owner.read_text(encoding="utf-8")
         grid = grid_owner.read_text(encoding="utf-8").replace("module;", "").replace(
             "export module game.core;", "").replace("export namespace", "namespace")

@@ -12,6 +12,13 @@ import subprocess
 import time
 
 
+def engine_module_source(module_root: Path, filename: str) -> Path:
+    """Resolve a module by owner, with support for stable source entry paths."""
+    owner, _, _ = filename.partition('.')
+    categorized = module_root / owner / filename
+    return categorized if categorized.is_file() else module_root / filename
+
+
 @cache
 def msvc_2022_root() -> Path | None:
     """Find the latest installed VS 2022 instance with the x64 C++ toolset."""

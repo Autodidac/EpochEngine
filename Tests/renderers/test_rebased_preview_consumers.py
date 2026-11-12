@@ -23,9 +23,9 @@ class RebasedPreviewConsumers(unittest.TestCase):
             'Engine/src/renderers/sdl/core.context_sdl.cpp',
             'Engine/src/renderers/sfml/core.context_sfml.cpp',
             'Engine/src/renderers/software/software.context_preview.cpp',
-            'Engine/modules/raylib.context.ixx',
-            'Engine/modules/sdl.context.ixx',
-            'Engine/modules/sfml.context.ixx',
+            'Engine/modules/raylib/raylib.context.ixx',
+            'Engine/modules/sdl/sdl.context.ixx',
+            'Engine/modules/sfml/sfml.context.ixx',
         ]
         readers = []
         for index, path in enumerate(paths):
@@ -48,7 +48,7 @@ class RebasedPreviewConsumers(unittest.TestCase):
                 '\n'.join(statements)+
                 'CHECK(camera.eye.x==11);CHECK(solidGeometry==first->solids->geometry);'
                 'CHECK(objectGeometry==first->lines);}')
-        vk_path = 'Engine/modules/vulkan.context_meshcube.ixx'
+        vk_path = 'Engine/modules/vulkan/vulkan.context_meshcube.ixx'
         vk = (ROOT/vk_path).read_text(encoding='utf-8')
         body = '\n'.join(definition(vk, marker).replace('export ', '') for marker in (
             '    export bool preview_geometry_matches(',
@@ -58,23 +58,23 @@ class RebasedPreviewConsumers(unittest.TestCase):
             '    export std::vector<std::uint32_t> preview_indices_for(',
             '    export std::uint32_t preview_solid_index_count_for(',
             '    export std::uint32_t preview_arcade_screen_index_count_for('))
-        commands_path = 'Engine/modules/vulkan.context_commands.ixx'
+        commands_path = 'Engine/modules/vulkan/vulkan.context_commands.ixx'
         commands = (ROOT/commands_path).read_text(encoding='utf-8')
         rebuild = definition(commands, '        if (frame.scene_visible && ctx)')
         start = commands.index('previewSceneFrame = previewgrid::scene_frame_for(')
         capture = commands[start:commands.index(';', start)+1]
         self.assertLess(start, commands.index('updateUniformBuffer(imageIndex, cam);'))
-        descriptor_path = 'Engine/modules/vulkan.context_descriptor.ixx'
+        descriptor_path = 'Engine/modules/vulkan/vulkan.context_descriptor.ixx'
         descriptor = (ROOT/descriptor_path).read_text(encoding='utf-8')
         start = descriptor.index('const auto previewCamera =')
         camera_read = descriptor[start:descriptor.index(';', start)+1]
-        module_path = 'Engine/modules/render.preview_grid.ixx'
+        module_path = 'Engine/modules/render/render.preview_grid.ixx'
         module = (ROOT/module_path).read_text(encoding='utf-8')
         packet = definition(module, '    export struct PublishedSceneFrame', True).replace('export ', '')
         cloud_recipe = (ROOT/'Engine/modules/asset.cloud_volume.ixx').read_text(encoding='utf-8')
         cloud = ('namespace asset::cloud_volume {\n' + definition(cloud_recipe, '    struct Recipe final', True) + '\n}\n')
         cloud += 'namespace previewgrid {\n' + definition(module, '    export struct CloudVolume final', True).replace('export ', '') + '\n}\n'
-        arcade = (ROOT/'Engine/modules/render.arcade.ixx').read_text(encoding='utf-8')
+        arcade = (ROOT/'Engine/modules/render/render.arcade.ixx').read_text(encoding='utf-8')
         arcade_ports = '\n'.join(definition(arcade, marker, True) for marker in (
             '    struct ArcadeSceneNodeContract',
             '    inline constexpr ArcadeSceneNodeContract kCabinetBodySceneNode',
@@ -237,7 +237,7 @@ int main(){
         sfml = ROOT/'Artifacts/Dependencies/vcpkg_installed/x64-windows/include'
         if not (sfml/'SFML/Graphics.hpp').is_file():
             self.skipTest('Installed SFML headers required; no dependency download')
-        paths = ['Engine/modules/sfml.context.ixx', 'Engine/src/renderers/sfml/core.context_sfml.cpp']
+        paths = ['Engine/modules/sfml/sfml.context.ixx', 'Engine/src/renderers/sfml/core.context_sfml.cpp']
         functions = [definition((ROOT/path).read_text(encoding='utf-8'), signature)
             for path,signature in zip(paths, ['        inline void render_scene_preview(', '    void render_scene_preview('])]
         ports = r"""#include <SFML/Graphics.hpp>

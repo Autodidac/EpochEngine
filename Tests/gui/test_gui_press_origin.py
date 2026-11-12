@@ -16,7 +16,7 @@ TABS = ROOT / "Engine/src/epochgui/controls/gui.navigation_chrome.inl"
 
 def fixture(before_buttons=None, before_tabs=None):
     base = pane_fixture()
-    api = (ROOT / "Engine/modules/gui.engine.ixx").read_text(encoding="utf-8")
+    api = (ROOT / "Engine/modules/gui/gui.engine.ixx").read_text(encoding="utf-8")
     bounds = definition(api, "    export struct WidgetBounds", True).replace("export ", "")
     base = base.replace("struct Frame{", bounds + "\nstruct Frame{std::optional<WidgetBounds> lastButtonBounds;")
     base = base.replace("textFieldActive=5;", "textFieldActive=5,textField=6;")

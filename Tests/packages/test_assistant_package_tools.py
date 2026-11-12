@@ -2,6 +2,7 @@
 No native Editor, model, download, provider build or renderer is launched.
 """
 from pathlib import Path
+from Tests.support.cpp import engine_module_source
 import json
 import os
 import subprocess
@@ -382,7 +383,7 @@ class AssistantPackageTools(unittest.TestCase):
         (proof/"protocol_contract.cpp").write_text(PROTOCOL,encoding="utf-8")
         names=("ai.mcp.ixx","core.sha256.ixx","package.registry.ixx","package.catalog.ixx","platform.filesystem.ixx","package.source_install.ixx",
             "project.planetary.ixx","asset.cloud_volume.ixx","project.planetary_snapshot.ixx","water.wave.ixx","asset.mesh_artifact.ixx","asset.texture_artifact.ixx")
-        modules=" ".join('"'+(ROOT/"Engine/modules"/name).as_posix()+'"' for name in names)
+        modules=" ".join('"'+(engine_module_source(ROOT/"Engine/modules", name)).as_posix()+'"' for name in names)
         token=str(time.time_ns())
         (proof/"CMakeLists.txt").write_text(f'''cmake_minimum_required(VERSION 3.30)
 cmake_policy(SET CMP0141 NEW)
@@ -390,7 +391,7 @@ set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT Embedded)
 project(AssistantPackageTools LANGUAGES CXX)
 add_executable(protocol_contract protocol_contract.cpp)
 target_compile_features(protocol_contract PRIVATE cxx_std_23)
-target_sources(protocol_contract PRIVATE FILE_SET CXX_MODULES BASE_DIRS "{(ROOT/"Engine/modules").as_posix()}" FILES "{(ROOT/"Engine/modules/ai.mcp.ixx").as_posix()}")
+target_sources(protocol_contract PRIVATE FILE_SET CXX_MODULES BASE_DIRS "{(ROOT/"Engine/modules").as_posix()}" FILES "{(ROOT/"Engine/modules/ai/ai.mcp.ixx").as_posix()}")
 add_executable(host_contract host_contract.cpp
  "{(ROOT/"Engine/src/packages/package.catalog.cpp").as_posix()}"
  "{(ROOT/"Engine/src/packages/package.source_install.cpp").as_posix()}")

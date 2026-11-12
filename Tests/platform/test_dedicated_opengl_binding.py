@@ -31,7 +31,7 @@ class DedicatedOpenGLBinding(unittest.TestCase):
         kits = windows_sdk_includes(kitroot)
         if not toolsets or not kits:
             self.skipTest('MSVC/SDK unavailable')
-        platform = read_owned_source(ROOT / 'Engine/modules/opengl.platform.ixx', encoding='utf-8')
+        platform = read_owned_source(ROOT / 'Engine/modules/opengl/opengl.platform.ixx', encoding='utf-8')
         api = platform[platform.index('    struct PlatformGLContext'):platform.index('    [[nodiscard]] inline bool swap_buffers')]
         guard = definition(platform, '    class ScopedContext') + ';'
         host = read_owned_source(ROOT / 'Engine/src/renderers/host/host.context_win.cpp', encoding='utf-8')

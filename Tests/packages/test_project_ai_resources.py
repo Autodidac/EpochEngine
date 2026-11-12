@@ -20,7 +20,7 @@ VIEW = ROOT / "Engine/src/editor/application/editor.frame_packages_about.inl"
 
 def fixture():
     writer = WRITER.read_text(encoding="utf-8")
-    filesystem = (ROOT / "Engine/modules/platform.filesystem.ixx").read_text(encoding="utf-8")
+    filesystem = (ROOT / "Engine/modules/platform/platform.filesystem.ixx").read_text(encoding="utf-8")
     backend = "\n".join(definition(filesystem, marker) for marker in (
         "    [[nodiscard]] inline bool exclusive_create_and_write(",
         "    [[nodiscard]] inline bool atomic_replace_same_filesystem("))
@@ -182,7 +182,7 @@ project(ProjectAiResourceChoice LANGUAGES CXX)
 add_executable(project_ai "{source.as_posix()}" "{(ROOT/'Engine/src/ai/ai.project_profile.cpp').as_posix()}")
 target_compile_features(project_ai PRIVATE cxx_std_23)
 target_compile_options(project_ai PRIVATE /W3 /WX /utf-8)
-target_sources(project_ai PRIVATE FILE_SET CXX_MODULES BASE_DIRS "{(ROOT/'Engine/modules').as_posix()}" FILES "{(ROOT/'Engine/modules/ai.project_profile.ixx').as_posix()}" "{(ROOT/'Engine/modules/core.sha256.ixx').as_posix()}")
+target_sources(project_ai PRIVATE FILE_SET CXX_MODULES BASE_DIRS "{(ROOT/'Engine/modules').as_posix()}" FILES "{(ROOT/'Engine/modules/ai/ai.project_profile.ixx').as_posix()}" "{(ROOT/'Engine/modules/core/core.sha256.ixx').as_posix()}")
 enable_testing()
 add_test(NAME actual_project_ai_choice COMMAND project_ai "${{CMAKE_CURRENT_BINARY_DIR}}/project-fixture")
 ''', encoding="utf-8")

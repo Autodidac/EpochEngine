@@ -1,0 +1,312 @@
+/************************************************
+ *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
+ *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
+ *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
+ *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
+ *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
+ *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
+ *                                              *
+ *   This file is part of the Epoch   Project.  *
+ *   epochengine - Modular C++ Framework        *
+ *                                              *
+ *   SPDX-License-Identifier:                   *
+ *   LicenseRef-MIT-NoSell                      *
+ *                                              *
+ *   Provided "AS IS", without warranty         *
+ *   of any kind.                               *
+ *                                              *
+ *   Use permitted for Non-Commercial           *
+ *   Purposes ONLY, without prior               *
+ *   commercial licensing agreement.            *
+ *                                              *
+ *   Redistribution Allowed with This Notice    *
+ *   and LICENSE file.                          *
+ *                                              *
+ *   No obligation to disclose                  *
+ *   modifications.                             *
+ *                                              *
+ *   See LICENSE file for full terms.           *
+ *                                              *
+ ***********************************************/
+// Epoch system notes (auto-checked):
+// Epoch Context: window/context state, dispatch and input ownership remain scoped.
+module;
+
+#include <atomic>
+#include <cstdint>
+#include <string>
+#include <string_view>
+#include <stdexcept>
+#include <utility>
+#include <functional>
+#include <memory>
+
+// Must be before anything that might include <windows.h>
+#if defined(_WIN32)
+#   ifndef WIN32_LEAN_AND_MEAN
+#       define WIN32_LEAN_AND_MEAN
+#   endif
+#   ifndef NOMINMAX
+#       define NOMINMAX
+#   endif
+#endif
+
+#include "../../include/epoch.engine.hpp"                 // DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT
+#include "../../include/engine.config.hpp"          // EPOCH_USING_* macros (fix path; do not use <include/...>)
+
+#if defined(_WIN32)
+#   ifdef EPOCH_USING_WINMAIN
+#       include "../../src/platform/platform.framework.hpp"
+#   endif
+#endif
+
+#include <glad/glad.h>
+
+#if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
+#   include <SDL3/SDL.h>
+#   include <SDL3/SDL_version.h>
+#endif
+
+#if defined(EPOCH_USING_SFML)
+#include <SFML/Graphics.hpp>
+#endif
+
+// If any include above dragged in <windows.h>, defuse min/max anyway.
+#if defined(_WIN32)
+#   ifdef min
+#       undef min
+#   endif
+#   ifdef max
+#       undef max
+#   endif
+#endif
+
+export module context.window;
+
+//import aframework;                    // if this imports SFML headers, NOMINMAX is already set
+import context.type;
+import context.commandqueue;
+import perf.tier;
+
+namespace epochengine::core
+{
+    export using OpaqueContextHandle = std::shared_ptr<void>;
+    export using ThreadInitializeCallback = std::function<bool(const OpaqueContextHandle&)>;
+
+    export enum class BackendLifecycleState : std::uint8_t
+    {
+        pending = 0,
+        initializing,
+        ready,
+        failed,
+        stopped
+    };
+
+    export [[nodiscard]] constexpr bool backend_requires_first_present(
+        const core::ContextType type) noexcept
+    {
+        return type == core::ContextType::OpenGL
+            || type == core::ContextType::SDL
+            || type == core::ContextType::RayLib;
+    }
+
+    export struct WindowData final
+    {
+#if defined(_WIN32)
+#   if !defined(EPOCH_MAIN_HEADLESS)
+        HWND  hwnd = nullptr;
+        // Backend-owned native children are published from their render thread
+        // and consumed by the editor/layout thread. The handle is the release /
+        // acquire publication point for the native window bundle.
+        std::atomic<HWND> hwndChild{ nullptr };
+        HWND  host_hwnd = nullptr;
+        HDC   parked_host_hdc = nullptr;
+        HDC   hdc = nullptr;
+
+        HGLRC glrc = nullptr;
+        HGLRC& glContext = glrc; // legacy alias
+#   endif
+#else
+        void* hwnd = nullptr;
+        void* hdc = nullptr;
+        void* glContext = nullptr;
+#endif
+
+#if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
+        SDL_Window* sdl_window = nullptr;
+        SDL_GLContext sdl_glrc = nullptr;
+#endif
+
+#if defined(EPOCH_USING_SFML)
+        sf::RenderWindow* sfml_window = nullptr;
+#endif
+
+        OpaqueContextHandle          context{};
+        core::CommandQueue          commandQueue{};
+        core::CommandQueue          ownerThreadCommandQueue{};
+        ThreadInitializeCallback    threadInitialize{};
+
+        std::atomic_bool running{ false };
+        bool usesSharedContext = false;
+        bool ownsNativeDc = false;
+        bool ownsNativeGlContext = false;
+        bool ownsParkedHostDc = false;
+
+        core::ContextType type = core::ContextType::Custom;
+
+        std::wstring titleWide{};
+        std::string  titleNarrow{};
+        std::string  guiRoute{};
+
+        int  width = DEFAULT_WINDOW_WIDTH;
+        int  height = DEFAULT_WINDOW_HEIGHT;
+        std::atomic_bool should_close{ false };
+        std::atomic<BackendLifecycleState> backendLifecycle{ BackendLifecycleState::pending };
+        bool isFloating = false;
+        std::atomic_uint8_t dockTargetPreference = 0u;
+        // Layout order only; registry/lifecycle iteration remains unchanged.
+        std::atomic<int> dockGridOrder{ -1 };
+        std::atomic_bool routedRedockRequested = false;
+#if defined(_WIN32)
+        // Invalidates queued proxy-child work on redock, undock or drag cancel.
+        std::atomic_uint64_t proxyChildNativeGeneration{ 0 };
+#endif
+        std::atomic_uint8_t routedDockTarget = 0u;
+        std::atomic_uint32_t routedDockTabInsertion = 0xffffffffu;
+        std::atomic_bool retirementQueued = false;
+        std::atomic_bool firstPresentComplete = false;
+        std::atomic_uint64_t successfulFrameGeneration{ 0 };
+        // Observational UI telemetry; never drives queue or frame ordering.
+        std::atomic<double> editorThrottleHz{ 0.0 };
+        std::atomic<double> editorFramePacingHz{ 0.0 };
+        std::atomic_bool editorNativeVsyncActive{ false };
+        // Context-local user policy; independent of immutable CLI startup defaults.
+        perf::frame_pacing_override editorFramePacingOverride{};
+        // Resolved native mode for backend work admission; never an FPS ceiling.
+        std::atomic_bool uncappedFrameSubmission{ false };
+        std::atomic_bool editorSessionRestoreAckQueued{ false };
+        std::atomic_uint64_t editorSessionRestoreAckGeneration{ 0 };
+        std::atomic_uint64_t resizeGeneration{ 0 };
+
+        std::function<void(int, int)> onResize{};
+
+        using RenderCommand = std::function<void()>;
+
+        void EnqueueCommand(RenderCommand cmd)
+        {
+            commandQueue.enqueue(std::move(cmd));
+        }
+
+        void EnqueueCommand(RenderCommand cmd, core::RenderPath path)
+        {
+            commandQueue.enqueue(std::move(cmd), path);
+        }
+
+        inline static WindowData* s_instance = nullptr;
+
+        WindowData() = default;
+
+#if defined(_WIN32) && !defined(EPOCH_MAIN_HEADLESS)
+        WindowData(HWND inHwnd, HDC inHdc, HGLRC inGlrc, bool inUsesShared, core::ContextType inType)
+            : hwnd(inHwnd)
+            , hdc(inHdc)
+            , glrc(inGlrc)
+            , usesSharedContext(inUsesShared)
+            , ownsNativeDc(inHdc != nullptr)
+            , ownsNativeGlContext(inGlrc != nullptr)
+            , type(inType)
+        {
+        }
+#else
+        WindowData(void* inHwnd, void* inHdc, void* inGlrc, bool inUsesShared, core::ContextType inType)
+            : hwnd(inHwnd)
+            , hdc(inHdc)
+            , glContext(inGlrc)
+            , usesSharedContext(inUsesShared)
+            , ownsNativeDc(inHdc != nullptr)
+            , ownsNativeGlContext(inGlrc != nullptr)
+            , type(inType)
+        {
+        }
+#endif
+
+        static void set_global_instance(WindowData* instance) noexcept { s_instance = instance; }
+        static WindowData* get_global_instance() noexcept { return s_instance; }
+
+#if defined(_WIN32) && !defined(EPOCH_MAIN_HEADLESS)
+        void setParentHandle(HWND v) noexcept { hwnd = v; }
+        void setChildHandle(HWND v) noexcept { hwndChild.store(v, std::memory_order_release); }
+
+        HWND getParentHandle() const noexcept { return hwnd; }
+        HWND getChildHandle()  const noexcept { return hwndChild.load(std::memory_order_acquire); }
+#endif
+
+#if defined(_WIN32)
+        static HWND getWindowHandle() noexcept
+        {
+#   if defined(EPOCH_MAIN_HEADLESS)
+            return nullptr;
+#   else
+            return s_instance ? s_instance->hwnd : nullptr;
+#   endif
+        }
+
+        static HWND getChildHandleStatic() noexcept
+        {
+#   if defined(EPOCH_MAIN_HEADLESS)
+            return nullptr;
+#   else
+            return s_instance
+                ? s_instance->hwndChild.load(std::memory_order_acquire) : nullptr;
+#   endif
+        }
+#endif
+
+        void set_size(int w, int h) noexcept { width = w; height = h; }
+        [[nodiscard]] int  get_width()  const noexcept { return width; }
+        [[nodiscard]] int  get_height() const noexcept { return height; }
+
+        void set_should_close(bool v) noexcept { should_close.store(v, std::memory_order_release); }
+        [[nodiscard]] bool get_should_close() const noexcept { return should_close.load(std::memory_order_acquire); }
+
+        void set_backend_lifecycle(BackendLifecycleState state) noexcept
+        {
+            backendLifecycle.store(state, std::memory_order_release);
+        }
+
+        [[nodiscard]] BackendLifecycleState backend_lifecycle() const noexcept
+        {
+            return backendLifecycle.load(std::memory_order_acquire);
+        }
+
+        [[nodiscard]] bool backend_ready() const noexcept
+        {
+            return backend_lifecycle() == BackendLifecycleState::ready;
+        }
+
+        void set_window_title(std::string_view title) noexcept
+        {
+            titleNarrow.assign(title.begin(), title.end());
+#if defined(_WIN32)
+            titleWide.assign(titleNarrow.begin(), titleNarrow.end());
+#endif
+        }
+
+#if defined(EPOCH_USING_SDL) && (EPOCH_USING_SDL == 1)
+        static SDL_Window* getSDLWindow() noexcept { return s_instance ? s_instance->sdl_window : nullptr; }
+#endif
+
+#if defined(EPOCH_USING_SFML)
+        sf::RenderWindow* getSFMLWindow()
+        {
+            if (!s_instance) throw std::runtime_error("WindowData is null!");
+            return s_instance->sfml_window;
+        }
+#endif
+    };
+}
+
+namespace epochengine::contextwindow
+{
+    export using WindowData = epochengine::core::WindowData;
+}

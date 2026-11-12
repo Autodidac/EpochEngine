@@ -225,10 +225,10 @@ class PlanetaryWaterClock(unittest.TestCase):
         completion = 'result.source==m_planetaryWaterSource&&m_planetarySettings' + condition(
             source, 'if(result.source==m_planetaryWaterSource&&m_planetarySettings')
         code = CODE.replace('RESULT_TYPE', result).replace('WORKER', worker).replace(' CLOCK\n', clock+'\n').replace('COMPLETION', completion)
-        timeline=(ROOT/'Engine/modules/timeline.system.ixx').read_text(encoding='utf-8')
+        timeline=(ROOT/'Engine/modules/timeline/timeline.system.ixx').read_text(encoding='utf-8')
         timeline=timeline[timeline.index('export namespace epochengine::timeline'):timeline.index('    inline void clamp_view_config')].replace('export namespace','namespace',1)+'}\n'
         stats=(ROOT/'Engine/dep/EpochPlatformEngine/modules/core.time.ixx').read_text(encoding='utf-8')
-        protocol=(ROOT/'Engine/modules/platform.child_process.ixx').read_text(encoding='utf-8')
+        protocol=(ROOT/'Engine/modules/platform/platform.child_process.ixx').read_text(encoding='utf-8')
         code=code.replace('CLOCK_STATS',definition(stats,'    struct simulation_stats')).replace('TIMELINE',timeline)
         code=code.replace('VALID_PRESENTATION',definition(protocol,'    [[nodiscard]] inline bool valid_runtime_presentation(')).replace('PRESENTATION',definition(protocol,'    struct RuntimePresentation final'))
         code=code.replace('APPLY_TIME',apply_time).replace('ADVANCE_TIME',advance_time)

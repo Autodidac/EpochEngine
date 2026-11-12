@@ -9,7 +9,7 @@ from Tests.support.cpp import compile_and_run
 
 ROOT = Path(__file__).resolve().parents[2]
 OWNERS = (
-    "Engine/modules/context.window.ixx",
+    "Engine/modules/context/context.window.ixx",
     "Engine/src/renderers/host/implementation/host.render_loop.inl",
     "Engine/src/renderers/host/host.context_linux.cpp",
     "Engine/src/editor/application/editor.frame_bootstrap.inl",

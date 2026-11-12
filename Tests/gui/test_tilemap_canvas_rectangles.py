@@ -12,7 +12,7 @@ from Tests.gui.test_gui_manual_press_origin import fixture as manual_fixture
 ROOT = Path(__file__).resolve().parents[2]
 OWNER = ROOT / "Engine/src/editor/editor.tilemap_workspace.cpp"
 GUI = ROOT / "Engine/src/epochgui/gui.engine.cpp"
-API = ROOT / "Engine/modules/gui.engine.ixx"
+API = ROOT / "Engine/modules/gui/gui.engine.ixx"
 BUTTONS = ROOT / "Engine/src/epochgui/controls/gui.buttons_images.inl"
 WINDOWS = ROOT / "Engine/src/epochgui/controls/gui.window_controls.inl"
 

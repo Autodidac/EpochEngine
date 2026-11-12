@@ -17,7 +17,7 @@ OWNERS = (
     "Engine/src/renderers/host/host.context_win.cpp",
     "Engine/src/renderers/host/implementation/host.window_interaction.inl",
     "Engine/src/renderers/host/implementation/host.native_dispatch.inl",
-    "Engine/modules/context.window.ixx",
+    "Engine/modules/context/context.window.ixx",
 )
 
 

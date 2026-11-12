@@ -21,7 +21,7 @@ def statement(source, marker):
 
 def fixture():
     pane = PANE.read_text(encoding='utf-8')
-    api = (ROOT/'Engine/modules/gui.engine.ixx').read_text(encoding='utf-8')
+    api = (ROOT/'Engine/modules/gui/gui.engine.ixx').read_text(encoding='utf-8')
     navigation = (ROOT/'Engine/src/epochgui/controls/gui.navigation_chrome.inl').read_text(encoding='utf-8')
     types = '\n'.join(definition(api, '    export '+kind+' '+name, True).replace('export ', '', 1)
         for kind, name in [('enum class','ButtonIcon'),('struct','Vec2'),('struct','WidgetBounds'),('struct','InlineButtonSpec'),
@@ -127,7 +127,7 @@ class ToolpaneReadability(unittest.TestCase):
     def test_actual_compact_tree_layout_labels_and_disclosure_geometry(self):
         pane = PANE.read_text(encoding='utf-8')
         buttons = (ROOT/'Engine/src/epochgui/controls/gui.buttons_images.inl').read_text(encoding='utf-8')
-        api = (ROOT/'Engine/modules/gui.engine.ixx').read_text(encoding='utf-8')
+        api = (ROOT/'Engine/modules/gui/gui.engine.ixx').read_text(encoding='utf-8')
         declarations = '\n'.join(definition(api, '    export '+kind+' '+name, True).replace('export ', '', 1)
             for kind,name in [('struct','Vec2'),('struct','WidgetBounds'),('enum class','MenuItemIndicator'),('struct','MenuItemOptions')])
         layout = definition(buttons,'    struct MenuItemLayout',True)+definition(buttons,'    [[nodiscard]] static MenuItemLayout make_menu_item_layout(')

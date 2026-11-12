@@ -18,7 +18,7 @@ class EditorOutput(unittest.TestCase):
   dock=(APP/'editor.frame_bottom_docks.inl').read_text(encoding='utf-8')
   header=dock[dock.index('        if (editor.dockStatusTab =='):dock.index('        auto dockLine =')]
   choice=dock[dock.index('        if (!editor.outputShowDetails'):dock.index('        else switch (editor.dockStatusTab)')]
-  core=(ROOT/'Engine/modules/editor.core.ixx').read_text(encoding='utf-8')
+  core=(ROOT/'Engine/modules/editor/editor.core.ixx').read_text(encoding='utf-8')
   enum=definition(core,'    export enum class EditorWorkspaceTab',True).replace('export ','',1)
   code=r'''
 #include <algorithm>

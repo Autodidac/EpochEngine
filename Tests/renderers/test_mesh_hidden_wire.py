@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 class MeshHiddenWire(unittest.TestCase):
     def test_matched_frame_gl_consumer_ownership(self):
-        source = (ROOT / "Engine/modules/opengl.preview.ixx").read_text(encoding="utf-8")
+        source = (ROOT / "Engine/modules/opengl/opengl.preview.ixx").read_text(encoding="utf-8")
         owner = definition(source, "    inline void render_scene_preview_conventional(")
         self.assertEqual(owner.count("scene_frame_for(ctx)"), 1)
         self.assertIn("matchedScene ? matchedScene->camera", owner)
@@ -29,7 +29,7 @@ class MeshHiddenWire(unittest.TestCase):
         self.assertIn("sampled_render_surface_markers_for(ctx)", sampled)
 
     def test_actual_depth_wire_pass_and_state_restoration(self):
-        path = ROOT / "Engine/modules/opengl.preview.ixx"
+        path = ROOT / "Engine/modules/opengl/opengl.preview.ixx"
         source = path.read_text(encoding="utf-8")
         scope = definition(source, "        struct ScopedPreviewGLState final", True)
         draw = definition(source, "    inline void render_mesh_wire_preview(")

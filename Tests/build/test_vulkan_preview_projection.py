@@ -16,7 +16,7 @@ class VulkanPreviewProjection(unittest.TestCase):
         if os.name != 'nt':
             self.skipTest('Installed MSVC CPU lane')
         shared = (ROOT / 'Engine/src/render/render.preview_camera.cpp').read_text(encoding='utf-8')
-        native = (ROOT / 'Engine/modules/vulkan.context_descriptor.ixx').read_text(encoding='utf-8')
+        native = (ROOT / 'Engine/modules/vulkan/vulkan.context_descriptor.ixx').read_text(encoding='utf-8')
         functions = '\n'.join(definition(shared, marker) for marker in (
             '    [[nodiscard]] Mat4 identity_matrix(',
             '    [[nodiscard]] Mat4 perspective(',

@@ -52,7 +52,7 @@ def before_exploration_order(source):
 
 def fixture(source):
     engine = (GUI / "gui.engine.cpp").read_text(encoding="utf-8")
-    api = (ROOT / "Engine/modules/gui.engine.ixx").read_text(encoding="utf-8")
+    api = (ROOT / "Engine/modules/gui/gui.engine.ixx").read_text(encoding="utf-8")
     windows = (GUI / "controls/gui.window_controls.inl").read_text(encoding="utf-8")
     navigation = (GUI / "controls/gui.navigation_chrome.inl").read_text(encoding="utf-8")
     text = (GUI / "controls/gui.text_controls.inl").read_text(encoding="utf-8")

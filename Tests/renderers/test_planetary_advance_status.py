@@ -21,10 +21,10 @@ def actual_advance():
 
 
 def fixture(body):
-    module=(ROOT/'Engine/modules/render.preview_grid.ixx').read_text(encoding='utf-8')
+    module=(ROOT/'Engine/modules/render/render.preview_grid.ixx').read_text(encoding='utf-8')
     camera_source=(ROOT/'Engine/src/render/render.preview_camera.cpp').read_text(encoding='utf-8')
     precise=definition(module,'    export struct PreciseMeshTransform final')+';\n'+definition(camera_source,'    [[nodiscard]] bool valid_precise_mesh_transform(')+'\n'+definition(camera_source,'    [[nodiscard]] std::optional<PreciseMeshTransform> make_precise_mesh_transform(')
-    world_position=definition((ROOT/'Engine/modules/scene.snapshot.ixx').read_text(encoding='utf-8').replace('anchor = {}','anchor'),
+    world_position=definition((ROOT/'Engine/modules/scene/scene.snapshot.ixx').read_text(encoding='utf-8').replace('anchor = {}','anchor'),
         '    [[nodiscard]] inline std::optional<std::array<double, 3>> world_position(')
     return r'''
 #include <algorithm>

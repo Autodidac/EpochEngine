@@ -12,9 +12,9 @@ ROOT = Path(__file__).resolve().parents[2]
 BOOTSTRAP = ROOT / "Engine/src/editor/application/editor.frame_bootstrap.inl"
 MENU = ROOT / "Engine/src/editor/application/editor.frame_command_menus.inl"
 PANEL = ROOT / "Engine/src/editor/systems/editor.systems_panel.cpp"
-API = ROOT / "Engine/modules/gui.engine.ixx"
-SCHEDULER = ROOT / "Engine/modules/editor.task_scheduler.ixx"
-GRAPH = ROOT / "Engine/modules/taskgraph.dotsystem.ixx"
+API = ROOT / "Engine/modules/gui/gui.engine.ixx"
+SCHEDULER = ROOT / "Engine/modules/editor/editor.task_scheduler.ixx"
+GRAPH = ROOT / "Engine/modules/taskgraph/taskgraph.dotsystem.ixx"
 
 
 def statement(source, marker):

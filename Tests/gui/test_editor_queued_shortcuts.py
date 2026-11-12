@@ -1,5 +1,6 @@
 """Actual context queue and Editor shortcut block admit fast chords exactly once."""
 from pathlib import Path
+from Tests.support.cpp import engine_module_source
 import hashlib
 import json
 import os
@@ -159,7 +160,7 @@ class EditorQueuedShortcuts(unittest.TestCase):
         proof.mkdir(parents=True, exist_ok=True)
         (proof / "consumer.cpp").write_text(code, encoding="utf-8")
         portable = ROOT / "Engine/dep/EpochGui"
-        modules = [ROOT / "Engine/modules" / name for name in ("core.sha256.ixx", "asset.gui_artifact.ixx", "project.gui_runtime.ixx")]
+        modules = [engine_module_source(ROOT / "Engine/modules", name) for name in ("core.sha256.ixx", "asset.gui_artifact.ixx", "project.gui_runtime.ixx")]
         modules += [portable / "modules" / name for name in ("epoch.gui.ixx", "epoch.gui.input.ixx")]
         sources = [ROOT / "Engine/src/assets/gui/asset.gui_artifact.cpp", ROOT / "Engine/src/project/project.gui_runtime.cpp",
                    ROOT / "Engine/src/project/project.gui_runtime_contract.cpp", portable / "src/epochgui/text_control.cpp", portable / "src/epochgui/input.cpp"]

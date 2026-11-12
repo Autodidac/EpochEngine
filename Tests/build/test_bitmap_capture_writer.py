@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 class BitmapCaptureWriter(unittest.TestCase):
     def test_shared_writer_preserves_pixels_orientation_and_failure(self):
-        owner = ROOT / 'Engine/modules/image.writer.ixx'
+        owner = ROOT / 'Engine/modules/image/image.writer.ixx'
         source = owner.read_text(encoding='utf-8')
         body = definition(source, '    inline bool a_writeBMP(')
         channels = definition(source, '    enum class BitmapSourceChannels', True)

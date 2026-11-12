@@ -52,7 +52,7 @@ struct EditorState {
  std::optional<int> forestSurfacePending,forestSurfacePlacement;
  unsigned forestSurfaceCancellation{};
  scene::SceneObjectId forestBrushTerrain{scene::kInvalidSceneObjectId};
- std::optional<std::array<double,3>> forestBrushLastDirection;
+ std::vector<std::array<double,3>> forestBrushDirections;
 
 };
 void push_editor_log(EditorState&,const std::string&){}
@@ -234,7 +234,7 @@ class GroupedGuiWorldHistory(unittest.TestCase):
         proof.mkdir(parents=True,exist_ok=True)
         (proof/"editor.grouped_history_contract.cpp").write_text(fixture(),encoding="utf-8")
         modules={}
-        for path in (ROOT/"Engine/modules").glob("*.ixx"):
+        for path in (ROOT/"Engine/modules").rglob("*.ixx"):
             match=re.search(r"^export module\s+([\w.:]+);",path.read_text(encoding="utf-8-sig"),re.M)
             if match:modules[match.group(1)]=path
         pending=["authoring.gui_document","scene.document","editor.authoring_history","core.sha256"]

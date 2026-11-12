@@ -368,7 +368,7 @@ and pointer midpoint/endpoints. Runtime text-input acceptance remains pending.
 
 - Portable static-library API: `Engine/dep/EpochGui/include/gui/`
 - Portable implementation: `Engine/dep/EpochGui/src/epochgui/`
-- Engine adapter API/implementation: `Engine/modules/gui.engine.ixx` and
+- Engine adapter API/implementation: `Engine/modules/gui/gui.engine.ixx` and
   `Engine/src/epochgui/gui.engine.cpp`
 - Primary editor consumer: `Engine/src/editor/editor.application.cpp`
 - Backend replay consumers: renderer/context code that drains deferred GUI

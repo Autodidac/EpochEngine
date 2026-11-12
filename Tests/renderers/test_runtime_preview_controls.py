@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def wire_fixture():
-    source = (ROOT / "Engine/modules/render.preview_grid.ixx").read_text(encoding="utf-8-sig")
+    source = (ROOT / "Engine/modules/render/render.preview_grid.ixx").read_text(encoding="utf-8-sig")
     baseline = actual_function(source, "inline std::vector<Vertex> detail::build_marker_solids(")
     baseline = baseline.replace("detail::build_marker_solids(", "baseline_marker_solids(")
     baseline = baseline.replace("std::vector<TexturedVertex>* textured, bool wire_depth)", "std::vector<TexturedVertex>* textured = nullptr, bool wire_depth = false)")
@@ -23,6 +23,14 @@ def wire_fixture():
             "        [[nodiscard]] inline Vec3 mesh_vertex_normal(",
             "        [[nodiscard]] inline bool mesh_wire_requested(",
             "        [[nodiscard]] inline bool mesh_source_reverse("))
+    lighting_owner = (ROOT / "Engine/src/render/render.preview_lighting.cpp").read_text(encoding="utf-8-sig")
+    shadow_limit = source.index("inline constexpr std::size_t kMaxForestShadowVertices =")
+    private_helpers += "\n" + source[shadow_limit:source.index(";", shadow_limit) + 1]
+    private_helpers += "\n" + actual_function(lighting_owner, "        struct ForestShadow final") + ";\n"
+    private_helpers += "\n".join(actual_function(lighting_owner, marker)
+        for marker in ("        [[nodiscard]] static const ForestShadow* forest_shadow_for(",
+            "        [[nodiscard]] const ForestShadow* prepare_forest_shadow(",
+            "        [[nodiscard]] float forest_shadow_visibility("))
     baseline = baseline.replace("detail::", "baseline_detail::")
     # Keep the pre-hoist reference cost: compute the exact owning Euler values
     # for each transformed source vertex, rather than changing that benchmark
@@ -62,9 +70,10 @@ def wire_fixture():
     assert 'restore_editor_preview_mesh(state,entity,meshBudget,awaitingPlanetaryBudget,*meshUsage)' in preview_caller
     caller_entry = re.search(r"const bool meshWireframe\s*=.*?;",preview_caller,re.S).group(0)
     caller_dispatch = re.search(r"published=pump_editor_planetary_preview\(.*?;",preview_caller,re.S).group(0)
-    direct_begin = preview_caller.index("            else", preview_caller.index(caller_dispatch))
-    direct_end = preview_caller.index("            if (!published)", direct_begin)
-    caller_direct = preview_caller[direct_begin + len("            else"):direct_end]
+    direct_branch = actual_function(preview_caller[preview_caller.index(caller_dispatch):], "\n            else\n")
+    # This fixture supplies assembled markers and exercises publication and retirement.
+    direct_begin = direct_branch.index("                // Inline previews replace")
+    caller_direct = "{\n" + direct_branch[direct_begin:]
     caller_wire = re.search(r"\.wireframe\s*=\s*(forestPainting\s*\?[^,]+),",preview_caller).group(1)
     documents = (ROOT / "Engine/src/editor/application/editor.application_project_documents.inl").read_text(encoding="utf-8")
     preview_reset = actual_function(documents,"        void reset_planetary_preview_publication(")
@@ -91,6 +100,7 @@ def wire_fixture():
 #include <chrono>
 #include <atomic>
 #include <condition_variable>
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -2089,7 +2099,7 @@ add_test(NAME planetary_look_direction COMMAND yaw_contract)
         module_map = {}
         owners = (ROOT / "Engine/modules", ROOT / "Engine/dep/EpochPlatformEngine/modules")
         for owner in owners:
-            for path in owner.glob("*.ixx"):
+            for path in owner.rglob("*.ixx"):
                 match = re.search(r"^export module\s+([\w.:]+);", path.read_text(encoding="utf-8-sig"), re.M)
                 if match:
                     self.assertNotIn(match.group(1), module_map)

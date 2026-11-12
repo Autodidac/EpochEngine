@@ -8,7 +8,7 @@ ROOT=Path(__file__).resolve().parents[2]
 class ProjectMotionScripts(unittest.TestCase):
  def test_compiled_tracks_script_abi_and_project_copy_debug_release(self):
   if os.name != "nt": self.skipTest("Win32 project DLL load/unload ABI consumer")
-  loader=(ROOT/'Engine/modules/scripting.system.ixx').read_text(encoding='utf-8')
+  loader=(ROOT/'Engine/modules/scripting/scripting.system.ixx').read_text(encoding='utf-8')
   adapter=(ROOT/'Engine/src/editor/application/editor.application_scripting_renderers.inl').read_text(encoding='utf-8')
   selection=(ROOT/'Engine/src/editor/application/editor.application_scene_selection.inl').read_text(encoding='utf-8')
   workspaces=(ROOT/'Engine/src/editor/application/editor.application_code_workspaces.inl').read_text(encoding='utf-8')
@@ -179,7 +179,7 @@ int main(int argc,char**argv){
     started=time.monotonic();r=subprocess.run(cmd,cwd=out,env=env,capture_output=True,text=True,timeout=timeout)
     (out/(label+'.log')).write_text(r.stdout+r.stderr,encoding='utf-8');self.assertEqual(r.returncode,0,label+': '+r.stdout+r.stderr)
     records.append({'config':config,'step':label,'exit':r.returncode,'seconds':time.monotonic()-started})
-   for name,path in [('temporal.request','Engine/modules/temporal.request.ixx'),('platform.filesystem','Engine/modules/platform.filesystem.ixx'),('project.motion_track','Engine/modules/project.motion_track.ixx')]:
+   for name,path in [('temporal.request','Engine/modules/temporal/temporal.request.ixx'),('platform.filesystem','Engine/modules/platform/platform.filesystem.ixx'),('project.motion_track','Engine/modules/project/project.motion_track.ixx')]:
     obj=out/(name+'.obj');ifc=out/(name+'.ifc');run(base+refs+['/c','/interface','/ifcOutput',str(ifc),'/Fo'+str(obj),str(ROOT/path)],name)
     refs+=['/reference',name+'='+str(ifc)];objects.append(str(obj))
    obj=out/'motion_impl.obj';run(base+refs+['/c','/Fo'+str(obj),str(ROOT/'Engine/src/project/project.motion_track.cpp')],'motion_impl');objects.append(str(obj))

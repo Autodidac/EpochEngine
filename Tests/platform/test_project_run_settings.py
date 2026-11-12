@@ -47,6 +47,7 @@ struct EditorState {
  std::string aiGoalLastMilestoneSignature,aiGoalLastMilestoneReceipt="project.save accepted",aiToolStatus="runtime active";
  int aiToolPlan=17;bool aiToolPlanApplied=true;
  std::uint64_t sceneDocumentRevision{8};
+ struct {std::uint64_t revision{1},contentHash{};} plantLabDocument;
  struct {
   struct {
    struct {
@@ -184,8 +185,8 @@ int main(){
     def test_actual_persistence_readback_and_refusals(self):
         scene = (ROOT / "Engine/src/editor/editor.scene.cpp").read_text(encoding="utf-8")
         registry = (ROOT / "Engine/src/editor/implementation/editor.project_registry.inl").read_text(encoding="utf-8")
-        core = (ROOT / "Engine/modules/editor.core.ixx").read_text(encoding="utf-8")
-        filesystem = (ROOT / "Engine/modules/platform.filesystem.ixx").read_text(encoding="utf-8")
+        core = (ROOT / "Engine/modules/editor/editor.core.ixx").read_text(encoding="utf-8")
+        filesystem = (ROOT / "Engine/modules/platform/platform.filesystem.ixx").read_text(encoding="utf-8")
         value = definition(core, "    export struct EditorProjectRunSettings final", True).replace("export ", "", 1)
         codec = definition(registry, "    [[nodiscard]] static std::optional<nlohmann::ordered_json>\n        parse_project_build_configuration_manifest(")
         persistence = "\n".join(definition(scene, marker) for marker in (
@@ -321,6 +322,7 @@ int main(int argc,char**argv) try {
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <vector>
 namespace scene{constexpr unsigned kInvalidSceneObjectId=0;}
 struct EditorState {
  std::string projectRoot="one",projectScenePath="worlds/main.epoch",projectId="one",planetaryStatus;
@@ -331,7 +333,9 @@ struct EditorState {
  bool planetaryInitialFramePending{};std::uint64_t planetaryInitialFrameGeneration{7};
  bool forestTerrainPainting=true,forestBrushHeld=true,forestPlacementFocusPending=true;
  unsigned forestBrushTerrain=9;
- std::optional<int> forestSurfacePlacement{1},forestBrushLastDirection{2};
+ std::vector<std::array<double,3>> forestBrushDirections{{1.0,0.0,0.0}};
+ std::optional<int> forestSurfacePlacement{1},previousSceneClick{2};
+ std::optional<bool> forestPlacementSaved{true},projectRunAfterTerrainPreview{true};
  struct {struct {struct {struct {std::uint64_t generation{7};}selected_project;}generations;} data;
   const auto& evidence()const{return data;}}projectLifecycle;
 };
@@ -364,7 +368,8 @@ int main(){
  #define CHECK(value) do{if(!(value))return __LINE__;}while(false)
  CHECK(!state.planetaryInitialFramePending&&state.planetaryInitialFrameGeneration==0);
  CHECK(state.forestTerrainPainting&&!state.forestBrushHeld&&!state.forestPlacementFocusPending);
- CHECK(!state.forestSurfacePlacement&&!state.forestBrushLastDirection&&state.forestBrushTerrain==0);
+ CHECK(!state.forestSurfacePlacement&&state.forestBrushDirections.empty()&&state.forestBrushTerrain==0);
+ CHECK(!state.forestPlacementSaved&&!state.projectRunAfterTerrainPreview&&!state.previousSceneClick);
  EditorState plant;plant.forestTerrainPainting=false;save_refresh(plant,true,true,true);
  CHECK(!plant.forestTerrainPainting&&!plant.forestBrushHeld&&!plant.forestSurfacePlacement);
  for(const bool pending:{false,true}){

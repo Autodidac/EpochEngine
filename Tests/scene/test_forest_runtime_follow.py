@@ -295,7 +295,7 @@ class ForestRuntimeFollow(unittest.TestCase):
         roots = [ROOT / "Engine/modules", ROOT / "Engine/dep/EpochPlatformEngine/modules"]
         found = {}
         for folder in roots:
-            for path in folder.glob("*.ixx"):
+            for path in folder.rglob("*.ixx"):
                 match = re.search(r"^export module\s+([\w.:]+);", path.read_text(encoding="utf-8-sig"), re.M)
                 if match:
                     found[match.group(1)] = path

@@ -1,5 +1,6 @@
 """Actual pinned plans and Editor offer handoff; tiny files and explicit queue ports."""
 from pathlib import Path
+from Tests.support.cpp import engine_module_source
 import hashlib,json,os,subprocess,time,unittest
 from Tests.build.test_opengl_sprite_stream import definition
 from Tests.support.cpp import configure_arguments,executable
@@ -123,7 +124,7 @@ class ModelCandidateOffers(unittest.TestCase):
         build=ROOT/'Artifacts/Intermediate/cmake/model-candidate-offers'/identity
         (report/'consumer.cpp').write_text(code,encoding='utf-8')
         modules=['core.sha256','platform.filesystem','ai.model_install','package.registry']
-        sources=' '.join('"'+(ROOT/'Engine/modules'/(name+'.ixx')).as_posix()+'"' for name in modules)
+        sources=' '.join('"'+(engine_module_source(ROOT/'Engine/modules', name + ".ixx")).as_posix()+'"' for name in modules)
         (report/'CMakeLists.txt').write_text(f'''cmake_minimum_required(VERSION 4.4)
 project(ModelCandidates LANGUAGES CXX)
 add_library(candidate_plans STATIC "{(ROOT/'Engine/src/ai/ai.model_install.cpp').as_posix()}")

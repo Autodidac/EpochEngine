@@ -44,8 +44,8 @@ int main(int argc,char** argv){
 
 class TextureResidencyExtraction(unittest.TestCase):
     def test_independent_residency_and_document_contracts(self):
-        relative = ["Engine/modules/asset.texture_artifact.ixx", "Engine/modules/authoring.texture.ixx",
-                    "Engine/modules/authoring.texture_detail.ixx",
+        relative = ["Engine/modules/asset.texture_artifact.ixx", "Engine/modules/authoring/authoring.texture.ixx",
+                    "Engine/modules/authoring/authoring.texture_detail.ixx",
                     "Engine/src/assets/texture/asset.texture_artifact.cpp",
                     "Engine/src/authoring/texture/authoring.texture_document.cpp",
                     "Engine/src/authoring/texture/authoring.texture_residency.cpp",

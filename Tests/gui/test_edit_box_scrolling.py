@@ -20,7 +20,7 @@ def fixture():
     text = (GUI / "controls/gui.text_controls.inl").read_text(encoding="utf-8")
     scroll = (GUI / "controls/gui.scroll_controls.inl").read_text(encoding="utf-8")
     buttons = (GUI / "controls/gui.buttons_images.inl").read_text(encoding="utf-8")
-    api = (ROOT / "Engine/modules/gui.engine.ixx").read_text(encoding="utf-8")
+    api = (ROOT / "Engine/modules/gui/gui.engine.ixx").read_text(encoding="utf-8")
     base = queue_fixture().split("void fast_sequences(", 1)[0]
     base = base.replace("#include <algorithm>", "#include <functional>\n#include <unordered_map>\n#include <algorithm>")
     base = base.replace("import epoch.gui.input;", '#include "gui/gui.chat_context_popup.hpp"\nimport epoch.gui.input;\nimport epoch.gui;\nimport epoch.gui.rounded_rect;')

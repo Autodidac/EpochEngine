@@ -1,5 +1,6 @@
 """Actual planetary size codec/binding/transport admission, without graphics/models."""
 from pathlib import Path
+from Tests.support.cpp import engine_module_source
 import hashlib
 import copy
 import json
@@ -477,7 +478,7 @@ class PlanetarySizeSettings(unittest.TestCase):
         generation_fixture = ROOT / "Artifacts/pgi" / str(time.time_ns())
         (report / "consumer.cpp").write_text(code, encoding="utf-8")
         (report / "provider_refusal.cpp").write_text("int main(){return 17;}\n", encoding="utf-8")
-        modules = [ROOT / "Engine/modules" / name for name in (
+        modules = [engine_module_source(ROOT / "Engine/modules", name) for name in (
             "asset.texture_artifact.ixx", "asset.mesh_artifact.ixx", "asset.cloud_volume.ixx",
             "project.planetary.ixx", "project.planetary_snapshot.ixx", "project.planetary_runtime.ixx", "water.wave.ixx", "platform.filesystem.ixx",
             "package.catalog.ixx", "package.registry.ixx", "package.source_install.ixx",

@@ -8,7 +8,7 @@ function(epoch_admit_task_scheduler consumer engine_source_root)
     endif()
     if(NOT TARGET epoch_task_scheduler)
         set(_engine "${engine_source_root}/Engine")
-        if(NOT EXISTS "${_engine}/modules/editor.task_scheduler.ixx")
+        if(NOT EXISTS "${_engine}/modules/editor/editor.task_scheduler.ixx")
             message(FATAL_ERROR "Missing explicit Engine scheduler source")
         endif()
         if(NOT TARGET Epoch::PlatformEngine)
@@ -34,12 +34,12 @@ function(epoch_admit_task_scheduler consumer engine_source_root)
         target_sources(epoch_task_scheduler PUBLIC
             FILE_SET scheduler_modules TYPE CXX_MODULES
             BASE_DIRS "${_engine}/modules"
-            FILES "${_engine}/modules/core.logger.ixx"
-                  "${_engine}/modules/core.mpmc_bounded_queue.ixx"
-                  "${_engine}/modules/systems.registry.ixx"
-                  "${_engine}/modules/systems.task.ixx"
-                  "${_engine}/modules/taskgraph.dotsystem.ixx"
-                  "${_engine}/modules/editor.task_scheduler.ixx")
+            FILES "${_engine}/modules/core/core.logger.ixx"
+                  "${_engine}/modules/core/core.mpmc_bounded_queue.ixx"
+                  "${_engine}/modules/systems/systems.registry.ixx"
+                  "${_engine}/modules/systems/systems.task.ixx"
+                  "${_engine}/modules/taskgraph/taskgraph.dotsystem.ixx"
+                  "${_engine}/modules/editor/editor.task_scheduler.ixx")
         target_include_directories(epoch_task_scheduler PUBLIC "${_engine}/include")
         target_compile_features(epoch_task_scheduler PUBLIC cxx_std_23)
         set_target_properties(epoch_task_scheduler PROPERTIES CXX_SCAN_FOR_MODULES ON)
@@ -49,7 +49,8 @@ function(epoch_admit_task_scheduler consumer engine_source_root)
             # below MAX_PATH even for nested project source attachments.
             foreach(_owner IN ITEMS core.logger core.mpmc_bounded_queue systems.registry
                     systems.task taskgraph.dotsystem editor.task_scheduler)
-                set_source_files_properties("${_engine}/modules/${_owner}.ixx" PROPERTIES VS_SETTINGS
+                string(REGEX MATCH "^[^.]+" _category "${_owner}")
+                set_source_files_properties("${_engine}/modules/${_category}/${_owner}.ixx" PROPERTIES VS_SETTINGS
                     "ObjectFileName=$(IntDir)${_owner}.obj;ModuleDependenciesFile=$(IntDir)${_owner}.module.json;ModuleOutputFile=$(IntDir)${_owner}.ifc")
             endforeach()
         endif()

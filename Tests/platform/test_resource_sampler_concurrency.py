@@ -11,7 +11,7 @@ from Tests.support.cpp import compile_and_run, windows_sdk_includes
 
 ROOT = Path(__file__).resolve().parents[2]
 OWNER = ROOT / "Engine/src/platform/platform.work_admission.cpp"
-MODULE = ROOT / "Engine/modules/platform.work_admission.ixx"
+MODULE = ROOT / "Engine/modules/platform/platform.work_admission.ixx"
 
 PREFIX = r'''
 #include <algorithm>

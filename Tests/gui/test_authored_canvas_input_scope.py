@@ -10,7 +10,7 @@ from Tests.build.test_opengl_sprite_stream import definition
 
 ROOT = Path(__file__).resolve().parents[2]
 APP = ROOT / "Engine/src/editor/application/editor.application_gui_authoring.inl"
-API = ROOT / "Engine/modules/gui.engine.ixx"
+API = ROOT / "Engine/modules/gui/gui.engine.ixx"
 FRAME = ROOT / "Engine/src/epochgui/controls/gui.frame_lifecycle.inl"
 
 
@@ -216,7 +216,7 @@ class AuthoredCanvasInputScope(unittest.TestCase):
         source = proof / "editor.canvas_input_contract.cpp"
         source.write_text(fixture(), encoding="utf-8")
         portable = ROOT / "Engine/dep/EpochGui"
-        modules = [ROOT / "Engine/modules/authoring.document.ixx", ROOT / "Engine/modules/authoring.gui_document.ixx",
+        modules = [ROOT / "Engine/modules/authoring/authoring.document.ixx", ROOT / "Engine/modules/authoring/authoring.gui_document.ixx",
             portable / "modules/epoch.gui.ixx", portable / "modules/epoch.gui.input.ixx"]
         (proof / "CMakeLists.txt").write_text(f'''cmake_minimum_required(VERSION 3.30)
 project(AuthoredCanvasInput LANGUAGES CXX)

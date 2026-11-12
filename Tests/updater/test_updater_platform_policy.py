@@ -1,5 +1,6 @@
 """Compile the real Engine update-policy module against canonical Platform."""
 from pathlib import Path
+from Tests.support.cpp import engine_module_source
 import os
 import subprocess
 import tempfile
@@ -13,18 +14,18 @@ ROOT = Path(__file__).resolve().parents[2]
 class UpdaterPlatformPolicy(unittest.TestCase):
     def test_engine_consumers_use_engine_owner_and_both_build_graphs_include_it(self):
         for name in ('core.commandline.ixx', 'updater.config.ixx'):
-            source = (ROOT/'Engine/modules'/name).read_text(encoding='utf-8')
+            source = (engine_module_source(ROOT/'Engine/modules', name)).read_text(encoding='utf-8')
             self.assertIn('import updater.platform_policy;', source)
             for api in ('updater_shell_backend_name', 'source_snapshot_archive_extension', 'source_snapshot_archive_label'):
                 self.assertNotIn('epochengine::platform::policy::'+api+'(', source)
-        module = (ROOT/'Engine/modules/updater.platform_policy.ixx').read_text(encoding='utf-8')
+        module = (ROOT/'Engine/modules/updater/updater.platform_policy.ixx').read_text(encoding='utf-8')
         self.assertIn('export module updater.platform_policy;', module)
         self.assertIn('import platform.native;', module)
         self.assertNotIn('import platform.engine;', module)
         for name in ('Engine.vcxitems', 'Engine.vcxitems.filters'):
-            self.assertIn('modules\\updater.platform_policy.ixx', (ROOT/'Engine'/name).read_text(encoding='utf-8'))
+            self.assertIn('modules\\updater\\updater.platform_policy.ixx', (ROOT/'Engine'/name).read_text(encoding='utf-8'))
         cmake = (ROOT/'Engine/CMakeLists.txt').read_text(encoding='utf-8')
-        self.assertIn('file(GLOB EPOCH_MODULE_FILES CONFIGURE_DEPENDS', cmake)
+        self.assertIn('file(GLOB_RECURSE EPOCH_MODULE_FILES CONFIGURE_DEPENDS', cmake)
         self.assertIn('add_test(NAME epoch_updater_platform_policy_contract', cmake)
 
     @unittest.skipUnless(os.name == 'nt', 'Installed MSVC module-consumer proof')
@@ -42,7 +43,7 @@ class UpdaterPlatformPolicy(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir=parent, prefix='updater-policy-module-') as folder:
             folder = Path(folder)
             native = ROOT/'Engine/dep/EpochPlatformEngine/modules/platform.native.ixx'
-            policy = ROOT/'Engine/modules/updater.platform_policy.ixx'
+            policy = ROOT/'Engine/modules/updater/updater.platform_policy.ixx'
             contract = ROOT/'Tests/updater/updater.platform_policy_contract.cpp'
             native_ref = ['/reference', 'platform.native='+str(folder/'native.ifc')]
             policy_ref = ['/reference', 'updater.platform_policy='+str(folder/'policy.ifc')]

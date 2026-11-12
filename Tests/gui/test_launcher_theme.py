@@ -17,7 +17,7 @@ class LauncherTheme(unittest.TestCase):
         owner = (ROOT / 'Engine/src/editor/application/editor.application_context_lifecycle.inl').read_text(encoding='utf-8')
         query = definition(owner, '    EditorAppearancePreferences editor_appearance_preferences(')
         self.assertNotIn('editor_state_for(', query)
-        api = (ROOT / 'Engine/modules/editor.core.ixx').read_text(encoding='utf-8')
+        api = (ROOT / 'Engine/modules/editor/editor.core.ixx').read_text(encoding='utf-8')
         appearance = definition(api, '    export struct EditorAppearancePreferences', True).replace('export ', '', 1)
         codec = contract_source().split('int main() {', 1)[0]
         code = '#include <map>\n#include <mutex>\n' + codec + '\n' + appearance + r'''
@@ -67,7 +67,7 @@ int main(int argc,char**){
             'malformed_fallback': 'Debug/Release PASS', 'native_visual_acceptance': False}, indent=2)+'\n')
 
     def test_all_launcher_surfaces_inherit_the_owner_theme(self):
-        menu = (ROOT / 'Engine/modules/gui.menu.ixx').read_text(encoding='utf-8')
+        menu = (ROOT / 'Engine/modules/gui/gui.menu.ixx').read_text(encoding='utf-8')
         self.assertNotIn('gui::push_theme(', menu)
         self.assertNotIn('gui::pop_theme(', menu)
         for name, begin in (('epoch.session_runtime.inl', 'case SessionMode::Menu:'),

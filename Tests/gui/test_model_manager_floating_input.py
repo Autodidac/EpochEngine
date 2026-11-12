@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def fixture():
-    api = (ROOT/'Engine/modules/gui.engine.ixx').read_text(encoding='utf-8')
+    api = (ROOT/'Engine/modules/gui/gui.engine.ixx').read_text(encoding='utf-8')
     frame = (ROOT/'Engine/src/epochgui/controls/gui.frame_lifecycle.inl').read_text(encoding='utf-8')
     windows = (ROOT/'Engine/src/epochgui/controls/gui.window_controls.inl').read_text(encoding='utf-8')
     adapters = (ROOT/'Engine/src/epochgui/gui.docking_adapter.cpp').read_text(encoding='utf-8')

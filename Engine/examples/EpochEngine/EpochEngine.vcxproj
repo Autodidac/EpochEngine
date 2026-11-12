@@ -231,130 +231,124 @@
     </Lib>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Update="$(ProjectDir)..\..\modules\2048like.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\game\game.a2048_like.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="$(ProjectDir)..\..\modules\game.a2048_like.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\application\application.registry.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="$(ProjectDir)..\..\modules\application.registry.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\simulation\simulation.cellular.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="$(ProjectDir)..\..\modules\simulation.cellular.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\ecs\ecs.core.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="$(ProjectDir)..\..\modules\ecs.core.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\editor\editor.core.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="$(ProjectDir)..\..\modules\editor.core.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\application\application.end_user.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="$(ProjectDir)..\..\modules\application.end_user.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\scripting\scripting.engine_bindings.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="$(ProjectDir)..\..\modules\scripting.engine_bindings.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\epoch\epoch.cli.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="$(ProjectDir)..\..\modules\epoch.cli.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\diagnostics\diagnostics.engine.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="$(ProjectDir)..\..\modules\diagnostics.engine.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\events\events.input.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="$(ProjectDir)..\..\modules\events.input.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\gui\gui.engine.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="$(ProjectDir)..\..\modules\gui.engine.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\core\core.handles.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="$(ProjectDir)..\..\modules\core.handles.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\input\input.engine.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="$(ProjectDir)..\..\modules\input.engine.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\systems\systems.task.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="$(ProjectDir)..\..\modules\platform.engine.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\telemetry\telemetry.engine.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="$(ProjectDir)..\..\modules\systems.task.ixx">
-      <FileType>Document</FileType>
-    </ClCompile>
-    <ClCompile Update="$(ProjectDir)..\..\modules\telemetry.engine.ixx">
-      <FileType>Document</FileType>
-    </ClCompile>
-    <ClCompile Update="$(ProjectDir)..\..\modules\engine.updater.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\engine\engine.updater.ixx">
       <FileType>Document</FileType>
     </ClCompile>
     <ClCompile Update="$(ProjectDir)..\..\modules\epoch.version.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="$(ProjectDir)..\..\modules\ecs.entity.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\ecs\ecs.entity.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="$(ProjectDir)..\..\modules\platform.framework.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\platform\platform.framework.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="$(ProjectDir)..\..\modules\game.frogger_like.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\game\game.frogger_like.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="$(ProjectDir)..\..\modules\game.core.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\game\game.core.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="$(ProjectDir)..\..\modules\image.atlas_writer.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\image\image.atlas_writer.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="$(ProjectDir)..\..\modules\game.match3_like.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\game\game.match3_like.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="$(ProjectDir)..\..\modules\game.minesweeper_like.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\game\game.minesweeper_like.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="$(ProjectDir)..\..\modules\atlas.mipmap.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\atlas\atlas.mipmap.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="$(ProjectDir)..\..\modules\core.mpmc_bounded_queue.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\core\core.mpmc_bounded_queue.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="$(ProjectDir)..\..\modules\game.pacman_like.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\game\game.pacman_like.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="$(ProjectDir)..\..\modules\platform.pump.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\platform\platform.pump.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="$(ProjectDir)..\..\modules\simulation.sand.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\simulation\simulation.sand.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="$(ProjectDir)..\..\modules\scene.core.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\scene\scene.core.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="$(ProjectDir)..\..\modules\scene.serializer.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\scene\scene.serializer.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="$(ProjectDir)..\..\modules\scene.snapshot.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\scene\scene.snapshot.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="$(ProjectDir)..\..\modules\scripting.system.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\scripting\scripting.system.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="$(ProjectDir)..\..\modules\game.sliding_puzzle_like.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\game\game.sliding_puzzle_like.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="$(ProjectDir)..\..\modules\game.snake_like.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\game\game.snake_like.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="$(ProjectDir)..\..\modules\game.sokoban_like.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\game\game.sokoban_like.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="$(ProjectDir)..\..\modules\sprite.handle.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\sprite\sprite.handle.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="$(ProjectDir)..\..\modules\sprite.registry.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\sprite\sprite.registry.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="$(ProjectDir)..\..\modules\game.tetris_like.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\game\game.tetris_like.ixx">
       <FileType>Document</FileType>
     </ClCompile>
-    <ClCompile Update="$(ProjectDir)..\..\modules\texture.core.ixx">
+    <ClCompile Update="$(ProjectDir)..\..\modules\texture\texture.core.ixx">
       <FileType>Document</FileType>
     </ClCompile>
   </ItemGroup>

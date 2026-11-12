@@ -93,7 +93,7 @@ int main(){
         refresh = sdl.split('    void refresh_dimensions(', 1)[1].split(
             '    void sync_docked_child_size(', 1)[0]
         refresh = '    void refresh_dimensions(' + refresh
-        state = read_owned_source(ROOT / 'Engine/modules/sdl.state.ixx')
+        state = read_owned_source(ROOT / 'Engine/modules/sdl/sdl.state.ixx')
         dimensions = state.split('    struct PresentationDimensions', 1)[1].split(
             '    enum class SurfaceLifecycleEvent', 1)[0]
         dimensions = '    struct PresentationDimensions' + dimensions
@@ -101,7 +101,7 @@ int main(){
         adapter = host.split('    void MultiContextManager::AttachBackendInputAdapter(', 1)[1].split(
             '    namespace backend', 1)[0]
         adapter = '    void MultiContextManager::AttachBackendInputAdapter(' + adapter
-        multiplexer = read_owned_source(ROOT / 'Engine/modules/context.multiplexer.ixx')
+        multiplexer = read_owned_source(ROOT / 'Engine/modules/context/context.multiplexer.ixx')
         declaration = next(line.strip() for line in multiplexer.splitlines()
             if 'void AttachBackendInputAdapter(HWND hwnd) noexcept;' in line)
         self.assertTrue(declaration.startswith('static '))
@@ -510,7 +510,7 @@ int main(){
         self.assertLess(binding, initialization.index('SDL_ShowWindow(s_window);'))
 
     def test_raylib_binds_shared_adapter_after_publishing_live_identity(self):
-        source = read_owned_source(ROOT / 'Engine/modules/raylib.context.ixx')
+        source = read_owned_source(ROOT / 'Engine/modules/raylib/raylib.context.ixx')
         adoption = source.split('void adopt_raylib_window(', 1)[1].split(
             '#if !defined(_WIN32)', 1)[0]
         self.assertEqual(adoption.count('AttachBackendInputAdapter(raylibHwnd);'), 1)

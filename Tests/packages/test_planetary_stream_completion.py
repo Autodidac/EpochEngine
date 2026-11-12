@@ -1,5 +1,6 @@
 """Actual completion admission expressions and real moving-view policy; no GPU."""
 from pathlib import Path
+from Tests.support.cpp import engine_module_source
 from Tests.platform.test_child_close_router import definition
 from Tests.support.cpp import compile_and_run
 import hashlib
@@ -429,7 +430,7 @@ int main(){
             code = code.replace(key.upper(), value)
         (proof / 'completion.contract.cpp').write_text(code, encoding='utf-8')
         modules = ['project.planetary', 'project.planetary_snapshot', 'asset.mesh_artifact', 'asset.texture_artifact', 'asset.cloud_volume', 'water.wave']
-        files = ' '.join('"' + (ROOT / 'Engine/modules' / (name + '.ixx')).as_posix() + '"' for name in modules)
+        files = ' '.join('"' + (engine_module_source(ROOT / 'Engine/modules', name + ".ixx")).as_posix() + '"' for name in modules)
         (proof / 'CMakeLists.txt').write_text(f'''cmake_minimum_required(VERSION 3.30)
 set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT Embedded)
 project(PlanetMovingCompletion LANGUAGES CXX)
@@ -463,7 +464,7 @@ add_test(NAME moving_completion COMMAND completion)
             (proof / 'result.json').write_text(json.dumps(dict(
                 scope='Actual completion admission expressions, recorded identity/source-verifier ports, real module view policy; no renderer/process execution',
                 source={str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()
-                        for path in [runtime_path, editor_path, ROOT/'Engine/modules/project.planetary.ixx']},
+                        for path in [runtime_path, editor_path, ROOT/'Engine/modules/project/project.planetary.ixx']},
                 expressions=expressions, phases=results, native=False), indent=2) + '\n', encoding='utf-8')
             self.assertEqual(run.returncode, 0, (run.stdout + run.stderr)[-10000:])
 

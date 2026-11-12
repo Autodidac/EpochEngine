@@ -68,7 +68,7 @@ return 0;}
         shell = bootstrap[bootstrap.index("        const gui::Vec2 editorSettingsDefaultSize"):bootstrap.index("        const gui::Vec2 aiModelManagerDefaultSize")]
         block = settings[settings.index("        if (editor.showSettingsModal && editorSettingsOwnsInput)"):]
         core = (ROOT / "Engine/dep/EpochGui/src/epochgui/floating_window.cpp").read_text(encoding="utf-8").replace("module;", "").replace("module epoch.gui;", "")
-        module = (ROOT / "Engine/modules/gui.engine.ixx").read_text(encoding="utf-8")
+        module = (ROOT / "Engine/modules/gui/gui.engine.ixx").read_text(encoding="utf-8")
         navigation = (ROOT / "Engine/src/epochgui/controls/gui.navigation_chrome.inl").read_text(encoding="utf-8")
         layout = definition(navigation, "    struct InlineButtonRowLayout", True) + definition(navigation, "    [[nodiscard]] static InlineButtonRowLayout make_inline_button_layout(")
         types = "\n".join(definition(module, "    export " + kind + " " + name, True).replace("export ", "") for kind,name in (

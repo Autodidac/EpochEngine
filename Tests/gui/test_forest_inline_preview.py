@@ -27,12 +27,15 @@ class ForestInlinePreview(unittest.TestCase):
             'struct EditorPreviewMeshCacheUsage',
             '[[nodiscard]] std::optional<EditorPreviewMeshCacheUsage> editor_preview_mesh_cache_usage(',
             '[[nodiscard]] bool restore_editor_preview_mesh(',
+            '[[nodiscard]] const std::shared_ptr<const asset::mesh::Artifact>& editor_forest_silhouette(',
             'void publish_editor_preview_markers(',
             '[[nodiscard]] bool painted_tree_uses_plant_lab(',
             'struct PaintedTreeUpdateResult final',
             '[[nodiscard]] PaintedTreeUpdateResult refresh_forest_factory_instances('))
+        documents=(ROOT/'Engine/src/editor/application/editor.application_project_documents.inl').read_text(encoding='utf-8')
+        functions+='\n'+definition(documents,'void end_editor_lod_inspection(')
         camera=workspace[workspace.index('const bool changedSurface ='):workspace.index('            if (changedSurface)\n                editor.surfaceSettleFrames')]
-        preview=(ROOT/'Engine/modules/render.preview_grid.ixx').read_text(encoding='utf-8')
+        preview=(ROOT/'Engine/modules/render/render.preview_grid.ixx').read_text(encoding='utf-8')
         camera_owner=(ROOT/'Engine/src/render/render.preview_camera.cpp').read_text(encoding='utf-8')
         precise=definition(preview,'    export struct PreciseMeshTransform final',True).replace('export ','')
         precise+='\n'+definition(preview,'    export struct CloudVolume final',True).replace('export ','')
@@ -40,12 +43,12 @@ class ForestInlinePreview(unittest.TestCase):
         precise+='\n'+definition(camera_owner,'    [[nodiscard]] std::optional<PreciseMeshTransform> make_precise_mesh_transform(')
         camera_helpers=definition(preview,'    export [[nodiscard]] inline std::array<double,3> camera_world_eye(').replace('export ','')
         camera_helpers+='\n'+definition(preview,'    export [[nodiscard]] inline Vec3 camera_forward(').replace('export ','')
-        world_position=definition((ROOT/'Engine/modules/scene.snapshot.ixx').read_text(encoding='utf-8').replace('anchor = {}','anchor'),
+        world_position=definition((ROOT/'Engine/modules/scene/scene.snapshot.ixx').read_text(encoding='utf-8').replace('anchor = {}','anchor'),
             '    [[nodiscard]] inline std::optional<std::array<double, 3>> world_position(')
         input_reserved=definition((ROOT/'Engine/src/editor/application/editor.application_document_editing.inl').read_text(encoding='utf-8'),
             '        [[nodiscard]] bool editor_project_viewport_input_reserved(')
         paint_types=preview[preview.index("    // Presentation-only paint colors."):preview.index("    export struct SolidDrawMarker final")].replace("export ","")
-        forest_region=definition((ROOT/"Engine/modules/scene.snapshot.ixx").read_text(encoding="utf-8"), "    struct SceneForestRegionInstance final",True)
+        forest_region=definition((ROOT/"Engine/modules/scene/scene.snapshot.ixx").read_text(encoding="utf-8"), "    struct SceneForestRegionInstance final",True)
         code=r'''
 #include "core.format_text.hpp"
 #include <algorithm>
@@ -97,20 +100,20 @@ namespace previewgrid {
  enum ObjectPreviewPrimitive { Cube,IndexedMesh };
  struct MeshBaseColorBinding{};ACTUAL_PRECISE
  ACTUAL_PAINT_TYPES
- struct ObjectMarker {Vec3 position,color,scale,rotationDegrees;float radius{};ObjectPreviewPrimitive primitive{};bool selected{},editorOnly{},sampledRenderSurface{};std::shared_ptr<const asset::mesh::Artifact> mesh;bool wireframe{};std::shared_ptr<const MeshBaseColorBinding>baseColorTexture;std::optional<PreciseMeshTransform>preciseTransform;std::shared_ptr<const MeshPaintView>paintView;};
- struct Camera{Vec3 eye{},target{0,0,-1};render_camera::ProjectionKind projection{render_camera::ProjectionKind::perspective};struct {std::array<double,3>eye{};Vec3 forward{0,0,-1};}navigation;bool navigationValid{};};
+ struct ObjectMarker {Vec3 position,color,scale,rotationDegrees;float radius{};ObjectPreviewPrimitive primitive{};bool selected{},editorOnly{},sampledRenderSurface{};std::shared_ptr<const asset::mesh::Artifact> mesh;bool wireframe{};std::shared_ptr<const MeshBaseColorBinding>baseColorTexture;std::optional<PreciseMeshTransform>preciseTransform;std::shared_ptr<const MeshPaintView>paintView;bool forestLighting{};};
+ struct Camera{Vec3 eye{},target{0,0,-1};render_camera::ProjectionKind projection{render_camera::ProjectionKind::perspective};struct {std::array<double,3>eye{};Vec3 forward{0,0,-1};}navigation;bool navigationValid{};float fovRadians{0.90f};};
  Camera camera_for(const core::Context*){return {};}
  Vec3 subtract(Vec3 a,Vec3 b){return {a.x-b.x,a.y-b.y,a.z-b.z};}Vec3 normalize(Vec3 a){return a;}
  ACTUAL_CAMERA_HELPERS
  Camera fit_visible_depth_range(Camera value,std::span<const ObjectMarker>,double=0.0){assert(false);return value;}
  unsigned publications{},lightingSets{},clears{};
- struct CameraRigSnapshot {bool valid{true};int value{};};
- int cameraValue=5;std::vector<ObjectMarker> observed;
  enum class CameraMode{Editor,FPS};CameraMode mode{CameraMode::Editor};
+ struct CameraRigSnapshot {bool valid{true};int value{};CameraMode mode{CameraMode::Editor};};
+ int cameraValue=5;std::vector<ObjectMarker> observed;
  CameraMode camera_mode_for(const void*){return mode;}
  void set_camera_mode(const void*,CameraMode value){mode=value;}
- CameraRigSnapshot capture_camera_rig_snapshot(const void*){return {true,cameraValue};}
- bool restore_camera_rig_snapshot(const void*,CameraRigSnapshot value){cameraValue=value.value;return true;}
+ CameraRigSnapshot capture_camera_rig_snapshot(const void*){return {true,cameraValue,mode};}
+ bool restore_camera_rig_snapshot(const void*,CameraRigSnapshot value){cameraValue=value.value;mode=value.mode;return true;}
  bool focus_camera(const void*,Vec3,float){cameraValue=42;return true;}
  bool focus_camera_precise(const void*,const std::array<double,3>&,float){cameraValue=42;return true;}
  void clear_object_markers(const core::Context*){++clears;observed.clear();}
@@ -149,6 +152,12 @@ struct EditorState {
  std::uint64_t forestPreviewRevision{},forestPreviewContentHash{};
  std::optional<previewgrid::CameraRigSnapshot> forestProjectCamera,assetGenerationPreviousCamera;
  std::optional<previewgrid::CameraRigSnapshot> forestDesignCamera;
+ std::optional<previewgrid::CameraRigSnapshot> lodInspectionReturnCamera;
+ previewgrid::CameraMode viewportCameraMode{previewgrid::CameraMode::Editor};
+ bool planetaryStreamContinue{};
+ bool helpersVisible{}; // Isolate scene and forest markers from editor gizmos.
+ std::uint64_t planetaryStreamNextTick{};
+ std::uint32_t planetaryViewportHeight{720};
  std::optional<previewgrid::Camera> forestPlacementCamera;bool forestTerrainPainting{};
  std::optional<int>forestSurfacePending;int selectedEntityId{};
  bool sceneInteractionDirty{},planetaryInitialFramePending{};std::uint64_t planetaryInitialFrameGeneration{};
@@ -179,6 +188,8 @@ bool bind_plant_preview_material(EditorState&,std::vector<EditorEntity>&,const f
 bool editor_project_viewport_covered(const EditorState&s){return s.covered;}
 ACTUAL_INPUT_RESERVED
 void rebuild_editor_lighting(EditorState&){++lightingRebuilds;}
+void append_editor_translation_gizmo(std::vector<previewgrid::ObjectMarker>&,const EditorState&,
+ const EditorEntity&,const previewgrid::ObjectMarker&,const std::array<double,3>&){assert(false);}
 bool restore_editor_mesh_base_color(const core::Context*,EditorState&,EditorEntity&){++restores;return true;}
 void refresh_editor_planetary_body_inventory(EditorState&,const EditorEntity&){assert(false);}
 bool editor_seed_cameras_unchanged(const std::vector<EditorSceneSeedEntity>&,const std::vector<EditorSceneSeedEntity>&){assert(false);return false;}
@@ -375,7 +386,7 @@ int main(){
         roots=[ROOT/'Engine/modules',ROOT/'Engine/dep/EpochPlatformEngine/modules']
         found={}
         for folder in roots:
-            for path in folder.glob('*.ixx'):
+            for path in folder.rglob('*.ixx'):
                 match=re.search(r'^export module\s+([\w.:]+);',path.read_text(encoding='utf-8-sig'),re.M)
                 if match:found[match.group(1)]=path
         implementations=[ROOT/p for p in ('Engine/src/assets/texture/asset.texture_artifact.cpp','Engine/src/forest/forest.preview_mesh.cpp',

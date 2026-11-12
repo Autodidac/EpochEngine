@@ -16,7 +16,7 @@ OWNER = ROOT / "Engine/src/editor/application/editor.application_asset_browsing.
 
 def fixture():
     owner = OWNER.read_text(encoding="utf-8")
-    api = (ROOT / "Engine/modules/editor.project_textures.ixx").read_text(encoding="utf-8")
+    api = (ROOT / "Engine/modules/editor/editor.project_textures.ixx").read_text(encoding="utf-8")
     types = "\n".join(definition(api, "    struct " + name + " final", True) for name in (
         "TexturePreview", "TextureThumbnailPolicy", "TextureThumbnail"))
     thumbnail = definition((ROOT / "Engine/src/editor/editor.project_textures.cpp").read_text(encoding="utf-8"),
@@ -296,7 +296,7 @@ class AssetImageWorkflow(unittest.TestCase):
         roots = [ROOT / "Engine/modules", ROOT / "Engine/dep/EpochPlatformEngine/modules"]
         available = {}
         for folder in roots:
-            for path in folder.glob("*.ixx"):
+            for path in folder.rglob("*.ixx"):
                 match = re.search(r"^export module\s+([\w.:]+);", path.read_text(encoding="utf-8-sig"), re.M)
                 if match:
                     available[match.group(1)] = path

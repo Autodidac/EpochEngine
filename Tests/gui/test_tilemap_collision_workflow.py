@@ -1,5 +1,6 @@
 """Actual collision controller methods over real tile document/compiler/history."""
 from pathlib import Path
+from Tests.support.cpp import engine_module_source
 import hashlib
 import json
 import os
@@ -10,7 +11,7 @@ from Tests.build.test_opengl_sprite_stream import definition
 
 ROOT = Path(__file__).resolve().parents[2]
 OWNER = ROOT / "Engine/src/editor/editor.tilemap_workspace.cpp"
-API = ROOT / "Engine/modules/editor.tilemap_workspace.ixx"
+API = ROOT / "Engine/modules/editor/editor.tilemap_workspace.ixx"
 
 
 def fixture():
@@ -153,7 +154,7 @@ class TileMapCollisionWorkflow(unittest.TestCase):
         source = proof / "editor.tilemap_collision_contract.cpp"
         source.write_text(fixture(), encoding="utf-8")
         portable = ROOT / "Engine/dep/EpochGui"
-        modules = [ROOT / "Engine/modules" / name for name in (
+        modules = [engine_module_source(ROOT / "Engine/modules", name) for name in (
             "authoring.document.ixx", "authoring.tilemap.ixx", "asset.tilemap_artifact.ixx")]
         modules += [portable / "modules" / name for name in ("epoch.gui.ixx", "epoch.gui.tile_workspace.ixx")]
         implementations = [ROOT / path for path in (

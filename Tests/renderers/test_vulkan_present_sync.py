@@ -13,8 +13,8 @@ ROOT = Path(__file__).resolve().parents[2]
 
 class VulkanPresentSync(unittest.TestCase):
     def test_actual_allocator_cleanup_and_frame_submission(self):
-        commands = (ROOT / 'Engine/modules/vulkan.context_commands.ixx').read_text(encoding='utf-8')
-        swap = (ROOT / 'Engine/modules/vulkan.context_swapchain.ixx').read_text(encoding='utf-8')
+        commands = (ROOT / 'Engine/modules/vulkan/vulkan.context_commands.ixx').read_text(encoding='utf-8')
+        swap = (ROOT / 'Engine/modules/vulkan/vulkan.context_swapchain.ixx').read_text(encoding='utf-8')
         allocator = 'void Application::createPresentSyncObjects()' + commands.split('void Application::createPresentSyncObjects()',1)[1].split('    void Application::createSyncObjects()',1)[0]
         cleanup = 'void Application::cleanupSwapChain()' + swap.split('void Application::cleanupSwapChain()',1)[1].split('    void Application::recreateSwapChain()',1)[0]
         draw = 'void Application::drawFrame()' + commands.split('void Application::drawFrame()',1)[1].rsplit('} // namespace',1)[0]
@@ -53,7 +53,7 @@ class VulkanPresentSync(unittest.TestCase):
             self.assertTrue(scratch.resolve().is_relative_to(parent));shutil.rmtree(scratch)
 
     def test_production_recreation_orders_idle_cleanup_and_image_allocation(self):
-        source=(ROOT/'Engine/modules/vulkan.context_swapchain.ixx').read_text(encoding='utf-8')
+        source=(ROOT/'Engine/modules/vulkan/vulkan.context_swapchain.ixx').read_text(encoding='utf-8')
         recreation=source.split('void Application::recreateSwapChain()',1)[1]
         self.assertLess(recreation.index('device->waitIdle()'),recreation.index('cleanupSwapChain();'))
         self.assertLess(recreation.index('cleanupSwapChain();'),recreation.index('createSwapChain();'))

@@ -229,7 +229,7 @@ class SceneMeshCoordinates(unittest.TestCase):
         module_map = {}
         module_roots = [ROOT / "Engine/modules", ROOT / "Engine/dep/EpochPlatformEngine/modules"]
         for directory in module_roots:
-            for path in directory.glob("*.ixx"):
+            for path in directory.rglob("*.ixx"):
                 match = re.search(r"^export module\s+([\w.:]+);", path.read_text(encoding="utf-8-sig"), re.M)
                 if match:
                     module_map[match.group(1)] = path

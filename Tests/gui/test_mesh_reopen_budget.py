@@ -18,7 +18,7 @@ def consumer():
     owner=(folder/'editor.application_asset_browsing.inl').read_text(encoding='utf-8')
     transactions=(folder/'editor.application_scene_transactions.inl').read_text(encoding='utf-8')
     start=preview.index('            const auto meshBudget=',preview.index('        void publish_editor_preview_markers('))
-    end=preview.index('                if (!forestPainting && !restore_editor_mesh_base_color',start)
+    end=preview.index('                std::array<float, 3> previewPosition = entity.position;',start)
     load=preview[start:end]+'\n            }\n'
     mesh_cache='\n'.join(definition(preview, marker, marker.startswith('        struct ')) for marker in (
         '        struct EditorPreviewMeshCacheUsage',
@@ -71,6 +71,7 @@ struct EditorEntity{
  scene::SceneObjectId sceneObjectId{};std::string name,type,category;scene::Vec3 position{},rotation{},scale{1,1,1};bool visible{true},editorOnly{};
  std::optional<scene::SceneTextureMaterialSnapshot>textureMaterial;std::optional<scene::SceneMeshSnapshot>meshAsset;
  std::optional<std::array<double,3>>positionAnchor;std::optional<scene::SceneForestRegionInstance>forestRegion;std::optional<project_planetary::GeneratedMeshFrame>meshSnapshotFrame;
+ std::optional<scene::SceneTerrainAttachment>terrainAttachment;
  std::shared_ptr<const asset::mesh::Artifact>meshSnapshot;bool meshLoadAttempted{};
 };
 struct EditorState{
@@ -174,7 +175,7 @@ class MeshReopenBudget(unittest.TestCase):
         source=proof/'editor.mesh_reopen_contract.cpp';source.write_text(consumer(),encoding='utf-8')
         roots=[ROOT/'Engine/modules',ROOT/'Engine/dep/EpochPlatformEngine/modules'];modules={}
         for folder in roots:
-            for p in folder.glob('*.ixx'):
+            for p in folder.rglob('*.ixx'):
                 m=re.search(r'^export module\s+([\w.:]+);',p.read_text(encoding='utf-8-sig'),re.M)
                 if m:modules[m[1]]=p
         selected={};pending=['asset.mesh_artifact','scene.document','scene.serializer']

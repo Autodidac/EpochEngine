@@ -24,7 +24,7 @@ class DiscoverySelfTest(unittest.TestCase):
         report = ROOT / 'Artifacts/Reports/public-discovery-selftest-oct29' / str(time.time_ns())
         report.mkdir(parents=True)
         system = (ROOT / 'Engine/src/updater/updater.system.cpp').read_text(encoding='utf-8')
-        config = (ROOT / 'Engine/modules/updater.config.ixx').read_text(encoding='utf-8')
+        config = (ROOT / 'Engine/modules/updater/updater.config.ixx').read_text(encoding='utf-8')
         integrity = (ROOT / 'Engine/src/updater/implementation/updater.release_integrity.inl').read_text(encoding='utf-8')
         version = (ROOT / 'Engine/modules/epoch.version.ixx').read_text(encoding='utf-8')
         version = version[:version.index('    export std::string GetRuntimePlatformDisplayString(')] + '}\n'

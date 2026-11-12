@@ -9,7 +9,7 @@ class ManagerReadability(unittest.TestCase):
   model=(ROOT/'Engine/src/editor/application/editor.frame_model_manager.inl').read_text(encoding='utf-8')
   package=(ROOT/'Engine/src/editor/application/editor.frame_packages_about.inl').read_text(encoding='utf-8')
   creation=(ROOT/'Engine/src/editor/application/editor.application_packages_creation.inl').read_text(encoding='utf-8')
-  registry=(ROOT/'Engine/modules/package.registry.ixx').read_text(encoding='utf-8')
+  registry=(ROOT/'Engine/modules/package/package.registry.ixx').read_text(encoding='utf-8')
   readiness=definition(creation,'        [[nodiscard]] bool builtin_project_package_ready(')
   ids='\n'.join(next(line.strip() for line in registry.splitlines() if 'inline constexpr std::string_view '+name+' =' in line)
     for name in ('kEngineForestFactoryPackageId','kEngineArcadePackageId'))

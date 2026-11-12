@@ -61,7 +61,7 @@ class ProjectBuildTranscripts(unittest.TestCase):
         scene = (ROOT / "Engine/src/editor/editor.scene.cpp").read_text(encoding="utf-8")
         runtime = (ROOT / "Engine/src/editor/application/editor.application_project_runtime.inl").read_text(encoding="utf-8")
         paths = (ROOT / "Engine/src/editor/application/editor.application_runtime_source.inl").read_text(encoding="utf-8")
-        core = (ROOT / "Engine/modules/editor.core.ixx").read_text(encoding="utf-8")
+        core = (ROOT / "Engine/modules/editor/editor.core.ixx").read_text(encoding="utf-8")
         session = (ROOT / "Engine/src/editor/application/editor.application_context_session.inl").read_text(encoding="utf-8")
         lifecycle = (ROOT / "Engine/src/editor/application/editor.application_context_lifecycle.inl").read_text(encoding="utf-8")
         common_stop = definition(session, "        void request_editor_task_session_stop(")

@@ -23,8 +23,8 @@ class ProjectRuntimePresentation(unittest.TestCase):
         paths = [APPLICATION / name for name in ("editor.application_scripting_renderers.inl",
             "editor.application_project_runtime.inl", "editor.frame_viewport.inl")]
         renderer, runtime, viewport = [p.read_text(encoding="utf-8") for p in paths]
-        capability = (ROOT / "Engine/modules/capability.profile.ixx").read_text(encoding="utf-8")
-        api = (ROOT / "Engine/modules/gui.engine.ixx").read_text(encoding="utf-8")
+        capability = (ROOT / "Engine/modules/capability/capability.profile.ixx").read_text(encoding="utf-8")
+        api = (ROOT / "Engine/modules/gui/gui.engine.ixx").read_text(encoding="utf-8")
         types = "\n".join(definition(capability, marker, True) for marker in (
             "    enum class BackendFamily", "    enum class Tier", "    enum class Feature",
             "    enum class MatchFailure", "    enum class AdmissionStatus"))

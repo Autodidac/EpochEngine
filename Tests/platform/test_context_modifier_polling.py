@@ -13,7 +13,7 @@ from Tools.source.owned_source_text import definition
 
 
 ROOT = Path(__file__).resolve().parents[2]
-OWNERS = ("Engine/modules/input.engine.ixx", "Engine/modules/core.context.ixx")
+OWNERS = ("Engine/modules/input/input.engine.ixx", "Engine/modules/core/core.context.ixx")
 
 
 class ContextModifierPolling(unittest.TestCase):

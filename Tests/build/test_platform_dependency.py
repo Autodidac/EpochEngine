@@ -12,14 +12,14 @@ DEP = ROOT/'Engine/dep/EpochPlatformEngine'
 class PlatformDependencyBoundary(unittest.TestCase):
     def test_module_import_closure_has_one_owner(self):
         modules = {}
-        for path in (DEP/'modules').glob('*.ixx'):
+        for path in (DEP/'modules').rglob('*.ixx'):
             source = read_owned_source(path, encoding='utf-8')
             declared = re.search(r'^export module\s+([^;]+);', source, re.M)
             self.assertIsNotNone(declared, str(path))
             name = declared.group(1)
             self.assertEqual(path.stem, name.replace(':', '_'))
             self.assertNotIn(name, modules)
-            self.assertFalse((ROOT/'Engine/modules'/path.name).exists(), name)
+            self.assertFalse(any((ROOT/'Engine/modules').rglob(path.name)), name)
             modules[name] = source
         for required in ('core.env', 'core.log', 'core.time', 'perf.tier', 'perf.select',
                          'platform.capabilities', 'platform.budgets', 'platform.window',
@@ -30,7 +30,7 @@ class PlatformDependencyBoundary(unittest.TestCase):
                 self.assertTrue(imported in modules or imported == 'std', (name, imported))
 
     def test_owned_quoted_includes_do_not_reach_engine_implementation(self):
-        owners = [*(DEP/'modules').glob('*.ixx'), *(DEP/'src').rglob('*.cpp'),
+        owners = [*(DEP/'modules').rglob('*.ixx'), *(DEP/'src').rglob('*.cpp'),
                   *(DEP/'src').rglob('*.hpp'), *(DEP/'include').glob('*.hpp'),
                   *(DEP/'include').glob('*.h')]
         for path in owners:
@@ -46,13 +46,13 @@ class PlatformDependencyBoundary(unittest.TestCase):
         project = ET.parse(DEP/'EpochPlatformEngine.vcxproj')
         compiled = [item.attrib['Include'].replace('\\', '/') for item in project.iter()
                     if item.tag.rsplit('}', 1)[-1] == 'ClCompile' and 'Include' in item.attrib]
-        for path in (DEP/'modules').glob('*.ixx'):
+        for path in (DEP/'modules').rglob('*.ixx'):
             self.assertEqual(compiled.count('modules/'+path.name), 1, path.name)
         self.assertEqual(compiled.count('src/core/core.env.cpp'), 1)
         self.assertNotIn('src/platform/platform.entry.cpp', compiled)
         self.assertFalse((ROOT/'Engine/src/core/core.env.cpp').exists())
         shared = read_owned_source(ROOT/'Engine/Engine.vcxitems', encoding='utf-8')
-        for path in (DEP/'modules').glob('*.ixx'):
+        for path in (DEP/'modules').rglob('*.ixx'):
             self.assertNotIn('modules\\'+path.name+'"', shared, path.name)
 
     def test_native_entry_is_opt_in_and_cxx23_is_minimum(self):

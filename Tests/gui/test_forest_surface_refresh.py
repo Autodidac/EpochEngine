@@ -39,7 +39,7 @@ class ForestSurfaceRefresh(unittest.TestCase):
             '        [[nodiscard]] scene::SceneObjectSnapshot editor_entity_snapshot(',
             '        [[nodiscard]] bool apply_editor_scene_transaction('))
         camera = (ROOT / 'Engine/src/render/render.preview_camera.cpp').read_text(encoding='utf-8')
-        transform = definition((ROOT / 'Engine/modules/render.preview_grid.ixx').read_text(encoding='utf-8'),
+        transform = definition((ROOT / 'Engine/modules/render/render.preview_grid.ixx').read_text(encoding='utf-8'),
                                '    export struct PreciseMeshTransform final', True).replace('export ', '')
         transform += '\n' + '\n'.join(definition(camera, marker) for marker in (
             '    [[nodiscard]] bool valid_precise_mesh_transform(',
@@ -422,7 +422,7 @@ SurfaceBatchResult query_surfaces(const std::filesystem::path&,const SurfaceBatc
         (report / 'provider_ports.hpp').write_text(port_header, encoding='utf-8')
         (report / 'provider.cpp').write_text(provider, encoding='utf-8')
         modules = {}
-        for path in (ROOT / 'Engine/modules').glob('*.ixx'):
+        for path in (ROOT / 'Engine/modules').rglob('*.ixx'):
             match = re.search(r'^export module\s+([\w.:]+);', path.read_text(encoding='utf-8-sig'), re.M)
             if match:
                 modules[match.group(1)] = path

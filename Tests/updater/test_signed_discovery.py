@@ -16,7 +16,7 @@ class SignedDiscovery(unittest.TestCase):
         parser=source[:source.index('        [[nodiscard]] inline std::optional<std::vector<unsigned char>>')]
         admission=definition(source,'[[nodiscard]] inline std::optional<std::string> verified_release_integrity_payload(')
         code=(ROOT/'Tests/updater/updater.signed_discovery_contract.cpp').read_text().replace('PRODUCTION_PARSER',parser).replace('PRODUCTION_ADMISSION',admission)
-        config=(ROOT/'Engine/modules/updater.config.ixx').read_text(encoding='utf-8')
+        config=(ROOT/'Engine/modules/updater/updater.config.ixx').read_text(encoding='utf-8')
         url=definition(config, 'export inline std::string PROJECT_RELEASE_INTEGRITY_URL(').replace('export ', '')
         policy='inline constexpr bool PROJECT_PACKAGED_UPDATES_ENABLED =' + config.split('export inline constexpr bool PROJECT_PACKAGED_UPDATES_ENABLED =',1)[1].split(';',1)[0] + ';'
         policies=''

@@ -110,7 +110,7 @@ class ProjectCloseCamera(unittest.TestCase):
         source=report/'editor.project_close_contract.cpp';source.write_text(consumer(),encoding='utf-8')
         roots=[ROOT/'Engine/modules',ROOT/'Engine/dep/EpochPlatformEngine/modules'];modules={}
         for folder in roots:
-            for path in folder.glob('*.ixx'):
+            for path in folder.rglob('*.ixx'):
                 match=re.search(r'^export module\s+([\w.:]+);',path.read_text(encoding='utf-8-sig'),re.M)
                 if match:modules[match[1]]=path
         selected={};pending=['render.preview_grid','authoring.texture_detail']

@@ -235,7 +235,7 @@ class TileMapGlobalHistory(unittest.TestCase):
         source.write_text(fixture(), encoding="utf-8")
         available = {}
         for directory in (ROOT / "Engine/modules", ROOT / "Engine/dep/EpochPlatformEngine/modules"):
-            for path in directory.glob("*.ixx"):
+            for path in directory.rglob("*.ixx"):
                 match = re.search(r"^export module\s+([\w.:]+);", path.read_text(encoding="utf-8-sig"), re.M)
                 if match:
                     available[match.group(1)] = path

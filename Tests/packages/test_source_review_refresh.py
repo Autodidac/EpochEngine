@@ -1,5 +1,6 @@
 """Real immutable source discovery and asynchronous Editor review admission; CPU only."""
 from pathlib import Path
+from Tests.support.cpp import engine_module_source
 import hashlib
 import json
 import os
@@ -226,7 +227,7 @@ class SourceReviewRefresh(unittest.TestCase):
         water_source.write_text(water_consumer(), encoding="utf-8")
         durable_source = proof / "project.water_requirement_contract.cpp"
         durable_source.write_text(durable_consumer(), encoding="utf-8")
-        modules = [ROOT / "Engine/modules" / (name+".ixx") for name in
+        modules = [engine_module_source(ROOT / "Engine/modules", name + ".ixx") for name in
                    ("core.sha256", "package.registry", "package.catalog", "platform.filesystem", "package.source_install", "asset.texture_artifact")]
         implementation = [ROOT / "Engine/src/packages" / name for name in ("package.catalog.cpp", "package.source_install.cpp")]
         implementation.append(ROOT/'Engine/src/assets/texture/asset.texture_artifact.cpp')
@@ -240,7 +241,7 @@ target_link_libraries({name} PRIVATE winhttp)
 add_test(NAME actual_{name} COMMAND {name})
 set_tests_properties(actual_{name} PROPERTIES TIMEOUT 20)
 '''
-        durable_modules = modules + [ROOT / "Engine/modules" / (name + ".ixx") for name in (
+        durable_modules = modules + [engine_module_source(ROOT / "Engine/modules", name + ".ixx") for name in (
             "project.planetary", "asset.cloud_volume", "project.planetary_snapshot", "water.wave", "asset.mesh_artifact", "platform.child_process", "platform.work_admission")]
         durable_modules.append(ROOT / "Engine/dep/EpochPlatformEngine/modules/core.env.ixx")
         durable_implementation = implementation + [ROOT / name for name in (

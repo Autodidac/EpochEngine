@@ -334,7 +334,7 @@ class ExternalCameraFrame(unittest.TestCase):
         source.write_text(fixture(), encoding="utf-8")
         module_map = {}
         for owner in (ROOT / "Engine/modules", ROOT / "Engine/dep/EpochPlatformEngine/modules"):
-            for path in owner.glob("*.ixx"):
+            for path in owner.rglob("*.ixx"):
                 match = re.search(r"^export module\s+([\w.:]+);", path.read_text(encoding="utf-8-sig"), re.M)
                 if match:
                     self.assertNotIn(match.group(1), module_map, "Duplicate module owner")

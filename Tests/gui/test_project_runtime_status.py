@@ -15,7 +15,7 @@ class ProjectRuntimeStatus(unittest.TestCase):
     def test_actual_launch_settlement_and_assistant_status_debug_release(self):
         owner = APPLICATION / "editor.frame_project_runtime.inl"
         runtime_owner = APPLICATION / "editor.application_project_runtime.inl"
-        lifecycle_owner = ROOT / "Engine/modules/project.lifecycle.ixx"
+        lifecycle_owner = ROOT / "Engine/modules/project/project.lifecycle.ixx"
         source = owner.read_text(encoding="utf-8")
         runtime = runtime_owner.read_text(encoding="utf-8")
         lifecycle = lifecycle_owner.read_text(encoding="utf-8")

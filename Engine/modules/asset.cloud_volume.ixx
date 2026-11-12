@@ -90,24 +90,29 @@ export namespace epochengine::asset::cloud_volume
         Point coordinate{(cosine*local[0]+sine*local[2])/recipe.horizontal_scale_meters,
             local[1]/recipe.horizontal_scale_meters,(-sine*local[0]+cosine*local[2])/recipe.horizontal_scale_meters};
         const auto footprint=footprint_meters/recipe.horizontal_scale_meters;
-        Point regional{},regionalDetail{},bladeDetail{};
-        for(unsigned axis=0;axis<3u;++axis)
-        {
-            regional[axis]=coordinate[axis]/32.0;
-            regionalDetail[axis]=coordinate[axis]/16.0+9.0;
-            bladeDetail[axis]=coordinate[axis]*2.0+17.0;
-        }
-        // Two regional samples form weather systems; two local samples retain
-        // the cumulus detail. The four-noise-evaluation budget is unchanged.
-        const auto weather=0.7*detail::filtered_noise(regional,recipe.seed^0x57454154u,footprint/32.0)
-            +0.3*detail::filtered_noise(regionalDetail,recipe.seed^0x48455231u,footprint/16.0);
-        const auto cover=detail::smooth(std::clamp((weather-(1.0-double(recipe.coverage)))/0.20,0.0,1.0));
+        const Point regional{(coordinate[0]+0.55*coordinate[1])/76.0,
+            coordinate[1]/36.0,(coordinate[2]-0.35*coordinate[1])/76.0};
+        const auto front=detail::filtered_noise(regional,recipe.seed^0x57454154u,footprint/36.0);
+        // Advect finer weather through the broad fronts and vary the direction
+        // of the shear by latitude. Low-frequency shapes stay visible in orbit.
+        const auto shear=(front-0.5)*1.8;
+        const Point regionalDetail{(coordinate[0]-0.3*coordinate[2])/29.0+shear+0.65*sine,
+            coordinate[1]/18.0+9.0,(coordinate[2]+0.3*coordinate[0])/29.0-shear+0.65*cosine};
+        const auto bands=detail::filtered_noise(regionalDetail,recipe.seed^0x48455231u,footprint/18.0);
+        const auto weather=0.72*front+0.28*bands;
+        const auto cover=detail::smooth(std::clamp((weather-(0.91-double(recipe.coverage)))/0.40,0.0,1.0));
         if(cover==0.0)return 0.0;
-        const auto shape=(2.0*detail::filtered_noise(coordinate,recipe.seed,footprint)
-            +detail::filtered_noise(bladeDetail,recipe.seed+1013u,footprint*2.0))/3.0;
-        const auto detail_mask=std::clamp((shape-0.25)/0.50,0.0,1.0);
-        const auto lower=detail::smooth(std::clamp(height/0.20,0.0,1.0));
-        const auto upper=1.0-detail::smooth(std::clamp((height-0.55)/0.45,0.0,1.0));
+        Point billows{};
+        for(unsigned axis=0;axis<3u;++axis)
+            billows[axis]=coordinate[axis]*2.0+17.0;
+        const auto shape=0.72*detail::filtered_noise(coordinate,recipe.seed,footprint)
+            +0.28*detail::filtered_noise(billows,recipe.seed+1013u,footprint*2.0);
+        // Dense fronts stay connected while their edges and tops break into
+        // individual billows. Stronger systems also reach higher in the shell.
+        const auto detail_mask=std::clamp(0.25+shape+0.25*cover-0.30*height,0.0,1.0);
+        const auto lower=detail::smooth(std::clamp(height/0.18,0.0,1.0));
+        const auto top=0.38+0.33*cover;
+        const auto upper=1.0-detail::smooth(std::clamp((height-top)/(1.0-top),0.0,1.0));
         return cover*detail_mask*lower*upper;
     }
     struct Interval final {double begin{},end{};};

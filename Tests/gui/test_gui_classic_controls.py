@@ -31,7 +31,7 @@ class ClassicControls(unittest.TestCase):
             '        static void draw_contrast_text('))
         button_start=buttons.index('    static bool button_with_state(')
         button = buttons[button_start:buttons.index('\n    bool button(',button_start)]
-        gui_api=(ROOT/'Engine/modules/gui.engine.ixx').read_text(encoding='utf-8')
+        gui_api=(ROOT/'Engine/modules/gui/gui.engine.ixx').read_text(encoding='utf-8')
         icon_api=definition(gui_api,'    export enum class ButtonIcon').replace('export ','',1)+';'
         icon_paint=definition(buttons,'    static void draw_button_icon(')+definition(buttons,'    static void draw_button_tooltip(')
         palette = definition(source, '            struct PaletteSprites', True)

@@ -1,5 +1,6 @@
 """Compile the actual Plant Lab reopen/ensure/publish helpers with real Forest owners."""
 from pathlib import Path
+from Tests.support.cpp import engine_module_source
 import hashlib
 import json
 import os
@@ -9,7 +10,7 @@ import sys
 import tempfile
 import unittest
 
-ROOT = next(p for p in Path(__file__).resolve().parents if (p/"Engine/modules/project.forest_library.ixx").is_file())
+ROOT = next(p for p in Path(__file__).resolve().parents if (p/"Engine/modules/project/project.forest_library.ixx").is_file())
 sys.path.insert(0,str(ROOT))
 from Tests.build.test_opengl_sprite_stream import definition
 from Tests.packages.test_forest_materialized_codec import MODULES
@@ -339,7 +340,7 @@ int main(int argc,char**argv){return argc==2||argc==3?epochengine::run(std::file
                 target = saved_input / artifact.relative_to(saved_project)
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(artifact, target)
-        modules="\n".join('    "'+(engine/"modules"/(name+".ixx")).as_posix()+'"' for name in MODULES)
+        modules="\n".join('    "'+(engine_module_source(engine/"modules", name + ".ixx")).as_posix()+'"' for name in MODULES)
         (src/"CMakeLists.txt").write_text(f'''cmake_minimum_required(VERSION 3.28)
 project(EpochForestReopenSafety LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 23)
@@ -367,7 +368,7 @@ target_link_libraries(forest_reopen_safety PRIVATE reopen_owners)
                 results[config]=(case/"result.txt").read_text(encoding="utf-8").strip()
                 if saved_input:
                     saved_results[config]=(case/"saved-project-result.txt").read_text(encoding="utf-8").strip()
-            record={"scope":"actual3Editorhelpers+existingProjectManifestParser/identityInspector+actualForestLibrary/filesystem; no graphics/models","configurations":results,"owner":str(owner.relative_to(ROOT)),"helper_sha256":{name:hashlib.sha256(body.encode()).hexdigest()for name,body in zip(markers,bodies)},"source_sha256":{str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest()for p in [owner,engine/"src/editor/application/editor.application_packages_creation.inl",engine/"src/editor/editor.scene.cpp",engine/"modules/editor.core.ixx",engine/"src/editor/implementation/editor.project_registry.inl",engine/"src/project/project.forest_library.cpp",*[engine/"modules"/(name+".ixx")for name in MODULES]]}}
+            record={"scope":"actual3Editorhelpers+existingProjectManifestParser/identityInspector+actualForestLibrary/filesystem; no graphics/models","configurations":results,"owner":str(owner.relative_to(ROOT)),"helper_sha256":{name:hashlib.sha256(body.encode()).hexdigest()for name,body in zip(markers,bodies)},"source_sha256":{str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest()for p in [owner,engine/"src/editor/application/editor.application_packages_creation.inl",engine/"src/editor/editor.scene.cpp",engine/"modules/editor/editor.core.ixx",engine/"src/editor/implementation/editor.project_registry.inl",engine/"src/project/project.forest_library.cpp",*[engine_module_source(engine/"modules", name + ".ixx")for name in MODULES]]}}
             record["saved_project_compiler_upgrade"]={"configurations":saved_results,"input_sha256":{str(p.relative_to(saved_input)):hashlib.sha256(p.read_bytes()).hexdigest()for p in saved_input.rglob("*")if p.is_file()}if saved_input else {}}
             (parent/"forest-reopen-safety-last.json").write_text(json.dumps(record,indent=2)+"\n",encoding="utf-8")
             success=True

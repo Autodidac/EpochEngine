@@ -8,7 +8,7 @@ ROOT=Path(__file__).resolve().parents[2]
 
 class TimelineTransport(unittest.TestCase):
  def test_actual_fast_icons_bounds_direction_and_theme_ink(self):
-  api=(ROOT/'Engine/modules/gui.engine.ixx').read_text(encoding='utf-8')
+  api=(ROOT/'Engine/modules/gui/gui.engine.ixx').read_text(encoding='utf-8')
   paint=(ROOT/'Engine/src/epochgui/controls/gui.buttons_images.inl').read_text(encoding='utf-8')
   code=r'''
 #include <algorithm>
@@ -46,15 +46,15 @@ int main(){
   (proof/'result.json').write_text(json.dumps({'passed':True,'results':results,'scope':'Actual icon enum and vector paint owner: two directions, dark/light contrast ink, exact bounds, distinct start/reverse glyphs; normal failure returns, no native renderer.'},indent=2),encoding='utf-8')
 
  def test_real_transport_and_editor_commands_debug_release(self):
-  module=(ROOT/'Engine/modules/timeline.system.ixx').read_text(encoding='utf-8')
+  module=(ROOT/'Engine/modules/timeline/timeline.system.ixx').read_text(encoding='utf-8')
   clock=(ROOT/'Engine/dep/EpochPlatformEngine/modules/core.time.ixx').read_text(encoding='utf-8')
-  core=(ROOT/'Engine/modules/editor.core.ixx').read_text(encoding='utf-8')
+  core=(ROOT/'Engine/modules/editor/editor.core.ixx').read_text(encoding='utf-8')
   inspector=(ROOT/'Engine/src/editor/application/editor.frame_inspector.inl').read_text(encoding='utf-8')
   diagnostics=(ROOT/'Engine/src/editor/application/editor.application_runtime_diagnostics.inl').read_text(encoding='utf-8')
   bootstrap=(ROOT/'Engine/src/editor/application/editor.frame_bootstrap.inl').read_text(encoding='utf-8')
   viewport=(ROOT/'Engine/src/editor/application/editor.frame_viewport.inl').read_text(encoding='utf-8')
   chrome=(ROOT/'Engine/src/epochgui/controls/gui.navigation_chrome.inl').read_text(encoding='utf-8')
-  gui_api=(ROOT/'Engine/modules/gui.engine.ixx').read_text(encoding='utf-8')
+  gui_api=(ROOT/'Engine/modules/gui/gui.engine.ixx').read_text(encoding='utf-8')
   self.assertEqual(bootstrap.count('advance_editor_timeline(editor);'),1)
   self.assertLess(bootstrap.index('advance_editor_timeline(editor);'),bootstrap.index('pump_script_build(editor);'))
   self.assertNotIn('sync_to_simulation(',inspector+viewport)

@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 class CompanionWindowActivation(unittest.TestCase):
     def test_route_uses_live_window_and_its_owner_without_creating_a_context(self):
-        module = (ROOT/'Engine/modules/context.multiplexer.ixx').read_text(encoding='utf-8')
+        module = (ROOT/'Engine/modules/context/context.multiplexer.ixx').read_text(encoding='utf-8')
         request = definition(module, '    export struct DetachedContextWindowRequest', True).replace('export ', '', 1)
         linux = definition(module, '        bool OpenDetachedContextWindow(const DetachedContextWindowRequest&)')
         host = (ROOT/'Engine/src/renderers/host/host.context_win.cpp').read_text(encoding='utf-8')
@@ -24,7 +24,7 @@ class CompanionWindowActivation(unittest.TestCase):
         legacy = (ROOT/'Engine/src/epoch/implementation/epoch.session_editor_launcher.inl').read_text(encoding='utf-8')
         forwarding = [definition(source, '                            for (const auto& route : editor_frame.companion_pane_activations)')
                       for source in (runtime, legacy)]
-        core = (ROOT/'Engine/modules/editor.core.ixx').read_text(encoding='utf-8')
+        core = (ROOT/'Engine/modules/editor/editor.core.ixx').read_text(encoding='utf-8')
         frame_types = '\n'.join(definition(core, marker, True).replace('export ', '', 1)
                                 for marker in ('    export enum class EditorCommand', '    export struct EditorFrameResult'))
         source = r'''

@@ -26,7 +26,7 @@ def fixture():
     review=definition(state,'            struct ModelImportReview final',True)
     target=definition(state,'            struct ModelShorelineTarget final',True)
     pose=definition(owner,'        struct ModelSurfacePose final',True)
-    forest_surface=(ROOT/'Engine/modules/forest.preview_mesh.ixx').read_text(encoding='utf-8')
+    forest_surface=(ROOT/'Engine/modules/forest/forest.preview_mesh.ixx').read_text(encoding='utf-8')
     surface_rotation=definition(forest_surface,'    [[nodiscard]] inline std::optional<std::array<float,3>> surface_rotation(')
     functions='\n'.join(definition(transactions,marker) for marker in (
         '        [[nodiscard]] bool project_scene_document_into_editor(',
@@ -467,7 +467,7 @@ class ModelProjectImport(unittest.TestCase):
         proof.mkdir(parents=True);source=proof/'editor.model_import_contract.cpp';source.write_text(fixture(),encoding='utf-8')
         roots=[ROOT/'Engine/modules',ROOT/'Engine/dep/EpochPlatformEngine/modules'];module_map={}
         for folder in roots:
-            for path in folder.glob('*.ixx'):
+            for path in folder.rglob('*.ixx'):
                 text=path.read_text(encoding='utf-8-sig');match=re.search(r'^export module\s+([\w.:]+);',text,re.M)
                 if match:module_map[match.group(1)]=path
         pending=['asset.model_import','asset.mesh_artifact','asset.texture_import','core.sha256','platform.filesystem','project.asset_registry','project.texture_library','project.planetary_runtime','scene.document','scene.serializer','scene.persistence','scene.runtime','scene.surface_alignment','editor.project_textures','render.preview_grid','authoring.texture_detail'];selected={}

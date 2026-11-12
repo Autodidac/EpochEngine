@@ -166,7 +166,7 @@ int main(){
   report=ROOT/'Artifacts/Reports/scene-object-drag-oct29'/str(time.time_ns());report.mkdir(parents=True)
   (report/'consumer.cpp').write_text(code,encoding='utf-8')
   module_map={}
-  for p in (ROOT/'Engine/modules').glob('*.ixx'):
+  for p in (ROOT/'Engine/modules').rglob('*.ixx'):
    match=re.search(r'^export module\s+([\w.]+);',p.read_text(encoding='utf-8-sig'),re.M)
    if match:module_map[match[1]]=p
   pending=['scene.document','scene.snapshot','render.math'];selected={}

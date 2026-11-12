@@ -1,7 +1,7 @@
 # Epoch - Creative Software And Game Engine
 
 <p align="center">
-  <a href="https://github.com/Autodidac/EpochEngine/releases/tag/v0.91.07"><img src="https://img.shields.io/badge/Current_Public_Source-v0.91.07-1F7A4C?style=for-the-badge" alt="Current Public source v0.91.07" /></a>
+  <a href="https://github.com/Autodidac/EpochEngine/releases/tag/v0.91.09"><img src="https://img.shields.io/badge/Current_Public_Source-v0.91.09-1F7A4C?style=for-the-badge" alt="Current Public source v0.91.09" /></a>
   <a href="https://github.com/Autodidac/EpochEngine/releases/latest"><img src="https://img.shields.io/github/v/release/Autodidac/EpochEngine?label=Published%20Windows%2FLinux%20runtime&amp;style=for-the-badge&amp;color=2C6A8A" alt="Published Windows/Linux runtime" /></a>
 </p>
 
@@ -56,7 +56,7 @@ actions before applying them.
 
 ## Current Snapshot
 
-This source checkpoint is [**0.91.07**](https://github.com/Autodidac/EpochEngine/releases/tag/v0.91.07).
+This source checkpoint is [**0.91.09**](https://github.com/Autodidac/EpochEngine/releases/tag/v0.91.09).
 The [latest stable runtime release](https://github.com/Autodidac/EpochEngine/releases/latest)
 contains the Windows and Linux packages and their validation results.
 Public releases and source updates use this GitHub repository without account

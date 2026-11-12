@@ -22,7 +22,7 @@ class RuntimeMeshControl(unittest.TestCase):
                 self.assertIn('initialize_inherited_runtime_control(argc,argv)',prior)
                 self.assertIn('return',prior)
         self.assertIn('else if (key == "--owned-runtime-control"sv)',
-                      (ROOT/'Engine/modules/core.commandline.ixx').read_text(encoding='utf-8'))
+                      (ROOT/'Engine/modules/core/core.commandline.ixx').read_text(encoding='utf-8'))
 
     def test_actual_supervisor_private_command_and_ack(self):
         if os.name!='nt':self.skipTest('Windows exact executable launch admission')
@@ -218,7 +218,7 @@ target_compile_features(control PRIVATE cxx_std_23)
 target_compile_options(control PRIVATE /utf-8 /EHsc /Z7)
 target_link_libraries(control PRIVATE bcrypt userenv advapi32)
 target_sources(control PRIVATE FILE_SET CXX_MODULES BASE_DIRS "{(ROOT/'Engine/modules').as_posix()}" FILES
- "{(ROOT/'Engine/modules/platform.child_process.ixx').as_posix()}" "{(ROOT/'Engine/modules/core.sha256.ixx').as_posix()}")
+ "{(ROOT/'Engine/modules/platform/platform.child_process.ixx').as_posix()}" "{(ROOT/'Engine/modules/core/core.sha256.ixx').as_posix()}")
 enable_testing()
 add_test(NAME control COMMAND control "${{CMAKE_CURRENT_BINARY_DIR}}/case-$<CONFIG>-{time.time_ns()}")
 """,encoding='utf-8')
@@ -231,4 +231,4 @@ add_test(NAME control COMMAND control "${{CMAKE_CURRENT_BINARY_DIR}}/case-$<CONF
             (proof/f'lane-{number}.log').write_text(run.stdout+run.stderr,encoding='utf-8')
             results.append(dict(command=command,exit=run.returncode))
             self.assertEqual(run.returncode,0,(run.stdout+run.stderr)[-8000:])
-        (proof/'result.json').write_text(json.dumps(dict(native=False,commands=results,sources={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in (ROOT/'Engine/modules/platform.child_process.ixx',ROOT/'Engine/src/platform/platform.child_process.cpp')}),indent=2),encoding='utf-8')
+        (proof/'result.json').write_text(json.dumps(dict(native=False,commands=results,sources={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in (ROOT/'Engine/modules/platform/platform.child_process.ixx',ROOT/'Engine/src/platform/platform.child_process.cpp')}),indent=2),encoding='utf-8')

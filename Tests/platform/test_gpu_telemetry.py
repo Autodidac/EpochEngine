@@ -12,13 +12,13 @@ from Tests.support.cpp import msvc_2022_root
 
 ROOT = Path(__file__).resolve().parents[2]
 OWNER = ROOT / "Engine/src/platform/platform.work_admission.cpp"
-MODULE = ROOT / "Engine/modules/platform.work_admission.ixx"
+MODULE = ROOT / "Engine/modules/platform/platform.work_admission.ixx"
 BOOTSTRAP = ROOT / "Engine/src/editor/application/editor.frame_bootstrap.inl"
 
 
 def consumer():
     source = OWNER.read_text(encoding="utf-8")
-    gui = (ROOT / "Engine/modules/gui.engine.ixx").read_text(encoding="utf-8")
+    gui = (ROOT / "Engine/modules/gui/gui.engine.ixx").read_text(encoding="utf-8")
     status_type = definition(gui, "    export struct StatusStripItem", True).replace("export ", "")
     tone = definition(gui, "    export enum class SemanticTone", True).replace("export ", "")
     backend = "\n".join(definition(source, marker, marker.endswith(" final")) for marker in (
@@ -43,6 +43,7 @@ PREFIX = r'''
 #include <array>
 #include <bit>
 #include <cmath>
+#include <cstdio>
 #include <cstdint>
 #include <cstring>
 // MSVC's template-instantiation C4702 in the existing formatter's terminal
@@ -85,7 +86,7 @@ namespace platform=epochengine::platform;
 namespace epochengine {
 std::string GetEngineVersionString(){return "test";}
 }
-#define CHECK(condition) do {if(!(condition))return __LINE__;}while(false)
+#define CHECK(condition) do {if(!(condition)){std::fprintf(stderr,"GPU telemetry fixture line %d: %s\n",__LINE__,#condition);return __LINE__;}}while(false)
 '''
 
 WIDTH_PORT = r'''
@@ -181,7 +182,7 @@ PRESENTATION_CHECKS = r'''
  CHECK(toolbarStatusItems[2].compact_width_reference=="G 100%"&&toolbarStatusItems[3].minimal_width_reference=="V 100%");
  CHECK(toolbarStatusItems[2].compact_label=="G "+toolbarGpuPercent&&toolbarStatusItems[2].minimal_label==toolbarStatusItems[2].compact_label);
  CHECK(toolbarStatusItems[3].compact_label=="V "+toolbarVramPercent&&toolbarStatusItems[3].minimal_label==toolbarStatusItems[3].compact_label);
- CHECK(toolbarStatusItems[6].label=="60 FPS");
+ CHECK(toolbarStatusItems[6].label=="Editor 60 FPS"&&toolbarStatusItems[6].compact_label=="60 FPS");
  CHECK(toolbarStatusItems[7].label.find("Queued")!=std::string_view::npos);
  CHECK(toolbarStatusItems[8].label=="OpenGL");
  CHECK(toolbarStatusItems[2].tooltip.find("process")!=std::string_view::npos);
@@ -309,7 +310,7 @@ target_compile_definitions(gpu_ports PRIVATE {flag})
             env[key] = str(tmp)
         invocations = []
         owners = [OWNER, MODULE, BOOTSTRAP, ROOT/"Engine/include/engine.config.hpp", ROOT/"Engine/CMakeLists.txt",
-                  ROOT/"Engine/src/editor/systems/editor.systems_panel.cpp", ROOT/"Engine/modules/editor.systems_panel.ixx",
+                  ROOT/"Engine/src/editor/systems/editor.systems_panel.cpp", ROOT/"Engine/modules/editor/editor.systems_panel.ixx",
                   ROOT/"Tools/MSVC/EpochDiagnostics.props", Path(__file__)]
         hashes = lambda: {str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest() for path in owners}
         before = hashes()

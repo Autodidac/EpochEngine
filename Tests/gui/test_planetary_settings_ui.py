@@ -14,7 +14,7 @@ ROOT=Path(__file__).resolve().parents[2]
 
 def fixture():
     view=(ROOT/'Engine/src/editor/application/editor.frame_viewport.inl').read_text(encoding='utf-8')
-    module=(ROOT/'Engine/modules/project.planetary.ixx').read_text(encoding='utf-8')
+    module=(ROOT/'Engine/modules/project/project.planetary.ixx').read_text(encoding='utf-8')
     mesh=(ROOT/'Engine/modules/asset.mesh_artifact.ixx').read_text(encoding='utf-8')
     snapshot=(ROOT/'Engine/modules/project.planetary_snapshot.ixx').read_text(encoding='utf-8')
     snapshot_types='\n'.join(definition(snapshot,'    struct '+name+' final',True)

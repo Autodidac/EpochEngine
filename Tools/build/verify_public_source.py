@@ -302,7 +302,7 @@ def private_native_coding_api_matches(name: str, text: str):
     yield from PRIVATE_NATIVE_CODING_API.finditer(text)
     # Engine-wide task/queue APIs retain their architecture. Only this private
     # native agent owner loses unqualified run-task/event transport identities.
-    if name.casefold().startswith(('engine/src/ai/', 'engine/modules/ai.')):
+    if name.casefold().startswith(('engine/src/ai/', 'engine/modules/ai/', 'engine/modules/ai.')):
         yield from PRIVATE_NATIVE_OWNER_API.finditer(text)
 
 

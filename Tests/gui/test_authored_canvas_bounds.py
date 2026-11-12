@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[2]
 OWNER = ROOT / "Engine/src/editor/application/editor.application_gui_authoring.inl"
 GUI = ROOT / "Engine/src/epochgui/gui.engine.cpp"
 FRAME = ROOT / "Engine/src/epochgui/controls/gui.frame_lifecycle.inl"
-API = ROOT / "Engine/modules/gui.engine.ixx"
+API = ROOT / "Engine/modules/gui/gui.engine.ixx"
 
 
 def actual_fixture(owner_text=None):
@@ -355,7 +355,7 @@ class AuthoredCanvasBounds(unittest.TestCase):
         proof.mkdir(parents=True, exist_ok=True)
         source = proof / "editor.canvas_bounds_contract.cpp"
         source.write_text(actual_fixture(), encoding="utf-8")
-        modules = [ROOT / "Engine/modules/authoring.document.ixx", ROOT / "Engine/modules/authoring.gui_document.ixx"]
+        modules = [ROOT / "Engine/modules/authoring/authoring.document.ixx", ROOT / "Engine/modules/authoring/authoring.gui_document.ixx"]
         portable = ROOT / "Engine/dep/EpochGui"
         modules += [portable / "modules/epoch.gui.ixx", portable / "modules/epoch.gui.input.ixx"]
         (proof / "CMakeLists.txt").write_text(f'''cmake_minimum_required(VERSION 3.30)

@@ -10,7 +10,7 @@ from Tests.build.test_opengl_sprite_stream import definition
 from Tests.gui.test_gui_queued_drag import fixture as queue_fixture
 
 ROOT = Path(__file__).resolve().parents[2]
-API = ROOT / "Engine/modules/gui.engine.ixx"
+API = ROOT / "Engine/modules/gui/gui.engine.ixx"
 CHROME = ROOT / "Engine/src/epochgui/controls/gui.navigation_chrome.inl"
 DOCK = ROOT / "Engine/src/editor/application/editor.frame_toolbar_dock_targets.inl"
 VIEW = ROOT / "Engine/src/editor/application/editor.frame_viewport.inl"

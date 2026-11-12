@@ -1,0 +1,460 @@
+/************************************************
+ *  ███████╗██████╗  ██████╗  ██████╗██╗  ██╗   *
+ *  ██╔════╝██╔══██╗██╔═══██╗██╔════╝██║  ██║   *
+ *  █████╗  ██████╔╝██║   ██║██║     ███████║   *
+ *  ██╔══╝  ██╔═══╝ ██║   ██║██║     ██╔══██║   *
+ *  ███████╗██║     ╚██████╔╝╚██████╗██║  ██║   *
+ *  ╚══════╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝   *
+ *                                              *
+ *   This file is part of the Epoch   Project.  *
+ *   epochengine - Modular C++ Framework        *
+ *                                              *
+ *   SPDX-License-Identifier:                   *
+ *   LicenseRef-MIT-NoSell                      *
+ *                                              *
+ *   Provided "AS IS", without warranty         *
+ *   of any kind.                               *
+ *                                              *
+ *   Use permitted for Non-Commercial           *
+ *   Purposes ONLY, without prior               *
+ *   commercial licensing agreement.            *
+ *                                              *
+ *   Redistribution Allowed with This Notice    *
+ *   and LICENSE file.                          *
+ *                                              *
+ *   No obligation to disclose                  *
+ *   modifications.                             *
+ *                                              *
+ *   See LICENSE file for full terms.           *
+ *                                              *
+ ***********************************************/
+// Epoch system notes (auto-checked):
+// Epoch STL: honor core.stl_types.hpp types/operators; fix callers, not core overloads.
+// Epoch AI: preserve model selection, candidate isolation and host verification gates.
+ /**************************************************************
+ *   Epoch Engine - AI Integration (Local OpenAI-Compatible)
+ *   License: MIT (adapt as needed)
+ **************************************************************/
+module;
+
+#include "../../include/core.stl_types.hpp"
+#include "../../include/epoch.edition.hpp"
+
+#if defined(_WIN32)
+#   ifndef WIN32_LEAN_AND_MEAN
+#       define WIN32_LEAN_AND_MEAN
+#   endif
+#   include <windows.h>
+#   include <winhttp.h>
+#   pragma comment(lib, "winhttp.lib")
+#endif
+
+#include <cstdint>
+#include <functional>
+#include <stop_token>
+#include <span>
+#include <string>
+#include <string_view>
+#include <vector>
+#include <stdexcept>
+#include <utility>
+
+export module ai.engine;
+
+export import ai.runtime;
+export import ai.session;
+export import ai.voice_session;
+export import ai.mcp;
+export import ai.eval;
+
+import core.log;
+
+export namespace epochengine::ai
+{
+    enum class LocalInferenceTransport : std::uint8_t
+    {
+        OpenAiCompatible,
+        LlamaCppCli
+    };
+
+    enum class InferenceWorkload : std::uint8_t
+    {
+        chat,
+        authoring,
+    };
+
+    enum class ModelRequestStage : std::uint8_t
+    {
+        queued, sending, request_sent, awaiting_response, receiving,
+        completed, cancelled, failed, retirement_failed
+    };
+    // Payload-free, caller-worker notifications; never an OS transport callback.
+    using ModelRequestObserver = std::function<void(ModelRequestStage)>;
+
+    // Worker-owned transport evidence only. No prompt, reply, key or reasoning
+    // text is published, and byte/event counts are deliberately not token counts.
+    struct ModelRequestProgress final
+    {
+        std::string canonical_model_key{}; // Host-admitted request identity; not a late UI selection.
+        std::string phase{};
+        std::uint32_t attempt{};
+        bool streaming_requested{};
+        bool streaming_received{};
+        std::size_t prompt_bytes{};
+        std::size_t response_bytes{};
+        std::size_t response_events{};
+        std::size_t content_bytes{};
+        std::size_t tool_argument_bytes{};
+        std::size_t reasoning_bytes{};
+        // Exact completed usage from the provider, never byte-derived.
+        double measured_tps{};
+        bool tps_known{};
+        std::uint32_t timeout_seconds{};
+        // Provider-reported completion tokens; never derive these from wire bytes,
+        // stream event count, or UTF-8 characters. Generation is measured from
+        // the first streamed payload where that boundary is observable.
+        std::uint64_t completion_tokens{};
+        double generation_ms{};
+        bool token_usage_reported{};
+        // True only when generation_ms is supplied as provider decode timing.
+        // Otherwise it is a measured first-payload-to-completion interval.
+        bool provider_generation_timing{};
+        std::uint64_t input_image_tokens{}; // Positive only from provider input-usage metadata.
+    };
+    using ModelProgressObserver = std::function<void(const ModelRequestProgress&)>;
+
+    struct InferenceBudget final
+    {
+        std::size_t context_tokens{};
+        std::size_t output_tokens{};
+        std::size_t maximum_prompt_bytes{};
+        std::size_t maximum_reply_bytes{};
+        std::uint32_t timeout_seconds{};
+
+        [[nodiscard]] constexpr bool valid() const noexcept
+        {
+            return context_tokens >= 4'096u
+                && output_tokens > 0u
+                && output_tokens < context_tokens
+                && maximum_prompt_bytes > 0u
+                && maximum_reply_bytes > 0u
+                && timeout_seconds > 0u;
+        }
+    };
+
+    [[nodiscard]] constexpr InferenceBudget inference_budget(
+        InferenceWorkload workload) noexcept
+    {
+        switch (workload)
+        {
+        case InferenceWorkload::chat:
+            return {81'920u, 8'192u, 192u * 1024u, 256u * 1024u, 180u};
+        case InferenceWorkload::authoring:
+            // A scene/tool plan can outlast a conversation, especially while
+            // an operator-managed model loads. Keep a finite, visible ceiling
+            // without restarting an expired generation or accepting fragments.
+            return {81'920u, 16'384u, 168u * 1024u, 512u * 1024u, 15u * 60u};
+        }
+        return {};
+    }
+
+    // Conservative code-text estimate, not a tokenizer or model capability.
+    // Reserve the requested output and system/tool framing before source packing.
+    [[nodiscard]] constexpr std::size_t source_prompt_byte_budget(
+        std::size_t context_tokens, std::size_t output_tokens) noexcept
+    {
+        const auto framing = context_tokens / 8u < 8192u ? context_tokens / 8u : 8192u;
+        if (output_tokens >= context_tokens || framing >= context_tokens - output_tokens)
+            return 0u;
+        const auto input = context_tokens - output_tokens - framing;
+        return input > (2u * 1024u * 1024u) / 3u
+            ? 2u * 1024u * 1024u : input * 3u;
+    }
+
+    struct DirectRuntimeStatus
+    {
+        std::string executable{};
+        std::string model{};
+        std::string message{};
+        bool executable_ready{};
+        bool model_ready{};
+
+        [[nodiscard]] bool ready() const noexcept
+        {
+            return executable_ready && model_ready;
+        }
+    };
+
+    inline constexpr std::string_view kEpochLocalQwen38ModelPackageId =
+        "os_model_qwen_3_8_27b";
+    inline constexpr std::string_view kEpochLocalLlamaCppRuntimePackageId =
+        "local_ai_llama_cpp_runtime";
+    inline constexpr std::string_view kEpochLocalLlamaCppRelease = "b10516";
+    inline constexpr std::string_view kEpochLocalLlamaCppRevision =
+        "b95502ba9aa0eb73a2f4fc8878d7fbe6a847a0b9";
+    inline constexpr std::string_view kEpochLocalQwen38ModelRevision =
+        "4ca720788d1e01f1bff70c033e0d0028fd02e502";
+    inline constexpr std::string_view kEpochLocalQwen38ModelFile =
+        "Qwen3.8-27B-UD-Q4_K_M.gguf";
+    inline constexpr std::uint64_t kEpochLocalQwen38ModelBytes =
+        16'464'440'224ull;
+    inline constexpr std::string_view kEpochLocalQwen38ModelSha256 =
+        "322e194ff79741c7baa497c240f677f54b201b0efab44ca8e50f122b39123482";
+    inline constexpr std::string_view kEpochLocalQwen38ModelUrl =
+        "https://huggingface.co/unsloth/Qwen3.8-27B-GGUF/resolve/"
+        "4ca720788d1e01f1bff70c033e0d0028fd02e502/"
+        "Qwen3.8-27B-UD-Q4_K_M.gguf?download=true";
+#if defined(_WIN32)
+    inline constexpr std::string_view kEpochLocalLlamaCppArtifact =
+        "llama-b10516-bin-win-vulkan-x64.zip";
+    inline constexpr std::string_view kEpochLocalLlamaCppArtifactSha256 =
+        "530f57d2a874ce017827c1e5a926812b9d5de4667248575d1372b1c0acf94d83";
+#else
+    inline constexpr std::string_view kEpochLocalLlamaCppArtifact =
+        "llama-b10516-bin-ubuntu-vulkan-x64.tar.gz";
+    inline constexpr std::string_view kEpochLocalLlamaCppArtifactSha256 =
+        "5ce186720f43c415465869b0cd93973b828b219cbf6fbcc22aa899531973c505";
+#endif
+
+    struct EpochLocalAiInstallStatus final
+    {
+        std::string runtime_root{};
+        std::string runtime_executable{};
+        std::string model_root{};
+        std::string model_file{};
+        std::string message{};
+        bool runtime_receipt_ready{};
+        bool runtime_executable_ready{};
+        bool model_receipt_ready{};
+        bool model_file_ready{};
+
+        [[nodiscard]] bool ready() const noexcept
+        {
+            return runtime_receipt_ready && runtime_executable_ready
+                && model_receipt_ready && model_file_ready;
+        }
+    };
+    struct Candidate
+    {
+        std::string text;
+        double score = 0.0;
+    };
+
+    enum class ModelTerminalFailure : std::uint8_t
+    {
+        none,
+        total_timeout,
+        cancelled,
+        retirement_failed,
+        provider_timeout,
+        request_rejected,
+        request_failed
+    };
+
+    struct EngineAiReply
+    {
+        std::string text;
+        double score = 0.0;
+        std::vector<Candidate> alternatives;
+        bool transport_retirement_failed{};
+        ModelTerminalFailure terminal_failure{ModelTerminalFailure::none};
+    };
+
+    struct ReferenceImage final
+    {
+        std::string name{};
+        std::string mime_type{};
+        std::string bytes{};
+        std::string client_id{}; // Local preview/receipt identity; never sent to the model.
+    };
+
+    class EngineAiModel
+    {
+    public:
+        struct Config
+        {
+            std::string backend = "openai_chat";
+            std::string endpoint = "http://localhost:1234"; // base or full
+            std::string model{};
+            std::string executable{};
+            std::size_t threads{};
+            std::size_t context_tokens = 4096;
+            std::size_t output_tokens = 512;
+            int gpu_layers = -1;
+            std::uint32_t timeout_seconds = 180;
+            std::size_t best_of = 1;
+            bool stream_replies = true;
+        };
+
+        explicit EngineAiModel(Config cfg);
+        [[nodiscard]] EngineAiReply submit(
+            std::string_view user_input,
+            InferenceWorkload workload = InferenceWorkload::chat,
+            std::stop_token cancellation = {},
+            ModelRequestObserver observer = {},
+            ModelProgressObserver progress_observer = {},
+            std::span<const ReferenceImage> images = {});
+
+    private:
+        Config m_cfg{};
+        std::string m_endpoint_full{}; // normalized to /v1/chat/completions
+    };
+
+    enum class VisualReviewVerdict : std::uint8_t
+    {
+        unavailable, pass, revise, inconclusive
+    };
+
+    struct VisualReviewResult final
+    {
+        VisualReviewVerdict verdict{VisualReviewVerdict::unavailable};
+        std::string detail{};
+    };
+
+    // Only an explicitly selected, confirmed OpenAI-compatible vision model
+    // may receive sandbox screenshots. Native text-only transports are skipped.
+    [[nodiscard]] bool visual_review_model_available(bool try_unlisted_model = false);
+    [[nodiscard]] VisualReviewResult review_candidate_screenshot(
+        std::string_view png_path,
+        std::stop_token cancellation = {},
+        bool try_unlisted_model = false,
+        std::string_view feature_objective = {});
+
+    // Engine-global service wrapper (simple singleton)
+    void init_engine_ai();
+    void shutdown_engine_ai();
+    // Cancels all requests already admitted/queued by the global service.
+    // Individual callers cancel only their own supplied stop token.
+    void cancel_engine_ai_request() noexcept;
+
+    [[nodiscard]] std::string send_to_engine_ai(
+        const std::string& user_text,
+        InferenceWorkload workload = InferenceWorkload::chat,
+        std::stop_token cancellation = {},
+        ModelRequestObserver observer = {},
+        ModelTerminalFailure* terminal_failure = nullptr,
+        ModelProgressObserver progress_observer = {},
+        std::span<const ReferenceImage> images = {});
+    [[nodiscard]] std::string default_workspace_root();
+    [[nodiscard]] std::string review_fixtures_root();
+    [[nodiscard]] std::string evals_root();
+    [[nodiscard]] std::string prompts_root();
+    [[nodiscard]] std::string manifests_root();
+    [[nodiscard]] std::string local_model_exchange_jsonl_path();
+    [[nodiscard]] std::string local_tool_trace_jsonl_path();
+    [[nodiscard]] std::string local_session_root();
+    [[nodiscard]] std::string local_model_root();
+    [[nodiscard]] std::string local_cache_root();
+    [[nodiscard]] std::string epoch_local_llama_cpp_root();
+    [[nodiscard]] std::string epoch_local_llama_cpp_executable();
+    [[nodiscard]] std::string epoch_local_qwen38_root();
+    [[nodiscard]] std::string epoch_local_qwen38_model();
+    [[nodiscard]] EpochLocalAiInstallStatus epoch_local_ai_install_status();
+    [[nodiscard]] bool epoch_local_ai_install_contract() noexcept;
+    [[nodiscard]] ProviderMode current_provider_mode() noexcept;
+    [[nodiscard]] LocalInferenceTransport current_local_inference_transport() noexcept;
+    [[nodiscard]] std::string_view local_inference_transport_name(LocalInferenceTransport transport) noexcept;
+    [[nodiscard]] DirectRuntimeStatus direct_runtime_status();
+    [[nodiscard]] DirectRuntimeStatus discover_direct_runtime();
+    [[nodiscard]] bool select_direct_runtime(std::string_view executable, std::string_view model);
+    void select_openai_compatible_runtime();
+    struct LocalApiEndpoint
+    {
+        std::string base_url{};
+        std::string chat_completions_url{};
+        std::string responses_url{};
+        std::string agent_tasks_url{};
+        bool stream_replies = true;
+    };
+    // Local endpoint selection/persistence does not query, load or start a model.
+    // Responses/agent URLs are reference routes, not Chat Completions transports.
+    struct LocalApiModelSuggestion
+    {
+        std::string endpoint{};
+        std::string model_id{};
+    };
+    struct LocalApiModelScanTarget
+    {
+        std::string endpoint{};
+        std::vector<std::pair<std::string, std::string>> headers{};
+    };
+    // UI thread only: snapshot preferences, environment, and authorized headers.
+    [[nodiscard]] std::vector<LocalApiModelScanTarget> prepare_local_api_model_scan();
+    // Worker thread: bounded HTTP only; no preference/path/logging/UI access.
+    [[nodiscard]] std::vector<LocalApiModelSuggestion> scan_local_api_model_suggestions(
+        std::vector<LocalApiModelScanTarget> targets);
+    [[nodiscard]] std::vector<std::string> saved_local_api_endpoints();
+    [[nodiscard]] LocalApiEndpoint active_local_api_endpoint();
+    [[nodiscard]] bool select_local_api_endpoint(std::string_view endpoint);
+    [[nodiscard]] bool set_local_api_streaming(bool enabled);
+    // Operator-declared loaded context for APIs that omit capacity metadata.
+    // Zero restores automatic detection. Bound to this endpoint and model.
+    [[nodiscard]] std::size_t local_model_context_override();
+    [[nodiscard]] bool set_local_model_context_override(std::size_t tokens);
+    [[nodiscard]] std::string active_model_name();
+    // Chat composer policy: "automatic" resolves per-model on each request.
+    // Qwen 3.8 dense defaults to Off; Flash Next is exempt and starts Low.
+    [[nodiscard]] std::string model_thinking_mode(std::string_view model);
+    [[nodiscard]] bool cycle_model_thinking_mode(std::string_view model);
+
+    enum class LocalModelSelectionOrigin : unsigned char
+    {
+        none,
+        configured,
+        explicit_selection,
+        remembered,
+        legacy_preference,
+        default_local
+    };
+    struct LocalModelSelection
+    {
+        std::string model_id{};
+        std::string endpoint{};
+        LocalModelSelectionOrigin origin{LocalModelSelectionOrigin::none};
+        bool available_in_inventory{};
+        bool reusable_on_request{};
+        bool confirmed{};
+    };
+    // Read-only preference/default restoration. Inventory presence is not proof
+    // of model residency, and this accessor never loads or queries a model.
+    [[nodiscard]] LocalModelSelection local_model_selection();
+    // Invoke only for a user Send/Start: prepares the selected local client and
+    // persists its endpoint-bound preference, without opening any transport.
+    [[nodiscard]] bool prepare_local_model_for_request();
+    [[nodiscard]] bool local_model_preference_contract();
+    [[nodiscard]] std::string active_provider_summary();
+    [[nodiscard]] ModelManifest active_model_manifest();
+    [[nodiscard]] std::vector<std::string> detected_model_names();
+    [[nodiscard]] std::string model_detection_status();
+    [[nodiscard]] std::string model_connection_status();
+    [[nodiscard]] bool is_engine_ai_initialized() noexcept;
+    [[nodiscard]] bool is_model_use_confirmed() noexcept;
+    [[nodiscard]] std::vector<std::string> refresh_detected_models();
+    [[nodiscard]] bool set_local_model_api_token(std::string_view token);
+    [[nodiscard]] bool has_local_model_api_token();
+    [[nodiscard]] bool select_active_model(std::string_view model_id);
+    [[nodiscard]] EvidencePaths default_evidence_paths();
+    void append_tool_trace(const McpCaptureRecord& record);
+
+    [[nodiscard]] bool promote_eval_case(const EvalCase& record, std::string_view suite_name = "editor_ai_smoke");
+    [[nodiscard]] bool valid_project_context_text(std::string_view text) noexcept;
+    [[nodiscard]] std::string normalize_assistant_reply(std::string_view reply);
+    // Display-only JSON decoding. Raw transport/admission bytes are unchanged;
+    // partial streams show only fields completed by the canonical JSON parser.
+    struct ToolOutputDisplay final
+    {
+        std::string text{};
+        // Offsets into text; completed source strings only, not model markup.
+        std::vector<std::pair<std::size_t, std::size_t>> code_ranges{};
+    };
+    [[nodiscard]] ToolOutputDisplay format_tool_output_for_display(
+        std::string_view payload, bool streaming,
+        std::span<const std::string> source_paths = {});
+    [[nodiscard]] std::string normalize_direct_llama_cpp_reply(
+        std::string_view transcript,
+        std::string_view user_text);
+    [[nodiscard]] bool direct_llama_cpp_prompt_transport_contract();
+    [[nodiscard]] bool model_request_cancellation_contract();
+    [[nodiscard]] bool is_promotable_assistant_reply(std::string_view reply);
+    [[nodiscard]] HelperReviewGateResult classify_helper_review_reply(std::string_view reply);
+}

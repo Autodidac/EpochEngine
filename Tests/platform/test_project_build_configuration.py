@@ -24,7 +24,7 @@ class ProjectBuildConfiguration(unittest.TestCase):
 
         registry = (ROOT / "Engine/src/editor/implementation/editor.project_registry.inl").read_text(encoding="utf-8")
         scene = (ROOT / "Engine/src/editor/editor.scene.cpp").read_text(encoding="utf-8")
-        core = (ROOT / "Engine/modules/editor.core.ixx").read_text(encoding="utf-8")
+        core = (ROOT / "Engine/modules/editor/editor.core.ixx").read_text(encoding="utf-8")
         shell = (ROOT / "Engine/src/editor/implementation/editor.project_shell_generation.inl").read_text(encoding="utf-8")
         supported = definition(core, "    export [[nodiscard]] constexpr bool editor_project_build_configuration_supported(").replace("export ", "", 1)
         codec = definition(registry, "    [[nodiscard]] static std::optional<nlohmann::ordered_json>\n        parse_project_build_configuration_manifest(")
@@ -99,7 +99,7 @@ int main(int argc,char**argv) try {
         scene = (ROOT / "Engine/src/editor/editor.scene.cpp").read_text(encoding="utf-8")
         runtime = (ROOT / "Engine/src/editor/application/editor.application_project_runtime.inl").read_text(encoding="utf-8")
         paths = (ROOT / "Engine/src/editor/application/editor.application_runtime_source.inl").read_text(encoding="utf-8")
-        core = (ROOT / "Engine/modules/editor.core.ixx").read_text(encoding="utf-8")
+        core = (ROOT / "Engine/modules/editor/editor.core.ixx").read_text(encoding="utf-8")
         shell = (ROOT / "Engine/src/editor/implementation/editor.project_shell_generation.inl").read_text(encoding="utf-8")
         result_type = definition(core, "    export struct EditorProjectBuildResult", True).replace("export ", "", 1)
         supported = definition(core, "    export [[nodiscard]] constexpr bool editor_project_build_configuration_supported(").replace("export ", "", 1)

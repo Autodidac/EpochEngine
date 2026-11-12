@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def contract_source(root=ROOT):
-    api = (root/'Engine/modules/gui.engine.ixx').read_text(encoding='utf-8')
+    api = (root/'Engine/modules/gui/gui.engine.ixx').read_text(encoding='utf-8')
     gui = (root/'Engine/src/epochgui/gui.engine.cpp').read_text(encoding='utf-8')
     state = (root/'Engine/src/editor/application/editor.application_state.inl').read_text(encoding='utf-8')
     routing = (root/'Engine/src/editor/application/editor.application_pane_routing.inl').read_text(encoding='utf-8')

@@ -1,5 +1,6 @@
 """Real project opt-in payload, guarded publication and canonical script adapter."""
 from pathlib import Path
+from Tests.support.cpp import engine_module_source
 import hashlib
 import json
 import os
@@ -20,9 +21,9 @@ SCENE = ROOT / "Engine/src/editor/editor.scene.cpp"
 
 def fixture():
     registry, shell, scene = (p.read_text(encoding="utf-8") for p in (REGISTRY, SHELL, SCENE))
-    core = (ROOT / "Engine/modules/editor.core.ixx").read_text(encoding="utf-8")
-    app = (ROOT / "Engine/modules/editor.application.ixx").read_text(encoding="utf-8")
-    arcade = (ROOT / "Engine/modules/render.arcade.ixx").read_text(encoding="utf-8")
+    core = (ROOT / "Engine/modules/editor/editor.core.ixx").read_text(encoding="utf-8")
+    app = (ROOT / "Engine/modules/editor/editor.application.ixx").read_text(encoding="utf-8")
+    arcade = (ROOT / "Engine/modules/render/render.arcade.ixx").read_text(encoding="utf-8")
     spec = definition(shell, "    struct ProjectShellSpec", True)
     private_marker = "EPOCH_" "PRIVATE_SOURCE_"
     spec = re.sub(r"// " + private_marker + r"BEGIN:.*?// " + private_marker + r"END:[^\n]*", "", spec, flags=re.S)
@@ -133,7 +134,7 @@ class EngineArcadeProject(unittest.TestCase):
         proof.mkdir(parents=True, exist_ok=True)
         fixture_root = proof / "fixture" / str(time.time_ns())
         (proof / "arcade.project_contract.cpp").write_text(fixture(), encoding="utf-8")
-        modules = [ROOT / "Engine/modules" / name for name in ("package.registry.ixx", "scene.snapshot.ixx", "scene.serializer.ixx", "platform.filesystem.ixx")]
+        modules = [engine_module_source(ROOT / "Engine/modules", name) for name in ("package.registry.ixx", "scene.snapshot.ixx", "scene.serializer.ixx", "platform.filesystem.ixx")]
         (proof / "CMakeLists.txt").write_text(f'''cmake_minimum_required(VERSION 3.30)
 project(EngineArcadeProject LANGUAGES CXX)
 add_executable(arcade_project arcade.project_contract.cpp)

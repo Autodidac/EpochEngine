@@ -1632,13 +1632,13 @@ Current source ownership:
 
 | Responsibility | Primary files/modules |
 | --- | --- |
-| Editor command/result payloads | `Engine/modules/editor.core.ixx` |
+| Editor command/result payloads | `Engine/modules/editor/editor.core.ixx` |
 | Toolbar context combobox and visible status | `Engine/src/editor/editor.application.cpp` |
 | Editor state capture/restore for handoff | `Engine/src/editor/editor.application.cpp` |
 | Session loop, live context discovery, handoff fallback | `Engine/src/epoch/epoch.engine_legacy.cpp` |
-| Native detached context/window request and `WindowData::guiRoute` | `Engine/modules/context.multiplexer.ixx`, `Engine/modules/context.window.ixx`, `Engine/src/renderers/host/host.context_win.cpp`, `Engine/src/renderers/host/host.context_linux.cpp` |
+| Native detached context/window request and `WindowData::guiRoute` | `Engine/modules/context/context.multiplexer.ixx`, `Engine/modules/context/context.window.ixx`, `Engine/src/renderers/host/host.context_win.cpp`, `Engine/src/renderers/host/host.context_linux.cpp` |
 | Reusable GUI layout state | `Engine/include/gui`, `Engine/src/epochgui`, `Engine/dep/EpochGui` |
-| Engine GUI adapter/render/input bridge | `Engine/modules/gui.engine.ixx`, `Engine/src/epochgui/gui.engine.cpp` |
+| Engine GUI adapter/render/input bridge | `Engine/modules/gui/gui.engine.ixx`, `Engine/src/epochgui/gui.engine.cpp` |
 
 Context switching acceptance:
 

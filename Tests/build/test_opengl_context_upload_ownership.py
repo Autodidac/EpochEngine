@@ -57,7 +57,7 @@ int main(){State glState;actual(glState);
 
  def test_native_context_state_and_upload_dispatch(self):
   if os.name!='nt':self.skipTest('Windows native ownership CPU lane')
-  source=(ROOT/'Engine/modules/opengl.textures.ixx').read_text(encoding='utf-8')
+  source=(ROOT/'Engine/modules/opengl/opengl.textures.ixx').read_text(encoding='utf-8')
   functions='\n'.join(definition(source,marker) for marker in (
    '    [[nodiscard]] inline const void* platform_context_key(',
    '    inline void bind_platform_state(',

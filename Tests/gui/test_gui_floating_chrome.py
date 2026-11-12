@@ -13,7 +13,7 @@ ROOT=Path(__file__).resolve().parents[2]
 def fixture():
     windows=(ROOT/'Engine/src/epochgui/controls/gui.window_controls.inl').read_text(encoding='utf-8')
     gui=(ROOT/'Engine/src/epochgui/gui.engine.cpp').read_text(encoding='utf-8')
-    api=(ROOT/'Engine/modules/gui.engine.ixx').read_text(encoding='utf-8')
+    api=(ROOT/'Engine/modules/gui/gui.engine.ixx').read_text(encoding='utf-8')
     adapter=(ROOT/'Engine/src/epochgui/gui.docking_adapter.cpp').read_text(encoding='utf-8')
     base=queued_fixture().rsplit('int main(){',1)[0].replace('import epoch.gui.input;','import epoch.gui.input;\nimport epoch.gui;')
     base=base.replace('Vec2 contentMin{},contentMax{};bool insideWindow{};', 'Vec2 contentMin{},contentMax{},origin{},windowSize{};std::string windowKey;bool insideWindow{};')

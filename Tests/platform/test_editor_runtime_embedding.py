@@ -106,7 +106,7 @@ target_compile_features(identity PRIVATE cxx_std_23)
 target_compile_options(identity PRIVATE /utf-8 /EHsc /Z7)
 target_include_directories(identity PRIVATE "{(ROOT/'Engine/include').as_posix()}")
 target_sources(identity PRIVATE FILE_SET CXX_MODULES BASE_DIRS "{(ROOT/'Engine/modules').as_posix()}" FILES
- "{(ROOT/'Engine/modules/project.lifecycle.ixx').as_posix()}" "{(ROOT/'Engine/modules/platform.child_process.ixx').as_posix()}" "{(ROOT/'Engine/modules/core.sha256.ixx').as_posix()}")
+ "{(ROOT/'Engine/modules/project/project.lifecycle.ixx').as_posix()}" "{(ROOT/'Engine/modules/platform/platform.child_process.ixx').as_posix()}" "{(ROOT/'Engine/modules/core/core.sha256.ixx').as_posix()}")
 enable_testing()
 add_test(NAME identity COMMAND identity)
 ''',encoding='utf-8')
@@ -262,7 +262,7 @@ set_tests_properties(former_grid_policy PROPERTIES WILL_FAIL TRUE)
                                  '        auto pane_family_enabled =', True)
         frame = (ROOT/'Engine/src/editor/application/editor.frame_project_runtime.inl').read_text(encoding='utf-8')
         state = (ROOT/'Engine/src/editor/application/editor.application_state.inl').read_text(encoding='utf-8')
-        project_stamp = definition((ROOT/'Engine/modules/project.lifecycle.ixx').read_text(encoding='utf-8'),
+        project_stamp = definition((ROOT/'Engine/modules/project/project.lifecycle.ixx').read_text(encoding='utf-8'),
                                    '    struct ProjectStamp final', True)
         launch_evidence = definition(state, '            struct ProjectRuntimeLaunchEvidence final', True)
         viewport = (ROOT/'Engine/src/editor/application/editor.frame_viewport.inl').read_text(encoding='utf-8')

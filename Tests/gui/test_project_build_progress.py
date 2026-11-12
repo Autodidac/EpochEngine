@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 class ProjectBuildProgress(unittest.TestCase):
     def test_ticket_identity_cancel_elapsed_throttle_and_selected_owner(self):
-        graph = (ROOT / 'Engine/modules/taskgraph.dotsystem.ixx').read_text(encoding='utf-8')
+        graph = (ROOT / 'Engine/modules/taskgraph/taskgraph.dotsystem.ixx').read_text(encoding='utf-8')
         source = (ROOT / 'Engine/src/editor/application/editor.application_project_runtime.inl').read_text(encoding='utf-8')
         types = '\n'.join(definition(graph, marker, True) for marker in (
             '    enum class NodeState', '    struct NodeHandle final', '    struct NodeDiagnostic'))

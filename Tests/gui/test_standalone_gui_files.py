@@ -1,5 +1,6 @@
 """Real GUI codec/writer and save/reload handlers; dialog/scene ports are recorded."""
 from pathlib import Path
+from Tests.support.cpp import engine_module_source
 import json
 import os
 import subprocess
@@ -156,7 +157,7 @@ class StandaloneGuiFiles(unittest.TestCase):
         proof = ROOT / "build/validation/standalone-gui-files-oct27"
         proof.mkdir(parents=True, exist_ok=True)
         (proof / "gui.files_contract.cpp").write_text(fixture(), encoding="utf-8")
-        modules = [ROOT / "Engine/modules" / name for name in (
+        modules = [engine_module_source(ROOT / "Engine/modules", name) for name in (
             "authoring.document.ixx", "authoring.gui_document.ixx", "platform.filesystem.ixx", "core.sha256.ixx")]
         files = " ".join('"' + path.as_posix() + '"' for path in modules)
         (proof / "CMakeLists.txt").write_text(f'''cmake_minimum_required(VERSION 3.30)

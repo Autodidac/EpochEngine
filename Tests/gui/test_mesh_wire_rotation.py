@@ -7,7 +7,7 @@ ROOT=Path(__file__).resolve().parents[2]
 
 class MeshWireRotation(unittest.TestCase):
  def test_actual_large_wire_producer_debug_release(self):
-  path=ROOT/'Engine/modules/render.preview_grid.ixx';source=path.read_text(encoding='utf-8')
+  path=ROOT/'Engine/modules/render/render.preview_grid.ixx';source=path.read_text(encoding='utf-8')
   owned=lambda marker,end=False:definition(source,marker,end).replace('export ','',1)
   types='struct MeshPaintView;\n'+owned('    export struct Vec3',True)+owned('    export [[nodiscard]] constexpr Vec3 visual_rgb(')+'\n'.join(owned(marker,True) for marker in (
    '    export struct Vertex','    export enum class ObjectPreviewPrimitive',
@@ -22,7 +22,9 @@ class MeshWireRotation(unittest.TestCase):
   wire=owned('        enum class MarkerLinePass',True)+owned('        [[nodiscard]] inline bool mesh_wire_requested(')+owned('        struct MeshWireEdges final',True)+owned('        [[nodiscard]] inline const MeshWireEdges* find_wire_edges(')+owned('        [[nodiscard]] inline std::vector<MeshWireEdges> build_wire_edges(')
   producer=owned('    inline std::vector<Vertex> detail::build_marker_lines(')
   before=producer.replace('detail::build_marker_lines(', 'detail::build_marker_lines_before(',1)
-  before=before.replace('                const auto rotation = detail::euler_rotation(marker.rotationDegrees);\n','')
+  mesh_rotation='\n                const auto rotation = detail::euler_rotation(marker.rotationDegrees);\n'
+  self.assertEqual(before.count(mesh_rotation),1)
+  before=before.replace(mesh_rotation,'\n',1)
   before=before.replace('return detail::mesh_vertex_position(marker,source,rotation);','return add(center, rotate_euler_degrees({source[0]*marker.scale.x,source[1]*marker.scale.y,source[2]*marker.scale.z},marker.rotationDegrees));')
   self.assertNotEqual(before.replace('build_marker_lines_before','build_marker_lines'),producer)
   code=r'''
@@ -73,7 +75,10 @@ int main(int argc,char**argv){
   mesh->v.push_back({{float(x)/cells,float((x*7+z*11)%13)*.01f,float(z)/cells}});
  for(unsigned z=0;z<cells;++z)for(unsigned x=0;x<cells;++x){const auto a=z*stride+x,b=a+1,c=a+stride,d=c+1;mesh->i.insert(mesh->i.end(),{a,c,b,b,c,d});}
  const p::ObjectMarker original{.position={100,40,-700},.scale={1.25f,.75f,4},.rotationDegrees={17.3f,-48,123.5f},.primitive=p::ObjectPreviewPrimitive::IndexedMesh,.selected=true,.mesh=mesh,.wireframe=true};
- std::vector<p::ObjectMarker>markers{original,{.position={2,3,4},.primitive=p::ObjectPreviewPrimitive::Cube,.selected=true},{.primitive=p::ObjectPreviewPrimitive::Light}};
+ std::vector<p::ObjectMarker>markers{original,
+  {.position={2,3,4},.primitive=p::ObjectPreviewPrimitive::Cube,.selected=true},
+  {.primitive=p::ObjectPreviewPrimitive::Light},
+  {.position={1,2,3},.scale={2,2,2},.rotationDegrees={15,45,90},.primitive=p::ObjectPreviewPrimitive::TranslationArrow}};
  auto edges=p::detail::build_wire_edges(markers,{});CHECK(edges.size()==1&&edges[0].edges->size()>100000);
  for(bool wire:{false,true})for(bool selected:{false,true})for(auto rotation:{p::Vec3{},p::Vec3{17.3f,-48,123.5f}}){
   markers[0].wireframe=wire;markers[0].selected=selected;markers[0].rotationDegrees=rotation;

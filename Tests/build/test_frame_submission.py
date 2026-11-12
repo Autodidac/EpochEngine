@@ -679,7 +679,7 @@ bool owner_frame(bool uncappedSubmission, frame_admission::State& state, OwnerCo
         self.assertNotIn('desktop safety', app)
         self.assertNotIn('120 FPS safety', app)
         self.assertIn('import gui.frame_limit_control;', app)
-        control = read_owned_source(ROOT / 'Engine/modules/gui.frame_limit_control.ixx', encoding='utf-8')
+        control = read_owned_source(ROOT / 'Engine/modules/gui/gui.frame_limit_control.ixx', encoding='utf-8')
         self.assertIn('.selected = edit.manual ? "Manual" : vsync ? "VSync"', control)
         settings = read_owned_source(ROOT / 'Engine/src/editor/application/editor.frame_consent_settings.inl')
         self.assertNotIn('core::cli::frame_limit_explicit =', settings)

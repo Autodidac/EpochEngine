@@ -16,8 +16,8 @@ class EditorMeshDrawMode(unittest.TestCase):
   viewport=(folder/'editor.frame_viewport.inl').read_text(encoding='utf-8')
   scene=(folder/'editor.application_scene_preview.inl').read_text(encoding='utf-8')
   state=(folder/'editor.application_state.inl').read_text(encoding='utf-8')
-  api=(ROOT/'Engine/modules/gui.engine.ixx').read_text(encoding='utf-8')
-  preview=(ROOT/'Engine/modules/render.preview_grid.ixx').read_text(encoding='utf-8')
+  api=(ROOT/'Engine/modules/gui/gui.engine.ixx').read_text(encoding='utf-8')
+  preview=(ROOT/'Engine/modules/render/render.preview_grid.ixx').read_text(encoding='utf-8')
   fields=state[state.index('            bool viewportMeshWireframe{};'):state.index('            input::ProfilePreset inputProfilePreset',state.index('            bool viewportMeshWireframe{};'))]
   layout=viewport[viewport.index('            const bool showMeshDrawMode ='):viewport.index('            if (showSceneRun)',viewport.index('            const bool showMeshDrawMode ='))]
   controls=viewport[viewport.index('            if (showMeshDrawMode)'):viewport.index('            ctx->set_scene_preview_mode(',viewport.index('            if (showMeshDrawMode)'))]

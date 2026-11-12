@@ -93,7 +93,7 @@ int main(){
         if not tools or not kits:
             self.skipTest("Installed MSVC/SDK unavailable")
         commands = (ROOT / "Engine/src/editor/application/editor.frame_command_menus.inl").read_text(encoding="utf-8")
-        api = (ROOT / "Engine/modules/gui.engine.ixx").read_text(encoding="utf-8")
+        api = (ROOT / "Engine/modules/gui/gui.engine.ixx").read_text(encoding="utf-8")
         asset = definition(commands, '        open_dropdown("Asset", TopMenu::Asset, [&]()') + ");"
         collector = definition(commands,"        enum class CommandMenuGroup",True)
         collector += '\nCommandMenuGroup commandMenuGroup{CommandMenuGroup::root};\n'

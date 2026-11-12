@@ -15,7 +15,7 @@ class WorkspaceVisibility(unittest.TestCase):
   workspace=(folder/'editor.frame_workspace_docking.inl').read_text(encoding='utf-8')
   routing=(folder/'editor.application_pane_routing.inl').read_text(encoding='utf-8')
   menus=(folder/'editor.frame_command_menus.inl').read_text(encoding='utf-8')
-  gui=(ROOT/'Engine/modules/gui.engine.ixx').read_text(encoding='utf-8')
+  gui=(ROOT/'Engine/modules/gui/gui.engine.ixx').read_text(encoding='utf-8')
   construction=toolbar[toolbar.index('        std::vector<gui::TabButtonSpec> documentTabs{};'):toolbar.index('        gui::set_cursor({ 16.0f, tab_y });')]
   dispatch=toolbar[toolbar.index('        if (documentTabResult.closed_index'):toolbar.index('        gui::end_window();',toolbar.index('        if (documentTabResult.closed_index'))]
   close=definition(workspace,'        const auto close_editor_workspace_tab =',True)

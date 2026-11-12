@@ -259,12 +259,12 @@ class PlanetaryFineDetail(unittest.TestCase):
         proof.mkdir(parents=True, exist_ok=True)
         (proof / "consumer.cpp").write_text(code, encoding="utf-8")
         owners = [PACKAGE / "upstream/EpochPlanet-0.2.3/src/core/world.cpp", PACKAGE / "upstream/EpochPlanet-0.2.3/src/core/terrain.cpp", ROOT / "Engine/src/assets/texture/asset.texture_artifact.cpp"]
-        modules = [PACKAGE / "modules/planet.terrain.ixx", PACKAGE / "modules/planet.streaming.ixx", ROOT / "Engine/modules/project.planetary.ixx", ROOT / "Engine/modules/asset.mesh_artifact.ixx", ROOT / "Engine/modules/asset.texture_artifact.ixx"]
+        modules = [PACKAGE / "modules/planet.terrain.ixx", PACKAGE / "modules/planet.streaming.ixx", ROOT / "Engine/modules/project/project.planetary.ixx", ROOT / "Engine/modules/asset.mesh_artifact.ixx", ROOT / "Engine/modules/asset.texture_artifact.ixx"]
         modules.append(PACKAGE / "modules/planet.coverage.ixx")
         modules.append(PACKAGE / "modules/planet.clouds.ixx")
         modules.append(ROOT / "Engine/modules/project.planetary_snapshot.ixx")
         modules.append(ROOT / "Engine/modules/asset.cloud_volume.ixx")
-        modules.append(ROOT / "Engine/modules/water.wave.ixx")
+        modules.append(ROOT / "Engine/modules/water/water.wave.ixx")
         owners.append(ROOT / "Engine/src/project/project.planetary_snapshot.cpp")
         paths = lambda values: "\n".join('"'+p.as_posix()+'"' for p in values)
         fixture = ROOT / "Artifacts/Runtime/TestData" / ("p" + f"{time.time_ns():x}"[-8:])

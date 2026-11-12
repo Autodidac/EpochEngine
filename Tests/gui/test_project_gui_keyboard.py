@@ -1,5 +1,6 @@
 """Real ordered GUI keyboard owner + project adapter + RuntimeSession, CPU only."""
 from pathlib import Path
+from Tests.support.cpp import engine_module_source
 import hashlib
 import json
 import os
@@ -15,7 +16,7 @@ ADAPTER = ROOT / "Engine/src/project/project.gui_epochgui.cpp"
 
 
 def fixture():
-    api = (ROOT / "Engine/modules/gui.engine.ixx").read_text(encoding="utf-8")
+    api = (ROOT / "Engine/modules/gui/gui.engine.ixx").read_text(encoding="utf-8")
     text = (GUI / "controls/gui.text_controls.inl").read_text(encoding="utf-8")
     frame = (GUI / "controls/gui.frame_lifecycle.inl").read_text(encoding="utf-8")
     owner = (GUI / "gui.engine.cpp").read_text(encoding="utf-8")
@@ -280,7 +281,7 @@ int main(){auto context=std::make_shared<core::Context>();fresh(context);Adapter
 '''
         (report/"before.cpp").write_text(before,encoding="utf-8")
         before_line = before[:before.index("CHECK(runtime.focused_widget().value==9);")].count("\n")+1
-        modules = [ROOT/"Engine/modules"/name for name in ("core.sha256.ixx","asset.gui_artifact.ixx","project.gui_runtime.ixx")]
+        modules = [engine_module_source(ROOT/"Engine/modules", name) for name in ("core.sha256.ixx","asset.gui_artifact.ixx","project.gui_runtime.ixx")]
         portable = ROOT/"Engine/dep/EpochGui"
         modules += [portable/"modules"/name for name in ("epoch.gui.ixx","epoch.gui.input.ixx")]
         sources = [ROOT/"Engine/src/assets/gui/asset.gui_artifact.cpp",ROOT/"Engine/src/project/project.gui_runtime.cpp",ROOT/"Engine/src/project/project.gui_runtime_contract.cpp",
@@ -319,9 +320,9 @@ int main(){auto context=std::make_shared<core::Context>();fresh(context);Adapter
             (report/"result.json").write_text(json.dumps({"passed":completed.returncode==0 and index==len(commands)-1,
                 "scope":"Actual queued input/filter/begin_frame, shared ordered text command/caret owner, actual adapter render/dispatch/widget caller and real artifact+RuntimeSession modules. Neutral drawing/clipboard/metric ports; no native input, renderer or model.",
                 "owners":{str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in [ADAPTER,
-                    ROOT/'Engine/modules/project.gui_epochgui.ixx',ROOT/'Engine/modules/project.gui_runtime.ixx',
+                    ROOT/'Engine/modules/project/project.gui_epochgui.ixx',ROOT/'Engine/modules/project/project.gui_runtime.ixx',
                     ROOT/'Engine/src/project/project.gui_runtime.cpp',ROOT/'Engine/src/project/project.gui_runtime_contract.cpp',
-                    ROOT/'Engine/modules/gui.engine.ixx',GUI/'gui.engine.cpp',GUI/'controls/gui.frame_lifecycle.inl',
+                    ROOT/'Engine/modules/gui/gui.engine.ixx',GUI/'gui.engine.cpp',GUI/'controls/gui.frame_lifecycle.inl',
                     GUI/'controls/gui.text_controls.inl',Path(__file__)]},"commands":runs},indent=2),encoding="utf-8")
             self.assertEqual(completed.returncode,0,completed.stdout[-7500:]+completed.stderr[-2500:])
 

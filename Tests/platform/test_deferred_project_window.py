@@ -16,7 +16,7 @@ class DeferredProjectWindow(unittest.TestCase):
             self.skipTest("Windows supervisor owner")
         owner = ROOT / "Engine/src/platform/platform.child_process.cpp"
         source = owner.read_text(encoding="utf-8")
-        cli = (ROOT / "Engine/modules/core.commandline.ixx").read_text(encoding="utf-8")
+        cli = (ROOT / "Engine/modules/core/core.commandline.ixx").read_text(encoding="utf-8")
         host = (ROOT / "Engine/src/renderers/host/host.context_win.cpp").read_text(encoding="utf-8")
         editor = (ROOT / "Engine/src/editor/application/editor.application_project_runtime.inl").read_text(encoding="utf-8")
         selected = definition(source, "        struct WindowSearch final", True)
@@ -180,7 +180,7 @@ add_executable(deferred deferred.contract.cpp "{(ROOT/'Engine/src/platform/platf
 target_compile_features(deferred PRIVATE cxx_std_23)
 target_compile_options(deferred PRIVATE /UNDEBUG /utf-8 /EHsc /Z7)
 target_sources(deferred PRIVATE FILE_SET CXX_MODULES BASE_DIRS "{(ROOT/'Engine/modules').as_posix()}" FILES
- "{(ROOT/'Engine/modules/platform.child_process.ixx').as_posix()}" "{(ROOT/'Engine/modules/core.sha256.ixx').as_posix()}")
+ "{(ROOT/'Engine/modules/platform/platform.child_process.ixx').as_posix()}" "{(ROOT/'Engine/modules/core/core.sha256.ixx').as_posix()}")
 target_link_libraries(deferred PRIVATE user32 advapi32 bcrypt userenv)
 add_executable(console_probe console.probe.cpp)
 enable_testing()

@@ -12,7 +12,7 @@ actual='\n'.join(definition(owner, marker) for marker in (
     '        void poll_forest_surface_placement(',
     '        [[nodiscard]] const EditorEntity* selected_forest_species_target(',
     '        [[nodiscard]] bool add_plant_lab_species_to_forest('))
-preview=(ROOT/'Engine/modules/render.preview_grid.ixx').read_text(encoding='utf-8')
+preview=(ROOT/'Engine/modules/render/render.preview_grid.ixx').read_text(encoding='utf-8')
 transform=definition(preview,'    export struct PreciseMeshTransform final',True).replace('export ','')
 camera_source=(ROOT/'Engine/src/render/render.preview_camera.cpp').read_text(encoding='utf-8')
 transform+='\n'+definition(camera_source,'    [[nodiscard]] bool valid_precise_mesh_transform(')+'\n'+definition(camera_source,'    [[nodiscard]] std::optional<PreciseMeshTransform> make_precise_mesh_transform(')

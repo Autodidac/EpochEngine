@@ -19,12 +19,12 @@ class ProjectBrowser(unittest.TestCase):
     def test_actual_discovery_picker_selection_refresh_and_admission(self):
         registry = (ROOT / "Engine/src/editor/implementation/editor.project_registry.inl").read_text(encoding="utf-8")
         shell = (ROOT / "Engine/src/editor/implementation/editor.project_shell_generation.inl").read_text(encoding="utf-8")
-        filesystem = (ROOT / "Engine/modules/platform.filesystem.ixx").read_text(encoding="utf-8")
+        filesystem = (ROOT / "Engine/modules/platform/platform.filesystem.ixx").read_text(encoding="utf-8")
         scene = (ROOT / "Engine/src/editor/editor.scene.cpp").read_text(encoding="utf-8")
-        core = (ROOT / "Engine/modules/editor.core.ixx").read_text(encoding="utf-8")
+        core = (ROOT / "Engine/modules/editor/editor.core.ixx").read_text(encoding="utf-8")
         app = (ROOT / "Engine/src/editor/application/editor.application_scripting_renderers.inl").read_text(encoding="utf-8")
         menus = (ROOT / "Engine/src/editor/application/editor.frame_command_menus.inl").read_text(encoding="utf-8")
-        gui = (ROOT / "Engine/modules/gui.engine.ixx").read_text(encoding="utf-8")
+        gui = (ROOT / "Engine/modules/gui/gui.engine.ixx").read_text(encoding="utf-8")
         def take(text, marker, semicolon=False):
             # The shared extractor treats a default path's {} as a body.
             if "resolve_projects_root(" in marker or "resolve_repo_relative_path(" in marker:

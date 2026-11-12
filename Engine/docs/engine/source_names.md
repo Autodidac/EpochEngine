@@ -89,6 +89,12 @@ vulkan.context_runtime.ixx
 The filename validator converts `:` to `_` and requires an exact match.
 Imports always name the exported module, never a compatibility filename.
 
+The engine groups its interfaces under `Engine/modules/<owner>/`. Build
+references use paths relative to the owning build file or the Engine source
+root. `Engine/modules/epoch.version.ixx` and `Engine/modules/engine.version.ixx`
+stay at the paths read by shipped updaters and source admission. The five asset and planetary interfaces referenced directly by
+installed Planetary Terrain packages also retain their published source paths.
+
 ## Owner Vocabulary
 
 - `core`: dependency-light primitives, lifecycle contracts, handles, logging,

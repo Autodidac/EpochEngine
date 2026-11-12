@@ -20,7 +20,7 @@ class PaletteFontPolicy(unittest.TestCase):
         text = (GUI/'controls/gui.text_controls.inl').read_text(encoding='utf-8')
         buttons = (GUI/'controls/gui.buttons_images.inl').read_text(encoding='utf-8')
         nodes = (GUI/'controls/gui.node_surface_controls.inl').read_text(encoding='utf-8')
-        variant = definition((ROOT/'Engine/modules/gui.engine.ixx').read_text(encoding='utf-8'),
+        variant = definition((ROOT/'Engine/modules/gui/gui.engine.ixx').read_text(encoding='utf-8'),
             '    export enum class ThemeVariant', True).replace('export enum class', 'enum class', 1)
         palette = definition(source, '            struct PaletteSprites', True)
         semantic = definition(source, '            struct SemanticSpritePair', True)

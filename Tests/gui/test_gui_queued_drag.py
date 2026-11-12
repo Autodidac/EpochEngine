@@ -11,7 +11,7 @@ from Tests.build.test_opengl_sprite_stream import definition
 ROOT = Path(__file__).resolve().parents[2]
 FRAME = ROOT / "Engine/src/epochgui/controls/gui.frame_lifecycle.inl"
 GUI = ROOT / "Engine/src/epochgui/gui.engine.cpp"
-API = ROOT / "Engine/modules/gui.engine.ixx"
+API = ROOT / "Engine/modules/gui/gui.engine.ixx"
 
 
 def fixture(before_drag=None):

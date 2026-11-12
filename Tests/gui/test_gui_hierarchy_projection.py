@@ -274,15 +274,15 @@ class GuiHierarchyProjection(unittest.TestCase):
         consumer = ROOT / "Tests/gui/editor.gui_hierarchy_projection_contract.cpp"
         (proof / "gui_owner_contract.hpp").write_text(actual_owner_fixture(), encoding="utf-8")
         owners = [
-            ROOT / "Engine/modules/authoring.document.ixx",
-            ROOT / "Engine/modules/authoring.gui_document.ixx",
-            ROOT / "Engine/modules/editor.hierarchy_adapter.ixx",
+            ROOT / "Engine/modules/authoring/authoring.document.ixx",
+            ROOT / "Engine/modules/authoring/authoring.gui_document.ixx",
+            ROOT / "Engine/modules/editor/editor.hierarchy_adapter.ixx",
             ROOT / "Engine/src/editor/editor.hierarchy_adapter.cpp",
             ROOT / "Engine/dep/EpochGui/src/epochgui/hierarchy_tree.cpp",
             consumer,
         ]
         modules = "\n".join(f'"{path.as_posix()}"' for path in owners[:3])
-        modules += '\n"' + (ROOT / "Engine/modules/editor.authoring_history.ixx").as_posix() + '"'
+        modules += '\n"' + (ROOT / "Engine/modules/editor/editor.authoring_history.ixx").as_posix() + '"'
         sources = "\n".join(f'"{path.as_posix()}"' for path in owners[3:])
         (proof / "CMakeLists.txt").write_text(f'''cmake_minimum_required(VERSION 3.30)
 project(GuiHierarchyProjection LANGUAGES CXX)

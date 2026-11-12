@@ -6,6 +6,7 @@ from Tools.source.owned_source_text import read_owned_source
 import json
 import os
 from pathlib import Path
+from Tests.support.cpp import engine_module_source
 import re
 import shutil
 import subprocess
@@ -114,8 +115,8 @@ class TextureDiagnosticPolicy(unittest.TestCase):
             ([(master, '0'), (context, '1'), (raylib, '1')], 1, 0),
             ([(master, '0'), (upload, '1'), (opengl, '1')], 0, 1)]
         for root, edition in self.edition_roots():
-            context_guard = self.active_guard(root, 'Engine/modules/raylib.context.ixx', context + ' && ' + raylib)
-            upload_guard = self.active_guard(root, 'Engine/modules/opengl.textures.ixx', upload + ' && ' + opengl)
+            context_guard = self.active_guard(root, 'Engine/modules/raylib/raylib.context.ixx', context + ' && ' + raylib)
+            upload_guard = self.active_guard(root, 'Engine/modules/opengl/opengl.textures.ixx', upload + ' && ' + opengl)
             for defines, context_value, upload_value in matrix:
                 with self.subTest(edition=edition, defines=defines):
                     self.expect_policy(root, edition,
@@ -127,7 +128,7 @@ class TextureDiagnosticPolicy(unittest.TestCase):
         throttle = 'EPOCH_SLOW_FRAME_LOG_THROTTLE_MS'
         trace = 'EPOCH_VULKAN_RUNTIME_DIAGNOSTICS'
         for root, edition in self.edition_roots():
-            self.active_guard(root, 'Engine/modules/diagnostics.engine.ixx', '!' + slow)
+            self.active_guard(root, 'Engine/modules/diagnostics/diagnostics.engine.ixx', '!' + slow)
             self.active_guard(root, 'Engine/src/renderers/vulkan/vulkan.platform_context.cpp', trace)
             self.expect_policy(root, edition, self.value_checks({slow: 1, grace: 5000, throttle: 5000, trace: 0}))
             self.expect_policy(root, edition, self.value_checks({slow: 0, grace: 0, throttle: 0, trace: 1}),
@@ -205,8 +206,8 @@ class TextureDiagnosticPolicy(unittest.TestCase):
         for root, edition in self.edition_roots():
             total = 0
             for filename in ('atlas.texture.ixx', 'sprite.registry.ixx', 'sprite.pool.ixx'):
-                source = read_owned_source(root / 'Engine/modules' / filename, encoding='utf-8')
-                self.assertLess(source.index('#include "../include/engine.config.hpp"'), source.index('export module'))
+                source = read_owned_source(engine_module_source(root / 'Engine/modules', filename), encoding='utf-8')
+                self.assertLess(source.index('#include "../../include/engine.config.hpp"'), source.index('export module'))
                 self.assertNotIn('defined(DEBUG_TEXTURE_RENDERING_VERBOSE)', source)
                 total += source.count('#if EPOCH_ENABLE_TEXTURE_DIAGNOSTICS')
             self.assertEqual(total, 5, f'edition={edition}')

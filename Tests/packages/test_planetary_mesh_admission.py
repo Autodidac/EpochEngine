@@ -30,6 +30,7 @@ def owner_function(source, marker):
 
 CODE = r'''
 #include <algorithm>
+#include <chrono>
 #include <array>
 #include <cctype>
 #include <cmath>
@@ -105,6 +106,7 @@ struct EditorEntity {
  std::array<float,3> position{},rotation{},scale{1,1,1};
  std::optional<scene::SceneMeshSnapshot> meshAsset;std::shared_ptr<const mesh::Artifact> meshSnapshot;bool meshLoadAttempted{};
 };
+namespace gui {struct Vec2{float x{},y{};};}
 struct EditorState {
  std::string projectRoot,projectId{"planet"},projectStatus,worldHierarchyStatus,worldHierarchyFilter;
  std::uint64_t selectedEntityId{},worldHierarchyScrollSelection{};bool sceneInteractionDirty{};
@@ -113,6 +115,9 @@ struct EditorState {
  struct PlanetaryMeshPolicy {std::string selected_root;project_planetary::SourceGeneration source;project_planetary::Settings settings;std::optional<project_planetary::MeshGenerationIdentity> generated_mesh;std::vector<project_planetary::GeneratedBody> generated_bodies;bool body_inventory_checked{};};
  struct PlanetaryBodySelection{std::uint64_t entity{};std::array<std::uint64_t,4> mesh_key{};std::uint32_t body{};};
  std::optional<PlanetaryBodySelection> planetaryBodySelection;
+ struct SceneClick{scene::SceneObjectId entity{};std::optional<std::uint32_t> body{};gui::Vec2 position{};
+  std::chrono::steady_clock::time_point time{};bool outliner{};};
+ std::optional<SceneClick> previousSceneClick;
  struct Hierarchy{std::uint64_t selected{};bool synchronize_selection(std::uint64_t value){selected=value;return true;}}worldHierarchy;
  std::optional<PlanetaryMeshPolicy> planetaryMeshPolicy;std::vector<EditorEntity> entities;
  authoring::scene::SceneDocument sceneDocument;
@@ -131,23 +136,27 @@ bool create_editor_scene_entity(EditorState& editor,EditorEntity entity,const st
 void select_editor_entity(EditorState&,std::size_t);
 EDITOR_FUNCTIONS
 namespace gui {
- struct Vec2{float x{},y{};};enum class SemanticTone{info};enum class MenuItemIndicator{Radio};
+ enum class SemanticTone{info};enum class MenuItemIndicator{Radio};
  struct Item{std::string_view label,shortcut;Vec2 size;MenuItemIndicator indicator;bool checked{},selected{};float indentation{};};
  std::vector<std::string> labels;std::vector<float> indentations;std::string click;
  void label(std::string_view){}
  void set_cursor(Vec2){}
  void section_heading(std::string_view,SemanticTone){}
  void wrapped_label(const std::string&,float){}
+ Vec2 mouse_position(){return {15,20};}
  bool menu_item(const Item& item){labels.emplace_back(item.label);indentations.push_back(item.indentation);if(item.label!=click)return false;click.clear();return true;}
 }
 struct ContextPort{const void* get()const{return this;}}ctx;
 std::optional<scene_interaction::FocusTarget> lastBodyFocus;
 void select_editor_entity(EditorState& editor,std::size_t index){editor.selectedEntityId=editor.entities.at(index).sceneObjectId;}
 void handle_scene_tool(EditorState& editor,const void*,std::string_view tool){CHECK(tool=="focus_selection");const auto index=editor_entity_index(editor,editor.selectedEntityId);lastBodyFocus=index?editor_planetary_body_focus(editor,editor.entities[*index]):std::nullopt;}
+bool editor_project_viewport_input_reserved(const EditorState&){return false;}
+BODY_CLICK
 void render_body_rows(EditorState& editor){
  const float outlinerWidth=250,hierarchyRowHeight=26,hierarchyRowsHeight=100;
  const gui::Vec2 hierarchyOrigin{};
  std::size_t generatedBodyRow{};
+ bool objectRowClicked{};
  BODY_FILTER
  BODY_OUTLINER
 }
@@ -237,7 +246,9 @@ int main(int argc,char** argv){
   CHECK(gui::click.empty()&&gui::labels==std::vector<std::string>({"Ground","Moon"}));
   CHECK(gui::indentations==std::vector<float>({0.0f,14.0f})); // real geometry, not spaces in canonical labels
   CHECK(editor.entities.size()==count&&editor.selectedEntityId==entity.sceneObjectId&&editor.worldHierarchy.selected==entity.sceneObjectId);
-  CHECK(editor.planetaryBodySelection->body==5&&lastBodyFocus&&lastBodyFocus->target.z==moon->target.z);
+  CHECK(editor.planetaryBodySelection->body==5&&!lastBodyFocus);
+  gui::click="Moon";render_body_rows(editor);
+  CHECK(gui::click.empty()&&lastBodyFocus&&lastBodyFocus->target.z==moon->target.z);
   const auto selectedId=editor.selectedEntityId;project_planetary::current=false;
   CHECK(!select_editor_planetary_body(editor,0,0)&&editor.selectedEntityId==selectedId&&editor.planetaryBodySelection->body==5);
   project_planetary::current=true;CHECK(!select_editor_planetary_body(editor,0,99)&&editor.planetaryBodySelection->body==5);
@@ -327,16 +338,18 @@ class PlanetaryMeshAdmission(unittest.TestCase):
         publication += "\n" + owner_function(play, "            bool publish_project_play_markers(")
         outliner_source = (ROOT/'Engine/src/editor/application/editor.frame_outliner.inl').read_text(encoding='utf-8')
         body_filter = owner_function(outliner_source, 'const auto containsNoCase = [](') + ';'
+        editing_source=(ROOT/'Engine/src/editor/application/editor.application_document_editing.inl').read_text(encoding='utf-8')
+        body_click=owner_function(editing_source,'[[nodiscard]] bool complete_scene_click(')
         outliner = definition(outliner_source,
             '        if(editor.planetaryMeshPolicy&&!editor.planetaryMeshPolicy->generated_bodies.empty())')
-        code = CODE.replace("GEOMETRY", geometry).replace("EDITOR_FUNCTIONS", functions).replace("RUNTIME_FUNCTION", runtime).replace("PUBLICATION", publication).replace('BODY_FILTER',body_filter).replace('BODY_OUTLINER',outliner)
+        code = CODE.replace("GEOMETRY", geometry).replace("EDITOR_FUNCTIONS", functions).replace("RUNTIME_FUNCTION", runtime).replace("PUBLICATION", publication).replace('BODY_FILTER',body_filter).replace('BODY_OUTLINER',outliner).replace('BODY_CLICK',body_click)
         proof = ROOT / "Artifacts/Reports/planetary-mesh-admission-oct28" / str(time.time_ns())
         proof.mkdir(parents=True, exist_ok=True)
         (proof / "consumer.cpp").write_text(code, encoding="utf-8")
         owners = (ROOT / "Engine/modules", ROOT / "Engine/dep/EpochPlatformEngine/modules")
         module_map = {}
         for directory in owners:
-            for path in directory.glob("*.ixx"):
+            for path in directory.rglob("*.ixx"):
                 found = re.search(r"^export module\s+([\w.:]+);", path.read_text(encoding="utf-8-sig"), re.M)
                 if found:
                     self.assertNotIn(found[1], module_map)

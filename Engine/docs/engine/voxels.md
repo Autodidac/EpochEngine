@@ -160,7 +160,7 @@ including cave/overhang and snow-like deposition samples. This is geometry editi
 not evidence of granular snow, fluid simulation, meshing or a playable planet.
 Each later feature needs controls, persistence, resources and acceptance together.
 
-October25 implemented slice: `Engine/modules/voxel.sdf.ixx` owns finite analytic
+October25 implemented slice: `Engine/modules/voxel/voxel.sdf.ixx` owns finite analytic
 sphere/axis-aligned-box samples, explicit sample validity/distance quality/material
 and hard CSG. `EditVolume` retains at most64 ordered edits; rejected edits leave
 the volume unchanged. `Engine/src/voxel/voxel.sdf_contract.cpp` proves units/signs,

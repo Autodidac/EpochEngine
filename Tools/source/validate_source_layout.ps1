@@ -32,9 +32,24 @@ foreach ($name in @('Engine.vcxitems', 'Engine.vcxitems.filters')) {
     }
 }
 $cmake = Get-Content (Join-Path $RepoRoot 'Engine/CMakeLists.txt') -Raw
+$cmake = $cmake.Replace('${EPOCH_MODULE_DIR}/', 'modules/')
 foreach ($match in [regex]::Matches($cmake, '(?<![\w/])(?:src|modules|include)/[\w./-]+\.(?:cpp|hpp|h|ixx|inl)\b')) {
     if (!(Test-Path -LiteralPath (Join-Path "$RepoRoot/Engine" $match.Value) -PathType Leaf)) {
         $failures.Add("CMake references missing source: $($match.Value)")
+    }
+}
+$examples = Join-Path $RepoRoot 'Engine/examples'
+if (Test-Path -LiteralPath $examples -PathType Container) {
+    foreach ($project in Get-ChildItem -LiteralPath $examples -Filter '*.vcxproj' -File -Recurse) {
+        [xml]$projectXml = Get-Content -LiteralPath $project.FullName -Raw
+        foreach ($node in $projectXml.SelectNodes('//*[local-name()="ClCompile"][@Update]')) {
+            $value = $node.GetAttribute('Update')
+            if (!$value.StartsWith('$(ProjectDir)') -or $value -notmatch '\.ixx$') { continue }
+            $relative = $value.Substring('$(ProjectDir)'.Length)
+            if (!(Test-Path -LiteralPath (Join-Path $project.DirectoryName $relative) -PathType Leaf)) {
+                $failures.Add("$($project.Name) updates missing module: $relative")
+            }
+        }
     }
 }
 # The extracted platform library is a first-party source owner, not a mirror.

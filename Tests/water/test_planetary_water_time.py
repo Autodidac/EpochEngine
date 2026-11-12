@@ -22,7 +22,7 @@ class PlanetaryWaterTime(unittest.TestCase):
         for name in ('TEMP','TMP','TMPDIR'):env[name]=str(temporary)
         build=Path(os.environ.get('EPOCH_PLANET_TEST_BUILD',ROOT/'Artifacts/Intermediate/cmake/planetary-water-time-nov01'))
         paths=[ROOT/'Engine/modules/project.planetary_snapshot.ixx',ROOT/'Engine/src/project/project.planetary_snapshot.cpp',
-            ROOT/'Engine/modules/water.wave.ixx',package/'modules/water.planetary.ixx',package/'tools/planet.stream_export.cpp',
+            ROOT/'Engine/modules/water/water.wave.ixx',package/'modules/water.planetary.ixx',package/'tools/planet.stream_export.cpp',
             package/'tests/planet.water_time_consumer.cpp',package/'CMakeLists.txt',Path(__file__)]
         hashes=lambda:{str(p.relative_to(ROOT)).replace('\\','/'):hashlib.sha256(p.read_bytes()).hexdigest()for p in paths}
         before=hashes();verdict={'passed':False,'sources':before,'invocations':[],'gpu_or_models':False,'configurations':{}}

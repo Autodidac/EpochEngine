@@ -28,10 +28,10 @@ class HeadingFontCapacity(unittest.TestCase):
         engine = ROOT / "Engine"
         renderer_path = engine / "src/epochgui/font.renderer.cpp"
         renderer = renderer_path.read_text(encoding="utf-8")
-        font_module = (engine / "modules/font.renderer.ixx").read_text(encoding="utf-8")
-        atlas_module = (engine / "modules/atlas.texture.ixx").read_text(encoding="utf-8")
-        texture_module = (engine / "modules/texture.core.ixx").read_text(encoding="utf-8")
-        handle_module = (engine / "modules/sprite.handle.ixx").read_text(encoding="utf-8")
+        font_module = (engine / "modules/font/font.renderer.ixx").read_text(encoding="utf-8")
+        atlas_module = (engine / "modules/atlas/atlas.texture.ixx").read_text(encoding="utf-8")
+        texture_module = (engine / "modules/texture/texture.core.ixx").read_text(encoding="utf-8")
+        handle_module = (engine / "modules/sprite/sprite.handle.ixx").read_text(encoding="utf-8")
         gui = (engine / "src/epochgui/gui.engine.cpp").read_text(encoding="utf-8")
         inks = re.findall(r"loadCache\(\s*g_resources\.([\w]+),\s*font::FontColor\{([^}]+)\}", gui)
         self.assertEqual(len(inks), 13)
@@ -260,8 +260,8 @@ int main(int argc,char**argv){
             fields = line.split("\t")
             rows.append(dict(zip(("kind", "name", "ready", "width", "height", "page", "x", "y", "glyphs", "line_height", "space_advance", "pixel_fnv64", "alpha_coverage"), fields)))
         self.assertEqual(len(rows), 26)
-        paths = [renderer_path, engine / "modules/font.renderer.ixx", engine / "modules/atlas.texture.ixx",
-                 engine / "modules/texture.core.ixx", engine / "modules/sprite.handle.ixx",
+        paths = [renderer_path, engine / "modules/font/font.renderer.ixx", engine / "modules/atlas/atlas.texture.ixx",
+                 engine / "modules/texture/texture.core.ixx", engine / "modules/sprite/sprite.handle.ixx",
                  engine / "src/stb/stb_truetype.h", engine / "src/epochgui/gui.theme_palette_spec.hpp",
                  engine / "src/epochgui/gui.engine.cpp", font, Path(__file__)]
         verdict = {"schema": "epoch.real-heading-font-capacity.v1", "build_exit": build.returncode, "run_exit": run.returncode,

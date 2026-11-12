@@ -521,8 +521,11 @@ class PlanetarySceneUnits(unittest.TestCase):
         end = source["play"].index("                std::error_code error;", start)
         scale_guard = source["play"][start:end]
         start = source["editor"].index("                const bool selected = !forestPreview")
-        end = source["editor"].index("\n            }", start)
-        marker = source["editor"][start:end]
+        end = source["editor"].index("                if(!forestPreview&&entity.forestRegion", start)
+        marker_scale = source["editor"][start:end]
+        start = source["editor"].index("                markers.push_back(epochengine::previewgrid::ObjectMarker{", end)
+        end = source["editor"].index("                if (selected && entity.sceneObjectId", start)
+        marker = marker_scale + source["editor"][start:end]
         start = source["editor"].index("                const auto planetScale = scene::mesh_render_scale(")
         end = source["editor"].index("\n            }", start)
         focus = source["editor"][start:end]
@@ -564,7 +567,7 @@ class PlanetarySceneUnits(unittest.TestCase):
         module_roots = [ROOT / "Engine/modules", ROOT / "Engine/dep/EpochPlatformEngine/modules"]
         module_map = {}
         for directory in module_roots:
-            for path in directory.glob("*.ixx"):
+            for path in directory.rglob("*.ixx"):
                 match = re.search(r"^export module\s+([\w.:]+);", path.read_text(encoding="utf-8-sig"), re.M)
                 if match:
                     module_map[match.group(1)] = path

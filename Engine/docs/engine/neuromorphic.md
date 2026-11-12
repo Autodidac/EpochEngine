@@ -45,7 +45,7 @@ architecture or weights are assumed. NEO speech I/O requires separate ASR/TTS pr
 
 Keep three distinct camera/render stages:
 
-1. **Existing sampled event camera:** `Engine/modules/render.neuromorphic_camera.ixx`
+1. **Existing sampled event camera:** `Engine/modules/render/render.neuromorphic_camera.ixx`
    converts supplied luminance observations into bounded events. This is not proof
    of an event-native sensor, free framebuffer capture or a perception model.
 2. **Planned perception/prediction:** a bounded project consumer may use event
@@ -54,7 +54,7 @@ Keep three distinct camera/render stages:
    measure observation/readback cost, accuracy, latency, RAM/VRAM and event storms.
    Do not continuously read back a framebuffer while claiming cost-free event input.
 3. **Generic invalidation primitive; future consumer only:**
-   `Engine/modules/render.neuromorphic_invalidation.ixx` retains its conservative
+   `Engine/modules/render/render.neuromorphic_invalidation.ixx` retains its conservative
    promotion contract, but no longer controls the production OpenGL scene path.
    A future model cannot suppress authoritative changes or replace presentation.
    Any new renderer policy needs separate operator scope and measured correctness

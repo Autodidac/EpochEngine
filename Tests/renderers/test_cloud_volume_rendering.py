@@ -9,7 +9,7 @@ class CloudVolumeRendering(unittest.TestCase):
         if os.name != 'nt':self.skipTest('Installed MSVC module consumer lane')
         repo=ROOT;root=ROOT
         report=ROOT/'Artifacts/Reports/cloud-volume-rendering/packets';report.mkdir(parents=True,exist_ok=True)
-        native=(root/'Engine/modules/opengl.cloud_volume.ixx').read_text(encoding='utf-8')
+        native=(root/'Engine/modules/opengl/opengl.cloud_volume.ixx').read_text(encoding='utf-8')
         packed=definition(native,'    struct PackedVolume final',True)+'\n'+definition(native,'    [[nodiscard]] inline std::optional<PackedVolume> pack_volume(')
         depth=re.search(r'float viewDepth\(float z\)\{[^}]+\}',native).group(0).replace('1.0','1.0f')
         density_owner='\n'.join(definition(native,marker) for marker in (
@@ -139,7 +139,7 @@ class CloudVolumeRendering(unittest.TestCase):
         module_map={}
         owners=[repo/'Engine/modules',repo/'Engine/dep/EpochPlatformEngine/modules']
         for owner in owners:
-         for path in owner.glob('*.ixx'):
+         for path in owner.rglob('*.ixx'):
           match=re.search(r'^export module\s+([\w.:]+);',path.read_text(encoding='utf-8-sig'),re.M)
           if match:module_map[match.group(1)]=path
         pending=['render.preview_grid','authoring.texture_detail'];closure=set()

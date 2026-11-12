@@ -27,7 +27,7 @@ class ProjectGuiActivation(unittest.TestCase):
         start = viewport.index("                    const bool projectBuildWasPending =")
         stop = viewport.index("                    const bool runtimeActive =", start)
         action = viewport[start:stop]
-        api = (ROOT / "Engine/modules/gui.engine.ixx").read_text(encoding="utf-8")
+        api = (ROOT / "Engine/modules/gui/gui.engine.ixx").read_text(encoding="utf-8")
         structures = "\n".join(definition(api, marker, True).replace("export ", "", 1) for marker in (
             "    export enum class ButtonIcon", "    export struct InlineButtonSpec", "    export enum class InlineButtonSizing",
             "    export enum class InlineButtonAlignment", "    export struct InlineButtonRowOptions"))

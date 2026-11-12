@@ -26,7 +26,7 @@ module;
 #endif
 
 #if defined(EPOCH_USING_SFML) && (EPOCH_USING_SFML == 1)
-#include "../modules/sfml.compat.hpp"
+#include "../../../modules/sfml/sfml.compat.hpp"
 #endif
 
 module core.context;

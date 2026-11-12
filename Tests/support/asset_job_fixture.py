@@ -4,6 +4,7 @@ Contains only ordinary generation/import contracts and explicit recording ports.
 No own-engine-source AI, candidate protocol, native launcher or model execution.
 """
 from pathlib import Path
+from Tests.support.cpp import engine_module_source
 import hashlib
 import json
 import os
@@ -21,7 +22,7 @@ def fixture(root=None):
     body = owner[owner.index("namespace epochengine::ai::asset_jobs"):]
     body = body.replace("namespace child = platform::child_process;", "namespace child = test_child;")
     body = body.replace("namespace admission = platform::work_admission;", "namespace admission = test_admission;")
-    api = (root / "Engine/modules/ai.asset_jobs.ixx").read_text(encoding="utf-8")
+    api = (root / "Engine/modules/ai/ai.asset_jobs.ixx").read_text(encoding="utf-8")
     api = api[api.index("export namespace epochengine::ai::asset_jobs"):].replace("export namespace", "namespace", 1)
     glb = glb_consumer().split("int main(int argc,char** argv)")[0]
     return glb + r'''
@@ -212,7 +213,7 @@ def run_fixture(test, fixture_factory=None, root=None):
     proof.mkdir(parents=True)
     source = proof / "ai.asset_jobs_contract.cpp"
     source.write_text(fixture_factory(), encoding="utf-8")
-    modules = [ROOT/"Engine/modules"/(name+".ixx") for name in (
+    modules = [engine_module_source(ROOT/"Engine/modules", name + ".ixx") for name in (
         "core.sha256", "platform.filesystem", "platform.child_process", "platform.work_admission",
         "ai.model_install", "ai.image_generation", "ai.model_generation", "ai.triposr_generation", "asset.texture_artifact",
         "asset.texture_import", "asset.mesh_artifact", "asset.model_import")]

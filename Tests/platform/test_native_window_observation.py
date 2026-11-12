@@ -24,14 +24,14 @@ class NativeWindowObservation(unittest.TestCase):
         cache = cache.replace("        const auto resolveFrameWindowState = [&]() noexcept", "        auto observe() noexcept")
         self.assertTrue(cache.rstrip().endswith("};"))
         cache = cache.rstrip()[:-2] + "}"
-        frame = read_owned_source(ROOT / "Engine/modules/render.context_frame.ixx")
+        frame = read_owned_source(ROOT / "Engine/modules/render/render.context_frame.ixx")
         frame = frame.split("export namespace epochengine::rendercontext", 1)[1]
         frame = "namespace epochengine::rendercontext" + frame
         interaction = read_owned_source(ROOT / "Engine/src/renderers/host/implementation/host.window_interaction.inl")
         invalidation = interaction.split("    [[nodiscard]] inline bool invalidates_native_window_observation", 1)[1]
         invalidation = "[[nodiscard]] inline bool invalidates_native_window_observation" + invalidation.split(
             "    inline void remember_gui_input_owner", 1)[0]
-        manager = read_owned_source(ROOT / "Engine/modules/context.multiplexer.ixx")
+        manager = read_owned_source(ROOT / "Engine/modules/context/context.multiplexer.ixx")
         invalidate = manager.split("        void invalidate_native_window_state() noexcept", 1)[1].split("\n\n", 1)[0]
         invalidate = "void invalidate_native_window_state() noexcept" + invalidate
         dispatch = read_owned_source(ROOT / "Engine/src/renderers/host/implementation/host.native_dispatch.inl")

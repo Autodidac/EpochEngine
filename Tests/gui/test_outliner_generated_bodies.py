@@ -14,7 +14,7 @@ PANE = ROOT / 'Engine/src/editor/application/editor.frame_outliner.inl'
 class GeneratedBodyOutliner(unittest.TestCase):
     def test_actual_bodies_share_the_hierarchy_scroll_and_keep_focus_routing(self):
         pane = PANE.read_text(encoding='utf-8')
-        api = (ROOT/'Engine/modules/gui.engine.ixx').read_text(encoding='utf-8')
+        api = (ROOT/'Engine/modules/gui/gui.engine.ixx').read_text(encoding='utf-8')
         declarations = '\n'.join(definition(api, '    export '+kind+' '+name, True).replace('export ', '', 1)
             for kind, name in [('struct', 'Vec2'), ('struct', 'WidgetBounds'),
                 ('enum class', 'MenuItemIndicator'), ('struct', 'MenuItemOptions')])

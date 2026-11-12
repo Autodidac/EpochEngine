@@ -99,7 +99,7 @@ class EventBus(unittest.TestCase):
 project(EventBusContract LANGUAGES CXX)
 add_executable(event_contract events.bus_contract.cpp)
 target_compile_features(event_contract PRIVATE cxx_std_23)
-target_sources(event_contract PRIVATE FILE_SET CXX_MODULES BASE_DIRS "{(ROOT/'Engine/modules').as_posix()}" FILES "{(ROOT/'Engine/modules/events.bus.ixx').as_posix()}")
+target_sources(event_contract PRIVATE FILE_SET CXX_MODULES BASE_DIRS "{(ROOT/'Engine/modules').as_posix()}" FILES "{(ROOT/'Engine/modules/events/events.bus.ixx').as_posix()}")
 target_include_directories(event_contract PRIVATE "{(ROOT/'Engine/include').as_posix()}")
 if(MSVC)
  target_compile_options(event_contract PRIVATE /utf-8 /EHsc /permissive-)

@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def consumer():
-    context = (ROOT/'Engine/modules/core.context.ixx').read_text(encoding='utf-8')
+    context = (ROOT/'Engine/modules/core/core.context.ixx').read_text(encoding='utf-8')
     host = (ROOT/'Engine/src/epoch/implementation/epoch.session_runtime.inl').read_text(encoding='utf-8')
     legacy = (ROOT/'Engine/src/epoch/epoch.engine_legacy.cpp').read_text(encoding='utf-8')
     accessors = '\n'.join(definition(context, marker) for marker in (
@@ -164,7 +164,7 @@ class ProjectWaterRuntime(unittest.TestCase):
         cpp=report/'water.runtime_contract.cpp';cpp.write_text(consumer(),encoding='utf-8')
         roots=[ROOT/'Engine/modules',ROOT/'Engine/dep/EpochPlatformEngine/modules'];modules={}
         for folder in roots:
-            for path in folder.glob('*.ixx'):
+            for path in folder.rglob('*.ixx'):
                 match=re.search(r'^export module\s+([\w.:]+);',path.read_text(encoding='utf-8-sig'),re.M)
                 if match:modules[match[1]]=path
         selected={};pending=['water.surface','scene.runtime','scene.serializer','render.preview_grid','context.type','core.time','authoring.texture_detail']
@@ -196,7 +196,7 @@ target_link_libraries(water_runtime PRIVATE owners)
             (report/f'lane-{index}.log').write_text(run.stdout+run.stderr,encoding='utf-8');results.append({'command':command,'exit':run.returncode})
             self.assertEqual(run.returncode,0,run.stdout[-9000:]+run.stderr)
         self.assertEqual((report/'Debug-proof.txt').read_bytes(),(report/'Release-proof.txt').read_bytes())
-        owners=[ROOT/'Engine/modules/core.context.ixx',ROOT/'Engine/src/epoch/epoch.engine_legacy.cpp',ROOT/'Engine/src/epoch/implementation/epoch.project_play_scene.inl',ROOT/'Engine/src/epoch/implementation/epoch.session_runtime.inl',*implementations,*selected.values(),Path(__file__)]
+        owners=[ROOT/'Engine/modules/core/core.context.ixx',ROOT/'Engine/src/epoch/epoch.engine_legacy.cpp',ROOT/'Engine/src/epoch/implementation/epoch.project_play_scene.inl',ROOT/'Engine/src/epoch/implementation/epoch.session_runtime.inl',*implementations,*selected.values(),Path(__file__)]
         (report/'result.json').write_text(json.dumps({'passed':True,'commands':results,'source_sha256':{str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in owners},'scope':'Actual Context accessor/member and central publication statement extracted verbatim, real project Water cache/marker helpers, real mesh/preview/simulation/scene modules. Native hooks and logging are recording ports. No window, GPU, model, global allocator fault, assertion or abort. Legacy launcher time exposure and physical rewind are not claimed.'},indent=2),encoding='utf-8')
 
 
