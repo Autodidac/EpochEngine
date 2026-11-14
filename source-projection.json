@@ -1,7 +1,5 @@
 {
-  "deferred_cmake_reference_count": 22,
   "edition": "public",
-  "excluded_count": 1182,
   "file_hash_algorithm": "sha256-git-text-lf-v1",
   "file_hash_normalization": "Text extensions/basenames listed in Tools/build/verify_public_source.py: replace CRLF with LF only; preserve BOMs, lone CR and all other bytes. Other files are hashed raw. Archive bytes and digests remain raw.",
   "files": {
@@ -1406,7 +1404,7 @@
     "Tests/gui/test_package_manager_layout.py": "10946b2c3cc555b67d8c77fc6917b9748922614c935cd751a8a57bf035ab4657",
     "Tests/gui/test_planet_explore_bridge.py": "de3e0c43e413b1a8877123ddf98cd381293de5d3409aa18d910e645b4c29989c",
     "Tests/gui/test_planetary_settings_ui.py": "6d22060d4122db2a52d04ab881d6c09628bb64952046d2a143c0dd8f06afa6ba",
-    "Tests/gui/test_plant_application_handoff.py": "a826e0fdb5dd9a1cc852b1b2283a90d496bf3c7d2364eb0aaf142a522b0f66f5",
+    "Tests/gui/test_plant_application_handoff.py": "195903ed17390305362a21aa062162db13f81f4fb2247e8e91f8d22620ad4f36",
     "Tests/gui/test_project_build_progress.py": "734de15a2abe98020cf455f240ddae13de25f5b22735a0e0a6c15f26f5ba9c2a",
     "Tests/gui/test_project_build_transcripts.py": "5a7951144dca70e353a480451164465c82e582989d6d6869710856beeac21e72",
     "Tests/gui/test_project_close_camera.py": "c6a229f3dde0f78910fbd0de7cab8ffeb40b3d0b2b28e5e3a7a529b9af6c7127",
@@ -1571,7 +1569,7 @@
     "Tests/updater/updater.runtime_identity_test.cpp": "b2352a864917a1dcd1f14056d680848ac80c5c70a04cbf605e3c975f30953ab1",
     "Tests/updater/updater.signed_discovery_contract.cpp": "6c9152314edddbc3f413e082b6dc79541a5fc9ba017f2b9ba15f34a7eab712bc",
     "Tests/updater/updater.source_admission_contract.ps1": "729cdaeb84d6e42427478d688b82b3d13bbbf017393389dc2e7f4595d29aeab0",
-    "Tests/voxel/test_sdf_contract_dispatch.py": "4176efbbf04f21375b4908425bcaea60e6802979e0990b51f3b995c5180f6ad8",
+    "Tests/voxel/test_sdf_contract_dispatch.py": "057d5c6d0f40fc3cb89f8b5ec6335105b3f793d5966e79db1c447b9fb0da51f7",
     "Tests/water/test_editor_planetary_water_clock.py": "1a90d891005aedaa2de843788d6aafa606a0a94a37d17d64838c20ac897bb02e",
     "Tests/water/test_fft_water_integration.py": "e76f7c411ccabeaa4a8b49a291fed5d61b86bb94e605c055a60c451f5ce5751d",
     "Tests/water/test_planetary_shoreline.py": "dcdba90a450febdf7f01ecffa5d0744361f8438a2e3638adf5c847fa211ef50b",
@@ -1633,8 +1631,7 @@
     "zip_logs.bat": "e237b9d63bc66591ec84c3c37a44800942bd616e1ef09bbea902a2e79aa976a1",
     "zip_snapshot.bat": "83c5cbdfd9ddd89c3158a44aaa06602d30a634ea2ea434c7329ff786d6100730"
   },
-  "removed_region_count": 431,
+  "manifest_maintenance": "explicit local refresh; no build or publication verdict",
   "schema": "epoch.source_projection.v1",
-  "transformed_file_count": 75,
   "validation": "source-boundaries-only; build/runtime acceptance required"
 }

@@ -116,8 +116,15 @@ int main() {
 '''.replace('PAYLOAD', payload).replace('HANDOFF', handoff).replace('CAPTURE', capture).replace('CLEAR_ROUTE', clear_route).replace('ROUTE', route)
         (proof/'consumer.cpp').write_text(source,encoding='utf-8')
         engine=(ROOT/'Engine').as_posix()
-        modules=['editor.application','forest.factory','authoring.morphology','authoring.document','voxel.field','package.registry']
-        module_sources='\n'.join(f'"{engine}/modules/{name}.ixx"' for name in modules)
+        modules = [
+            'editor/editor.application.ixx',
+            'forest/forest.factory.ixx',
+            'authoring/authoring.morphology.ixx',
+            'authoring/authoring.document.ixx',
+            'voxel/voxel.field.ixx',
+            'package/package.registry.ixx',
+        ]
+        module_sources = '\n'.join(f'"{engine}/modules/{path}"' for path in modules)
         (proof/'CMakeLists.txt').write_text(f'''cmake_minimum_required(VERSION 3.30)
 project(EpochPlantHandoffProof LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 23)
