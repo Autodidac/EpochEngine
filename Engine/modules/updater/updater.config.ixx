@@ -243,6 +243,7 @@ namespace epochengine::updater
 
     export inline std::string PROJECT_SOURCE_VERSION_URL()
     {
+        if (!SOURCE_UPDATE_FALLBACK_ENABLED) return {};
         return SITE_DISTRIBUTION
             ? std::string{ EPOCH_SITE_BASE } + "/api/epoch/source-version"
             : "https://raw.githubusercontent.com/Autodidac/EpochEngine/main/Engine/modules/epoch.version.ixx";
@@ -377,7 +378,7 @@ namespace epochengine::updater
     export inline std::string PROJECT_ACTION_RUNS_API_URL()
     {
         return SITE_DISTRIBUTION ? std::string{ EPOCH_SITE_BASE } + "/api/epoch/actions/runs"
-            : std::string{GITHUB_API_BASE} + "Autodidac/EpochEngine/actions/runs";
+            : std::string{GITHUB_API_BASE} + "Autodidac/EpochEngine/actions/workflows/epoch-public.yml/runs";
     }
 
     export inline bool PROJECT_UPDATE_CHANNEL_ALLOWED(std::string_view version_url,

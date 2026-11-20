@@ -769,6 +769,8 @@
 
             for (const auto& release : releases)
             {
+                if (resolved.found && compare_versions(release.version, resolved.remote_version) <= 0)
+                    continue;
                 for (const auto& asset : release.assets)
                 {
                     if (!starts_with_ascii(asset.name, binary_prefix)
@@ -804,7 +806,7 @@
                     resolved.binary_url = asset.url;
                     resolved.checksum_url = asset.checksum_url;
                     resolved.expected_sha256 = core::sha256::hex(*expected_digest);
-                    return resolved;
+                    break;
                 }
             }
 
@@ -913,9 +915,71 @@
                 || normalized_value.find(normalized_job) != std::string::npos;
         }
 
+        [[nodiscard]] inline std::optional<std::string> read_hosted_build_metadata(
+            const std::string& url, const char* label)
+        {
+            const auto path = make_temp_download_path(label).replace_extension(".json");
+            std::error_code error;
+            const bool downloaded = download_file(url, path.string());
+            std::optional<std::string> text;
+            if (downloaded)
+            {
+                text.emplace();
+                if (std::filesystem::file_size(path, error) <= k_release_json_max_input_bytes && !error)
+                    *text = read_text_file(path);
+            }
+            std::filesystem::remove(path, error);
+            return text;
+        }
+
+        [[nodiscard]] inline bool is_public_source_commit(const std::string_view sha)
+        {
+            return sha.size() == 40u && std::ranges::all_of(sha, [](const char digit)
+            {
+                return (digit >= '0' && digit <= '9') || (digit >= 'a' && digit <= 'f');
+            });
+        }
+
+        [[nodiscard]] inline std::string resolve_public_hosted_source_commit(
+            const std::string& repository_api, const std::string& version)
+        {
+            if (version.empty() || extract_version_string(version) != version) return {};
+            const auto tag_ref = "refs/tags/v" + version;
+            const auto reference = read_hosted_build_metadata(repository_api + "/git/ref/tags/v" + version,
+                "actions_source_tag");
+            if (!reference || extract_json_string_field(*reference, "ref") != tag_ref) return {};
+
+            auto object = extract_json_object_text(*reference, "object");
+            if (extract_json_string_field(object, "type") == "tag")
+            {
+                const auto sha = extract_json_string_field(object, "sha");
+                if (!is_public_source_commit(sha)) return {};
+                const auto annotation = read_hosted_build_metadata(repository_api + "/git/tags/" + sha,
+                    "actions_source_annotation");
+                if (!annotation || extract_json_string_field(*annotation, "sha") != sha) return {};
+                object = extract_json_object_text(*annotation, "object");
+            }
+
+            const auto commit = extract_json_string_field(object, "sha");
+            return extract_json_string_field(object, "type") == "commit" && is_public_source_commit(commit)
+                ? commit : std::string{};
+        }
+
+        [[nodiscard]] inline std::uint64_t public_hosted_run_number(
+            const std::string_view run_object, const std::string_view member)
+        {
+            const auto field = json_object_member_span(run_object, member);
+            if (!field) return 0u;
+            const auto number = run_object.substr(field->start, field->end - field->start);
+            std::uint64_t parsed_number{};
+            const auto parsed = std::from_chars(number.data(), number.data() + number.size(), parsed_number);
+            return parsed.ec == std::errc{} && parsed.ptr == number.data() + number.size() ? parsed_number : 0u;
+        }
+
         [[nodiscard]] inline BuildStatusResult check_platform_build_status(
             const std::string& runs_api_url,
-            const std::string& job_name)
+            const std::string& job_name,
+            const std::string& source_version)
         {
             BuildStatusResult result{};
             result.job_name = job_name;
@@ -926,58 +990,106 @@
                 return result;
             }
 
-            const auto runs_json_path =
-                make_temp_download_path("actions_runs").replace_extension(".json");
-            if (!download_file(runs_api_url, runs_json_path.string()))
+            const auto repository_api = std::string{GITHUB_API_BASE} + "Autodidac/EpochEngine";
+            std::string source_commit;
+            std::string runs_url = runs_api_url;
+            if (PUBLIC_DISTRIBUTION)
+            {
+                if (runs_api_url != PROJECT_ACTION_RUNS_API_URL())
+                {
+                    result.reason = "Public hosted build discovery refused a different workflow endpoint.";
+                    return result;
+                }
+                source_commit = resolve_public_hosted_source_commit(repository_api, source_version);
+                if (source_commit.empty())
+                {
+                    result.reason = "Could not resolve the exact Public source release tag to a commit.";
+                    return result;
+                }
+                runs_url += "?head_sha=" + source_commit + "&per_page=5";
+            }
+
+            const auto runs_json = read_hosted_build_metadata(runs_url, "actions_runs");
+            if (!runs_json)
             {
                 result.reason = "Could not download hosted build run metadata.";
                 return result;
             }
 
-            const auto runs_json = read_text_file(runs_json_path);
-            std::error_code ec;
-            std::filesystem::remove(runs_json_path, ec);
-            if (runs_json.empty())
+            if (runs_json->empty())
             {
                 result.reason = "Hosted build run metadata was empty.";
                 return result;
             }
 
-            const auto workflow_runs = extract_json_array_text(runs_json, "workflow_runs");
+            const auto workflow_runs = extract_json_array_text(*runs_json, "workflow_runs");
             if (workflow_runs.empty())
             {
                 result.reason = "Hosted build response did not contain workflow runs.";
                 return result;
             }
 
+            auto run_objects = extract_json_objects(workflow_runs);
+            if (PUBLIC_DISTRIBUTION)
+            {
+                const std::string* newest_run{};
+                std::uint64_t newest_number{};
+                for (const auto& run : run_objects)
+                {
+                    if (extract_json_string_field(run, "head_sha") != source_commit) continue;
+                    const auto number = public_hosted_run_number(run, "run_number");
+                    if (number == 0u)
+                    {
+                        result.reason = "The exact Public workflow run did not identify its run number.";
+                        return result;
+                    }
+                    if (number <= newest_number) continue;
+                    newest_number = number;
+                    newest_run = &run;
+                }
+                if (!newest_run)
+                {
+                    result.reason = "No Public workflow run matched the exact source release commit.";
+                    return result;
+                }
+                run_objects = {*newest_run};
+            }
+
             bool attempted_job_metadata = false;
             bool parsed_job_metadata = false;
-            for (const auto& run_object : extract_json_objects(workflow_runs))
+            for (const auto& run_object : run_objects)
             {
-                const auto jobs_url = extract_json_string_field(run_object, "jobs_url");
-                if (jobs_url.empty())
-                    continue;
+                std::string jobs_url;
+                if (PUBLIC_DISTRIBUTION)
+                {
+                    const auto run_id = public_hosted_run_number(run_object, "id");
+                    if (run_id == 0u)
+                    {
+                        result.reason = "The newest exact Public workflow run did not identify its jobs.";
+                        return result;
+                    }
+                    jobs_url = repository_api + "/actions/runs/" + std::to_string(run_id) + "/jobs?per_page=10";
+                }
+                else jobs_url = extract_json_string_field(run_object, "jobs_url");
+                if (jobs_url.empty()) continue;
 
                 attempted_job_metadata = true;
-                const auto jobs_json_path =
-                    make_temp_download_path("actions_jobs").replace_extension(".json");
-                if (!download_file(jobs_url, jobs_json_path.string()))
-                    continue;
-
-                const auto jobs_json = read_text_file(jobs_json_path);
-                std::filesystem::remove(jobs_json_path, ec);
-                if (jobs_json.empty())
-                    continue;
-
-                const auto jobs_array = extract_json_array_text(jobs_json, "jobs");
+                const auto jobs_json = read_hosted_build_metadata(jobs_url, "actions_jobs");
+                const auto jobs_array = jobs_json ? extract_json_array_text(*jobs_json, "jobs") : std::string{};
                 if (jobs_array.empty())
+                {
+                    if (PUBLIC_DISTRIBUTION) break;
                     continue;
+                }
 
                 parsed_job_metadata = true;
                 for (const auto& job_object : extract_json_objects(jobs_array))
                 {
                     const auto candidate_name = extract_json_string_field(job_object, "name");
-                    if (!text_matches_ci_job(candidate_name, job_name))
+                    const bool matches = PUBLIC_DISTRIBUTION
+                        ? candidate_name == job_name && extract_json_string_field(job_object, "head_sha") == source_commit
+                        : text_matches_ci_job(candidate_name, job_name);
+                    if (!matches)
                         continue;
 
                     result.checked = true;
@@ -1008,6 +1120,19 @@
                     }
 
                     return result;
+                }
+
+                if (PUBLIC_DISTRIBUTION)
+                {
+                    // Older runs cannot replace the current exact run, even for the same commit.
+                    result.status = extract_json_string_field(run_object, "status");
+                    if (!result.status.empty() && result.status != "completed")
+                    {
+                        result.pending = true;
+                        result.reason = "The newest exact Public workflow run is still " + result.status + ".";
+                        return result;
+                    }
+                    break;
                 }
             }
 

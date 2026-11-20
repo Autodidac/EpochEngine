@@ -42,6 +42,7 @@ export namespace epochengine::updater
         std::string archive_format{};
         std::string source_version{};
         std::string commit{};
+        std::string archive_sha256{};
         std::string message{};
     };
 

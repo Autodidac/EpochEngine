@@ -1,4 +1,4 @@
-param([string]$Report, [string]$OwnerScript, [string]$Repo)
+param([string]$Report, [string]$OwnerScript, [string]$Repo, [string]$ChannelFixtures)
 $ErrorActionPreference = 'Stop'
 $ownerText = [IO.File]::ReadAllText($OwnerScript)
 $digestText = [IO.File]::ReadAllText((Join-Path $Report 'digest.ps1'))
@@ -26,18 +26,18 @@ foreach ($case in @('flat', 'wrapped', 'ambiguous', 'foreign', 'version', 'proje
     $sourceRoot = Join-Path $homePath 'admitted'
     $sourceArchive = Join-Path $homePath 'source.zip'
     $expectedEdition = '1'
-    $expectedPublicSourceVersion = '0.90.185'
+    $expectedSourceVersion = '0.90.185'
     $wrapped = $case -in @('wrapped', 'ambiguous')
     $root = if ($wrapped) { Join-Path $tree 'EpochEngine-tag' } else { $tree }
     New-SourceTree $root
     switch ($case) {
         'ambiguous' { New-SourceTree (Join-Path $tree 'other') }
         'foreign' { [IO.File]::WriteAllText((Join-Path $root 'Engine/include/epoch.edition.hpp'), "#define EPOCH_SOURCE_EDITION_PUBLIC 0`n") }
-        'version' { $expectedPublicSourceVersion = '0.90.186' }
+        'version' { $expectedSourceVersion = '0.90.186' }
         'projection' { Remove-Item -LiteralPath (Join-Path $root 'source-projection.json') }
         'private' { New-Item -ItemType Directory -Path (Join-Path $root 'Engine/dep/EpochSelfCoding') -Force | Out-Null }
         'development' {
-            $expectedEdition = '0'; $expectedPublicSourceVersion = ''
+            $expectedEdition = '0'
             [IO.File]::WriteAllText((Join-Path $root 'Engine/include/epoch.edition.hpp'), "#define EPOCH_SOURCE_EDITION_PUBLIC 0`n")
         }
     }
@@ -61,4 +61,43 @@ foreach ($case in @('flat', 'wrapped', 'ambiguous', 'foreign', 'version', 'proje
     if ($expected -and -not (Test-Path -LiteralPath (Join-Path $sourceRoot 'Engine.sln'))) { throw 'Incomplete source moved.' }
     if (-not $expected -and (Test-Path -LiteralPath $sourceRoot)) { throw 'Refused source was published.' }
 }
-Write-Output 'public_source_worker.contract=pass (actual digest, ZIP, root and version admission; no network/build)'
+foreach ($archiveEdition in @('public', 'development')) {
+    foreach ($archiveVersion in @('0.91.13', '0.91.14')) {
+        $sourceArchive = Join-Path $ChannelFixtures "$archiveEdition-source-$archiveVersion.zip"
+        $expectedSourceSha = (Get-FileHash -LiteralPath $sourceArchive -Algorithm SHA256).Hash.ToLowerInvariant()
+        foreach ($edition in @('public', 'development')) {
+            $expectedEdition = if ($edition -eq 'public') { '1' } else { '0' }
+            foreach ($case in @('match', 'wrong-version', 'missing-version')) {
+                $homePath = Join-Path $Report "route-$archiveEdition-$archiveVersion-$edition-$case"
+                $stagingDir = Join-Path $homePath 'staging'
+                $sourceRoot = Join-Path $homePath 'admitted'
+                $expected = ($edition -eq $archiveEdition) -and ($case -eq 'match')
+                $expectedSourceVersion = switch ($case) {
+                    'match' { $archiveVersion }
+                    'wrong-version' { if ($archiveVersion -eq '0.91.13') { '0.91.14' } else { '0.91.13' } }
+                    'missing-version' { '' }
+                }
+                $succeeded = $false
+                try {
+                    & ([scriptblock]::Create($digestText))
+                    Expand-Archive -LiteralPath $sourceArchive -DestinationPath $stagingDir
+                    & ([scriptblock]::Create($ownerText))
+                    $succeeded = $true
+                } catch {
+                    if ($expected) { throw }
+                }
+                if ($succeeded -ne $expected) { throw "Incorrect ZIP admission: $archiveEdition $archiveVersion as $edition $case" }
+                if ($succeeded) {
+                    $versionModule = Join-Path $sourceRoot 'Engine/modules/epoch.version.ixx'
+                    $fixtureModule = Join-Path $ChannelFixtures "$archiveEdition-source-$archiveVersion/Engine/modules/epoch.version.ixx"
+                    if ((Get-FileHash -LiteralPath $versionModule).Hash -cne (Get-FileHash -LiteralPath $fixtureModule).Hash) {
+                        throw 'Authenticated source version changed during ZIP readback.'
+                    }
+                } elseif (Test-Path -LiteralPath $sourceRoot) {
+                    throw 'Refused ZIP was published.'
+                }
+            }
+        }
+    }
+}
+Write-Output 'source_worker.contract=pass (Public and Development 0.91.13/0.91.14 ZIP readback, edition and version binding; no network/build)'
