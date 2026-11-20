@@ -1,7 +1,5 @@
 {
-  "deferred_cmake_reference_count": 30,
   "edition": "public",
-  "excluded_count": 1212,
   "file_hash_algorithm": "sha256-git-text-lf-v1",
   "file_hash_normalization": "Text extensions/basenames listed in Tools/build/verify_public_source.py: replace CRLF with LF only; preserve BOMs, lone CR and all other bytes. Other files are hashed raw. Archive bytes and digests remain raw.",
   "files": {
@@ -745,7 +743,7 @@
     "Engine/modules/editor/editor.workspace_layout.ixx": "0333d3dc78d5adda92fe202dc98104086ae65ef5d20315b89421a64cbfe89dbd",
     "Engine/modules/engine.version.ixx": "d77c80975aa1c0ecb45e10f08bf284db58e5cee5c63f9161ab56c31b2df4be37",
     "Engine/modules/engine/engine.updater.ixx": "e1bbaae06db1d026639a8305be900f661fd2f8634f3a2584bc6b3d7e1ccec30e",
-    "Engine/modules/epoch.version.ixx": "7bf27a0a496c06ec3a585ab07d3ec520628addf37b42353e55329096a0e37521",
+    "Engine/modules/epoch.version.ixx": "2aaddefe5d27af7524ac4dd93d628dc40964908f76e5abbd14b05be1fdb3abdc",
     "Engine/modules/epoch/epoch.build_validation.ixx": "6bdeaed36d17322f524c94012d41fdfabcbe143040e2e492818c59eb4544f398",
     "Engine/modules/epoch/epoch.cli.ixx": "962434e6b810d47b61f09fbd691fa33bb6fcaa6d26c37728bfba1b0c4bb19b05",
     "Engine/modules/epoch/epoch.engine.ixx": "49c6a527263364b2ab52c29a06f587709309ecda67e944946f872cefea867c03",
@@ -958,7 +956,7 @@
     "Engine/modules/water/water.surface.ixx": "a58afbd24490dae2d82ef6a0c4f35ba5d951e51b5fc431e603885ce7673201f6",
     "Engine/modules/water/water.system.ixx": "30091990fd81805d02f22b18fd0f9bbfbc1c0318ddf26aca93af3c439d2dd5a0",
     "Engine/modules/water/water.wave.ixx": "da823838325ca0bf44382bb136bf75865d2f3c15c03cf71e54865c984f838fc2",
-    "Engine/resource/WinResource.rc": "bc61712971c13608741abd83f7db979ccaeed61840e3264718189b53377a02ba",
+    "Engine/resource/WinResource.rc": "b4bd1d84dc059c5062db3b4361bd90a5f0297b507ccc4319449ff211b2168124",
     "Engine/resource/epoch-logo.png": "ee098de87972e7ab50cb3546b77e7e91d9cfd04861302c010394016f6b187bc9",
     "Engine/resource/epoch.manifest": "3242062989f717f0f1846b13ad2082e37438d32bdc33903effeaecaa6cfb7382",
     "Engine/resource/icon.ico": "f0cba2f279302fd4e98498a6fb3cd0ff37a7d5155ea1f2c99be8935dd50103b2",
@@ -1764,8 +1762,7 @@
     "zip_logs.bat": "e237b9d63bc66591ec84c3c37a44800942bd616e1ef09bbea902a2e79aa976a1",
     "zip_snapshot.bat": "83c5cbdfd9ddd89c3158a44aaa06602d30a634ea2ea434c7329ff786d6100730"
   },
-  "removed_region_count": 440,
+  "manifest_maintenance": "explicit local refresh; no build or publication verdict",
   "schema": "epoch.source_projection.v1",
-  "transformed_file_count": 78,
   "validation": "source-boundaries-only; build/runtime acceptance required"
 }
