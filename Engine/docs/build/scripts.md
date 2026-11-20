@@ -258,6 +258,12 @@ projected file names and bytes before writing and complements the ZIP checksum.
 1. Record the intended source version, the existing runtime version for each
    edition and platform, and which release pointers the delivery will advance.
    Use the same source version for the matching Public and Development snapshots.
+   For an updater test release, place the source one revision above the packaged
+   runtime on both channels. Download the actual runtime package for each edition,
+   extract it into a fresh install and run its ordinary update check. Record the
+   discovered version, selected repository, verified archive digest and version
+   after rebuild. A Public download mirrored on the Site still exercises GitHub.
+   Test the authenticated channel from the owner portal's Site-bound runtime.
 2. Change the source version literals in `Engine/modules/epoch.version.ixx` and
    all four Windows resource fields in `Engine/resource/WinResource.rc`
    (`FILEVERSION`, `PRODUCTVERSION`, `FileVersion` and `ProductVersion`).
@@ -271,7 +277,9 @@ projected file names and bytes before writing and complements the ZIP checksum.
    reviewed source. Its source badge, alt text and source tag link come from the
    resource's `ProductVersion`. Its runtime badge and link follow GitHub's latest
    stable release. Read back the README on GitHub's default branch, including
-   the badge image, alt text and link targets.
+   the badge image, alt text and link targets. Match feature badges to the
+   edition being downloaded. Identify the build and project in new screenshot
+   captions and preserve the dates or versions on archived captures.
 4. Freeze the two reviewed commits. Match each tag or Site source entry, archive
    filename, checksum sidecar and receipt to its exact edition, version, commit
    and tree. Mark a GitHub source-only release as a prerelease so the latest
@@ -279,6 +287,9 @@ projected file names and bytes before writing and complements the ZIP checksum.
    versioned Public source ZIP and its signed `epoch-release-integrity.json`
    to that exact tag before advertising the source version on `main`. Verify
    that the version module, signed source row, ZIP and archive tree agree.
+   Epoch's installed updater verifies the release manifest against its trusted
+   public key. The signature covers the release version, download locations and
+   archive hashes. Owner sign-in on the Site controls access to private downloads.
    For a runtime release, also check the embedded distribution identity,
    platform asset names, signed integrity document and updater discovery. Verify
    the source and runtime links on GitHub, the Public Site and the owner portal.

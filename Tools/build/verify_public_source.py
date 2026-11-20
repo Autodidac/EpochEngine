@@ -242,6 +242,8 @@ REVIEWED_ASSET_TOOLS = {
 # paths. The portable Edge0 loader, model catalog and kernels stay Public.
 DEVELOPMENT_ONLY_MODEL_TOOLS = frozenset({'tools/models/edge0/benchmark_windows.py'})
 REVIEWED_README_MEDIA = {
+    'Images/readme/windows-calculator-authoring-v09114.png': '8f1b742d959a3c40bf9a02daf0714a5f88c1f7f0f530f49f0f2f88196734f559',
+    'Images/readme/linux-calculator-authoring-v09114.png': 'b3d9fad04d2f3c40e857a23cb6ff8534ce4e705df82c79081a8e33e5cec8c812',
     'Images/readme/windows-world-project-v090185.png': 'bd38e19fba78a8185367db697376cfdfe1da6542c51124ce6f1d692f74cfc72b',
 }
 LOCAL_README_IMAGE = re.compile(

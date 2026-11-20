@@ -3737,14 +3737,14 @@
                         const bool commandsAvailable = !menusBlockedByModal && !toolbarControlsBlockedByMenu;
                         const std::array actions{
                             gui::InlineButtonSpec{
-                                .label=running ? "Stop" : "Run In Editor", .width=118.0f,
+                                .label=running ? "Stop" : "Run In Editor",
                                 .enabled=running || (!building && !automationInputReserved)},
-                            gui::InlineButtonSpec{
-                                .label="Cancel Build", .width=108.0f, .enabled=building},
-                            gui::InlineButtonSpec{.label="Show Output", .width=108.0f}};
+                            gui::InlineButtonSpec{.label="Show Output"},
+                            gui::InlineButtonSpec{.label="Cancel Build"}};
+                        const auto visibleActions = std::span{actions}.first(building ? 3u : 2u);
                         const auto selected = render_automation_inspection(automationBackgroundInput,
                             commandsAvailable, [&]() {
-                                return gui::inline_button_row(actions, 28.0f, 6.0f,
+                                return gui::inline_button_row(visibleActions, 28.0f, 6.0f,
                                     {.sizing=gui::InlineButtonSizing::FitContent,
                                      .wrap=true, .available_width=centerWidth});
                             });
@@ -3757,10 +3757,10 @@
                                 show_project_run_output();
                                 play_active_context(true);
                             }
-                            else if (*selected == 1u && building)
-                                (void)cancel_project_build(editor);
-                            else if (*selected == 2u)
+                            else if (*selected == 1u)
                                 show_project_run_output();
+                            else if (*selected == 2u && building)
+                                (void)cancel_project_build(editor);
                         }
                         if (editor.projectBuildPending)
                             gui::label(project_build_activity_label(editor));
