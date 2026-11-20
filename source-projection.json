@@ -3,7 +3,7 @@
   "file_hash_algorithm": "sha256-git-text-lf-v1",
   "file_hash_normalization": "Text extensions/basenames listed in Tools/build/verify_public_source.py: replace CRLF with LF only; preserve BOMs, lone CR and all other bytes. Other files are hashed raw. Archive bytes and digests remain raw.",
   "files": {
-    ".gitattributes": "a135dd2f8e4dcc14b6160ca66151a7773a712317d71609f64f58d5f19adcbe2d",
+    ".gitattributes": "f7fa65df609d1b933756c65ba6af09f97890feb0dbbfd9cb5dcb27faecb7ded3",
     ".github/workflows/epoch-public.yml": "f59d8c47d219350057e47636742f554edbbe04651826ff2e0767d12950d9e29d",
     ".gitignore": "047c91be68c32eb481f4c22eb601d5fce0f4a7305054535edc8f48b097f205f7",
     "AGENTS.md": "a9e6a23513ee770be38d12db2baf2faf7fd28bf483bae4e80e6ba04093f16924",
