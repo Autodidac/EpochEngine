@@ -1,5 +1,6 @@
 """Actual collision controller methods over real tile document/compiler/history."""
 from pathlib import Path
+from Tests.support.cpp import engine_module_source
 import hashlib
 import json
 import os
@@ -10,7 +11,7 @@ from Tests.build.test_opengl_sprite_stream import definition
 
 ROOT = Path(__file__).resolve().parents[2]
 OWNER = ROOT / "Engine/src/editor/editor.tilemap_workspace.cpp"
-API = ROOT / "Engine/modules/editor.tilemap_workspace.ixx"
+API = ROOT / "Engine/modules/editor/editor.tilemap_workspace.ixx"
 
 
 def fixture():
@@ -18,7 +19,9 @@ def fixture():
     types = "\n".join(definition(api, marker, True) for marker in (
         "    enum class ControllerCode", "    struct ControllerResult"))
     types += definition(api, "    [[nodiscard]] constexpr std::string_view controller_code_name(")
-    helpers = "\n".join(definition(owner, marker) for marker in (
+    helpers = "template <typename Entries>\n[[nodiscard]] std::optional<std::string> " + definition(
+        owner, "available_copy_name(") + "\n"
+    helpers += "\n".join(definition(owner, marker) for marker in (
         "        [[nodiscard]] constexpr bool valid_coordinate(",
         "        [[nodiscard]] constexpr authoring::tilemap::UInt2 tile_coordinate(",
         "        [[nodiscard]] constexpr bool cell_action_available(",
@@ -27,6 +30,8 @@ def fixture():
     for name, result in (
         ("apply_cell", "ControllerResult"), ("select_palette", "ControllerResult"),
         ("select_tool", "ControllerResult"), ("accept", "ControllerResult"), ("reject", "ControllerResult"),
+        ("duplicate_selected_object", "ControllerResult"),
+        ("duplicate_selected_layer", "ControllerResult"),
         ("stage_selected_palette_collision", "ControllerResult"),
         ("apply_selected_palette_collision", "ControllerResult"),
         ("selected_palette", "std::optional<authoring::tilemap::PaletteEntryHandle>"),
@@ -38,6 +43,7 @@ def fixture():
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <string>
@@ -62,6 +68,8 @@ struct TileMapWorkspaceController{
  struct{std::uint64_t commands{},mutations{},painted_cells{},rejected_commands{};}metrics_;
  std::string status_;
  std::optional<authoring::tilemap::LayerHandle> selected_layer_handle_;
+ std::optional<authoring::tilemap::LayerDescriptor> selected_layer_draft_;
+ bool selected_layer_draft_dirty_{};
  std::optional<authoring::tilemap::PaletteEntryHandle> selected_palette_handle_;
  std::optional<authoring::tilemap::CollisionShape> selected_palette_collision_draft_;
  bool selected_palette_collision_draft_dirty_{};
@@ -77,6 +85,8 @@ struct TileMapWorkspaceController{
  ControllerResult apply_cell(CellCoordinate)noexcept;
  ControllerResult select_palette(std::uint32_t)noexcept;
  ControllerResult select_tool(Tool)noexcept;
+ ControllerResult duplicate_selected_object()noexcept;
+ ControllerResult duplicate_selected_layer()noexcept;
  ControllerResult accept(authoring::tilemap::MutationResult)noexcept;
  ControllerResult reject(ControllerCode,authoring::tilemap::ResultCode=authoring::tilemap::ResultCode::invalid_document,
   project_tilemap_sources::SourceCode=project_tilemap_sources::SourceCode::invalid_store,
@@ -139,6 +149,46 @@ int main(){
  // Selecting another real painted tile never toggles either tile globally.
  CHECK(controller.apply_cell({3,1}));CHECK(controller.selected_palette()==b.palette_entry);
  CHECK(doc.palette_entry(a.palette_entry)->collision==solid&&doc.compile().artifact.collision.size()==2);
+
+ const auto original=doc.create_object({.name="Spawn",.position={2,2},.size={1,1}});
+ CHECK(original);
+ for (auto expected: {"Spawn Copy","Spawn Copy 2"}) {
+  controller.selected_object_=original.object;
+  controller.selected_object_draft_=doc.object(original.object);
+  CHECK(controller.duplicate_selected_object());
+  CHECK(controller.selected_object_!=original.object);
+  CHECK(controller.selected_object_draft_->name==expected);
+ }
+ CHECK(doc.snapshot().objects.size()==3);
+ CHECK(doc.object(original.object)->name=="Spawn");
+
+ controller.selected_layer_handle_=layer.layer;
+ controller.selected_layer_draft_=doc.layer(layer.layer);
+ controller.selected_layer_draft_->locked=true;
+ const auto beforeCopy=doc.metrics();
+ CHECK(controller.duplicate_selected_layer());
+ const auto copiedLayer=*controller.selected_layer_handle_;
+ CHECK(copiedLayer!=layer.layer&&doc.layer(copiedLayer)->name=="Ground Copy");
+ CHECK(doc.layer(copiedLayer)->locked&&doc.compile().artifact.collision.size()==4);
+ CHECK(doc.metrics().operation_count==beforeCopy.operation_count+1);
+ CHECK(doc.metrics().occupied_cells==beforeCopy.occupied_cells*2);
+ CHECK(doc.undo()&&!doc.layer(copiedLayer)&&doc.metrics().occupied_cells==beforeCopy.occupied_cells);
+ CHECK(doc.redo()&&doc.layer(copiedLayer)->locked&&doc.compile().artifact.collision.size()==4);
+ const auto copySnapshot=doc.serialize();
+ CHECK(copySnapshot);
+ auto savedCopy=Document::deserialize(copySnapshot.bytes);
+ CHECK(savedCopy&&savedCopy.document->snapshot().chunks==doc.snapshot().chunks);
+
+ DocumentLimits limits;
+ limits.maximum_chunks=1;
+ auto limited=Document::deserialize(after.bytes,limits);
+ CHECK(limited);
+ const auto limitedBefore=limited.document->serialize();
+ const auto limitedRevision=limited.document->revision();
+ auto rejectedDescriptor=*limited.document->layer(layer.layer);
+ rejectedDescriptor.name="Over capacity";
+ CHECK(limited.document->create_layer(rejectedDescriptor,layer.layer).code==ResultCode::capacity_exceeded);
+ CHECK(limited.document->revision()==limitedRevision&&limited.document->serialize().bytes==limitedBefore.bytes);
 }
 '''
 
@@ -153,7 +203,7 @@ class TileMapCollisionWorkflow(unittest.TestCase):
         source = proof / "editor.tilemap_collision_contract.cpp"
         source.write_text(fixture(), encoding="utf-8")
         portable = ROOT / "Engine/dep/EpochGui"
-        modules = [ROOT / "Engine/modules" / name for name in (
+        modules = [engine_module_source(ROOT / "Engine/modules", name) for name in (
             "authoring.document.ixx", "authoring.tilemap.ixx", "asset.tilemap_artifact.ixx")]
         modules += [portable / "modules" / name for name in ("epoch.gui.ixx", "epoch.gui.tile_workspace.ixx")]
         implementations = [ROOT / path for path in (
@@ -169,7 +219,8 @@ enable_testing()
 add_test(NAME actual_tilemap_collision COMMAND tilemap_collision)
 set_tests_properties(actual_tilemap_collision PROPERTIES TIMEOUT 10)
 ''', encoding="utf-8")
-        commands = [["cmake", "-S", str(proof), "-B", str(build), "-G", "Visual Studio 17 2022", "-A", "x64"]]
+        commands = [["cmake", "-S", str(proof), "-B", str(build), "-G", "Visual Studio 17 2022", "-A", "x64",
+                     "-DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded"]]
         for config in ("Debug", "Release"):
             commands += [["cmake", "--build", str(build), "--config", config, "--parallel", "1"],
                          ["ctest", "--test-dir", str(build), "-C", config, "--output-on-failure"]]

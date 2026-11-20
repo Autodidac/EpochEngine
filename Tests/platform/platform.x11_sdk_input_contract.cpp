@@ -6,6 +6,8 @@
 #include <chrono>
 #include <bitset>
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <mutex>
 #include <optional>
 #include <shared_mutex>
@@ -13,7 +15,7 @@
 #include <unordered_map>
 
 using HWND = void*;
-#define CHECK(value) do { if (!(value)) return __LINE__; } while (false)
+#define CHECK(value) do { if (!(value)) { std::fprintf(stderr, "X11 contract line %d: %s\n", __LINE__, #value); return EXIT_FAILURE; } } while (false)
 namespace epochengine::input {
 enum MouseButton { MouseLeft, MouseMiddle, MouseRight, MouseButton4, MouseButton5, MouseCount };
 std::shared_mutex g_inputMutex;
@@ -45,13 +47,7 @@ long manager_event_mask(ContextType type) {
     MANAGER_MASK
     return swa.event_mask;
 }
-std::optional<epochengine::input::MouseButton> map_mouse_button(unsigned button) {
-    using namespace epochengine::input;
-    switch (button) {
-    case 1: return MouseLeft; case 2: return MouseMiddle; case 3: return MouseRight;
-    case 8: return MouseButton4; case 9: return MouseButton5; default: return {};
-    }
-}
+MAP_POINTER_BUTTON
 FORWARD_POINTER
 }
 

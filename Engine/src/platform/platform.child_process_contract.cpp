@@ -27,6 +27,7 @@
 #include <winsock2.h>
 #include <Windows.h>
 #include <aclapi.h>
+#include <netfw.h>
 #include <sddl.h>
 #include <winioctl.h>
 #elif defined(__linux__)
@@ -351,6 +352,13 @@ namespace
             if (lookup("EPOCH_CHILD_PRIVATE_SENTINEL")) return false;
 #if defined(_WIN32)
             if (lookup("PATHEXT") != ".COM;.EXE;.BAT;.CMD") return false;
+            SYSTEM_INFO host{};
+            ::GetNativeSystemInfo(&host);
+            const std::string_view architecture =
+                host.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_AMD64 ? "AMD64" :
+                host.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_ARM64 ? "ARM64" :
+                host.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_INTEL ? "x86" : "";
+            if (!architecture.empty() && lookup("PROCESSOR_ARCHITECTURE") != architecture) return false;
 #endif
             const auto process = root / "cache" / "process";
             const std::vector<std::pair<std::string, std::filesystem::path>> expected{
@@ -836,6 +844,152 @@ namespace
     // This opt-in probe launches only a copy of this console component, with
     // literal synthetic fixtures. It never launches an editor, GPU context,
     // model request, server/listener, or generated project.
+    enum class IsolationNetworkStage { startup, socket_creation, nonblocking, connection, wait, status_query, completion };
+
+    [[nodiscard]] bool isolation_network_denied(IsolationNetworkStage stage, int error) noexcept
+    {
+        return error == WSAEACCES && (stage == IsolationNetworkStage::socket_creation
+            || stage == IsolationNetworkStage::connection || stage == IsolationNetworkStage::completion);
+    }
+
+    [[nodiscard]] std::string isolation_network_report(IsolationNetworkStage stage, int error)
+    {
+        const char* name = "unknown";
+        switch (stage)
+        {
+        case IsolationNetworkStage::startup: name = "winsock-startup"; break;
+        case IsolationNetworkStage::socket_creation: name = "socket-creation"; break;
+        case IsolationNetworkStage::nonblocking: name = "nonblocking-setup"; break;
+        case IsolationNetworkStage::connection: name = "connect"; break;
+        case IsolationNetworkStage::wait: name = "completion-wait"; break;
+        case IsolationNetworkStage::status_query: name = "socket-status-query"; break;
+        case IsolationNetworkStage::completion: name = "connection-status"; break;
+        }
+        const bool connectionAttempted = stage == IsolationNetworkStage::connection
+            || stage == IsolationNetworkStage::wait || stage == IsolationNetworkStage::status_query
+            || stage == IsolationNetworkStage::completion;
+        const bool denied = isolation_network_denied(stage, error);
+        return std::string{"file-access-checks=passed\nnetwork-stage="} + name
+            + "\nnetwork-error=" + std::to_string(error)
+            + "\nnetwork-denial-check=" + (denied ? "passed" : "not-proven")
+            + "\nconnection-denial-check=" + (!connectionAttempted ? "not-exercised"
+                : (denied ? "passed" : "not-proven")) + "\n";
+    }
+
+    struct IsolationNetworkControl final
+    {
+        int startup_error{};
+        std::optional<int> socket_error{};
+        std::optional<int> close_error{};
+        std::optional<int> cleanup_error{};
+    };
+
+    [[nodiscard]] IsolationNetworkControl network_initialization_control()
+    {
+        // Initialization only, under the caller's token. No bind/listen/connect/data.
+        IsolationNetworkControl result{};
+        WSADATA sockets{};
+        result.startup_error = ::WSAStartup(MAKEWORD(2, 2), &sockets);
+        if (result.startup_error != 0) return result;
+        const SOCKET socket = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+        result.socket_error = socket == INVALID_SOCKET ? ::WSAGetLastError() : 0;
+        if (socket != INVALID_SOCKET)
+            result.close_error = ::closesocket(socket) == 0 ? 0 : ::WSAGetLastError();
+        result.cleanup_error = ::WSACleanup() == 0 ? 0 : ::WSAGetLastError();
+        return result;
+    }
+
+    [[nodiscard]] std::string isolation_network_control_report(const IsolationNetworkControl& control,
+        std::string_view prefix = "ordinary-control")
+    {
+        const auto value = [](const std::optional<int>& error) {
+            return error ? std::to_string(*error) : std::string{"not-exercised"};
+        };
+        const std::string label{prefix};
+        return label + "-startup-error=" + std::to_string(control.startup_error)
+            + "\n" + label + "-socket-error=" + value(control.socket_error)
+            + "\n" + label + "-close-error=" + value(control.close_error)
+            + "\n" + label + "-cleanup-error=" + value(control.cleanup_error)
+            + "\n" + label + "-connection-attempted=0\n";
+    }
+
+    [[nodiscard]] std::string network_catalog_access_report()
+    {
+        // Diagnostic only: fixed catalog keys, metadata counts, no values or
+        // provider names. Never requests write access or initializes providers.
+        std::string report{};
+        const auto inspect = [&](const wchar_t* path, std::string_view label,
+            DWORD access, std::string_view accessLabel)
+        {
+            HKEY key{};
+            const LSTATUS opened = ::RegOpenKeyExW(HKEY_LOCAL_MACHINE, path, 0,
+                access, &key);
+            const std::string prefix = "catalog-" + std::string{label} + "-" + std::string{accessLabel};
+            report += prefix + "-open-status=" + std::to_string(opened) + "\n";
+            if (opened != ERROR_SUCCESS) return;
+            DWORD subkeys{}, values{};
+            const LSTATUS queried = ::RegQueryInfoKeyW(key, nullptr, nullptr, nullptr,
+                &subkeys, nullptr, nullptr, &values, nullptr, nullptr, nullptr, nullptr);
+            report += prefix + "-query-status=" + std::to_string(queried) + "\n";
+            if (queried == ERROR_SUCCESS)
+                report += prefix + "-subkey-count=" + std::to_string(subkeys)
+                    + "\n" + prefix + "-value-count=" + std::to_string(values) + "\n";
+            report += prefix + "-close-status=" + std::to_string(::RegCloseKey(key)) + "\n";
+        };
+        const auto inspectAccess = [&](const wchar_t* path, std::string_view label)
+        {
+            // RegQueryInfoKey requires query permission; requesting enumeration
+            // as well can obscure which permission the diagnostic was denied.
+            inspect(path, label, KEY_QUERY_VALUE, "query-only");
+            inspect(path, label, KEY_QUERY_VALUE | KEY_ENUMERATE_SUB_KEYS, "query-enumerate");
+        };
+        inspectAccess(L"SYSTEM\\CurrentControlSet\\Services\\WinSock2\\Parameters", "parameters");
+        inspectAccess(L"SYSTEM\\CurrentControlSet\\Services\\WinSock2\\Parameters\\Protocol_Catalog9", "protocol");
+        inspectAccess(L"SYSTEM\\CurrentControlSet\\Services\\WinSock2\\Parameters\\NameSpace_Catalog5", "namespace");
+        return report;
+    }
+
+    [[nodiscard]] std::string network_capability_diagnostic()
+    {
+        // A policy diagnostic on the matched child's token is separate from a
+        // socket verdict. Use only a fixed loopback literal and send no traffic.
+        const HMODULE firewall = ::LoadLibraryExW(L"FirewallAPI.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+        if (!firewall)
+            return "network-capability-query-load-status=" + std::to_string(::GetLastError()) + "\n";
+        const auto diagnose = reinterpret_cast<decltype(&::NetworkIsolationDiagnoseConnectFailureAndGetInfo)>(
+            ::GetProcAddress(firewall, "NetworkIsolationDiagnoseConnectFailureAndGetInfo"));
+        NETISO_ERROR_TYPE capability = NETISO_ERROR_TYPE_NONE;
+        const DWORD status = diagnose ? diagnose(L"127.0.0.1", &capability) : ERROR_PROC_NOT_FOUND;
+        (void)::FreeLibrary(firewall);
+
+        std::string report = "network-capability-query-status=" + std::to_string(status) + "\n";
+        if (status == ERROR_SUCCESS)
+            report += "network-capability-query-result=" + std::to_string(static_cast<int>(capability)) + "\n";
+        return report;
+    }
+
+    [[nodiscard]] int run_network_initialization_child(std::string_view eventName)
+    {
+        constexpr std::string_view prefix = "Local\\epoch-workspace-isolation-";
+        if (!eventName.starts_with(prefix) || eventName.size() <= prefix.size()
+            || eventName.size() > prefix.size() + 40u
+            || eventName.substr(prefix.size()).find_first_not_of("0123456789-") != std::string_view::npos)
+            return 160;
+        const std::wstring eventPath{eventName.begin(), eventName.end()};
+        ContractHandle event{::OpenEventW(EVENT_MODIFY_STATE, FALSE, eventPath.c_str())};
+        const DWORD eventStatus = event.valid() ? ERROR_SUCCESS : ::GetLastError();
+        const auto control = network_initialization_control();
+        const auto diagnostic = isolation_network_control_report(control, "child-control")
+            + "host-event-open-status=" + std::to_string(eventStatus) + "\n"
+            + network_catalog_access_report() + network_capability_diagnostic();
+        DWORD written{};
+        if (::WriteFile(::GetStdHandle(STD_OUTPUT_HANDLE), diagnostic.data(),
+                static_cast<DWORD>(diagnostic.size()), &written, nullptr) == FALSE
+            || written != diagnostic.size()) return 160;
+        return control.startup_error == 0 && control.socket_error == 0
+            && control.close_error == 0 && control.cleanup_error == 0 ? 0 : 159;
+    }
+
     [[nodiscard]] int run_isolation_child(char** argv)
     {
         const auto code = std::filesystem::path{argv[2]};
@@ -877,50 +1031,70 @@ namespace
                 (scratch / "result.txt").c_str(), nullptr) == FALSE) return 158;
         // Connect only to the already operator-approved local model endpoint;
         // send no bytes. A refused/absent server is NOT network-policy proof.
+        const auto report = [](IsolationNetworkStage stage, int error, int failedExit)
+        {
+            const auto diagnostic = isolation_network_report(stage, error);
+            DWORD written{};
+            (void)::WriteFile(::GetStdHandle(STD_OUTPUT_HANDLE), diagnostic.data(),
+                static_cast<DWORD>(diagnostic.size()), &written, nullptr);
+            return isolation_network_denied(stage, error) ? 0 : failedExit;
+        };
         WSADATA sockets{};
         const int socketStartup = ::WSAStartup(MAKEWORD(2, 2), &sockets);
         if (socketStartup != 0)
         {
-            const std::string diagnostic = "file-access-checks=passed\nwinsock-startup-error="
-                + std::to_string(socketStartup) + "\nconnection-denial-check=not-exercised\n";
-            DWORD written{};
-            (void)::WriteFile(::GetStdHandle(STD_OUTPUT_HANDLE), diagnostic.data(),
-                static_cast<DWORD>(diagnostic.size()), &written, nullptr);
-            return 155;
+            return report(IsolationNetworkStage::startup, socketStartup, 155);
         }
         const SOCKET connection = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
         if (connection == INVALID_SOCKET)
         {
             const int failure = ::WSAGetLastError();
             (void)::WSACleanup();
-            return failure == WSAEACCES ? 0 : 156;
+            return report(IsolationNetworkStage::socket_creation, failure, 156);
         }
         u_long nonblocking = 1u;
         const bool modeReady = ::ioctlsocket(connection, FIONBIO, &nonblocking) == 0;
+        if (!modeReady)
+        {
+            const int failure = ::WSAGetLastError();
+            (void)::closesocket(connection);
+            (void)::WSACleanup();
+            return report(IsolationNetworkStage::nonblocking, failure, 157);
+        }
         sockaddr_in endpoint{};
         endpoint.sin_family = AF_INET;
         endpoint.sin_port = ::htons(1234u);
         endpoint.sin_addr.s_addr = ::htonl(INADDR_LOOPBACK);
-        const int connected = modeReady
-            ? ::connect(connection, reinterpret_cast<const sockaddr*>(&endpoint), sizeof(endpoint)) : 0;
+        const int connected = ::connect(connection, reinterpret_cast<const sockaddr*>(&endpoint), sizeof(endpoint));
         int failure = connected == SOCKET_ERROR ? ::WSAGetLastError() : 0;
+        auto stage = IsolationNetworkStage::connection;
         if (failure == WSAEWOULDBLOCK)
         {
             fd_set writable{}, failed{};
             FD_ZERO(&writable); FD_SET(connection, &writable);
             FD_ZERO(&failed); FD_SET(connection, &failed);
             timeval deadline{3, 0};
-            if (::select(0, nullptr, &writable, &failed, &deadline) > 0)
+            const int ready = ::select(0, nullptr, &writable, &failed, &deadline);
+            if (ready > 0)
             {
                 int size = sizeof(failure);
+                stage = IsolationNetworkStage::completion;
                 if (::getsockopt(connection, SOL_SOCKET, SO_ERROR,
                         reinterpret_cast<char*>(&failure), &size) != 0)
+                {
                     failure = ::WSAGetLastError();
+                    stage = IsolationNetworkStage::status_query; // Query failure is not a connection verdict.
+                }
+            }
+            else
+            {
+                stage = IsolationNetworkStage::wait;
+                failure = ready == SOCKET_ERROR ? ::WSAGetLastError() : WSAETIMEDOUT;
             }
         }
         (void)::closesocket(connection);
         (void)::WSACleanup();
-        return failure == WSAEACCES ? 0 : 157;
+        return report(stage, failure, 157);
     }
 
     [[nodiscard]] std::optional<std::wstring> file_dacl(const std::filesystem::path& path)
@@ -940,14 +1114,16 @@ namespace
         return result;
     }
 
-    [[nodiscard]] int run_isolation_contract(const std::filesystem::path& self)
+    [[nodiscard]] int run_isolation_contract(const std::filesystem::path& self,
+        bool initializationOnly = false)
     {
         ExecutableIdentityFixture fixture{};
         fixture.preserve_evidence = true;
         if (!fixture.prepare("epoch-workspace-isolation-")) return 140;
+        std::string controlEvidence = isolation_network_control_report(network_initialization_control());
         const auto fail = [&](int code, const std::string& message)
         {
-            (void)fixture.write("isolation.evidence.txt", message);
+            (void)fixture.write("isolation.evidence.txt", controlEvidence + message);
             return code;
         };
         const auto root = fixture.root / "generation";
@@ -995,37 +1171,109 @@ namespace
                 && file_dacl(code) == beforeCode && file_dacl(code / "input.txt") == beforeInput
                 && file_dacl(scratch) == beforeScratch;
         };
-        // Admission must discover a null descendant DACL before the first
-        // inheritable root grant can rewrite it. This canary is fixture-only.
-        const auto nullDaclPath = code / "null-dacl-canary.txt";
-        auto nullDaclName = nullDaclPath.wstring();
-        if (!fixture.write("generation/code/null-dacl-canary.txt", "synthetic-null-dacl")
-            || ::SetNamedSecurityInfoW(nullDaclName.data(), SE_FILE_OBJECT,
-                DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION,
-                nullptr, nullptr, nullptr, nullptr) != ERROR_SUCCESS)
-            return fail(148, "Cannot prepare null-DACL admission canary.");
-        const auto nullDacl = file_dacl(nullDaclPath);
-        if (!nullDacl || !refusedBeforeExecution("absent or invalid DACL")
-            || file_dacl(nullDaclPath) != nullDacl)
-            return fail(148, "Null-DACL refusal changed permissions or reached execution.");
-        if (!std::filesystem::remove(nullDaclPath, error) || error)
-            return fail(148, "Cannot retire null-DACL canary.");
+        if (!initializationOnly)
+        {
+            // Admission must discover a null descendant DACL before the first
+            // inheritable root grant can rewrite it. This canary is fixture-only.
+            const auto nullDaclPath = code / "null-dacl-canary.txt";
+            auto nullDaclName = nullDaclPath.wstring();
+            if (!fixture.write("generation/code/null-dacl-canary.txt", "synthetic-null-dacl")
+                || ::SetNamedSecurityInfoW(nullDaclName.data(), SE_FILE_OBJECT,
+                    DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION,
+                    nullptr, nullptr, nullptr, nullptr) != ERROR_SUCCESS)
+                return fail(148, "Cannot prepare null-DACL admission canary.");
+            const auto nullDacl = file_dacl(nullDaclPath);
+            if (!nullDacl || !refusedBeforeExecution("absent or invalid DACL")
+                || file_dacl(nullDaclPath) != nullDacl)
+                return fail(148, "Null-DACL refusal changed permissions or reached execution.");
+            if (!std::filesystem::remove(nullDaclPath, error) || error)
+                return fail(148, "Cannot retire null-DACL canary.");
 
-        const auto outsideAlias = fixture.root / "outside-alias.txt";
-        if (::CreateHardLinkW(outsideAlias.c_str(), (code / "input.txt").c_str(), nullptr) == FALSE
-            || !refusedBeforeExecution("hard-linked"))
-            return fail(149, "Hardlinked admission was not refused before execution.");
-        if (!std::filesystem::remove(outsideAlias, error) || error)
-            return fail(149, "Cannot retire hardlink canary.");
+            const auto outsideAlias = fixture.root / "outside-alias.txt";
+            if (::CreateHardLinkW(outsideAlias.c_str(), (code / "input.txt").c_str(), nullptr) == FALSE
+                || !refusedBeforeExecution("hard-linked"))
+                return fail(149, "Hardlinked admission was not refused before execution.");
+            if (!std::filesystem::remove(outsideAlias, error) || error)
+                return fail(149, "Cannot retire hardlink canary.");
 
-        const auto detour = fixture.root / "detour";
-        const auto junction = scratch / "redirected";
-        if (!std::filesystem::create_directory(detour, error) || error
-            || !create_fixture_directory_link(junction, detour)
-            || !refusedBeforeExecution("reparse"))
-            return fail(150, "Reparse admission was not refused before execution.");
-        if (!std::filesystem::remove(junction, error) || error)
-            return fail(150, "Cannot retire junction canary.");
+            const auto detour = fixture.root / "detour";
+            const auto junction = scratch / "redirected";
+            if (!std::filesystem::create_directory(detour, error) || error
+                || !create_fixture_directory_link(junction, detour)
+                || !refusedBeforeExecution("reparse"))
+                return fail(150, "Reparse admission was not refused before execution.");
+            if (!std::filesystem::remove(junction, error) || error)
+                return fail(150, "Cannot retire junction canary.");
+        }
+        // Match executable bytes/location, working directory, explicit environment
+        // and arguments. Only the restriction and observation labels differ.
+        // These controls do not connect and cannot establish network denial.
+        const std::string eventName = "Local\\" + fixture.root.filename().string();
+        const std::wstring eventPath{eventName.begin(), eventName.end()};
+        ::SetLastError(ERROR_SUCCESS);
+        ContractHandle hostEvent{::CreateEventW(nullptr, TRUE, FALSE, eventPath.c_str())};
+        if (!hostEvent.valid() || ::GetLastError() == ERROR_ALREADY_EXISTS)
+            return fail(142, "Cannot create isolated host event fixture.");
+        const auto initializationControl = [&](bool restricted)
+        {
+            auto control = request;
+            const std::string label = restricted ? "restricted-child-control" : "ordinary-child-control";
+            control.arguments = {"--epoch-network-initialization-child", eventName};
+            control.merged_output_path = fixture.root / (label + ".log");
+            control.correlation_key = "contract:" + label;
+            control.exclusive_group = control.correlation_key;
+            if (!restricted) control.isolation.reset();
+            const auto started = child_process::launch_or_focus(control);
+            OwnedContractProcess controlOwner{started.handle};
+            if (!started)
+            {
+                controlEvidence += label + "-launch-failed=" + started.message + "\n";
+                return false;
+            }
+            const auto completed = child_process::wait(started.handle, {}, 15'000'000'000ull);
+            const bool released = child_process::release(started.handle);
+            if (released) controlOwner.handle = {};
+            const bool retired = !child_process::active_in_group(control.exclusive_group);
+            const bool observed = completed && completed.process && completed.process->exit_code_valid;
+            const bool restrictedVerified = !restricted || (completed.process
+                && completed.process->restricted_token_verified && completed.process->isolation_retired);
+            const bool restored = file_dacl(code) == beforeCode
+                && file_dacl(code / "input.txt") == beforeInput && file_dacl(scratch) == beforeScratch;
+            char bytes[4096]{};
+            std::ifstream diagnostic{control.merged_output_path, std::ios::binary};
+            diagnostic.read(bytes, sizeof(bytes));
+            const std::string_view received{bytes, static_cast<std::size_t>(diagnostic.gcount())};
+            const auto eventOpenReturned = [&](DWORD status)
+            {
+                return received.find("\nhost-event-open-status=" + std::to_string(status) + "\n")
+                    != std::string_view::npos;
+            };
+            const bool eventBoundaryPassed = restricted
+                ? (eventOpenReturned(ERROR_ACCESS_DENIED) || eventOpenReturned(ERROR_FILE_NOT_FOUND))
+                : eventOpenReturned(ERROR_SUCCESS);
+            const bool eventUnchanged = ::WaitForSingleObject(hostEvent.value, 0u) == WAIT_TIMEOUT;
+            controlEvidence += label + "-exit=" + (observed
+                ? std::to_string(completed.process->exit_code) : "missing")
+                + "\n" + label + "-handle-released=" + std::to_string(released)
+                + "\n" + label + "-group-retired=" + std::to_string(retired)
+                + "\n" + label + "-restriction-check=" + (restricted
+                    ? (restrictedVerified ? "passed" : "failed") : "not-requested")
+                + "\n" + label + "-prior-dacl-restored=" + std::to_string(restored)
+                + "\n" + label + "-host-event-access-check=" + (eventBoundaryPassed ? "passed" : "failed")
+                + "\n" + label + "-host-event-unchanged=" + std::to_string(eventUnchanged)
+                + "\n" + label + "-diagnostics-begin\n"
+                + std::string{received}
+                + "\n" + label + "-diagnostics-end\n";
+            // Initialization failure is diagnostic, not process/retirement failure.
+            return observed && (completed.process->exit_code == 0 || completed.process->exit_code == 159)
+                && released && retired && restrictedVerified && restored && eventBoundaryPassed && eventUnchanged;
+        };
+        if (!initializationControl(false) || !initializationControl(true))
+            return fail(143, "Matched initialization control did not complete and retire safely.\n");
+        if (initializationOnly)
+            return fixture.write("isolation.evidence.txt", controlEvidence
+                + "paired-controls-check=passed\nconnection-attempted=0\nnetwork-denial-check=not-proven\n")
+                ? 0 : 143;
         const auto launch = child_process::launch_or_focus(request);
         OwnedContractProcess owner{launch.handle};
         if (!launch)
@@ -1060,6 +1308,9 @@ namespace
         const bool isolationRetired = result.process && result.process->isolation_retired;
         const bool childPassed = result && result.process && result.process->exit_code_valid
             && result.process->exit_code == 0;
+        char childDiagnosticBytes[2048]{};
+        std::ifstream childDiagnostics{fixture.root / "child.log", std::ios::binary};
+        childDiagnostics.read(childDiagnosticBytes, sizeof(childDiagnosticBytes));
         const std::string evidence = "process=" + result.message
             + "\nnull_dacl_admission_refused=1\nhardlink_admission_refused=1\nreparse_admission_refused=1"
             + "\nchild_exit=" + (result.process && result.process->exit_code_valid
@@ -1069,7 +1320,10 @@ namespace
             + "\nhandle_released=" + std::to_string(released)
             + "\ndata_preserved=" + std::to_string(dataPreserved)
             + "\nprior_dacl_restored=" + std::to_string(daclRestored)
-            + "\nprocess_group_retired=" + std::to_string(groupRetired) + "\n";
+            + "\nprocess_group_retired=" + std::to_string(groupRetired)
+            + "\nchild_diagnostics_begin\n"
+            + std::string{childDiagnosticBytes, static_cast<std::size_t>(childDiagnostics.gcount())}
+            + "\nchild_diagnostics_end\n";
         if (!dataPreserved) return fail(145, evidence);
         if (!daclRestored) return fail(146, evidence);
         if (!groupRetired) return fail(147, evidence);
@@ -1077,6 +1331,58 @@ namespace
             return fail(144, evidence);
         fixture.preserve_evidence = false;
         return 0;
+    }
+
+    [[nodiscard]] bool verified_file_lease_contract(ExecutableIdentityFixture& fixture)
+    {
+        const auto file = fixture.root / "payload.bin";
+        if (!fixture.write("payload.bin", "benign payload")) return false;
+        const auto expected = child_process::inspect_executable(file);
+        if (!expected) return false;
+        auto mismatched = *expected;
+        ++mismatched.size_bytes;
+        std::stop_source stopped;
+        stopped.request_stop();
+        if (child_process::lock_verified_file_for_read(file, {})
+            || child_process::lock_verified_file_for_read(file, mismatched)
+            || child_process::lock_verified_file_for_read(file, *expected, stopped.get_token())
+            || child_process::lock_verified_file_for_read(fixture.root, *expected)
+            || child_process::lock_verified_file_for_read(fixture.root / "missing.bin", *expected))
+            return false;
+
+        auto lease = child_process::lock_verified_file_for_read(file, *expected);
+        if (!lease) return false;
+        auto otherOwner = lease;
+        lease.reset();
+        {
+            ContractHandle reader{::CreateFileW(file.c_str(), GENERIC_READ,
+                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr)};
+            if (!reader.valid()) return false;
+        }
+        const auto blocked = [&](DWORD access)
+        {
+            ContractHandle handle{::CreateFileW(file.c_str(), access,
+                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr)};
+            const auto error = ::GetLastError();
+            return !handle.valid() && error == ERROR_SHARING_VIOLATION;
+        };
+        if (!blocked(GENERIC_WRITE) || !blocked(DELETE)) return false;
+        const auto retained = child_process::inspect_executable(file);
+        if (retained != expected) return false;
+        otherOwner.reset();
+        {
+            ContractHandle writer{::CreateFileW(file.c_str(), GENERIC_WRITE | DELETE,
+                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr)};
+            if (!writer.valid()) return false;
+        }
+        // Failed identity/cancellation acquisition must not leave hidden locks.
+        if (!fixture.write("payload.bin", "changed payload")) return false;
+        if (child_process::lock_verified_file_for_read(file, *expected)) return false;
+        std::error_code error;
+        return std::filesystem::remove(file, error) && !error;
     }
 
     [[nodiscard]] bool identity_lock_contract(ExecutableIdentityFixture& fixture)
@@ -1346,6 +1652,129 @@ namespace
         return 27;
     }
 
+    [[nodiscard]] int run_bounded_output_child(std::string_view mode)
+    {
+        char byte{};
+        DWORD received{};
+        if (!::ReadFile(::GetStdHandle(STD_INPUT_HANDLE), &byte, 1u, &received, nullptr)
+            || received != 0u || ::GetPriorityClass(::GetCurrentProcess()) != BELOW_NORMAL_PRIORITY_CLASS)
+            return 171;
+        for (unsigned turn = 0u; turn < 64u; ++turn)
+            for (const bool standardError : {false, true})
+            {
+                const std::string block(8192u, standardError ? 'E' : 'O');
+                DWORD written{};
+                if (!::WriteFile(::GetStdHandle(standardError ? STD_ERROR_HANDLE : STD_OUTPUT_HANDLE),
+                        block.data(), static_cast<DWORD>(block.size()), &written, nullptr)
+                    || written != block.size()) return 172;
+            }
+        if (mode == "cancel" || mode == "timeout")
+            std::this_thread::sleep_for(std::chrono::seconds{30});
+        return mode == "nonzero" ? 37 : 0;
+    }
+
+    [[nodiscard]] int run_bounded_output_contract(const std::filesystem::path& self)
+    {
+        ExecutableIdentityFixture fixture{};
+        fixture.preserve_evidence = true;
+        if (!fixture.prepare("epoch-bounded-output-")) return 173;
+        const auto fail = [&](std::string message) {
+            (void)fixture.write("bounded-output.evidence.txt", message);
+            return 174;
+        };
+        constexpr std::size_t limit = 16'387u;
+        for (const std::string mode : {"normal", "append", "nonzero", "cancel", "timeout", "complete"})
+        {
+            child_process::LaunchRequest request{};
+            request.executable = self;
+            request.working_directory = fixture.root;
+            request.merged_output_path = fixture.root / (mode + ".log");
+            request.arguments = {"--epoch-bounded-output-child", mode};
+            request.correlation_key = "contract:bounded-output:" + mode;
+            request.exclusive_group = request.correlation_key;
+            request.window_mode = child_process::WindowMode::hidden;
+            request.expected_executable = child_process::inspect_executable(self);
+            request.environment = child_process::prepare_workspace_environment(fixture.root);
+            request.disconnect_standard_input = true;
+            request.merged_output_limit_bytes = mode == "complete" ? 2u * 1024u * 1024u : limit;
+            request.below_normal_priority = true;
+            request.append_output = mode == "append";
+            if (!request.expected_executable || !request.environment
+                || (request.append_output && !fixture.write(mode + ".log", "prefix:")))
+                return fail("Cannot prepare bounded capture inputs.");
+            const auto started = child_process::launch_or_focus(request);
+            OwnedContractProcess owner{started.handle};
+            if (started.code != child_process::LaunchCode::started)
+                return fail("Capture launch failed: " + started.message);
+            // No supervisor polling while the producer exceeds pipe capacity.
+            // The owned output worker must drain independently.
+            const auto readyDeadline = std::chrono::steady_clock::now() + std::chrono::seconds{5};
+            std::error_code error{};
+            while (std::chrono::steady_clock::now() < readyDeadline)
+            {
+                if (std::filesystem::file_size(request.merged_output_path, error)
+                    == (mode == "complete" ? 1'048'576u : limit) && !error) break;
+                error.clear();
+                std::this_thread::sleep_for(std::chrono::milliseconds{5});
+            }
+            std::stop_source cancellation{};
+            if (mode == "cancel") (void)cancellation.request_stop();
+            const auto done = child_process::wait(started.handle, cancellation.get_token(),
+                mode == "timeout" ? 20'000'000ull : 5'000'000'000ull);
+            const auto expected = mode == "cancel" ? child_process::WaitCode::cancelled
+                : mode == "timeout" ? child_process::WaitCode::timed_out : child_process::WaitCode::exited;
+            const bool released = child_process::release(started.handle);
+            if (released) owner.handle = {};
+            std::ifstream input{request.merged_output_path, std::ios::binary};
+            const std::string captured{std::istreambuf_iterator<char>{input}, {}};
+            std::string prefix = request.append_output ? "prefix:" : "";
+            if (mode == "complete")
+            {
+                for (unsigned turn = 0u; turn < 64u; ++turn)
+                    prefix += std::string(8192u, 'O') + std::string(8192u, 'E');
+            }
+            else
+            {
+                prefix += std::string(8192u, 'O') + std::string(8192u, 'E') + "OOO";
+                prefix.resize(limit);
+            }
+            if (done.code != expected || !done.process || done.process->active()
+                || !done.process->exit_code_valid || !released
+                || child_process::active_in_group(request.exclusive_group)
+                || captured != prefix
+                || ((mode == "normal" || mode == "append" || mode == "complete") && done.process->exit_code != 0)
+                || (mode == "nonzero" && done.process->exit_code != 37))
+                return fail("Bounded capture failed for " + mode + ": " + done.message
+                    + "; bytes=" + std::to_string(captured.size()));
+        }
+        child_process::LaunchRequest invalid{};
+        invalid.executable = self;
+        invalid.correlation_key = "contract:bounded-output:invalid";
+        invalid.merged_output_limit_bytes = limit;
+        const auto refused = child_process::launch_or_focus(invalid);
+        if (refused.code != child_process::LaunchCode::invalid_request || refused.handle.valid())
+            return fail("Missing capture path was not refused before launch.");
+        invalid.merged_output_path = fixture.root / "oversized.log";
+        invalid.append_output = true;
+        if (!fixture.write("oversized.log", std::string(limit + 1u, 'X')))
+            return fail("Cannot prepare oversized existing output.");
+        const auto oversized = child_process::launch_or_focus(invalid);
+        OwnedContractProcess oversizedOwner{oversized.handle};
+        const auto oversizedState = child_process::snapshot(oversized.handle);
+        if (oversized.code != child_process::LaunchCode::spawn_failed || !oversizedState
+            || oversizedState->active() || oversizedState->platform_process_id != 0u
+            || !child_process::release(oversized.handle)
+            || std::filesystem::file_size(invalid.merged_output_path) != limit + 1u)
+            return fail("Oversized append was not refused before execution without changing the file.");
+        oversizedOwner.handle = {};
+        (void)fixture.write("bounded-output.evidence.txt",
+            "normal=passed\nappend=passed\nnonzero=passed\ncancel=passed\ntimeout=passed\n"
+            "stdin-eof=passed\nbelow-normal-priority=passed\nmerged-prefix=passed\n"
+            "complete-output=passed\noversized-append=refused\n"
+            "output-cap=16387\nproducer-bytes=1048576\nretirement=passed\n");
+        return 0;
+    }
+
     [[nodiscard]] bool execution_input_contract(
         const std::filesystem::path& self, ExecutableIdentityFixture& fixture)
     {
@@ -1374,7 +1803,7 @@ namespace
         const auto duplicate = child_process::launch_or_focus(held);
         bool bindingsValid = duplicate.code == child_process::LaunchCode::focused_existing
             && duplicate.handle == live.handle;
-        for (unsigned change = 0u; change < 11u; ++change)
+        for (unsigned change = 0u; change < 13u; ++change)
         {
             auto different = held;
             if (change == 0u) different.environment->front().value = "changed";
@@ -1388,7 +1817,9 @@ namespace
             else if (change == 7u) different.merged_output_path = fixture.root / "different.log";
             else if (change == 8u) different.append_output = true;
             else if (change == 9u) different.window_mode = child_process::WindowMode::normal;
-            else different.exclusive_group = "contract:other-group";
+            else if (change == 10u) different.exclusive_group = "contract:other-group";
+            else if (change == 11u) different.merged_output_limit_bytes = 4096u;
+            else different.below_normal_priority = true;
             const auto refused = child_process::launch_or_focus(different);
             bindingsValid = bindingsValid
                 && refused.code == child_process::LaunchCode::invalid_request
@@ -1676,6 +2107,16 @@ static int run_contract_entry(int argc, char** argv)
     }
 
 #if defined(_WIN32)
+    if (argc == 2 && std::string_view{argv[1]} == "--epoch-file-lease-contract-only")
+    {
+        ExecutableIdentityFixture fixture{};
+        if (!fixture.prepare("epoch-file-lease-")) return 160;
+        return verified_file_lease_contract(fixture) ? 0 : 161;
+    }
+    if (argc == 2 && std::string_view{argv[1]} == "--epoch-bounded-output-contract-only")
+        return run_bounded_output_contract(std::filesystem::absolute(argv[0]));
+    if (argc == 3 && std::string_view{argv[1]} == "--epoch-bounded-output-child")
+        return run_bounded_output_child(argv[2]);
     if (argc == 2 && std::string_view{argv[1]} == "--epoch-input-contract-only")
     {
         ExecutableIdentityFixture fixture{};
@@ -1685,8 +2126,12 @@ static int run_contract_entry(int argc, char** argv)
     }
     if (argc == 2 && std::string_view{argv[1]} == "--epoch-isolation-contract-only")
         return run_isolation_contract(std::filesystem::absolute(argv[0]));
+    if (argc == 2 && std::string_view{argv[1]} == "--epoch-network-initialization-pair-only")
+        return run_isolation_contract(std::filesystem::absolute(argv[0]), true);
     if (argc == 5 && std::string_view{argv[1]} == "--epoch-isolation-child")
         return run_isolation_child(argv);
+    if (argc == 3 && std::string_view{argv[1]} == "--epoch-network-initialization-child")
+        return run_network_initialization_child(argv[2]);
     if (argc == 2 && std::string_view{argv[1]} == "--epoch-retirement-contract-only")
         return run_retirement_contracts(std::filesystem::absolute(argv[0]));
     if ((argc == 3 || (argc == 4 && std::string_view{argv[3]} == "churn"))
@@ -1745,6 +2190,8 @@ static int run_contract_entry(int argc, char** argv)
     if (!selfIdentity || !selfIdentity->valid())
         return 19;
 #if defined(_WIN32)
+    if (!verified_file_lease_contract(identityFixture))
+        return 161;
     if (!identity_lock_contract(identityFixture))
         return 23;
 #endif
@@ -1962,6 +2409,7 @@ int main(int argc, char** argv)
     // deliberately return nonzero sentinels and must keep their capture bytes.
     if (result != 0 && (argc == 1 || (argc == 2
             && (std::string_view{argv[1]} == "--epoch-input-contract-only"
+                || std::string_view{argv[1]} == "--epoch-file-lease-contract-only"
                 || std::string_view{argv[1]} == "--epoch-retirement-contract-only"))))
     {
         namespace child_process = epochengine::platform::child_process;

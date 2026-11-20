@@ -79,6 +79,17 @@ function Write-EpochRuntimeDistribution {
         ($identity | ConvertTo-Json -Compress), [System.Text.UTF8Encoding]::new($false))
 }
 
+function Assert-EpochRuntimeHasNoModelWeights {
+    param([Parameter(Mandatory = $true)][string]$Stage)
+    $weightExtensions = @('.gguf', '.safetensors', '.ckpt', '.onnx', '.pt', '.pth', '.tflite')
+    $weight = Get-ChildItem -LiteralPath $Stage -File -Force -Recurse |
+        Where-Object { $_.Extension -in $weightExtensions } |
+        Select-Object -First 1
+    if ($weight) {
+        throw "Engine runtime packages require separately installed model weights. Found $($weight.FullName)."
+    }
+}
+
 function Move-EpochPackageValidationEvidence {
     param(
         [Parameter(Mandatory = $true)][string]$Stage,

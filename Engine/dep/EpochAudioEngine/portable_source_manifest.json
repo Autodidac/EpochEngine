@@ -1,7 +1,7 @@
 {
   "schema": "epoch.portable_source_parity.v1",
   "repository": "Autodidac/EpochAudioEngine",
-  "upstream_revision": "980ebd3304f7e5cfc97e48c1e093ea1fc2107760",
+  "upstream_revision": "1f94bdb8728ea428308c00db6f8c681ce99c04cf",
   "scope": [
     "modules",
     "src",
@@ -11,72 +11,93 @@
   "full_tree_mirror": false,
   "files": [
     {
+      "path": "examples/audio.render_wav_demo.cpp",
+      "sha256": "204e93d856e76220950e1b98f2dea6ec6575cb7902a03c1bdbd3c92ca46508f3",
+      "canonical_upstream_sha256": "2113bbf68f2560c9dc1a408a25f39e3f93810abb2baf941c22662be93df8fcc6"
+    },
+    {
       "path": "modules/audio.device.ixx",
-      "sha256": "2bc62058d7bedd654d853307f109c410f3da73e655e4435eac719884764269a8"
+      "sha256": "2bc62058d7bedd654d853307f109c410f3da73e655e4435eac719884764269a8",
+      "canonical_upstream_sha256": "a5b143fb9e6095f8c18cce1cdff4b8bd222e09db9088617b5fdf65ed77621ee3"
     },
     {
       "path": "modules/audio.manager.ixx",
-      "sha256": "177d08996b75bfa2a03667bec4ed4b2410901765bdd181a39ba605322999c4a7"
+      "sha256": "177d08996b75bfa2a03667bec4ed4b2410901765bdd181a39ba605322999c4a7",
+      "canonical_upstream_sha256": "4ab3d37144964de53357593251af702ea1eecda73a4b9acb29c8ab06c98f6dfe"
     },
     {
       "path": "modules/audio.mixer.ixx",
-      "sha256": "7fd5d75e02d1626220510bbd7e247ad434949c0383b326669b677dca9d416fe3"
+      "sha256": "7fd5d75e02d1626220510bbd7e247ad434949c0383b326669b677dca9d416fe3",
+      "canonical_upstream_sha256": "b15d342868b80db3c29cc7a4a40c313dc17e730549960f041b4201bcaf6ca437"
     },
     {
       "path": "modules/audio.playback_runtime.ixx",
-      "sha256": "bf7218841bbec08fff004c982103a580a516068d004868a019cee845d4839451"
+      "sha256": "bf7218841bbec08fff004c982103a580a516068d004868a019cee845d4839451",
+      "canonical_upstream_sha256": "55d538a8a11cd9257daacf70772b91deabc83171202d87f015ab5cc4179cb7c1"
     },
     {
       "path": "modules/audio.types.ixx",
-      "sha256": "1751ee814c1f2fcaba44afd31dbaed8a0973303fbda9aeb509bfcc4188467d25"
+      "sha256": "1751ee814c1f2fcaba44afd31dbaed8a0973303fbda9aeb509bfcc4188467d25",
+      "canonical_upstream_sha256": "29c94ea744f320e107ba5eb9eadf45173027a2f92fc66cd8356560966050872b"
     },
     {
       "path": "src/audio.device.cpp",
-      "sha256": "649e90e269666478e8deceb37832a9d731a28987c9ab492713d194954ebb8fc9"
+      "sha256": "d00eeb38e62d884bcf9ab0829f91b6ff193989b87c5af9222355c697de2e6065",
+      "canonical_upstream_sha256": "db63c2ce1e5dcd78979e59cf362e4c0efb06727eee2825af544bafd4c2b3a1b0"
     },
     {
       "path": "src/audio.device_contract.cpp",
-      "sha256": "914766c7f9133c535d181d571942eb818200025d5c00f492f76fe9af95ece9ae"
+      "sha256": "3ac9a0badfadcebee01f54986d3b0b7cb3ab62ef98a5d86bde6b29553873e062",
+      "canonical_upstream_sha256": "468de90f5dc8265b7b0e5b3d3e0d209c795e9c0497a98ab484c160dce0b6de49"
     },
     {
       "path": "src/audio.manager.cpp",
-      "sha256": "14e7d484e1c6857ace9da98251decd4b183ec3bd3312fa71db8719b6d58afed1"
+      "sha256": "14e7d484e1c6857ace9da98251decd4b183ec3bd3312fa71db8719b6d58afed1",
+      "canonical_upstream_sha256": "0296e7ab5324453195c6b8982903273f30d0734e9669fbfb9a1271973cde7378"
     },
     {
       "path": "src/audio.mixer.cpp",
-      "sha256": "bd221a476033d5446c78bbcf18cbbf327bcf1fc7c741bd6db7a1cc0a618ad0b9"
+      "sha256": "bd221a476033d5446c78bbcf18cbbf327bcf1fc7c741bd6db7a1cc0a618ad0b9",
+      "canonical_upstream_sha256": "03418cf946663e868094f8879d1256bf350307f339b4f556e9278ba559462acb"
     },
     {
       "path": "src/audio.mixer_contract.cpp",
-      "sha256": "9e3dfeed165435e51e0e489fe498db47880637d4fa0843d2b530b5ae0cb9222e"
+      "sha256": "9e3dfeed165435e51e0e489fe498db47880637d4fa0843d2b530b5ae0cb9222e",
+      "canonical_upstream_sha256": "3a7185c5249c635e70f864675659ce8fe0756ba5820cee43a3ab0bd70c395ae0"
     },
     {
       "path": "src/audio.playback_runtime.cpp",
-      "sha256": "23381d3f68d5b3f45b1446d05a79a5f3a464433b72d86ab6562a92c1e206a863"
+      "sha256": "23381d3f68d5b3f45b1446d05a79a5f3a464433b72d86ab6562a92c1e206a863",
+      "canonical_upstream_sha256": "6b96adff5f9f19e58bcf35d11aaf607ae1fb8613fbd8e17ff2368fdb60e097c8"
     },
     {
       "path": "src/audio.playback_runtime_contract.cpp",
-      "sha256": "c4bbef145ac93fde62713eb2cb127f6a5e2e96f05b804dc89fa5737e95f770bd"
+      "sha256": "c4bbef145ac93fde62713eb2cb127f6a5e2e96f05b804dc89fa5737e95f770bd",
+      "canonical_upstream_sha256": "ec26adf568aef72d6ee1878b879b5e75b2cad55576eebace3c5e4fe9d7b0fd69"
     },
     {
       "path": "tests/audio.device_consumer.cpp",
-      "sha256": "56389168f92fd495ee4aad73b261a06380fd9c72149515f074970ef431092752"
+      "sha256": "56389168f92fd495ee4aad73b261a06380fd9c72149515f074970ef431092752",
+      "canonical_upstream_sha256": "dde021e58f00a88ce3269de5ba432b62e81aafd080b557cc4171b69841bdfed6"
     },
     {
       "path": "tests/audio.mixer_consumer.cpp",
-      "sha256": "26488e5aa11608d7b10f7cf3b17e5a8d4c4315dbe3141b5283dcb95a5d418efd"
+      "sha256": "26488e5aa11608d7b10f7cf3b17e5a8d4c4315dbe3141b5283dcb95a5d418efd",
+      "canonical_upstream_sha256": "5f0c242eea67d8c2ecd3b0add28bab2ffe0e3270f765b871e91099ed3945be34"
     },
     {
       "path": "tests/audio.playback_runtime_consumer.cpp",
-      "sha256": "b57dc0b23af3694b4a04d91a36df4aba959e49e9ca17894b56409244b92b2867"
+      "sha256": "b57dc0b23af3694b4a04d91a36df4aba959e49e9ca17894b56409244b92b2867",
+      "canonical_upstream_sha256": "5af70487111c2a955e53764983e4197acd6e62ddfbdf5f699f2b659d944ba968"
     },
     {
       "path": "tests/audio.wav_contract.py",
-      "sha256": "d6d501a1b3b759345ed2a1c5e72ebba7f4b0fc77562f9f247dd80ddb91b7c92e"
-    },
-    {
-      "path": "examples/audio.render_wav_demo.cpp",
-      "sha256": "5afe73d947f6317690f3d8eb54428ff81e11018fc00a20b5adaf6e1a7352516e"
+      "sha256": "828adcc5f816d0c5db17f68b9bb5198f613b9a12db8affc4ae306ee960554d8f",
+      "canonical_upstream_sha256": "0fb2e8571157e1711e95686ed26a32c33be3d5915e25e70412a766669f6ce9fc"
     }
-  ]
+  ],
+  "published_revision": "1f94bdb8728ea428308c00db6f8c681ce99c04cf",
+  "publication_status": "published_source",
+  "canonical_text_normalization": "CRLF to LF only.",
+  "validation": "Windows MSVC and Linux Clang Debug/Release contracts and WAV output passed. Physical playback was outside this check."
 }

@@ -7,6 +7,10 @@ std::expected<Result, core::Error> run(const Request& request, std::stop_token s
     if (request.executable.empty()) return std::unexpected(core::Error{core::make_error_code(core::Errc::invalid_argument), "executable is empty"});
 #ifdef _WIN32
     return detail::run_windows(request, stop);
+#elif defined(__ANDROID__)
+    (void)stop;
+    return std::unexpected(core::Error{core::make_error_code(core::Errc::tool_denied),
+        "Owned subprocesses are unavailable on Android"});
 #else
     return detail::run_posix(request, stop);
 #endif

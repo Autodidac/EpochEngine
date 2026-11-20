@@ -62,6 +62,7 @@ import render.camera;
 import render.arcade;
 import render.lighting;
 import context.type;
+import platform.child_process;
 // CPU-only Context port: the current publisher checks the backend kind when
 // a textured mesh is present. No native window or graphics device is owned.
 namespace epochengine::core {class Context {public:ContextType type{ContextType::OpenGL};};}
@@ -74,6 +75,7 @@ namespace asset=epochengine::asset;
 namespace previewgrid=epochengine::previewgrid;
 namespace render_camera=epochengine::render_camera;
 namespace lighting=epochengine::lighting;
+namespace platform=epochengine::platform;
 using ProjectRuntimeEntity=scene_runtime::RuntimeEntity;
 void check(bool value,int line){if(!value){std::fprintf(stderr,"Planet scene units failed line %d\n",line);std::exit(89);}}
 #define CHECK(...) check(static_cast<bool>((__VA_ARGS__)),__LINE__)
@@ -85,9 +87,15 @@ double vector_length(previewgrid::Vec3 value){return std::hypot(double(value.x),
 constexpr int m_runtimeViewportWidth=1280,m_runtimeViewportHeight=720;
 // These cases publish without a runtime camera packet. Camera and geometry
 // math below stay real while the asynchronous scheduler remains separate.
-bool pump_runtime_planetary_frame(const void*,previewgrid::SceneFrameRequest,bool){std::abort();}
+bool pump_runtime_planetary_frame(const void*,previewgrid::SceneFrameRequest,platform::child_process::MeshDrawMode,bool*){std::abort();}
+double runtime_depth_fit_aspect() noexcept{return double(m_runtimeViewportWidth)/m_runtimeViewportHeight;}
 RUNTIME_PUBLICATION
 #undef near
+class LegacyGroundCover final : public project_planetary_runtime::GroundCoverProvider {
+public:
+ std::optional<project_planetary_runtime::GroundCoverDrawPatch> build_patch(
+  std::uint32_t,std::array<double,3>,std::stop_token) const override { return {}; }
+};
 class RuntimeProbe {
 public:
  std::vector<ProjectRuntimeEntity> m_entities;
@@ -105,12 +113,22 @@ public:
  std::optional<project_planetary::Settings> m_meshPlanetarySettings{project_planetary::Settings{}};
  std::optional<project_planetary::Settings> m_planetarySettings{project_planetary::Settings{}};
  std::shared_ptr<const epochengine::project_planetary_snapshot::Snapshot> m_planetaryWaterSource;
+ std::shared_ptr<const asset::mesh::SphericalWaterAppearance> m_planetaryWaterAppearance;
  struct RuntimeClock{double playhead_seconds{};};std::optional<RuntimeClock>m_runtimePresentation;
  bool m_runtimeCloudsVisible{true},m_runtimeCloudBackendUnavailable{};
  std::unordered_map<std::uint64_t,std::shared_ptr<const asset::mesh::Artifact>> m_meshes;
+ std::vector<project_planetary_runtime::GroundCoverDrawPatch> m_groundCoverPatches;
  static std::uint64_t suppressed_planet(bool rebased,const std::vector<previewgrid::ObjectMarker>& planetaryMarkers,
   std::uint64_t m_planetaryEntity){return RUNTIME_SUPPRESSION;}
  RUNTIME_METHODS
+ void place_ground_cover(std::vector<previewgrid::ObjectMarker>& markers, const std::array<double,3>& local){
+  const auto* terrain=planetary_entity();
+  const auto body=std::find_if(m_explorationFrame.bodies.begin(),
+    m_explorationFrame.bodies.begin()+m_explorationFrame.body_count,
+    [&](const auto& entry){return entry.id==m_explorationFrame.anchor;});
+  CHECK(terrain&&body!=m_explorationFrame.bodies.begin()+m_explorationFrame.body_count);
+  GROUND_COVER_PLACEMENT
+ }
  std::optional<previewgrid::Camera> exploration_camera(const project_planetary_runtime::Frame& frame){
   const auto projected=project_planetary_runtime::preview_frame(frame);if(!projected)return {};
   const auto* entity=planetary_entity();if(!entity)return {};
@@ -136,7 +154,15 @@ struct EditorEntity {
  std::optional<project_planetary::GeneratedMeshFrame> meshSnapshotFrame;
  std::shared_ptr<const previewgrid::MeshBaseColorBinding> meshBaseColorTexture;
 };
-struct EditorState {std::string projectStatus;};
+EDITOR_LIGHTNING_TYPES
+struct EditorState {
+ std::string projectStatus;
+ bool helpersVisible{};
+ std::uint64_t planetaryStreamEntity{};
+ std::shared_ptr<const asset::mesh::SphericalWaterAppearance> planetaryStreamAppearance;
+ // This metric fixture never submits a Lightning scene object.
+ struct LightningPort {project_lightning::Projection sample(std::uint64_t,double){std::abort();}} lightningPreview;
+};
 std::shared_ptr<const previewgrid::MeshPaintView> forest_paint_view(const EditorState&,const EditorEntity&){return {};}
 // This legacy/unit-framing lane has no admitted provider body inventory.
 // Actual body bounds/selection/Outliner projection are exercised by
@@ -150,9 +176,14 @@ bool marker_selected_for_entity(const EditorEntity&,bool selected){return select
 bool is_plant_lab_preview_entity(const EditorEntity&){return false;}
 previewgrid::ObjectPreviewPrimitive preview_primitive_for_entity(const EditorEntity&){return previewgrid::ObjectPreviewPrimitive::Cube;}
 EDITOR_FOCUS_TARGET
-void editor_marker(EditorState& state,const EditorEntity& entity,std::vector<previewgrid::ObjectMarker>& markers){
- bool forestPreview{},forestPainting{},meshWireframe{};const auto previewPosition=entity.position;
- EDITOR_MARKER
+void editor_marker(EditorState& state,const EditorEntity& input,std::vector<previewgrid::ObjectMarker>& markers){
+ bool forestPreview{},forestPainting{},meshWireframe{};
+ const bool useBaseColor=false; // No texture residency in the metric marker fixture.
+ const double sampleTime{};
+ for(const auto& entity : std::span{&input,1u}) {
+  const auto previewPosition=entity.position;
+  EDITOR_MARKER
+ }
 }
 void editor_focus(const epochengine::core::Context* ctx,const EditorEntity* planet){
  EditorState state;
@@ -185,6 +216,11 @@ void check_adaptive_near_plane(){
   return project_play_adaptive_near_plane(camera,clearance,units,entities,meshes,3,origin);};
  CHECK(near_plane()==500.0f);
  CHECK(near(near_plane(-5000),1e-7,1e-10));
+ ProjectRuntimeEntity hud;hud.source_id=10;hud.type="GuiPanel";hud.category="UI";
+ hud.flags=scene_runtime::RuntimeEntityFlag::visible;
+ entities.push_back(hud);
+ CHECK(!project_play_entity_has_geometry(hud,3)&&near_plane()==500.0f);
+ entities.clear();
  ProjectRuntimeEntity cube;cube.source_id=9;cube.type="StaticMesh";cube.category="World";
  cube.flags=scene_runtime::RuntimeEntityFlag::visible;cube.transform.position={0,0,2};entities.push_back(cube);
  CHECK(near(near_plane(),.75)); // 1m cube two metres ahead survives the altitude proposal.
@@ -220,6 +256,24 @@ void check_adaptive_near_plane(){
    CHECK(world.z>=(*bounds)[0]-.00001&&world.z<=(*bounds)[1]+.00001);
   }
  }
+ // A metric stream replaces the normalized saved mesh without rewriting its
+ // authored asset reference. Both the live scale and body-local origin apply.
+ entities[0].mesh_asset->coordinates=scene::SceneMeshCoordinates{637100,{1e9,2e9,3e9}};
+ entities[0].transform.position={3,4,8};
+ entities[0].transform.rotation={0,90,0};
+ entities[0].transform.scale={2,3,4};
+ const project_planetary::GeneratedMeshFrame streamed{1,{100,200,300}};
+ const auto streamedMarker=project_play_marker_for_entity(
+  entities[0],mesh.artifact,{-2,0,-5},false,nullptr,&streamed);
+ CHECK(streamedMarker&&streamedMarker->preciseTransform&&streamedMarker->mesh==mesh.artifact);
+ CHECK(near(streamedMarker->scale.x,2)&&near(streamedMarker->scale.y,3)&&near(streamedMarker->scale.z,4));
+ const auto parent=previewgrid::make_precise_mesh_transform({3,4,8},{2,3,4},{0,90,0});
+ CHECK(parent);
+ const auto expected=parent->apply(streamed.source_origin_meters);
+ CHECK(near(streamedMarker->preciseTransform->position[0],expected[0]-2)
+  &&near(streamedMarker->preciseTransform->position[1],expected[1])
+  &&near(streamedMarker->preciseTransform->position[2],expected[2]-5));
+ CHECK(entities[0].mesh_asset->coordinates->meters_per_unit==637100);
  entities[0].source_id=3;CHECK(near_plane()==500); // only the controller-managed planet is excluded
  entities[0].source_id=9;entities[0].mesh_asset.reset();entities[0].type="ForestFoliageCluster";
  CHECK(near(near_plane(),1e-7,1e-10)); // unknown geometry cannot justify clipping it
@@ -227,6 +281,8 @@ void check_adaptive_near_plane(){
  CHECK(std::isfinite(metric));
 }
 int main(int argc,char**argv){
+ const LegacyGroundCover legacyCover;
+ CHECK(!legacyCover.build_neighborhood(0,{1,0,0},{}));
  CHECK(argc==2);const auto output=std::filesystem::path{argv[1]};std::filesystem::create_directories(output);
  check_adaptive_near_plane();
  std::array<asset::mesh::Vertex,3> vertices{};vertices[0].position={-10,0,0};vertices[1].position={10,0,0};vertices[2].position={0,10,0};
@@ -257,6 +313,17 @@ int main(int argc,char**argv){
  EditorEntity editorPlanet;editorPlanet.position={100,200,300};editorPlanet.type="IndexedMesh";editorPlanet.meshAsset=metadata;editorPlanet.meshSnapshot=artifact.artifact;
  EditorState editorState;std::vector<previewgrid::ObjectMarker> editorMarkers;
  editor_marker(editorState,editorPlanet,editorMarkers);CHECK(editorMarkers.size()==1&&editorMarkers[0].scale.x==2500&&editorMarkers[0].position.x==100);
+ const auto matchingWater=std::make_shared<const asset::mesh::SphericalWaterAppearance>(
+     asset::mesh::SphericalWaterAppearance{.artifact_key=artifact.artifact->key()});
+ editorState.planetaryStreamEntity=editorPlanet.sceneObjectId;
+ editorState.planetaryStreamAppearance=matchingWater;
+ editorMarkers.clear();
+ editor_marker(editorState,editorPlanet,editorMarkers);
+ CHECK(editorMarkers.size()==1&&editorMarkers[0].sphericalWater==matchingWater);
+ editorState.planetaryStreamAppearance=std::make_shared<const asset::mesh::SphericalWaterAppearance>();
+ editorMarkers.clear();
+ editor_marker(editorState,editorPlanet,editorMarkers);
+ CHECK(editorMarkers.size()==1&&!editorMarkers[0].sphericalWater);
  const auto* focusContext=&focusPort;
  editor_focus(focusContext,&editorPlanet);const auto metricDistance=previewgrid::camera_distance_for(focusContext);
  CHECK(std::isfinite(metricDistance)&&metricDistance>10000);
@@ -304,6 +371,16 @@ int main(int argc,char**argv){
  CHECK(RuntimeProbe::suppressed_planet(true,cloudMarkers,3)==3);
  genericCloudProbe.m_runtimeCloudsVisible=false;genericClouds.clear();
  CHECK(genericCloudProbe.append_planetary_cloud_markers(genericClouds,cloudVolumes,true)&&genericClouds.empty());
+ genericCloudProbe.m_runtimeCloudsVisible=true;
+ auto& densityLayer=*cloudSnapshot->metadata.cloud;
+ densityLayer.artifact.reset();
+ densityLayer.density=epochengine::asset::cloud_volume::Recipe{1337u,100.0,70.0,50.0};
+ CHECK(genericCloudProbe.append_planetary_cloud_markers(genericClouds,cloudVolumes,false,302400));
+ CHECK(genericCloudProbe.m_runtimeCloudBackendUnavailable&&genericClouds.empty()&&cloudVolumes.empty());
+ CHECK(genericCloudProbe.append_planetary_cloud_markers(genericClouds,cloudVolumes,true,302400));
+ CHECK(!genericCloudProbe.m_runtimeCloudBackendUnavailable&&genericClouds.empty()&&cloudVolumes.size()==1);
+ CHECK(cloudVolumes.front().recipe==*densityLayer.density&&cloudVolumes.front().time_seconds==302400);
+ cloudVolumes.clear();
  const auto movedCloudPoint=movedClouds.back().preciseTransform->apply({10,0,0});
  CHECK(near(movedCloudPoint[0],cloudPoint[0]-500,1e-8)&&near(movedCloudPoint[1],cloudPoint[1]-600,1e-8)
     &&near(movedCloudPoint[2],cloudPoint[2]-700,1e-8));
@@ -344,7 +421,28 @@ int main(int argc,char**argv){
  CHECK(surfaceCamera&&surfaceCamera->nearPlane==undergroundCamera->nearPlane);
  advancedFrame.altitude=5000;
  const auto secondBodyMarkers=probe.planetary_exploration_markers();CHECK(secondBodyMarkers[0].scale.x==2500&&secondBodyMarkers[1].scale.x==100);
- CHECK(publish_project_play_markers(context,probe.m_entities,&meshes,{},secondBodyMarkers,3,false,offset));
+ RuntimeProbe grassProbe;
+ auto grassTerrain=*probe.planetary_entity();
+ grassTerrain.transform.rotation={0.0f,90.0f,0.0f};
+ grassTerrain.transform.scale={2.0f,3.0f,4.0f};
+ grassProbe.m_entities.push_back(grassTerrain);
+ grassProbe.m_explorationFrame=frame;
+ auto& grassFrame=grassProbe.m_explorationFrame;
+ grassFrame.camera={1001000,4,0};
+ const std::array<double,3> grassCameraLocal{1000,4,0};
+ CHECK(grassProbe.exploration_camera(grassFrame));
+ grassProbe.m_explorationPreview=project_planetary_runtime::preview_frame(grassFrame);
+ grassProbe.m_groundCoverPatches.push_back({{1000,0,0},artifact.artifact});
+ grassProbe.m_groundCoverPatches.push_back({{1000,80,0},artifact.artifact});
+ std::vector<previewgrid::ObjectMarker> grassMarkers;
+ grassProbe.place_ground_cover(grassMarkers,grassCameraLocal);
+ CHECK(grassMarkers.size()==1&&grassMarkers.front().preciseTransform);
+ const auto& grassTransform=*grassMarkers.front().preciseTransform;
+ CHECK(near(grassTransform.position[0],0,1e-6)&&near(grassTransform.position[1],-12,1e-6)
+    &&near(grassTransform.position[2],0,1e-6));
+ CHECK(grassTransform.scale==std::array<double,3>{2,3,4});
+ CHECK(publish_project_play_markers(context,probe.m_entities,&meshes,{},secondBodyMarkers,3,
+  platform::child_process::MeshDrawMode::shaded,offset));
  const auto shifted=previewgrid::detail::g_objectMarkers.at(context).markers;
  CHECK(shifted.size()==4&&shifted[0].scale.x==14&&shifted[1].scale.x==1&&shifted[1].position.x==3-1000000);
  lighting::LightingFrame lights;lights.revision=7;
@@ -490,6 +588,7 @@ class PlanetarySceneUnits(unittest.TestCase):
             "legacy": "Engine/src/epoch/epoch.engine_legacy.cpp",
             "editor": "Engine/src/editor/application/editor.application_scene_preview.inl",
             "package": "Engine/src/editor/application/editor.application_packages_creation.inl",
+            "lightning": "Engine/modules/project/project.lightning.ixx",
             "import": "Engine/src/editor/application/editor.application_asset_browsing.inl"}.items()}
         source = {name: path.read_text(encoding="utf-8-sig") for name, path in paths.items()}
         publication = "\n".join(owner(source["legacy"], marker) for marker in (
@@ -516,13 +615,17 @@ class PlanetarySceneUnits(unittest.TestCase):
             "            [[nodiscard]] std::array<double,3> planetary_scene_origin_offset(",
             "            [[nodiscard]] std::vector<previewgrid::ObjectMarker> planetary_exploration_markers(",
             "            [[nodiscard]] bool append_planetary_cloud_markers("))
-        suppression = source["play"].split("}, &m_meshes, m_meshFrameLimits, planetaryMarkers,",1)[1].split(", requestedWireframe",1)[0].strip()
+        suppression = re.search(r"\}, &m_meshes, m_meshFrameLimits, planetaryMarkers,\s*([^,]+), requestedMode,", source["play"])
+        self.assertIsNotNone(suppression, "Runtime publication no longer exposes the selected-planet suppression argument")
         start = source["play"].index("                if(const auto* entity=planetary_entity();entity&&entity->mesh_asset&&entity->mesh_asset->coordinates)")
         end = source["play"].index("                std::error_code error;", start)
         scale_guard = source["play"][start:end]
         start = source["editor"].index("                const bool selected = !forestPreview")
-        end = source["editor"].index("\n            }", start)
-        marker = source["editor"][start:end]
+        end = source["editor"].index("                if(!forestPreview&&entity.forestRegion", start)
+        marker_scale = source["editor"][start:end]
+        start = source["editor"].index("                markers.push_back(epochengine::previewgrid::ObjectMarker{", end)
+        end = source["editor"].index("                if (selected && entity.sceneObjectId", start)
+        marker = marker_scale + source["editor"][start:end]
         start = source["editor"].index("                const auto planetScale = scene::mesh_render_scale(")
         end = source["editor"].index("\n            }", start)
         focus = source["editor"][start:end]
@@ -534,19 +637,28 @@ class PlanetarySceneUnits(unittest.TestCase):
         end = source["play"].index("\n                }", start)
         runtime_inverse = source["play"][start:end].replace("return;", "return {};")
         imported = definition(source["import"], "                if (mesh_frame)")
-        code = CODE.replace("RUNTIME_PUBLICATION", publication).replace("RUNTIME_METHODS", methods).replace("RUNTIME_SUPPRESSION", suppression)
+        code = CODE.replace("RUNTIME_PUBLICATION", publication).replace("RUNTIME_METHODS", methods).replace("RUNTIME_SUPPRESSION", suppression[1].strip())
         camera_start = source["play"].index("                const double sceneUnits=entity->mesh_asset&&entity->mesh_asset->coordinates")
         camera_end = source["play"].index("                if(m_explorationFrame.anchor!=result.frame.anchor)", camera_start)
         camera_policy = source["play"][camera_start:camera_end].replace("return;", "return {};")
         code = code.replace("CAMERA_POLICY", camera_policy)
+        ground_cover = owner(source["play"], "            void append_planetary_ground_cover(")
+        placement = ground_cover[ground_cover.index("                const auto pivot="):ground_cover.rfind("\n")]
+        code = code.replace("GROUND_COVER_PLACEMENT", placement)
+        lightning_type = next(line for line in source["lightning"].splitlines()
+                              if "constexpr std::string_view scene_type" in line)
+        lightning_projection = definition(source["lightning"], "    struct Projection final", True)
+        lightning_types = "namespace project_lightning {\n" + lightning_type + "\n" + lightning_projection + "\n}\n"
         code = code.replace("SCALE_GUARD", scale_guard).replace("EDITOR_MARKER", marker)
+        code = code.replace("EDITOR_LIGHTNING_TYPES", lightning_types)
         code = code.replace("EDITOR_FOCUS_TARGET", focus_target).replace("EDITOR_FOCUS", focus)
         code = code.replace("EDITOR_INVERSE", inverse).replace("RUNTIME_INVERSE", runtime_inverse)
         code = code.replace("IMPORT_COORDINATES", imported)
         extracted_hashes = {name: hashlib.sha256(value.encode()).hexdigest() for name, value in {
             "runtime_publication": publication, "runtime_methods": methods, "scale_guard": scale_guard,
             "editor_marker": marker, "editor_focus": focus, "editor_focus_target": focus_target, "editor_inverse": inverse,
-            "runtime_inverse": runtime_inverse, "import_coordinates": imported,"camera_policy":camera_policy}.items()}
+            "runtime_inverse": runtime_inverse, "import_coordinates": imported,"camera_policy":camera_policy,
+            "ground_cover_placement": placement}.items()}
         self.assertIn("binding->size_reference_body!=settings.size_reference_body", source["play"])
         self.assertIn("binding->reference_radius_meters!=settings.reference_radius_meters", source["play"])
         self.assertIn(".size_reference_body=settings->size_reference_body", source["legacy"])
@@ -564,13 +676,13 @@ class PlanetarySceneUnits(unittest.TestCase):
         module_roots = [ROOT / "Engine/modules", ROOT / "Engine/dep/EpochPlatformEngine/modules"]
         module_map = {}
         for directory in module_roots:
-            for path in directory.glob("*.ixx"):
+            for path in directory.rglob("*.ixx"):
                 match = re.search(r"^export module\s+([\w.:]+);", path.read_text(encoding="utf-8-sig"), re.M)
                 if match:
                     module_map[match.group(1)] = path
         pending = ["asset.mesh_artifact", "project.planetary", "project.planetary_runtime", "scene.document",
                    "scene.serializer", "scene.runtime", "render.preview_grid", "render.arcade", "context.type",
-                   "authoring.texture_detail"]
+                   "authoring.texture_detail", "platform.child_process"]
         selected = {}
         while pending:
             name = pending.pop()

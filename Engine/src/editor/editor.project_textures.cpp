@@ -176,23 +176,6 @@ namespace epochengine::editor_project_textures
             return profile;
         }
 
-        [[nodiscard]] asset::texture::TextureCompileProfile
-            authored_texture_profile(
-                const authoring::texture::TextureDocument& document) noexcept
-        {
-            asset::texture::TextureCompileProfile profile{};
-            const auto& canvas = document.descriptor();
-            profile.format =
-                canvas.format
-                    == authoring::texture::PixelFormat::rgba8_srgb
-                ? asset::texture::ArtifactFormat::rgba8_srgb
-                : asset::texture::ArtifactFormat::rgba8_unorm;
-            profile.color_space = canvas.color_space;
-            profile.mipmaps =
-                asset::texture::MipmapPolicy::preserve_authored;
-            return profile;
-        }
-
         [[nodiscard]] std::uint64_t material_stable_key(
             canvas2d::LogicalTextureReference logical) noexcept
         {
@@ -614,7 +597,7 @@ namespace epochengine::editor_project_textures
                         ++result.skipped_sources;
                         continue;
                     }
-                    profile = authored_texture_profile(*loaded.document);
+                    profile = project_texture_sources::authored_texture_profile(*loaded.document);
                     authoredDocument = std::move(loaded.document);
                 }
 
@@ -672,7 +655,8 @@ namespace epochengine::editor_project_textures
                         : static_cast<std::uint64_t>(sourceBytes),
                     .decoded_bytes = leased.decoded_bytes,
                     .width = view.extent.width,
-                    .height = view.extent.height
+                    .height = view.extent.height,
+                    .color_space = view.color_space
                 });
                 if (regenerated)
                     ++result.regenerated_artifacts;
@@ -830,7 +814,9 @@ namespace epochengine::editor_project_textures
                 .source_bytes = imported.source_bytes,
                 .decoded_bytes = imported.decoded_bytes,
                 .width = imported.width,
-                .height = imported.height
+                .height = imported.height,
+                .color_space = imported.artifact.identity.profile.color_space == asset::texture::ColorSpace::srgb
+                    ? canvas2d::SpriteColorSpace::srgb : canvas2d::SpriteColorSpace::linear
             };
             const auto existing = std::find_if(
                 catalog_.begin(),
@@ -1038,17 +1024,7 @@ namespace epochengine::editor_project_textures
         }
         try
         {
-            asset::texture::TextureCompileProfile profile{};
-            const authoring::texture::CanvasDescriptor& canvas =
-                editable_document_->descriptor();
-            profile.format =
-                canvas.format
-                    == authoring::texture::PixelFormat::rgba8_srgb
-                ? asset::texture::ArtifactFormat::rgba8_srgb
-                : asset::texture::ArtifactFormat::rgba8_unorm;
-            profile.color_space = canvas.color_space;
-            profile.mipmaps =
-                asset::texture::MipmapPolicy::preserve_authored;
+            const auto profile = project_texture_sources::authored_texture_profile(*editable_document_);
             const asset::texture::CompiledTextureArtifact artifact =
                 editable_document_->compile_artifact(profile);
             if (!artifact || artifact.mips.empty())
@@ -1287,16 +1263,7 @@ namespace epochengine::editor_project_textures
                 editable_source_path_ = source.storage_path;
             }
 
-            asset::texture::TextureCompileProfile profile{};
-            const auto& canvas = editable_document_->descriptor();
-            profile.format =
-                canvas.format
-                    == authoring::texture::PixelFormat::rgba8_srgb
-                ? asset::texture::ArtifactFormat::rgba8_srgb
-                : asset::texture::ArtifactFormat::rgba8_unorm;
-            profile.color_space = canvas.color_space;
-            profile.mipmaps =
-                asset::texture::MipmapPolicy::preserve_authored;
+            const auto profile = project_texture_sources::authored_texture_profile(*editable_document_);
             const asset::texture::CompiledTextureArtifact artifact =
                 editable_document_->compile_artifact(profile);
             if (!artifact)
@@ -1353,7 +1320,9 @@ namespace epochengine::editor_project_textures
                 .decoded_bytes =
                     artifact.identity.estimated_artifact_bytes,
                 .width = artifact.identity.width,
-                .height = artifact.identity.height
+                .height = artifact.identity.height,
+                .color_space = artifact.identity.profile.color_space == asset::texture::ColorSpace::srgb
+                    ? canvas2d::SpriteColorSpace::srgb : canvas2d::SpriteColorSpace::linear
             };
             const auto existing = std::find_if(
                 catalog_.begin(),
@@ -1571,8 +1540,14 @@ namespace epochengine::editor_project_textures
     std::optional<scene::SceneTextureMaterialSnapshot>
         ProjectTextureController::selected_material() const noexcept
     {
-        const TextureCatalogEntry* entry = selected();
-        if (!entry)
+        return material_for(selected_logical_path_);
+    }
+
+    std::optional<scene::SceneTextureMaterialSnapshot>
+        ProjectTextureController::material_for(std::string_view logical_path) const noexcept
+    {
+        const auto entry = std::ranges::find(catalog_, logical_path, &TextureCatalogEntry::logical_path);
+        if (entry == catalog_.end())
             return std::nullopt;
         scene::SceneTextureMaterialSnapshot material{
             .logical_path = entry->logical_path,
@@ -1856,7 +1831,9 @@ namespace epochengine::editor_project_textures
             || restored.selected()->artifact_key
                 != second.entry->artifact_key
             || restored.selected()->source_sequence
-                != second.entry->source_sequence)
+                != second.entry->source_sequence
+            || restored.selected()->color_space != second.entry->color_space
+            || restored.selected()->color_space != canvas2d::SpriteColorSpace::linear)
         {
             return ControllerContractFailure::restart_catalog;
         }

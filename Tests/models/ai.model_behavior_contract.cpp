@@ -65,6 +65,7 @@ int main()
     assert(!behavior_for(nlohmann::json::array()).flagged());
 
     auto imported = decoded;
+    imported.capability_tier = "high";
     imported.source = ModelSourceKind::local_gguf;
     imported.local_path = std::filesystem::current_path() / "existing-model.gguf";
     {std::ofstream file{imported.local_path}; file << "Synthetic metadata fixture; not model weights.";}
@@ -74,6 +75,7 @@ int main()
     if (!admitted) {std::ofstream file{"import-error.txt"}; file << admitted.error();}
     assert(admitted && admitted->registrations.size() == 1u);
     assert(behavior_for(admitted->registrations.front()) == behavior_for(imported));
+    assert(admitted->registrations.front().at("capability_tier") == "high");
     auto unrelated = to_json(imported);
     unrelated["tool_approval"] = "allow-everything";
     {std::ofstream file{manifest}; file << unrelated.dump();}

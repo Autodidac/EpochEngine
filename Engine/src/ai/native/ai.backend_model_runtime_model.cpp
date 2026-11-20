@@ -2,6 +2,7 @@
 // Epoch system notes (auto-checked):
 // Epoch AI: preserve model selection, candidate isolation and host verification gates.
 #include "ai.backend_model_runtime_model.hpp"
+#include "../ai.model_capability.hpp"
 
 #include <algorithm>
 #include <charconv>
@@ -81,6 +82,7 @@ nlohmann::json to_json(const RuntimeModelProfile& profile) {
         {"profile_revision", profile.profile_revision},
         {"idle_timeout_minutes", profile.idle_timeout_minutes},
         {"runtime_policy", profile.runtime_policy},
+        {"capability_tier", profile.capability_tier},
         {"gpu_offload_percent", profile.gpu_offload_percent},
         {"gpu_layer_count_hint", profile.gpu_layer_count_hint},
         {"context_tokens", profile.context_tokens},
@@ -134,7 +136,8 @@ RuntimeModelProfile runtime_model_from_json(const nlohmann::json& value) {
 
     RuntimeModelProfile profile;
     profile.id = string_value("id");
-    profile.display_name = string_value("display_name", profile.id);
+    profile.display_name = normalized_model_display_name(
+        profile.id, string_value("display_name", profile.id));
     profile.behavior_labels = declared_behavior_labels(value);
     profile.tags = behavior_metadata(value, "tags");
 
@@ -155,6 +158,11 @@ RuntimeModelProfile runtime_model_from_json(const nlohmann::json& value) {
     profile.estimated_bytes = value.value("estimated_bytes", std::uint64_t{});
     profile.profile_revision = value.value("profile_revision", 1U);
     profile.runtime_policy = string_value("runtime_policy", "recommended");
+    if (value.contains("capability_tier") && !value.at("capability_tier").is_string())
+        throw std::invalid_argument("capability_tier must be a string");
+    profile.capability_tier = string_value("capability_tier", "reference");
+    if (profile.capability_tier != "reference" && !epochengine::ai::model_capability::parse(profile.capability_tier))
+        throw std::invalid_argument("Unknown capability tier");
     profile.gpu_offload_percent = value.value("gpu_offload_percent", gpu_offload_default_percent);
     profile.gpu_layer_count_hint = value.value("gpu_layer_count_hint", 48U);
     profile.context_tokens = value.value("context_tokens", 81'920U);

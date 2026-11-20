@@ -464,21 +464,21 @@ export namespace epochengine::media::timeline_preview
         }
 
         const double duration = state.source->duration_seconds;
-        const double advanced = state.playhead_seconds + elapsed_seconds;
         if (state.loop)
         {
-            state.playhead_seconds = std::fmod(advanced, duration);
-            if (state.playhead_seconds < 0.0)
-                state.playhead_seconds += duration;
-        }
-        else if (advanced >= duration)
-        {
-            state.playhead_seconds = duration;
-            state.transport = TransportMode::stopped;
+            // Reduce large deltas before adding them so the current sub-frame
+            // position is preserved even when elapsed time has low precision.
+            const double remainder = std::fmod(elapsed_seconds, duration);
+            state.playhead_seconds = std::fmod(state.playhead_seconds + remainder, duration);
         }
         else
         {
-            state.playhead_seconds = advanced;
+            state.playhead_seconds += elapsed_seconds;
+            if (state.playhead_seconds >= duration)
+            {
+                state.playhead_seconds = duration;
+                state.transport = TransportMode::stopped;
+            }
         }
         return true;
     }
@@ -488,11 +488,66 @@ export namespace epochengine::media::timeline_preview
     {
         if (!state.source)
             return std::nullopt;
+        if (state.source->frame_count == 0u)
+            return std::nullopt;
+        const std::uint64_t last = state.source->frame_count - 1u;
         const double frame = state.playhead_seconds * state.source->frame_rate.value();
-        const std::uint64_t index = frame > 0.0
-            ? static_cast<std::uint64_t>(frame)
-            : 0u;
-        return (std::min)(index, state.source->frame_count - 1u);
+        // UINT64_MAX rounds to 2^64 in double. Reject that boundary before
+        // converting even when it was produced by valid admitted metadata.
+        constexpr double exclusive_limit = 0x1p64;
+        if (state.playhead_seconds >= state.source->duration_seconds || frame >= exclusive_limit)
+            return last;
+        if (!(frame > 0.0))
+            return 0u;
+        auto index = (std::min)(static_cast<std::uint64_t>(frame), last);
+        const auto rate = state.source->frame_rate;
+        const auto frame_start = [rate](std::uint64_t frame_index) noexcept {
+            return static_cast<double>(frame_index) * rate.denominator / rate.numerator;
+        };
+        // The rounded FPS product can land on either side of an exact seek
+        // timestamp. Compare adjacent frame starts in the playhead's units.
+        if (index > 0u && state.playhead_seconds < frame_start(index))
+            --index;
+        else if (index < last && state.playhead_seconds >= frame_start(index + 1u))
+            ++index;
+        return index;
+    }
+
+    struct AtlasLayout final
+    {
+        std::uint32_t columns{};
+        std::uint32_t rows{};
+    };
+
+    struct AtlasFrame final
+    {
+        std::uint64_t index{};
+        std::uint64_t x{};
+        std::uint64_t y{};
+        std::uint32_t width{};
+        std::uint32_t height{};
+    };
+
+    // The atlas contains equal-sized, row-major source frames. UV orientation
+    // and rotation remain presentation decisions of the consuming renderer.
+    [[nodiscard]] inline std::optional<AtlasFrame> current_atlas_frame(
+        const PreviewState& state,
+        AtlasLayout layout) noexcept
+    {
+        const auto index = current_frame_index(state);
+        if (!index || layout.columns == 0u || layout.rows == 0u)
+            return std::nullopt;
+        const auto capacity = static_cast<std::uint64_t>(layout.columns) * layout.rows;
+        if (state.source->frame_count > capacity)
+            return std::nullopt;
+
+        const auto& source = *state.source;
+        return AtlasFrame{
+            *index,
+            (*index % layout.columns) * source.source_width,
+            (*index / layout.columns) * source.source_height,
+            source.source_width,
+            source.source_height};
     }
 
     struct ContractReport final

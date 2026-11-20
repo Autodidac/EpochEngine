@@ -4,20 +4,51 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 #include <numbers>
 #include <string_view>
+#include <utility>
 #include <vector>
 import audio.mixer;
 
 namespace {
+void usage(std::ostream& output) {
+    output << "Usage: epoch_audio_demo <output.wav> | --self-test | --help\n"
+        << "Renders a one-second stereo 440 Hz tone without opening an audio device.\n";
+}
+
 void little_endian(std::ofstream& out, std::uint32_t value, unsigned bytes) {
     for (unsigned n = 0; n < bytes; ++n) out.put(static_cast<char>((value >> (n * 8)) & 255));
 }
 }
 
 int main(int argc, char** argv) {
-    if (argc != 2) return 2;
-    const bool self_test = std::string_view{argv[1]} == std::string_view{"--self-test"};
+    if (argc == 1) {
+        usage(std::cout);
+        return 0;
+    }
+    if (argc != 2) {
+        usage(std::cerr);
+        return 2;
+    }
+    const std::string_view argument{argv[1]};
+    if (argument == "--help" || argument == "-h") {
+        usage(std::cout);
+        return 0;
+    }
+    const bool self_test = argument == "--self-test";
+    const std::filesystem::path output_path = self_test ? std::filesystem::path{} : argv[1];
+    if (!self_test) {
+        std::error_code error;
+        if (std::filesystem::exists(output_path, error)) {
+            std::cerr << "Output already exists: " << output_path << '\n';
+            return 2;
+        }
+        if (output_path.empty() || error) {
+            std::cerr << "Could not resolve the output path: " << output_path << '\n';
+            return 2;
+        }
+    }
     constexpr std::uint32_t rate = 48000;
     using namespace epochengine::audio;
     AudioManager manager;
@@ -48,11 +79,15 @@ int main(int argc, char** argv) {
             output.push_back(static_cast<std::int16_t>(std::lround(std::clamp(sample, -1.0f, 1.0f) * 32767.0f)));
     }
     if (output.size() != rate * 2u || std::none_of(output.begin(), output.end(), [](auto v) { return v != 0; })) return 3;
-    if (self_test) return 0;
-    std::error_code error;
-    if (std::filesystem::exists(argv[1], error) || error) return 2;
-    std::ofstream out{argv[1], std::ios::binary | std::ios::noreplace};
-    if (!out) return 4;
+    if (self_test) {
+        std::cout << "Audio synthesis check passed.\n";
+        return 0;
+    }
+    std::ofstream out{output_path, std::ios::binary | std::ios::noreplace};
+    if (!out) {
+        std::cerr << "Could not create the WAV file: " << output_path << '\n';
+        return 4;
+    }
     const auto bytes = static_cast<std::uint32_t>(output.size() * 2u);
     out.write("RIFF", 4); little_endian(out, bytes + 36, 4); out.write("WAVEfmt ", 8);
     little_endian(out, 16, 4); little_endian(out, 1, 2); little_endian(out, 2, 2);
@@ -61,5 +96,10 @@ int main(int argc, char** argv) {
     out.write("data", 4); little_endian(out, bytes, 4);
     for (auto sample : output) little_endian(out, static_cast<std::uint16_t>(sample), 2);
     out.close();
-    return out ? 0 : 4;
+    if (!out) {
+        std::cerr << "Could not finish writing the WAV file: " << output_path << '\n';
+        return 4;
+    }
+    std::cout << "Wrote one second of stereo PCM16 (48 kHz) to " << output_path << '\n';
+    return 0;
 }

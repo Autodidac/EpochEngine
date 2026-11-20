@@ -212,7 +212,11 @@ namespace epochengine::gui_lib
         if (popupInput.mouse_pressed) popupInput.mouse_position = press_position;
         popupInput.close_requested = popupInput.close_requested || input.focus_lost;
         result.popup = update_popup(state.popup, popupOptions, popupInput);
-        if (input.popup.mouse_pressed) state.pressed_id.reset();
+        // Losing pointer ownership cancels the press without synthesizing a
+        // release. A later unpaired release must not activate that command.
+        if (input.popup.mouse_pressed
+            || (!input.pointer_down && !input.popup.mouse_released))
+            state.pressed_id.reset();
         result.popup.hovered = result.popup.visible && inside(result.popup.popup, input.popup.mouse_position);
         result.popup.owner_hovered = inside(result.popup.owner, input.popup.mouse_position);
         result.pointer_captured = (result.popup.visible && result.popup.hovered)

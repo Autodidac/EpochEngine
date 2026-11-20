@@ -1,8 +1,10 @@
 """Real GUI codec/writer and save/reload handlers; dialog/scene ports are recorded."""
 from pathlib import Path
+from Tests.support.cpp import engine_module_source
 import json
 import os
 import subprocess
+import time
 import unittest
 
 from Tests.build.test_opengl_sprite_stream import definition
@@ -153,14 +155,16 @@ int main(int argc,char**argv){
 
 class StandaloneGuiFiles(unittest.TestCase):
     def test_real_document_save_reload_and_failure_preservation(self):
-        proof = ROOT / "build/validation/standalone-gui-files-oct27"
-        proof.mkdir(parents=True, exist_ok=True)
+        proof = ROOT / "Artifacts/Reports/standalone-gui-files" / str(time.time_ns())
+        proof.mkdir(parents=True)
         (proof / "gui.files_contract.cpp").write_text(fixture(), encoding="utf-8")
-        modules = [ROOT / "Engine/modules" / name for name in (
+        modules = [engine_module_source(ROOT / "Engine/modules", name) for name in (
             "authoring.document.ixx", "authoring.gui_document.ixx", "platform.filesystem.ixx", "core.sha256.ixx")]
         files = " ".join('"' + path.as_posix() + '"' for path in modules)
         (proof / "CMakeLists.txt").write_text(f'''cmake_minimum_required(VERSION 3.30)
+cmake_policy(SET CMP0141 NEW)
 project(StandaloneGuiFiles LANGUAGES CXX)
+set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT Embedded)
 add_executable(gui_files gui.files_contract.cpp
  "{(ROOT/'Engine/src/authoring/gui/authoring.gui_document_codec.cpp').as_posix()}"
  "{(ROOT/'Engine/src/authoring/gui/authoring.gui_templates.cpp').as_posix()}")
@@ -175,7 +179,7 @@ add_test(NAME actual_gui_file_handlers COMMAND gui_files "${{CMAKE_CURRENT_BINAR
 set_tests_properties(actual_gui_file_handlers PROPERTIES TIMEOUT 30)
 ''', encoding="utf-8")
         commands = [("configure", ["cmake", "-S", str(proof), "-B", str(proof / "cmake")])]
-        commands[0][1].extend(["-G", "Visual Studio 17 2022", "-A", "x64"] if os.name == "nt"
+        commands[0][1].extend(["-G", "Visual Studio 17 2022", "-A", "x64", "-T", "host=x64"] if os.name == "nt"
             else ["-G", "Ninja", "-DCMAKE_BUILD_TYPE=Release"])
         for config in (("Debug", "Release") if os.name == "nt" else ("Release",)):
             build = ["cmake", "--build", str(proof / "cmake"), "--config", config, "--parallel", "1"]
@@ -205,6 +209,20 @@ set_tests_properties(actual_gui_file_handlers PROPERTIES TIMEOUT 30)
         self.assertIn("save_project_gui_document(editor)", actions)
         self.assertIn("save_gui_document_from_dialog(editor,true)", outliner)
         self.assertIn('menu_item(standaloneGui ? "Save GUI..." : "Save Project"', menu)
+
+    def test_outliner_borrows_document_after_replacement_controls(self):
+        outliner = (ROOT / "Engine/src/editor/application/editor.frame_outliner.inl").read_text(encoding="utf-8")
+        controls_start = outliner.index('gui::section_heading(fullGuiAuthoring ? "GUI Document"')
+        history_start = outliner.index("const std::array documentHistoryActions", controls_start)
+        borrow = outliner.index("auto* const guiDocument = editor.guiDocument.get();", controls_start)
+        controls = outliner[controls_start:borrow]
+        for action in ("open_project_manifest_from_dialog", "editor_close_project",
+                       "open_gui_document_from_dialog", "apply_gui_template",
+                       "reload_project_gui_document", "reload_standalone_gui_document"):
+            self.assertIn(action, controls)
+        self.assertLess(borrow, history_start)
+        self.assertNotIn("guiDocument->", controls)
+        self.assertIn("guiDocument->widget(editor.guiDocumentRoot)", outliner[history_start:])
 
 
 if __name__ == "__main__":

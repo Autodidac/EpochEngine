@@ -50,8 +50,8 @@ int main()
         "(host.context_win.cpp:5237) - Backend OpenGL window state activity=foreground presentable=true logical=1600x1000 framebuffer=1600x1000 dpi_milli=1000 dpi_known=true visibility_known=true focus_known=true occlusion_known=true resize_generation=1.");
     assert(window == "18:32:09 [INFO] Context.Win: OpenGL window foreground 1600x1000 (fb 1600x1000)");
     const auto source = format_line("2026-10-11 18:36:55", "INFO", "Engine.AI.Source",
-        "(editor.ai_development_panel.cpp:12583) - Resident source; path=Engine/modules/gui.engine.ixx; first_line=1; last_line=570; bytes=16337; content_sha256=d5d44d89166cc917a81ec1d3236a12156323b98766cf413ecd48652d8a8c1bd2");
-    assert(source == "18:36:55 [INFO] AI.Source: Source Engine/modules/gui.engine.ixx:1-570");
+        "(editor.ai_development_panel.cpp:12583) - Resident source; path=Engine/modules/gui/gui.engine.ixx; first_line=1; last_line=570; bytes=16337; content_sha256=d5d44d89166cc917a81ec1d3236a12156323b98766cf413ecd48652d8a8c1bd2");
+    assert(source == "18:36:55 [INFO] AI.Source: Source Engine/modules/gui/gui.engine.ixx:1-570");
     const auto warning = format_line("2026-10-11 18:32:11", "WARN", "ai",
         "(ai.engine.cpp:99) - WinHTTP: WinHttpSendRequest failed");
     assert(warning.find("ai.engine.cpp:99") != std::string::npos);

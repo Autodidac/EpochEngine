@@ -68,6 +68,11 @@
         if (editor.aiDeferredDispatchQueued)
             (void)dispatch_deferred_ai_request();
 
+        if (ctx->windowData)
+            ctx->windowData->editorForegroundWorkActive.store(
+                editor_automation_input_reserved(editor, chat)
+                    || editor_assistant_work_active(editor, chat) || editor.scriptBuildPending.has_value(),
+                std::memory_order_relaxed);
         frameTimer.mark_ui_done();
         persist_editor_layout_preferences(editor);
         ctx->set_gui_overlay_priority(editor.openMenu != TopMenu::None || editor.outlinerContextMenu.menu.popup.open || modal_visible_now() || floating_gui_visible() || gui::select_box_popup_open());

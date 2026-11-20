@@ -233,14 +233,34 @@ PRIVATE_STEMS = ('ai.development_', 'ai.iteration_', 'ai.source_', 'ai.self_iter
                  'editor.codex_app_server', 'editor.codex_bridge') + PRIVATE_NATIVE_SOURCE_PREFIXES
 PRIVATE_STEMS += ('editor.ai_approved_patch', 'editor.ai_engine_mission',
                   'editor.ai_reference_images')
-REVIEWED_SHARED = {'Engine/src/editor/ai/editor.ai_session_diagnostics.hpp': '327726e230daa46b7702145559690740ed0e2250717f67e340d6c172678b0fb5', 'Engine/src/editor/ai/editor.ai_source_intent.hpp': '52c453c06b620862e2ce82dc7c7a627d3ca553a0f18443311ee4d06394118f15', 'AGENTS.md': 'a9e6a23513ee770be38d12db2baf2faf7fd28bf483bae4e80e6ba04093f16924'}
+REVIEWED_SHARED = {'Engine/src/editor/ai/editor.ai_session_diagnostics.hpp': '327726e230daa46b7702145559690740ed0e2250717f67e340d6c172678b0fb5', 'Engine/src/editor/ai/editor.ai_source_intent.hpp': 'e79854f342583e4963a4f59165b7fb7c383c02b0915e8bda6a99ec450aa916e9', 'AGENTS.md': 'a9e6a23513ee770be38d12db2baf2faf7fd28bf483bae4e80e6ba04093f16924'}
 # The optional offline image-to-3D worker has no own-engine-source access.
 REVIEWED_ASSET_TOOLS = {
     'Tools/ai/triposr_worker.py': '5c953e11be385a45594d802b826078f3f8d7c2673eaa14dd914410b8a25b75a6',
 }
+# This host benchmark imports the private task metrics and operator fixture
+# paths. The portable Edge0 loader, model catalog and kernels stay Public.
+DEVELOPMENT_ONLY_MODEL_TOOLS = frozenset({'tools/models/edge0/benchmark_windows.py'})
 REVIEWED_README_MEDIA = {
     'Images/readme/windows-world-project-v090185.png': 'bd38e19fba78a8185367db697376cfdfe1da6542c51124ce6f1d692f74cfc72b',
 }
+LOCAL_README_IMAGE = re.compile(
+    rb'''(?:!\[[^\]\r\n]*\]\(\s*<?|<img\b[^>]*?\s+src\s*=\s*["'])'''
+    rb'''((?:\./)?Images/readme/[^\s<>"')]+)''', re.IGNORECASE)
+
+
+def readme_media_reference_issues(files: dict[str, bytes]) -> list[str]:
+    refs = {match.decode('utf-8').removeprefix('./')
+            for match in LOCAL_README_IMAGE.findall(files.get('README.md', b''))}
+    problems = []
+    for name in sorted(refs):
+        if name not in REVIEWED_README_MEDIA:
+            problems.append(f'Unreviewed README image reference: {name}')
+        elif name not in files:
+            problems.append(f'Reviewed README image missing from public source: {name}')
+    return problems
+
+
 PRIVATE_API = re.compile(r'\b(?:editor_ai_development_panel|editor_ai_development_controller|aiDevelopmentPanel|aiSourceArtifacts|AiSourceTaskResult|editor_ai_approved_patch|editor_ai_engine_mission|engine_mission_requested|engine_mission_file|engine_mission_model|engine_mission_candidate|engine_mission_error|codex_task_requested|codex_task_file|codex_task_error|set_source_mission_model|source_mission_setup_stop_source|epoch_engine_mission_model|source_mission_model|ApprovedPatchHandoff|prepare_approved_patch_handoff|invalidate_approved_patch_handoff|epoch_propose_source_patch|epoch_select_source_context|EPOCH_SOURCE_PROPOSAL_V1|EPOCH_SOURCE_CONTEXT_REQUEST_V1|source_iteration|source_self_review|project_ai_iteration|project_ai_iteration_session|EditorProjectSelfIterationProvision|projectSelfIterationDefault|ProjectSelfIterationChoice|self_iteration_provision|includeSelfIteration|project_self_iteration_choices|project_self_iteration_label|self_iteration_orchestrator|source_patch_stager|source_patch_proposal|source_patch_bundle|curated_context_bundle|development_proposal_codec|candidate_artifacts(?=\s*::)|push_ai_development_log(?=\s*\()|log_ai_candidate_event(?=\s*\())\b')
 PRIVATE_AUTH = re.compile(r'/api/private/epoch-engine/device/|EpochEngine\.SourceDeviceAuth\.v1|epoch-source-key-wrap-v1|EpochEngine private source DEK wrap v1')
 PRIVATE_NATIVE_CODING_API = re.compile(
@@ -302,7 +322,7 @@ def private_native_coding_api_matches(name: str, text: str):
     yield from PRIVATE_NATIVE_CODING_API.finditer(text)
     # Engine-wide task/queue APIs retain their architecture. Only this private
     # native agent owner loses unqualified run-task/event transport identities.
-    if name.casefold().startswith(('engine/src/ai/', 'engine/modules/ai.')):
+    if name.casefold().startswith(('engine/src/ai/', 'engine/modules/ai/', 'engine/modules/ai.')):
         yield from PRIVATE_NATIVE_OWNER_API.finditer(text)
 
 
@@ -330,10 +350,13 @@ def private_training_api_matches(name: str, text: str):
 IMPORT = re.compile(r'^\s*(?:export\s+)?import\s+([A-Za-z_][A-Za-z0-9_.:]*)\s*;', re.M)
 INCLUDE = re.compile(r'^\s*#\s*include\s*"([^"\n]+)"', re.M)
 MODULE = re.compile(rb'export\s+module\s+([A-Za-z_][A-Za-z0-9_.:]*);')
+MODEL_WEIGHT_SUFFIXES = {'.gguf', '.safetensors', '.ckpt', '.onnx', '.pt', '.pth', '.tflite'}
 
 
 def forbidden_path(name: str) -> bool:
     path = PurePosixPath(name)
+    if name.casefold() in DEVELOPMENT_ONLY_MODEL_TOOLS:
+        return True
     if name.casefold() in HELD_REFERENCE_ASSETS:
         return True
     if name.casefold() in GENERATED_ROOT_FILES:
@@ -351,7 +374,9 @@ def forbidden_path(name: str) -> bool:
     if (path.parts[0].casefold() in {'changes','projects','addons','releasenotes','images','ai','cache','logs','captures','build','artifacts','x64'}
             and name not in REVIEWED_README_MEDIA):
         return True
-    if path.name.lower().startswith(('.env','credentials','secrets')) or path.suffix.lower() in {'.pem','.key','.pfx','.p12','.sqlite','.db','.jsonl','.zip','.7z','.tar','.gz','.tgz','.exe','.dll','.pdb','.obj','.gguf','.lib','.so','.dylib','.a','.pyc','.aps'}:
+    if path.name.lower().startswith(('.env','credentials','secrets')) or path.suffix.lower() in {'.pem','.key','.pfx','.p12','.sqlite','.db','.jsonl','.zip','.7z','.tar','.gz','.tgz','.exe','.dll','.pdb','.obj','.lib','.so','.dylib','.a','.pyc','.aps'}:
+        return True
+    if path.suffix.lower() in MODEL_WEIGHT_SUFFIXES:
         return True
     if name.casefold().startswith('tools/ai/') and name not in REVIEWED_ASSET_TOOLS:
         return True
@@ -459,6 +484,8 @@ def check(root: Path, manifest: dict, names: set[str], verify_hashes: bool = Tru
     for name,digest in REVIEWED_README_MEDIA.items():
         if name in files and source_digest(name, files[name]) != digest:
             raise RuntimeError('Reviewed README media changed; maintainer review required')
+    if problems := readme_media_reference_issues(files):
+        raise RuntimeError('\n'.join(problems))
     modules = {'std','std.compat'}
     for name,data in files.items():
         if PurePosixPath(name).suffix.lower() in {'.ixx','.cppm','.mpp'}:

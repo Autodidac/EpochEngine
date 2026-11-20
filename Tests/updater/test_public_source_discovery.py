@@ -35,11 +35,11 @@ class PublicSourceDiscovery(unittest.TestCase):
         formatter = 'namespace epochengine {\n' + formatter.replace('export ', '', 1) + '\n}\n'
         worker = (ROOT / 'Engine/src/updater/implementation/updater.source_worker.inl').read_text(encoding='utf-8')
         windows = (ROOT / 'Engine/src/updater/updater.source_worker_win.cpp').read_text(encoding='utf-8')
-        sha = (ROOT / 'Engine/modules/core.sha256.ixx').read_text(encoding='utf-8').replace('module;', '').replace('export module core.sha256;', '').replace('export namespace', 'namespace')
+        sha = (ROOT / 'Engine/modules/core/core.sha256.ixx').read_text(encoding='utf-8').replace('module;', '').replace('export module core.sha256;', '').replace('export namespace', 'namespace')
         distribution = (ROOT / 'Engine/include/updater.distribution.hpp').read_text(encoding='utf-8').replace('#pragma once', '').replace('#include "epoch.edition.hpp"', '#define EPOCH_SOURCE_EDITION_PUBLIC 1\n#define EPOCH_EDITION_PUBLIC 1')
-        config = (ROOT / 'Engine/modules/updater.config.ixx').read_text(encoding='utf-8')
+        config = (ROOT / 'Engine/modules/updater/updater.config.ixx').read_text(encoding='utf-8')
         policies = ''
-        signatures = ('PROJECT_RELEASE_INTEGRITY_URL', 'PROJECT_SOURCE_URL', 'PROJECT_SOURCE_CHECKSUM_URL', 'PROJECT_SOURCE_VERSION_URL', 'PROJECT_SOURCE_CHANNEL_ALLOWED')
+        signatures = ('PROJECT_RELEASE_INTEGRITY_URL', 'PROJECT_SOURCE_VERSION_URL', 'PROJECT_SOURCE_URL', 'PROJECT_SOURCE_CHECKSUM_URL', 'PROJECT_SOURCE_CHANNEL_ALLOWED')
         for name, public in (('public_policy', 'true'), ('development_policy', 'false')):
             policies += 'namespace ' + name + ' { constexpr bool PUBLIC_DISTRIBUTION=' + public + '; constexpr bool SITE_DISTRIBUTION=!PUBLIC_DISTRIBUTION; constexpr bool SOURCE_UPDATE_FALLBACK_ENABLED=true; constexpr bool AUTHORIZED_SOURCE_DISTRIBUTION_ENABLED=SITE_DISTRIBUTION; constexpr auto GITHUB_BASE="https://github.com/"; constexpr auto EPOCH_SITE_BASE="https://epoch.adamrushford.chatgpt.site";\n'
             policies += '\n'.join(definition(config, 'export inline ' + ('bool ' if item.endswith('ALLOWED') else 'std::string ') + item + '(').replace('export ', '') for item in signatures)

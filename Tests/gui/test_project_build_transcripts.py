@@ -61,7 +61,7 @@ class ProjectBuildTranscripts(unittest.TestCase):
         scene = (ROOT / "Engine/src/editor/editor.scene.cpp").read_text(encoding="utf-8")
         runtime = (ROOT / "Engine/src/editor/application/editor.application_project_runtime.inl").read_text(encoding="utf-8")
         paths = (ROOT / "Engine/src/editor/application/editor.application_runtime_source.inl").read_text(encoding="utf-8")
-        core = (ROOT / "Engine/modules/editor.core.ixx").read_text(encoding="utf-8")
+        core = (ROOT / "Engine/modules/editor/editor.core.ixx").read_text(encoding="utf-8")
         session = (ROOT / "Engine/src/editor/application/editor.application_context_session.inl").read_text(encoding="utf-8")
         lifecycle = (ROOT / "Engine/src/editor/application/editor.application_context_lifecycle.inl").read_text(encoding="utf-8")
         common_stop = definition(session, "        void request_editor_task_session_stop(")
@@ -127,8 +127,24 @@ fs::path generated_project_output_path(const fs::path& root,std::string_view){re
 fs::path generated_project_existing_output_path(const fs::path& root,std::string_view config){return generated_project_output_path(root,config);}
 HELPERS
 WORKER
-struct EditorState{project_lifecycle::EvidenceLedger projectLifecycle;std::uint64_t projectBuildProjectKey{},projectBuildLifecycleGeneration{};std::string projectBuildProjectRoot,projectRoot,projectBuildRequestedConfiguration{"Debug"},projectBuildConfiguration{"Debug"};struct Transcript{project_lifecycle::ProjectStamp project;std::string configuration,path;}projectBuildTranscript;
-std::unique_ptr<editor_tasks::Scheduler>taskScheduler;editor_tasks::CancellationTicket projectBuildCancellation{},scriptBuildCancellation{},planetaryCancellation{},planetaryPreviewCancellation{},assetGenerationCancellation{},aiDirectRuntimeCancellation{},aiAuthoringApplyCancellation{},aiToolTestCancellation{},aiContinuousBuildCancellation{};std::optional<std::future<EditorProjectBuildResult>>projectBuildPending,aiContinuousBuildPending;bool projectBuildRunAfterBuild{true},aiProjectScriptRunAfterBuild{true},aiProjectScriptRepairQueued{true},aiToolTestAfterBuild{true};std::string projectBuildStatus,aiContinuousBuildStatus,aiContinuousBuildFingerprint;};
+struct EditorState {
+ project_lifecycle::EvidenceLedger projectLifecycle;
+ std::uint64_t projectBuildProjectKey{},projectBuildLifecycleGeneration{};
+ std::string projectBuildProjectRoot,projectRoot,projectBuildRequestedConfiguration{"Debug"},projectBuildConfiguration{"Debug"};
+ struct Transcript {project_lifecycle::ProjectStamp project;std::string configuration,path;} projectBuildTranscript;
+ std::unique_ptr<editor_tasks::Scheduler> taskScheduler;
+ editor_tasks::CancellationTicket projectBuildCancellation{},scriptBuildCancellation{},planetaryCancellation{},
+  planetaryPreviewCancellation{},assetGenerationCancellation{},modelShorelineCancellation{},aiDirectRuntimeCancellation{},
+  aiAuthoringApplyCancellation{},aiToolTestCancellation{},aiContinuousBuildCancellation{};
+ std::optional<std::future<EditorProjectBuildResult>> projectBuildPending,aiContinuousBuildPending;
+ std::optional<std::future<int>> modelShorelinePending;
+ struct ModelImportReview {std::optional<int> shoreline;};
+ std::optional<ModelImportReview> modelImportReview;
+ struct AssetGeneration {std::string status;} assetGeneration;
+ bool projectBuildReusesReviewedArtifact{},projectBuildRunAfterBuild{true},aiProjectScriptRunAfterBuild{true},
+  aiProjectScriptRepairQueued{true},aiToolTestAfterBuild{true};
+ std::string projectBuildStatus,aiContinuousBuildStatus,aiContinuousBuildFingerprint,aiToolStatus;
+};
 void push_editor_log(EditorState&,const std::string&){}
 std::string ai_continuous_build_fingerprint(EditorState&,const std::string&,const fs::path&){return "explicit unchanged fixture identity";}
 template<class Op>auto schedule_editor_cancellable_task(EditorState&e,std::string name,Op&&op){return e.taskScheduler->submit_cancellable(std::move(name),std::forward<Op>(op));}
@@ -156,11 +172,20 @@ int main(){
  assert(aiReady.wait_for(std::chrono::seconds{3})==std::future_status::ready);
  auto buildTask=closing.taskScheduler->submit_cancellable("Project Build",[&](std::stop_token token){return editor_build_project(root.string(),token,"Debug");});closing.projectBuildCancellation=buildTask.cancellation;closing.projectBuildPending.emplace(std::move(buildTask.completion));
  const auto started=std::chrono::steady_clock::now()+std::chrono::seconds{5};while(!platform::child_process::active_in_group("epoch.project.build")&&std::chrono::steady_clock::now()<started)std::this_thread::sleep_for(std::chrono::milliseconds{2});assert(platform::child_process::active_in_group("epoch.project.build"));
+ auto waitForCancellation=[](std::stop_token token){while(!token.stop_requested())std::this_thread::sleep_for(std::chrono::milliseconds{1});return 1;};
+ auto shoreline=closing.taskScheduler->submit_cancellable("Owned shoreline import",waitForCancellation);
+ closing.modelShorelineCancellation=shoreline.cancellation;
+ closing.modelShorelinePending.emplace(std::move(shoreline.completion));
+ closing.modelImportReview.emplace(EditorState::ModelImportReview{.shoreline=1});
  std::vector<std::future<int>>ownedTasks;
  for(auto*ticket:std::array{&closing.scriptBuildCancellation,&closing.planetaryCancellation,&closing.planetaryPreviewCancellation,&closing.assetGenerationCancellation,&closing.aiDirectRuntimeCancellation,&closing.aiAuthoringApplyCancellation,&closing.aiToolTestCancellation,&closing.aiContinuousBuildCancellation}){
-  auto task=closing.taskScheduler->submit_cancellable("Owned common task",[](std::stop_token token){while(!token.stop_requested())std::this_thread::sleep_for(std::chrono::milliseconds{1});return 1;});*ticket=task.cancellation;ownedTasks.push_back(std::move(task.completion));}
+  auto task=closing.taskScheduler->submit_cancellable("Owned common task",waitForCancellation);*ticket=task.cancellation;ownedTasks.push_back(std::move(task.completion));}
  const auto closed=std::chrono::steady_clock::now();request_editor_task_session_stop(closing);assert(!closing.projectBuildRunAfterBuild&&!closing.aiProjectScriptRunAfterBuild&&!closing.aiProjectScriptRepairQueued&&!closing.aiToolTestAfterBuild&&closing.projectBuildPending&&closing.taskScheduler&&unrelated.projectBuildRunAfterBuild&&!aiToken.stop_requested());
+ assert(closing.modelImportReview&&!closing.modelImportReview->shoreline&&closing.modelShorelinePending);
+ assert(closing.aiToolStatus=="Shoreline import stopped. The scene is unchanged."&&closing.assetGeneration.status==closing.aiToolStatus);
  assert(closing.projectBuildPending->wait_for(std::chrono::seconds{7})==std::future_status::ready);const auto closeResult=closing.projectBuildPending->get();assert(closeResult.cancelled&&!closeResult.succeeded&&!closeResult.log_path.empty()&&read(closeResult.log_path).find("cancelled=1")!=std::string::npos);assert(!platform::child_process::active_in_group("epoch.project.build")&&read(first.log_path)==original);
+ assert(closing.modelShorelinePending->wait_for(std::chrono::seconds{2})==std::future_status::ready);
+ try{assert(closing.modelShorelinePending->get()==1);}catch(const editor_tasks::TaskCancelled&){}
  for(auto&task:ownedTasks){assert(task.wait_for(std::chrono::seconds{2})==std::future_status::ready);try{assert(task.get()==1);}catch(const editor_tasks::TaskCancelled&){}}
  (void)closing.taskScheduler->cancel(aiTask.cancellation);closing.taskScheduler.reset();assert(aiTask.completion.get()==11&&aiToken.stop_requested());assert(std::chrono::steady_clock::now()-closed<std::chrono::seconds{8});
  EditorState evidence;evidence.projectRoot=root.string();evidence.projectBuildConfiguration="Release";evidence.taskScheduler=std::make_unique<editor_tasks::Scheduler>(editor_tasks::SchedulerLimits{.worker_count=1,.retained_finished_nodes=32}); // Legacy owner reads the admitted manifest configuration, not stale view state.
@@ -168,7 +193,7 @@ int main(){
  const auto evidenceStarted=std::chrono::steady_clock::now()+std::chrono::seconds{5};while(!platform::child_process::active_in_group("epoch.project.build")&&std::chrono::steady_clock::now()<evidenceStarted)std::this_thread::sleep_for(std::chrono::milliseconds{2});assert(platform::child_process::active_in_group("epoch.project.build"));
  request_editor_task_session_stop(evidence);evidence.taskScheduler.reset();assert(evidence.aiContinuousBuildPending->wait_for(std::chrono::seconds{0})==std::future_status::ready);const auto evidenceResult=evidence.aiContinuousBuildPending->get();assert(evidenceResult.cancelled&&!evidenceResult.log_path.empty()&&!platform::child_process::active_in_group("epoch.project.build")&&read(first.log_path)==original);
  EditorState editor;editor.projectRoot=editor.projectBuildProjectRoot=root.string();assert(editor.projectLifecycle.select_project(11));assert(editor.projectLifecycle.record_scene_commit(1));assert(editor.projectLifecycle.record_shell_materialized());assert(editor.projectLifecycle.observe_build_inputs(123));editor.projectBuildLifecycleGeneration=editor.projectLifecycle.begin_build();editor.projectBuildProjectKey=11;retain_project_build_transcript(editor,failed);assert(project_build_transcript_for_display(editor)==failed.log_path);editor.projectBuildConfiguration="Release";assert(project_build_transcript_for_display(editor)!=failed.log_path);editor.projectBuildConfiguration="Debug";assert(editor.projectLifecycle.select_project(12));assert(project_build_transcript_for_display(editor)!=failed.log_path);const auto saved=editor.projectBuildTranscript.path;retain_project_build_transcript(editor,cancelled);assert(editor.projectBuildTranscript.path==saved);
- std::ofstream receipt("result.json");receipt<<"{\"real_child_supervisor\":true,\"unique_attempts\":true,\"quoted_preflight_stderr\":true,\"failure_exit7\":true,\"owned_cancel\":true,\"duplicate_no_reservation\":true,\"project_configuration_binding\":true,\"common_close_build_cancellation\":true,\"future_and_transcript_retained\":true,\"all_owned_common_tickets_cancelled\":true,\"continuous_build_actual_child_cancelled\":true,\"other_context_and_private_AI_ticket_untouched\":true}";
+ std::ofstream receipt("result.json");receipt<<"{\"real_child_supervisor\":true,\"unique_attempts\":true,\"quoted_preflight_stderr\":true,\"failure_exit7\":true,\"owned_cancel\":true,\"duplicate_no_reservation\":true,\"project_configuration_binding\":true,\"common_close_build_cancellation\":true,\"future_and_transcript_retained\":true,\"all_owned_common_tickets_cancelled\":true,\"shoreline_ticket_cancelled_and_review_cleared\":true,\"continuous_build_actual_child_cancelled\":true,\"other_context_and_private_AI_ticket_untouched\":true}";
 }
 '''.replace("SUPPORTED", supported).replace("RESULT", result).replace("HELPERS", helpers).replace("WORKER", worker).replace("DISPLAY", display).replace("CANCEL_BUILD", cancel_build).replace("COMMON_STOP", common_stop).replace("CONTINUOUS_BUILD",continuous_build)
         self.compile_and_run("immutable-transcripts", code)
@@ -193,7 +218,7 @@ import editor.task_scheduler;
 #include <cassert>
 namespace taskgraph=epochengine::taskgraph;
 namespace editor_tasks=epochengine::editor_tasks;
-struct EditorState {std::unique_ptr<editor_tasks::Scheduler> taskScheduler{std::make_unique<editor_tasks::Scheduler>(editor_tasks::SchedulerLimits{.worker_count=1,.retained_finished_nodes=32})};editor_tasks::CancellationTicket projectBuildCancellation{};std::chrono::steady_clock::time_point projectBuildProgressSample{};std::string projectBuildStatus;bool selected{true};};
+struct EditorState {std::unique_ptr<editor_tasks::Scheduler> taskScheduler{std::make_unique<editor_tasks::Scheduler>(editor_tasks::SchedulerLimits{.worker_count=1,.retained_finished_nodes=32})};editor_tasks::CancellationTicket projectBuildCancellation{};std::chrono::steady_clock::time_point projectBuildProgressSample{};std::string projectBuildStatus;bool selected{true},projectBuildReusesReviewedArtifact{};};
 bool project_build_targets_selected_project(const EditorState&e){return e.selected;}
 FUNCTIONS
 int main(){

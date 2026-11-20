@@ -29,6 +29,9 @@ struct TileHash { [[nodiscard]] std::size_t operator()(TileKey key) const noexce
 [[nodiscard]] std::vector<TileKey> balance_cut(std::span<const TileKey> leaves);
 [[nodiscard]] DVec3 cube_direction(std::uint8_t face,double u,double v);
 [[nodiscard]] DVec3 tile_direction(TileKey key,double local_u,double local_v);
+[[nodiscard]] DVec3 tile_mesh_anchor(const Body& body,TileKey key);
+[[nodiscard]] double tile_skirt_depth(const Body& body,TileKey key,int cells) noexcept;
+[[nodiscard]] FVec3 lower_tile_vertex(FVec3 position,DVec3 anchor,double depth) noexcept;
 struct Mesh {
     DVec3 anchor{};
     double bound_radius{};
@@ -47,10 +50,11 @@ struct LodSettings {
 // Optional view-directed refinement. This never removes the body's coarse
 // coverage; direction and aspect only prioritize its bounded detail budget.
 // An explicit camera up enables forward, 45-degree camera-down (including roll),
-// and body-radial nadir rays. Only hit ancestry bypasses the view cone; all three
-// share the existing detail/leaf budgets. With altitude, a smooth cubic weight
-// trades these hits for the broad circumscribed viewport cone. Transition
-// bounds scale with body radius (Earth: 5km to 100km above the visible surface).
+// and body-radial nadir rays. At low altitude a tapered disk around the
+// subcamera ground retains nearby detail in every direction, including offscreen.
+// Ground and ray-hit tiles share the same bounded leaf budget. With altitude,
+// emphasis shifts to the broad viewport cone. Transition bounds scale with body
+// radius (Earth: 5–10 km for the ground disk, 5–100 km for the ray hits).
 // Omitting up retains the original single-ray policy exactly.
 struct TerrainView { DVec3 forward{};double aspect_ratio=16.0/9.0;std::optional<DVec3> up{}; };
 struct TerrainPlan { std::vector<TileKey> needed;std::vector<TileKey> leaves;std::uint64_t signature{}; };

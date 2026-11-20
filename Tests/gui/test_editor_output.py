@@ -15,20 +15,24 @@ class EditorOutput(unittest.TestCase):
    '        [[nodiscard]] static EditorWorkspaceTab editor_output_category(',
    '        [[nodiscard]] static const std::vector<std::string>& filtered_editor_output(',
    '        static void record_editor_run_output('))
+  runtime_owner=(APP/'editor.application_project_runtime.inl').read_text(encoding='utf-8')
+  active_status=definition(runtime_owner,'        [[nodiscard]] std::string project_active_runtime_status(')
   dock=(APP/'editor.frame_bottom_docks.inl').read_text(encoding='utf-8')
   header=dock[dock.index('        if (editor.dockStatusTab =='):dock.index('        auto dockLine =')]
   choice=dock[dock.index('        if (!editor.outputShowDetails'):dock.index('        else switch (editor.dockStatusTab)')]
-  core=(ROOT/'Engine/modules/editor.core.ixx').read_text(encoding='utf-8')
+  core=(ROOT/'Engine/modules/editor/editor.core.ixx').read_text(encoding='utf-8')
   enum=definition(core,'    export enum class EditorWorkspaceTab',True).replace('export ','',1)
   code=r'''
 #include <algorithm>
 #include <array>
 #include <cstdint>
 #include <filesystem>
+#include <format>
 #include <optional>
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 #define CHECK(c) do{if(!(c))return __LINE__;}while(false)
 ENUM
@@ -44,7 +48,13 @@ namespace editor_ai_session_diagnostics{
 std::filesystem::path fallback_engine_root(){return{};}
 bool record_engine(const std::filesystem::path&,std::string_view,std::string_view,std::string_view){++archived;return true;}}
 HELPERS
-namespace epochengine{template<class...T>std::string format_text(const char*,const T&...){return "recorded-output-id";}}
+namespace epochengine{template<class...T>std::string format_text(std::format_string<T...> format,T&&... args){return std::format(format,std::forward<T>(args)...);}}
+namespace platform::child_process{
+enum class ProcessState{running,stop_requested};
+struct ProcessSnapshot{ProcessState state{};std::uint64_t platform_process_id{},runtime_ns{};};
+const char* process_state_name(ProcessState state){return state==ProcessState::stop_requested?"Stop requested":"Running";}
+}
+ACTIVE_STATUS
 int editor_main_surface_index(int value){return value;}
 namespace gui{
 struct Vec2{float x{},y{};};Vec2 cursor;
@@ -70,8 +80,12 @@ bool full_lines{},cached_measurements{};
 ScrollTextPanelResult scroll_text_panel(const ScrollTextPanelOptions&o){shown=o.lines;full_lines=o.max_line_chars==0;cached_measurements=o.incremental_line_measurements;++panels;return{};}
 void fresh(){cursor={};filterLabels.clear();shown.clear();panels=rows=0;widest=0;}
 }
+template<class Scope,class Draw>
+auto render_automation_inspection(Scope&,bool,Draw draw){return draw();}
 void actual_output(EditorState&editor,float width=900){gui::fresh();
 const gui::Vec2 console_render_pos{},console_render_size{width,500};
+std::optional<bool> automationBackgroundInput;
+const auto canInspectAutomation=[](){return true;};
 HEADER
 CHOICE
 else ++gui::details;
@@ -100,11 +114,20 @@ int main(){
  record_editor_run_output(state,detail);const auto recorded=state.logLines.size();
  CHECK(state.logLines.back()=="[run] "+detail);record_editor_run_output(state,detail);CHECK(state.logLines.size()==recorded);
  record_editor_run_output(state,"");record_editor_run_output(state,detail);CHECK(state.logLines.size()==recorded+1);
+ using namespace platform::child_process;
+ ProcessSnapshot process{ProcessState::running,42,1'000'000'000};
+ CHECK(project_active_runtime_status(process)=="Running | PID 42 | 1.00s");
+ process.state=ProcessState::stop_requested;
+ record_editor_run_output(state,project_active_runtime_status(process));
+ const auto stopping=state.logLines.size();
+ process.runtime_ns=2'000'000'000;
+ record_editor_run_output(state,project_active_runtime_status(process));
+ CHECK(state.logLines.size()==stopping&&state.logLines.back()=="[run] Stop requested | PID 42");
  EditorState bounded;for(unsigned i=0;i<520;++i)push_editor_log(bounded,std::to_string(i));
  CHECK(bounded.logLines.size()==512&&bounded.logLines.front()=="8"&&bounded.logLines.back()=="519");
  return 0;
 }
-'''.replace('ENUM',enum).replace('HELPERS',helpers).replace('HEADER',header).replace('CHOICE',choice)
+'''.replace('ENUM',enum).replace('HELPERS',helpers).replace('HEADER',header).replace('CHOICE',choice).replace('ACTIVE_STATUS',active_status)
   proof=ROOT/'Artifacts/Reports/editor-output-oct29'/hashlib.sha256(code.encode()).hexdigest()[:12];proof.mkdir(parents=True,exist_ok=True)
   cpp=proof/'output.cpp';cpp.write_text(code,encoding='utf-8')
   results=compile_and_run(self,cpp,proof)

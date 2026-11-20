@@ -39,6 +39,7 @@ module;
 #include "../include/ai.token_metrics.hpp"
 #include "ai.native_runtime.hpp"
 #include "ai.thinking_policy.hpp"
+#include "ai.model_capability.hpp"
 #include <nlohmann/json.hpp>
 
 #if defined(_WIN32)
@@ -104,6 +105,9 @@ import ai.project_profile;
 import core.log;
 import core.logger;
 import core.path;
+#if defined(_WIN32)
+import platform.child_process;
+#endif
 
 namespace epochengine::ai
 {
@@ -1440,12 +1444,17 @@ namespace epochengine::ai
         }
 
 #include "implementation/ai.model_protocol.inl"
+        [[nodiscard]] static bool project_script_request(InferenceWorkload workload,
+            std::string_view input)
+        {
+            return workload == InferenceWorkload::authoring
+                && input.starts_with("Return one complete C++23 project script for review, using this exact envelope:\nEPOCH_PROJECT_SCRIPT_V1\n");
+        }
         [[nodiscard]] static std::string model_system_prompt(
             bool directRuntime, InferenceWorkload workload,
             std::string_view input)
         {
-            const bool projectScript = workload == InferenceWorkload::authoring
-                && input.starts_with("Return one complete C++23 project script for review, using this exact envelope:\nEPOCH_PROJECT_SCRIPT_V1\n");
+            const bool projectScript = project_script_request(workload, input);
             const bool projectTool = workload == InferenceWorkload::authoring
                 && input.starts_with(tool_plan_protocol_prompt());
             std::string prompt = directRuntime
@@ -1970,8 +1979,43 @@ namespace epochengine::ai
         effective.context_tokens = budget.context_tokens;
         effective.output_tokens = budget.output_tokens;
         effective.timeout_seconds = budget.timeout_seconds;
-        const std::string sys = model_system_prompt(
-            effective.backend == "llama_cpp_cli", workload, user_input);
+        const bool applicationRequest = workload == InferenceWorkload::application_assistance;
+        if (applicationRequest)
+        {
+#if defined(_WIN32)
+            const bool supported = effective.backend == "llama_cpp_cli"
+                && effective.application_isolation && !effective.application_protocol.empty()
+                && effective.application_model_identity && effective.application_model_identity->valid()
+                && effective.application_protocol.size() <= budget.maximum_prompt_bytes / 2u
+                && user_input.size() <= budget.maximum_prompt_bytes - effective.application_protocol.size()
+                && images.empty();
+#else
+            constexpr bool supported = false;
+#endif
+            if (!supported)
+            {
+                out.text = "Application assistance requires an admitted isolated local runtime and a bounded text request.";
+                out.terminal_failure = ModelTerminalFailure::request_rejected;
+                return out;
+            }
+            effective.best_of = 1u;
+            effective.gpu_layers = 0;
+        }
+        else
+        {
+            effective.application_isolation.reset();
+        }
+        bool codingRequest = project_script_request(workload, user_input);
+        if (codingRequest) {
+            const auto reason = model_capability::coding_restriction(effective.model);
+            if (!reason.empty()) {
+                out.text = reason;
+                out.terminal_failure = ModelTerminalFailure::request_rejected;
+                return out;
+            }
+        }
+        const std::string sys = applicationRequest ? effective.application_protocol
+            : model_system_prompt(effective.backend == "llama_cpp_cli", workload, user_input);
 
         bool sourcePacket = false;
         bool structuredSource = false;
@@ -2030,6 +2074,12 @@ namespace epochengine::ai
                 core::log::warn(
                     "ai",
                     "Local-model reply exceeded the bounded workload response size and was rejected.");
+                if (applicationRequest)
+                {
+                    out.text = "The application model reply exceeded its permitted size.";
+                    out.terminal_failure = ModelTerminalFailure::request_rejected;
+                    return out;
+                }
                 continue;
             }
 
@@ -2050,6 +2100,11 @@ namespace epochengine::ai
             out.alternatives.clear();
             out.terminal_failure = ModelTerminalFailure::cancelled;
         }
+        else if (applicationRequest && out.text.empty())
+        {
+            out.text = "The application model returned no reply.";
+            out.terminal_failure = ModelTerminalFailure::request_failed;
+        }
         }
         catch (const ModelTransportRetirementFailure& exception)
         {
@@ -2062,8 +2117,8 @@ namespace epochengine::ai
             return out;
         }
         bool visibleReply = model_reply_has_visible_content(out.text);
-        observation.succeeded = !out.text.empty() && !model_reply_is_failure(out.text)
-            && visibleReply;
+        observation.succeeded = out.terminal_failure == ModelTerminalFailure::none
+            && !out.text.empty() && !model_reply_is_failure(out.text) && visibleReply;
         return out;
     }
 
@@ -2265,7 +2320,6 @@ namespace epochengine::ai
         // host owns source tools, scene/script approval, builds and repair.
         if (nativeSelected)
         {
-            notify_model_stage(observer, ModelRequestStage::sending);
             bool hostControlled = true;
             bool structuredSource = false;
             ModelRequestProgress progress{.phase="Local model request",.attempt=1u,
@@ -2273,11 +2327,13 @@ namespace epochengine::ai
                 .timeout_seconds=budget.timeout_seconds};
             const ScopedModelRequest requestPermit{g_aiRequestGate,cancellation};
             if(!requestPermit.acquired()||cancellation.stop_requested())return cancelled();
+            notify_model_stage(observer, ModelRequestStage::sending);
             notify_model_progress(progress_observer,progress);
             std::chrono::steady_clock::time_point lastProgressUpdate{};
             std::optional<std::chrono::steady_clock::time_point> firstNativePayloadAt;
             bool receivingNotified = false;
             std::string_view nativeHostStage{};
+            if (project_script_request(workload, user_text)) nativeHostStage = "project_script";
             const auto result =
                 native_runtime::complete_host_request(openai_chat_request_body(
                     active_model_name(),model_system_prompt(false,workload,user_text),
@@ -2287,7 +2343,8 @@ namespace epochengine::ai
                     [&](native_runtime::OutputKind kind,std::string_view delta) {
                         ++progress.response_events;
                         progress.response_bytes+=delta.size();
-                        if (!delta.empty() && !firstNativePayloadAt)
+                        const bool modelPayload = !delta.empty() && kind != native_runtime::OutputKind::boundary;
+                        if (modelPayload && !firstNativePayloadAt)
                             firstNativePayloadAt = std::chrono::steady_clock::now();
                         if(kind==native_runtime::OutputKind::reasoning) {
                             progress.reasoning_bytes+=delta.size();
@@ -2296,7 +2353,7 @@ namespace epochengine::ai
                         } else if(kind==native_runtime::OutputKind::tool_arguments) {
                             progress.tool_argument_bytes+=delta.size();
                         }
-                        if (!receivingNotified)
+                        if (modelPayload && !receivingNotified)
                         {
                             notify_model_stage(observer, ModelRequestStage::receiving);
                             receivingNotified = true;
@@ -2308,7 +2365,8 @@ namespace epochengine::ai
                             lastProgressUpdate = now;
                             notify_model_progress(progress_observer, progress);
                         }
-                    })
+                    },
+                    [&] { notify_model_stage(observer, ModelRequestStage::awaiting_response); })
                 ;
             if (hostControlled && result.ok)
             {

@@ -88,6 +88,156 @@
         return engine_arcade_screen_graph_contract_ready(nullDevice);
     }
 
+    [[nodiscard]] inline bool render_graph_rejected_target_contract_ready()
+    {
+        struct RecordingContext final : epochengine::ICommandContext
+        {
+            int render_pass_begins = 0;
+            int render_pass_ends = 0;
+            int draws = 0;
+            void begin(const char*) override {}
+            void end() override {}
+            void debug_marker(const char*) override {}
+            void barrier() override {}
+            void begin_render_pass(epochengine::RenderTargetHandle,
+                                   const epochengine::RenderPassDesc&) override { ++render_pass_begins; }
+            void end_render_pass() override { ++render_pass_ends; }
+            void draw_model(epochengine::ModelHandle) override { ++draws; }
+        };
+        struct AllocationDevice final : epochengine::IRenderDevice
+        {
+            RecordingContext context{};
+            unsigned mask = 0;
+            int standalone_allocations = 0;
+            int destroyed_textures = 0;
+            int destroyed_samplers = 0;
+            int destroyed_targets = 0;
+            std::string backend_name() const override { return "graph-contract"; }
+            epochengine::BufferHandle create_buffer(const epochengine::BufferDesc&) override { return {}; }
+            epochengine::TextureHandle create_texture(const epochengine::TextureDesc&) override
+            {
+                ++standalone_allocations;
+                return epochengine::TextureHandle{1u};
+            }
+            epochengine::SamplerHandle create_sampler(const epochengine::SamplerDesc&) override
+            {
+                ++standalone_allocations;
+                return epochengine::SamplerHandle{1u};
+            }
+            epochengine::RenderTargetHandle create_render_target(const epochengine::RenderTargetDesc&) override
+            {
+                ++standalone_allocations;
+                return epochengine::RenderTargetHandle{1u};
+            }
+            epochengine::ModelHandle create_model(const epochengine::ModelDesc&) override
+            {
+                return epochengine::ModelHandle{1u};
+            }
+            epochengine::RenderTextureAssetHandles create_render_texture_asset(
+                const epochengine::RenderTextureAssetDesc&) override
+            {
+                return {
+                    epochengine::TextureHandle{(mask & 1u) ? 1u : 0u},
+                    epochengine::SamplerHandle{(mask & 2u) ? 1u : 0u},
+                    epochengine::RenderTargetHandle{(mask & 4u) ? 1u : 0u}
+                };
+            }
+            void destroy(epochengine::BufferHandle) noexcept override {}
+            void destroy(epochengine::TextureHandle) noexcept override { ++destroyed_textures; }
+            void destroy(epochengine::SamplerHandle) noexcept override { ++destroyed_samplers; }
+            void destroy(epochengine::RenderTargetHandle) noexcept override { ++destroyed_targets; }
+            epochengine::ICommandContext& acquire_graphics_context() override { return context; }
+            void present(epochengine::ISwapchain&) override {}
+        };
+
+        // Exercise every partial bundle, not just total allocation failure.
+        for (unsigned mask = 0; mask < 8; ++mask)
+        {
+            AllocationDevice device{};
+            device.mask = mask;
+            epochengine::GraphBuilder builder{};
+            const auto screen = builder.create_render_texture_asset(
+                "graph.contract.screen", epochengine::render_arcade::make_screen_render_texture_desc());
+            const auto model = builder.create_model("graph.contract.model", {});
+            int offscreen_callbacks = 0;
+            int default_callbacks = 0;
+            auto offscreen = [&](epochengine::ICommandContext&) { ++offscreen_callbacks; };
+            auto default_surface = [&](epochengine::ICommandContext&) { ++default_callbacks; };
+            const auto explicit_pass = builder.add_render_pass(
+                "graph.contract.explicit", screen.render_target, {}, {}, screen.plan.render_pass, offscreen);
+            builder.add_model_draw(explicit_pass, model);
+            const epochengine::GraphResource writes[] = {screen.render_target};
+            const auto implicit_pass = builder.add_pass(
+                "graph.contract.write", {},
+                epochengine::array_view<const epochengine::GraphResource>{writes, 1u}, offscreen);
+            builder.add_model_draw(implicit_pass, model);
+            [[maybe_unused]] const auto default_pass = builder.add_pass(
+                "graph.contract.default", {}, {}, default_surface);
+            [[maybe_unused]] const auto invalid_pass = builder.add_render_pass(
+                "graph.contract.invalid", epochengine::GraphResource{999u}, {}, {}, {}, offscreen);
+            [[maybe_unused]] const auto empty_pass = builder.add_render_pass(
+                "graph.contract.empty", {}, {}, {}, {}, offscreen);
+
+            auto graph = builder.compile(device);
+            const bool complete = mask == 7u;
+            const auto status = complete ? epochengine::GraphPassStatus::ready
+                : epochengine::GraphPassStatus::render_target_unavailable;
+            const bool allocation_ok = device.standalone_allocations == 0
+                && static_cast<bool>(graph.render_texture_assets.front().backend) == complete
+                && static_cast<bool>(graph.textures.front().backend) == complete
+                && static_cast<bool>(graph.samplers.front().backend) == complete
+                && static_cast<bool>(graph.render_targets.front().backend) == complete
+                && graph.passes[0].status == status && graph.passes[1].status == status
+                && graph.passes[2].status == epochengine::GraphPassStatus::ready
+                && graph.passes[3].status == epochengine::GraphPassStatus::render_target_unavailable
+                && graph.passes[4].status == epochengine::GraphPassStatus::render_target_unavailable
+                && device.destroyed_textures == (!complete && (mask & 1u) ? 1 : 0)
+                && device.destroyed_samplers == (!complete && (mask & 2u) ? 1 : 0)
+                && device.destroyed_targets == (!complete && (mask & 4u) ? 1 : 0);
+            graph.execute(device);
+            const bool execution_ok = offscreen_callbacks == (complete ? 2 : 0)
+                && default_callbacks == 1
+                && device.context.render_pass_begins == (complete ? 2 : 0)
+                && device.context.render_pass_ends == (complete ? 2 : 0)
+                && device.context.draws == (complete ? 2 : 0);
+            graph.destroy(device);
+            if (!allocation_ok || !execution_ok
+                || device.destroyed_textures != ((mask & 1u) ? 1 : 0)
+                || device.destroyed_samplers != ((mask & 2u) ? 1 : 0)
+                || device.destroyed_targets != ((mask & 4u) ? 1 : 0))
+                return false;
+        }
+        // A render-only bundle does not need a sampler. Ordinary independently
+        // declared resources must continue using their own allocation path.
+        AllocationDevice device{};
+        device.mask = 5u;
+        epochengine::GraphBuilder builder{};
+        auto desc = epochengine::render_arcade::make_screen_render_texture_desc();
+        desc.sampled_after_render = false;
+        const auto render_only = builder.create_render_texture_asset("graph.contract.render_only", desc);
+        [[maybe_unused]] const auto texture = builder.create_texture("graph.contract.texture", {});
+        [[maybe_unused]] const auto sampler = builder.create_sampler("graph.contract.sampler", {});
+        const auto target = builder.create_render_target("graph.contract.target", {});
+        int callbacks = 0;
+        auto callback = [&](epochengine::ICommandContext&) { ++callbacks; };
+        [[maybe_unused]] const auto bundle_pass = builder.add_render_pass(
+            "graph.contract.render_only", render_only.render_target, {}, {}, {}, callback);
+        [[maybe_unused]] const auto independent_pass = builder.add_render_pass(
+            "graph.contract.independent", target, {}, {}, {}, callback);
+        auto graph = builder.compile(device);
+        const bool allocation_ok = device.standalone_allocations == 3
+            && graph.render_texture_assets.front().backend
+            && !graph.samplers.front().backend
+            && graph.passes[0].status == epochengine::GraphPassStatus::ready
+            && graph.passes[1].status == epochengine::GraphPassStatus::ready;
+        graph.execute(device);
+        graph.destroy(device);
+        return allocation_ok && callbacks == 2
+            && device.context.render_pass_begins == 2 && device.context.render_pass_ends == 2
+            && device.destroyed_textures == 2 && device.destroyed_samplers == 1
+            && device.destroyed_targets == 2;
+    }
+
     [[nodiscard]] inline bool engine_arcade_cabinet_graph_contract_ready(epochengine::IRenderDevice& device)
     {
         const epochengine::RendererCapabilities caps = device.capabilities();

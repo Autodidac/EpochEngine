@@ -163,6 +163,7 @@ namespace epochengine
         p.reads.assign(reads.begin(), reads.end());
         p.writes.assign(writes.begin(), writes.end());
         p.render_target_resource = target;
+        p.status = GraphPassStatus::render_target_unavailable;
         p.render_pass = pass;
         p.execute = std::move(fn);
         m_passes.push_back(std::move(p));
@@ -400,37 +401,47 @@ namespace epochengine
 
         for (auto& asset : g.render_texture_assets)
         {
+            GraphTexture* const texture = resolve_texture(asset.color_texture);
+            GraphSampler* const sampler = resolve_sampler(asset.sampler);
+            GraphRenderTarget* const renderTarget = resolve_render_target(asset.render_target);
+            // These resources form one allocation. A rejected bundle must not
+            // become unrelated standalone resources in the allocation loops below.
+            if (texture) texture->owned_by_render_texture_asset = true;
+            if (sampler) sampler->owned_by_render_texture_asset = true;
+            if (renderTarget) renderTarget->owned_by_render_texture_asset = true;
             asset.backend = dev.create_render_texture_asset(asset.desc);
             const bool satisfiesRequirements = asset.backend.satisfies(asset.plan.backend_requirements);
 
             if (!satisfiesRequirements)
+            {
+                if (asset.backend.color_texture || asset.backend.sampler || asset.backend.render_target)
+                    dev.destroy(asset.backend);
+                asset.backend = {};
                 continue;
+            }
 
-            if (GraphTexture* texture = resolve_texture(asset.color_texture))
+            if (texture)
             {
                 if (asset.backend.color_texture)
                 {
                     texture->backend = asset.backend.color_texture;
                     texture->sampled_sampler = asset.backend.sampler;
-                    texture->owned_by_render_texture_asset = true;
                 }
             }
 
-            if (GraphSampler* sampler = resolve_sampler(asset.sampler))
+            if (sampler)
             {
                 if (asset.backend.sampler)
                 {
                     sampler->backend = asset.backend.sampler;
-                    sampler->owned_by_render_texture_asset = true;
                 }
             }
 
-            if (GraphRenderTarget* renderTarget = resolve_render_target(asset.render_target))
+            if (renderTarget)
             {
                 if (asset.backend.render_target)
                 {
                     renderTarget->backend = asset.backend.render_target;
-                    renderTarget->owned_by_render_texture_asset = true;
                 }
             }
         }
@@ -438,17 +449,17 @@ namespace epochengine
         for (auto& b : g.buffers)  b.backend = dev.create_buffer(b.desc);
         for (auto& t : g.textures)
         {
-            if (!t.backend)
+            if (!t.backend && !t.owned_by_render_texture_asset)
                 t.backend = dev.create_texture(t.desc);
         }
         for (auto& sampler : g.samplers)
         {
-            if (!sampler.backend)
+            if (!sampler.backend && !sampler.owned_by_render_texture_asset)
                 sampler.backend = dev.create_sampler(sampler.desc);
         }
         for (auto& rt : g.render_targets)
         {
-            if (!rt.backend)
+            if (!rt.backend && !rt.owned_by_render_texture_asset)
                 rt.backend = dev.create_render_target(rt.desc);
         }
         for (auto& material : g.materials)
@@ -520,17 +531,24 @@ namespace epochengine
         for (auto& pass : g.passes)
         {
             if (pass.render_target)
+            {
+                pass.status = GraphPassStatus::ready;
                 continue;
+            }
 
             const u32 targetResourceIndex = pass.render_target_resource.value;
-            if (targetResourceIndex > 0 && targetResourceIndex <= g.resources.size())
+            if (targetResourceIndex > 0)
             {
-                const ResourceDecl& resource = g.resources[targetResourceIndex - 1u];
-                if (resource.kind == ResourceKind::render_target && resource.index < g.render_targets.size())
+                pass.status = GraphPassStatus::render_target_unavailable;
+                if (targetResourceIndex <= g.resources.size())
                 {
-                    pass.render_target = g.render_targets[resource.index].backend;
-                    continue;
+                    const ResourceDecl& resource = g.resources[targetResourceIndex - 1u];
+                    if (resource.kind == ResourceKind::render_target && resource.index < g.render_targets.size())
+                        pass.render_target = g.render_targets[resource.index].backend;
                 }
+                if (pass.render_target)
+                    pass.status = GraphPassStatus::ready;
+                continue;
             }
 
             for (const GraphResource resourceHandle : pass.writes)
@@ -543,6 +561,9 @@ namespace epochengine
                 if (resource.kind == ResourceKind::render_target && resource.index < g.render_targets.size())
                 {
                     pass.render_target = g.render_targets[resource.index].backend;
+                    pass.status = pass.render_target
+                        ? GraphPassStatus::ready
+                        : GraphPassStatus::render_target_unavailable;
                     break;
                 }
             }
@@ -557,6 +578,8 @@ namespace epochengine
         ctx.begin("frame_graph");
         for (auto& p : passes)
         {
+            if (p.status != GraphPassStatus::ready)
+                continue;
             ctx.debug_marker(p.name.c_str());
             if (p.binding_set)
                 ctx.bind_binding_set(p.binding_set);

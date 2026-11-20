@@ -49,6 +49,29 @@ std::string_view to_string(TaskIntent intent) noexcept {
     return "complex";
 }
 
+bool requests_advisory_response(std::string_view text) {
+    if (text.empty() || text.size() > 1200 || text.find_first_of("\r\n") != std::string_view::npos)
+        return false;
+    const auto storage = lowercase(text);
+    auto lower = std::string_view{storage};
+    while (!lower.empty() && std::isspace(static_cast<unsigned char>(lower.front()))) lower.remove_prefix(1);
+    if (lower.starts_with("please ")) lower.remove_prefix(7);
+    const bool informational = lower.starts_with("explain ") || lower.starts_with("describe ")
+        || lower.starts_with("summarize ") || lower.starts_with("what is ")
+        || lower.starts_with("what are ") || lower.starts_with("how does ")
+        || lower.starts_with("plan ") || lower.starts_with("outline ")
+        || lower.starts_with("give me a plan for ");
+    // Mixed requests retain the coding gate. Deliberately conservative: this
+    // exception is for a tool-free explanation/checklist, never task execution.
+    return informational && !contains_any(lower, {
+        "write ", "implement", "generate ", "code example", "code snippet",
+        "show code", "include code", "provide code", "return code", "and code",
+        "then code", "create ", "modify ", "edit ", "delete ", "execute ",
+        "run ", "build ", "compile ", "fix ", "patch ", "apply ", "save ",
+        "install ", "download ", "use tools", "add ", "output ", "do it"
+    });
+}
+
 TaskIntent classify_task(std::string_view text) {
     const auto lower = lowercase(text);
     if (contains_any(lower, {"c++", "cpp23", "cpp20", "cmake", "compile", "compiler", "debug", "source code",

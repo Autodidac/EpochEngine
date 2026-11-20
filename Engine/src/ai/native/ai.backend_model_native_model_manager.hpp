@@ -55,6 +55,10 @@ public:
     [[nodiscard]] std::expected<nlohmann::json, core::Error> update_tuning(
         std::string_view id_or_uri, const nlohmann::json& changes);
     [[nodiscard]] std::expected<nlohmann::json, core::Error> register_model(const nlohmann::json& spec);
+    // Explicit metadata repair only: reconnect missing local weights without
+    // registration defaults, provider selection, download or inference.
+    [[nodiscard]] std::expected<nlohmann::json, core::Error> reconnect_model_file(
+        std::string_view id_or_uri, const std::filesystem::path& local_path);
     [[nodiscard]] std::expected<nlohmann::json, core::Error> install(std::string_view id_or_uri);
     [[nodiscard]] std::expected<nlohmann::json, core::Error> provision_runtime();
     [[nodiscard]] std::expected<nlohmann::json, core::Error> remove(std::string_view id_or_uri, bool delete_cache);

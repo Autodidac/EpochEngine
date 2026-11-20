@@ -4,11 +4,15 @@
  ************************************************/
 module;
 
+#include "../../include/engine.config.hpp"
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <functional>
 #include <map>
+#include <set>
 #include <span>
 #include <string>
 #include <string_view>
@@ -20,11 +24,29 @@ module project.gui_epochgui;
 import asset.gui_artifact;
 import asset.texture_artifact;
 import project.texture_library;
+#if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TEXTURE_EDITOR
+import authoring.texture;
+import project.texture_source;
+#endif
 
 namespace epochengine::project_gui
 {
     namespace
     {
+        [[nodiscard]] project_textures::LoadedTextureArtifact load_gui_image(
+            project_textures::TextureArtifactLibrary& library, std::string_view path) noexcept
+        {
+            auto loaded = library.load_latest(path, asset::texture::TextureCompileProfile{});
+            if (loaded.code == project_textures::LibraryCode::not_found)
+            {
+                asset::texture::TextureCompileProfile linear{};
+                linear.format = asset::texture::ArtifactFormat::rgba8_unorm;
+                linear.color_space = asset::texture::ColorSpace::linear;
+                loaded = library.load_latest(path, linear);
+            }
+            return loaded;
+        }
+
         [[nodiscard]] gui::Vec2 point(
             project_gui_runtime::Rect rect) noexcept
         {
@@ -73,9 +95,38 @@ namespace epochengine::project_gui
         clear();
     }
 
+    void EpochGuiAdapter::prepare_images(std::span<const asset::gui::CompiledWidget> widgets)
+    {
+#if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TEXTURE_EDITOR
+        project_textures::TextureArtifactLibrary library{project_id_, project_root_};
+        project_texture_sources::ProjectTextureSourceStore sources{project_id_, project_root_};
+        std::set<std::string_view> seen;
+        for (const auto& widget : widgets)
+        {
+            if ((widget.kind != asset::gui::WidgetKind::image && widget.kind != asset::gui::WidgetKind::image_button)
+                || widget.asset_path.empty() || !seen.insert(widget.asset_path).second
+                || load_gui_image(library, widget.asset_path).code != project_textures::LibraryCode::not_found)
+                continue;
+            const auto source = sources.load(widget.asset_path);
+            if (!source)
+                continue;
+            const auto profile = project_texture_sources::authored_texture_profile(*source.document);
+            const auto compiled = source.document->compile_artifact(profile);
+            if (compiled)
+                (void)library.persist(widget.asset_path, compiled);
+        }
+#else
+        (void)widgets;
+#endif
+    }
+
     EpochGuiRenderResult EpochGuiAdapter::render(
         project_gui_runtime::RuntimeSession& runtime,
-        project_gui_runtime::Float2 viewport) noexcept
+        project_gui_runtime::Float2 viewport,
+        const std::function<bool(const gui::InputEvent&)>& command,
+        PointerDelivery pointer_delivery,
+        TextScaling text_scaling,
+        project_gui_runtime::Float2 origin) noexcept
     {
         EpochGuiRenderResult result{};
         if (!valid() || !runtime.valid())
@@ -84,10 +135,16 @@ namespace epochengine::project_gui
         try
         {
             project_gui_runtime::RuntimeFrame frame =
-                runtime.build_frame(viewport);
+                runtime.build_frame(viewport, origin);
             result.code = frame.code;
             if (!frame)
                 return result;
+
+            // Desktop tools shrink text in small viewports and keep desktop
+            // text size in larger windows. Share the scale with keyboard input.
+            const float textFactor = text_scaling == TextScaling::desktop
+                ? (std::min)(frame.scale, 1.0f) : frame.scale;
+            const gui::ScopedTextScale textScale{textFactor};
 
             auto observed = runtime.metrics();
             const auto refresh = [&]() {
@@ -98,7 +155,7 @@ namespace epochengine::project_gui
                     && current.text_changes == observed.text_changes
                     && current.slider_changes == observed.slider_changes)
                     return true;
-                auto updated = runtime.build_frame(viewport);
+                auto updated = runtime.build_frame(viewport, origin);
                 if (!updated) { result.code = updated.code; return false; }
                 frame = std::move(updated);
                 observed = runtime.metrics();
@@ -108,13 +165,33 @@ namespace epochengine::project_gui
             const gui::Vec2 mouse = gui::mouse_position();
             result.pointer_captured = runtime.pointer_captured(
                 {mouse.x, mouse.y});
-            if (const auto press = gui::mouse_press_position(); press
-                && !runtime.pointer_captured({press->x, press->y}))
-                (void)runtime.clear_focus();
-            if (gui::was_mouse_released())
-                (void)runtime.pointer_release({mouse.x, mouse.y});
+            const auto pointer_press = [&](gui::Vec2 position) {
+                (void)runtime.pointer_press({position.x, position.y});
+            };
+            if (pointer_delivery == PointerDelivery::ordered)
+            {
+                bool refresh_succeeded = true;
+                gui::visit_left_pointer_edges(tool_pointer_, [&](gui::EventType type, gui::Vec2 position) {
+                    if (!refresh_succeeded)
+                        return;
+                    if (type == gui::EventType::MouseDown)
+                        pointer_press(position);
+                    else
+                        (void)runtime.pointer_release({position.x, position.y});
+                    refresh_succeeded = refresh();
+                });
+                if (!refresh_succeeded)
+                    return result;
+            }
+            else
+            {
+                if (const auto press = gui::mouse_press_position())
+                    pointer_press(*press);
+                if (gui::was_mouse_released())
+                    (void)runtime.pointer_release({mouse.x, mouse.y});
+            }
             if (!refresh()) return result;
-            const auto keyboard = dispatch_keyboard(runtime, frame);
+            const auto keyboard = dispatch_keyboard(runtime, frame, command);
             if (keyboard != project_gui_runtime::RuntimeCode::ready
                 && keyboard != project_gui_runtime::RuntimeCode::no_change)
                 result.code = keyboard;
@@ -165,6 +242,7 @@ namespace epochengine::project_gui
 
     void EpochGuiAdapter::clear() noexcept
     {
+        tool_pointer_ = {};
         gui::release_keyboard_input(this);
         for (const auto& [id, text] : text_state_)
         { (void)id; gui::release_keyboard_input(&text); }
@@ -174,7 +252,8 @@ namespace epochengine::project_gui
 
     project_gui_runtime::RuntimeCode EpochGuiAdapter::dispatch_keyboard(
         project_gui_runtime::RuntimeSession& runtime,
-        const project_gui_runtime::RuntimeFrame& frame)
+        const project_gui_runtime::RuntimeFrame& frame,
+        const std::function<bool(const gui::InputEvent&)>& command)
     {
         using Kind = asset::gui::WidgetKind;
         using Code = project_gui_runtime::RuntimeCode;
@@ -208,7 +287,7 @@ namespace epochengine::project_gui
             .target = [&]() {
                 gui::KeyboardInputTarget target{};
                 const auto* view = focused();
-                if (!view) return target;
+                if (!view) { if (command) target.identity = this; return target; }
                 target.identity = this;
                 if (view->kind == Kind::text_input)
                 {
@@ -219,17 +298,19 @@ namespace epochengine::project_gui
                     target.maximum_bytes = source.maximum_length;
                     target.multiline = source.multiline;
                     target.read_only = source.read_only;
+                    target.position = point(view->bounds);
                 }
                 return target;
             },
             .command = [&](const gui::InputEvent& event) {
                 const auto* view = focused();
-                if (!view) return false;
+                if (!view) return command && command(event);
                 if (event.type == gui::EventType::TextInput)
                 {
                     if (tabTextPending && event.text == "\t")
                     { tabTextPending = false; return true; }
                     tabTextPending = false;
+                    if (view->kind != Kind::text_input && command && command(event)) return true;
                     return view->kind != Kind::text_input;
                 }
                 if (event.type != gui::EventType::KeyDown
@@ -255,7 +336,7 @@ namespace epochengine::project_gui
                     const auto& source = runtime.artifact()->widgets[view->index];
                     const double step = source.step > 0.0 ? source.step
                         : (source.maximum - source.minimum) * 0.01;
-                    const auto current = runtime.build_frame(frame.viewport);
+                    const auto current = runtime.build_frame(frame.viewport, frame.viewport_origin);
                     const auto currentView = std::find_if(current.widgets.begin(), current.widgets.end(),
                         [&](const auto& item) { return item.id == view->id; });
                     if (!current || currentView == current.widgets.end())
@@ -264,7 +345,7 @@ namespace epochengine::project_gui
                         + (event.key == 37 ? -step : step)));
                     return true;
                 }
-                return false;
+                return view->kind != Kind::text_input && command && command(event);
             },
             .cancel = [&]() { (void)record(runtime.clear_focus()); },
             .text_changed = [&]() {
@@ -287,16 +368,7 @@ namespace epochengine::project_gui
             state.load_attempted = true;
             project_textures::TextureArtifactLibrary library{
                 project_id_, project_root_};
-            auto loaded = library.load_latest(
-                logicalPath,
-                asset::texture::TextureCompileProfile{});
-            if (!loaded)
-            {
-                asset::texture::TextureCompileProfile linear{};
-                linear.format = asset::texture::ArtifactFormat::rgba8_unorm;
-                linear.color_space = asset::texture::ColorSpace::linear;
-                loaded = library.load_latest(logicalPath, linear);
-            }
+            auto loaded = load_gui_image(library, logicalPath);
             if (loaded && !loaded.artifact.mips.empty())
             {
                 const auto& mip = loaded.artifact.mips.front();
@@ -364,8 +436,13 @@ namespace epochengine::project_gui
                 {first.x, first.y},
                 {last.x + last.width - first.x, first.height},
                 false);
-            const gui::TabBarResult changed = gui::tab_bar_buttons(
-                tabs, first.height, 0.0f);
+            gui::TabBarResult changed{};
+            {
+                gui::ContentClipScope clip({frame.viewport_origin.x, frame.viewport_origin.y},
+                    {frame.viewport_origin.x + frame.viewport.x,
+                        frame.viewport_origin.y + frame.viewport.y});
+                changed = gui::tab_bar_buttons(tabs, first.height, 0.0f);
+            }
             gui::end_window();
             if (changed.selected_index
                 && *changed.selected_index < tabs.size())
@@ -402,7 +479,31 @@ namespace epochengine::project_gui
             switch (view.kind)
             {
             case Kind::button:
-                (void)gui::button_selected(view.primary_text, size, view.focused);
+                if (view.style)
+                {
+                    const auto& style = *view.style;
+                    const auto byte = [](float value) {
+                        return static_cast<std::uint8_t>(std::round((std::clamp)(value, 0.0f, 1.0f) * 255.0f));
+                    };
+                    const auto color = [&](const auto& rgba) {
+                        return gui::Color{byte(rgba.red), byte(rgba.green), byte(rgba.blue),
+                            byte(rgba.alpha * style.opacity)};
+                    };
+                    (void)gui::authored_button(view.primary_text, size, view.focused, view.enabled,
+                        {.face = color(style.background), .border = color(style.border),
+                            .border_width = style.border_width, .corner_radius = style.corner_radius});
+                }
+                else if (view.enabled)
+                    (void)gui::button_selected(view.primary_text, size, view.focused);
+                else
+                {
+                    const gui::InlineButtonSpec unavailable{
+                        .label = view.primary_text,
+                        .width = size.x,
+                        .enabled = false};
+                    (void)gui::inline_button_row({&unavailable, 1u}, size.y, 0.0f,
+                        {.available_width = size.x});
+                }
                 break;
             case Kind::text:
                 gui::wrapped_label(view.primary_text, size.x);

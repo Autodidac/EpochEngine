@@ -33,7 +33,7 @@ namespace epoch_ai::model::catalog
     };
     inline constexpr std::string_view evidence_status =
         "Publisher metadata checked 2026-10-29. Weights are not locally verified until installation. "
-        "Backend, vision, tools, speed and memory fit have not been tested in Epoch.";
+        "See Tiers / Comparison for exact November 15 coding, speed and memory results on installed Hauhau/Fable variants. Vision and tool execution remain unverified.";
     inline constexpr std::string_view registration_notice =
         "Download uses an exact revision and SHA-256. Verify & Register is a separate action; "
         "it does not load or select the model. Existing profiles and tuning are preserved.";
@@ -53,7 +53,7 @@ namespace epoch_ai::model::catalog
             .research_date = "2026-10-29",
             .architecture = "qwen35moe",
             .blocked_reason = "",
-            .notes = "Publisher variant; not benchmarked in Epoch. Reserve memory for renderer, KV caches and temporary allocations; GPU/RAM placement must be tested.",
+            .notes = "2026-11-15: 3/5 fixed C++ tasks passed in this exact quantization; see Tiers / Comparison for timings, memory and failures. No tool-safety or general capability certification.",
             .bytes = 15440519296ull,
             .parameter_count = 34660610688ull,
             .file_count = 1u,
@@ -73,7 +73,7 @@ namespace epoch_ai::model::catalog
             .research_date = "2026-10-29",
             .architecture = "qwen35moe",
             .blocked_reason = "",
-            .notes = "Publisher variant; not benchmarked in Epoch. Reserve memory for renderer, KV caches and temporary allocations; GPU/RAM placement must be tested.",
+            .notes = "2026-11-15: 3/5 fixed C++ tasks passed in this exact quantization; see Tiers / Comparison for timings, memory and failures. No tool-safety or general capability certification.",
             .bytes = 21166758016ull,
             .parameter_count = 34660610688ull,
             .file_count = 1u,
@@ -93,7 +93,7 @@ namespace epoch_ai::model::catalog
             .research_date = "2026-10-29",
             .architecture = "qwen35",
             .blocked_reason = "",
-            .notes = "Publisher variant; not benchmarked in Epoch. Reserve memory for renderer, KV caches and temporary allocations; GPU/RAM placement must be tested.",
+            .notes = "2026-11-15: 4/5 fixed C++ tasks passed in this exact quantization; see Tiers / Comparison for timings, memory and failures. No tool-safety or general capability certification.",
             .bytes = 14080729632ull,
             .parameter_count = 26895998464ull,
             .file_count = 1u,
@@ -113,7 +113,7 @@ namespace epoch_ai::model::catalog
             .research_date = "2026-10-29",
             .architecture = "qwen35",
             .blocked_reason = "",
-            .notes = "Publisher variant; not benchmarked in Epoch. Reserve memory for renderer, KV caches and temporary allocations; GPU/RAM placement must be tested.",
+            .notes = "2026-11-15: 3/5 fixed C++ tasks passed in this exact quantization; see Tiers / Comparison for timings, memory and failures. No tool-safety or general capability certification.",
             .bytes = 18047255072ull,
             .parameter_count = 26895998464ull,
             .file_count = 1u,

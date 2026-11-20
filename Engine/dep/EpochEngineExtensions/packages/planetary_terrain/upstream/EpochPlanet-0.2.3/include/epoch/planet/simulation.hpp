@@ -5,6 +5,7 @@
 
 namespace epoch::planet {
 enum class TravelMode : std::uint8_t { flight, walk, cruise };
+inline constexpr double surface_clearance_meters = 1.8;
 struct Camera {
     DVec3 position{},forward{0,0,-1},up{0,1,0};
     [[nodiscard]] DVec3 right() const { return normalized(cross(forward,up),{1,0,0}); }

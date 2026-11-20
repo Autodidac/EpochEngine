@@ -6,7 +6,7 @@ from Tests.support.cpp import compile_and_run
 ROOT=Path(__file__).resolve().parents[2]
 class MeshTextureSampler(unittest.TestCase):
     def test_inherited_sampler_is_neutralized_and_restored(self):
-        source=(ROOT/'Engine/modules/opengl.preview.ixx').read_text(encoding='utf-8')
+        source=(ROOT/'Engine/modules/opengl/opengl.preview.ixx').read_text(encoding='utf-8')
         scope=definition(source,'        struct TextureZeroScope final',True)
         code=r'''
 #include <cstdlib>

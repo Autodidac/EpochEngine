@@ -1,5 +1,6 @@
 """Actual GUI frame/keyboard owners release hidden focus without losing document state."""
 from pathlib import Path
+from Tests.support.cpp import engine_module_source
 import hashlib
 import json
 import os
@@ -90,7 +91,7 @@ class HiddenKeyboardFocus(unittest.TestCase):
         (proof / "consumer.cpp").write_text(base+MAIN, encoding="utf-8")
         (proof / "before.cpp").write_text(base.replace(frame_end, before_end)+BEFORE_MAIN, encoding="utf-8")
         portable = ROOT / "Engine/dep/EpochGui"
-        modules = [ROOT / "Engine/modules" / name for name in ("core.sha256.ixx", "asset.gui_artifact.ixx", "project.gui_runtime.ixx")]
+        modules = [engine_module_source(ROOT / "Engine/modules", name) for name in ("core.sha256.ixx", "asset.gui_artifact.ixx", "project.gui_runtime.ixx")]
         modules += [portable / "modules" / name for name in ("epoch.gui.ixx", "epoch.gui.input.ixx")]
         sources = [ROOT / "Engine/src/assets/gui/asset.gui_artifact.cpp", ROOT / "Engine/src/project/project.gui_runtime.cpp",
                    ROOT / "Engine/src/project/project.gui_runtime_contract.cpp", portable / "src/epochgui/text_control.cpp", portable / "src/epochgui/input.cpp"]

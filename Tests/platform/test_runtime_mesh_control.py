@@ -11,6 +11,28 @@ from Tests.platform.test_child_close_router import definition
 ROOT=Path(__file__).resolve().parents[2]
 
 class RuntimeMeshControl(unittest.TestCase):
+    def test_three_mode_packet_rejects_legacy_semantics(self):
+        from Tests.support.cpp import compile_and_run
+        owner=(ROOT/'Engine/src/platform/platform.child_process.cpp').read_text(encoding='utf-8')
+        packet=definition(owner,'        struct ControlPacket final',True)
+        validator=definition(owner,'        bool valid_control_packet(',False)
+        code="#include <cstdint>\n"+packet+r"""
+struct RuntimePresentation {double seconds,duration_seconds,rate;bool reverse,playing;};
+bool valid_runtime_presentation(const RuntimePresentation&s){return s.seconds>=0&&s.duration_seconds>=s.seconds&&s.rate>0;}
+struct OwnedRuntimeControl{std::uint64_t token{17};struct{std::uint64_t project_generation{29};}lease;};
+"""+validator+r"""
+int main(){OwnedRuntimeControl c;ControlPacket p{.kind=1,.token=17,.sequence=1,.generation=29};
+ for(unsigned mode=0;mode<3;++mode){p.mode=mode;if(!valid_control_packet(c,p,1))return 1;
+  p.version=2;if(valid_control_packet(c,p,1))return 2;p.version=3;}
+ p.mode=3;if(valid_control_packet(c,p,1))return 3;
+ p.mode=2;p.kind=2;if(!valid_control_packet(c,p,2))return 4;
+ p.version=2;if(valid_control_packet(c,p,2))return 5;
+ p.version=3;p.token=18;if(valid_control_packet(c,p,2))return 6;
+ return 0;}
+"""
+        report=ROOT/'Artifacts/Reports/runtime-mesh-packet';report.mkdir(parents=True,exist_ok=True)
+        src=report/'packet.cpp';src.write_text(code,encoding='utf-8');compile_and_run(self,src,report)
+
     def test_actual_entrypoints_admit_private_ports_before_cli_parse(self):
         source=(ROOT/'Engine/src/epoch/epoch.engine_legacy.cpp').read_text(encoding='utf-8')
         for marker in ('        (void)cli::parse(argc, argv);',
@@ -22,7 +44,7 @@ class RuntimeMeshControl(unittest.TestCase):
                 self.assertIn('initialize_inherited_runtime_control(argc,argv)',prior)
                 self.assertIn('return',prior)
         self.assertIn('else if (key == "--owned-runtime-control"sv)',
-                      (ROOT/'Engine/modules/core.commandline.ixx').read_text(encoding='utf-8'))
+                      (ROOT/'Engine/modules/core/core.commandline.ixx').read_text(encoding='utf-8'))
 
     def test_actual_supervisor_private_command_and_ack(self):
         if os.name!='nt':self.skipTest('Windows exact executable launch admission')
@@ -86,17 +108,17 @@ int main(int argc,char**argv){
   CHECK(!process::claim_inherited_runtime_control("foreign","scene"));
   CHECK(process::claim_inherited_runtime_control("project","scene"));
   const std::filesystem::path root=argv[2];
-  bool actualWire{};
+  auto actualMode=process::MeshDrawMode::shaded;
   for(unsigned turn=0;turn<3000;++turn){
    if(auto command=process::poll_runtime_mesh_command()){
     auto stale=*command;++stale.sequence;
     process::acknowledge_runtime_mesh_command(stale,true,stale.mode); // Must not acknowledge this generation.
     {std::ofstream received(root/("received-"+std::to_string(command->sequence)));received<<static_cast<unsigned>(command->mode);}
     for(unsigned n=0;n<1000&&!std::filesystem::exists(root/("release-"+std::to_string(command->sequence)));++n)std::this_thread::sleep_for(2ms);
-    const bool publish=command->sequence==1; // Second requested frame is refused.
-    if(publish)actualWire=command->mode==process::MeshDrawMode::wireframe;
-    process::acknowledge_runtime_mesh_command(*command,publish,actualWire?process::MeshDrawMode::wireframe:process::MeshDrawMode::solid);
-    if(command->sequence==2){std::this_thread::sleep_for(100ms);return 0;}
+    const bool publish=command->sequence!=2; // Second requested frame is refused; third publishes Shaded.
+    if(publish)actualMode=command->mode;
+    process::acknowledge_runtime_mesh_command(*command,publish,actualMode);
+    if(command->sequence==3){std::this_thread::sleep_for(100ms);return 0;}
    }
    std::this_thread::sleep_for(2ms);
   }
@@ -136,8 +158,8 @@ int main(int argc,char**argv){
  CHECK(!process::request_runtime_mesh_mode(handle,lease,*image,"foreign",process::MeshDrawMode::wireframe));
  CHECK(!process::request_runtime_mesh_mode(handle,lease,*image,request.correlation_key,static_cast<process::MeshDrawMode>(9)));
  auto changed=request;changed.runtime_control->scene_id="foreign";CHECK(!process::launch_or_focus(changed));
- for(unsigned sequence=1;sequence<=2;++sequence){
-  const auto mode=sequence==1?process::MeshDrawMode::wireframe:process::MeshDrawMode::solid;
+ for(unsigned sequence=1;sequence<=3;++sequence){
+  const auto mode=sequence==1?process::MeshDrawMode::wireframe:sequence==2?process::MeshDrawMode::solid:process::MeshDrawMode::shaded;
   CHECK(process::request_runtime_mesh_mode(handle,lease,*image,request.correlation_key,mode));
   CHECK(!process::request_runtime_mesh_mode(handle,lease,*image,request.correlation_key,mode));
   for(unsigned n=0;n<1000&&!std::filesystem::exists(root/("received-"+std::to_string(sequence)));++n)std::this_thread::sleep_for(2ms);
@@ -148,8 +170,8 @@ int main(int argc,char**argv){
   for(unsigned n=0;n<1000;++n){snapshot=process::snapshot(handle);
    if(snapshot&&snapshot->runtime_control.acknowledged_sequence==sequence)break;std::this_thread::sleep_for(2ms);}
   CHECK(snapshot&&snapshot->runtime_control.acknowledged_sequence==sequence);
-  CHECK(snapshot->runtime_control.acknowledged_mode==process::MeshDrawMode::wireframe);
-  CHECK(snapshot->runtime_control.status==(sequence==1?process::RuntimeControlStatus::accepted:process::RuntimeControlStatus::rejected));
+  CHECK(snapshot->runtime_control.acknowledged_mode==(sequence==3?process::MeshDrawMode::shaded:process::MeshDrawMode::wireframe));
+  CHECK(snapshot->runtime_control.status==(sequence!=2?process::RuntimeControlStatus::accepted:process::RuntimeControlStatus::rejected));
  }
  auto retired=process::wait(handle,{},5'000'000'000ull);CHECK(retired&&retired.process->exit_code==0);CHECK(process::release(handle));measure("after-first");
  CHECK(!process::request_runtime_mesh_mode(handle,lease,*image,request.correlation_key,process::MeshDrawMode::solid));
@@ -218,7 +240,7 @@ target_compile_features(control PRIVATE cxx_std_23)
 target_compile_options(control PRIVATE /utf-8 /EHsc /Z7)
 target_link_libraries(control PRIVATE bcrypt userenv advapi32)
 target_sources(control PRIVATE FILE_SET CXX_MODULES BASE_DIRS "{(ROOT/'Engine/modules').as_posix()}" FILES
- "{(ROOT/'Engine/modules/platform.child_process.ixx').as_posix()}" "{(ROOT/'Engine/modules/core.sha256.ixx').as_posix()}")
+ "{(ROOT/'Engine/modules/platform/platform.child_process.ixx').as_posix()}" "{(ROOT/'Engine/modules/core/core.sha256.ixx').as_posix()}")
 enable_testing()
 add_test(NAME control COMMAND control "${{CMAKE_CURRENT_BINARY_DIR}}/case-$<CONFIG>-{time.time_ns()}")
 """,encoding='utf-8')
@@ -231,4 +253,4 @@ add_test(NAME control COMMAND control "${{CMAKE_CURRENT_BINARY_DIR}}/case-$<CONF
             (proof/f'lane-{number}.log').write_text(run.stdout+run.stderr,encoding='utf-8')
             results.append(dict(command=command,exit=run.returncode))
             self.assertEqual(run.returncode,0,(run.stdout+run.stderr)[-8000:])
-        (proof/'result.json').write_text(json.dumps(dict(native=False,commands=results,sources={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in (ROOT/'Engine/modules/platform.child_process.ixx',ROOT/'Engine/src/platform/platform.child_process.cpp')}),indent=2),encoding='utf-8')
+        (proof/'result.json').write_text(json.dumps(dict(native=False,commands=results,sources={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in (ROOT/'Engine/modules/platform/platform.child_process.ixx',ROOT/'Engine/src/platform/platform.child_process.cpp')}),indent=2),encoding='utf-8')

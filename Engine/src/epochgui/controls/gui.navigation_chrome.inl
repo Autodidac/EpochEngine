@@ -127,14 +127,13 @@
                 ? tab.label
                 : std::string_view{ fittedLabel };
             const float textWidth = measure_text_width(displayLabel, kFontScale) + 2.0f;
-            const float textHeight = base_line_height(kFontScale);
             const float minTextX = x + kContentPadding + kButtonTextClipInset;
             const float maxTextX = x + width - kContentPadding - textWidth;
             const float centeredTextX = x + (std::max)(0.0f, (width - textWidth) * 0.5f);
             const float textX = maxTextX > minTextX
                 ? (std::clamp)(centeredTextX, minTextX, maxTextX)
                 : minTextX;
-            const float textY = rowStart.y + std::floor((std::max)(0.0f, (h - textHeight) * 0.5f)) + 1.0f;
+            const float textY = centered_text_top(rowStart.y, h, kFontScale);
             draw_text_line(displayLabel, textX, textY, kFontScale);
 
             x += width + gap;
@@ -410,10 +409,8 @@
                 kFontScale);
             const std::string_view display =
                 fitted.empty() ? tab.label : std::string_view{ fitted };
-            const float textY = layout.label.position.y
-                + std::floor((std::max)(
-                    0.0f,
-                    (layout.label.size.y - base_line_height(kFontScale)) * 0.5f));
+            const float textY = centered_text_top(
+                buttonPosition.y, buttonSize.y, kFontScale);
             const float textX = workbenchPresentation
                 ? layout.label.position.x
                     + (std::max)(
@@ -948,6 +945,7 @@
         [[nodiscard]] float status_item_text_width(const StatusStripItem& item,
             std::string_view label, int density) noexcept
         {
+            if (item.icon != ButtonIcon::none) return 12.0f;
             const auto reference = density == 0 ? item.width_reference
                 : density == 1 ? item.compact_width_reference : item.minimal_width_reference;
             return (std::max)(measure_text_width(label, kFontScale), measure_text_width(reference, kFontScale));
@@ -1155,17 +1153,20 @@
         const Vec2 saved = cursor_position();
         std::string_view hoverLabel{};
         Vec2 hoverPosition{};
+        auto translucentFace = AuthoredButtonStyle{.face = active_palette().buttonColor, .corner_radius = 6.0f};
+        translucentFace.face.a = 128u;
         for (std::size_t i = 0u; i < prepared.layout.count; ++i)
         {
             const auto& cell = prepared.layout.cells[i];
+            const auto& item = options.items[i];
             set_cursor({options.position.x + cell.x,
                 options.position.y + cell.y});
             if (button_with_state(prepared.labels[i], {cell.width, cell.height},
-                    false, true, options.items[i].tone))
+                    false, true, item.tone, false, false, item.icon, {}, false,
+                    item.translucent_face ? &translucentFace : nullptr))
                 result.selected_index = i;
             if ((!options.items[i].tooltip.empty() || prepared.labels[i] != options.items[i].label)
-                && g_frame.pointerInputAllowed
-                && point_in_modal_input_capture(g_frame.mousePos)
+                && point_in_tooltip_capture(g_frame.mousePos)
                 && point_in_rect(g_frame.mousePos, options.position.x + cell.x,
                     options.position.y + cell.y, cell.width, cell.height))
             {
@@ -1178,17 +1179,14 @@
         set_cursor(saved);
         if (!hoverLabel.empty())
         {
-            const float width = (std::min)(g_frame.windowSize.x,
-                measure_text_width(hoverLabel, kFontScale) + 20.0f);
-            hoverPosition.x = std::clamp(hoverPosition.x, g_frame.origin.x,
-                (std::max)(g_frame.origin.x, g_frame.origin.x + g_frame.windowSize.x - width));
-            begin_top_layer();
-            draw_rounded_sprite(active_palette().panelBackground,
-                hoverPosition.x, hoverPosition.y, width, 28.0f,
-                gui_lib::rounded_rect::RoundedRectStyle{.enabled = true, .control_radius = 4.0f});
-            draw_text_line(hoverLabel, hoverPosition.x + 10.0f,
-                hoverPosition.y + 4.0f, kFontScale);
-            end_top_layer();
+            // Toolbar chrome is shorter than its overlay. Use the same bounded,
+            // wrapped tooltip as buttons, within the native context viewport.
+            const ContentClipClearScope tooltipClip;
+            g_frame.contentMin = {0.0f, 0.0f};
+            g_frame.contentMax = {
+                static_cast<float>((std::max)(1, g_frame.ctx->get_width_safe())),
+                static_cast<float>((std::max)(1, g_frame.ctx->get_height_safe()))};
+            draw_button_tooltip(hoverLabel, {hoverPosition.x, hoverPosition.y - 3.0f}, 0.0f);
         }
         return result;
     }
@@ -1255,6 +1253,12 @@
         prepare_zone(options.center_items, centerCore);
         prepare_zone(options.right_items, rightCore);
 
+        // Reserve the same minimum and arrow/padding space as select_box.
+        const auto largestZone = (std::max)({options.left_items.size(),
+            options.center_items.size(), options.right_items.size()});
+        const std::string overflowMeasure = "More (" + std::to_string(largestZone) + ")";
+        const float measuredOverflowWidth = (std::max)({96.0f, options.overflow_width,
+            measure_text_width(overflowMeasure, kFontScale) + 24.0f + 2.0f * kContentPadding + 2.0f});
         const gui_lib::ChromeBarLayout layout =
             gui_lib::make_chrome_bar_layout({
                 .bounds = {
@@ -1266,7 +1270,7 @@
                 .right_items = rightCore,
                 .item_gap = options.item_gap,
                 .zone_gap = options.zone_gap,
-                .overflow_width = options.overflow_width,
+                .overflow_width = measuredOverflowWidth,
                 .horizontal_padding = options.horizontal_padding,
                 .center_shift_x = options.center_shift_x
             });

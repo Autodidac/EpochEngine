@@ -105,6 +105,21 @@ DVec3 tile_direction(TileKey k,double u,double v) {
     return cube_direction(k.face,(static_cast<double>(k.x)+u)*2.0/n-1.0,
                                  (static_cast<double>(k.y)+v)*2.0/n-1.0);
 }
+DVec3 tile_mesh_anchor(const Body& body,TileKey key) {
+    const auto center=tile_direction(key,0.5,0.5);
+    return center*(body.radius+sample_height(body,center));
+}
+double tile_skirt_depth(const Body& body,TileKey key,int cells) noexcept {
+    const double span=body.radius*2.0/static_cast<double>(1u<<key.level);
+    // A 2:1 cut limits the coarser edge length to twice this tile's grid spacing.
+    const double spacing=span/cells;
+    return std::max(4.0*body.geography_scale,spacing*0.28+2.0*spacing*spacing/body.radius+
+        body.height_scale*0.002/std::pow(2.0,key.level*0.25));
+}
+FVec3 lower_tile_vertex(FVec3 position,DVec3 anchor,double depth) noexcept {
+    const auto point=anchor+DVec3{position};
+    return FVec3{point-normalized(point)*depth-anchor};
+}
 static void add_vertex(Mesh& m,DVec3 p,DVec3 n,FVec3 color,float material) {
     m.vertices.push_back({FVec3{p-m.anchor},FVec3{n},{color.x,color.y,color.z,material}});
 }
@@ -127,18 +142,13 @@ static void cone(Mesh& m,DVec3 base,DVec3 up,double height,double radius,FVec3 c
 Mesh build_tile(const Body& body,TileKey key,MeshConfig config,std::stop_token stop) {
     if(config.cells<2||config.cells>64||key.body!=body.id||!std::isfinite(body.radius)||body.radius<=0||body.radius>1e12||!std::isfinite(body.height_scale)||body.height_scale<0||body.height_scale>body.radius*0.5) throw std::invalid_argument("Invalid terrain mesh request");
     const int n=config.cells,s=n+1;
-    Mesh mesh;const auto center=tile_direction(key,0.5,0.5);
-    mesh.anchor=center*(body.radius+sample_height(body,center));
-    const double span=body.radius*2.0/static_cast<double>(1u<<key.level);
+    Mesh mesh;
+    mesh.anchor=tile_mesh_anchor(body,key);
     mesh.bound_radius=0;
     const std::size_t side=static_cast<std::size_t>(s);
     mesh.vertices.reserve(side*side*(body.ocean?2u:1u)+512);
     mesh.indices.reserve(static_cast<std::size_t>(n*n)*6*(body.ocean?2u:1u)+1500);
-    // Preserve the existing skirt strategy and add a spherical chord-error allowance.
-    // A 2:1 cut limits the coarser edge length to twice this tile's grid spacing.
-    const double spacing=span/n;
-    const double skirt=std::max(4.0*body.geography_scale,spacing*0.28+2.0*spacing*spacing/body.radius+
-        body.height_scale*0.002/std::pow(2.0,key.level*0.25));
+    const double skirt=tile_skirt_depth(body,key,n);
     std::vector<DVec3> directions(side*side);
     std::vector<SurfaceSample> samples(side*side);
     bool has_water=false;
@@ -172,7 +182,33 @@ Mesh build_tile(const Body& body,TileKey key,MeshConfig config,std::stop_token s
                 const auto p=d*(body.radius+(water?0.0:sample.height));
                 // A fixed metric normal stencil makes lighting agree at shared LOD vertices.
                 const auto normal=water||body.kind==BodyKind::gas?d:surface_normal(body,d,3.0*body.geography_scale);
-                add_vertex(mesh,p,normal,water?FVec3{0.015f,0.085f,0.12f}:sample.color,water?1.0f:0.0f);
+                auto color=water?FVec3{0.015f,0.085f,0.12f}:sample.color;
+                if(!water&&body.kind==BodyKind::temperate)
+                {
+                    // Use the same normal sample on every LOD. Tile-relative material
+                    // coordinates or a mesh triangle normal would change the blend at seams.
+                    const double elevation=sample.height/body.geography_scale;
+                    const double slope=1.0-std::clamp(dot(normal,d),0.0,1.0);
+                    const double land=smooth(20.0,95.0,elevation);
+                    const double rock=smooth(0.025,0.19,slope)*land;
+                    if(rock>0.0)
+                    {
+                        const auto stone_tint=static_cast<float>(0.5+0.5*noise3(d*1900.0,body.seed^0x2d71u));
+                        const auto stone=mix(FVec3{0.24f,0.25f,0.23f},FVec3{0.41f,0.40f,0.36f},stone_tint);
+                        color=mix(color,stone,static_cast<float>(rock));
+                    }
+                    const double ground_detail=land*(1.0-rock);
+                    if(ground_detail>0.0)
+                    {
+                        // Sample the same six-metre field on every face and LOD.
+                        // Keep extreme standalone body sizes inside the noise domain.
+                        const double frequency=std::min(body.radius/6.0,90'000'000.0);
+                        const double grain=noise3(d*frequency,body.seed^0x6d2b79f5u);
+                        const float brightness=static_cast<float>(1.0+ground_detail*(0.075*grain-0.035));
+                        color=color*brightness;
+                    }
+                }
+                add_vertex(mesh,p,normal,color,water?1.0f:0.0f);
                 if(!coarse.empty()) {
                     const double px=(static_cast<double>(key.x&1u)*n+x)*0.5;
                     const double py=(static_cast<double>(key.y&1u)*n+y)*0.5;
@@ -201,8 +237,7 @@ Mesh build_tile(const Body& body,TileKey key,MeshConfig config,std::stop_token s
             const auto lower=static_cast<std::uint32_t>(mesh.vertices.size());
             for(auto idx:edge) {
                 auto v=mesh.vertices[idx];
-                const auto p=mesh.anchor+DVec3{v.position};
-                v.position=FVec3{p-normalized(p)*skirt-mesh.anchor};mesh.vertices.push_back(v);
+                v.position=lower_tile_vertex(v.position,mesh.anchor,skirt);mesh.vertices.push_back(v);
             }
             for(std::size_t i=0;i<edge.size();++i) {
                 const auto j=(i+1)%edge.size();
@@ -250,7 +285,7 @@ Mesh build_tile(const Body& body,TileKey key,MeshConfig config,std::stop_token s
 // retains the ordinary viewport/screen-error policy.
 struct RefinementHit {DVec3 direction;double distance;};
 static std::optional<RefinementHit> refinement_hit(const Body& body,DVec3 eye,DVec3 forward,bool ocean) {
-    const double envelope=1.18*std::abs(body.height_scale)+9.0*std::abs(body.geography_scale);
+    const double envelope=terrain_relief_bound(body);
     const double inner=body.radius-envelope;
     if(inner<=0.0)return {};
     double begin{},end{};
@@ -331,18 +366,57 @@ static TerrainPlan plan_terrain_impl(const Universe& world,DVec3 camera,double s
         for(auto key:previous->needed) if(!old_leaves.contains(key)) split_before.insert(key);
     }
     struct Focus {TileKey tile;double distance;};
-    struct BodyView { DVec3 local,up;double radius,near_weight;std::array<std::optional<Focus>,3> foci{}; };
+    struct BodyView {
+        DVec3 local,up;
+        double radius,near_weight,ground_reach,ground_weight;
+        DVec3 flight_center{};
+        double flight_weight{};
+        std::array<std::optional<Focus>,3> foci{};
+    };
+    const auto smooth_weight=[](double ratio) noexcept {
+        const double x=std::clamp(ratio,0.0,1.0);
+        return x*x*(3.0-2.0*x);
+    };
     std::vector<BodyView> views;views.reserve(world.bodies().size());
     for(const auto& b:world.bodies()) {
         const auto local=camera-world.center(b.id,seconds);
+        const double radius=length(local);
+        const auto up=normalized(local);
         double near_weight=1.0;
+        double ground_reach{},ground_weight{};
+        DVec3 flight_center{};
+        double flight_weight{};
         if(refinement_view&&refinement_view->up) {
-            const double ground=sample_height(b,normalized(local));
-            const double altitude=std::max(0.0,length(local)-b.radius-(ocean_surface&&b.ocean?std::max(0.0,ground):ground));
+            const double ground=sample_height(b,up);
+            const double clearance=radius-b.radius-(ocean_surface&&b.ocean?std::max(0.0,ground):ground);
+            const double altitude=std::max(0.0,clearance);
             const double near=std::clamp(b.radius*.002,25.0,5000.0);
             const double far=std::max(near*4.0,std::clamp(b.radius*.02,250.0,100000.0));
             const double blend=std::clamp((altitude-near)/(far-near),0.0,1.0);
             near_weight=1.0-blend*blend*(3.0-2.0*blend);
+            if(clearance>=0.0&&radius>0.0&&b.kind!=BodyKind::gas) {
+                // Cover a disk around the surface beneath the observer, even
+                // when their view is horizontal. Bound the reach on ascent and
+                // fade out before the orbit-wide priority takes over.
+                const double minimum_reach=std::clamp(b.radius*.0001,2.0,640.0);
+                ground_reach=std::clamp(altitude*4.0,minimum_reach,near*4.0);
+                const double fade=std::clamp((altitude-near)/near,0.0,1.0);
+                ground_weight=.85*(1.0-fade*fade*(3.0-2.0*fade));
+                if(!selected_body||b.id==world.body(*selected_body).id) {
+                    // Extend the ground region ahead of a near-horizontal view.
+                    // Fade in above walking clearance and out before orbit.
+                    // This uses camera heading, without moving the camera or
+                    // reserving any additional leaves.
+                    const double flight_floor=std::clamp(near*.04,20.0,200.0);
+                    const auto heading=refinement_view->forward-up*dot(up,refinement_view->forward);
+                    const double heading_length=length(heading);
+                    flight_weight=.85*smooth_weight((altitude-flight_floor)/flight_floor)
+                        *(1.0-smooth_weight((altitude-near)/(near*2.0)))
+                        *smooth_weight((heading_length-.65)/.30);
+                    if(flight_weight>0.0)
+                        flight_center=normalized(up+heading*(1.2*ground_reach/(heading_length*b.radius)));
+                }
+            }
         }
         std::array<std::optional<Focus>,3> foci{};
         if(refinement_view&&(!selected_body||b.id==world.body(*selected_body).id)) {
@@ -361,7 +435,7 @@ static TerrainPlan plan_terrain_impl(const Universe& world,DVec3 camera,double s
                 foci[2]=focus(-normalized(local));
             }
         }
-        views.push_back({local,normalized(local),length(local),near_weight,foci});
+        views.push_back({local,up,radius,near_weight,ground_reach,ground_weight,flight_center,flight_weight,foci});
     }
     const double focal=static_cast<double>(height)/(2.0*std::tan(fov*0.5));
     const auto score=[&](TileKey k)->Candidate {
@@ -372,8 +446,21 @@ static TerrainPlan plan_terrain_impl(const Universe& world,DVec3 camera,double s
         for(const auto& focus:view.foci)if(focus&&contains(k,focus->tile)) {
             at_focus=true;focus_distance=std::min(focus_distance,focus->distance);
         }
-        // Only actual footprint-hit ancestry may refine outside the view cone.
-        // The rest of the horizon retains the existing exclusion and budgets.
+        // A tile intersecting the ground disk can retain useful nearby detail
+        // independently of yaw and roll. Use the same conservative bound as
+        // the viewport test so nearby tiles on another cube face are eligible.
+        const double direction_extent=std::min(2.0,std::sqrt(2.0)/n);
+        double ground_weight{};
+        if(view.ground_weight>0.0) {
+            const double gap=body.radius*std::max(0.0,length(middle-view.up)-direction_extent);
+            const double taper=std::clamp(2.0*gap/view.ground_reach-1.0,0.0,1.0);
+            ground_weight=view.ground_weight*(1.0-taper*taper*(3.0-2.0*taper));
+        }
+        if(view.flight_weight>0.0) {
+            const double gap=body.radius*std::max(0.0,length(middle-view.flight_center)-direction_extent);
+            const double taper=smooth_weight((gap/view.ground_reach-.25)/(1.3-.25));
+            ground_weight=std::max(ground_weight,view.flight_weight*(1.0-taper));
+        }
         const bool footprint_focus=refinement_view&&refinement_view->up&&at_focus;
         double central_weight=1.0;
         if(refinement_view) {
@@ -382,12 +469,11 @@ static TerrainPlan plan_terrain_impl(const Universe& world,DVec3 camera,double s
             // Normalizing a cube-face point is 1-Lipschitz (its length is at
             // least one). Half a tile diagonal therefore bounds every surface
             // direction. The height envelope includes all terms in height_field.
-            const double extent=body.radius*std::min(2.0,std::sqrt(2.0)/n)
-                +std::abs(body.height_scale)*1.18+9.0*std::abs(body.geography_scale);
+            const double extent=body.radius*direction_extent+terrain_relief_bound(body);
             if(center_distance>extent) {
                 const double separation=std::acos(std::clamp(dot(to_center/center_distance,refinement_view->forward),-1.0,1.0));
                 const double angular_extent=std::asin(std::min(1.0,extent/center_distance));
-                if(separation>cone_angle+angular_extent&&!footprint_focus)return {k,0.0,false};
+                if(separation>cone_angle+angular_extent&&!footprint_focus&&ground_weight<=0.0)return {k,0.0,false};
                 const double offset=std::clamp((separation-angular_extent-cone_angle*.75)/(cone_angle*.25),0.0,1.0);
                 central_weight=1.0-offset*offset*(3.0-2.0*offset);
             }
@@ -435,14 +521,22 @@ static TerrainPlan plan_terrain_impl(const Universe& world,DVec3 camera,double s
         // maximum level, complete balanced cut and fixed leaf budget still win.
         if(refinement_view&&refinement_view->up) {
             // From orbit, spread detail across the circumscribed viewport cone.
-            // Smoothly trade that region for the three ray hits near the ground;
-            // The queue's attention weight is continuous across that trade;
-            // the orbital plateau covers a region rather than one ray ancestry.
-            const double weight=view.near_weight*(at_focus?1.0:0.0)+(1.0-view.near_weight)*central_weight;
-            const double priority=span*focal/distance/threshold*(1.0+3.0*weight);
+            // Trade the orbital region for the near ray hits and surrounding
+            // ground. Protect the ray-hit chains before balancing nearby detail.
+            const double view_weight=view.near_weight*(at_focus?1.0:0.0)+(1.0-view.near_weight)*central_weight;
+            // Once a patch is small relative to the disk, resume ordinary
+            // screen-error refinement. This spends the first part of the
+            // budget spreading nearby detail before chasing it underfoot.
+            const double detail=ground_weight>0.0?std::clamp((span/view.ground_reach-.075)/.10,0.0,1.0):0.0;
+            const double ground_detail=ground_weight*detail;
+            const double weight=std::max(view_weight,ground_detail);
+            const double screen_error=span*focal/distance/threshold*(1.0+3.0*weight);
+            const double priority=ground_detail>0.0?std::max(screen_error,1.0+ground_detail):screen_error;
             // A bounded monotonic screen-error term prevents an infinitesimal
             // altitude-weight change from replacing the entire queue tier.
-            return {k,priority,false,false,2.0*weight+priority/(1.0+priority)};
+            const bool protect_focus=at_focus&&k.level+2u<settings.max_level;
+            const double focus_attention=2.0*view_weight+(protect_focus?2.0*view.ground_weight:0.0);
+            return {k,priority,false,false,std::max(focus_attention,4.0*ground_detail)+priority/(1.0+priority)};
         }
         return {k,span*focal/distance/threshold*(at_focus?4.0:1.0),in_view,at_focus};
     };

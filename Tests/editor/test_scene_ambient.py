@@ -220,7 +220,7 @@ class SceneAmbient(unittest.TestCase):
         module_map = {}
         roots = [ROOT / "Engine/modules", ROOT / "Engine/dep/EpochPlatformEngine/modules"]
         for root in roots:
-            for path in root.glob("*.ixx"):
+            for path in root.rglob("*.ixx"):
                 match = re.search(r"^export module\s+([\w.:]+);", path.read_text(encoding="utf-8-sig"), re.M)
                 if match:
                     module_map[match.group(1)] = path

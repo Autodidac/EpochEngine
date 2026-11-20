@@ -2,9 +2,11 @@
 // SPDX-License-Identifier: LicenseRef-MIT-NoSell
         if (editor.showPackageManagerModal)
         {
+            using Page = EditorState::PackageManagerPage;
             editor.openMenu = TopMenu::None;
             poll_package_source_task(editor);
-            if (!editor.packageSourceView) request_site_package_catalog(editor, false);
+            if (!editor.packageSourceView && editor.packageManagerPage != Page::examples)
+                request_site_package_catalog(editor, false);
             poll_site_package_catalog(editor);
             const gui::Vec2 modalSize = packageManagerModalSize;
             const gui::Vec2 modalPos{
@@ -380,18 +382,67 @@
             {
             const std::array packageTabs{
                 gui::TabButtonSpec{.id="package-manager.addons", .label="Project Packages",
-                    .width=152.0f, .active=!editor.packageCatalogModelsOnly},
+                    .width=152.0f, .active=editor.packageManagerPage == Page::packages},
                 gui::TabButtonSpec{.id="package-manager.ai-resources", .label="Project AI Resources",
-                    .width=180.0f, .active=editor.packageCatalogModelsOnly}
+                    .width=180.0f, .active=editor.packageManagerPage == Page::ai_resources},
+                gui::TabButtonSpec{.id="package-manager.examples", .label="Project Examples",
+                    .width=154.0f, .active=editor.packageManagerPage == Page::examples}
             };
-            if (const auto tabs = gui::tab_bar_buttons(packageTabs, 29.0f, 5.0f);
+            if (const auto tabs = gui::responsive_tab_bar_buttons({
+                    .overflow_id="package-manager-tabs", .overflow_label="Package Manager pages",
+                    .tabs=packageTabs, .available_width=contentWidth, .height=29.0f, .gap=5.0f});
                 tabs.selected_index)
             {
-                editor.packageCatalogModelsOnly = *tabs.selected_index == 1u;
-                if (editor.packageCatalogModelsOnly)
+                constexpr std::array pages{Page::packages, Page::ai_resources, Page::examples};
+                editor.packageManagerPage = pages[*tabs.selected_index];
+                if (editor.packageManagerPage == Page::ai_resources)
                     editor.aiModelManagerAutoRescanPending = true;
             }
-            const bool projectAiResources = editor.packageCatalogModelsOnly;
+            if (editor.packageManagerPage == Page::examples)
+            {
+                const auto examples = editor_bundled_project_examples();
+                gui::section_heading("Project examples");
+                gui::wrapped_label("Import an editable project from the installed Epoch source into Projects.",
+                    contentWidth);
+                for (std::size_t index = 0u; index < examples.size(); ++index)
+                {
+                    if (gui::menu_item({.label=examples[index].display_name,
+                            .size={contentWidth, gui::menu_item_row_height()},
+                            .tone=gui::SemanticTone::info,
+                            .selected=index == editor.selectedProjectExample}))
+                    {
+                        editor.selectedProjectExample = index;
+                        editor.packageExampleStatus.clear();
+                    }
+                }
+                const bool selected = editor.selectedProjectExample < examples.size();
+                if (selected)
+                    gui::wrapped_label(examples[editor.selectedProjectExample].summary, contentWidth);
+                if (!editor.packageExampleStatus.empty())
+                    gui::wrapped_label(editor.packageExampleStatus, contentWidth);
+                const std::array exampleActions{
+                    gui::InlineButtonSpec{.label="Import Project", .width=0.0f,
+                        .enabled=selected && !editor.projectBuildPending && !editor.projectRuntimeProcess.valid()
+                            && !package_source_task_busy(editor) && !planetary_project_busy(editor)},
+                    gui::InlineButtonSpec{.label="Close", .width=0.0f}};
+                if (const auto action=gui::inline_button_row(exampleActions, 30.0f, 6.0f, packageActionLayout))
+                {
+                    if (*action == 1u)
+                        editor.showPackageManagerModal = false;
+                    else if (selected)
+                    {
+                        const auto imported = editor_import_bundled_project_example(
+                            examples[editor.selectedProjectExample].id);
+                        editor.packageExampleStatus = imported.succeeded
+                            ? "Project imported. Use Open Project to edit your copy."
+                            : imported.summary;
+                        push_editor_log(editor, "[project] " + editor.packageExampleStatus);
+                    }
+                }
+            }
+            else
+            {
+            const bool projectAiResources = editor.packageManagerPage == Page::ai_resources;
             gui::wrapped_label(projectAiResources
                 ? "Let this project use the engine's selected AI service. Model weights stay shared; nothing is bundled or loaded here."
                 : "Software add-ons and dependencies for the active project.",
@@ -418,6 +469,7 @@
             if (projectAiResources)
             {
                 namespace native = epochengine::ai::native_runtime;
+                const bool calculator = editor.projectId == epochengine::ai::project_profile::calculator_project_id;
                 if (editor.aiModelManagerAutoRescanPending && !native::snapshot(false).busy
                     && native::refresh())
                     editor.aiModelManagerAutoRescanPending = false;
@@ -427,19 +479,23 @@
                 for (const auto& model : models.models)
                     if (selectedModel == model.id || selectedModel == model.uri)
                         selectedModel = model.label.empty() ? model.id : model.label;
-                gui::wrapped_label("Current Assistant model: "
-                    + (selectedModel.empty() ? std::string{"None confirmed"} : selectedModel), contentWidth);
+                if (!calculator)
+                    gui::wrapped_label("Current Assistant model: "
+                        + (selectedModel.empty() ? std::string{"None confirmed"} : selectedModel), contentWidth);
                 const bool canChangeProject = !editor.projectId.empty() && !editor.projectRoot.empty()
                     && !editor.projectBuildPending && !editor.projectRuntimeProcess.valid();
                 const std::array aiActions{
-                    gui::InlineButtonSpec{.label="Enable Project AI", .width=0.0f, .enabled=canChangeProject},
+                    gui::InlineButtonSpec{.label=calculator ? "Allow Calculator Coach" : "Enable Project AI",
+                        .width=0.0f, .enabled=canChangeProject},
                     gui::InlineButtonSpec{.label="Disable Project AI", .width=0.0f, .enabled=canChangeProject},
                     gui::InlineButtonSpec{.label="Close", .width=0.0f}};
                 const std::string policy = editor.projectRoot.empty()
                     ? "Open or create a project first. Choose a model in Model Manager; no download or model load happens here."
                     : editor.projectBuildPending || editor.projectRuntimeProcess.valid()
                         ? "Stop the project build or runtime before changing its AI setting."
-                        : "The project follows the engine-selected model, not a pinned model ID. Each session still needs model confirmation. Weights are not copied; image support is not implied.";
+                        : calculator
+                            ? "The Coach can ask a small local model to propose a calculation. The calculator evaluates it. Live use requires a confirmed model and a verified isolated runtime."
+                            : "The project follows the engine-selected model, not a pinned model ID. Each session still needs model confirmation. Weights are not copied; image support is not implied.";
                 const bool showStatus = editor.packageInstallStatus.starts_with("Project AI");
                 const float footerHeight = gui::measure_wrapped_label_height(policy, contentWidth)
                     + (showStatus ? gui::measure_wrapped_label_height(editor.packageInstallStatus, contentWidth) : 0.0f)
@@ -492,7 +548,8 @@
                 {
                     if (*action == 2u) editor.showPackageManagerModal = false;
                     else (void)write_project_ai_profile(editor, *action == 0u
-                        ? ProjectAiProviderMode::engine_selected : ProjectAiProviderMode::disabled);
+                        ? (calculator ? ProjectAiProviderMode::calculator_coach : ProjectAiProviderMode::engine_selected)
+                        : ProjectAiProviderMode::disabled);
                 }
             }
             else
@@ -775,6 +832,7 @@
                     && editor.packageModelInstall->process.valid())
                     (void)platform::child_process::stop(editor.packageModelInstall->process,
                         platform::child_process::StopMode::graceful);
+            }
             }
             }
             }

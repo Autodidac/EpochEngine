@@ -29,7 +29,10 @@ class ForestProjectCreation(unittest.TestCase):
             brace = start + body.end() - 1
             return viewport[start:brace] + definition(viewport[brace:], '{')
 
-        create = button_branch('                    if (gui::button("Create Project",')
+        create = definition(viewport, '                const auto createProject =', True)
+        start = viewport.index('                    if (gui::button("Create Project",')
+        end = viewport.index(';', start) + 1
+        create += viewport[start:end]
         region_prefix = "EPOCH_" + "PRIVATE_SOURCE_"
         create = re.sub(r"// " + region_prefix + r"BEGIN:.*?// " + region_prefix + r"END:[^\n]*",
                         "", create, flags=re.S)

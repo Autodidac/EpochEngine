@@ -9,16 +9,38 @@ admission and lifecycle apply across those profiles. Optional AI and world
 features cooperate through common contracts without being prerequisites for
 ordinary software. Fixed-step, continuous and event-driven work coexist.
 
-Epoch is a C++23 module-first engine/editor. Current source, edition releases and
-exact validation receipts are owned by `Changes/active_pass.md`; do not infer
-today's status from an older version in an architecture snapshot. This October25
-documentation pass establishes no new native runtime, GPU, inference or
-candidate-succession proof. Current acceptance lives in
-`Changes/active_pass.md`; historical snapshots are retained in
-`Engine/docs/reference/pass_history.md`.
-Runtime/editor code lives under `Engine/modules/`, `Engine/src/`, and
-`Engine/include/`, with reusable GUI ownership mirrored into EpochGui and bulky
-optional package implementations kept in EpochEngineExtensions.
+Epoch is C++23/module-first. Current acceptance belongs to
+[active_pass.md](../../../Changes/active_pass.md), not historical version labels;
+[pass history](../reference/pass_history.md) retains older evidence. Documentation
+alone proves no native runtime, GPU, inference or candidate-succession result.
+
+### Source ownership and data flow
+
+| Family | Owner responsibility |
+| --- | --- |
+| `core`, `platform`, task/event/context | Lifecycle, windows, input boundaries, scheduling, shared infrastructure |
+| `authoring`, `scene`, `temporal` | Documents, semantic edits/history, scene identity, persistence |
+| `asset`, `assets`, texture/mesh/tilemap | Import, validation, compilation into runtime artifacts |
+| `project`, `packages`, extensions | Manifests, dependency admission, generated applications, Build/Run, optional features |
+| `render`, `canvas2d`; `renderers/<backend>` | Shared draw/resource contracts; native allocation, upload, draw, presentation and retirement |
+| `editor`; EpochGui | Workspace adapters; reusable GUI behavior |
+| `ai`, `ai/native` | Discovery, installation, inference, resource ownership, tools, generation jobs |
+| `Engine/dep/` | Separately owned dependencies; exact boundaries in [dependencies](../../dep/README.md); SelfCoding remains private Development-only |
+| `Tests`, contracts; `Artifacts/Reports` | Executable regressions; dated evidence, not authoritative implementation |
+
+Module interfaces (`.ixx`) may include exported implementation; `.cpp` owns
+implementation/module units; `.hpp`/`.h` serves internal, template, native or ABI
+boundaries. An included `.inl` fragment is not an independent library. Contract
+and Python fixture presence does not prove the current executable passed them.
+[Source naming](source_names.md) owns placement and migration rules.
+
+Editor/Assistant/scripts → authored documents and semantic changes → validated
+assets and admitted scene state → shared camera/lighting/geometry/render packets
+→ backend execution → scene/GUI/capture/presentation. Renderer residency is
+derived, never canonical authoring state. The Editor consumes the same renderer;
+[renderer evidence](renderers.md) distinguishes contracts from native parity.
+[Forest ownership](forest_factory.md) maps plant generation, persistence, controls
+and fixtures as cooperating owners rather than a single renderer feature.
 
 Render-to-texture is an Engine service. The central render-device/graph contracts
 own logical surfaces and their lifetimes; each renderer/context owns its native
@@ -353,17 +375,17 @@ storage growth are proven.
 - `../../../Changes/roadmap.md`
 
 
-## v0.90.24-v0.90.33 integrated editor/rendering baseline
+## Historical v0.90.24–v0.90.33 baseline
 
-The current source combines these systems rather than treating them as independent prototypes:
+That baseline introduced OpenGL scene color/depth reuse, renderer-neutral
+object/light damage, neuromorphic promotion and selective/full A/B measurements.
+**Cached/partial frame composition was removed by the October30 decision**;
+see [current rendering policy](event_render.md). Resource caches, event and
+perception contracts remain; the old optimization is not an open parity mission.
 
-- OpenGL persistent scene color/depth caching with cached/partial/full/conventional decisions.
-- Renderer-neutral object and lighting damage, including previous/current bounds and bounded point/spot influence volumes.
-- Neuromorphic sparse activity as a conservative promotion policy over authoritative damage.
-- A/B selective/full-baseline benchmarking through one cache/presentation path, with presentation FPS separated from measured render FPS.
-- Selection-set editing, marquee selection, group transforms, atomic batch creation, and temporal-history-safe recreate after Undo.
-- Focus-owned multicontext input, routed-pane docking recovery, and single-owner AI Chat projection.
-- EpochGui-owned font/window shadow intent.
-- MSVC entry-point ownership is mode-specific: normal EpochEditor uses the engine-owned internal entry point; generated child/static-runtime builds suppress that path with `EPOCH_MAIN_IN_MAIN_CPP` and provide their generated entry source. The same projects expose Debug, Release and ReleaseWithDebugInfo. BuildAll dispatches CMake's three Windows configurations from EpochEditor; there is no separate combined-build project. Linux helpers retain Debug/Release.
-
-The renderer optimization currently has production partial color/depth reuse only in the OpenGL editor scene. Shared contracts are intentionally broader than the current optimized backend so Vulkan/DirectX/SDL/SFML/Raylib/software can adopt equivalent reuse without duplicating scene truth or lighting semantics.
+Retained baseline areas: selection/marquee/group transforms and history-safe
+Undo recreation; focus-owned multicontext input, routed docking and single-owner
+chat projection; EpochGui font/window shadow intent. Native acceptance remains
+feature/backend-specific. [Build workflow](workflows.md#msvc-editor-and-generated-project-entry-ownership)
+owns internal versus generated entry points, Debug/Release/optimized-symbols,
+CMake BuildAll dispatch and portable Debug/Release helpers.

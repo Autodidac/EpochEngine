@@ -34,6 +34,17 @@
         return titleBarHeight + 2.0f * kContentPadding + (std::max)(0.0f, content_height);
     }
 
+    float titled_window_caption_width(std::string_view title) noexcept
+    {
+        try { ensure_resources(); }
+        catch (...) { return 0.0f; }
+        const auto* previous = g_temporaryTextFont;
+        g_temporaryTextFont = caption_text_font();
+        const float width = measure_text_width(title, kFontScale) + 2.0f * kContentPadding;
+        g_temporaryTextFont = previous;
+        return std::ceil(width);
+    }
+
     void label(std::string_view text) noexcept
     {
         if (!g_frame.insideWindow || !g_frame.ctx) return;
@@ -216,7 +227,7 @@
         advance_cursor({0.0f, blockHeight + kContentPadding});
     }
 
-    void property_row(std::string_view labelText, std::string_view valueText, float label_width) noexcept
+    void property_row(std::string_view labelText, std::string_view valueText, float label_width, bool wrap_label) noexcept
     {
         if (!g_frame.insideWindow || !g_frame.ctx) return;
 
@@ -230,32 +241,38 @@
         const float gap = 10.0f;
         const float valueX = pos.x + labelWidth + gap;
         const float valueWidth = (std::max)(space_advance(kFontScale), availableWidth - labelWidth - gap);
+        const auto drawLabel = [&](float width)
+        {
+            if (wrap_label)
+                return (std::max)(line_advance_amount(kFontScale),
+                    draw_wrapped_text(labelText, pos.x, pos.y, width, kFontScale));
+            const std::string clippedLabel = fit_text_to_width(labelText, width, kFontScale);
+            draw_text_line(clippedLabel, pos.x, pos.y, kFontScale);
+            return line_advance_amount(kFontScale);
+        };
 
         if (valueWidth < minReadableValueWidth)
         {
-            const std::string clippedLabel = fit_text_to_width(labelText, availableWidth, kFontScale);
-            draw_text_line(clippedLabel, pos.x, pos.y, kFontScale);
-
-            const float nextLineY = pos.y + line_advance_amount(kFontScale);
+            const float labelHeight = drawLabel(availableWidth);
+            const float nextLineY = pos.y + labelHeight;
             const float valueHeight = valueText.empty()
                 ? line_advance_amount(kFontScale)
                 : draw_wrapped_text(valueText, pos.x, nextLineY, availableWidth, kFontScale);
 
             advance_cursor({
                 0.0f,
-                line_advance_amount(kFontScale) + (std::max)(line_advance_amount(kFontScale), valueHeight)
+                labelHeight + (std::max)(line_advance_amount(kFontScale), valueHeight)
             });
             return;
         }
 
-        const std::string clippedLabel = fit_text_to_width(labelText, labelWidth, kFontScale);
-        draw_text_line(clippedLabel, pos.x, pos.y, kFontScale);
+        const float labelHeight = drawLabel(labelWidth);
 
         const float valueHeight = valueText.empty()
             ? line_advance_amount(kFontScale)
             : draw_wrapped_text(valueText, valueX, pos.y, valueWidth, kFontScale);
 
-        advance_cursor({ 0.0f, (std::max)(line_advance_amount(kFontScale), valueHeight) });
+        advance_cursor({ 0.0f, (std::max)(labelHeight, valueHeight) });
     }
 
     float wrapped_text_height(std::string_view text, float width) noexcept
@@ -615,6 +632,7 @@
                 return false;
             }
             if (!owned(target.identity)) return false;
+            const void* previousActive = active;
             active = target.identity;
             g_frame.visitedActiveWidget = active;
             for (auto event = g_frame.events.begin(); event != g_frame.events.end();)
@@ -652,6 +670,21 @@
                 if (handled) event = g_frame.events.erase(event);
                 else ++event;
                 if (!target.identity) break;
+            }
+            if (g_frame.ctx->update_native_text_input && target.text && !target.read_only)
+            {
+                // Ask for the native keyboard on focus acquisition or a tap on
+                // the focused field. A still-focused field may keep its caret
+                // while the user dismisses the native keyboard.
+                const bool fieldPressed = std::any_of(g_frame.events.begin(), g_frame.events.end(),
+                    [&](const InputEvent& event) {
+                        return event.type == EventType::MouseDown && event.mouse_button == 0
+                            && point_in_rect(event.mouse_pos, target.position.x, target.position.y,
+                                target.size.x, target.size.y);
+                    });
+                g_frame.nativeTextInput = core::Context::NativeTextInputArea{
+                    target.position.x, target.position.y, target.size.x, target.size.y,
+                    active != previousActive || fieldPressed};
             }
             return true;
         }

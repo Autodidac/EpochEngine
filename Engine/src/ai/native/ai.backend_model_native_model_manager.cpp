@@ -204,6 +204,11 @@ namespace {
 
 [[nodiscard]] std::expected<std::uint64_t, std::string> local_gguf_set_bytes(
     const std::filesystem::path& first_shard) {
+    if (is_edge0_bundle_path(first_shard)) {
+        const auto bundle = inspect_edge0_bundle(first_shard);
+        if (!bundle.complete) return std::unexpected(bundle.error);
+        return bundle.bytes;
+    }
     static const std::regex split_pattern{R"((.*)-(\d{5})-of-(\d{5})\.gguf$)", std::regex::icase};
     std::smatch match;
     const auto filename = first_shard.filename().string();
@@ -290,6 +295,48 @@ namespace {
     return normalized;
 }
 
+[[nodiscard]] std::expected<std::filesystem::path, std::string> validate_model_reconnection(
+    const RuntimeModelProfile& profile, const std::filesystem::path& selected) {
+    if (profile.source != ModelSourceKind::local_gguf || profile.local_path.empty())
+        return std::unexpected("Reconnect requires an existing local-file profile. Use registration for a different model.");
+    std::error_code error;
+    if (std::filesystem::exists(profile.local_path, error) || error)
+        return std::unexpected("The original model file still exists or its absence could not be verified. No profile was changed.");
+    static const std::regex split_pattern{R"((.*)-(\d{5})-of-(\d{5})\.gguf$)", std::regex::icase};
+    std::smatch match;
+    const auto selected_name = selected.filename().string();
+    if (std::regex_match(selected_name, match, split_pattern)
+        && (std::stoul(match[3].str()) == 0u || std::stoul(match[3].str()) > 256u))
+        return std::unexpected("Invalid or unsupported GGUF shard count.");
+    auto normalized = normalize_local_gguf_path(selected);
+    if (!normalized) return std::unexpected(normalized.error());
+    if (normalized->filename() != profile.local_path.filename())
+        return std::unexpected("The filename does not match this profile's original model. Register a different model separately.");
+    const auto metadata = local_gguf_layer_metadata(*normalized);
+    if (!metadata || (metadata->architecture != "qwen2" && metadata->architecture != "qwen2moe"
+        && metadata->architecture != "qwen3" && metadata->architecture != "qwen3moe"
+        && metadata->architecture != "qwen35" && metadata->architecture != "qwen35moe"))
+        return std::unexpected("Missing, malformed or unsupported Qwen GGUF architecture metadata. No profile was changed.");
+    // Every shard needs a valid GGUF header; nonempty filenames alone cannot
+    // distinguish an interrupted download or an HTML error page from weights.
+    const auto name = normalized->filename().string();
+    if (std::regex_match(name, match, split_pattern)) {
+        const auto count = std::stoul(match[3].str());
+        for (unsigned i = 1u; i <= count; ++i) {
+            const auto digits = std::to_string(i);
+            const auto shard = normalized->parent_path() / (match[1].str() + "-"
+                + std::string(5u - digits.size(), '0') + digits + "-of-" + match[3].str() + ".gguf");
+            gguf_metadata_detail::Reader reader{shard};
+            if (!reader.fields()) return std::unexpected("Invalid GGUF shard header: " + shard.string());
+        }
+    }
+    const auto bytes = local_gguf_set_bytes(*normalized);
+    if (!bytes) return std::unexpected(bytes.error());
+    if (profile.estimated_bytes && *bytes < profile.estimated_bytes - profile.estimated_bytes / 10u)
+        return std::unexpected("The selected GGUF set is smaller than this profile's expected weights.");
+    return normalized;
+}
+
 } // namespace
 
 // Runtime configuration has stable storage for the entire server lifetime.
@@ -304,6 +351,7 @@ struct NativeModelManager::RuntimeSlot {
         : config(with_port(source, port)), runtime(config, state_root) {}
     core::Config config;
     QwenFlashRuntime runtime;
+    bool exclusive_model{};
     epochengine::ai::native_runtime::idle::UsefulActivity activity;
     std::string idle_status;
 };
@@ -362,6 +410,14 @@ std::shared_ptr<NativeModelManager::RuntimeSlot> NativeModelManager::find_slot(
 std::shared_ptr<NativeModelManager::RuntimeSlot> NativeModelManager::slot_for(
     const RuntimeModelProfile& profile) {
     std::scoped_lock lock(slots_mutex_);
+    const bool exclusive = is_edge0_profile(profile);
+    // A returned shared slot reserves startup before the runtime owns a PID.
+    // Keep that reservation and unknown retirement exclusive; never silently
+    // unload another model to make room for this materially different bundle.
+    for (const auto& [id, slot] : slots_) {
+        if (id != profile.id && (exclusive || slot->exclusive_model)
+            && (slot.use_count() > 1 || !slot->runtime.worker_retired())) return {};
+    }
     const auto existing=slots_.find(profile.id);
     const auto running_for_this_model = existing!=slots_.end() && existing->second->runtime.running();
     // 1-3 local models are practical on most desktops. Never assign a port
@@ -371,13 +427,17 @@ std::shared_ptr<NativeModelManager::RuntimeSlot> NativeModelManager::slot_for(
     const auto resident = std::count_if(slots_.begin(), slots_.end(),
         [](const auto& entry) { return entry.second->runtime.running(); });
     if (resident >= max_resident_slots && !running_for_this_model) return {};
-    if (existing != slots_.end()) return existing->second;
+    if (existing != slots_.end()) {
+        existing->second->exclusive_model = exclusive;
+        return existing->second;
+    }
     if (slots_.size() >= max_registered_slots ||
         static_cast<std::uint32_t>(config_.qwen_flash_port) + max_registered_slots > 65535u)
         return {};
     const auto port = static_cast<std::uint32_t>(config_.qwen_flash_port) +
         static_cast<std::uint32_t>(slots_.size());
     auto slot = std::make_shared<RuntimeSlot>(config_, state_root_, port);
+    slot->exclusive_model = exclusive;
     slots_.emplace(profile.id, slot);
     return slot;
 }
@@ -396,7 +456,7 @@ nlohmann::json NativeModelManager::model_runtime_status(std::string_view id_or_u
         epochengine::ai::native_runtime::idle::Clock::now());
     status["idle_status"] = !slot->idle_status.empty() ? slot->idle_status
         : !slot->runtime.running() ? "Not loaded"
-        : epochengine::ai::native_runtime::idle::work_gate.protected_work()
+        : epochengine::ai::native_runtime::idle::work_gate().protected_work()
             ? "Active or queued work protects residency" : "Idle";
     return status;
 }
@@ -576,6 +636,10 @@ std::expected<void, core::Error> NativeModelManager::restore_residency(
             return std::unexpected(core::Error{core::make_error_code(core::Errc::cancelled),
                 "Native restoration superseded by operator settings or shutdown"});
         if (!entry.slot->runtime.matches_resident(entry.launch)) {
+            const auto reserved = slot_for(entry.saved);
+            if (!reserved || reserved != entry.slot)
+                return std::unexpected(core::Error{core::make_error_code(core::Errc::model_unavailable),
+                    "Native restoration refused: Edge0 requires exclusive model residency. Unload the other model first."});
             auto restored = entry.slot->runtime.restore_resident(entry.launch, claim, deadline, stop);
             if (!restored) return std::unexpected(restored.error());
             note_model_use(entry.saved.id);
@@ -704,7 +768,7 @@ void NativeModelManager::save_profile(const RuntimeModelProfile& profile, bool o
 void NativeModelManager::seed_defaults() {
     const RuntimeModelProfile qwen{
         .id = "qwen3.8-flash-next-ud-q2-k-xl",
-        .display_name = "Qwen3.8 Flash Next Ã‚Â· UD-Q2_K_XL",
+        .display_name = "Qwen3.8 Flash Next (UD-Q2_K_XL)",
         .runtime = RuntimeKind::qwen_flash,
         .source = ModelSourceKind::hugging_face,
         .repo = "unsloth/Qwen3.8-Flash-Next-GGUF",
@@ -962,9 +1026,9 @@ std::expected<nlohmann::json, core::Error> NativeModelManager::update_tuning(
         core::make_error_code(core::Errc::invalid_argument), "Model tuning requires an object"});
     // Whitelist only non-identity runtime settings. Never accept a caller's
     // id/path/repo/command override via the settings GUI.
-    static constexpr std::array<std::string_view, 25> allowed{
+    static constexpr std::array<std::string_view, 26> allowed{
         "idle_timeout_minutes",
-        "runtime_policy", "gpu_layers", "gpu_layer_count_hint", "context_tokens", "parallel_slots",
+        "runtime_policy", "capability_tier", "gpu_layers", "gpu_layer_count_hint", "context_tokens", "parallel_slots",
         "context_reserve_tokens", "auto_compact", "compact_trigger_ratio", "compact_target_ratio",
         "threads", "batch_threads", "batch_size", "ubatch_size", "flash_attention",
         "kv_type_k", "kv_type_v", "kv_offload", "kv_cpu_pinned", "kv_gpu_layers",
@@ -999,6 +1063,38 @@ std::expected<nlohmann::json, core::Error> NativeModelManager::update_tuning(
     return nlohmann::json{{"model", runtime_model_uri(updated)},
         {"requires_reload", model_loaded(updated.id)},
         {"effective_gpu_layers", effective_gpu_layers(updated)}};
+}
+
+std::expected<nlohmann::json, core::Error> NativeModelManager::reconnect_model_file(
+    std::string_view id_or_uri, const std::filesystem::path& local_path) {
+    std::scoped_lock lock(mutex_, slots_mutex_);
+    const auto original = find_locked(id_or_uri);
+    if (!original) return std::unexpected(core::Error{core::make_error_code(core::Errc::model_unavailable),
+        "Unknown native model: " + std::string{id_or_uri}});
+    // An existing slot may have been handed to a concurrent loader even before
+    // its worker starts. Refuse that whole session, rather than race its copy of
+    // the old profile. A freshly opened manager can reconnect it safely.
+    if (slots_.contains(original->id)) return std::unexpected(core::Error{
+        core::make_error_code(core::Errc::model_unavailable),
+        "This model has a runtime slot in this session. Restart the Editor before reconnecting its weights."});
+    if (install_state_.value("state", std::string{"idle"}) == "installing"
+        || runtime_install_state_.value("state", std::string{"idle"}) == "installing")
+        return std::unexpected(core::Error{core::make_error_code(core::Errc::model_unavailable),
+            "Wait for the current model installation before reconnecting weights."});
+    try {
+        const auto selected = validate_model_reconnection(*original, local_path);
+        if (!selected) return std::unexpected(core::Error{core::make_error_code(core::Errc::invalid_argument), selected.error()});
+        auto updated = *original;
+        updated.local_path = *selected;
+        save_profile(updated); // Atomic replacement before publishing; every other field is preserved.
+        const auto found = std::ranges::find_if(profiles_, [&](const auto& item) { return item.id == updated.id; });
+        if (found != profiles_.end()) *found = updated;
+        return nlohmann::json{{"model", runtime_model_uri(updated)}, {"reconnected", true},
+            {"local_path", updated.local_path.string()}, {"loaded", false},
+            {"validation", "Filename and bounded GGUF metadata checked; tensor integrity and runtime compatibility are checked on explicit load."}};
+    } catch (const std::exception& error) {
+        return std::unexpected(core::Error{core::make_error_code(core::Errc::io_error), error.what()});
+    }
 }
 
 std::expected<nlohmann::json, core::Error> NativeModelManager::register_model(const nlohmann::json& spec) {
@@ -1050,6 +1146,7 @@ std::expected<nlohmann::json, core::Error> NativeModelManager::register_model(co
         }
         profile.profile_revision = runtime_profile_revision;
         profile.runtime_policy = spec.value("runtime_policy", config_.qwen_flash_runtime_policy);
+        profile.capability_tier = spec.value("capability_tier", std::string{"reference"});
         profile.gpu_offload_percent = spec.value("gpu_offload_percent", config_.qwen_flash_gpu_offload_percent);
         profile.gpu_layer_count_hint = spec.value("gpu_layer_count_hint", config_.qwen_flash_gpu_layer_count_hint);
         profile.context_tokens = spec.value("context_tokens", config_.qwen_flash_context_tokens);
@@ -1097,6 +1194,8 @@ std::expected<nlohmann::json, core::Error> NativeModelManager::register_model(co
         if (spec.contains("idle_timeout_minutes"))
             validated_profile["idle_timeout_minutes"] = spec.at("idle_timeout_minutes");
         profile = runtime_model_from_json(validated_profile);
+        if (is_edge0_profile(profile) && !edge0_launch_profile_supported(profile))
+            throw std::invalid_argument("Edge0 requires its streaming profile. Import the Edge0 baseline and choose zero or four GPU KV layers.");
 
         const bool runtime_reload_required = model_loaded(profile.id);
 
@@ -1127,6 +1226,7 @@ void NativeModelManager::set_install_state(nlohmann::json state) {
 }
 
 std::expected<nlohmann::json, core::Error> NativeModelManager::install(std::string_view id_or_uri) {
+    if (auto refused = qwen_flash_.diagnostic_admission_error()) return std::unexpected(std::move(*refused));
     if (config_.shared_model_inputs_bound) return std::unexpected(core::Error{
         core::make_error_code(core::Errc::model_unavailable),
         "Shared model inputs are read-only here. Use the owning Editor to install or change them."});
@@ -1194,7 +1294,7 @@ std::expected<nlohmann::json, core::Error> NativeModelManager::install(std::stri
         auto slot = slot_for(profile);
         if (!slot) {
             set_install_state({{"state", "failed"}, {"model", runtime_model_uri(profile)},
-                {"error", "Insufficient free native model slots/ports for install-only load"}});
+                {"error", "Native model capacity is unavailable. Edge0 requires exclusive residency; unload other models first."}});
             return;
         }
         auto acquired = acquire_gpu_ownership();
@@ -1225,6 +1325,7 @@ std::expected<nlohmann::json, core::Error> NativeModelManager::install(std::stri
 }
 
 std::expected<nlohmann::json, core::Error> NativeModelManager::provision_runtime() {
+    if (auto refused = qwen_flash_.diagnostic_admission_error()) return std::unexpected(std::move(*refused));
     if (config_.shared_model_inputs_bound) return std::unexpected(core::Error{
         core::make_error_code(core::Errc::model_unavailable),
         "Shared runtime inputs are read-only here. Use the owning Editor to install or update the runtime."});
@@ -1336,6 +1437,7 @@ std::expected<std::string, core::Error> NativeModelManager::prepare(
     std::chrono::steady_clock::time_point deadline,
     std::stop_token stop,
     std::optional<std::uint32_t> gpu_offload_cap_percent) {
+    if (auto refused = qwen_flash_.diagnostic_admission_error()) return std::unexpected(std::move(*refused));
     epochengine::ai::native_runtime::idle::WorkLease loading;
     if (!loading.admitted()) return std::unexpected(core::Error{
         core::make_error_code(core::Errc::model_unavailable), "Idle unload is retiring; retry model setup after it finishes"});
@@ -1389,7 +1491,7 @@ std::expected<std::string, core::Error> NativeModelManager::prepare(
     auto slot = slot_for(profile);
     if (!slot) return std::unexpected(core::Error{
         core::make_error_code(core::Errc::model_unavailable),
-        "Native resident-model limit (3 concurrent processes) or port capacity reached. Unload a model."});
+        "Native model capacity is unavailable. Edge0 requires exclusive residency; otherwise up to 3 processes are supported. Unload the other model first."});
     auto acquired = acquire_gpu_ownership();
     if (!acquired) return std::unexpected(acquired.error());
     GpuUse gpu_use{this, std::move(*acquired)};
@@ -1406,6 +1508,7 @@ std::expected<std::string, core::Error> NativeModelManager::prepare_with_local_o
     const std::filesystem::path& local_path_override,
     std::chrono::steady_clock::time_point deadline,
     std::stop_token stop) {
+    if (auto refused = qwen_flash_.diagnostic_admission_error()) return std::unexpected(std::move(*refused));
     epochengine::ai::native_runtime::idle::WorkLease loading;
     if (!loading.admitted()) return std::unexpected(core::Error{
         core::make_error_code(core::Errc::model_unavailable), "Idle unload is retiring; retry model setup after it finishes"});
@@ -1470,7 +1573,7 @@ std::expected<std::string, core::Error> NativeModelManager::prepare_with_local_o
     auto slot = slot_for(profile);
     if (!slot) return std::unexpected(core::Error{
         core::make_error_code(core::Errc::model_unavailable),
-        "Native resident-model limit (3 concurrent processes) or port capacity reached. Unload a model."});
+        "Native model capacity is unavailable. Edge0 requires exclusive residency; otherwise up to 3 processes are supported. Unload the other model first."});
     auto acquired = acquire_gpu_ownership();
     if (!acquired) return std::unexpected(acquired.error());
     GpuUse gpu_use{this, std::move(*acquired)};
@@ -1632,7 +1735,7 @@ nlohmann::json NativeModelManager::runtime_types() const {
     const nlohmann::json recommended{
         {"repo", "unsloth/Qwen3.8-Flash-Next-GGUF"},
         {"quant", "UD-Q2_K_XL"},
-        {"display_name", "Qwen3.8 Flash Next Ã‚Â· UD-Q2_K_XL"},
+        {"display_name", "Qwen3.8 Flash Next (UD-Q2_K_XL)"},
         {"runtime_policy", config_.qwen_flash_runtime_policy},
         {"gpu_offload_percent", config_.qwen_flash_gpu_offload_percent},
         {"gpu_layer_count_hint", config_.qwen_flash_gpu_layer_count_hint},

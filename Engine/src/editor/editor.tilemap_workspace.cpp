@@ -27,6 +27,7 @@ module;
 module editor.tilemap_workspace;
 
 import project.asset_registry;
+import render.canvas2d;
 
 namespace epochengine::editor_tilemaps
 {
@@ -35,6 +36,30 @@ namespace epochengine::editor_tilemaps
         namespace fs = std::filesystem;
         using Tool = gui_lib::tile_workspace::Tool;
         using CellCoordinate = gui_lib::tile_workspace::CellCoordinate;
+
+        template <typename Entries>
+        [[nodiscard]] std::optional<std::string> available_copy_name(
+            std::string_view baseName, const Entries& entries,
+            std::size_t maximumName)
+        {
+            constexpr std::string_view copySuffix{" Copy"};
+            for (std::size_t ordinal = 1u; ordinal <= entries.size() + 1u; ++ordinal)
+            {
+                std::string suffix{copySuffix};
+                if (ordinal != 1u)
+                    suffix += " " + std::to_string(ordinal);
+                if (suffix.size() >= maximumName)
+                    return std::nullopt;
+                std::string name{baseName.substr(0u, maximumName - suffix.size())};
+                name += suffix;
+                if (std::none_of(entries.begin(), entries.end(),
+                    [&](const auto& entry) { return entry.descriptor.name == name; }))
+                {
+                    return name;
+                }
+            }
+            return std::nullopt;
+        }
 
         [[nodiscard]] constexpr bool valid_coordinate(
             CellCoordinate coordinate) noexcept
@@ -183,6 +208,33 @@ namespace epochengine::editor_tilemaps
             if (right <= left || bottom <= top)
                 return {};
             return {{left, top}, {right - left, bottom - top}};
+        }
+
+        [[nodiscard]] gui_lib::Rect canvas_object_bounds(
+            const TileMapWorkspaceController& controller,
+            const gui_lib::tile_workspace::TileCanvasLayout& canvas,
+            const authoring::tilemap::MapObjectSnapshot& object) noexcept
+        {
+            const auto* draft = controller.selected_object() == object.handle
+                ? controller.selected_object_draft() : nullptr;
+            return clipped_rect(
+                object_canvas_rect(canvas, draft ? *draft : object.descriptor),
+                canvas.viewport);
+        }
+
+        [[nodiscard]] const authoring::tilemap::MapObjectSnapshot* canvas_object_at(
+            const TileMapWorkspaceController& controller,
+            const authoring::tilemap::DocumentSnapshot& snapshot,
+            const gui_lib::tile_workspace::TileCanvasLayout& canvas,
+            gui::Vec2 point) noexcept
+        {
+            for (auto object = snapshot.objects.rbegin(); object != snapshot.objects.rend(); ++object)
+            {
+                const auto bounds = canvas_object_bounds(controller, canvas, *object);
+                if (bounds.size.x > 0.0f && bounds.size.y > 0.0f && point_in_rect(point, bounds))
+                    return std::addressof(*object);
+            }
+            return nullptr;
         }
 
         [[nodiscard]] std::string map_status_line(
@@ -769,37 +821,11 @@ namespace epochengine::editor_tilemaps
         authoring::tilemap::LayerDescriptor duplicate =
             *selected_layer_draft_;
         const auto current = document_->snapshot();
-        const std::size_t maximumName = document_->limits().maximum_name_bytes;
-        constexpr std::string_view copySuffix{" Copy"};
-        if (maximumName <= copySuffix.size())
+        auto name = available_copy_name(duplicate.name, current.layers,
+            document_->limits().maximum_name_bytes);
+        if (!name)
             return reject(ControllerCode::operation_limit);
-
-        const std::string baseName = duplicate.name;
-        auto nameExists = [&](std::string_view name)
-        {
-            return std::any_of(
-                current.layers.begin(),
-                current.layers.end(),
-                [&](const auto& candidate)
-                {
-                    return candidate.descriptor.name == name;
-                });
-        };
-        for (std::uint32_t ordinal = 1u;; ++ordinal)
-        {
-            std::string suffix = ordinal == 1u
-                ? std::string{copySuffix}
-                : std::string{copySuffix} + " " + std::to_string(ordinal);
-            if (suffix.size() >= maximumName)
-                return reject(ControllerCode::operation_limit);
-            duplicate.name = baseName.substr(
-                0u, (std::min)(baseName.size(), maximumName - suffix.size()));
-            duplicate.name += suffix;
-            if (!nameExists(duplicate.name))
-                break;
-            if (ordinal >= document_->limits().maximum_layers)
-                return reject(ControllerCode::operation_limit);
-        }
+        duplicate.name = std::move(*name);
         const auto highestLayer = std::max_element(
             current.layers.begin(),
             current.layers.end(),
@@ -815,7 +841,7 @@ namespace epochengine::editor_tilemaps
                 ? highestLayer->descriptor.draw_layer
                 : highestLayer->descriptor.draw_layer + 1;
 
-        const auto mutation = document_->create_layer(std::move(duplicate));
+        const auto mutation = document_->create_layer(std::move(duplicate), *layer);
         ControllerResult accepted = accept(mutation);
         if (accepted && mutation.layer)
         {
@@ -916,6 +942,9 @@ namespace epochengine::editor_tilemaps
         dependency.stable_material_key = stable_material_key(
             texture.logical.asset_key, texture.logical.artifact_revision);
         dependency.texture_extent = {texture.width, texture.height};
+        dependency.color_space = texture.color_space == canvas2d::SpriteColorSpace::srgb
+            ? asset::tilemap::ColorSpace::srgb : asset::tilemap::ColorSpace::linear;
+        dependency.alpha = asset::tilemap::AlphaMode::straight;
 
         authoring::tilemap::TileSetDescriptor tileSet{};
         tileSet.name = texture_set_name(texture.logical_path);
@@ -1085,6 +1114,7 @@ namespace epochengine::editor_tilemaps
         selected_object_draft_dirty_ = false;
         object_drag_active_ = false;
         object_drag_offset_ = {};
+        object_drag_input_ = {};
         selected_cell_.reset();
         status_ = "Selected map object " + descriptor->name + ".";
         return {
@@ -1101,6 +1131,7 @@ namespace epochengine::editor_tilemaps
         selected_object_draft_dirty_ = false;
         object_drag_active_ = false;
         object_drag_offset_ = {};
+        object_drag_input_ = {};
     }
 
     ControllerResult TileMapWorkspaceController::stage_selected_object(
@@ -1162,13 +1193,12 @@ namespace epochengine::editor_tilemaps
             return reject(ControllerCode::object_required);
         authoring::tilemap::MapObjectDescriptor duplicate =
             *selected_object_draft_;
-        constexpr std::string_view suffix{" Copy"};
-        const std::size_t maximumName = document_->limits().maximum_name_bytes;
-        if (maximumName <= suffix.size())
+        const auto current = document_->snapshot();
+        auto name = available_copy_name(duplicate.name, current.objects,
+            document_->limits().maximum_name_bytes);
+        if (!name)
             return reject(ControllerCode::operation_limit);
-        if (duplicate.name.size() + suffix.size() > maximumName)
-            duplicate.name.resize(maximumName - suffix.size());
-        duplicate.name += suffix;
+        duplicate.name = std::move(*name);
         duplicate.position.x += 0.5f;
         duplicate.position.y += 0.5f;
         const auto mutation = document_->create_object(std::move(duplicate));
@@ -1297,6 +1327,7 @@ namespace epochengine::editor_tilemaps
         }
         object_drag_active_ = false;
         object_drag_offset_ = {};
+        object_drag_input_ = {};
         if (commit)
             return apply_selected_object();
 
@@ -1306,9 +1337,11 @@ namespace epochengine::editor_tilemaps
             clear_object_selection();
             return reject(ControllerCode::object_required);
         }
+        const bool moved = selected_object_draft_dirty_;
         selected_object_draft_ = *committed;
         selected_object_draft_dirty_ = false;
-        status_ = "Cancelled the staged map-object drag.";
+        status_ = moved ? "Cancelled the staged map-object drag."
+            : "Selected map object " + committed->name + ".";
         return {
             ControllerCode::unchanged,
             authoring::tilemap::ResultCode::unchanged,
@@ -1319,6 +1352,68 @@ namespace epochengine::editor_tilemaps
     bool TileMapWorkspaceController::object_drag_active() const noexcept
     {
         return object_drag_active_;
+    }
+
+    bool TileMapWorkspaceController::route_canvas_object_drag(
+        const authoring::tilemap::DocumentSnapshot& snapshot,
+        const gui_lib::tile_workspace::TileCanvasLayout& canvas,
+        bool interactive,
+        CanvasRenderResult& result) noexcept
+    {
+        if (!interactive)
+        {
+            if (object_drag_active_)
+                (void)end_object_drag(false);
+            return false;
+        }
+
+        const auto press = gui::mouse_press_position();
+        if (press && object_drag_active_)
+            (void)end_object_drag(false);
+
+        const auto* target = press ? canvas_object_at(*this, snapshot, canvas, *press) : nullptr;
+        if (!object_drag_active_ && !target)
+            return false;
+
+        const auto bounds = target ? canvas_object_bounds(*this, canvas, *target) : canvas.viewport;
+        const auto origin = press.value_or(object_drag_input_.press_position);
+        const auto drag = gui::drag_surface(object_drag_input_, {
+            .position = gui_point(bounds.position),
+            .size = gui_size(bounds),
+            .hit_padding = 0.0f,
+            .minimum_hit_extent = 1.0f,
+            .drag_threshold = 3.0f});
+        const auto to_map = [&](gui::Vec2 point) noexcept -> authoring::tilemap::Float2
+        {
+            return {(point.x - canvas.origin.x) / canvas.cell_pixels,
+                (point.y - canvas.origin.y) / canvas.cell_pixels};
+        };
+        if (drag.pressed && target)
+        {
+            if (!begin_object_drag(target->handle, to_map(origin)))
+            {
+                object_drag_input_ = {};
+                return false;
+            }
+            result.changed = true;
+        }
+        if (!object_drag_active_)
+            return false;
+
+        bool staged = true;
+        if (drag.dragging || drag.released)
+        {
+            const auto updated = update_object_drag(to_map({origin.x + drag.delta.x, origin.y + drag.delta.y}));
+            staged = static_cast<bool>(updated);
+            result.changed = result.changed || updated.code == ControllerCode::ready;
+        }
+        if (object_drag_active_ && (drag.released || !object_drag_input_.pending))
+        {
+            const auto settled = end_object_drag(drag.released && staged);
+            result.changed = result.changed || settled.code == ControllerCode::ready;
+        }
+        result.input_captured = true;
+        return true;
     }
 
     ControllerResult
@@ -1882,6 +1977,8 @@ namespace epochengine::editor_tilemaps
             || options.viewport.size.x < 220.0f
             || options.viewport.size.y < 180.0f)
         {
+            if (controller.object_drag_active())
+                (void)controller.end_object_drag(false);
             return result;
         }
 
@@ -1918,7 +2015,11 @@ namespace epochengine::editor_tilemaps
                 .show_inspector = options.show_inspector,
                 .limits = workspaceLimits});
             if (!layout.valid)
+            {
+                if (controller.object_drag_active())
+                    (void)controller.end_object_drag(false);
                 return result;
+            }
 
             result.visible = true;
             const gui::ContentClipScope workspaceClip{
@@ -2154,63 +2255,10 @@ namespace epochengine::editor_tilemaps
                     result.input_captured = true;
                 }
 
-                std::optional<authoring::tilemap::MapObjectHandle>
-                    pointerObject{};
-                for (auto object = current.objects.rbegin();
-                     object != current.objects.rend();
-                     ++object)
-                {
-                    const auto* descriptor = std::addressof(object->descriptor);
-                    if (controller.selected_object()
-                            == std::optional{object->handle}
-                        && controller.selected_object_draft())
-                    {
-                        descriptor = controller.selected_object_draft();
-                    }
-                    const auto bounds = clipped_rect(
-                        object_canvas_rect(canvas, *descriptor),
-                        canvas.viewport);
-                    if (bounds.size.x > 0.0f && bounds.size.y > 0.0f
-                        && point_in_rect(pointer, bounds))
-                    {
-                        pointerObject = object->handle;
-                        break;
-                    }
-                }
-
-                const authoring::tilemap::Float2 mapPointer{
-                    (libraryPointer.x - canvas.origin.x) / canvas.cell_pixels,
-                    (libraryPointer.y - canvas.origin.y) / canvas.cell_pixels};
-                if (options.interactive && pointerObject
-                    && gui::was_mouse_pressed())
-                {
-                    const auto started = controller.begin_object_drag(
-                        *pointerObject, mapPointer);
-                    result.changed = static_cast<bool>(started)
-                        || result.changed;
-                    result.input_captured = true;
-                }
-                if (controller.object_drag_active())
-                {
-                    if (gui::is_mouse_down())
-                    {
-                        const auto staged =
-                            controller.update_object_drag(mapPointer);
-                        result.changed =
-                            staged.code == ControllerCode::ready
-                            || result.changed;
-                        result.input_captured = true;
-                    }
-                    else
-                    {
-                        const auto committed =
-                            controller.end_object_drag(true);
-                        result.changed =
-                            committed.code == ControllerCode::ready
-                            || result.changed;
-                        result.input_captured = true;
-                    }
-                }
+                const bool objectCaptured = controller.route_canvas_object_drag(
+                    current, canvas, options.interactive, result);
+                const bool clickAvailable = options.interactive && !objectCaptured;
+                const bool pointerOverObject = canvas_object_at(controller, current, canvas, pointer) != nullptr;
 
                 std::uint32_t rendered{};
                 for (std::uint32_t y = canvas.visible_cells.first.y;
@@ -2272,7 +2320,7 @@ namespace epochengine::editor_tilemaps
                         }
                         const bool selected = controller.selected_cell()
                             == std::optional<CellCoordinate>{coordinate};
-                        const bool objectOwnsPointer = pointerObject
+                        const bool objectOwnsPointer = pointerOverObject
                             && point_in_rect(pointer, bounds);
                         if (objectOwnsPointer)
                         {
@@ -2286,7 +2334,7 @@ namespace epochengine::editor_tilemaps
                                      collisionMarker,
                                      occupied || selected,
                                      cell_action_available(
-                                         state.tool, occupied, options.interactive)))
+                                         state.tool, occupied, clickAvailable)))
                         {
                             const auto changed = controller.apply_cell(coordinate);
                             result.changed = result.changed
@@ -2320,7 +2368,7 @@ namespace epochengine::editor_tilemaps
                             bounds,
                             descriptor->name,
                             selected,
-                            options.interactive))
+                            clickAvailable))
                     {
                         const auto changed =
                             controller.select_object(object.handle);
@@ -2329,6 +2377,10 @@ namespace epochengine::editor_tilemaps
                         result.input_captured = true;
                     }
                 }
+            }
+            else if (controller.object_drag_active())
+            {
+                (void)controller.end_object_drag(false);
             }
 
             if (layout.inspector_visible)
@@ -2976,7 +3028,11 @@ namespace epochengine::editor_tilemaps
             return ControllerContractFailure::texture_project_guard;
         }
         if (!controller.attach_texture(texture, projectKey, {2u, 2u})
-            || controller.snapshot().palette.size() != 16u)
+            || controller.snapshot().palette.size() != 16u
+            || controller.snapshot().tile_sets.front().descriptor.texture.color_space
+                != asset::tilemap::ColorSpace::linear
+            || controller.snapshot().tile_sets.front().descriptor.texture.alpha
+                != asset::tilemap::AlphaMode::straight)
         {
             return ControllerContractFailure::texture_attach;
         }

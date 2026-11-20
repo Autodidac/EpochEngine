@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="org.epochengine.tests.androidcapability"
+    android:versionCode="1" android:versionName="1.0">
+    <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="36" />
+    <uses-feature android:glEsVersion="0x00030000" android:required="true" />
+    <application android:label="Epoch Android Capability Probe" android:hasCode="false"
+        android:extractNativeLibs="true" android:debuggable="true">
+        <activity android:name="android.app.NativeActivity" android:exported="true">
+            <meta-data android:name="android.app.lib_name" android:value="epoch_android_capability" />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

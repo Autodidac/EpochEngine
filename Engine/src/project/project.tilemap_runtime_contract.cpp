@@ -18,10 +18,15 @@ module project.tilemap_runtime;
 
 import asset.texture_artifact;
 import project.texture_resources;
+import render.canvas2d_cpu;
 
 #if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
 import authoring.tilemap;
 import project.tilemap_source;
+#if EPOCH_ENABLE_TEXTURE_EDITOR
+import authoring.texture;
+import project.texture_source;
+#endif
 #endif
 
 namespace epochengine::project_tilemap_runtime
@@ -145,6 +150,25 @@ namespace epochengine::project_tilemap_runtime
             return ContractFailure::texture_publication;
 
 #if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
+#if EPOCH_ENABLE_TEXTURE_EDITOR
+        constexpr std::string_view authored_texture_path{"Assets/Textures/source.epoch_texture"};
+        const authoring::texture::CanvasDescriptor textureCanvas{
+            .width = 2u, .height = 2u, .tile_extent = 2u, .mip_count = 1u,
+            .format = authoring::texture::PixelFormat::rgba8_unorm,
+            .color_space = asset::texture::ColorSpace::linear};
+        authoring::texture::TextureDocument textureDocument{{2u, 1u}, {3u, 1u}, textureCanvas};
+        project_texture_sources::ProjectTextureSourceStore textureSourceStore{
+            std::string{projectId}, root.path};
+        if (!textureSourceStore.save(authored_texture_path, textureDocument))
+            return ContractFailure::texture_publication;
+        const auto authoredTexture = textureDocument.compile_artifact(
+            project_texture_sources::authored_texture_profile(textureDocument));
+        const auto sourceTexture = texturePipeline.publish(authored_texture_path, authoredTexture);
+        if (!sourceTexture)
+            return ContractFailure::texture_publication;
+#else
+        const auto& sourceTexture = texture;
+#endif
         auto created = authoring::tilemap::Document::create(
             {0u, 1u},
             authoring::tilemap::MapDescriptor{
@@ -157,11 +181,11 @@ namespace epochengine::project_tilemap_runtime
         authoring::tilemap::TileSetDescriptor tileSet{};
         tileSet.name = "Runtime Tiles";
         tileSet.texture = {
-            .logical_path = texture.locator.canonical_logical_path,
-            .artifact_key = texture.locator.artifact_key.words,
+            .logical_path = sourceTexture.locator.canonical_logical_path,
+            .artifact_key = sourceTexture.locator.artifact_key.words,
             .project_key = texturePipeline.project_key(),
-            .asset_key = texture.logical.asset_key,
-            .artifact_revision = texture.logical.artifact_revision,
+            .asset_key = sourceTexture.logical.asset_key,
+            .artifact_revision = sourceTexture.logical.artifact_revision,
             .stable_material_key = 71u,
             .texture_extent = {2u, 2u}};
         tileSet.tile_extent = {1u, 1u};
@@ -205,6 +229,12 @@ namespace epochengine::project_tilemap_runtime
             return ContractFailure::source_save;
         }
 
+#if EPOCH_ENABLE_TEXTURE_EDITOR
+        const std::filesystem::path textureCache{sourceTexture.locator.storage_path};
+        std::error_code cacheError;
+        if (!std::filesystem::remove(textureCache, cacheError) || cacheError)
+            return ContractFailure::texture_publication;
+#endif
         ProjectTileMapRuntime sourceRuntime{
             std::string{projectId}, projectRoot};
         if (!sourceRuntime.valid())
@@ -243,6 +273,49 @@ namespace epochengine::project_tilemap_runtime
         {
             return ContractFailure::metrics;
         }
+
+#if EPOCH_ENABLE_TEXTURE_EDITOR
+        const auto restoredTexture = texturePipeline.restore_exact(
+            authored_texture_path, sourceTexture.locator.artifact_key);
+        const auto retainedSource = textureSourceStore.load(authored_texture_path);
+        if (!restoredTexture || restoredTexture.logical != sourceTexture.logical
+            || !retainedSource || retainedSource.document->revision() != textureDocument.revision())
+            return ContractFailure::texture_source_regeneration;
+
+        {
+            std::ofstream corrupt{textureCache, std::ios::binary | std::ios::trunc};
+            corrupt << "bad";
+            if (!corrupt)
+                return ContractFailure::texture_source_regeneration;
+        }
+        ProjectTileMapRuntime guardedRuntime{std::string{projectId}, projectRoot};
+        const auto corrupt = guardedRuntime.prepare({
+            .logical_path = "Assets/Maps/source.epochmap",
+            .source_policy = SourcePolicy::prefer_source});
+        if (corrupt.code != RuntimeCode::texture_restore_failure
+            || std::filesystem::file_size(textureCache, cacheError) != 3u || cacheError
+            || !std::filesystem::remove(textureCache, cacheError) || cacheError)
+            return ContractFailure::texture_source_regeneration;
+
+        const auto compiledOnly = guardedRuntime.prepare({
+            .logical_path = "Assets/Maps/source.epochmap",
+            .source_policy = SourcePolicy::compiled_only});
+        if (compiledOnly.code != RuntimeCode::texture_restore_failure
+            || std::filesystem::exists(textureCache, cacheError) || cacheError)
+            return ContractFailure::texture_source_regeneration;
+
+        auto changedCanvas = textureCanvas;
+        changedCanvas.width = 4u;
+        authoring::texture::TextureDocument changedTexture{{2u, 1u}, {3u, 1u}, changedCanvas};
+        if (!textureSourceStore.save(authored_texture_path, changedTexture))
+            return ContractFailure::texture_source_regeneration;
+        const auto changed = guardedRuntime.prepare({
+            .logical_path = "Assets/Maps/source.epochmap",
+            .source_policy = SourcePolicy::prefer_source});
+        if (changed.code != RuntimeCode::texture_identity_mismatch
+            || std::filesystem::exists(textureCache, cacheError) || cacheError)
+            return ContractFailure::texture_source_regeneration;
+#endif
 
         const auto staleArtifact = compiled_map(
             texturePipeline.project_key(), texture, "Stale Runtime", 8u);
@@ -304,10 +377,21 @@ namespace epochengine::project_tilemap_runtime
         }
         if (restored.scene.resources.bindings.textures.size() != 1u
             || restored.scene.resources.bindings.textures.front().logical
-                != texture.logical)
+                != texture.logical
+            || restored.scene.sprites.front().material.alpha != canvas2d::SpriteAlphaMode::straight
+            || restored.scene.sprites.front().material.color_space
+                != restored.scene.resources.bindings.textures.front().color_space)
         {
             return ContractFailure::visible_resource_selection;
         }
+        int canvasOwner{};
+        const auto publication = canvas2d::scene_content::publish(&canvasOwner, restored.scene);
+        const auto acquired = canvas2d::scene_content::acquire(&canvasOwner);
+        const auto frame = canvas2d::scene_content::compile(acquired, {1280u, 720u});
+        const auto raster = canvas2d::cpu::rasterize(frame, restored.scene.resources.bindings);
+        (void)canvas2d::scene_content::retire(&canvasOwner);
+        if (!publication || !frame || !raster || raster.metrics.fragments_shaded == 0u)
+            return ContractFailure::visible_resource_selection;
 
         const auto emptyCompiled = compiled_map(
             texturePipeline.project_key(), texture, "Empty Runtime", 10u, false);

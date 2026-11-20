@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -53,6 +54,9 @@ struct Config {
     // only after Epoch AI has launched and owns the runtime process.
     bool qwen_flash_enabled = true;
     std::filesystem::path qwen_flash_server;
+    // Explicit diagnostic image verifier. Transport admission is a separate gate.
+    std::function<bool(const std::filesystem::path&)> qwen_flash_diagnostic_verifier;
+    std::filesystem::path qwen_flash_diagnostic_output;
     std::filesystem::path model_cache_root;
     bool shared_model_inputs_bound{};
     bool shared_native_inputs_disabled{};

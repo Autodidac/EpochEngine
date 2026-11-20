@@ -125,6 +125,7 @@ if((EPOCH_PLANET_BUILD_MESH_EXPORT OR EPOCH_PLANET_BUILD_RUNTIME_CONTROLLER) AND
         foreach(_epoch_mesh_owner IN ITEMS
             modules/asset.texture_artifact.ixx modules/asset.mesh_artifact.ixx modules/asset.cloud_volume.ixx
             src/assets/texture/asset.texture_artifact.cpp modules/project.planetary_snapshot.ixx
+            modules/project.planetary_runtime.ixx
             src/project/project.planetary_snapshot.cpp)
             get_filename_component(_epoch_mesh_name "${_epoch_mesh_owner}" NAME)
             set(_epoch_mesh_outputs "ObjectFileName=$(IntDir)${_epoch_mesh_name}.obj;ModuleDependenciesFile=$(IntDir)${_epoch_mesh_name}.module.json")
@@ -157,6 +158,22 @@ if(EPOCH_PLANET_BUILD_WATER)
     endif()
 endif()
 if(EPOCH_PLANET_BUILD_MESH_EXPORT OR EPOCH_PLANET_BUILD_RUNTIME_CONTROLLER)
+    add_library(epoch_extension_planetary_cut_assembly STATIC)
+    target_sources(epoch_extension_planetary_cut_assembly PUBLIC FILE_SET planetary_assembly_modules TYPE CXX_MODULES
+        BASE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/modules" FILES modules/planet.cut_assembly.ixx)
+    target_compile_features(epoch_extension_planetary_cut_assembly PUBLIC cxx_std_23)
+    target_link_libraries(epoch_extension_planetary_cut_assembly PUBLIC EpochEngineExtensions::PlanetaryCore)
+    if(TARGET epoch)
+        target_link_libraries(epoch_extension_planetary_cut_assembly PUBLIC epoch)
+    else()
+        target_link_libraries(epoch_extension_planetary_cut_assembly PUBLIC epoch_planet_mesh_format)
+    endif()
+    if(EPOCH_PLANET_BUILD_WATER)
+        target_link_libraries(epoch_extension_planetary_cut_assembly PUBLIC epoch_extension_planetary_water)
+        target_compile_definitions(epoch_extension_planetary_cut_assembly PRIVATE EPOCH_PLANET_HAS_WATER_EXTENSION=1)
+    endif()
+    set_target_properties(epoch_extension_planetary_cut_assembly PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
     add_library(epoch_extension_planetary_clouds STATIC)
     target_sources(epoch_extension_planetary_clouds PUBLIC FILE_SET planetary_cloud_modules TYPE CXX_MODULES
         BASE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/modules" FILES modules/planet.clouds.ixx)
@@ -170,7 +187,8 @@ if(EPOCH_PLANET_BUILD_MESH_EXPORT OR EPOCH_PLANET_BUILD_RUNTIME_CONTROLLER)
 endif()
 if(EPOCH_PLANET_BUILD_MESH_EXPORT)
     add_executable(epoch_planet_mesh_export tools/planet.mesh_export.cpp tools/planet.stream_export.cpp)
-    target_link_libraries(epoch_planet_mesh_export PRIVATE EpochEngineExtensions::PlanetaryCore epoch_extension_planetary_clouds)
+    target_link_libraries(epoch_planet_mesh_export PRIVATE EpochEngineExtensions::PlanetaryCore
+        epoch_extension_planetary_clouds epoch_extension_planetary_cut_assembly)
     if(TARGET epoch)
         target_link_libraries(epoch_planet_mesh_export PRIVATE epoch)
     else()
@@ -257,7 +275,8 @@ if(EPOCH_PLANET_BUILD_RUNTIME_CONTROLLER)
         BASE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/modules" FILES modules/planet.exploration_runtime.ixx)
     target_compile_features(epoch_extension_planetary_runtime PUBLIC cxx_std_23)
     target_include_directories(epoch_extension_planetary_runtime PUBLIC "${_epoch_package_include}")
-    target_link_libraries(epoch_extension_planetary_runtime PUBLIC EpochEngineExtensions::PlanetaryCore epoch_extension_planetary_clouds)
+    target_link_libraries(epoch_extension_planetary_runtime PUBLIC EpochEngineExtensions::PlanetaryCore
+        epoch_extension_planetary_clouds epoch_extension_planetary_cut_assembly)
     if(EPOCH_PLANET_BUILD_WATER)
         target_link_libraries(epoch_extension_planetary_runtime PUBLIC epoch_extension_planetary_water)
         target_compile_definitions(epoch_extension_planetary_runtime PRIVATE EPOCH_PLANET_HAS_WATER_EXTENSION=1)

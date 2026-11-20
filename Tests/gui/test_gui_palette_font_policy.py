@@ -20,7 +20,7 @@ class PaletteFontPolicy(unittest.TestCase):
         text = (GUI/'controls/gui.text_controls.inl').read_text(encoding='utf-8')
         buttons = (GUI/'controls/gui.buttons_images.inl').read_text(encoding='utf-8')
         nodes = (GUI/'controls/gui.node_surface_controls.inl').read_text(encoding='utf-8')
-        variant = definition((ROOT/'Engine/modules/gui.engine.ixx').read_text(encoding='utf-8'),
+        variant = definition((ROOT/'Engine/modules/gui/gui.engine.ixx').read_text(encoding='utf-8'),
             '    export enum class ThemeVariant', True).replace('export enum class', 'enum class', 1)
         palette = definition(source, '            struct PaletteSprites', True)
         semantic = definition(source, '            struct SemanticSpritePair', True)
@@ -132,7 +132,7 @@ bool has_content_clip() {return false;}
 float space_advance(float) {return 1;}
 float line_advance_amount(float) {return 1;}
 float baseline_offset(float) {return 0;}
-float base_line_height(float) {return 1;}
+float fixtureLineHeight=1;float base_line_height(float) {return fixtureLineHeight;}
 struct DecodedUtf8Codepoint {char32_t codepoint{};std::size_t byte_count{1};};
 DecodedUtf8Codepoint decode_utf8_codepoint(std::string_view text,std::size_t at) {return {static_cast<unsigned char>(text[at]),1};}
 char32_t safe_draw_codepoint(char32_t c) {return c;}
@@ -229,6 +229,14 @@ void check(bool light) {
  assert(sprites[3]==(light?p.consoleBackground:p.textField).id);
 }
 void check_slider_reflow() {
+ fixtureLineHeight=40;g_frame.cursor={0,0};g_frame.mousePos={25,23};g_frame.mouseDown=true;testHover=true;testPress=true;
+ auto compact=slider({.id="compact",.size={160,24},.value=0});
+ assert(compact.bounds.size.y==24 && compact.changed);
+ g_frame.mouseDown=false;g_frame.justReleased=true;slider({.id="compact",.size={160,24}});g_frame.justReleased=false;
+ assert(slider({.id="labelled",.label="Value",.size={160,24}}).bounds.size.y==48);
+ assert(slider({.id="explicit-large",.size={160,60}}).bounds.size.y==60);
+ fixtureLineHeight=1;
+
  g_frame.cursor={0,0};g_frame.mousePos={25,10};g_frame.mouseDown=true;
  testHover=true;testPress=true;
  auto first=slider({.id="reflow",.value=0});assert(first.changed&&first.value==25);

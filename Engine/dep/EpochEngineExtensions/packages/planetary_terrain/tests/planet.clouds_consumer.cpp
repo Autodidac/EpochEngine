@@ -19,6 +19,20 @@ int main()
 {
     try
     {
+        for(unsigned reference=0;reference<6u;++reference)
+        {
+            for(double size:{250.0,6'371'000.0,100'000'000.0})
+            {
+                const core::Universe world{1337,{reference,size}};
+                for(const auto& body:world.bodies())
+                {
+                    const auto density=clouds::density_recipe(body);
+                    require(bool(density)==clouds::supports(body),"world size changed cloud support");
+                    if(density)require(density->view_occluder_radius_meters>0.0,
+                        "supported world lacks a certified inner terrain radius");
+                }
+            }
+        }
         for(const double radius:std::array{250.0,1'737'000.0,6'371'000.0,100'000'000.0})
         {
             const core::Universe world{1337,{0u,radius}};
@@ -27,6 +41,9 @@ int main()
             require(density&&epochengine::asset::cloud_volume::valid(*density,body.radius),
                 "bounded metric cloud recipe is missing");
             require(clouds::density_recipe(body)==density,"cloud recipe is nondeterministic");
+            require(density->view_occluder_radius_meters>0.0
+                &&density->view_occluder_radius_meters==body.radius-core::terrain_relief_bound(body),
+                "cloud view occluder did not use the terrain relief bound");
             require(density->base_altitude_meters>body.height_scale*0.35
                 &&density->base_altitude_meters+density->thickness_meters<body.atmosphere_height,
                 "cloud deck does not clear ordinary terrain within its atmosphere");

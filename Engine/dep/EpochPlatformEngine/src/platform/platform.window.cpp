@@ -30,6 +30,7 @@ module;
 #include "core.stl_types.hpp"
 #include "core.abi_types.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <thread>
 #include <unordered_map>
@@ -57,6 +58,31 @@ namespace epochengine::platform::window_adapter
     namespace
     {
 #ifdef _WIN32
+        [[nodiscard]] bool horizontal_edge_bounds(long left, long right,
+            long workLeft, long workRight, long tolerance, bool selectedLeft,
+            long& nextLeft, long& nextRight) noexcept
+        {
+            nextLeft = left; nextRight = right;
+            if (right <= left || workRight <= workLeft || tolerance < 0) return false;
+            const auto within_tolerance = [tolerance](long a, long b) noexcept
+            { const auto delta = static_cast<long long>(a) - b;
+              return delta >= -static_cast<long long>(tolerance) && delta <= tolerance; };
+            // Constrain to this window's monitor, never the virtual desktop.
+            nextLeft = (std::clamp)(left, workLeft, workRight - 1);
+            nextRight = (std::clamp)(right, nextLeft + 1, workRight);
+            if (selectedLeft)
+            {
+                if (within_tolerance(left, workLeft)) nextRight = workRight;
+                else nextLeft = workLeft;
+            }
+            else
+            {
+                if (within_tolerance(right, workRight)) nextLeft = workLeft;
+                else nextRight = workRight;
+            }
+            return nextLeft != left || nextRight != right;
+        }
+
         constexpr wchar_t nativeInputProperty[] = L"EpochBackendInputAdapter";
         constexpr UINT_PTR nativeInputSubclass = 2;
         struct NativeInputRegistration { NativeInputBinding binding; };
@@ -100,6 +126,9 @@ namespace epochengine::platform::window_adapter
                 ::RemovePropW(hwnd, nativeInputProperty);
                 delete registration;
             }
+            if (msg == WM_NCLBUTTONDBLCLK && (key == HTLEFT || key == HTRIGHT)
+                && extend_native_horizontal_edge({reinterpret_cast<std::uintptr_t>(hwnd)}, key == HTLEFT))
+                return 0;
             const auto result = dispatch_native_input(binding,
                 native_input_message(hwnd, msg, key, flags));
             return result.handled ? static_cast<LRESULT>(result.value)
@@ -527,6 +556,31 @@ namespace epochengine::platform::window_adapter
             (void)emit(NativeInputAction::input); return {};
         default: return {};
         }
+    }
+
+    bool extend_native_horizontal_edge(WindowHandle window, bool left) noexcept
+    {
+#ifdef _WIN32
+        const auto hwnd = reinterpret_cast<HWND>(window.value);
+        if (!owns_native_input_thread(hwnd) || ::IsIconic(hwnd) || ::IsZoomed(hwnd)) return false;
+        const auto style = ::GetWindowLongPtrW(hwnd, GWL_STYLE);
+        if ((style & WS_CHILD) || !(style & WS_THICKFRAME)) return false;
+        RECT bounds{};
+        MONITORINFO monitor{sizeof(MONITORINFO)};
+        if (!::GetWindowRect(hwnd, &bounds)
+            || !::GetMonitorInfoW(::MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), &monitor)) return false;
+        const auto dpi = ::GetDpiForWindow(hwnd);
+        const long tolerance = (std::max)(1L, static_cast<long>((dpi ? dpi : 96u) * 2u / 96u));
+        long nextLeft{}, nextRight{};
+        if (!horizontal_edge_bounds(bounds.left, bounds.right, monitor.rcWork.left,
+                monitor.rcWork.right, tolerance, left, nextLeft, nextRight)) return false;
+        return ::SetWindowPos(hwnd, nullptr, nextLeft, bounds.top,
+            nextRight - nextLeft, bounds.bottom - bounds.top,
+            SWP_NOACTIVATE | SWP_NOZORDER) != FALSE;
+#else
+        (void)window; (void)left;
+        return false;
+#endif
     }
 
     bool attach_native_input(WindowHandle window, NativeInputBinding binding) noexcept

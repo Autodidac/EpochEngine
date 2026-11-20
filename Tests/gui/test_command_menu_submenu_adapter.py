@@ -16,7 +16,7 @@ def child_view_definition():
 
 class SubmenuAdapter(unittest.TestCase):
  def test_actual_adapter_debug_release(self):
-  api=(ROOT/'Engine/modules/gui.engine.ixx').read_text(encoding='utf-8')
+  api=(ROOT/'Engine/modules/gui/gui.engine.ixx').read_text(encoding='utf-8')
   owner=(ROOT/'Engine/src/epochgui/controls/gui.buttons_images.inl').read_text(encoding='utf-8')
   types='\n'.join(definition(api,marker,True).replace('export ','',1) for marker in (
    '    export enum class SemanticTone','    export enum class MenuItemIndicator','    export struct MenuItemOptions',

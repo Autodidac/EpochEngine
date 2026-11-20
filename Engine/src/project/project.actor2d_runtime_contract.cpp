@@ -141,28 +141,40 @@ namespace epochengine::project_actor2d
         if (!near(firstSettled.y, 2.55))
             return ContractFailure::platformer_collision_failed;
 
+        const auto queuedJump = first.advance({.sequence = 121u, .jump_pressed = true}, 0u);
+        if (!queuedJump || queuedJump.steps_committed != 0u || !first.snapshot().pending_jump)
+            return ContractFailure::actor_event_failed;
         const auto paused = first.advance({
-            .sequence = 121u,
+            .sequence = 122u,
             .pause_pressed = true});
         if (paused.code != ResultCode::paused || !paused.state.paused
-            || paused.steps_committed != 0u
+            || paused.steps_committed != 0u || first.snapshot().pending_jump
             || !has_event(paused, ActorEventKind::pause_changed, true))
         {
             return ContractFailure::pause_failed;
         }
-        const auto stale = first.advance({.sequence = 121u});
+        const auto stale = first.advance({.sequence = 122u});
         if (stale.code != ResultCode::invalid_input)
             return ContractFailure::stale_input_accepted;
         if (!stale.events.empty())
             return ContractFailure::actor_event_failed;
+        const auto pausedJump = first.advance({.sequence = 123u, .jump_pressed = true});
+        if (pausedJump.code != ResultCode::paused || pausedJump.steps_committed != 0u
+            || first.snapshot().pending_jump || !pausedJump.events.empty())
+            return ContractFailure::pause_failed;
         const auto resumed = first.advance({
-            .sequence = 122u,
+            .sequence = 124u,
+            .jump_pressed = true,
             .pause_pressed = true});
-        if (!resumed || resumed.state.paused
+        if (!resumed || resumed.state.paused || !resumed.state.grounded
+            || first.snapshot().pending_jump || has_event(resumed, ActorEventKind::jump_started)
             || !has_event(resumed, ActorEventKind::pause_changed, false))
             return ContractFailure::pause_failed;
+        if (!first.advance({.sequence = 125u, .jump_pressed = true}, 0u)
+            || !has_event(first.advance({.sequence = 126u}), ActorEventKind::jump_started))
+            return ContractFailure::actor_event_failed;
         const auto reset = first.advance({
-            .sequence = 123u,
+            .sequence = 127u,
             .reset_pressed = true});
         if (!reset || !near(reset.state.x, 1.5) || !near(reset.state.y, 2.0)
             || reset.state.fixed_tick != 0u

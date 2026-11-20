@@ -23,19 +23,18 @@ class ForestAnchorRefresh(unittest.TestCase):
             "[[nodiscard]] scene::SceneObjectSnapshot editor_entity_snapshot(",
             "void append_editor_descriptor_operations(",
             "[[nodiscard]] bool synchronize_editor_scene_category("))
-        helper_marker = "[[nodiscard]] std::optional<std::array<double,3>> verified_forest_surface_anchor("
-        if helper_marker in production:
-            functions += "\n" + definition(production, helper_marker)
-        for marker in ("[[nodiscard]] bool painted_tree_uses_plant_lab(",
+        for marker in ("[[nodiscard]] bool forest_area_matches_terrain_frame(",
+                       "[[nodiscard]] std::optional<std::array<double,3>> verified_forest_surface_anchor(",
+                       "[[nodiscard]] bool painted_tree_uses_plant_lab(",
                        "struct PaintedTreeUpdateResult final",
                        "[[nodiscard]] PaintedTreeUpdateResult refresh_forest_factory_instances("):
             functions += "\n" + definition(production, marker, marker.startswith("struct "))
-        preview = (ROOT / "Engine/modules/render.preview_grid.ixx").read_text(encoding="utf-8")
+        preview = (ROOT / "Engine/modules/render/render.preview_grid.ixx").read_text(encoding="utf-8")
         camera = (ROOT / "Engine/src/render/render.preview_camera.cpp").read_text(encoding="utf-8")
         precise = definition(preview, "    export struct PreciseMeshTransform final", True).replace("export ", "")
         precise += "\n" + definition(camera, "    [[nodiscard]] bool valid_precise_mesh_transform(")
         precise += "\n" + definition(camera, "    [[nodiscard]] std::optional<PreciseMeshTransform> make_precise_mesh_transform(")
-        planetary = (ROOT / "Engine/modules/project.planetary.ixx").read_text(encoding="utf-8")
+        planetary = (ROOT / "Engine/modules/project/project.planetary.ixx").read_text(encoding="utf-8")
         types = "\n".join(definition(planetary, "    struct " + name + " final", True)
                           for name in ("Settings", "GeneratedMeshFrame", "MeshGenerationIdentity", "GeneratedBody", "SourceGeneration"))
         code = CODE.replace("ACTUAL_PLANETARY_TYPES", types).replace("ACTUAL_PRECISE", precise).replace("ACTUAL_FUNCTIONS", functions).replace("assert(", "CHECK(")
@@ -43,7 +42,7 @@ class ForestAnchorRefresh(unittest.TestCase):
         proof.mkdir(parents=True, exist_ok=True)
         (proof / "consumer.cpp").write_text(code, encoding="utf-8")
         module_root = ROOT / "Engine/modules"
-        found = {p.stem: p for p in module_root.glob("*.ixx")}
+        found = {p.stem: p for p in module_root.rglob("*.ixx")}
         pending, selected = ["scene.document", "scene.serializer"], {}
         while pending:
             name = pending.pop()
@@ -121,6 +120,7 @@ struct EditorEntity {
  std::optional<scene::SceneMeshSnapshot>meshAsset;
  std::optional<std::array<double,3>>positionAnchor;
  std::optional<scene::SceneForestRegionInstance>forestRegion;
+ std::optional<scene::SceneTerrainAttachment>terrainAttachment;
  std::shared_ptr<const int>meshSnapshot;bool meshLoadAttempted{};
 };
 struct EditorState {
@@ -161,7 +161,7 @@ void mirror(EditorState& state){
  const auto projected=state.sceneDocument.project_snapshot();assert(projected);++projections;state.entities.clear();
  for(const auto& value:projected.snapshot.objects){EditorEntity e;e.sceneObjectId=value.id;e.name=value.name;e.type=value.type;e.category=value.category;
   e.position=value.position;e.rotation=value.rotation;e.scale=value.scale;e.visible=value.visible;e.editorOnly=value.editor_only;
-  e.textureMaterial=value.texture_material;e.meshAsset=value.mesh_asset;e.positionAnchor=value.position_anchor;e.forestRegion=value.forest_region;state.entities.push_back(e);}}
+  e.textureMaterial=value.texture_material;e.meshAsset=value.mesh_asset;e.positionAnchor=value.position_anchor;e.forestRegion=value.forest_region;e.terrainAttachment=value.terrain_attachment;state.entities.push_back(e);}}
 bool apply_editor_scene_transaction(EditorState& state,std::span<const authoring::scene::SceneOperation> operations,
  std::string_view label,std::optional<scene::SceneObjectId> selected={}){
  const auto result=state.sceneDocument.apply_transaction(operations,label);if(!result)return false;++commits;mirror(state);

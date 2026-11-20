@@ -47,7 +47,7 @@ int main(){
         from Tests.build.test_opengl_sprite_stream import definition
         viewport = (ROOT/'Engine/src/editor/application/editor.frame_viewport.inl').read_text(encoding='utf-8')
         actual = definition(viewport, '            if (editor.mainSurface == EditorMainSurface::ForestFactory && !editor.forestTerrainPainting)')
-        forest = (ROOT/'Engine/modules/forest.factory.ixx').read_text(encoding='utf-8')
+        forest = (ROOT/'Engine/modules/forest/forest.factory.ixx').read_text(encoding='utf-8')
         forest_types = '\n'.join(definition(forest, marker, True) for marker in (
             '    enum class ForestProfileProperty', '    struct ForestProfileEdit', '    struct ForestAssetDocument',
             '    struct ForestCanopySettings final'))

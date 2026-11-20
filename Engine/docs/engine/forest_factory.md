@@ -6,7 +6,48 @@ Plant Lab edits the individual plant; Forest Factory paints procedural regions
 on a simplified shaded planet. Show highlighted region boundaries without the
 foliage obscuring them. Existing saved region centre/radius, body identity and
 body-local anchors can drive these overlays; do not add a second region manager.
-The present painting toggle only adds controls over the ordinary scene.
+Forest Paint now uses the existing terrain preview and admitted region tint.
+
+The operator's relief-globe reference sets the visual direction for Forest Paint.
+Keep terrain relief and shorelines readable under the paint. Add a freehand
+lasso that previews the region while drawing and shows the committed coverage
+as a translucent, terrain-conforming layer with a clear edge. Keep far-side
+coverage occluded and make a selected region distinguishable from other painted
+areas. Display the saved footprint independently of tree visibility and density.
+Keep the existing brush available for local strokes.
+
+Use the existing viewport-to-body surface picking and placement scheduler. A
+lasso needs a bounded, closed body-local footprint with explicit validation at
+the limb and cube-face seams. Preview stays transient until commit. On commit,
+use the ordinary region/history transaction and sample eligible terrain inside
+the footprint for placement, with the same shoreline and spacing checks. Save
+and regenerate from the footprint rather than visible trees or LOD vertices.
+Native acceptance must show the boundary and fill from orbit and close up, then
+exercise cancel, Undo/Redo, reopen and placement within the same outline.
+Brush tint remains vertex-based and blends with the terrain mesh's existing
+colors. Unpainted land and water keep their mesh colors. The OpenGL 3.3 Forest
+Paint preview composites lasso fill and edge per fragment on the existing
+terrain draw. Its terrain depth keeps the far side hidden. It admits the lasso
+only when the view contains one
+visible terrain mesh. Other backends retain Brush. A saved lasso is visible
+independently of its trees. Hold the left mouse button to trace the visible
+surface and release to close and queue placement. Escape cancels the gesture.
+Use **Saved lasso** to select an area with or without trees. **Erase Selected
+Area** removes its footprint and matching trees in one undoable operation.
+Filling or adding species to a saved lasso remains a separate workflow.
+
+Windows Debug and Release CPU checks cover polygon sampling, exact indexed
+terrain picking, and a saved, undoable footprint with zero surviving trees.
+The exact OpenGL shaders passed offline compilation and linked and rendered
+through headless Mesa llvmpipe. The pixel test exercised fill, edge, color
+separation and depth occlusion with two controlled terrain colors. The
+interactive Editor gesture, full scene appearance and physical-driver
+parity remain open.
+Proof is retained under
+`Artifacts/Reports/forest-lasso-geometry-nov01/`, `forest-terrain-ray/`,
+`forest-area-nov01/`, `forest-area-completion-nov01/`,
+`forest-paint-coverage-packing/` and `forest-coverage-opengl/`. The Mesa
+receipt is under `forest-coverage-opengl/native-mesa-20261117/`.
 
 Separate trunk length and branch length. The operator's eight **Length -**
 presses were a shape reference, not an eight-metre change. Current recipe mapping
@@ -15,24 +56,98 @@ The morphology owner already supports separate root and segment lengths. Repair
 the profile mapping with saved-asset compatibility rather than changing every
 existing plant's generated geometry silently.
 
-Near trees need actual bark texture bindings. Existing mesh UVs/material slots
-are flattened to colors by `project_compiled_forest_entities`; use the existing
-project texture controller and persisted texture/material snapshot. Resolve bark
-versus foliage atlas/submaterials and proper cap normals/UVs. Distant trees should
-use bounded voxel representations through the existing voxel core; current LOD
-plans and occupancy estimates alone do not render voxel LOD.
-
-The same branching graph should also support a **lightning** consumer without
-leaves. Reuse graph generation, but give lightning its own strike/decay and
-material behavior, driven by the central time system. This effect is requested,
-not implemented. Its acceptance includes deterministic seed/time replay,
-pause/reverse, project persistence and visible output.
+Near-tree bark/foliage binding now has an existing atlas path (see Ownership);
+verify physical material behavior, cap normals/UVs and native appearance rather
+than rebuilding it. Distant voxel rendering remains open: LOD plans and occupancy
+estimates do not render voxel trees.
 
 Next sequence and remaining cloud/water acceptance are retained in
 `Changes/mission_cache.md`, November2 plant/forest completion gate. No tree
 dimension default or saved plant was changed for this planning checkpoint.
 
+## Lightning scene object — November 16
+
+Use **Asset → Add Lightning** or **3D Objects → + → Lightning**, then position
+and scale it like a scene object. The normal scene save records its stable
+identity and transform. The electrical morphology recipe uses that ID as its
+seed. Each strike propagates and fades in 0.30 seconds and repeats every three
+seconds. Timeline time zero is near the crest so the effect is visible when
+added at the start. Play, pause, reverse or scrub to inspect it.
+
+Editor and project play use the same electrical graph and bounded indexed mesh
+projection. The shared scene mesh command draws the bolt with an unlit tint so
+its brightness follows decay. Windows Debug and Release CPU checks exercised
+scene save/reopen, runtime scene admission, editor marker publication, partial
+propagation and repeatable time and seed. Native renderer appearance, planetary
+placement and weather-driven triggering remain open.
+[Scene and projection proof](../../../Artifacts/Reports/forest-bark-repeat-20261116/f89bc97473a01e0d/result.json)
+and [editor publication proof](../../../Artifacts/Reports/preview-contracts-oct31/forest/result.json).
+
+November 17 follow-up: current electrical morphology is already `spatial_3d`,
+with radial tube cross-sections, not camera-facing cards. Angle-dependent
+flattening/disappearance still needs a paused native camera-orbit check; periodic
+pulse extinction alone does not diagnose an angle bug. The electrical graph now
+alternates turn angles between successive branch generations, with seeded yaw
+variation and enough lateral reach to visibly change direction. Cloud-to-cloud
+strikes may stay entirely inside a cloud; increasingly horizontal strikes spread
+within a flatter cloud-layer envelope while every bolt retains a volumetric tube
+cross-section visible from all angles.
+
+Lightning remains emissive/unlit; make its spatial form readable through jagged
+volume, glow and eventual illumination of nearby clouds/surfaces rather than
+making the bolt depend on ambient light. Cloud/surrounding illumination is a
+separate unimplemented acceptance requirement.
+
+Planned weather ownership: reuse existing storm cells with sparse emitter/zone
+objects, deterministic seeds and spatial activation. Strikes recur within the
+same sky region; bound active emitters and avoid a dense probe grid or iterating
+every planetary emitter each frame. Weather activation, lighting interaction and
+native visibility remain unresolved; the fixed three-second preview is not a
+completed weather system.
+
+The translation gizmo now anchors ordinary meshes at their transformed local
+bottom center and Lightning at its authored emitter origin; planetary bodies
+keep their center. This changes only the translation indicator and its extent,
+not saved geometry, positions or rotation origins. Imported geometry keeps its
+existing local coordinates. General per-model editable/authored pivot metadata,
+rotation/scale-pivot controls and native visual acceptance remain open.
+
 ## Approved regional forest workflow — November1, not implemented yet
+
+### Whole-planet forest generation — November 17 operator requirement
+
+Planned, not accepted runtime behavior: one visible **Generate Planet** action
+should coordinate terrain generation and a complete Forest Factory population
+pass. Start from a saved default forest recipe and seed; incrementally cover
+every surface region, including the far side, rather than only the camera view.
+Use deterministic body-local sampling tiles and bounded batches of rays/surface
+queries through the existing terrain provider and scheduler. Show coverage and
+placement progress, permit cancellation, and keep editing responsive. Complete
+coverage means each tile was evaluated, not that every tile receives trees.
+
+Project candidate roots onto the current terrain revision, then apply biome,
+land/paint mask, shoreline clearance, slope, elevation and spacing constraints.
+Choose species and bounded size/rotation/shape variation from the recipe and its
+seed, so the default becomes a coherent forest rather than arbitrary scattered
+objects. Do not add a separate placement or terrain-query system. Progressive
+preview may accumulate trees, but the saved forest revision must be coherent;
+discard stale work if the terrain changes while queries are outstanding.
+
+Regenerating the same planet re-evaluates and repositions its generated forest
+through Forest Factory. Retain region intent, authored plant/material assets
+and stable identities where applicable. A new planet/forest seed can deliberately
+change the generated distribution and procedural variation; an ordinary surface
+refresh must not silently redesign authored trees. Preserve manual placements
+and exclusions as a distinct authored layer. Persist seed, recipe, coverage and
+terrain revision so save/reopen or cancellation never duplicates completed work.
+Publish the completed regeneration undoably, using existing project history.
+
+Acceptance requires whole-body coverage, dry-land/coast/slope checks, repeatable
+results independent of batch order, cancellation/resume, stale-revision rejection,
+save/reopen, undo and preservation of manual edits. Visually verify one complete
+planet, regenerate it with a different terrain seed, and confirm that trees move
+onto suitable land and retain distance-based rendering. This extends the regional
+workflow below; the current bounded area command does not satisfy it.
 
 Paint forest regions, rather than managing every generated tree in 3D Objects.
 Show the planet and its named regions in the hierarchy. A region owns its seed,
@@ -175,7 +290,7 @@ definition may be added during that extraction.
 
 ## October26 optional integration and generated textures
 
-Forest Factory and Plant Lab retain their distinct authoring/placement roles, but their feature implementation is an optional add-on. An ordinary Engine consumer does not require forests, terrain, planets or AI. Terrain providers are interchangeable only through compatible declared capabilities; required dependencies, optional integrations and alternatives must remain distinct. Forest placement must work with an admitted surface provider without forcing a planetary or voxel stack. Preserve existing authoring documents and placements during extraction.
+Forest Factory/Plant Lab are intended optional Extensions; extraction is not complete (see Ownership). An ordinary Engine consumer should not require forests, terrain, planets or AI. Terrain providers are interchangeable only through compatible declared capabilities; required dependencies, optional integrations and alternatives must remain distinct. Forest placement must work with an admitted surface provider without forcing a planetary or voxel stack. Preserve existing authoring documents and placements during extraction.
 
 Engine-owned optional text-to-2D generation supplies tree/foliage textures as the first concrete image-generation use case before 3D model generation. Forest Factory consumes approved texture assets through the existing material/asset pipeline; it does not own a second model manager. Manual/imported textures work without models. Generation and its runtime validation are still unimplemented acceptance work.
 
@@ -234,58 +349,54 @@ serve future authoring tools without turning Forest Factory into a general
 morphology editor.
 
 The current document, compiler, and project-persistence slice is build-proven.
-Editable typed node UI, sparse voxel rasterization, production mesh compilation,
-and physical texture/material outputs remain unfinished.
+Editable typed node UI, sparse voxel rasterization and physical material/native
+acceptance remain unfinished; indexed preview mesh compilation exists.
+
+Retained Plant Lab acceptance (November 17, from the August16 review):
+branch-start and branch-length edits must regenerate the morphology while
+retaining the configured target height. Configured height is authored intent,
+not a requirement that final canopy bounds or the crown silhouette stay fixed.
+Length edits must also preserve the independent trunk scale described above.
+The current `forest.plant_lab_compiler` contract in
+`Engine/src/epoch/implementation/epoch.contracts_engine.inl` checks branch-start
+edit/compile/history behavior. `Tests/packages/project.forest_materialized_contract.cpp`
+checks Length edits, retained configured height/root length/trunk endpoint and
+saved-source reopen; `Tests/scene/forest.profile_geometry_contract.cpp` checks
+actual branch geometry and retained trunk scale. These test sources were inspected
+on November 17; no new execution is claimed here. Native control-to-preview edits
+and the saved source/Library/reopen path still need visible acceptance of these
+specific invariants. Preserve compatibility and migration requirements above.
 
 ## Project Source And Library Authority
 
-`project.forest_library` owns the first canonical Plant Lab asset path:
-`Assets/Forest/*.epoch_forest`. The bounded binary source preserves stable
-genome identity, profile state, revision/content identity, and the complete
-semantic edit journal. Each publication compiles that exact source into a
-content-addressed immutable `Library/Forest` descriptor containing the admitted
-preview geometry, voxel LOD, and occupancy identity. Both formats carry SHA-256
-integrity and fail closed on malformed, oversized, mismatched, or corrupted
-content.
+`project.forest_library` publishes bounded binary `Assets/Forest/*.epoch_forest`
+source (genome/profile, revision/content identity, semantic edit journal) into
+immutable content-addressed `Library/Forest` artifacts (preview geometry, voxel
+LOD/occupancy identity). Both carry SHA-256 and reject malformed, oversized,
+mismatched or corrupt data. Verify/write the artifact before atomically replacing
+source. Exact/latest reopen and old revisions survive restart; renderer resources
+and preview atlases are excluded.
 
-The Library writes and verifies an immutable artifact before atomically
-replacing the canonical source. Exact and latest reopen remain available across
-process restarts; old artifact revisions stay addressable. Preview atlases and
-renderer resources are not serialized into either format.
+Materialized v2 can retain the complete compiled tree. `select_materialized` and
+`load_selected_materialized` use an 8 KiB reference binding real project root,
+exact manifest, source and compiled result. Failed selection preserves previous
+selection/source/artifacts. The reference is a hint, never approval: cold loading
+regenerates source and requires identical artifact bytes, so Forest generation
+remains required. Editor adoption/automatic refresh are unfinished; v1 loading,
+old keys and refusal to guess latest v2 stay unchanged. Manifest changes require
+explicit reselection; settle stable identity/save ordering before UI adoption.
+Only an absent reference under verified ordinary paths means `not_found`; broken
+links, invalid parents, corruption and stale records remain errors.
 
-The newer materialized v2 record can also store the complete compiled tree.
-The library now has explicit `select_materialized` and
-`load_selected_materialized` operations. Selection happens after publication;
-failure leaves the previous selection, source and artifacts untouched. Its
-8 KiB reference stays under the existing `Library/Forest` owner and binds the
-project's real root, exact manifest bytes, source and compiled result.
-
-That reference is a hint, not approval. A cold load rebuilds from saved source
-and requires the exact same artifact bytes before returning it. This still
-runs Forest's generation code. It does not make Forest Factory optional or change v1
-loading, old keys, or the refusal to guess a latest v2 artifact. The Editor
-still uses v1; v2 host adoption and automatic refresh are not implemented.
-A manifest change requires explicit
-reselection; the existing project owner must settle stable identity and save
-ordering before UI adoption.
-
-Only a missing reference file beneath verified ordinary project/source/Library
-paths returns `not_found`. Broken links, invalid parents, corrupt files and
-stale records remain errors; callers must not treat them as a missing tree.
-
-The actual library passes Windows Debug/Release tests with separate producer
-and reopen processes, altered/rehashed files, stale source, foreign roots,
-links, size limits and a real failed atomic replacement. The prior v1 golden
-bytes still match. Proof: `build/validation/forest-selected-reference-oct27/result.json`.
-
-Linux Debug/Release also pass separate **native-local** producer/reopen tests;
-the Windows locked-file test is explicitly skipped there. Windows artifact
-interoperability still fails its unchanged golden test. The CRTs produce a
-different cosine value, changing one tree tangent and its saved hash. Changing
-all cosine calls to double precision would also change some existing Windows
-results, so legacy math and golden files remain untouched. A versioned portable
-generation/rebake policy is still needed; do not relax verification to hide this.
-Proof and retained failure: `build/validation/forest-selected-reference-oct27/linux/result.json`.
+Windows Debug/Release producer/reopen tests cover altered/rehashed files, stale
+source, foreign roots, links, limits, failed atomic replacement and unchanged v1
+golden bytes: `build/validation/forest-selected-reference-oct27/result.json`.
+Linux native-local Debug/Release producer/reopen passes, skipping Windows locked-file
+behavior. Cross-platform Windows golden interoperability still fails: differing
+CRT cosine changes a tangent/hash. Double precision would alter existing Windows
+results too. Keep legacy math/goldens; require versioned portable generation/rebake,
+never relaxed integrity. Retained proof/failure:
+`build/validation/forest-selected-reference-oct27/linux/result.json`.
 
 ## Forest Factory Placement Portal
 
@@ -319,20 +430,13 @@ rule. This removes independent per-path center-Y guesses without claiming
 physical settling, terrain collision, arbitrary imported-mesh bounds, or a GUI
 eye test.
 
-The production preview no longer reduces every authored segment to a capped
-box. Trunks and branches use their real endpoints and sampled radii to form
-oriented tapered eight-sided solids. Child roots overlap inside their parent
-trunk. Internal junction disks are omitted; only the root base and exposed
-terminal tips are capped. Exposed tips use two short taper stages beyond the
-authored endpoint; authored nodes and leaf attachments remain unchanged. Cap
-rims have separate planar normals and radial UVs.
-This is overlapping branch geometry, not a smooth manifold Boolean union.
-Invalid zero-length or zero-radius
-projections are refused. The
-renderer-neutral indexed mesh compiler separately proves deterministic
-topology, logical materials, leaf-card orientation, bounds, budgets, and cap
-evidence; production indexed-mesh consumption and native pixel acceptance
-remain later gates.
+Preview geometry uses oriented tapered eight-sided branch solids with overlapping
+child roots, no internal junction disks, and capped root/exposed tips. Two short
+tip taper stages preserve authored nodes/leaf attachments; cap rims have separate
+planar normals/radial UVs. This is not a manifold Boolean union. Zero-length or
+zero-radius projections are refused. Indexed topology/material slots, leaf-card
+orientation, bounds and budgets have CPU contracts; native appearance and
+physical material fidelity remain separate acceptance gates.
 
 ## Tiered Terrain Extension Boundary
 
@@ -359,31 +463,38 @@ remain descriptor-only.
 
 ## Ownership
 
-- Plant Lab owns generation and forest-configuration authoring.
-- Forest Factory owns standard-editor browsing and placement.
-- Engine mainline owns shared document, morphology, temporal, voxel, compiled
-  asset, validation, and project integration contracts.
-- EpochEngineExtensions owns heavy optional generators and generated payloads.
-- Package Registry owns activation, provenance, integrity, and approval gates.
-- Generated projects receive optional payload only after visible activation or
-  main-scene use.
+November 17 source inspection (not runtime proof):
+
+| Layer | Current owner / persisted type | Downstream boundary |
+|---|---|---|
+| Shared morphology | `Engine/modules/authoring/authoring.morphology.ixx` | Bounded graph, temporal sampling and voxel planning; not a forest renderer. |
+| Plant profile/document/compiler | `Engine/modules/forest/forest.factory.ixx` | Mainline compatibility/default-asset adapter and compiled forest data; intended optional feature extraction remains unfinished. |
+| Mesh projection | `Engine/modules/forest/forest.preview_mesh.ixx` | Indexed branch/leaf geometry, UVs and logical material slots. |
+| Source/Library | `Engine/modules/project/project.forest_library.ixx`, `Engine/src/project/project.forest_library.cpp` | `Assets/Forest/*.epoch_forest` → immutable `Library/Forest/*.epoch_forest_artifact`; v2 hint `selected.epoch_forest_reference` obeys validation described above. |
+| Editor placement/materials | `Engine/src/editor/application/editor.application_scene_preview.inl` | `project_compiled_forest_entities` builds an `asset::mesh` snapshot; `prepare_plant_material_atlas` loads exact bark/foliage texture artifacts and `bind_plant_preview_material` binds the composed atlas. Geometry carries UVs plus tint, not colors alone. |
+| Runtime consumption | `Engine/src/epoch/implementation/epoch.project_play_scene.inl` | Existing mesh/texture residency and shared scene draw path; renderer resources are disposable, not authoring authority. |
+
+Plant Lab owns authoring; Forest Factory browses and places stable asset references.
+Mainline retains shared morphology/temporal/voxel/asset validation contracts.
+Heavy optional generators belong in `Engine/dep/EpochEngineExtensions`, but the
+forest modules above still reside in mainline: do not describe extraction as done.
+Package Registry owns activation/provenance/integrity/approval; generated projects
+receive optional payload only after visible activation or main-scene use.
+
+Evidence is scoped: `Tests/packages/project.forest_materialized_contract.cpp`,
+`Tests/scene/forest.profile_geometry_contract.cpp` and the receipts above cover
+specified CPU/data behavior. They do not prove every backend's textures, shadows,
+voxel LOD, planetary placement or end-to-end GUI workflow. Regional and whole-planet missions remain open.
 
 ## Next Production Slices
 
-1. Define Plant Lab tree-asset and forest-configuration documents with stable
-   identity and semantic operations.
-2. Build the shared typed node editor with stable node/pin/connection identity,
-   validation, serialization, and migration.
-3. Separate editable documents, compiled morphology/forest artifacts, and
-   physical preview/voxel/texture caches.
-4. Add deterministic regeneration independent from time-only sampling.
-5. Rasterize selected samples into `SparseVoxelField` LODs and compile indexed
-   mesh/material/impostor outputs.
-6. Make Forest Factory browse those assets, place scene references, and edit
-   placement/configuration overrides without opening Plant Lab internally.
-7. Add replay, boundedness, forward/reverse equivalence, placement persistence,
-   and Build/Run tests.
-
-Stable authoring documents and semantic operations are canonical. Atlases,
-sparse pages, GPU buffers, descriptors, previews, and renderer caches remain
-disposable.
+1. Complete stable Plant Lab tree/configuration documents and semantic operations.
+2. Finish typed node UI with stable node/pin/connection IDs, validation,
+   serialization and migration.
+3. Separate canonical documents/compiled artifacts from disposable atlas,
+   sparse-page, GPU-buffer, descriptor, preview and renderer caches.
+4. Add deterministic regeneration independent of time-only sampling.
+5. Rasterize samples into `SparseVoxelField` LODs; complete mesh/material/impostor outputs.
+6. Browse/place logical assets and edit scene/configuration overrides through
+   Forest Factory without embedding Plant Lab.
+7. Verify replay, bounds, forward/reverse equivalence, persistence and Build/Run.

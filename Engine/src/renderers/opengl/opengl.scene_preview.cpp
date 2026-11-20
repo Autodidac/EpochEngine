@@ -1,6 +1,8 @@
 #include "opengl.scene_preview.hpp"
 #include "opengl.canvas2d_scene.hpp"
 
+#include <chrono> // Keep libstdc++ chrono definitions visible before Clang loads module imports.
+
 #include <include/engine.config.hpp>
 
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)

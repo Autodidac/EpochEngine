@@ -27,6 +27,7 @@
                     .meshAsset = source.mesh_asset,
                     .positionAnchor = source.position_anchor,
                     .forestRegion = source.forest_region,
+                    .forestPaintRegions = source.forest_paint_regions,
                     .terrainAttachment = source.terrain_attachment
                 });
             }
@@ -96,7 +97,8 @@
                 .mesh_asset = entity.meshAsset,
                 .position_anchor = entity.positionAnchor,
                 .forest_region = entity.forestRegion,
-                .terrain_attachment = entity.terrainAttachment
+                .terrain_attachment = entity.terrainAttachment,
+                .forest_paint_regions = entity.forestPaintRegions
             };
         }
 
@@ -244,17 +246,19 @@
             return apply_editor_scene_transaction(state, change, solid ? "Enable Walking Collision" : "Disable Walking Collision");
         }
 
-        [[nodiscard]] bool detach_editor_model_from_terrain(EditorState& state, const EditorEntity& model)
+        [[nodiscard]] bool detach_editor_object_from_terrain(EditorState& state, const EditorEntity& entity)
         {
             namespace document = authoring::scene;
-            if (model.type != "IndexedMesh" || !model.terrainAttachment || model.forestRegion
-                || !model.meshAsset || !model.positionAnchor) return false;
-            const auto handle = state.sceneDocument.find({model.sceneObjectId});
+            const bool camera = entity.type == "Camera";
+            if ((!camera && (entity.type != "IndexedMesh" || !entity.meshAsset))
+                || !entity.terrainAttachment || entity.forestRegion || !entity.positionAnchor) return false;
+            const auto handle = state.sceneDocument.find({entity.sceneObjectId});
             if (!handle) return false;
             const std::array<document::SceneOperation, 1> change{
-                document::GeometryComponentChangedOperation{.object = *handle, .mesh_asset = model.meshAsset,
-                    .position_anchor = model.positionAnchor}};
-            return apply_editor_scene_transaction(state, change, "Detach Model from Terrain", model.sceneObjectId);
+                document::GeometryComponentChangedOperation{.object = *handle, .mesh_asset = entity.meshAsset,
+                    .position_anchor = entity.positionAnchor}};
+            return apply_editor_scene_transaction(state, change,
+                camera ? "Detach Camera from Terrain" : "Detach Model from Terrain", entity.sceneObjectId);
         }
 
         [[nodiscard]] std::optional<scene::Vec3> parse_editor_ambient_channels(
@@ -403,9 +407,10 @@
             EditorState& state,
             std::vector<EditorEntity> entities,
             std::string_view label,
-            const std::function<bool()>& beforeCommit = {})
+            const std::function<bool()>& beforeCommit = {},
+            std::vector<authoring::scene::SceneOperation> operations = {})
         {
-            if (entities.empty())
+            if (entities.empty() && operations.empty())
                 return true;
             if (!state.sceneDocument.initialized() &&
                 !rebuild_editor_scene_document(state, "Initialize scene before batch creation"))
@@ -419,8 +424,7 @@
             for (const auto& object : existing)
                 occupied.insert(object.descriptor.id.value);
 
-            std::vector<authoring::scene::SceneOperation> operations{};
-            operations.reserve(entities.size());
+            operations.reserve(operations.size() + entities.size());
             std::optional<scene::SceneObjectId> selected{};
             for (std::size_t index = 0; index < entities.size(); ++index)
             {
@@ -686,6 +690,7 @@
             // appear to restore the very area they just removed.
             state.forestBrushTerrain=scene::kInvalidSceneObjectId;
             state.forestBrushDirections.clear();
+            state.forestLassoGesture.reset();
             if(state.forestSurfacePending)
             {
                 if(state.taskScheduler)(void)state.taskScheduler->cancel(state.forestSurfaceCancellation);
@@ -751,7 +756,8 @@
                 .mesh_asset = entity.meshAsset,
                 .position_anchor = entity.positionAnchor,
                 .forest_region = entity.forestRegion,
-                .terrain_attachment = entity.terrainAttachment
+                .terrain_attachment = entity.terrainAttachment,
+                .forest_paint_regions = entity.forestPaintRegions
             };
         }
 
@@ -771,6 +777,7 @@
                 .meshAsset = entity.mesh_asset,
                 .positionAnchor = entity.position_anchor,
                 .forestRegion = entity.forest_region,
+                .forestPaintRegions = entity.forest_paint_regions,
                 .terrainAttachment = entity.terrain_attachment
             };
         }

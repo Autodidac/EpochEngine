@@ -613,27 +613,13 @@ namespace epochengine::project
             if (!request.gui_path.empty())
             {
                 trace_regeneration(request, "audio_regeneration_complete");
-                constexpr std::uint64_t maximum_gui_bytes =
-                    64ull * 1024ull * 1024ull;
-                const auto bytes = read_file_bytes(
-                    root / fs::path{request.gui_path}, maximum_gui_bytes);
-                const auto decoded = bytes
-                    ? authoring::gui::deserialize_gui_document(*bytes)
-                    : authoring::gui::DeserializedGuiDocument{};
-                const auto compiled = decoded
-                    ? authoring::gui::compile_gui_document(*decoded.snapshot)
-                    : authoring::gui::CompileResult{};
                 project_gui::ArtifactLibrary library{
                     std::string{request.project_id}, root.string()};
-                const auto published = compiled
-                    ? library.persist(request.gui_path, compiled.artifact)
-                    : project_gui::ArtifactLocator{};
-                const auto restored = published
-                    ? library.load_exact(
-                        request.gui_path, compiled.artifact.identity.key)
-                    : project_gui::LoadedArtifact{};
-                if (!bytes || !decoded || !compiled || !published || !restored)
-                    return fail("gui_regeneration", "GUI artifact regeneration failed");
+                const auto restored = library.compile_source(request.gui_path);
+                if (!restored)
+                    return fail("gui_regeneration",
+                        "GUI artifact regeneration failed: "
+                            + std::string{project_gui::library_code_name(restored.code)});
                 report.regenerated_mask |= bit(ArtifactKind::gui);
             }
 

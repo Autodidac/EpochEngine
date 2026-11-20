@@ -24,6 +24,18 @@ import platform.filesystem;
 
 namespace epochengine::project_texture_sources
 {
+    asset::texture::TextureCompileProfile authored_texture_profile(
+        const authoring::texture::TextureDocument& document) noexcept
+    {
+        const auto& canvas = document.descriptor();
+        return {
+            .format = canvas.format == authoring::texture::PixelFormat::rgba8_srgb
+                ? asset::texture::ArtifactFormat::rgba8_srgb
+                : asset::texture::ArtifactFormat::rgba8_unorm,
+            .color_space = canvas.color_space,
+            .mipmaps = asset::texture::MipmapPolicy::preserve_authored};
+    }
+
     namespace
     {
         namespace fs = std::filesystem;

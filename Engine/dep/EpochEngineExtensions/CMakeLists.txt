@@ -26,9 +26,17 @@ get_filename_component(
 )
 
 set(_epoch_required_core_modules
-    "${EPOCH_ENGINE_MODULE_DIR}/render.math.ixx"
-    "${EPOCH_ENGINE_MODULE_DIR}/terrain.foundation.ixx"
+    "${EPOCH_ENGINE_MODULE_DIR}/render/render.math.ixx"
+    "${EPOCH_ENGINE_MODULE_DIR}/terrain/terrain.foundation.ixx"
 )
+if(NOT EXISTS "${EPOCH_ENGINE_MODULE_DIR}/render/render.math.ixx"
+   AND NOT EXISTS "${EPOCH_ENGINE_MODULE_DIR}/terrain/terrain.foundation.ixx")
+    # Older published Epoch sources kept both modules at the root.
+    set(_epoch_required_core_modules
+        "${EPOCH_ENGINE_MODULE_DIR}/render.math.ixx"
+        "${EPOCH_ENGINE_MODULE_DIR}/terrain.foundation.ixx"
+    )
+endif()
 foreach(_epoch_core_module IN LISTS _epoch_required_core_modules)
     if(NOT EXISTS "${_epoch_core_module}")
         message(FATAL_ERROR
@@ -74,6 +82,16 @@ include(CTest)
 
 option(EPOCH_BUILD_SOURCE_PACKAGES "Build the preserved standalone source packages" ON)
 if(EPOCH_BUILD_SOURCE_PACKAGES)
+    if(EPOCH_PLANET_BUILD_WATER)
+        file(REAL_PATH "${CMAKE_CURRENT_SOURCE_DIR}/packages/fft_ocean" _epoch_bundled_fft)
+        file(REAL_PATH "${EPOCH_PLANET_WATER_SOURCE_ROOT}" _epoch_admitted_fft
+            BASE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
+        if(NOT EPOCH_PLANET_WATER_SOURCE_ROOT OR NOT _epoch_admitted_fft STREQUAL _epoch_bundled_fft)
+            message(FATAL_ERROR "The combined Extensions build requires explicit admission of its own FFT package for Planet Water.")
+        endif()
+        # Enable the adapter before the package loop creates the FFT targets.
+        set(EPOCH_FFT_BUILD_WATER_ADAPTER ON)
+    endif()
     set(_epoch_source_packages
         capability_technique_gallery
         engine_authoritative_dedicated_server

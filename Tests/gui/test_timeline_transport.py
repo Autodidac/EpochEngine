@@ -8,7 +8,7 @@ ROOT=Path(__file__).resolve().parents[2]
 
 class TimelineTransport(unittest.TestCase):
  def test_actual_fast_icons_bounds_direction_and_theme_ink(self):
-  api=(ROOT/'Engine/modules/gui.engine.ixx').read_text(encoding='utf-8')
+  api=(ROOT/'Engine/modules/gui/gui.engine.ixx').read_text(encoding='utf-8')
   paint=(ROOT/'Engine/src/epochgui/controls/gui.buttons_images.inl').read_text(encoding='utf-8')
   code=r'''
 #include <algorithm>
@@ -46,15 +46,15 @@ int main(){
   (proof/'result.json').write_text(json.dumps({'passed':True,'results':results,'scope':'Actual icon enum and vector paint owner: two directions, dark/light contrast ink, exact bounds, distinct start/reverse glyphs; normal failure returns, no native renderer.'},indent=2),encoding='utf-8')
 
  def test_real_transport_and_editor_commands_debug_release(self):
-  module=(ROOT/'Engine/modules/timeline.system.ixx').read_text(encoding='utf-8')
+  module=(ROOT/'Engine/modules/timeline/timeline.system.ixx').read_text(encoding='utf-8')
   clock=(ROOT/'Engine/dep/EpochPlatformEngine/modules/core.time.ixx').read_text(encoding='utf-8')
-  core=(ROOT/'Engine/modules/editor.core.ixx').read_text(encoding='utf-8')
+  core=(ROOT/'Engine/modules/editor/editor.core.ixx').read_text(encoding='utf-8')
   inspector=(ROOT/'Engine/src/editor/application/editor.frame_inspector.inl').read_text(encoding='utf-8')
   diagnostics=(ROOT/'Engine/src/editor/application/editor.application_runtime_diagnostics.inl').read_text(encoding='utf-8')
   bootstrap=(ROOT/'Engine/src/editor/application/editor.frame_bootstrap.inl').read_text(encoding='utf-8')
   viewport=(ROOT/'Engine/src/editor/application/editor.frame_viewport.inl').read_text(encoding='utf-8')
   chrome=(ROOT/'Engine/src/epochgui/controls/gui.navigation_chrome.inl').read_text(encoding='utf-8')
-  gui_api=(ROOT/'Engine/modules/gui.engine.ixx').read_text(encoding='utf-8')
+  gui_api=(ROOT/'Engine/modules/gui/gui.engine.ixx').read_text(encoding='utf-8')
   self.assertEqual(bootstrap.count('advance_editor_timeline(editor);'),1)
   self.assertLess(bootstrap.index('advance_editor_timeline(editor);'),bootstrap.index('pump_script_build(editor);'))
   self.assertNotIn('sync_to_simulation(',inspector+viewport)
@@ -115,7 +115,7 @@ void wrapped_label(std::string_view s,float){readout=s;}void label(std::string_v
 void advance_cursor(Vec2 v){g_frame.cursor.x+=v.x;g_frame.cursor.y+=v.y;}Vec2 cursor_position(){return g_frame.cursor;}void set_cursor(Vec2 v){g_frame.cursor=v;}
 struct ProgressBarOptions{float value;Vec2 size;bool show_percent;};void progress_bar(ProgressBarOptions){++progressCount;}
 struct SliderOptions{std::string_view id;float minimum,maximum,value,step;Vec2 size;};
-struct SliderResult{bool changed;float value;};SliderResult slider(SliderOptions o){return {scrub.has_value(),scrub.value_or(o.value)};}
+WidgetBounds scrubBounds;struct SliderResult{bool changed;float value;};SliderResult slider(SliderOptions o){scrubBounds={g_frame.cursor,o.size};return {scrub.has_value(),scrub.value_or(o.value)};}
 template<std::size_t N>std::optional<std::size_t>inline_button_row(const std::array<InlineButtonSpec,N>&spec,float height,float gap,InlineButtonRowOptions options){
  labels.clear();icons.clear();tooltips.clear();for(const auto&button:spec){labels.emplace_back(button.label);icons.push_back(button.icon);tooltips.emplace_back(button.tooltip);}
  const auto layout=resolve_inline_button_layout(spec,height,gap,options);buttonBounds=layout.items;
@@ -203,11 +203,14 @@ int main(){
   gui::action.reset();gui::scrub=2.25f;actual_controls(ui,compact);CHECK(ui.timelineState.playhead_seconds==2.25&&!ui.timelineState.playing&&ui.timeControl.paused);
   gui::scrub.reset();gui::action=0;actual_controls(ui,compact);CHECK(ui.timelineState.playhead_seconds==0&&!ui.timelineState.playing);
  }
- for(float width:{80.f,160.f,280.f,304.f,320.f,800.f}){
+ for(float width:{80.f,160.f,280.f,304.f,320.f,519.f,520.f,800.f}){
   EditorState ui;t::seek_seconds(ui.timelineState,5);gui::action.reset();gui::scrub.reset();gui::progressCount=0;actual_controls(ui,true,width);
   CHECK(gui::progressCount==0&&gui::icons.size()==7&&gui::icons[2]==gui::ButtonIcon::fast_reverse&&gui::icons[3]==gui::ButtonIcon::reverse&&gui::icons[4]==gui::ButtonIcon::play&&gui::icons[5]==gui::ButtonIcon::fast_forward);
   CHECK(gui::g_frame.cursor.y==gui::compactHeight);for(const auto&b:gui::buttonBounds)CHECK(b.position.x>=0&&b.size.x>=20&&b.position.x+b.size.x<=width);
-  if(width>=304)CHECK(gui::compactHeight==54.f);else CHECK(gui::compactHeight<=160.f);
+  if(width>=520){CHECK(gui::compactHeight==24.f&&gui::scrubBounds.position.y==0&&gui::scrubBounds.position.x==200.f);
+   CHECK(gui::scrubBounds.size.x>=208.f&&gui::scrubBounds.position.x+gui::scrubBounds.size.x<=width-104.f);
+   for(const auto&b:gui::buttonBounds)CHECK(b.position.x+b.size.x<=gui::scrubBounds.position.x);}
+  else if(width>=304)CHECK(gui::compactHeight==52.f);else CHECK(gui::compactHeight<=160.f);
   gui::action=4;actual_controls(ui,true,width);gui::action.reset();actual_controls(ui,true,width);CHECK(gui::icons[4]==gui::ButtonIcon::pause&&gui::icons[3]==gui::ButtonIcon::reverse);
   gui::action=3;actual_controls(ui,true,width);gui::action.reset();actual_controls(ui,true,width);CHECK(gui::icons[3]==gui::ButtonIcon::pause&&gui::icons[4]==gui::ButtonIcon::play);
  }

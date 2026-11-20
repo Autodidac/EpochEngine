@@ -10,10 +10,11 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def wire_fixture():
-    source = (ROOT / "Engine/modules/render.preview_grid.ixx").read_text(encoding="utf-8-sig")
+    source = (ROOT / "Engine/modules/render/render.preview_grid.ixx").read_text(encoding="utf-8-sig")
     baseline = actual_function(source, "inline std::vector<Vertex> detail::build_marker_solids(")
     baseline = baseline.replace("detail::build_marker_solids(", "baseline_marker_solids(")
-    baseline = baseline.replace("std::vector<TexturedVertex>* textured, bool wire_depth)", "std::vector<TexturedVertex>* textured = nullptr, bool wire_depth = false)")
+    baseline = baseline.replace("std::vector<TexturedVertex>* textured, bool wire_depth,std::vector<WaterDetailRange>* water_detail)",
+        "std::vector<TexturedVertex>* textured = nullptr, bool wire_depth = false, std::vector<WaterDetailRange>* water_detail = nullptr)")
     # The current production implementation centralizes vertex positioning in
     # private helpers. Extract those real bodies into the recording namespace;
     # do not substitute a second transform implementation in this consumer.
@@ -22,7 +23,18 @@ def wire_fixture():
             "        [[nodiscard]] inline Vec3 rotate_euler(", "        [[nodiscard]] inline Vec3 mesh_vertex_position(",
             "        [[nodiscard]] inline Vec3 mesh_vertex_normal(",
             "        [[nodiscard]] inline bool mesh_wire_requested(",
-            "        [[nodiscard]] inline bool mesh_source_reverse("))
+            "        [[nodiscard]] inline bool mesh_source_reverse(",
+            "        [[nodiscard]] inline Vec3 preview_box_half_extents("))
+    lighting_owner = (ROOT / "Engine/src/render/render.preview_lighting.cpp").read_text(encoding="utf-8-sig")
+    for marker in ("inline constexpr std::size_t kMaxForestShadowVertices =",
+                   "inline constexpr std::uint64_t maximum_primitive_solid_vertices ="):
+        begin = source.index(marker)
+        private_helpers += "\n" + source[begin:source.index(";", begin) + 1]
+    private_helpers += "\n" + actual_function(lighting_owner, "        struct ForestShadow final") + ";\n"
+    private_helpers += "\n".join(actual_function(lighting_owner, marker)
+        for marker in ("        [[nodiscard]] static const ForestShadow* forest_shadow_for(",
+            "        [[nodiscard]] const ForestShadow* prepare_forest_shadow(",
+            "        [[nodiscard]] float forest_shadow_visibility("))
     baseline = baseline.replace("detail::", "baseline_detail::")
     # Keep the pre-hoist reference cost: compute the exact owning Euler values
     # for each transformed source vertex, rather than changing that benchmark
@@ -60,11 +72,12 @@ def wire_fixture():
     scene_interaction_owner = actual_function(selection_owner,'        [[nodiscard]] bool ensure_editor_scene_interaction(')
     preview_caller = actual_function(preview_owner, "        void publish_editor_preview_markers(")
     assert 'restore_editor_preview_mesh(state,entity,meshBudget,awaitingPlanetaryBudget,*meshUsage)' in preview_caller
-    caller_entry = re.search(r"const bool meshWireframe\s*=.*?;",preview_caller,re.S).group(0)
+    caller_entry = re.search(r"const auto meshMode\s*=.*?;",preview_caller,re.S).group(0) + "\n" + re.search(r"const bool meshWireframe\s*=.*?;",preview_caller,re.S).group(0)
     caller_dispatch = re.search(r"published=pump_editor_planetary_preview\(.*?;",preview_caller,re.S).group(0)
-    direct_begin = preview_caller.index("            else", preview_caller.index(caller_dispatch))
-    direct_end = preview_caller.index("            if (!published)", direct_begin)
-    caller_direct = preview_caller[direct_begin + len("            else"):direct_end]
+    direct_branch = actual_function(preview_caller[preview_caller.index(caller_dispatch):], "\n            else\n")
+    # This fixture supplies assembled markers and exercises publication and retirement.
+    direct_begin = direct_branch.index("                // Inline previews replace")
+    caller_direct = "{\n" + direct_branch[direct_begin:]
     caller_wire = re.search(r"\.wireframe\s*=\s*(forestPainting\s*\?[^,]+),",preview_caller).group(1)
     documents = (ROOT / "Engine/src/editor/application/editor.application_project_documents.inl").read_text(encoding="utf-8")
     preview_reset = actual_function(documents,"        void reset_planetary_preview_publication(")
@@ -74,23 +87,38 @@ def wire_fixture():
     assert "reset_planetary_preview_publication(state);" in actual_function(documents,"        void reset_project_bound_editor_state(")
     state = (ROOT / "Engine/src/editor/application/editor.application_state.inl").read_text(encoding="utf-8")
     state_begin = state.index("            std::optional<std::future<std::optional<previewgrid::PreparedSceneFrame>>> planetaryPreviewPending")
-    state_end = state.index("            bool planetaryPreviewWireframe{};", state_begin) + len("            bool planetaryPreviewWireframe{};")
+    state_end = state.index("            platform::child_process::MeshDrawMode planetaryPreviewDrawMode{platform::child_process::MeshDrawMode::shaded};", state_begin) + len("            platform::child_process::MeshDrawMode planetaryPreviewDrawMode{platform::child_process::MeshDrawMode::shaded};")
     preview_fields = state[state_begin:state_end]
     runtime_publication = '\n'.join(actual_function(play, marker) + (';' if 'struct ' in marker else '')
-        for marker in ('            struct RuntimeSceneFrameResult final',
+        for marker in ('            static void advance_ordinary_density_navigation(',
+            '            struct RuntimeSceneFrameResult final',
             '            struct PlanetaryFramePublication final',
+            '            struct PlanetaryCutPlayback final',
+            '            [[nodiscard]] static bool planetary_startup_needs_detail(',
+            '            [[nodiscard]] bool defer_provisional_planetary_frame(',
+            '            [[nodiscard]] double runtime_depth_fit_aspect(',
+            '            [[nodiscard]] bool advance_runtime_planetary_view(',
             '            [[nodiscard]] bool planetary_frame_preparing(',
             '            [[nodiscard]] bool pump_runtime_planetary_frame('))
+    dispatch_begin = play.index('                if(frame_camera||ordinary_density_frame)')
+    dispatch_end = play.index('            static void advance_ordinary_density_navigation(', dispatch_begin)
+    frame_dispatch = play[dispatch_begin:dispatch_end].rsplit('}', 1)[0]
+    assert '!cloudVolumes.empty()||m_planetaryFramePublications.contains(ctx.get())' in play
+    assert 'm_explorationRenderOrigin,managedTerrainAttachments,cloudVolumes,ordinaryDensityFrame,' in play
+    assert 'm_planetaryEntity,m_planetaryMeshFrame?&*m_planetaryMeshFrame:nullptr,m_planetaryWaterAppearance,' in play
+    assert 'planetaryViewUpdated||advance_runtime_planetary_view(' in play
     retirement=actual_function(play,'            void shutdown_planetary_runtime() noexcept')
     retirement=retirement[retirement.index('                    if(m_planetaryScheduler)'):
         retirement.index('                    m_planetaryFramePublications.clear();')+len('                    m_planetaryFramePublications.clear();')]
     fixture = r'''
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cmath>
 #include <chrono>
 #include <atomic>
 #include <condition_variable>
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -116,6 +144,8 @@ def wire_fixture():
 #if defined(_MSC_VER)
 #include <crtdbg.h>
 #endif
+namespace platform::child_process {enum class MeshDrawMode{solid,wireframe,shaded};}
+using Mode=platform::child_process::MeshDrawMode;
 import asset.mesh_artifact;
 import render.preview_grid;
 import render.device;
@@ -128,6 +158,7 @@ import editor.task_scheduler;
 import scene.snapshot;
 import scene.interaction;
 import project.planetary;
+import project.planetary_snapshot;
 bool deny_all{},deny_large{};unsigned blocked{};std::atomic<void(*)()> allocation_hook{};
 thread_local bool skip_allocation_hook{};
 void* operator new(std::size_t count){if(deny_all||(deny_large&&count>65536)){++blocked;throw std::bad_alloc{};}
@@ -155,16 +186,46 @@ inline std::vector<Timing> evidence;
 struct Sink{void logf(LogLevel,std::source_location,const char*,double queue,double prepare,double commit,double total,bool published,std::string_view outcome={}){
  evidence.push_back({queue,prepare,commit,total,published,std::string{outcome}});}};
 inline Sink& get(const char*){static Sink sink;return sink;}
+inline void info(std::string_view,std::string_view){}
+}
+namespace project_planetary_runtime {
+struct Frame {
+ struct Body {std::uint32_t id{};double radius{};bool landable{};};
+ std::array<Body,16> bodies{};
+ std::uint32_t anchor{},body_count{};
+ double altitude{};
+ bool valid{};
+};
 }
 struct RuntimePublicationProbe{
- struct {std::uint32_t anchor{};}m_explorationFrame;
+ project_planetary_runtime::Frame m_explorationFrame;
+ struct Settings {bool stream_lod{true};};
+ std::optional<Settings>m_planetarySettings{Settings{}};
+ std::optional<int>m_explorationRenderCamera{1},m_planetaryMeshFrame;
+ std::optional<std::uint32_t>m_planetaryLodBody;
+ std::optional<timing::Clock::time_point>m_planetaryStartupDeadline;
+ bool m_planetaryFailed{},m_planetaryPaused{};
+ std::optional<double>m_planetaryWaterObservedSeconds,m_planetaryWaterPublishedSeconds;
+ std::shared_ptr<const epochengine::project_planetary_snapshot::Snapshot>m_planetaryWaterSource;
  bool m_runtimeWaterVisible{true},m_runtimeCloudsVisible{true};
+ float m_runtimeViewportWidth{1264},m_runtimeViewportHeight{761};
  std::unique_ptr<editor_tasks::Scheduler>m_planetaryScheduler=std::make_unique<editor_tasks::Scheduler>(
   editor_tasks::SchedulerLimits{.worker_count=1,.retained_finished_nodes=32});
  RUNTIME_PUBLICATION
+ bool dispatch(const void* ctx,std::vector<ObjectMarker> markers,
+  const epochengine::lighting::LightingFrame* frame_lighting,std::span<const CloudVolume> clouds,
+  bool ordinary_density_frame,Mode mesh_mode=Mode::shaded,bool* view_updated=nullptr) {
+  const Camera* frame_camera=nullptr;
+  const MeshFrameLimits mesh_limits{};
+  const std::array<double,3> render_origin{};
+  RUNTIME_FRAME_DISPATCH
+ }
  std::unordered_map<const void*,PlanetaryFramePublication>m_planetaryFramePublications;
- std::optional<std::future<int>>m_planetaryPending,m_planetaryWaterPending;
- editor_tasks::CancellationTicket m_planetaryCancellation,m_planetaryWaterCancellation;
+ std::optional<std::future<int>>m_planetaryPending,m_planetaryWaterPending,m_groundCoverPending;
+ std::optional<int>m_planetaryInitialWaterCut;
+ std::optional<PlanetaryCutPlayback>m_planetaryCutPlayback;
+ bool m_planetaryPreparingInitialWater{},m_planetaryPreparingWetBatch{};
+ editor_tasks::CancellationTicket m_planetaryCancellation,m_planetaryWaterCancellation,m_groundCoverCancellation;
  void actual_retire(){RUNTIME_RETIREMENT}
  void ensure_planetary_scheduler(){(void)m_planetaryScheduler->maintain();}
 };
@@ -192,8 +253,8 @@ struct EditorState{
  scene_interaction::SceneInteractionQuery sceneInteraction;
  std::array<double,3>sceneInteractionOrigin{};bool sceneInteractionDirty{true};
  project_planetary::SceneMeshBudget meshBudget;
- bool viewportMeshWireframe{};
- std::optional<bool>viewportMeshWireframeRequest;
+ Mode viewportMeshDrawMode{Mode::shaded};
+ std::optional<Mode>viewportMeshDrawModeRequest;
  std::unique_ptr<editor_tasks::Scheduler>taskScheduler=std::make_unique<editor_tasks::Scheduler>(
   editor_tasks::SchedulerLimits{.worker_count=1,.retained_finished_nodes=32});
  std::vector<std::string>logs;
@@ -419,18 +480,18 @@ int verify_editor_wire_request_lifetime(){
  std::promise<void>entered,release;auto released=release.get_future().share();
  auto blocker=state.taskScheduler->submit("Hold wire preparation",[&]{entered.set_value();released.wait();});
  CHECK(entered.get_future().wait_for(std::chrono::seconds{2})==std::future_status::ready);
- state.viewportMeshWireframeRequest=true;
+ state.viewportMeshDrawModeRequest=Mode::wireframe;
  CHECK(!actual_editor_preview_frame(&context,state,request));
  const auto ticket=state.planetaryPreviewCancellation;
  for(unsigned frame=0;frame<20;++frame){
   CHECK(!actual_editor_preview_frame(&context,state,request));
-  CHECK(state.viewportMeshWireframeRequest==true&&!state.viewportMeshWireframe);
+  CHECK(state.viewportMeshDrawModeRequest==Mode::wireframe&&state.viewportMeshDrawMode==Mode::shaded);
   CHECK(state.planetaryPreviewCancellation.node==ticket.node);
  }
  release.set_value();blocker.get();
  CHECK(state.planetaryPreviewPending->wait_for(std::chrono::seconds{2})==std::future_status::ready);
  CHECK(actual_editor_preview_frame(&context,state,request));
- CHECK(state.viewportMeshWireframe&&!state.viewportMeshWireframeRequest&&!state.planetaryPreviewPending);
+ CHECK(state.viewportMeshDrawMode==Mode::wireframe&&!state.viewportMeshDrawModeRequest&&!state.planetaryPreviewPending);
  CHECK(scene_frame_for(&context)->wire->depth_triangles->size()==3&&scene_frame_for(&context)->solids->geometry->empty());
  // Resize invalidates a queued narrow-view fit before it can publish into a
  // wider viewport, then admits the current aspect through the same owner.
@@ -452,37 +513,37 @@ int verify_editor_wire_request_lifetime(){
  std::promise<void>entered2,release2;auto released2=release2.get_future().share();
  auto blocker2=state.taskScheduler->submit("Hold superseded wire preparation",[&]{entered2.set_value();released2.wait();});
  CHECK(entered2.get_future().wait_for(std::chrono::seconds{2})==std::future_status::ready);
- state.viewportMeshWireframeRequest=false;CHECK(!actual_editor_preview_frame(&context,state,request));
- state.viewportMeshWireframeRequest=true;CHECK(!actual_editor_preview_frame(&context,state,request));
- CHECK(state.viewportMeshWireframe&&state.viewportMeshWireframeRequest==true);
+ state.viewportMeshDrawModeRequest=Mode::shaded;CHECK(!actual_editor_preview_frame(&context,state,request));
+ state.viewportMeshDrawModeRequest=Mode::wireframe;CHECK(!actual_editor_preview_frame(&context,state,request));
+ CHECK(state.viewportMeshDrawMode==Mode::wireframe&&state.viewportMeshDrawModeRequest==Mode::wireframe);
  release2.set_value();blocker2.get();
  bool committed{};
  for(unsigned frame=0;frame<4&&!committed;++frame){
   CHECK(state.planetaryPreviewPending&&state.planetaryPreviewPending->wait_for(std::chrono::seconds{2})==std::future_status::ready);
-  committed=actual_editor_preview_frame(&context,state,request);CHECK(state.viewportMeshWireframe);
+  committed=actual_editor_preview_frame(&context,state,request);CHECK(state.viewportMeshDrawMode==Mode::wireframe);
  }
- CHECK(committed&&!state.viewportMeshWireframeRequest&&!state.planetaryPreviewPending);
+ CHECK(committed&&!state.viewportMeshDrawModeRequest&&!state.planetaryPreviewPending);
  // Refusal clears only the pending choice, not the last accepted wire packet.
- request.limits.maximum_bytes=0;state.viewportMeshWireframeRequest=false;
+ request.limits.maximum_bytes=0;state.viewportMeshDrawModeRequest=Mode::shaded;
  CHECK(!actual_editor_preview_frame(&context,state,request));
  CHECK(state.planetaryPreviewPending->wait_for(std::chrono::seconds{2})==std::future_status::ready);
  CHECK(!actual_editor_preview_frame(&context,state,request));
- CHECK(!state.planetaryPreviewPending&&!state.viewportMeshWireframeRequest&&state.viewportMeshWireframe);
+ CHECK(!state.planetaryPreviewPending&&!state.viewportMeshDrawModeRequest&&state.viewportMeshDrawMode==Mode::wireframe);
  CHECK(state.logs.size()==1&&scene_frame_for(&context)->wire->depth_triangles->size()==3);
  // The actual project reset retires its pending choice and invalidates an
  // old completion even when the same project is immediately reopened.
  request.limits={};std::promise<void>entered3,release3;auto released3=release3.get_future().share();
  auto blocker3=state.taskScheduler->submit("Hold project reset preparation",[&]{entered3.set_value();released3.wait();});
  CHECK(entered3.get_future().wait_for(std::chrono::seconds{2})==std::future_status::ready);
- state.viewportMeshWireframeRequest=false;CHECK(!actual_editor_preview_frame(&context,state,request));
+ state.viewportMeshDrawModeRequest=Mode::shaded;CHECK(!actual_editor_preview_frame(&context,state,request));
  reset_planetary_preview_publication(state);
- CHECK(!state.viewportMeshWireframeRequest&&!state.planetaryPreviewRequest&&state.viewportMeshWireframe);
+ CHECK(!state.viewportMeshDrawModeRequest&&!state.planetaryPreviewRequest&&state.viewportMeshDrawMode==Mode::wireframe);
  release3.set_value();blocker3.get();committed=actual_editor_preview_frame(&context,state,request);
  for(unsigned frame=0;frame<4&&!committed;++frame){
   CHECK(state.planetaryPreviewPending&&state.planetaryPreviewPending->wait_for(std::chrono::seconds{2})==std::future_status::ready);
-  committed=actual_editor_preview_frame(&context,state,request);CHECK(state.viewportMeshWireframe);
+  committed=actual_editor_preview_frame(&context,state,request);CHECK(state.viewportMeshDrawMode==Mode::wireframe);
  }
- CHECK(committed&&!state.viewportMeshWireframeRequest&&!state.planetaryPreviewPending&&state.logs.size()==1);
+ CHECK(committed&&!state.viewportMeshDrawModeRequest&&!state.planetaryPreviewPending&&state.logs.size()==1);
  cleanup_context(&context);return 0;
 }
 int verify_retired_editor_preview_result(){
@@ -518,22 +579,22 @@ int verify_editor_planetary_preview_queue(){
  std::promise<void>entered,release;auto released=release.get_future().share();
  auto blocker=state.taskScheduler->submit("Hold sole worker for deterministic queue test",[&]{entered.set_value();released.wait();});
  CHECK(entered.get_future().wait_for(std::chrono::seconds{2})==std::future_status::ready);
- CHECK(!pump_editor_planetary_preview(&context,state,request,false)&&state.planetaryPreviewPending);
+ CHECK(!pump_editor_planetary_preview(&context,state,request,Mode::shaded)&&state.planetaryPreviewPending);
  const auto ticket=state.planetaryPreviewCancellation;
  const auto firstRequest=state.planetaryPreviewRequest;
  for(unsigned repeat=0;repeat<20;++repeat){
-  CHECK(!pump_editor_planetary_preview(&context,state,request,false));
+  CHECK(!pump_editor_planetary_preview(&context,state,request,Mode::shaded));
   CHECK(state.planetaryPreviewRequest==firstRequest&&state.planetaryPreviewCancellation.node==ticket.node);
  }
  request.camera.eye.x+=1;request.camera.target.x+=1;
- CHECK(!pump_editor_planetary_preview(&context,state,request,false));
+ CHECK(!pump_editor_planetary_preview(&context,state,request,Mode::shaded));
  CHECK(state.planetaryPreviewRequest==firstRequest&&scene_frame_for(&context)->solids==original->solids);
  release.set_value();blocker.get();
  CHECK(state.planetaryPreviewPending->wait_for(std::chrono::seconds{2})==std::future_status::ready);
- CHECK(pump_editor_planetary_preview(&context,state,request,false)&&state.planetaryPreviewPending);
+ CHECK(pump_editor_planetary_preview(&context,state,request,Mode::shaded)&&state.planetaryPreviewPending);
  CHECK(state.planetaryPreviewPending->wait_for(std::chrono::seconds{2})==std::future_status::ready);
- CHECK(pump_editor_planetary_preview(&context,state,request,false)&&!state.planetaryPreviewPending);
- CHECK(!pump_editor_planetary_preview(&context,state,request,false)&&!state.planetaryPreviewPending);
+ CHECK(pump_editor_planetary_preview(&context,state,request,Mode::shaded)&&!state.planetaryPreviewPending);
+ CHECK(!pump_editor_planetary_preview(&context,state,request,Mode::shaded)&&!state.planetaryPreviewPending);
  // Stale project/scene/selection/wireframe completions never become visible.
  for(unsigned stale=0;stale<5;++stale){
   auto source=capture_scene_frame_source(&context);CHECK(source);
@@ -546,25 +607,25 @@ int verify_editor_planetary_preview_queue(){
   state.planetaryPreviewProjectGeneration=state.projectLifecycle.evidence().generations.selected_project.generation;
   state.planetaryPreviewSceneRevision=state.sceneDocumentRevision;
   state.planetaryPreviewSelection=state.selectedEntityId;state.planetaryPreviewSelections=state.selectedEntityIds;
-  state.planetaryPreviewWireframe=false;
+  state.planetaryPreviewDrawMode=Mode::shaded;
   if(stale==0)++state.projectLifecycle.ledger.generations.selected_project.generation;
   if(stale==1)++state.sceneDocumentRevision;
   if(stale==2)++state.selectedEntityId;
   if(stale==3)state.selectedEntityIds.push_back(55);
   completion.set_value(std::move(prepared));
-  CHECK(!pump_editor_planetary_preview(&context,state,request,stale==4));
+  CHECK(!pump_editor_planetary_preview(&context,state,request,stale==4?Mode::solid:Mode::shaded));
   CHECK(scene_frame_for(&context)->markers[0].position.x!=obsolete.markers[0].position.x);
   CHECK(state.planetaryPreviewPending->wait_for(std::chrono::seconds{2})==std::future_status::ready);
-  CHECK(pump_editor_planetary_preview(&context,state,request,stale==4));
+  CHECK(pump_editor_planetary_preview(&context,state,request,stale==4?Mode::solid:Mode::shaded));
  }
  // Admission failure retains the frame and reports once instead of resending
  // the same expensive request every owner turn.
  request.markers[0].primitive=ObjectPreviewPrimitive::IndexedMesh;
- CHECK(!pump_editor_planetary_preview(&context,state,request,false)&&state.planetaryPreviewPending);
+ CHECK(!pump_editor_planetary_preview(&context,state,request,Mode::shaded)&&state.planetaryPreviewPending);
  CHECK(state.planetaryPreviewPending->wait_for(std::chrono::seconds{2})==std::future_status::ready);
- CHECK(!pump_editor_planetary_preview(&context,state,request,false)&&!state.planetaryPreviewPending);
+ CHECK(!pump_editor_planetary_preview(&context,state,request,Mode::shaded)&&!state.planetaryPreviewPending);
  CHECK(state.logs.size()==1&&!state.projectStatus.empty());
- CHECK(!pump_editor_planetary_preview(&context,state,request,false)&&!state.planetaryPreviewPending&&state.logs.size()==1);
+ CHECK(!pump_editor_planetary_preview(&context,state,request,Mode::shaded)&&!state.planetaryPreviewPending&&state.logs.size()==1);
  cleanup_context(&context);return 0;
 }
 // Preserve the former production per-index math as a byte-exact reference;
@@ -725,6 +786,139 @@ int verify_mixed_planetary_publication(){
  CHECK(scene_frame_for(&wireContext)==wireFrame);cleanup_context(&wireContext);return 0;
 }
 
+int verify_ordinary_density_navigation(){
+ int context{},plainContext{};
+ RuntimePublicationProbe owner;
+ const auto beforeLook=camera_for(&context);
+ ObjectMarker marker{.primitive=ObjectPreviewPrimitive::Cube};
+ const epochengine::lighting::LightingFrame lights;
+ CloudVolume cloud{.center={0,-6'371'000,0},.radius=6'371'000,.time_seconds=17,.recipe={.seed=91,
+  .base_altitude_meters=2000,.thickness_meters=1500,.horizontal_scale_meters=50000}};
+ CHECK(owner.dispatch(&plainContext,{marker},&lights,{},false));
+ CHECK(!scene_frame_for(&plainContext)&&!owner.planetary_frame_preparing(&plainContext));
+ cleanup_context(&plainContext);
+ CHECK(publish_scene_frame(&context,std::span{&marker,1},beforeLook,lights,{}, {},std::span{&cloud,1}));
+ const auto original=scene_frame_for(&context);
+ std::promise<void>entered,release;auto released=release.get_future().share();
+ auto blocker=owner.m_planetaryScheduler->submit("Hold ordinary planetary display",[&]{entered.set_value();released.wait();});
+ CHECK(entered.get_future().wait_for(std::chrono::seconds{2})==std::future_status::ready);
+ const auto sampledRevision=camera_revision_for(&context);
+ marker.position.x=2;
+ CHECK(!owner.dispatch(&context,{marker},&lights,std::span{&cloud,1},true));
+ const auto queued=scene_frame_for(&context);
+ CHECK(owner.planetary_frame_preparing(&context)&&queued->solids==original->solids);
+ owner.advance_ordinary_density_navigation(&context,sampledRevision);
+ CHECK(scene_frame_for(&context)==queued);
+ look_camera(&context,5,-3);
+ owner.advance_ordinary_density_navigation(&context,sampledRevision);
+ const auto moved=scene_frame_for(&context);
+ const auto view=camera_for(&context);
+ CHECK(moved->revision>queued->revision&&moved->solids==original->solids);
+ CHECK(dot(camera_forward(moved->camera),camera_forward(view))>0.99999f);
+ CHECK(moved->camera.nearPlane==view.nearPlane&&moved->camera.farPlane==view.farPlane);
+ CHECK(moved->clouds.size()==1&&moved->clouds[0]==cloud);
+ // Empty clouds still visit the same display owner and retire the queued
+ // cloudy request while retaining the previous admitted dry-land geometry.
+ owner.m_runtimeCloudsVisible=false;
+ CHECK(!owner.dispatch(&context,{marker},&lights,{},true));
+ CHECK(scene_frame_for(&context)->clouds.empty()&&scene_frame_for(&context)->solids==original->solids);
+ release.set_value();blocker.get();
+ auto& work=owner.m_planetaryFramePublications.at(&context);
+ for(unsigned turn=0;turn<4&&work.pending;++turn){
+  CHECK(work.pending->wait_for(std::chrono::seconds{5})==std::future_status::ready);
+  (void)owner.dispatch(&context,{marker},&lights,{},true);
+  CHECK(scene_frame_for(&context)->clouds.empty());
+ }
+ const auto accepted=scene_frame_for(&context);
+ CHECK(!work.pending&&work.admitted&&accepted->solids!=original->solids);
+ CHECK(accepted->markers.front().position.x==2);
+ CHECK(accepted->camera.nearPlane==view.nearPlane&&accepted->camera.farPlane==view.farPlane);
+ CHECK(dot(camera_forward(accepted->camera),camera_forward(view))>0.99999f);
+ cleanup_context(&context);
+ return 0;
+}
+
+int verify_runtime_planetary_clip_handoff(){
+ int context{};
+ RuntimePublicationProbe owner;
+ SceneFrameRequest request;
+ request.camera.eye={};request.camera.target={0,0,-1};
+ request.camera.nearPlane=.18f;request.camera.farPlane=42'813'184.0f;
+ request.depth_fit_aspect=owner.runtime_depth_fit_aspect();
+ request.markers.push_back({.position={0,0,-90},.primitive=ObjectPreviewPrimitive::Cube});
+ request.water_detail_seconds=0.0;
+ const auto fit=fit_visible_depth_range(request.camera,request.markers,request.depth_fit_aspect);
+ CHECK(fit.nearPlane>request.camera.nearPlane&&fit.farPlane<request.camera.farPlane);
+ auto& pilot=owner.m_explorationFrame;
+ pilot.valid=true;pilot.body_count=2;pilot.anchor=1;pilot.altitude=3.8;
+ pilot.bodies[0]={1,6371000,true};pilot.bodies[1]={2,250000,false};
+ const auto bootstrap=timing::Clock::time_point{std::chrono::seconds{1}};
+ owner.m_planetaryStartupDeadline=timing::Clock::time_point{};
+ owner.m_planetaryLodBody=1;
+ CHECK(owner.defer_provisional_planetary_frame(bootstrap));
+ owner.m_planetaryMeshFrame=12;owner.m_planetaryLodBody=2;
+ CHECK(owner.defer_provisional_planetary_frame(bootstrap));
+ owner.m_planetaryLodBody=1;
+ CHECK(!owner.defer_provisional_planetary_frame(bootstrap)&&owner.m_planetaryStartupDeadline);
+ bool updated{};
+ CHECK(!owner.pump_runtime_planetary_frame(&context,request,Mode::shaded,&updated)&&!updated);
+ auto& work=owner.m_planetaryFramePublications.at(&context);
+ CHECK(work.pending->wait_for(std::chrono::seconds{5})==std::future_status::ready);
+ auto later=request;later.water_detail_seconds=1.25;
+ CHECK(same_scene_frame_request(request,later));
+ request=later;
+ CHECK(owner.pump_runtime_planetary_frame(&context,request,Mode::shaded,&updated)&&updated);
+ const auto first=scene_frame_for(&context);
+ CHECK(first&&first->revision==1u&&first->camera.nearPlane==fit.nearPlane&&first->camera.farPlane==fit.farPlane);
+ CHECK(first->water_detail_seconds==1.25&&!work.pending);
+ CHECK(!owner.advance_runtime_planetary_view(&context,request.camera,request.render_origin,{},1.0));
+ CHECK(scene_frame_for(&context)==first);
+ owner.m_planetaryMeshFrame.reset();
+ CHECK(owner.defer_provisional_planetary_frame(bootstrap+std::chrono::milliseconds{7999}));
+ CHECK(!owner.defer_provisional_planetary_frame(bootstrap+std::chrono::seconds{8})&&!owner.m_planetaryStartupDeadline);
+ owner.m_planetaryStartupDeadline=timing::Clock::time_point{};pilot.altitude=800000;
+ CHECK(!owner.defer_provisional_planetary_frame(bootstrap)&&!owner.m_planetaryStartupDeadline);
+ pilot.altitude=3.8;
+ owner.m_planetaryStartupDeadline=timing::Clock::time_point{};owner.m_planetarySettings->stream_lod=false;
+ CHECK(!owner.defer_provisional_planetary_frame(bootstrap)&&!owner.m_planetaryStartupDeadline);
+ owner.m_planetaryStartupDeadline=timing::Clock::time_point{};owner.m_planetarySettings->stream_lod=true;owner.m_planetaryFailed=true;
+ CHECK(!owner.defer_provisional_planetary_frame(bootstrap)&&!owner.m_planetaryStartupDeadline);
+ owner.m_planetaryFailed=false;
+ std::promise<void>entered,release;auto released=release.get_future().share();
+ auto blocker=owner.m_planetaryScheduler->submit("Hold another clip fit",[&]{entered.set_value();released.wait();});
+ CHECK(entered.get_future().wait_for(std::chrono::seconds{2})==std::future_status::ready);
+ request.markers.front().position.z=-95;
+ request.water_detail_seconds=1.0;
+ CHECK(!owner.pump_runtime_planetary_frame(&context,request,Mode::shaded,&updated)&&updated);
+ const auto held=scene_frame_for(&context);
+ CHECK(held->revision==first->revision+1&&held->solids==first->solids);
+ CHECK(held->camera.nearPlane==fit.nearPlane&&held->camera.farPlane==fit.farPlane);
+ CHECK(held->water_detail_seconds==1.0);
+ // The outer fallback applies the same policy when geometry admission
+ // cannot reach the scheduler. A viewport change widens the retained range.
+ CHECK(owner.advance_runtime_planetary_view(&context,request.camera,request.render_origin,{},1.0));
+ const auto resized=scene_frame_for(&context);
+ CHECK(resized->solids==first->solids&&resized->camera.nearPlane==request.camera.nearPlane
+     &&resized->camera.farPlane==request.camera.farPlane);
+ CHECK(resized->water_detail_seconds==1.0);
+ release.set_value();blocker.get();
+ CHECK(work.pending->wait_for(std::chrono::seconds{5})==std::future_status::ready);
+ request.water_detail_seconds=0.75;
+ CHECK(owner.pump_runtime_planetary_frame(&context,request,Mode::shaded,&updated)&&updated);
+ const auto replacement=scene_frame_for(&context);
+ CHECK(replacement->revision==resized->revision+1&&replacement->solids!=first->solids);
+ CHECK(replacement->camera.nearPlane>request.camera.nearPlane&&replacement->camera.farPlane<request.camera.farPlane);
+ CHECK(replacement->water_detail_seconds==0.75&&!work.pending);
+ request.camera.target={1,0,-1};
+ CHECK(owner.advance_runtime_planetary_view(&context,request.camera,request.render_origin,{},request.depth_fit_aspect));
+ const auto turned=scene_frame_for(&context);
+ CHECK(turned->solids==replacement->solids&&turned->camera.nearPlane==request.camera.nearPlane
+     &&turned->camera.farPlane==request.camera.farPlane);
+ CHECK(dot(camera_forward(turned->camera),camera_forward(request.camera))>0.99999f);
+ cleanup_context(&context);
+ return 0;
+}
+
 int verify_runtime_planetary_publication(){
  using Clock=std::chrono::steady_clock;
  int context{},baselineContext{};RuntimePublicationProbe owner;
@@ -745,7 +939,7 @@ int verify_runtime_planetary_publication(){
  auto blocker=owner.m_planetaryScheduler->submit("Hold existing runtime scheduler",[&]{entered.set_value();released.wait();});
  CHECK(entered.get_future().wait_for(std::chrono::seconds{2})==std::future_status::ready);
  const auto submitStart=Clock::now();
- CHECK(!owner.pump_runtime_planetary_frame(&context,request,false));
+ CHECK(!owner.pump_runtime_planetary_frame(&context,request,Mode::shaded));
  const auto submitNs=std::chrono::duration_cast<std::chrono::nanoseconds>(Clock::now()-submitStart).count();
  auto& work=owner.m_planetaryFramePublications.at(&context);
  const auto ticket=work.cancellation;const auto first=work.request;
@@ -754,57 +948,60 @@ int verify_runtime_planetary_publication(){
  CHECK(queued.running_tasks==1&&queued.queued_tasks==1&&queued.outstanding_tasks==2);
  for(unsigned frame=0;frame<20;++frame){
   request.camera.eye.x+=.1f;request.camera.target.x+=.1f;
-  CHECK(!owner.pump_runtime_planetary_frame(&context,request,false));
+  CHECK(!owner.pump_runtime_planetary_frame(&context,request,Mode::shaded));
   CHECK(work.request==first&&work.cancellation.node==ticket.node);
   CHECK(scene_frame_for(&context)->solids==original->solids);
   CHECK(std::abs(scene_frame_for(&context)->camera.eye.x-request.camera.eye.x)<1e-5f);
  }
  release.set_value();blocker.get();
  CHECK(work.pending->wait_for(std::chrono::seconds{5})==std::future_status::ready);
- CHECK(owner.pump_runtime_planetary_frame(&context,request,false));
+ CHECK(owner.pump_runtime_planetary_frame(&context,request,Mode::shaded));
  CHECK(scene_frame_for(&context)->solids->geometry->size()==expected);
  // The camera moved while preparation ran: queue only the latest request,
  // then settle without resending an unchanged completed frame.
  CHECK(work.pending&&work.pending->wait_for(std::chrono::seconds{5})==std::future_status::ready);
- CHECK(owner.pump_runtime_planetary_frame(&context,request,false)&&!work.pending);
+ CHECK(owner.pump_runtime_planetary_frame(&context,request,Mode::shaded)&&!work.pending);
  const auto accepted=scene_frame_for(&context)->solids;
- CHECK(owner.pump_runtime_planetary_frame(&context,request,false)&&!work.pending);
+ CHECK(owner.pump_runtime_planetary_frame(&context,request,Mode::shaded)&&!work.pending);
  std::promise<void>resizeEntered,resizeRelease;auto resizeReleased=resizeRelease.get_future().share();
  auto resizeBlocker=owner.m_planetaryScheduler->submit("Hold runtime resize",[&]{resizeEntered.set_value();resizeReleased.wait();});
  CHECK(resizeEntered.get_future().wait_for(std::chrono::seconds{2})==std::future_status::ready);
- request.depth_fit_aspect=1;CHECK(!owner.pump_runtime_planetary_frame(&context,request,false));
+ request.depth_fit_aspect=1;CHECK(!owner.pump_runtime_planetary_frame(&context,request,Mode::shaded));
  const auto narrowRequest=work.request;
- request.depth_fit_aspect=2;CHECK(!owner.pump_runtime_planetary_frame(&context,request,false));
+ request.depth_fit_aspect=2;CHECK(!owner.pump_runtime_planetary_frame(&context,request,Mode::shaded));
  resizeRelease.set_value();resizeBlocker.get();
  for(unsigned turn=0;turn<4&&work.pending;++turn){
   CHECK(work.pending->wait_for(std::chrono::seconds{5})==std::future_status::ready);
-  const bool resized=owner.pump_runtime_planetary_frame(&context,request,false);
+  const bool resized=owner.pump_runtime_planetary_frame(&context,request,Mode::shaded);
   if(resized)CHECK(work.request!=narrowRequest&&work.request->depth_fit_aspect==2);
  }
  CHECK(!work.pending&&work.admitted&&work.request->depth_fit_aspect==2);
  // Refusal retains complete geometry and is not repeated for identical input.
  request.limits.maximum_bytes=0;
- CHECK(!owner.pump_runtime_planetary_frame(&context,request,false));
+ CHECK(!owner.pump_runtime_planetary_frame(&context,request,Mode::shaded));
  CHECK(work.pending->wait_for(std::chrono::seconds{5})==std::future_status::ready);
  work.next_evidence={};
- CHECK(!owner.pump_runtime_planetary_frame(&context,request,false)&&!work.pending);
+ CHECK(!owner.pump_runtime_planetary_frame(&context,request,Mode::shaded)&&!work.pending);
  CHECK(!logger::evidence.empty()&&logger::evidence.back().outcome=="preparation refused");
  CHECK(scene_frame_for(&context)->solids==accepted);
- CHECK(!owner.pump_runtime_planetary_frame(&context,request,false)&&!work.pending);
- // A queued explicit display change can be superseded without presenting it.
+ CHECK(!owner.pump_runtime_planetary_frame(&context,request,Mode::shaded)&&!work.pending);
+ // Solid and Shaded share wireframe=false: their distinct enum policy must
+ // still retire stale Solid work rather than publish it as Shaded. A display change can be superseded without presenting it.
  request.limits={};request.markers[0].mesh.reset();request.markers[0].primitive=ObjectPreviewPrimitive::Cube;
  std::promise<void>entered2,release2;auto released2=release2.get_future().share();
  auto blocker2=owner.m_planetaryScheduler->submit("Hold superseded runtime request",[&]{entered2.set_value();released2.wait();});
  CHECK(entered2.get_future().wait_for(std::chrono::seconds{2})==std::future_status::ready);
- request.markers[0].wireframe=true;CHECK(!owner.pump_runtime_planetary_frame(&context,request,true));
- request.markers[0].wireframe=false;CHECK(!owner.pump_runtime_planetary_frame(&context,request,false));
+ request.markers[0].wireframe=false;request.markers[0].neutralSurface=true;
+ CHECK(!owner.pump_runtime_planetary_frame(&context,request,Mode::solid));
+ request.markers[0].neutralSurface=false;CHECK(!owner.pump_runtime_planetary_frame(&context,request,Mode::shaded));
  CHECK(scene_frame_for(&context)->solids==accepted);
  release2.set_value();blocker2.get();
  for(unsigned turn=0;turn<4&&owner.planetary_frame_preparing(&context);++turn){
   CHECK(work.pending->wait_for(std::chrono::seconds{5})==std::future_status::ready);
-  (void)owner.pump_runtime_planetary_frame(&context,request,false);
+  (void)owner.pump_runtime_planetary_frame(&context,request,Mode::shaded);
   CHECK(scene_frame_for(&context)->wire->depth_triangles->empty());
   CHECK(!scene_frame_for(&context)->markers.front().wireframe);
+  CHECK(!scene_frame_for(&context)->markers.front().neutralSurface);
  }
  CHECK(!work.pending&&work.admitted&&scene_frame_for(&context)->solids->geometry->size()==36);
  // Changing back to the cancelled policy must retry, not deduplicate its
@@ -812,13 +1009,13 @@ int verify_runtime_planetary_publication(){
  std::promise<void>entered3,release3;auto released3=release3.get_future().share();
  auto blocker3=owner.m_planetaryScheduler->submit("Hold runtime display policy bounce",[&]{entered3.set_value();released3.wait();});
  CHECK(entered3.get_future().wait_for(std::chrono::seconds{2})==std::future_status::ready);
- request.markers[0].wireframe=true;CHECK(!owner.pump_runtime_planetary_frame(&context,request,true));
- request.markers[0].wireframe=false;CHECK(!owner.pump_runtime_planetary_frame(&context,request,false));
- request.markers[0].wireframe=true;CHECK(!owner.pump_runtime_planetary_frame(&context,request,true));
+ request.markers[0].wireframe=true;CHECK(!owner.pump_runtime_planetary_frame(&context,request,Mode::wireframe));
+ request.markers[0].wireframe=false;CHECK(!owner.pump_runtime_planetary_frame(&context,request,Mode::shaded));
+ request.markers[0].wireframe=true;CHECK(!owner.pump_runtime_planetary_frame(&context,request,Mode::wireframe));
  release3.set_value();blocker3.get();
  for(unsigned turn=0;turn<4&&owner.planetary_frame_preparing(&context);++turn){
   CHECK(work.pending->wait_for(std::chrono::seconds{5})==std::future_status::ready);
-  (void)owner.pump_runtime_planetary_frame(&context,request,true);
+  (void)owner.pump_runtime_planetary_frame(&context,request,Mode::wireframe);
  }
  CHECK(!work.pending&&work.admitted&&scene_frame_for(&context)->markers.front().wireframe);
  // Cancel after the actual preparation body starts. Its cooperative stop path
@@ -829,21 +1026,21 @@ int verify_runtime_planetary_publication(){
  request.markers[0].primitive=ObjectPreviewPrimitive::IndexedMesh;request.markers[0].mesh=detailed.artifact;
  request.markers[0].wireframe=false;request.limits={6'291'456,64ull*1024*1024};
  skip_allocation_hook=true;allocation_hook=hold_runtime_preparation;
- CHECK(!owner.pump_runtime_planetary_frame(&context,request,false));
+ CHECK(!owner.pump_runtime_planetary_frame(&context,request,Mode::shaded));
  CHECK(preparingEntered.get_future().wait_for(std::chrono::seconds{5})==std::future_status::ready);
  const auto cooperativeRequest=work.request;const auto beforeCooperative=scene_frame_for(&context)->solids;
- request.markers[0].wireframe=true;CHECK(!owner.pump_runtime_planetary_frame(&context,request,true));
- request.markers[0].wireframe=false;CHECK(!owner.pump_runtime_planetary_frame(&context,request,false));
+ request.markers[0].wireframe=true;CHECK(!owner.pump_runtime_planetary_frame(&context,request,Mode::wireframe));
+ request.markers[0].wireframe=false;CHECK(!owner.pump_runtime_planetary_frame(&context,request,Mode::shaded));
  CHECK(work.request==cooperativeRequest&&scene_frame_for(&context)->solids==beforeCooperative);
  preparingRelease.set_value();
  CHECK(work.pending->wait_for(std::chrono::seconds{5})==std::future_status::ready);
  skip_allocation_hook=false;work.next_evidence={};
- CHECK(!owner.pump_runtime_planetary_frame(&context,request,false));
+ CHECK(!owner.pump_runtime_planetary_frame(&context,request,Mode::shaded));
  CHECK(work.pending&&work.request!=cooperativeRequest);
  CHECK(!logger::evidence.empty()&&logger::evidence.back().outcome=="cancelled");
  CHECK(scene_frame_for(&context)->solids==beforeCooperative);
  CHECK(work.pending->wait_for(std::chrono::seconds{5})==std::future_status::ready);
- CHECK(owner.pump_runtime_planetary_frame(&context,request,false)&&!work.pending);
+ CHECK(owner.pump_runtime_planetary_frame(&context,request,Mode::shaded)&&!work.pending);
  CHECK(scene_frame_for(&context)->solids->geometry->size()==expected);
  // Execute the actual runtime retirement block with a cooperative active
  // terrain job and a queued display. Stop owns cancellation and joins before
@@ -855,10 +1052,12 @@ int verify_runtime_planetary_publication(){
  owner.m_planetaryCancellation=active.cancellation;
  owner.m_planetaryPending.emplace(std::move(active.completion));
  CHECK(activeEntered.get_future().wait_for(std::chrono::seconds{2})==std::future_status::ready);
- request.markers[0].wireframe=true;CHECK(!owner.pump_runtime_planetary_frame(&context,request,true));
+ request.markers[0].wireframe=true;CHECK(!owner.pump_runtime_planetary_frame(&context,request,Mode::wireframe));
  const auto beforeRetirement=scene_frame_for(&context)->solids;
+ owner.m_planetaryInitialWaterCut=1;owner.m_planetaryCutPlayback.emplace();owner.m_planetaryPreparingInitialWater=true;
  owner.actual_retire();
  CHECK(!owner.m_planetaryScheduler&&owner.m_planetaryFramePublications.empty());
+ CHECK(!owner.m_planetaryInitialWaterCut&&!owner.m_planetaryCutPlayback&&!owner.m_planetaryPreparingInitialWater);
  CHECK(scene_frame_for(&context)->solids==beforeRetirement);
  CHECK(!logger::evidence.empty()&&logger::evidence.front().committed);
  const auto& phases=logger::evidence.front();
@@ -937,7 +1136,8 @@ int* racedContext{};ObjectMarker racedMarker;Camera racedCamera;epochengine::lig
 bool raced{};
 void publish_competing_scene() {raced=publish_scene_frame(racedContext,std::span{&racedMarker,1},racedCamera,racedLights);}
 struct BodyInventoryPort{unsigned body_count{};};
-bool managed_frame_admitted(bool rebased,std::optional<BodyInventoryPort> m_explorationPreview,std::span<const ObjectMarker> planetaryMarkers){
+bool managed_frame_admitted(bool rebased,std::optional<BodyInventoryPort> m_explorationPreview,
+ std::span<const ObjectMarker> planetaryMarkers,bool waitingForFirstTerrain=false){
  ACTUAL_MANAGED_GATE
  return completeManagedFrame;
 }
@@ -965,14 +1165,18 @@ int verify_async_camera_handoff() {
   std::optional<PreparedSceneFrame> prepared;
   std::promise<void> entered,release;auto released=release.get_future().share();
   std::thread worker([&]{entered.set_value();released.wait();
-   prepared=prepare_scene_frame(*source,std::span{&marker,1},initial,lights,{},queuedOrigin,{},std::span{&queuedCloud,1});});
+   prepared=prepare_scene_frame(*source,std::span{&marker,1},initial,lights,{},queuedOrigin,{},
+     std::span{&queuedCloud,1},false,WaterFrameSource{41u,12.5});});
   entered.get_future().wait();
   auto latestCloud=cloud;latestCloud.time_seconds=20;
   for(unsigned axis=0;axis<3;++axis)latestCloud.center[axis]-=latestOrigin[axis];
   SceneFrameRequest currentView;currentView.camera=latest;currentView.render_origin=latestOrigin;currentView.clouds={latestCloud};
+  currentView.water_source=WaterFrameSource{92u,18.0};
+  currentView.water_detail_seconds=20.0;
   if(explicitLatest&&wire){currentView.camera.projection=epochengine::render_camera::ProjectionKind::orthographic;
    currentView.camera.orthographicVerticalSize=37;}
-  const bool moved=explicitLatest||advance_scene_frame_camera(&context,latest,latestOrigin,std::span<const CloudVolume>{&latestCloud,1});
+  const bool moved=explicitLatest||advance_scene_frame_camera(&context,latest,latestOrigin,
+    std::span<const CloudVolume>{&latestCloud,1},20.0);
   release.set_value();worker.join();CHECK(moved&&prepared);
   const auto geometry=prepared->replacement->scene_frame->solids;
   const auto previous=scene_frame_for(&context);
@@ -981,6 +1185,8 @@ int verify_async_camera_handoff() {
   // never observe the queued camera before a later camera-only correction.
   std::shared_ptr<const PublishedSceneFrame> observed;std::thread renderer([&]{observed=scene_frame_for(&context);});renderer.join();
   CHECK(observed&&observed->solids==geometry&&observed->render_origin==queuedOrigin);
+  CHECK(observed->water_source.terrain_request==41u&&observed->water_source.sampled_seconds==12.5);
+  CHECK(observed->water_detail_seconds==20.0);
   CHECK(dot(camera_forward(observed->camera),forward)>.999999f);
   CHECK(dot(normalize(observed->camera.up),normalize(latest.up))>.999999f);
   for(unsigned axis=0;axis<3;++axis) {
@@ -1018,13 +1224,16 @@ int verify_async_camera_handoff() {
  // raw conservative lens is supplied on every turn, including settled views.
  {int context{};ObjectMarker marker{.primitive=ObjectPreviewPrimitive::IndexedMesh,.mesh=built.artifact};
   CHECK(publish_scene_frame(&context,std::span{&marker,1},initial,lights));
+  CHECK(scene_clear_color(scene_frame_for(&context).get())==kClearColor);
   auto source=capture_scene_frame_source(&context);CHECK(source);
   auto fitted=initial;fitted.nearPlane=20;fitted.farPlane=200;
-  auto prepared=prepare_scene_frame(*source,std::span{&marker,1},fitted,lights);CHECK(prepared);
-  SceneFrameRequest unchanged;unchanged.camera=initial;
+  auto prepared=prepare_scene_frame(*source,std::span{&marker,1},fitted,lights,{}, {},{}, {},true);CHECK(prepared);
+  SceneFrameRequest unchanged;unchanged.camera=initial;unchanged.space_background=true;
   CHECK(commit_scene_frame(&context,std::move(*prepared),&unchanged));
   const auto observed=scene_frame_for(&context);
   CHECK(observed->camera.nearPlane==20&&observed->camera.farPlane==200);
+  const std::array<float,4> black{0,0,0,1};
+  CHECK(scene_clear_color(observed.get())==black);
   cleanup_context(&context);
  }
  return 0;
@@ -1072,6 +1281,7 @@ int verify_relative_scene_publication() {
   CHECK(!commit_scene_frame(&asyncContext,std::move(*prepared)));
  }
  CHECK(managed_frame_admitted(true,BodyInventoryPort{1},std::span{&marker,1}));
+ CHECK(!managed_frame_admitted(true,BodyInventoryPort{1},std::span{&marker,1},true));
  CHECK(managed_frame_admitted(false,std::nullopt,{}));
  const auto attemptManaged=[&](std::optional<BodyInventoryPort> inventory,std::span<const ObjectMarker> markers){
   return managed_frame_admitted(true,inventory,markers)&&publish_scene_frame(&context,markers,camera,lights);};
@@ -1138,6 +1348,8 @@ int main() {
  if(const auto queued=verify_editor_planetary_preview_queue();queued)return queued;
  if(const auto mixed=verify_mixed_planetary_publication();mixed)return mixed;
  if(const auto runtime=verify_runtime_planetary_publication();runtime)return runtime;
+ if(const auto density=verify_ordinary_density_navigation();density)return density;
+ if(const auto clip=verify_runtime_planetary_clip_handoff();clip)return clip;
  if(const auto relative=verify_relative_scene_publication();relative)return relative;
  if(const auto lighting=verify_lighting_invalidation();lighting)return lighting;
  if(const auto pending=verify_lighting_damage_primitives();pending)return pending;
@@ -1248,6 +1460,85 @@ int main() {
   CHECK(std::memcmp(optimized.data(),reference.data(),reference.size()*sizeof(preview::Vertex))==0);
  }
  preview::cleanup_context(&equivalence);
+ // Use the real lit mesh path. Two water ranges share a mesh with land and
+ // retain identical positions and normals. Resolve solar glint separately
+ // from the broad reflection shared by both water ranges.
+ {
+  std::array<asset::mesh::Vertex,9> surface{};
+  const std::array<std::uint32_t,9> surfaceIndices{0,1,2,3,4,5,6,7,8};
+  for(std::uint32_t i=0;i<surface.size();++i){
+   surface[i].position={float(i/3u)*2.0f+float(i%3u==1u),0.0f,float(i%3u==2u)};
+   surface[i].normal={0,1,0};surface[i].color={.08f,.09f,.10f};
+  }
+  const auto globe=asset::mesh::build_artifact(surface,surfaceIndices);CHECK(globe);
+  preview::ObjectMarker globeMarker{.primitive=preview::ObjectPreviewPrimitive::IndexedMesh,.mesh=globe.artifact};
+  preview::Camera view;view.eye={2,40,0};view.target={2,0,0};view.up={0,0,1};
+  epochengine::lighting::LightingFrame sunlight;sunlight.revision=1;
+  sunlight.lights.push_back({.desc={.kind=epochengine::lighting::LightKind::Directional,
+   .intensity=1.0f,.direction={0,-1,0}}});
+  int context{};
+  CHECK(preview::publish_scene_frame(&context,std::span{&globeMarker,1},view,sunlight));
+  const auto before=preview::scene_frame_for(&context)->solids->geometry;CHECK(before->size()==9);
+  auto water=std::make_shared<asset::mesh::SphericalWaterAppearance>();
+  water->artifact_key=globe.artifact->key();water->ranges={{3,3,1.0f},{6,3,0.0f}};
+  globeMarker.sphericalWater=water;
+  globeMarker.waterDetail=preview::SphericalWaterView{{2.0,-20.0,0.0},20.0,1.0,0.0};
+  CHECK(preview::publish_scene_frame(&context,std::span{&globeMarker,1},view,sunlight));
+  const auto waterFrame=preview::scene_frame_for(&context);
+  const auto after=waterFrame->solids->geometry;
+  CHECK(waterFrame->solids->water_detail_ranges.size()==1u);
+  CHECK((waterFrame->solids->water_detail_ranges.front()==preview::WaterDetailRange{3u,3u}));
+  const auto originalWave=preview::water_detail_for(*waterFrame);CHECK(originalWave);
+  CHECK(preview::advance_scene_frame_camera(&context,view,{},std::nullopt,1.25));
+  const auto live=preview::scene_frame_for(&context);
+  CHECK(live->solids==waterFrame->solids&&live->markers.front().waterDetail->seconds==0.0);
+  const auto liveWave=preview::water_detail_for(*live);CHECK(liveWave&&liveWave->waves!=originalWave->waves);
+  CHECK(preview::advance_scene_frame_camera(&context,view,{},std::nullopt,0.0));
+  const auto rewound=preview::water_detail_for(*preview::scene_frame_for(&context));
+  CHECK(rewound&&rewound->waves==originalWave->waves);
+  auto shifted=*waterFrame;
+  shifted.render_origin={257.0,0.0,-17.0};
+  shifted.camera.eye.x-=257.0f;shifted.camera.eye.z+=17.0f;
+  const auto shiftedWave=preview::water_detail_for(shifted);CHECK(shiftedWave);
+  for(std::size_t i=0;i<originalWave->waves.size();++i){
+   const auto& first=originalWave->waves[i];const auto& second=shiftedWave->waves[i];
+   const double a=2.0*first[0]+first[3];
+   const double b=(2.0-257.0)*second[0]+17.0*second[2]+second[3];
+   CHECK(std::abs(std::sin(a)-std::sin(b))<0.003);
+  }
+  shifted.markers.front().waterDetail->seconds=1.25;
+  const auto advancedWave=preview::water_detail_for(shifted);CHECK(advancedWave);
+  CHECK(advancedWave->waves!=shiftedWave->waves);
+  shifted.camera.eye.y+=1000.0f;CHECK(!preview::water_detail_for(shifted));
+  CHECK(after!=before&&after->size()==9);
+  CHECK(std::memcmp(before->data(),after->data(),3*sizeof(preview::Vertex))==0);
+  for(unsigned i=3;i<9;++i){
+   const auto& a=(*before)[i];const auto& b=(*after)[i];
+   CHECK(a.position.x==b.position.x&&a.position.y==b.position.y&&a.position.z==b.position.z);
+  }
+  CHECK((*after)[3].color.x>(*after)[6].color.x+.03f);
+  CHECK((*before)[6].color.x>(*after)[6].color.x+.05f);
+  auto rejected=std::make_shared<asset::mesh::SphericalWaterAppearance>(*water);
+  rejected->artifact_key.words[0]^=1u;globeMarker.sphericalWater=rejected;
+  CHECK(!preview::publish_scene_frame(&context,std::span{&globeMarker,1},view,sunlight)
+   &&preview::scene_frame_for(&context)->solids->geometry==after);
+  globeMarker.sphericalWater=water;
+  sunlight.lights.front().desc.enabled=false;
+  sunlight.environment.ambient={.06f,.10f,.18f};
+  CHECK(preview::publish_scene_frame(&context,std::span{&globeMarker,1},view,sunlight));
+  const auto overhead=preview::scene_frame_for(&context)->solids->geometry;
+  view.eye={2,0.2f,40};view.up={0,1,0};
+  CHECK(preview::publish_scene_frame(&context,std::span{&globeMarker,1},view,sunlight));
+  const auto grazing=preview::scene_frame_for(&context)->solids->geometry;
+  CHECK((*grazing)[3].color.z>(*overhead)[3].color.z+.05f);
+  CHECK((*grazing)[6].color.z>(*overhead)[6].color.z+.05f);
+  CHECK(std::abs((*grazing)[3].color.z-(*grazing)[6].color.z)<.005f);
+  view.eye.y=-0.2f;
+  CHECK(preview::publish_scene_frame(&context,std::span{&globeMarker,1},view,sunlight));
+  const auto below=preview::scene_frame_for(&context)->solids->geometry;
+  CHECK((*below)[3].color.z==(*below)[6].color.z);
+  preview::cleanup_context(&context);
+ }
  const auto before=preview::preview_content_revision_for(&a);
  marker.wireframe=true;CHECK(publish(&a));
  CHECK(preview::preview_content_revision_for(&a)==before+1);
@@ -1283,7 +1574,9 @@ int main() {
  CHECK(preview::object_marker_vertices_for(&a).empty());
  // Forest painting changes only submitted albedo, and invalidates it by value.
  int paintContext{};auto painted=marker;painted.selected=false;
- auto paint=std::make_shared<preview::MeshPaintView>();paint->color={0.2f,0.3f,0.4f};painted.paintView=paint;
+ auto paint=std::make_shared<preview::MeshPaintView>();
+ paint->regions.push_back({.direction={1,0,0},.radius=std::sqrt(2.0),.minimum_dot=0.5,.color={0.2f,0.3f,0.4f}});
+ painted.paintView=paint;
  CHECK(preview::set_object_markers(&paintContext,std::span{&painted,1}));
  const auto paintFrame=preview::object_solid_frame_for(&paintContext);
  CHECK(!paintFrame->geometry->empty());
@@ -1291,7 +1584,8 @@ int main() {
  painted.paintView=std::make_shared<preview::MeshPaintView>(*paint);
  CHECK(preview::set_object_markers(&paintContext,std::span{&painted,1}));
  CHECK(preview::preview_content_revision_for(&paintContext)==paintRevision);
- auto changedPaint=std::make_shared<preview::MeshPaintView>(*paint);changedPaint->color={0.7f,0.6f,0.1f};painted.paintView=changedPaint;
+ auto changedPaint=std::make_shared<preview::MeshPaintView>(*paint);
+ changedPaint->regions.front().color={0.7f,0.6f,0.1f};painted.paintView=changedPaint;
  CHECK(preview::set_object_markers(&paintContext,std::span{&painted,1}));
  CHECK(preview::preview_content_revision_for(&paintContext)>paintRevision);
  CHECK(preview::object_solid_frame_for(&paintContext)->geometry!=paintFrame->geometry);
@@ -1588,6 +1882,7 @@ int main() {
  return 0;
 }
 '''
+    fixture = fixture.replace("RUNTIME_FRAME_DISPATCH", frame_dispatch)
     return fixture.replace("RUNTIME_RETIREMENT",retirement).replace("RUNTIME_PUBLICATION",runtime_publication).replace("BASELINE_OWNER", baseline).replace("SHARED_ROUTING_OWNER",routing).replace("ACTUAL_MANAGED_GATE", managed_gate).replace("ACTUAL_EXPLORATION_CAMERA", exploration_camera).replace("PREVIEW_FIELDS",preview_fields).replace("CACHE_HELPERS",cache_helpers).replace("SCENE_INTERACTION_OWNER",scene_interaction_owner).replace("GENERIC_FOCUS",generic_focus).replace("EDITOR_FRAMING",editor_framing).replace("PREVIEW_PUMP",preview_pump).replace("PREVIEW_RETIRE",preview_retire).replace("PREVIEW_RESET",preview_reset).replace("PAINT_FOCUS_DISPATCH",paint_focus_dispatch).replace("PAINT_FOCUS",paint_focus).replace("RETIRE_CALL",retire_call).replace("CALLER_ENTRY",caller_entry).replace("CALLER_DISPATCH",caller_dispatch).replace("CALLER_DIRECT",caller_direct).replace("CALLER_WIRE",caller_wire)
 
 
@@ -1606,6 +1901,17 @@ def source_receipt_fixture():
     play = globals().get('SOURCE_RECEIPT_PLAY') or (ROOT / 'Engine/src/epoch/implementation/epoch.project_play_scene.inl').read_text(encoding='utf-8-sig')
     planet = globals().get('SOURCE_RECEIPT_PLANET') or (ROOT / 'Engine/src/project/project.planetary.cpp').read_text(encoding='utf-8-sig')
     pump = actual_function(play, '            void pump_planetary_runtime(')
+    adopt_water = actual_function(play, '            void adopt_planetary_water_source(').replace(
+        'project_planetary_snapshot::Snapshot', 'epochengine::project_planetary_snapshot::Snapshot')
+    playback = '\n'.join(actual_function(play, marker) + (';' if 'struct ' in marker else '')
+        for marker in (
+            '            struct RuntimeSceneFrameResult final',
+            '            struct PlanetaryFramePublication final',
+            '            struct PlanetaryCutPlayback final',
+            '            void publish_planetary_stream_cut(', '            bool pump_planetary_cut_playback(',
+            '            [[nodiscard]] bool planetary_wet_frame_committed(',
+            '            [[nodiscard]] bool planetary_wet_frames_fit(',
+            '            void restore_planetary_cut_playback('))
     changed = actual_function(play, '            [[nodiscard]] static bool planetary_view_changed(')
     start = planet.index('            if(cancellation.stop_requested()||!source_generation_is_current(project_root,*admitted,cancellation)', planet.index('    StreamResult stream_step('))
     end = planet.index('            operation.ok = true;', start) + len('            operation.ok = true;')
@@ -1633,17 +1939,23 @@ def source_receipt_fixture():
 #include <vector>
 import asset.mesh_artifact;
 import project.planetary;
+import project.planetary_snapshot;
 import render.preview_grid;
 import scene.snapshot;
 import editor.task_scheduler;
 namespace fs=std::filesystem;
 namespace asset=epochengine::asset;
 namespace previewgrid=epochengine::previewgrid;
+namespace project_planetary_snapshot=epochengine::project_planetary_snapshot;
 namespace scene=epochengine::scene;
 namespace editor_tasks=epochengine::editor_tasks;
 namespace timing {using Clock=std::chrono::steady_clock;}
+namespace platform::child_process {enum class MeshDrawMode{solid,wireframe,shaded};}
 namespace core {struct Context {};}
-namespace logger {enum class LogLevel {WARN};struct Sink {void log(LogLevel,const std::string&,std::source_location){}};Sink get(const char*){return {};}}
+namespace render_water_evidence {bool enabled(){return false;}}
+namespace logger {enum class LogLevel {WARN,INFO};struct Sink {void log(LogLevel,const std::string&,std::source_location){}
+ template<class...T>void logf(T&&...){}};Sink get(const char*){return {};}
+ template<class...T>void infof_loc(T&&...){}}
 #define CHECK(value) do{if(!(value)){std::fprintf(stderr,"Source receipt contract line %d: %s\n",__LINE__,#value);return __LINE__;}}while(false)
 std::string read(const fs::path& path){std::ifstream in(path,std::ios::binary);return {std::istreambuf_iterator<char>{in},{}};}
 void write(const fs::path& path,const std::string& text){fs::create_directories(path.parent_path());std::ofstream out(path,std::ios::binary|std::ios::trunc);out<<text;}
@@ -1671,6 +1983,7 @@ StreamResult final_admission(const fs::path& project_root,const std::optional<So
  const std::optional<std::string>& observedRecipe,const Settings& settings,StreamResult result,std::stop_token cancellation) {
  auto& operation=result.operation;
  const bool providerWater=true;const package_source::Attachment water;
+ const std::optional<double> verifiedSampleSeconds;
  const StreamMeshBinding* binding=nullptr;
  FINAL_ADMISSION
  if(omit_receipt)result.verified_source.reset();
@@ -1691,6 +2004,10 @@ StreamResult stream_step(const fs::path& root,Settings settings,StreamView view,
 }
 struct Transform {std::array<float,3>position{},rotation{},scale{1,1,1};};
 struct Entity {std::uint64_t source_id{7};Transform transform;std::optional<scene::SceneMeshSnapshot>mesh_asset;bool visible()const{return true;}};
+namespace project_planetary_runtime {
+struct Binding {std::string water_source_hash;};
+std::optional<Binding> admitted_project_binding(){return {};}
+}
 struct RuntimeStreamProbe {
  fs::path root;std::string m_projectRoot;
  std::vector<Entity>m_entities{Entity{}};
@@ -1699,11 +2016,19 @@ struct RuntimeStreamProbe {
  struct Preview {std::array<double,3>camera{0,0,26.5};std::optional<std::array<double,3>>forward{{0,0,-1}},up{{0,1,0}};};
  std::optional<Preview>m_explorationPreview{Preview{}};
  struct {double seconds{};std::uint32_t anchor{};}m_explorationFrame;
- bool m_explorationController{true},m_planetaryPaused{},m_planetaryFailed{},m_planetaryContinue{true};
+ struct Controller {
+  std::shared_ptr<int> water_provider()const{return {};}
+  std::shared_ptr<const project_planetary_snapshot::WaterLatticeProvider> water_lattice_provider()const{return {};}
+ };
+ std::shared_ptr<Controller> m_explorationController{std::make_shared<Controller>()};
+ bool m_planetaryPaused{},m_planetaryFailed{},m_planetaryContinue{true};
  bool m_planetaryPublishedOcean{};
  std::optional<project_planetary::GeneratedMeshFrame>m_planetaryMeshFrame;
  std::optional<std::uint32_t>m_planetaryLodBody;
  std::shared_ptr<const epochengine::project_planetary_snapshot::Snapshot>m_planetaryWaterSource;
+ std::shared_ptr<const epochengine::project_planetary_snapshot::Snapshot>m_planetaryWaterPublishedSource;
+ std::optional<double>m_planetaryWaterObservedSeconds,m_planetaryWaterPublishedSeconds;
+ std::shared_ptr<const epochengine::asset::mesh::SphericalWaterAppearance>m_planetaryWaterAppearance;
  std::uint64_t m_planetaryEntity{7},m_planetarySequence{};
  std::uint32_t m_planetaryRequestBody{};
  project_planetary::StreamView m_planetaryView;
@@ -1712,6 +2037,22 @@ struct RuntimeStreamProbe {
  timing::Clock::time_point m_planetaryNextTick{};
  std::optional<std::future<project_planetary::StreamResult>>m_planetaryPending;
  editor_tasks::CancellationTicket m_planetaryCancellation;
+ std::optional<int> m_planetaryWaterPending;
+ editor_tasks::CancellationTicket m_planetaryWaterCancellation;
+ std::uint64_t m_planetaryRequestWaterClock{},m_planetaryWaterClockGeneration{};
+ bool m_planetaryPreparingInitialWater{},m_planetaryPreparingWetBatch{};
+ struct InitialPlanetaryWaterCut {
+  project_planetary::StreamResult stream;std::shared_ptr<int> provider;std::string water_source_hash;
+  std::shared_ptr<const project_planetary_snapshot::Snapshot> previous;
+  std::shared_ptr<const project_planetary_snapshot::WaterLatticeProvider> lattice_provider;
+ };
+ std::optional<InitialPlanetaryWaterCut> m_planetaryInitialWaterCut;
+ static project_planetary::StreamResult prepare_initial_planetary_water_cut(const fs::path&,
+  const project_planetary::Settings&,InitialPlanetaryWaterCut cut,std::uint64_t,std::uint64_t,std::stop_token) {
+  return std::move(cut.stream);
+ }
+ std::uint64_t planetary_water_display_bytes(const project_planetary_snapshot::Snapshot&,
+  const project_planetary_snapshot::Snapshot*)const{return 0;}
  std::unique_ptr<editor_tasks::Scheduler>m_planetaryScheduler=std::make_unique<editor_tasks::Scheduler>(
   editor_tasks::SchedulerLimits{.worker_count=1,.retained_finished_nodes=32});
  unsigned reset_water_calls{},geometry_admissions{};
@@ -1721,11 +2062,20 @@ struct RuntimeStreamProbe {
  }
  ~RuntimeStreamProbe(){m_planetaryScheduler->graph().Shutdown();}
  bool runtime_water_visibility_pending()const{return false;}
- bool planetary_mesh_frame_fits(const std::shared_ptr<const asset::mesh::Artifact>& value){++geometry_admissions;return bool(value);}
- void reset_planetary_water(){++reset_water_calls;}
+ bool planetary_mesh_frame_fits(const std::shared_ptr<const asset::mesh::Artifact>& value,
+  const std::optional<project_planetary::GeneratedMeshFrame>& = {}){++geometry_admissions;return bool(value);}
+ void reset_planetary_water(bool){++reset_water_calls;}
  void ensure_planetary_scheduler(){(void)m_planetaryScheduler->maintain();}
  void retry(){m_planetaryFailed=false;m_planetaryContinue=true;m_planetaryNextTick={};}
+ struct PlanetaryCutPlayback;
+ void queue_planetary_wet_batch(PlanetaryCutPlayback&){
+  throw std::logic_error("Source receipt fixture unexpectedly queued a shoreline continuation");
+ }
  ACTUAL_CHANGED
+ ACTUAL_ADOPT_WATER
+ ACTUAL_PLAYBACK
+ std::optional<PlanetaryCutPlayback> m_planetaryCutPlayback;
+ std::unordered_map<const void*,PlanetaryFramePublication> m_planetaryFramePublications;
  ACTUAL_PUMP
 };
 int main(){
@@ -1820,7 +2170,8 @@ int main(){
   project_planetary::worker_checks.load(),project_planetary::producer_calls.load());
 }
 '''
-    return code.replace('FINAL_ADMISSION', final).replace('ACTUAL_CHANGED', changed).replace('ACTUAL_PUMP', pump)
+    return (code.replace('FINAL_ADMISSION', final).replace('ACTUAL_CHANGED', changed)
+            .replace('ACTUAL_ADOPT_WATER', adopt_water).replace('ACTUAL_PLAYBACK', playback).replace('ACTUAL_PUMP', pump))
 
 
 def shortcut_fixture():
@@ -1873,18 +2224,21 @@ namespace lighting {
  struct Color{float r{},g{},b{};};struct LightingFrame{unsigned revision{};struct{Color ambient{};}environment;};
 }
 namespace platform::child_process {
- enum class MeshDrawMode{solid,wireframe};struct RuntimeMeshCommand{std::uint64_t sequence{};MeshDrawMode mode{};};
+ enum class MeshDrawMode{solid,wireframe,shaded};struct RuntimeMeshCommand{std::uint64_t sequence{};MeshDrawMode mode{};};
  inline unsigned acknowledgements{};inline bool lastPublished{};inline MeshDrawMode lastMode{};
  void acknowledge_runtime_mesh_command(const RuntimeMeshCommand&,bool published,MeshDrawMode mode){++acknowledgements;lastPublished=published;lastMode=mode;}
 }
 struct ActualOwner {
  bool m_editorRuntimeControlled{};std::optional<platform::child_process::RuntimeMeshCommand> m_ownedRuntimeMeshCommand{};
- bool m_meshWireframe{},m_screenshotHeld{},m_wireframeHeld{};
- std::optional<bool> m_requestedMeshWireframe{};
- std::string m_runtimeViewStatus{},m_tileMapPath{};float m_runtimeViewportHeight{628},m_runtimeViewportWidth{1280};
+ platform::child_process::MeshDrawMode m_meshDrawMode{platform::child_process::MeshDrawMode::shaded};
+ bool m_screenshotHeld{},m_wireframeHeld{};
+ std::optional<platform::child_process::MeshDrawMode> m_requestedMeshDrawMode{};
+ std::string m_runtimeViewStatus{},m_tileMapPath{};
+ gui::WidgetBounds m_runtimeGuiBounds{{},{1280,628}};
  bool m_runtimeControlsVisible{true};
  bool m_runtimeInspectionLight{};
  bool m_planetaryFailed{},m_planetaryPaused{},m_planetaryPending{},m_planetaryContinue{};
+ bool m_planetaryInitialWaterCut{},m_planetaryPreparingInitialWater{},m_planetaryCutPlayback{};
  struct Gameplay {bool active()const{return false;}};Gameplay* m_gameplayRuntime{};
  bool m_planetarySettings{},m_explorationController{};
  int m_screenshotAfterFrames{};std::string m_screenshotStatus{};
@@ -1892,7 +2246,9 @@ struct ActualOwner {
 };
 #define CHECK(value) do {if(!(value))return __LINE__;}while(false)
 int main(){
+ using Mode=platform::child_process::MeshDrawMode;
  ActualOwner owner;core::Context context;
+ CHECK(owner.m_meshDrawMode==Mode::shaded&&!owner.m_requestedMeshDrawMode);
  const auto key=[&](input::Key value,bool held){context.held[static_cast<int>(value)]=held;};
  key(input::Key::F12,true);context.focused=false;
  owner.update_runtime_view_shortcuts(&context,false);CHECK(owner.m_screenshotAfterFrames==0);
@@ -1914,37 +2270,43 @@ int main(){
  context.focused=false;owner.finish_runtime_screenshot(&context);
  CHECK(owner.m_screenshotAfterFrames==0&&editor_clipboard_screenshot::calls==1);
  context.focused=true;key(input::Key::PrintScreen,false);key(input::Key::F2,true);
- owner.update_runtime_view_shortcuts(&context,true);CHECK(!owner.m_requestedMeshWireframe.value_or(owner.m_meshWireframe));
+ owner.update_runtime_view_shortcuts(&context,true);CHECK(owner.m_requestedMeshDrawMode.value_or(owner.m_meshDrawMode)==Mode::shaded);
  key(input::Key::F2,false);owner.update_runtime_view_shortcuts(&context,false);
  key(input::Key::F2,true);gui::captured=true;
- owner.update_runtime_view_shortcuts(&context,false);CHECK(!owner.m_requestedMeshWireframe.value_or(owner.m_meshWireframe));
+ owner.update_runtime_view_shortcuts(&context,false);CHECK(owner.m_requestedMeshDrawMode.value_or(owner.m_meshDrawMode)==Mode::shaded);
  gui::captured=false;key(input::Key::F2,false);owner.update_runtime_view_shortcuts(&context,false);
- key(input::Key::F2,true);owner.update_runtime_view_shortcuts(&context,false);CHECK(owner.m_requestedMeshWireframe.value_or(owner.m_meshWireframe));
- owner.update_runtime_view_shortcuts(&context,false);CHECK(owner.m_requestedMeshWireframe.value_or(owner.m_meshWireframe));
+ key(input::Key::F2,true);owner.update_runtime_view_shortcuts(&context,false);CHECK(owner.m_requestedMeshDrawMode.value_or(owner.m_meshDrawMode)==Mode::wireframe);
+ owner.update_runtime_view_shortcuts(&context,false);CHECK(owner.m_requestedMeshDrawMode.value_or(owner.m_meshDrawMode)==Mode::wireframe);
  key(input::Key::F2,false);owner.update_runtime_view_shortcuts(&context,false);
- key(input::Key::F2,true);owner.update_runtime_view_shortcuts(&context,false);CHECK(!owner.m_requestedMeshWireframe.value_or(owner.m_meshWireframe));
+ key(input::Key::F2,true);owner.update_runtime_view_shortcuts(&context,false);CHECK(owner.m_requestedMeshDrawMode.value_or(owner.m_meshDrawMode)==Mode::shaded);
  owner.m_screenshotAfterFrames=1;owner.finish_runtime_screenshot(nullptr);
  CHECK(owner.m_screenshotAfterFrames==0&&editor_clipboard_screenshot::calls==1);
  context.held.fill(false);context.pressed[static_cast<int>(input::Key::F2)]=true;
- owner.update_runtime_view_shortcuts(&context,false);CHECK(owner.m_requestedMeshWireframe.value_or(owner.m_meshWireframe));
+ owner.update_runtime_view_shortcuts(&context,false);CHECK(owner.m_requestedMeshDrawMode.value_or(owner.m_meshDrawMode)==Mode::wireframe);
  context.pressed.fill(false);owner.update_runtime_view_shortcuts(&context,false);
- CHECK(owner.m_requestedMeshWireframe.value_or(owner.m_meshWireframe)); // A complete queued tap need not remain held.
+ CHECK(owner.m_requestedMeshDrawMode.value_or(owner.m_meshDrawMode)==Mode::wireframe); // A complete queued tap need not remain held.
  context.pressed[static_cast<int>(input::Key::F12)]=true;
  owner.update_runtime_view_shortcuts(&context,false);CHECK(owner.m_screenshotAfterFrames==2);
- owner.finish_runtime_mesh_display(false,true);
- CHECK(!owner.m_meshWireframe&&!owner.m_requestedMeshWireframe&&!owner.m_runtimeViewStatus.empty());
- owner.finish_runtime_mesh_display(true,false);CHECK(owner.m_runtimeViewStatus.empty());
- owner.m_requestedMeshWireframe=true;
- owner.finish_runtime_mesh_display(true,true);
- CHECK(owner.m_meshWireframe&&!owner.m_requestedMeshWireframe&&owner.m_runtimeViewStatus.empty());
- owner.finish_runtime_mesh_display(false,false);CHECK(owner.m_meshWireframe);
+ owner.finish_runtime_mesh_display(false,Mode::wireframe);
+ CHECK(owner.m_meshDrawMode!=Mode::wireframe&&!owner.m_requestedMeshDrawMode&&!owner.m_runtimeViewStatus.empty());
+ owner.finish_runtime_mesh_display(true,Mode::shaded);CHECK(owner.m_runtimeViewStatus.empty());
+ owner.m_requestedMeshDrawMode=Mode::wireframe;
+ owner.finish_runtime_mesh_display(true,Mode::wireframe);
+ CHECK(owner.m_meshDrawMode==Mode::wireframe&&!owner.m_requestedMeshDrawMode&&owner.m_runtimeViewStatus.empty());
+ owner.finish_runtime_mesh_display(false,Mode::shaded);CHECK(owner.m_meshDrawMode==Mode::wireframe);
  owner.m_editorRuntimeControlled=true;owner.m_ownedRuntimeMeshCommand=platform::child_process::RuntimeMeshCommand{1,platform::child_process::MeshDrawMode::solid};
- owner.finish_runtime_mesh_display(false,false);CHECK(owner.m_meshWireframe&&!owner.m_ownedRuntimeMeshCommand);
+ owner.finish_runtime_mesh_display(false,Mode::solid);CHECK(owner.m_meshDrawMode==Mode::wireframe&&!owner.m_ownedRuntimeMeshCommand);
  CHECK(platform::child_process::acknowledgements==1&&!platform::child_process::lastPublished&&platform::child_process::lastMode==platform::child_process::MeshDrawMode::wireframe);
  owner.m_ownedRuntimeMeshCommand=platform::child_process::RuntimeMeshCommand{2,platform::child_process::MeshDrawMode::solid};
- owner.finish_runtime_mesh_display(true,false);CHECK(!owner.m_meshWireframe&&platform::child_process::acknowledgements==2&&platform::child_process::lastPublished);
+ owner.finish_runtime_mesh_display(true,Mode::solid);CHECK(owner.m_meshDrawMode==Mode::solid&&platform::child_process::acknowledgements==2&&platform::child_process::lastPublished&&platform::child_process::lastMode==Mode::solid);
+ owner.m_ownedRuntimeMeshCommand=platform::child_process::RuntimeMeshCommand{3,Mode::shaded};
+ owner.finish_runtime_mesh_display(false,Mode::shaded);
+ CHECK(owner.m_meshDrawMode==Mode::solid&&platform::child_process::lastMode==Mode::solid&&!platform::child_process::lastPublished);
+ owner.m_ownedRuntimeMeshCommand=platform::child_process::RuntimeMeshCommand{4,Mode::shaded};
+ owner.finish_runtime_mesh_display(true,Mode::shaded);
+ CHECK(owner.m_meshDrawMode==Mode::shaded&&platform::child_process::lastMode==Mode::shaded&&platform::child_process::lastPublished);
  key(input::Key::F2,false);context.pressed[static_cast<int>(input::Key::F2)]=false;owner.update_runtime_view_shortcuts(&context,false);
- key(input::Key::F2,true);owner.update_runtime_view_shortcuts(&context,false);CHECK(!owner.m_requestedMeshWireframe);
+ key(input::Key::F2,true);owner.update_runtime_view_shortcuts(&context,false);CHECK(!owner.m_requestedMeshDrawMode);
  key(input::Key::F2,false);owner.update_runtime_view_shortcuts(&context,false);
  owner.m_editorRuntimeControlled=false;
  owner.m_explorationController=true;owner.m_planetarySettings=true;
@@ -1962,7 +2324,7 @@ int main(){
  CHECK(normal.environment.ambient.r==0.05f&&normal.environment.ambient.g==0.8f&&normal.environment.ambient.b==0.1f);
  CHECK(inspected.revision==normal.revision&&!owner.m_runtimeInspectionLight);
  CHECK(owner.runtime_panel_height()<=580&&owner.runtime_panel_height()>0);
- owner.m_runtimeViewportHeight=450;CHECK(owner.runtime_panel_height()<=402);
+ owner.m_runtimeGuiBounds.size.y=450;CHECK(owner.runtime_panel_height()<=402);
  CHECK(owner.runtime_panel_captures_pointer({24,24}));
  CHECK(owner.runtime_panel_captures_pointer({454,24+owner.runtime_panel_height()}));
  CHECK(!owner.runtime_panel_captures_pointer({23.9f,24})&&!owner.runtime_panel_captures_pointer({454.1f,24}));
@@ -1974,11 +2336,11 @@ int main(){
  gui::captured=true;CHECK(owner.consume_runtime_navigation_wheel({900,900},false)==0&&gui::consumed==0);
  gui::captured=false;CHECK(owner.consume_runtime_navigation_wheel({900,900},false)==7&&gui::consumed==1&&gui::wheel==0);
  CHECK(owner.consume_runtime_navigation_wheel({900,900},false)==0&&gui::consumed==2);
- owner.m_runtimeViewportHeight=20;CHECK(owner.runtime_panel_height()==1);
+ owner.m_runtimeGuiBounds.size.y=20;CHECK(owner.runtime_panel_height()==1);
  const auto tiny=owner.runtime_panel_bounds();
  CHECK(owner.runtime_panel_captures_pointer({tiny.position.x,tiny.position.y+tiny.size.y}));
  CHECK(!owner.runtime_panel_captures_pointer({tiny.position.x,tiny.position.y+tiny.size.y+0.1f}));
- owner.m_runtimeViewportHeight=720;owner.m_runtimeControlsVisible=false;
+ owner.m_runtimeGuiBounds.size.y=720;owner.m_runtimeControlsVisible=false;
  const auto compact=owner.runtime_panel_bounds();CHECK(compact.position.x==1096&&compact.position.y==24&&compact.size.x==160&&compact.size.y==32);
  CHECK(!owner.runtime_panel_captures_pointer({24,24})&&!owner.runtime_panel_captures_pointer({100,200}));
  CHECK(owner.runtime_panel_captures_pointer({compact.position.x+1,compact.position.y+1}));
@@ -1991,10 +2353,18 @@ int main(){
  gui::nextClick=false;owner.draw_runtime_controls_hide(390);CHECK(owner.m_runtimeControlsVisible);
  gui::nextClick=true;owner.draw_runtime_controls_hide(390);CHECK(!owner.m_runtimeControlsVisible&&gui::label=="Hide Controls");
  for(const auto dimensions:std::array{gui::Vec2{1393,943},gui::Vec2{400,300},gui::Vec2{180,120},gui::Vec2{20,20},gui::Vec2{1,1}})
-  for(bool visible:{false,true}){owner.m_runtimeViewportWidth=dimensions.x;owner.m_runtimeViewportHeight=dimensions.y;owner.m_runtimeControlsVisible=visible;
+  for(bool visible:{false,true}){owner.m_runtimeGuiBounds.size=dimensions;owner.m_runtimeControlsVisible=visible;
    const auto bounds=owner.runtime_panel_bounds();CHECK(bounds.position.x>=0&&bounds.position.y>=0&&bounds.size.x>0&&bounds.size.y>0);
    CHECK(bounds.position.x+bounds.size.x<=dimensions.x&&bounds.position.y+bounds.size.y<=dimensions.y);
    CHECK(owner.runtime_panel_captures_pointer(bounds.position));}
+ owner.m_runtimeGuiBounds={{8,70},{384,746}};owner.m_runtimeControlsVisible=true;
+ const auto safePanel=owner.runtime_panel_bounds();
+ CHECK(safePanel.position.x==32&&safePanel.position.y==94);
+ CHECK(owner.runtime_panel_captures_pointer(safePanel.position)&&!owner.runtime_panel_captures_pointer({32,24}));
+ owner.m_runtimeControlsVisible=false;
+ const auto safeCompact=owner.runtime_panel_bounds();
+ CHECK(safeCompact.position.x==208&&safeCompact.position.y==94);
+ CHECK(owner.runtime_panel_captures_pointer(safeCompact.position)&&!owner.runtime_panel_captures_pointer({208,24}));
  return 0;
 }
 '''
@@ -2089,7 +2459,7 @@ add_test(NAME planetary_look_direction COMMAND yaw_contract)
         module_map = {}
         owners = (ROOT / "Engine/modules", ROOT / "Engine/dep/EpochPlatformEngine/modules")
         for owner in owners:
-            for path in owner.glob("*.ixx"):
+            for path in owner.rglob("*.ixx"):
                 match = re.search(r"^export module\s+([\w.:]+);", path.read_text(encoding="utf-8-sig"), re.M)
                 if match:
                     self.assertNotIn(match.group(1), module_map)
@@ -2119,7 +2489,7 @@ endif()
 include("{(ROOT / 'Engine/cmake/epoch_task_scheduler.cmake').as_posix()}")
 epoch_admit_task_scheduler(wire_contract "{ROOT.as_posix()}")
 add_executable(shortcut_contract runtime.shortcuts_contract.cpp)
-add_executable(source_receipt_contract runtime.source_receipt_contract.cpp "{(ROOT / 'Engine/src/render/render.preview_camera.cpp').as_posix()}" "{(ROOT / 'Engine/src/render/render.preview_lighting.cpp').as_posix()}" "{(ROOT / 'Engine/src/assets/texture/asset.texture_artifact.cpp').as_posix()}" "{(ROOT / 'Engine/src/authoring/texture/authoring.texture_document.cpp').as_posix()}" "{(ROOT / 'Engine/src/authoring/texture/authoring.texture_residency.cpp').as_posix()}")
+add_executable(source_receipt_contract runtime.source_receipt_contract.cpp "{(ROOT / 'Engine/src/project/project.planetary_snapshot.cpp').as_posix()}" "{(ROOT / 'Engine/src/render/render.preview_camera.cpp').as_posix()}" "{(ROOT / 'Engine/src/render/render.preview_lighting.cpp').as_posix()}" "{(ROOT / 'Engine/src/assets/texture/asset.texture_artifact.cpp').as_posix()}" "{(ROOT / 'Engine/src/authoring/texture/authoring.texture_document.cpp').as_posix()}" "{(ROOT / 'Engine/src/authoring/texture/authoring.texture_residency.cpp').as_posix()}")
 target_sources(source_receipt_contract PRIVATE FILE_SET CXX_MODULES BASE_DIRS {bases} FILES {modules})
 target_include_directories(source_receipt_contract PRIVATE "{(ROOT / 'Engine/include').as_posix()}")
 target_link_libraries(source_receipt_contract PRIVATE Epoch::TaskScheduler)

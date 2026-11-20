@@ -11,15 +11,101 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <stdexcept>
 #include <utility>
 #include <vector>
 
 #include "../ai.native_multimodel_gpu_budget.hpp"
 #include "../ai.model_behavior.hpp"
+#include "../ai.model_capability.hpp"
 
 #include <nlohmann/json.hpp>
 
 namespace epoch_ai::model {
+
+// Normalize the shipped legacy label consistently in metadata-only and live views.
+// Operator-assigned names and unrelated model identities are preserved verbatim.
+[[nodiscard]] inline std::string normalized_model_display_name(
+    std::string_view id, std::string name)
+{
+    if (id == "qwen3.8-flash-next-ud-q2-k-xl"
+        && name == "Qwen3.8 Flash Next \xc3\x83\xe2\x80\x9a\xc3\x82\xc2\xb7 UD-Q2_K_XL")
+        return "Qwen3.8 Flash Next (UD-Q2_K_XL)";
+    return name;
+}
+
+// Edge0 is a bundle consumed by the installed native streaming backend, not a
+// standalone GGUF. Admission reads only bounded metadata/file sizes; the loader
+// remains responsible for tensor/scale integrity. Publisher args/env are data,
+// never executable configuration.
+[[nodiscard]] inline bool is_edge0_bundle_path(const std::filesystem::path& path)
+{
+    return path.filename() == epochengine::ai::model_capability::edge0_skeleton;
+}
+
+struct Edge0BundleInspection {
+    bool complete{};
+    std::uint64_t bytes{};
+    std::string error;
+};
+
+[[nodiscard]] inline Edge0BundleInspection inspect_edge0_bundle(const std::filesystem::path& skeleton)
+{
+    Edge0BundleInspection result;
+    const auto root = skeleton.parent_path();
+    const auto require_file = [&](const std::filesystem::path& relative, std::uint64_t expected) {
+        std::error_code ec;
+        const auto file = root / relative;
+        if (!std::filesystem::is_regular_file(file, ec) || ec
+            || std::filesystem::file_size(file, ec) != expected || ec) {
+            result.error = "Edge0 bundle is missing or truncated: " + relative.generic_string();
+            return false;
+        }
+        result.bytes += expected;
+        return true;
+    };
+    if (!is_edge0_bundle_path(skeleton)) {
+        result.error = "Edge0 requires its model-skeleton.gguf bundle entry.";
+        return result;
+    }
+    for (const auto& [name, size] : std::array<std::pair<std::string_view, std::uint64_t>, 6>{{
+        {"model-skeleton.gguf", 5'991'569'248ULL}, {"experts.bin", 40'076'574'720ULL},
+        {"latent_dense_q4.bin", 1'981'808'640ULL}, {"labels.bin", 98'304ULL},
+        {"ple-fp8.gguf", 51'200'246'112ULL}, {"native_experts.txt", 1'463ULL}}}) {
+        if (!require_file(std::filesystem::path{name}, size)) return result;
+    }
+    for (unsigned layer = 0; layer < 48; ++layer)
+        if (!require_file(std::filesystem::path{"scales"} / ("l" + std::to_string(layer) + ".f32"), 7'168ULL))
+            return result;
+    std::ifstream gguf(skeleton, std::ios::binary);
+    char magic[4]{};
+    if (!gguf.read(magic, 4) || std::string_view{magic, 4} != "GGUF") {
+        result.error = "Edge0 skeleton has an invalid GGUF header.";
+        return result;
+    }
+    std::error_code ec;
+    const auto metadata_bytes = std::filesystem::file_size(root / "model.json", ec);
+    if (ec || metadata_bytes == 0 || metadata_bytes > 65'536) {
+        result.error = "Edge0 bundle metadata is absent or exceeds the admission limit.";
+        return result;
+    }
+    try {
+        std::ifstream input(root / "model.json", std::ios::binary);
+        std::string text(static_cast<std::size_t>(metadata_bytes), '\0');
+        if (!input.read(text.data(), static_cast<std::streamsize>(text.size())))
+            throw std::runtime_error("unreadable metadata");
+        const auto metadata = nlohmann::json::parse(text);
+        if (metadata.value("model_name", std::string{}) != "edge0-145b-q3k"
+            || metadata.value("layers", 0) != 48 || metadata.value("experts", 0) != 512
+            || metadata.value("latent_dim", 0) != 1792 || metadata.value("build", std::string{}) != "Q3_K")
+            throw std::runtime_error("unsupported bundle geometry");
+    } catch (const std::exception&) {
+        result.error = "Edge0 bundle metadata does not describe the admitted 145B Q3_K layout.";
+        return result;
+    }
+    result.complete = true;
+    return result;
+}
 
 [[nodiscard]] inline bool is_vision_projector_filename(std::string_view name)
 {
@@ -319,6 +405,7 @@ struct RuntimeModelProfile {
     // target. Automatic derives safe memory/batching values from the current
     // machine while using the same GPU target. Manual exposes all controls.
     std::string runtime_policy{"recommended"};
+        std::string capability_tier{"reference"};
     std::uint32_t gpu_offload_percent{gpu_offload_default_percent};
     std::uint32_t gpu_layer_count_hint{48};
     // Transient per-launch VRAM safeguard; never persisted to manifest JSON.
@@ -375,6 +462,57 @@ struct RuntimeModelProfile {
     std::vector<std::string> behavior_labels;
     std::vector<std::string> tags;
 };
+
+[[nodiscard]] inline bool is_edge0_profile(const RuntimeModelProfile& profile)
+{
+    return profile.id == epochengine::ai::model_capability::edge0_id || is_edge0_bundle_path(profile.local_path);
+}
+
+// This is the measured stream1 baseline. Do not inherit dense/Flash expert
+// caching, automatic fitting or recovery defaults for this different layout.
+[[nodiscard]] inline RuntimeModelProfile edge0_baseline_profile(const std::filesystem::path& skeleton)
+{
+    RuntimeModelProfile result;
+    result.id = epochengine::ai::model_capability::edge0_id;
+    result.display_name = "Edge0 145B Q3_K (streaming CUDA, lower RAM)";
+    result.source = ModelSourceKind::local_gguf;
+    result.quant = "Q3_K";
+    result.local_path = skeleton;
+    result.estimated_bytes = 99'250'642'551ULL;
+    result.runtime_policy = "manual";
+    result.gpu_layer_count_hint = 49;
+    result.gpu_layers = "49";
+    result.batch_size = 128;
+    result.ubatch_size = 32;
+    result.kv_cpu_pinned = false;
+    result.phase_aware_workspace = false;
+    result.tensor_override.clear();
+    result.prompt_cache_mib = 0;
+    result.expert_cache_mode = "off";
+    result.expert_cache_mib = 0;
+    result.pinned_host_mib = 0;
+    return result;
+}
+
+[[nodiscard]] inline bool edge0_launch_profile_supported(const RuntimeModelProfile& profile)
+{
+    const bool supportedKvPlacement = profile.kv_gpu_layers == 0u
+        || profile.kv_gpu_layers == epochengine::ai::model_capability::edge0_trial_kv_gpu_layers
+        || profile.kv_gpu_layers == epochengine::ai::model_capability::edge0_extended_trial_kv_gpu_layers;
+    return profile.source == ModelSourceKind::local_gguf && is_edge0_bundle_path(profile.local_path)
+        && profile.runtime_policy == "manual" && profile.parallel_slots == 1
+        && profile.context_tokens >= 4'096 && profile.context_tokens <= 81'920
+        && profile.threads > 0 && profile.threads <= 12 && profile.batch_threads > 0 && profile.batch_threads <= 12
+        && profile.batch_size == 128 && profile.ubatch_size == 32
+        && profile.gpu_layers == "49" && profile.gpu_layer_count_hint == 49
+        && !profile.kv_offload && supportedKvPlacement
+        && profile.kv_type_k == "q4_0" && profile.kv_type_v == "q4_0"
+        && !profile.kv_cpu_pinned && !profile.phase_aware_workspace && profile.tensor_override.empty()
+        && profile.prompt_cache_mib == 0 && !profile.reasoning_preserve
+        && profile.load_mode == "mmap" && profile.lazy_mode == "on"
+        && profile.expert_cache_mode == "off" && profile.expert_cache_mib == 0 && profile.pinned_host_mib == 0
+        && !profile.early_router && !profile.speculative_enabled && !profile.multimodel_memory_saver;
+}
 
 // Metadata interpretation is shared by persisted profiles and read-only UI
 // inventories. Missing labels make no safety claim; a positive identity/tag

@@ -12,9 +12,11 @@ PACKAGE = ROOT / 'Engine/dep/EpochEngineExtensions/packages/planetary_terrain'
 CODE = r'''
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -24,6 +26,7 @@ CODE = r'''
 #include <span>
 #include <stop_token>
 #include <string>
+#include <type_traits>
 #include <vector>
 import planet.terrain;
 import asset.mesh_artifact;
@@ -33,13 +36,22 @@ namespace p=epochengine::project_planetary_snapshot;
 namespace mesh=epochengine::asset::mesh;
 namespace core=epoch::extensions::planetary_terrain::core;
 namespace project_planetary_snapshot=p;
-struct Result {std::shared_ptr<const mesh::Artifact> snapshot;std::shared_ptr<const p::Snapshot> patch_snapshot;};
-Result actual_worker(const mesh::Result& decoded,std::optional<p::Metadata> metadata,p::Limits patchLimits,std::stop_token cancellation={}) {
+struct Result {
+ std::shared_ptr<const mesh::Artifact> snapshot;
+ std::shared_ptr<const p::Snapshot> patch_snapshot;
+ std::shared_ptr<const mesh::SphericalWaterAppearance> water_appearance;
+};
+Result actual_worker(const mesh::Result& decoded,const p::Metadata& metadata,p::Limits patchLimits,
+ std::stop_token cancellation={},bool metricTransport=false,std::array<double,3> sourceOrigin={}) {
  Result result;struct {std::string message;} operation;
+ const auto encoded=p::encode(metadata,*decoded.artifact,patchLimits);
+ auto packet=p::DecodedSnapshot::read(encoded,decoded.artifact,metadata.identity,patchLimits,cancellation,
+    metricTransport?std::optional{sourceOrigin}:std::nullopt);
+ if(!packet)return result;
  ACTUAL_WORKER
  return result;
 }
-std::shared_ptr<p::Snapshot> fixture99(unsigned copies=1) {
+std::shared_ptr<p::Snapshot> fixture99(unsigned copies=1,bool coarsened=false) {
  auto s=std::make_shared<p::Snapshot>();
  s->metadata.identity.source_hash="sha256:"+std::string(64,'a');
  s->metadata.identity.recipe_key=std::string(64,'b');s->metadata.identity.request_id=1;
@@ -59,7 +71,7 @@ std::shared_ptr<p::Snapshot> fixture99(unsigned copies=1) {
  for(std::uint8_t face=0;face<6;++face) {
   core::TileKey root{0,0,0,face,0};add(root,false);
   for(auto first:core::children(root)) {add(first,false);
-   for(auto second:core::children(first)) {bool split=face==0&&second.x==0&&second.y==0;add(second,!split);
+   for(auto second:core::children(first)) {bool split=!coarsened&&face==0&&second.x==0&&second.y==0;add(second,!split);
     if(split)for(auto third:core::children(second))add(third,true);
    }
   }
@@ -68,6 +80,94 @@ std::shared_ptr<p::Snapshot> fixture99(unsigned copies=1) {
  if(s->artifact)s->metadata.identity.artifact_key=s->artifact->key();return s;
 }
 bool same_vertex(const mesh::Vertex& a,const mesh::Vertex& b) {return a.position==b.position&&a.normal==b.normal&&a.uv==b.uv&&a.color==b.color;}
+static_assert(!std::is_default_constructible_v<p::DecodedSnapshot>);
+static_assert(!std::is_copy_constructible_v<p::DecodedSnapshot>);
+static_assert(std::is_same_v<decltype(std::declval<p::DecodedSnapshot&>().metadata()),const p::Metadata&>);
+using Origin = std::array<double,3>;
+const Origin reference{4'000'000.0, 2'000'000.0, 1'000'000.0};
+std::shared_ptr<p::Snapshot> metric_fixture(bool coarse,std::uint64_t request,Origin origin) {
+ auto snapshot=fixture99(1,coarse);
+ if(!snapshot->artifact)return {};
+ snapshot->metric_origin_meters=origin;
+ snapshot->metadata.identity.request_id=request;
+ const auto source=snapshot->artifact;
+ std::vector<mesh::Vertex> vertices(source->vertices().begin(),source->vertices().end());
+ for(auto& v:vertices)
+  for(unsigned axis=0;axis<3;++axis)
+   v.position[axis]=static_cast<float>(v.position[axis]+(reference[axis]-origin[axis]));
+ snapshot->artifact=mesh::build_artifact(vertices,source->indices()).artifact;
+ if(!snapshot->artifact)return {};
+ snapshot->metadata.identity.artifact_key=snapshot->artifact->key();
+ return snapshot;
+}
+bool complete(const p::Transition& cut) {
+ std::array<std::uint64_t,6> area{};
+ for(const auto& draw:cut.draw()) {
+  const auto& patch=draw.snapshot->metadata.patches[draw.patch];
+  const auto key=patch.key;
+  area[key.face]+=std::uint64_t{1}<<(2u*(20u-key.level));
+  for(const auto& other:cut.draw()) {
+   const auto k=other.snapshot->metadata.patches[other.patch].key;
+   if(key!=k&&(p::contains(key,k)||p::contains(k,key)))return false;
+   for(const auto neighbor:patch.neighbors)
+    if(p::contains(k,neighbor)&&key.level>k.level+1u)return false;
+  }
+ }
+ return std::ranges::all_of(area,[](auto value){return value==(std::uint64_t{1}<<40u);});
+}
+int check_metric_transition(p::Limits limits) {
+ const Origin shifted{reference[0]+1024.0,reference[1]+32.0,reference[2]-256.0};
+ const Origin later{reference[0]+1536.0,reference[1]-8.0,reference[2]+128.0};
+ auto fine=metric_fixture(false,1,reference),coarse=metric_fixture(true,2,shifted);
+ if(!fine||!coarse)return 1;
+ p::Transition mixed{limits};
+ if(!mixed.admit(fine,{},p::InitialCut::selected_patches)||!mixed.settled())return 2;
+ const auto first=mixed.materialize();
+ if(!first||!mixed.admit(coarse)||mixed.settled()||!complete(mixed))return 3;
+ const auto rebased=mixed.materialize();
+ if(!rebased||rebased->indices().size()!=first->indices().size())return 4;
+ std::size_t offset{},retained{};
+ for(const auto& draw:mixed.draw()) {
+  const auto& patch=draw.snapshot->metadata.patches[draw.patch];
+  if(patch.key.level==3u&&draw.snapshot==fine)++retained;
+  for(unsigned i=0;i<patch.vertex_count;++i,++offset) {
+   const auto& before=first->vertices()[offset];
+   const auto& after=rebased->vertices()[offset];
+   if(before.normal!=after.normal||before.uv!=after.uv||before.color!=after.color)return 5;
+   for(unsigned axis=0;axis<3;++axis)
+    if(std::abs((double(after.position[axis])-before.position[axis])+(shifted[axis]-reference[axis]))>0.0001)return 6;
+  }
+ }
+ if(retained!=4u)return 7;
+ auto legacy=fixture99();
+ legacy->metadata.identity.request_id=3u;
+ if(mixed.admit(legacy))return 8;
+ const auto badFrame=metric_fixture(true,3,shifted);
+ badFrame->metric_origin_meters->at(1)=NAN;
+ if(mixed.admit(badFrame)||!mixed.advance(.05)||!complete(mixed))return 9;
+ const auto phased=mixed.materialize();
+ if(!phased||!mixed.advance(.1,true)||mixed.materialize()->key()!=phased->key())return 10;
+ for(const auto& draw:mixed.draw())if(draw.snapshot==fine&&std::abs(draw.morph-.25f)>1e-6)return 11;
+ auto fineAgain=metric_fixture(false,4,later);
+ if(!fineAgain||!mixed.admit(fineAgain)||!complete(mixed))return 12;
+ const auto retargeted=mixed.materialize();
+ if(!retargeted||retargeted->vertices().size()!=phased->vertices().size())return 13;
+ for(std::size_t i=0;i<phased->vertices().size();++i)
+  for(unsigned axis=0;axis<3;++axis)
+   if(std::abs((double(retargeted->vertices()[i].position[axis])-phased->vertices()[i].position[axis])
+      +(later[axis]-shifted[axis]))>0.0002)return 14;
+ for(unsigned i=0;i<4;++i)
+  if(!mixed.advance(.05)||!complete(mixed)||!mixed.materialize())return 15;
+ p::Transition direct{limits};
+ if(!direct.admit(fineAgain,{},p::InitialCut::selected_patches)||!mixed.settled()
+    ||mixed.materialize()->key()!=direct.materialize()->key())return 16;
+ std::stop_source cancelled;cancelled.request_stop();
+ if(mixed.materialize(cancelled.get_token())||!mixed.settled())return 17;
+ auto staticFrame=actual_worker({mesh::Code::ready,fineAgain->artifact},fineAgain->metadata,limits,{},true,later);
+ if(!staticFrame.patch_snapshot||staticFrame.patch_snapshot->metric_origin_meters!=later
+    ||staticFrame.snapshot->key()!=direct.materialize()->key())return 18;
+ return 0;
+}
 int check_cut(std::shared_ptr<const p::Snapshot> s,p::Limits limits,unsigned minimum) {
  if(!s||!s->artifact||!p::valid_metadata(s->metadata,*s->artifact,limits))return 1;
  unsigned targets{};for(auto& patch:s->metadata.patches)targets+=patch.target;
@@ -95,10 +195,53 @@ int check_cut(std::shared_ptr<const p::Snapshot> s,p::Limits limits,unsigned min
  if(actual_worker(decoded,invalid->metadata,limits).snapshot)return 14;
  return 0;
 }
+int benchmark_static_cut(std::span<const std::byte> bytes,
+ const std::shared_ptr<const mesh::Artifact>& artifact,const p::Identity& expected,p::Limits limits) {
+ using Clock=std::chrono::steady_clock;
+ using Dur=std::chrono::duration<double,std::milli>;
+ auto wrong=expected;++wrong.request_id;
+ if(p::DecodedSnapshot::read(bytes,artifact,wrong,limits,{}))return 1;
+ auto corrupt=std::vector<std::byte>{bytes.begin(),bytes.end()};
+ corrupt.back()^=std::byte{1};
+ if(p::DecodedSnapshot::read(corrupt,artifact,expected,limits,{}))return 2;
+ std::array<double,7> old_cut{},sealed_cut{},old_total{},sealed_total{};
+ mesh::ContentHash key{};
+ for(std::size_t i=0;i<old_cut.size();++i)
+  for(unsigned mode:{unsigned(i%2),unsigned(1-i%2)}) {
+   const auto started=Clock::now();
+   std::shared_ptr<const mesh::Artifact> output;
+   Clock::time_point cut_started;
+   if(mode==0) {
+    auto metadata=p::decode(bytes,*artifact,expected,limits);if(!metadata)return 3;
+    cut_started=Clock::now();
+    auto source=std::make_shared<const p::Snapshot>(p::Snapshot{artifact,std::move(*metadata)});
+    p::Transition initial{limits};
+    if(!initial.admit(source,{},p::InitialCut::selected_patches))return 4;
+    std::shared_ptr<const mesh::SphericalWaterAppearance> unused;
+    output=initial.materialize({},&unused);
+   } else {
+    auto packet=p::DecodedSnapshot::read(bytes,artifact,expected,limits,{});if(!packet)return 5;
+    cut_started=Clock::now();
+    auto selected=std::move(*packet).materialize_selected();
+    output=std::move(selected.artifact);
+    if(!selected.source||selected.source->artifact!=artifact||selected.source->metadata.identity!=expected)return 6;
+   }
+   const auto finished=Clock::now();
+   if(!output||(!key.empty()&&output->key()!=key))return 7;
+   key=output->key();
+   (mode?sealed_cut:old_cut)[i]=Dur(finished-cut_started).count();
+   (mode?sealed_total:old_total)[i]=Dur(finished-started).count();
+  }
+ const auto median=[](auto values){std::ranges::sort(values);return values[values.size()/2u];};
+ std::printf("hierarchy vertices=%zu indices=%zu samples=%zu legacy_cut_ms=%.3f sealed_cut_ms=%.3f legacy_total_ms=%.3f sealed_total_ms=%.3f\n",
+  artifact->vertices().size(),artifact->indices().size(),old_cut.size(),median(old_cut),median(sealed_cut),median(old_total),median(sealed_total));
+ return 0;
+}
 int main(int argc,char** argv) {
  p::Limits limits;limits.artifact={1000000,6000000,64ull*1024*1024};limits.maximum_retained_bytes=128ull*1024*1024;limits.maximum_transient_bytes=128ull*1024*1024;
  auto fixture=fixture99();if(!fixture||std::count_if(fixture->metadata.patches.begin(),fixture->metadata.patches.end(),[](auto& v){return v.target;})!=99)return 20;
  if(auto fail=check_cut(fixture,limits,99))return 30+fail;
+ if(auto fail=check_metric_transition(limits))return 140+fail;
  namespace planet=epochengine::project_planetary;
  auto settings=planet::with_detail_preset(planet::Settings{},planet::DetailPreset::detailed);
  if(!settings)return 100;
@@ -117,6 +260,7 @@ int main(int argc,char** argv) {
   auto metadata=p::decode(std::as_bytes(std::span(raw.data(),raw.size())),*decoded.artifact,identity,limits);if(!metadata)return 61;
   auto s=std::make_shared<p::Snapshot>(p::Snapshot{decoded.artifact,std::move(*metadata)});
   if(auto fail=check_cut(s,limits,7))return 70+fail;
+  if(auto fail=benchmark_static_cut(std::as_bytes(std::span(raw.data(),raw.size())),decoded.artifact,identity,limits))return 180+fail;
  }
  return 0;
 }
@@ -126,8 +270,9 @@ class SelectedCut(unittest.TestCase):
     @unittest.skipUnless(os.name=='nt','This lane uses the installed Windows/MSVC production module toolchain')
     def test_actual_worker_selected_cut_and_legacy_morph(self):
         owner=(ROOT/'Engine/src/project/project.planetary.cpp').read_text(encoding='utf-8')
-        first=owner.index('                    auto admitted=std::make_shared<const project_planetary_snapshot::Snapshot>(')
-        last=owner.index('                    result.patch_snapshot=std::move(admitted);',first)+len('                    result.patch_snapshot=std::move(admitted);')
+        first=owner.index('                    auto selected=std::move(*packet).materialize_selected(cancellation);')
+        end='                    result.water_appearance=std::move(selected.water_appearance);'
+        last=owner.index(end,first)+len(end)
         code=CODE.replace('ACTUAL_WORKER',owner[first:last])
         proof=ROOT/'Artifacts/Reports/planetary-selected-cut-oct31'/str(time.time_ns());proof.mkdir(parents=True)
         # MSVC appends nested scheduler target, module and file-tracker paths.
@@ -149,7 +294,7 @@ target_compile_options(selected_cut PRIVATE /utf-8 /EHsc)
 target_link_libraries(selected_cut PRIVATE EpochEngineExtensions::PlanetaryCore epoch_planet_mesh_format)
 add_library(selected_cut_settings STATIC)
 target_compile_features(selected_cut_settings PUBLIC cxx_std_23)
-target_sources(selected_cut_settings PUBLIC FILE_SET CXX_MODULES BASE_DIRS "{(ROOT/'Engine/modules').as_posix()}" FILES "{(ROOT/'Engine/modules/project.planetary.ixx').as_posix()}")
+target_sources(selected_cut_settings PUBLIC FILE_SET CXX_MODULES BASE_DIRS "{(ROOT/'Engine/modules').as_posix()}" FILES "{(ROOT/'Engine/modules/project/project.planetary.ixx').as_posix()}")
 target_link_libraries(selected_cut_settings PUBLIC epoch_planet_mesh_format)
 target_link_libraries(selected_cut PRIVATE selected_cut_settings)
 add_executable(settings_contract "{(ROOT/'Tests/packages/project.planetary_settings_contract.cpp').as_posix()}")

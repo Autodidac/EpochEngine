@@ -16,7 +16,7 @@ class DeferredProjectWindow(unittest.TestCase):
             self.skipTest("Windows supervisor owner")
         owner = ROOT / "Engine/src/platform/platform.child_process.cpp"
         source = owner.read_text(encoding="utf-8")
-        cli = (ROOT / "Engine/modules/core.commandline.ixx").read_text(encoding="utf-8")
+        cli = (ROOT / "Engine/modules/core/core.commandline.ixx").read_text(encoding="utf-8")
         host = (ROOT / "Engine/src/renderers/host/host.context_win.cpp").read_text(encoding="utf-8")
         editor = (ROOT / "Engine/src/editor/application/editor.application_project_runtime.inl").read_text(encoding="utf-8")
         selected = definition(source, "        struct WindowSearch final", True)
@@ -35,7 +35,11 @@ class DeferredProjectWindow(unittest.TestCase):
         standalone_begin = host.index("                        (parent\n", host.index("auto make_backend_windows"))
         standalone = host[standalone_begin:host.index("initialX, initialY", standalone_begin)].strip().rstrip(",")
         cli_branch = definition(cli, '            else if (key == "--defer-window-show"sv)').replace("else if", "if", 1)
-        launch = definition(editor, "        [[nodiscard]] bool launch_project_runtime(")
+        # The signature has a default shared_ptr argument `{}`. Start brace
+        # extraction at the function body, not that default initializer.
+        launch_start = editor.index("        [[nodiscard]] bool launch_project_runtime(")
+        launch_body = editor.index("\n        {", launch_start)
+        launch = definition(editor[launch_body:], "\n        {")
         presentation_begin = launch.index("            request.window_mode =")
         presentation_end = launch.index("            if(inEditor&&projectProfile", presentation_begin)
         presentation = launch[presentation_begin:presentation_end]
@@ -64,6 +68,7 @@ using StopCode=process::StopCode;
 using DWORD=std::uint32_t;using BOOL=int;using LPARAM=std::intptr_t;using HWND=void*;
 constexpr BOOL TRUE=1,FALSE=0;constexpr DWORD WAIT_TIMEOUT=258,GW_OWNER=4,GWL_STYLE=0,GWL_EXSTYLE=1,WS_CHILD=0x40000000,WS_EX_TOOLWINDOW=0x80;
 constexpr DWORD SW_SHOWNORMAL=1,CREATE_SUSPENDED=4,CREATE_UNICODE_ENVIRONMENT=1024,CREATE_NO_WINDOW=0x08000000,EXTENDED_STARTUPINFO_PRESENT=0x00080000;
+constexpr DWORD BELOW_NORMAL_PRIORITY_CLASS=0x00004000;
 constexpr DWORD WS_OVERLAPPEDWINDOW=0x00cf0000,WS_CLIPCHILDREN=0x02000000,WS_CLIPSIBLINGS=0x04000000,WS_VISIBLE=0x10000000;
 constexpr DWORD WM_CLOSE=0x10,ERROR_SUCCESS=0;
 #define CALLBACK
@@ -180,7 +185,7 @@ add_executable(deferred deferred.contract.cpp "{(ROOT/'Engine/src/platform/platf
 target_compile_features(deferred PRIVATE cxx_std_23)
 target_compile_options(deferred PRIVATE /UNDEBUG /utf-8 /EHsc /Z7)
 target_sources(deferred PRIVATE FILE_SET CXX_MODULES BASE_DIRS "{(ROOT/'Engine/modules').as_posix()}" FILES
- "{(ROOT/'Engine/modules/platform.child_process.ixx').as_posix()}" "{(ROOT/'Engine/modules/core.sha256.ixx').as_posix()}")
+ "{(ROOT/'Engine/modules/platform/platform.child_process.ixx').as_posix()}" "{(ROOT/'Engine/modules/core/core.sha256.ixx').as_posix()}")
 target_link_libraries(deferred PRIVATE user32 advapi32 bcrypt userenv)
 add_executable(console_probe console.probe.cpp)
 enable_testing()

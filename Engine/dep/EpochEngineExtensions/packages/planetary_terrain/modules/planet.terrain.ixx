@@ -29,6 +29,7 @@ export namespace epoch::extensions::planetary_terrain::core
     using ::epoch::planet::noise3;
     using ::epoch::planet::fbm;
     using ::epoch::planet::sample_height;
+    using ::epoch::planet::terrain_relief_bound;
     using ::epoch::planet::sample_surface;
     using ::epoch::planet::surface_normal;
     using ::epoch::planet::kind_name;
@@ -40,11 +41,15 @@ export namespace epoch::extensions::planetary_terrain::core
     using ::epoch::planet::balance_cut;
     using ::epoch::planet::cube_direction;
     using ::epoch::planet::tile_direction;
+    using ::epoch::planet::tile_mesh_anchor;
+    using ::epoch::planet::tile_skirt_depth;
+    using ::epoch::planet::lower_tile_vertex;
     using ::epoch::planet::build_tile;
     using ::epoch::planet::plan_terrain;
     using ::epoch::planet::plan_body_terrain;
     using ::epoch::planet::finite;
     using ::epoch::planet::length;
+    using ::epoch::planet::dot;
     using ::epoch::planet::tangent;
     using ::epoch::planet::cross;
     using ::epoch::planet::normalized;

@@ -26,7 +26,7 @@ struct ProfileImport final {
         constexpr std::string_view builtin = "qwen3.8-flash-next-ud-q2-k-xl";
         static const std::set<std::string> allowed{
             "format", "id", "display_name", "runtime", "source", "repo", "quant",
-            "local_path", "estimated_bytes", "profile_revision", "runtime_policy", "idle_timeout_minutes",
+            "local_path", "estimated_bytes", "profile_revision", "runtime_policy", "capability_tier", "idle_timeout_minutes",
             "gpu_offload_percent", "gpu_layer_count_hint", "context_tokens", "parallel_slots",
             "effective_context_tokens", "context_reserve_tokens", "auto_compact",
             "compact_trigger_ratio", "compact_target_ratio", "threads", "batch_threads",

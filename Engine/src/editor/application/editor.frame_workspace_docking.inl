@@ -252,7 +252,7 @@
         {
             const auto surface = *editor.requestedMainSurface;
             editor.requestedMainSurface.reset();
-            apply_editor_surface(surface, "admitted Assistant request");
+            apply_editor_surface(surface, "workspace request");
         }
 
         auto open_editor_surface = [&](EditorMainSurface surface, std::string_view source)

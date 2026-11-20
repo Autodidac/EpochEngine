@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def fixture():
-    api = (ROOT/'Engine/modules/gui.engine.ixx').read_text(encoding='utf-8')
+    api = (ROOT/'Engine/modules/gui/gui.engine.ixx').read_text(encoding='utf-8')
     frame = (ROOT/'Engine/src/epochgui/controls/gui.frame_lifecycle.inl').read_text(encoding='utf-8')
     windows = (ROOT/'Engine/src/epochgui/controls/gui.window_controls.inl').read_text(encoding='utf-8')
     adapters = (ROOT/'Engine/src/epochgui/gui.docking_adapter.cpp').read_text(encoding='utf-8')
@@ -128,6 +128,9 @@ int main(){
 
 class ModelManagerFloatingInput(unittest.TestCase):
     def test_real_normalizer_and_early_input_reservation(self):
+        bootstrap=(ROOT/'Engine/src/editor/application/editor.frame_bootstrap.inl').read_text(encoding='utf-8')
+        manager_options=bootstrap.split('gui::FloatingWindowOptions aiModelManagerWindowOptions{',1)[1].split('};',1)[0]
+        self.assertIn('.dim_background=true',manager_options)
         owner=(ROOT/'Engine/src/editor/application/editor.frame_model_manager.inl').read_text(encoding='utf-8')
         self.assertLess(owner.index('aiModelManagerBackgroundInput.reset();'),owner.index('if (editor.showAiModelManagerModal)'))
         self.assertIn('editor.aiModelManagerWindow,\n                aiModelManagerWindowOptions)',owner)

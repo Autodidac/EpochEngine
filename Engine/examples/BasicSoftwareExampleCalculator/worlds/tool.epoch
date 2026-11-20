@@ -1,0 +1,14 @@
+epoch_snapshot 4
+scene "project:BasicSoftwareExampleCalculator"
+project "BasicSoftwareExampleCalculator"
+world "ToolWorkspace"
+document_kind "tool"
+support_tier "baseline"
+revision 1
+primary_camera 0
+primary_spawn 0
+frame 0
+time 0
+packages 0
+objects 0
+timeline_keys 0

@@ -13,7 +13,7 @@ def consumer():
     owner = (ROOT / "Engine/src/editor/application/editor.application_packages_creation.inl").read_text(encoding="utf-8")
     application = (ROOT / "Engine/src/editor/editor.application.cpp").read_text(encoding="utf-8")
     state = (ROOT / "Engine/src/editor/application/editor.application_state.inl").read_text(encoding="utf-8")
-    settings = (ROOT / "Engine/modules/project.planetary.ixx").read_text(encoding="utf-8")
+    settings = (ROOT / "Engine/modules/project/project.planetary.ixx").read_text(encoding="utf-8")
     functions = "\n".join(definition(owner, marker) for marker in (
         "        [[nodiscard]] bool planetary_project_busy(",
         "        [[nodiscard]] std::uint64_t planetary_project_key(",

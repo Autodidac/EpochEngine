@@ -3,16 +3,22 @@
 module;
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cmath>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <limits>
 #include <memory>
 #include <mutex>
+#include <optional>
+#include <source_location>
 #include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 #include <include/engine.config.hpp>
 
@@ -30,6 +36,11 @@ module;
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_properties.h>
 #include <SDL3/SDL_video.h>
+#if defined(__ANDROID__)
+#include <GLES3/gl3.h>
+#include <src/render/render.atmosphere_shader.hpp>
+#include <src/render/render.cloud_shader.hpp>
+#endif
 #endif
 
 module core.context;
@@ -56,6 +67,10 @@ import render.canvas2d_runtime;
 import render.device;
 import render.device_sdl;
 import render.context_frame;
+#if defined(__ANDROID__)
+import render.lighting;
+import render.preview_atmosphere;
+#endif
 import package.registry;
 import sdl.renderer;
 import sdl.state;
@@ -79,6 +94,507 @@ namespace
     int s_dockHeight = 0;
     int s_logicalPresentationWidth = 0;
     int s_logicalPresentationHeight = 0;
+
+#if defined(__ANDROID__)
+    SDL_GLContext s_androidRendererContext{};
+
+    [[nodiscard]] GLuint compile_android_preview_shader(GLenum stage, std::string_view shared,
+        std::string_view body, const char* logTag)
+    {
+        using epochengine::rendercloudshader::gles_header;
+        const auto shader = glCreateShader(stage);
+        if (!shader) return 0;
+        const std::array sources{gles_header.data(), shared.data(), body.data()};
+        const std::array lengths{GLint(gles_header.size()), GLint(shared.size()), GLint(body.size())};
+        glShaderSource(shader, body.empty() ? 2 : 3, sources.data(), lengths.data());
+        glCompileShader(shader);
+        GLint compiled{};
+        glGetShaderiv(shader, GL_COMPILE_STATUS, &compiled);
+        if (compiled) return shader;
+        std::array<char, 2048> log{};
+        glGetShaderInfoLog(shader, log.size(), nullptr, log.data());
+        epochengine::logger::error(logTag, log.data());
+        glDeleteShader(shader);
+        return 0;
+    }
+
+    [[nodiscard]] GLuint make_android_fullscreen_program(std::string_view fragmentShared,
+        std::string_view fragmentBody, const char* logTag)
+    {
+        const auto vertex = compile_android_preview_shader(GL_VERTEX_SHADER,
+            epochengine::rendercloudshader::vertex_source, {}, logTag);
+        const auto pixel = vertex ? compile_android_preview_shader(GL_FRAGMENT_SHADER,
+            fragmentShared, fragmentBody, logTag) : 0;
+        const auto program = vertex && pixel ? glCreateProgram() : 0;
+        if (program)
+        {
+            glAttachShader(program, vertex);
+            glAttachShader(program, pixel);
+            glLinkProgram(program);
+        }
+        if (vertex) glDeleteShader(vertex);
+        if (pixel) glDeleteShader(pixel);
+        if (!program) return 0;
+        GLint linked{};
+        glGetProgramiv(program, GL_LINK_STATUS, &linked);
+        if (linked) return program;
+        std::array<char, 2048> log{};
+        glGetProgramInfoLog(program, log.size(), nullptr, log.data());
+        epochengine::logger::error(logTag, log.data());
+        glDeleteProgram(program);
+        return 0;
+    }
+
+    class AndroidPlanetarySky final
+    {
+    public:
+        void release() noexcept
+        {
+            if (program_) glDeleteProgram(program_);
+            if (triangle_) glDeleteVertexArrays(1, &triangle_);
+        }
+
+        void draw(const epochengine::previewgrid::PlanetAtmosphereView& atmosphere,
+            int width, int height, bool space)
+        {
+            if (failed_) return;
+            if (!program_ && !initialize())
+            {
+                failed_ = true;
+                epochengine::logger::error("SDL.Sky", "Android sky shader initialization failed.");
+                return;
+            }
+
+            GLint previousArray{};
+            glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &previousArray);
+            std::array<GLint, 6> previousBlend{};
+            glGetIntegerv(GL_BLEND_SRC_RGB, &previousBlend[0]);
+            glGetIntegerv(GL_BLEND_DST_RGB, &previousBlend[1]);
+            glGetIntegerv(GL_BLEND_SRC_ALPHA, &previousBlend[2]);
+            glGetIntegerv(GL_BLEND_DST_ALPHA, &previousBlend[3]);
+            glGetIntegerv(GL_BLEND_EQUATION_RGB, &previousBlend[4]);
+            glGetIntegerv(GL_BLEND_EQUATION_ALPHA, &previousBlend[5]);
+            glBindVertexArray(triangle_);
+            glDisable(GL_DEPTH_TEST);
+            glDisable(GL_CULL_FACE);
+            glEnable(GL_BLEND);
+            glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
+            glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ZERO, GL_ONE);
+            glUseProgram(program_);
+            const auto vector = [&](std::size_t uniform, epochengine::previewgrid::Vec3 value) {
+                glUniform3f(locations_[uniform], value.x, value.y, value.z);
+            };
+            vector(0, atmosphere.observer);
+            vector(1, atmosphere.forward);
+            vector(2, atmosphere.right);
+            vector(3, atmosphere.up);
+            vector(4, atmosphere.sun);
+            glUniform1f(locations_[5], atmosphere.thickness);
+            glUniform1i(locations_[6], atmosphere.sun_visible);
+            glDrawArrays(GL_TRIANGLES, 0, 3);
+            glDisable(GL_BLEND);
+            glBlendFuncSeparate(previousBlend[0], previousBlend[1], previousBlend[2], previousBlend[3]);
+            glBlendEquationSeparate(previousBlend[4], previousBlend[5]);
+            glBindVertexArray(static_cast<GLuint>(previousArray));
+            if (glGetError() != GL_NO_ERROR)
+            {
+                failed_ = true;
+                epochengine::logger::error("SDL.Sky", "Android sky draw failed.");
+                return;
+            }
+            if (width != loggedWidth_ || height != loggedHeight_)
+            {
+                loggedWidth_ = width;
+                loggedHeight_ = height;
+                using namespace epochengine;
+                const auto& eye = atmosphere.observer;
+                logger::get("SDL.Sky").logf(logger::LogLevel::INFO, std::source_location::current(),
+                    "Android planetary sky drawn: viewport={}x{} radius_ratio={:.6f} thickness={:.6f} solar_disk={} space={}.",
+                    width, height, std::hypot(eye.x, eye.y, eye.z), atmosphere.thickness,
+                    atmosphere.sun_visible, space);
+            }
+        }
+
+    private:
+        [[nodiscard]] bool initialize()
+        {
+            constexpr std::string_view body = R"glsl(in vec2 vUv;
+out vec4 outColor;
+void main() {
+    outColor=skyAtmosphere(vUv*2.0-1.0);
+    if (outColor.a<=0.0) discard;
+}
+)glsl";
+            program_ = make_android_fullscreen_program(
+                epochengine::renderatmosphereshader::fragment_shared, body, "SDL.Sky");
+            if (!program_) return false;
+            glGenVertexArrays(1, &triangle_);
+            constexpr std::array names{"uSkyEye", "uSkyForward", "uSkyRight", "uSkyUp",
+                "uSkySun", "uSkyThickness", "uSkySunVisible"};
+            for (std::size_t i = 0; i < names.size(); ++i)
+                locations_[i] = glGetUniformLocation(program_, names[i]);
+            return triangle_ != 0;
+        }
+
+        GLuint program_{}, triangle_{};
+        std::array<GLint, 7> locations_{};
+        int loggedWidth_{}, loggedHeight_{};
+        bool failed_{};
+    };
+
+    using PreviewVertex = epochengine::previewgrid::Vertex;
+    using PreviewGeometry = std::vector<PreviewVertex>;
+#include "sdl.cloud_volume.inl"
+
+    // SDL's 2D geometry drops Z. Draw the existing opaque scene batch into
+    // the SDL window's GLES depth buffer before SDL composites the overlays.
+    class AndroidSceneDepth final
+    {
+    public:
+        void release() noexcept
+        {
+            if (context_ && context_ == SDL_GL_GetCurrentContext())
+            {
+                clouds_.release();
+                sky_.release();
+                if (buffer_) glDeleteBuffers(1, &buffer_);
+                if (program_) glDeleteProgram(program_);
+            }
+            *this = {};
+        }
+
+        void pause_presentation() noexcept { clouds_.pause_presentation(); }
+        void observe_present() { clouds_.observe_present(); }
+
+        [[nodiscard]] bool draw(const epochengine::core::RenderViewport& viewport,
+            const epochengine::previewgrid::Mat4& mvp,
+            const epochengine::previewgrid::PublishedSceneFrame& scene, bool densityClouds)
+        {
+            const auto& geometry = scene.solids->geometry;
+            if (geometry->empty() || (failed_ && context_ == SDL_GL_GetCurrentContext())
+                || SDL_GetRenderTarget(s_renderer)
+                || geometry->size() > static_cast<std::size_t>((std::numeric_limits<GLsizei>::max)())
+                || !SDL_FlushRenderer(s_renderer) || SDL_GL_GetCurrentWindow() != s_window)
+                return false;
+
+            const auto context = SDL_GL_GetCurrentContext();
+            if (!context) return false;
+            if (context_ != context)
+            {
+                release();
+                context_ = context;
+                GLint depthBits{};
+                glGetIntegerv(GL_DEPTH_BITS, &depthBits);
+                if (depthBits < 16 || !build_program()) return disable();
+                epochengine::logger::get("SDL").logf(epochengine::logger::LogLevel::INFO,
+                    std::source_location::current(), "Android opaque scene depth active ({} bits).", depthBits);
+            }
+
+            float left{}, top{}, right{}, bottom{};
+            if (!SDL_RenderCoordinatesToWindow(s_renderer, static_cast<float>(viewport.x),
+                    static_cast<float>(viewport.y), &left, &top)
+                || !SDL_RenderCoordinatesToWindow(s_renderer, static_cast<float>(viewport.x + viewport.width),
+                    static_cast<float>(viewport.y + viewport.height), &right, &bottom)
+                || s_width <= 0 || s_height <= 0 || !std::isfinite(left)
+                || !std::isfinite(top) || !std::isfinite(right) || !std::isfinite(bottom))
+                return false;
+            const auto pixel = [](float coordinate, int logical, int drawable) {
+                return static_cast<GLint>(std::lround((std::clamp)(coordinate, 0.0f,
+                    static_cast<float>(logical)) * drawable / logical));
+            };
+            const auto x = pixel(left, s_width, s_framebufferWidth);
+            const auto y = s_framebufferHeight - pixel(bottom, s_height, s_framebufferHeight);
+            const auto width = pixel(right, s_width, s_framebufferWidth) - x;
+            const auto height = s_framebufferHeight - pixel(top, s_height, s_framebufferHeight) - y;
+            if (width <= 0 || height <= 0) return false;
+
+            const float aspect = static_cast<float>(viewport.width) / viewport.height;
+            const auto atmosphere = scene.camera.projection == epochengine::render_camera::ProjectionKind::perspective
+                ? epochengine::previewgrid::planet_atmosphere_view(scene, aspect) : std::nullopt;
+            const bool cloudTarget = densityClouds && clouds_.begin(scene, aspect, width, height, atmosphere);
+            glBindBuffer(GL_ARRAY_BUFFER, buffer_);
+            if (uploaded_.lock() != geometry)
+            {
+                glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(geometry->size() * sizeof(PreviewVertex)),
+                    geometry->data(), GL_STATIC_DRAW);
+                if (glGetError() != GL_NO_ERROR)
+                {
+                    glBindBuffer(GL_ARRAY_BUFFER, 0);
+                    if (cloudTarget) clouds_.restore();
+                    return disable();
+                }
+                uploaded_ = geometry;
+            }
+
+            const int drawX = cloudTarget ? 0 : x;
+            const int drawY = cloudTarget ? 0 : y;
+            glViewport(drawX, drawY, width, height);
+            glScissor(drawX, drawY, width, height);
+            glEnable(GL_SCISSOR_TEST);
+            glDepthMask(GL_TRUE);
+            glDepthFunc(GL_LESS);
+            glClearDepthf(1.0f);
+            const bool clearBackground = cloudTarget || atmosphere.has_value();
+            if (clearBackground)
+            {
+                const auto background = epochengine::previewgrid::scene_clear_color(&scene);
+                glClearColor(background[0], background[1], background[2], background[3]);
+            }
+            glClear(clearBackground ? GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT : GL_DEPTH_BUFFER_BIT);
+            if (atmosphere) sky_.draw(*atmosphere, width, height, scene.space_background);
+            glEnable(GL_DEPTH_TEST);
+            glDisable(GL_BLEND);
+            glEnable(GL_CULL_FACE);
+            glFrontFace(GL_CW);
+            glUseProgram(program_);
+            glUniformMatrix4fv(mvp_, 1, GL_FALSE, (cloudTarget ? clouds_.projection_view() : mvp).data());
+            bind_vertices(position_, offsetof(PreviewVertex, position));
+            bind_vertices(color_, offsetof(PreviewVertex, color));
+            glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(geometry->size()));
+
+            // The SDL flush invalidated its viewport, scissor, blend and
+            // program cache. Restore depth/culling and the two private inputs,
+            // which its 2D renderer does not reset between draw batches.
+            glDisableVertexAttribArray(position_);
+            glDisableVertexAttribArray(color_);
+            glBindBuffer(GL_ARRAY_BUFFER, 0);
+            glDisable(GL_DEPTH_TEST);
+            glDisable(GL_CULL_FACE);
+            glFrontFace(GL_CCW);
+            if (glGetError() != GL_NO_ERROR)
+            {
+                if (cloudTarget) clouds_.restore();
+                return disable();
+            }
+            if (cloudTarget && !clouds_.composite(x, y))
+                return draw(viewport, mvp, scene, false);
+            return true;
+        }
+
+    private:
+        static constexpr GLuint position_ = 6;
+        static constexpr GLuint color_ = 7;
+        SDL_GLContext context_{};
+        GLuint program_{};
+        GLuint buffer_{};
+        GLint mvp_ = -1;
+        bool failed_{};
+        std::weak_ptr<const PreviewGeometry> uploaded_{};
+        AndroidCloudVolume clouds_{};
+        AndroidPlanetarySky sky_{};
+
+        [[nodiscard]] bool disable()
+        {
+            failed_ = true;
+            epochengine::logger::error("SDL", "Android scene depth unavailable. Using SDL geometry.");
+            return false;
+        }
+
+        static void bind_vertices(GLuint attribute, std::size_t offset) noexcept
+        {
+            glEnableVertexAttribArray(attribute);
+            glVertexAttribPointer(attribute, 3, GL_FLOAT, GL_FALSE, sizeof(PreviewVertex),
+                reinterpret_cast<const void*>(offset));
+        }
+
+        [[nodiscard]] static GLuint compile_shader(GLenum type, const char* source) noexcept
+        {
+            const auto shader = glCreateShader(type);
+            if (!shader) return 0;
+            glShaderSource(shader, 1, &source, nullptr);
+            glCompileShader(shader);
+            GLint compiled{};
+            glGetShaderiv(shader, GL_COMPILE_STATUS, &compiled);
+            if (compiled) return shader;
+            glDeleteShader(shader);
+            return 0;
+        }
+
+        [[nodiscard]] bool build_program() noexcept
+        {
+            const auto vertex = compile_shader(GL_VERTEX_SHADER,
+                "attribute vec3 a_position; attribute vec3 a_color; uniform mat4 u_mvp;"
+                "varying mediump vec3 v_color;"
+                "void main(){gl_Position=u_mvp*vec4(a_position,1.0);v_color=a_color;}");
+            const auto fragment = compile_shader(GL_FRAGMENT_SHADER,
+                "varying mediump vec3 v_color; void main(){gl_FragColor=vec4(clamp(v_color,0.0,1.0),1.0);}");
+            if (vertex && fragment) program_ = glCreateProgram();
+            if (program_)
+            {
+                glAttachShader(program_, vertex);
+                glAttachShader(program_, fragment);
+                glBindAttribLocation(program_, position_, "a_position");
+                glBindAttribLocation(program_, color_, "a_color");
+                glLinkProgram(program_);
+            }
+            if (vertex) glDeleteShader(vertex);
+            if (fragment) glDeleteShader(fragment);
+            if (!program_) return false;
+            GLint linked{};
+            glGetProgramiv(program_, GL_LINK_STATUS, &linked);
+            if (!linked) return false;
+            mvp_ = glGetUniformLocation(program_, "u_mvp");
+            glGenBuffers(1, &buffer_);
+            return mvp_ >= 0 && buffer_ != 0;
+        }
+    };
+
+    AndroidSceneDepth s_androidSceneDepth{};
+    std::atomic_bool s_androidBackgrounded{false};
+    std::atomic_bool s_androidCancelInput{false};
+    bool s_androidLifecycleWatch = false;
+    const epochengine::core::Context* s_androidTextInputOwner{};
+    std::optional<epochengine::core::Context::NativeTextInputArea> s_androidTextInput{};
+
+    using AndroidTouchTarget = epochengine::sdlcontext::state::AndroidTouchTarget;
+    using epochengine::sdlcontext::state::android_orbit_touch_state;
+
+    [[nodiscard]] constexpr SDL_Scancode android_key_scancode(epochengine::input::Key key) noexcept
+    {
+        // Epoch's authored controls use physical key positions. Keep the SDL
+        // order aligned with input::Key, including the separate keypad keys.
+        constexpr auto scancodes = std::to_array<SDL_Scancode>({
+            SDL_SCANCODE_UNKNOWN,
+            SDL_SCANCODE_A, SDL_SCANCODE_B, SDL_SCANCODE_C, SDL_SCANCODE_D, SDL_SCANCODE_E,
+            SDL_SCANCODE_F, SDL_SCANCODE_G, SDL_SCANCODE_H, SDL_SCANCODE_I, SDL_SCANCODE_J,
+            SDL_SCANCODE_K, SDL_SCANCODE_L, SDL_SCANCODE_M, SDL_SCANCODE_N, SDL_SCANCODE_O,
+            SDL_SCANCODE_P, SDL_SCANCODE_Q, SDL_SCANCODE_R, SDL_SCANCODE_S, SDL_SCANCODE_T,
+            SDL_SCANCODE_U, SDL_SCANCODE_V, SDL_SCANCODE_W, SDL_SCANCODE_X, SDL_SCANCODE_Y, SDL_SCANCODE_Z,
+            SDL_SCANCODE_0, SDL_SCANCODE_1, SDL_SCANCODE_2, SDL_SCANCODE_3, SDL_SCANCODE_4,
+            SDL_SCANCODE_5, SDL_SCANCODE_6, SDL_SCANCODE_7, SDL_SCANCODE_8, SDL_SCANCODE_9,
+            SDL_SCANCODE_SPACE, SDL_SCANCODE_APOSTROPHE, SDL_SCANCODE_COMMA, SDL_SCANCODE_MINUS,
+            SDL_SCANCODE_PERIOD, SDL_SCANCODE_SLASH, SDL_SCANCODE_SEMICOLON, SDL_SCANCODE_EQUALS,
+            SDL_SCANCODE_LEFTBRACKET, SDL_SCANCODE_BACKSLASH, SDL_SCANCODE_RIGHTBRACKET, SDL_SCANCODE_GRAVE,
+            SDL_SCANCODE_ESCAPE, SDL_SCANCODE_RETURN, SDL_SCANCODE_TAB, SDL_SCANCODE_BACKSPACE,
+            SDL_SCANCODE_INSERT, SDL_SCANCODE_DELETE, SDL_SCANCODE_RIGHT, SDL_SCANCODE_LEFT,
+            SDL_SCANCODE_DOWN, SDL_SCANCODE_UP, SDL_SCANCODE_PAGEUP, SDL_SCANCODE_PAGEDOWN,
+            SDL_SCANCODE_HOME, SDL_SCANCODE_END, SDL_SCANCODE_CAPSLOCK, SDL_SCANCODE_SCROLLLOCK,
+            SDL_SCANCODE_NUMLOCKCLEAR, SDL_SCANCODE_PRINTSCREEN, SDL_SCANCODE_PAUSE,
+            SDL_SCANCODE_F1, SDL_SCANCODE_F2, SDL_SCANCODE_F3, SDL_SCANCODE_F4, SDL_SCANCODE_F5,
+            SDL_SCANCODE_F6, SDL_SCANCODE_F7, SDL_SCANCODE_F8, SDL_SCANCODE_F9, SDL_SCANCODE_F10,
+            SDL_SCANCODE_F11, SDL_SCANCODE_F12, SDL_SCANCODE_F13, SDL_SCANCODE_F14, SDL_SCANCODE_F15,
+            SDL_SCANCODE_F16, SDL_SCANCODE_F17, SDL_SCANCODE_F18, SDL_SCANCODE_F19, SDL_SCANCODE_F20,
+            SDL_SCANCODE_F21, SDL_SCANCODE_F22, SDL_SCANCODE_F23, SDL_SCANCODE_F24,
+            SDL_SCANCODE_LSHIFT, SDL_SCANCODE_RSHIFT, SDL_SCANCODE_LCTRL, SDL_SCANCODE_RCTRL,
+            SDL_SCANCODE_LALT, SDL_SCANCODE_RALT, SDL_SCANCODE_LGUI, SDL_SCANCODE_RGUI, SDL_SCANCODE_APPLICATION,
+            SDL_SCANCODE_KP_0, SDL_SCANCODE_KP_1, SDL_SCANCODE_KP_2, SDL_SCANCODE_KP_3, SDL_SCANCODE_KP_4,
+            SDL_SCANCODE_KP_5, SDL_SCANCODE_KP_6, SDL_SCANCODE_KP_7, SDL_SCANCODE_KP_8, SDL_SCANCODE_KP_9,
+            SDL_SCANCODE_KP_PERIOD, SDL_SCANCODE_KP_DIVIDE, SDL_SCANCODE_KP_MULTIPLY, SDL_SCANCODE_KP_MINUS,
+            SDL_SCANCODE_KP_PLUS, SDL_SCANCODE_KP_ENTER, SDL_SCANCODE_KP_EQUALS
+        });
+        static_assert(scancodes.size() == epochengine::input::Key::Count);
+        return key < scancodes.size() ? scancodes[key] : SDL_SCANCODE_UNKNOWN;
+    }
+
+    void reset_android_keyboard() noexcept
+    {
+        epochengine::sdlcontext::state::get_sdl_state().keyboard = {};
+    }
+
+    void observe_android_keyboard(const SDL_KeyboardEvent& key, bool down) noexcept
+    {
+        const auto scan = key.scancode;
+        if (key.windowID != s_windowId || scan <= SDL_SCANCODE_UNKNOWN || scan >= SDL_SCANCODE_COUNT
+            || (down && key.repeat))
+            return;
+        auto& keyboard = epochengine::sdlcontext::state::get_sdl_state().keyboard;
+        if (down && !keyboard.down.test(scan)) keyboard.pressed.set(scan);
+        keyboard.down.set(scan, down);
+    }
+
+    [[nodiscard]] bool android_key_state(epochengine::input::Key key, bool just_pressed) noexcept
+    {
+        const auto scan = android_key_scancode(key);
+        if (scan == SDL_SCANCODE_UNKNOWN) return false;
+        std::scoped_lock lock{epochengine::sdlcontext::state::runtime_api_mutex()};
+        const auto& keyboard = epochengine::sdlcontext::state::get_sdl_state().keyboard;
+        return (just_pressed ? keyboard.pressed : keyboard.down).test(scan);
+    }
+
+    void cancel_android_touch(const epochengine::core::Context* context) noexcept
+    {
+        auto& touch = android_orbit_touch_state();
+        if (touch.device && context
+            && (touch.target == AndroidTouchTarget::gui || touch.target == AndroidTouchTarget::cancelled_gui))
+            epochengine::gui::push_input_for_context(context, {epochengine::gui::EventType::FocusLost});
+        touch.cancel();
+    }
+
+    void record_android_text_input(const epochengine::core::Context& context,
+        std::optional<epochengine::core::Context::NativeTextInputArea> target) noexcept
+    {
+        std::scoped_lock lock{epochengine::sdlcontext::state::runtime_api_mutex()};
+        if (&context != s_androidTextInputOwner)
+            return;
+        if (target && s_androidTextInput && s_androidTextInput->activate)
+            target->activate = true;
+        s_androidTextInput = target;
+    }
+
+    void stop_android_text_input() noexcept
+    {
+        s_androidTextInput.reset();
+        if (s_window && SDL_IsMainThread() && SDL_TextInputActive(s_window))
+            (void)SDL_StopTextInput(s_window);
+    }
+
+    void sync_android_text_input(bool window_focused) noexcept
+    {
+        if (!window_focused || !s_androidTextInput)
+        {
+            stop_android_text_input();
+            return;
+        }
+
+        auto& target = *s_androidTextInput;
+        const bool activate = std::exchange(target.activate, false);
+        const bool active = SDL_TextInputActive(s_window);
+        if (!active && !activate)
+            return;
+
+        float left{}, top{}, right{}, bottom{};
+        int window_width{}, window_height{};
+        if (SDL_RenderCoordinatesToWindow(s_renderer, target.x, target.y, &left, &top)
+            && SDL_RenderCoordinatesToWindow(s_renderer, target.x + target.width,
+                target.y + target.height, &right, &bottom)
+            && std::isfinite(left) && std::isfinite(top)
+            && std::isfinite(right) && std::isfinite(bottom)
+            && SDL_GetWindowSize(s_window, &window_width, &window_height)
+            && window_width > 0 && window_height > 0)
+        {
+            const auto pixel = [](float coordinate, int maximum) {
+                return static_cast<int>(std::lround((std::clamp)(coordinate,
+                    0.0f, static_cast<float>(maximum))));
+            };
+            const int x = pixel(left, window_width - 1);
+            const int y = pixel(top, window_height - 1);
+            const SDL_Rect area{x, y, (std::max)(1, pixel(right, window_width) - x),
+                (std::max)(1, pixel(bottom, window_height) - y)};
+            SDL_Rect previous{};
+            if (!SDL_GetTextInputArea(s_window, &previous, nullptr)
+                || !SDL_RectsEqual(&area, &previous))
+                (void)SDL_SetTextInputArea(s_window, &area, 0);
+        }
+
+        // A native dismissal must stay dismissed. Only an explicit focus or
+        // pointer edge can start text input again for a still-focused field.
+        if (activate && (!active || !SDL_ScreenKeyboardShown(s_window))
+            && !SDL_StartTextInput(s_window))
+            epochengine::logger::error("SDL", "Could not activate Android text input.");
+    }
+
+    bool SDLCALL observe_android_lifecycle(void*, SDL_Event* event) noexcept
+    {
+        if (event->type == SDL_EVENT_WILL_ENTER_BACKGROUND)
+        {
+            s_androidBackgrounded.store(true, std::memory_order_release);
+            s_androidCancelInput.store(true, std::memory_order_release);
+        }
+        else if (event->type == SDL_EVENT_DID_ENTER_FOREGROUND)
+            s_androidBackgrounded.store(false, std::memory_order_release);
+        return true;
+    }
+#endif
 
 #if defined(_WIN32)
     HWND s_hostWindow = nullptr;
@@ -135,6 +651,22 @@ namespace
         epochengine::sdltextures::sdl_renderer = nullptr;
         epochengine::sdlcontext::sdl_renderer.renderer = nullptr;
 
+#if defined(__ANDROID__)
+        s_androidSceneDepth.release();
+        s_androidRendererContext = nullptr;
+        reset_android_keyboard();
+        stop_android_text_input();
+        cancel_android_touch(s_androidTextInputOwner);
+        android_orbit_touch_state() = {};
+        s_androidTextInputOwner = nullptr;
+        if (s_androidLifecycleWatch)
+        {
+            SDL_RemoveEventWatch(observe_android_lifecycle, nullptr);
+            s_androidLifecycleWatch = false;
+        }
+        s_androidBackgrounded.store(false, std::memory_order_release);
+        s_androidCancelInput.store(false, std::memory_order_release);
+#endif
         if (s_ownsRenderer && s_renderer)
             SDL_DestroyRenderer(s_renderer);
         s_renderer = nullptr;
@@ -712,8 +1244,13 @@ namespace
 
     void bind_default_input(const std::shared_ptr<epochengine::core::Context>& ctx)
     {
+#if defined(__ANDROID__)
+        ctx->is_key_held = [](epochengine::input::Key key) { return android_key_state(key, false); };
+        ctx->is_key_down = [](epochengine::input::Key key) { return android_key_state(key, true); };
+#else
         ctx->is_key_held = [](epochengine::input::Key key) { return epochengine::input::is_key_held(key); };
         ctx->is_key_down = [](epochengine::input::Key key) { return epochengine::input::is_key_down(key); };
+#endif
         ctx->get_mouse_position = [](int& x, int& y)
         {
             x = epochengine::input::mouseX.load(std::memory_order_relaxed);
@@ -1041,7 +1578,13 @@ namespace
             : epochengine::previewgrid::object_solid_geometry_for(ctx.get());
 
         const auto& solidVertices = *solidGeometry;
-        for (std::size_t i = 0; i + 2 < solidVertices.size(); i += 3)
+#if defined(__ANDROID__)
+        const bool drewDepth = matchedScene && s_androidSceneDepth.draw(viewport, mvp,
+            *matchedScene, ctx->preview_density_clouds);
+#else
+        constexpr bool drewDepth = false;
+#endif
+        for (std::size_t i = 0; !drewDepth && i + 2 < solidVertices.size(); i += 3)
         {
             if (!epochengine::previewgrid::clockwise_solid_triangle_faces_camera(
                     solidVertices[i].position,
@@ -1051,35 +1594,8 @@ namespace
             {
                 continue;
             }
-            float ax = 0.0f;
-            float ay = 0.0f;
-            float bx = 0.0f;
-            float by = 0.0f;
-            float cx = 0.0f;
-            float cy = 0.0f;
-            if (!project_preview_vertex(mvp, solidVertices[i].position, viewport, ax, ay)
-                || !project_preview_vertex(mvp, solidVertices[i + 1].position, viewport, bx, by)
-                || !project_preview_vertex(mvp, solidVertices[i + 2].position, viewport, cx, cy))
-            {
-                continue;
-            }
-
-            const auto color = solidVertices[i].color;
-            const SDL_FColor faceColor{
-                (std::clamp)(color.x, 0.0f, 1.0f),
-                (std::clamp)(color.y, 0.0f, 1.0f),
-                (std::clamp)(color.z, 0.0f, 1.0f),
-                1.0f
-            };
-            SDL_Vertex triangle[3]{};
-            triangle[0].position = SDL_FPoint{ ax, ay };
-            triangle[0].color = faceColor;
-            triangle[1].position = SDL_FPoint{ bx, by };
-            triangle[1].color = faceColor;
-            triangle[2].position = SDL_FPoint{ cx, cy };
-            triangle[2].color = faceColor;
-            constexpr int triangleIndices[3]{ 0, 1, 2 };
-            if (!SDL_RenderGeometry(s_renderer, nullptr, triangle, 3, triangleIndices, 3))
+            if (!epochengine::sdlcontext::draw_preview_solid_triangle(s_renderer, mvp, viewport,
+                solidVertices[i], solidVertices[i + 1], solidVertices[i + 2]))
             {
                 epochengine::sdlcontext::check_sdl_error("SDL_RenderGeometry scene solid");
                 epochengine::sdlcontext::state::get_sdl_state().renderFaulted = true;
@@ -1332,6 +1848,9 @@ namespace
 
     void request_host_shutdown(const std::shared_ptr<epochengine::core::Context>& ctx) noexcept
     {
+#if defined(__ANDROID__)
+        stop_android_text_input();
+#endif
         s_running = false;
         auto& state = epochengine::sdlcontext::state::get_sdl_state();
         state.running = false;
@@ -1339,6 +1858,129 @@ namespace
         if (ctx && ctx->windowData)
             ctx->windowData->set_should_close(true);
     }
+
+#if defined(__ANDROID__)
+    void send_android_gui_input(epochengine::core::Context& ctx,
+        const epochengine::gui::InputEvent& input) noexcept
+    {
+        using epochengine::gui::EventType;
+        if (input.type == EventType::MouseMove || input.type == EventType::MouseDown || input.type == EventType::MouseUp)
+        {
+            epochengine::input::mouseX.store(static_cast<int>(input.mouse_pos.x), std::memory_order_relaxed);
+            epochengine::input::mouseY.store(static_cast<int>(input.mouse_pos.y), std::memory_order_relaxed);
+        }
+        epochengine::gui::push_input_for_context(&ctx, input);
+    }
+
+    void dispatch_android_orbit_touch(epochengine::core::Context& ctx, SDL_Event event) noexcept
+    {
+        namespace gui = epochengine::gui;
+        auto& touch = android_orbit_touch_state();
+        const auto& finger = event.tfinger;
+        if (finger.windowID != s_windowId || finger.touchID == 0
+            || finger.touchID == SDL_MOUSE_TOUCHID || finger.touchID == SDL_PEN_TOUCHID) return;
+
+        if (event.type == SDL_EVENT_FINGER_CANCELED)
+        {
+            if (touch.matches(finger)) cancel_android_touch(&ctx);
+            return;
+        }
+        if (event.type == SDL_EVENT_FINGER_UP)
+        {
+            if (!touch.matches(finger)) return;
+            if (touch.target == AndroidTouchTarget::cancelled_gui)
+                send_android_gui_input(ctx, { .type = gui::EventType::FocusLost });
+            else if (touch.target == AndroidTouchTarget::gui)
+                send_android_gui_input(ctx, { .type = gui::EventType::MouseUp, .mouse_pos = {touch.x, touch.y} });
+            touch.end_contact();
+            return;
+        }
+
+        if (!touch.hit_test || touch.target == AndroidTouchTarget::cancelled_gui) return;
+        const bool pressed = event.type == SDL_EVENT_FINGER_DOWN;
+        if (pressed ? touch.device != 0 : !touch.matches(finger)) return;
+        if (!SDL_ConvertEventToRenderCoordinates(s_renderer, &event)
+            || !std::isfinite(finger.x) || !std::isfinite(finger.y))
+        {
+            cancel_android_touch(&ctx);
+            return;
+        }
+        if (pressed)
+        {
+            touch.device = finger.touchID;
+            touch.finger = finger.fingerID;
+            touch.x = finger.x;
+            touch.y = finger.y;
+            touch.target = touch.hit_test(touch.owner, finger.x, finger.y);
+        }
+        if (touch.target == AndroidTouchTarget::gui)
+        {
+            touch.x = finger.x;
+            touch.y = finger.y;
+            send_android_gui_input(ctx, { .type = pressed ? gui::EventType::MouseDown : gui::EventType::MouseMove,
+                .mouse_pos = {finger.x, finger.y} });
+        }
+        else if (!pressed && touch.target == AndroidTouchTarget::orbit)
+            touch.orbit_to(finger.x, finger.y, gui::DragSurfaceOptions{}.drag_threshold);
+        else if (!pressed && (touch.target == AndroidTouchTarget::ascend || touch.target == AndroidTouchTarget::descend)
+            && touch.hit_test(touch.owner, finger.x, finger.y) != touch.target)
+            touch.target = AndroidTouchTarget::ignored;
+    }
+
+    void dispatch_android_gui_input(epochengine::core::Context& ctx, SDL_Event event)
+    {
+        namespace gui = epochengine::gui;
+        gui::InputEvent input{};
+        if (event.type == SDL_EVENT_WINDOW_FOCUS_LOST && event.window.windowID == s_windowId)
+        {
+            reset_android_keyboard();
+            cancel_android_touch(nullptr);
+            stop_android_text_input();
+            input.type = gui::EventType::FocusLost;
+        }
+        else if (event.type == SDL_EVENT_MOUSE_MOTION
+            && event.motion.windowID == s_windowId)
+        {
+            if (android_orbit_touch_state().owner && event.motion.which == SDL_TOUCH_MOUSEID) return;
+            if (!SDL_ConvertEventToRenderCoordinates(s_renderer, &event)) return;
+            input.type = gui::EventType::MouseMove;
+            input.mouse_pos = {event.motion.x, event.motion.y};
+        }
+        else if ((event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_UP)
+            && event.button.windowID == s_windowId && event.button.button == SDL_BUTTON_LEFT)
+        {
+            if (android_orbit_touch_state().owner && event.button.which == SDL_TOUCH_MOUSEID) return;
+            if (!SDL_ConvertEventToRenderCoordinates(s_renderer, &event)) return;
+            input.type = event.type == SDL_EVENT_MOUSE_BUTTON_DOWN
+                ? gui::EventType::MouseDown : gui::EventType::MouseUp;
+            input.mouse_pos = {event.button.x, event.button.y};
+        }
+        else if (event.type == SDL_EVENT_TEXT_INPUT && event.text.windowID == s_windowId && event.text.text)
+        {
+            // Native IME owns composing text. Only SDL's committed UTF-8
+            // reaches the existing authored text control and its edit history.
+            input.type = gui::EventType::TextInput;
+            input.text = event.text.text;
+        }
+        else if (event.type == SDL_EVENT_KEY_DOWN && event.key.windowID == s_windowId)
+        {
+            switch (event.key.key)
+            {
+            case SDLK_BACKSPACE: input.key = 8; break;
+            case SDLK_DELETE: input.key = 46; break;
+            case SDLK_RETURN: case SDLK_KP_ENTER: input.key = 13; break;
+            default: return;
+            }
+            input.type = gui::EventType::KeyDown;
+            input.ctrl_down = (event.key.mod & SDL_KMOD_CTRL) != 0;
+            input.shift_down = (event.key.mod & SDL_KMOD_SHIFT) != 0;
+            input.alt_down = (event.key.mod & SDL_KMOD_ALT) != 0;
+        }
+        else return;
+
+        send_android_gui_input(ctx, input);
+    }
+#endif
 
 #if defined(_WIN32)
     // Owner-thread aggregate only. No event payloads, extra polling or queue changes.
@@ -1435,6 +2077,125 @@ namespace
     }
 #endif
 
+    void register_sdl_atlas_uploader()
+    {
+        epochengine::atlasmanager::register_backend_uploader(
+            epochengine::core::ContextType::SDL,
+            [](const epochengine::TextureAtlas& atlas)
+            {
+                epochengine::sdltextures::ensure_uploaded(atlas);
+            });
+    }
+
+#if defined(__ANDROID__)
+    [[nodiscard]] bool admit_android_renderer_context(epochengine::core::Context& ctx, bool cloudsRequested)
+    {
+        const auto context = SDL_GL_GetCurrentContext();
+        if (!context || SDL_GL_GetCurrentWindow() != s_window)
+            return false;
+        const auto* version = reinterpret_cast<const char*>(glGetString(GL_VERSION));
+        if (!version || !std::string_view(version).starts_with("OpenGL ES "))
+            return false;
+        s_androidRendererContext = context;
+        const bool densityClouds = cloudsRequested && std::string_view(version).starts_with("OpenGL ES 3.");
+        ctx.preview_density_clouds = densityClouds;
+        epochengine::logger::get("SDL").logf(epochengine::logger::LogLevel::INFO,
+            std::source_location::current(), "Android SDL video={} renderer={} version={} density_clouds={}.",
+            SDL_GetCurrentVideoDriver(), SDL_GetRendererName(s_renderer), version, densityClouds);
+        return true;
+    }
+
+    void release_android_render_targets(epochengine::core::Context& ctx)
+    {
+        cancel_android_touch(&ctx);
+        s_androidSceneDepth.release();
+        release_canvas2d_presenter();
+        destroy_arcade_screen_preview_target();
+    }
+
+    [[nodiscard]] bool recreate_android_renderer(epochengine::core::Context& ctx)
+    {
+        using namespace epochengine;
+        if (!s_ownsRenderer || !s_androidRendererContext)
+            return false;
+
+        // On resume SDL can restore the window with a new EGL context while
+        // the GLES renderer still owns the lost one. Release the stale
+        // resources outside the replacement context's GL namespace.
+        const auto current = SDL_GL_GetCurrentContext();
+        if (current && SDL_GL_GetCurrentWindow() != s_window)
+            return false;
+        const auto replacement = current != s_androidRendererContext ? current : nullptr;
+        if (replacement && !SDL_GL_MakeCurrent(nullptr, nullptr))
+            return false;
+
+        int vsync{};
+        const bool hadVsync = SDL_GetRenderVSync(s_renderer, &vsync);
+        release_android_render_targets(ctx);
+        atlasmanager::unregister_backend_uploader(core::ContextType::SDL);
+        sdltextures::clear_gpu_atlases();
+        sdltextures::sdl_renderer = nullptr;
+        sdlcontext::sdl_renderer.renderer = nullptr;
+        SDL_DestroyRenderer(std::exchange(s_renderer, nullptr));
+        s_ownsRenderer = false;
+        s_androidRendererContext = nullptr;
+
+        // The provisional EGL context came from SDL's window restore, which
+        // does not transfer it to the GLES renderer. The new renderer creates
+        // and owns its own context on the same window.
+        if (replacement && !SDL_GL_DestroyContext(replacement))
+            return false;
+        ctx.preview_density_clouds = false;
+        s_renderer = SDL_CreateRenderer(s_window, "opengles2");
+        if (!s_renderer)
+            return false;
+        s_ownsRenderer = true;
+        if (!admit_android_renderer_context(ctx,
+            SDL_GetBooleanProperty(SDL_GetGlobalProperties(), "epoch.android.density_clouds", false)))
+            return false;
+        if (hadVsync && !SDL_SetRenderVSync(s_renderer, vsync))
+            logger::warn("SDL", "Android SDL could not restore the previous VSync setting.");
+        sdlcontext::init_renderer(s_renderer);
+        sdltextures::sdl_renderer = s_renderer;
+        gui::refresh_context_resources(&ctx);
+        register_sdl_atlas_uploader();
+        return true;
+    }
+
+    [[nodiscard]] bool handle_android_render_event(const SDL_Event& event, epochengine::core::Context& ctx)
+    {
+        if (event.type != SDL_EVENT_RENDER_DEVICE_LOST && event.type != SDL_EVENT_RENDER_DEVICE_RESET
+            && event.type != SDL_EVENT_RENDER_TARGETS_RESET)
+            return true;
+        if (event.render.windowID != s_windowId)
+            return true;
+
+        reset_android_keyboard();
+        auto& state = epochengine::sdlcontext::state::get_sdl_state();
+        if (ctx.windowData)
+        {
+            ctx.windowData->firstPresentComplete.store(false, std::memory_order_release);
+            ctx.windowData->set_backend_lifecycle(epochengine::core::BackendLifecycleState::initializing);
+        }
+        if (event.type == SDL_EVENT_RENDER_DEVICE_LOST
+            || (event.type == SDL_EVENT_RENDER_DEVICE_RESET && !recreate_android_renderer(ctx)))
+        {
+            state.renderFaulted = true;
+            ctx.preview_density_clouds = false;
+            if (ctx.windowData)
+                ctx.windowData->set_backend_lifecycle(epochengine::core::BackendLifecycleState::failed);
+            epochengine::logger::error("SDL", "The Android SDL render device could not recover.");
+            return false;
+        }
+        if (event.type == SDL_EVENT_RENDER_TARGETS_RESET)
+            release_android_render_targets(ctx);
+        state.surfaceLifecycle.reset();
+        s_logicalPresentationWidth = 0;
+        s_logicalPresentationHeight = 0;
+        return true;
+    }
+#endif
+
     void sdl_initialize_adapter()
     {
 #if defined(_WIN32)
@@ -1448,6 +2209,10 @@ namespace
             epochengine::sdlcontext::state::runtime_api_mutex()};
 
         ctx->init_failed = false;
+#if defined(__ANDROID__)
+        (void)SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "1");
+        (void)SDL_SetHint(SDL_HINT_ENABLE_SCREEN_KEYBOARD, "1");
+#endif
         if (s_videoSubsystemLease || s_window || s_renderer)
         {
             ctx->init_failed = true;
@@ -1481,6 +2246,25 @@ namespace
             return;
         }
         s_videoSubsystemLease = true;
+#if defined(__ANDROID__)
+        // The Android JNI bootstrap registers the Java thread first. SDL
+        // records the native Activity's render owner while initializing video.
+        if (!SDL_IsMainThread())
+        {
+            ctx->init_failed = true;
+            epochengine::logger::error("SDL", "Android SDL video is owned by another thread.");
+            release_owned_sdl_runtime();
+            return;
+        }
+        s_androidLifecycleWatch = SDL_AddEventWatch(observe_android_lifecycle, nullptr);
+        if (!s_androidLifecycleWatch)
+        {
+            ctx->init_failed = true;
+            epochengine::logger::error("SDL", std::string("SDL_AddEventWatch failed: ") + SDL_GetError());
+            release_owned_sdl_runtime();
+            return;
+        }
+#endif
 #if defined(_WIN32)
         ScopedParentDpiAwareness dpiAwareness{ hostedDockParent };
         s_pollStandaloneEvents = !hostedWindow;
@@ -1505,7 +2289,7 @@ namespace
         SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_WIDTH_NUMBER, s_width);
         SDL_SetNumberProperty(props, SDL_PROP_WINDOW_CREATE_HEIGHT_NUMBER, s_height);
         SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_RESIZABLE_BOOLEAN, true);
-#if defined(__linux__)
+#if defined(__linux__) && !defined(__ANDROID__)
         // The context manager owns this X11 window and its input/lifetime.
         // SDL owns only its wrapper and renderer, not a second native window.
         if (ctx->hwnd)
@@ -1517,7 +2301,29 @@ namespace
             SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_HIDDEN_BOOLEAN, true);
 #endif
 
-        s_window = SDL_CreateWindowWithProperties(props);
+#if defined(__ANDROID__)
+        const bool cloudsRequested = SDL_GetBooleanProperty(SDL_GetGlobalProperties(),
+            "epoch.android.density_clouds", false);
+        if (cloudsRequested)
+        {
+            (void)SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+            (void)SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+            (void)SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+            SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_OPENGL_BOOLEAN, true);
+            s_window = SDL_CreateWindowWithProperties(props);
+            if (s_window) s_renderer = SDL_CreateRenderer(s_window, "opengles2");
+            if (!s_renderer)
+            {
+                if (s_window) SDL_DestroyWindow(s_window);
+                s_window = nullptr;
+                SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
+                SDL_SetBooleanProperty(props, SDL_PROP_WINDOW_CREATE_OPENGL_BOOLEAN, false);
+                epochengine::logger::error("SDL.Clouds", "The Android GLES 3 window was unavailable.");
+            }
+        }
+        if (!s_window)
+#endif
+            s_window = SDL_CreateWindowWithProperties(props);
         SDL_DestroyProperties(props);
         if (!s_window)
         {
@@ -1529,7 +2335,11 @@ namespace
         s_ownsWindow = true;
         s_windowId = SDL_GetWindowID(s_window);
 
+#if defined(__ANDROID__)
+        if (!s_renderer) s_renderer = SDL_CreateRenderer(s_window, "opengles2");
+#else
         s_renderer = SDL_CreateRenderer(s_window, nullptr);
+#endif
         if (!s_renderer)
         {
             ctx->init_failed = true;
@@ -1538,6 +2348,15 @@ namespace
             return;
         }
         s_ownsRenderer = true;
+#if defined(__ANDROID__)
+        if (!admit_android_renderer_context(*ctx, cloudsRequested))
+        {
+            ctx->init_failed = true;
+            epochengine::logger::error("SDL", "Android SDL created a renderer without a usable GLES context.");
+            release_owned_sdl_runtime();
+            return;
+        }
+#endif
 
 #if defined(_WIN32)
         SDL_PropertiesID windowProps = SDL_GetWindowProperties(s_window);
@@ -1672,18 +2491,17 @@ namespace
  #endif
 
         s_running = true;
+#if defined(__ANDROID__)
+        s_androidTextInputOwner = ctx.get();
+        ctx->update_native_text_input = record_android_text_input;
+#endif
 #if defined(_WIN32)
         if (!hostedWindow)
             SDL_ShowWindow(s_window);
 #else
         SDL_ShowWindow(s_window);
 #endif
-        epochengine::atlasmanager::register_backend_uploader(
-            epochengine::core::ContextType::SDL,
-            [](const epochengine::TextureAtlas& atlas)
-            {
-                epochengine::sdltextures::ensure_uploaded(atlas);
-            });
+        register_sdl_atlas_uploader();
     }
 
     void sdl_cleanup_adapter()
@@ -1740,6 +2558,10 @@ namespace
             windowId = reinterpret_cast<std::uintptr_t>(ctx->windowData->hwnd);
 #endif
         auto& state = epochengine::sdlcontext::state::get_sdl_state();
+#if defined(__ANDROID__)
+        if (state.renderFaulted) return false;
+        state.keyboard.pressed.reset();
+#endif
         const bool closeRequested =
             state.renderFaulted
             || state.shouldClose
@@ -1786,7 +2608,50 @@ namespace
                     return false;
                 }
 
-#if defined(__linux__)
+#if defined(__ANDROID__)
+                if (s_androidCancelInput.exchange(false, std::memory_order_acq_rel))
+                {
+                    reset_android_keyboard();
+                    cancel_android_touch(nullptr);
+                    stop_android_text_input();
+                    epochengine::gui::push_input_for_context(ctx.get(), {epochengine::gui::EventType::FocusLost});
+                }
+                if (!handle_android_render_event(event, *ctx)) return false;
+                switch (event.type)
+                {
+                case SDL_EVENT_WINDOW_RESIZED:
+                case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
+                case SDL_EVENT_WINDOW_SAFE_AREA_CHANGED:
+                case SDL_EVENT_WINDOW_HIDDEN:
+                case SDL_EVENT_WINDOW_MINIMIZED:
+                case SDL_EVENT_WINDOW_OCCLUDED:
+                    if (event.window.windowID == s_windowId) cancel_android_touch(ctx.get());
+                    break;
+                case SDL_EVENT_FINGER_DOWN:
+                case SDL_EVENT_FINGER_MOTION:
+                case SDL_EVENT_FINGER_UP:
+                case SDL_EVENT_FINGER_CANCELED:
+                    if (!s_androidBackgrounded.load(std::memory_order_acquire))
+                        dispatch_android_orbit_touch(*ctx, event);
+                    break;
+                case SDL_EVENT_KEYBOARD_REMOVED:
+                    reset_android_keyboard();
+                    break;
+                case SDL_EVENT_KEY_DOWN:
+                case SDL_EVENT_KEY_UP:
+                    if (!s_androidBackgrounded.load(std::memory_order_acquire))
+                    {
+                        observe_android_keyboard(event.key, event.type == SDL_EVENT_KEY_DOWN);
+                        dispatch_android_gui_input(*ctx, event);
+                    }
+                    break;
+                default:
+                    if (!s_androidBackgrounded.load(std::memory_order_acquire))
+                        dispatch_android_gui_input(*ctx, event);
+                    break;
+                }
+#endif
+#if defined(__linux__) && !defined(__ANDROID__)
                 if ((event.type == SDL_EVENT_MOUSE_BUTTON_DOWN
                         || event.type == SDL_EVENT_MOUSE_BUTTON_UP)
                     && event.button.windowID == s_windowId)
@@ -1846,17 +2711,70 @@ namespace
 
         sync_docked_child_size(ctx);
         const SDL_WindowFlags flags = SDL_GetWindowFlags(s_window);
+        bool minimized = (flags & SDL_WINDOW_MINIMIZED) != 0;
+#if defined(__ANDROID__)
+        if (s_androidCancelInput.exchange(false, std::memory_order_acq_rel))
+        {
+            reset_android_keyboard();
+            cancel_android_touch(nullptr);
+            stop_android_text_input();
+            epochengine::gui::push_input_for_context(ctx.get(), {epochengine::gui::EventType::FocusLost});
+        }
+        minimized = minimized || s_androidBackgrounded.load(std::memory_order_acquire);
+        const bool focused = !minimized && (flags & SDL_WINDOW_INPUT_FOCUS) != 0
+            && (flags & SDL_WINDOW_HIDDEN) == 0;
+        if (!focused)
+        {
+            reset_android_keyboard();
+            cancel_android_touch(ctx.get());
+        }
+        sync_android_text_input(focused);
+#endif
         state.surfaceLifecycle.observe_window_flags(
-            (flags & SDL_WINDOW_MINIMIZED) != 0,
+            minimized,
             (flags & SDL_WINDOW_OCCLUDED) != 0);
         refresh_dimensions(ctx);
 
+#if defined(__ANDROID__)
+        if (!state.surfaceLifecycle.rendering_allowed())
+        {
+            reset_android_keyboard();
+            cancel_android_touch(ctx.get());
+        }
+        epochengine::rendercontext::Viewport safe_area{};
+        if (state.surfaceLifecycle.rendering_allowed() && SDL_GetRenderTarget(s_renderer) == nullptr)
+        {
+            SDL_Rect native_safe_area{};
+            // SDL converts the native bounds into the same coordinates as its GUI events.
+            if (SDL_GetRenderSafeArea(s_renderer, &native_safe_area))
+                safe_area = {native_safe_area.x, native_safe_area.y, native_safe_area.w, native_safe_area.h};
+        }
+        ctx->publish_frame_window_state(epochengine::rendercontext::resolve_window_state({
+            .logical_width = s_width,
+            .logical_height = s_height,
+            .framebuffer_width = state.surfaceLifecycle.zeroDrawable ? 0 : s_framebufferWidth,
+            .framebuffer_height = state.surfaceLifecycle.zeroDrawable ? 0 : s_framebufferHeight,
+            .resize_generation = ctx->windowData
+                ? ctx->windowData->resizeGeneration.load(std::memory_order_acquire) : 0u,
+            .visible = (flags & SDL_WINDOW_HIDDEN) == 0,
+            .focused = (flags & SDL_WINDOW_INPUT_FOCUS) != 0,
+            .minimized = minimized,
+            .occluded = (flags & SDL_WINDOW_OCCLUDED) != 0,
+            .visibility_known = true,
+            .focus_known = true,
+            .minimized_known = true,
+            .occlusion_known = true,
+            .safe_area = safe_area}));
+#endif
         state.window.sdl_window = s_window;
         state.set_dimensions(s_width, s_height);
         state.running = s_running;
 
         if (!state.surfaceLifecycle.rendering_allowed())
         {
+#if defined(__ANDROID__)
+            s_androidSceneDepth.pause_presentation();
+#endif
             if (ctx->windowData)
             {
                 ctx->windowData->firstPresentComplete.store(
@@ -1892,6 +2810,9 @@ namespace
         {
             return false;
         }
+#if defined(__ANDROID__)
+        s_androidSceneDepth.observe_present();
+#endif
         if (ctx->windowData && presentation.present_succeeded)
         {
             state.surfaceLifecycle.acknowledge_present();

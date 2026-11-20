@@ -49,7 +49,9 @@ class GeneratedProjectDependencies(unittest.TestCase):
             "    [[nodiscard]] static constexpr std::string_view generated_windows_msbuild_candidates("))
         fragments += definition((ROOT / "Engine/src/editor/implementation/editor.project_registry.inl").read_text(encoding="utf-8"),
             "    [[nodiscard]] static std::string to_windows_path(")
-        fragments += definition(source, "    inline constexpr std::array<std::string_view, 7> generated_child_runtime_assets", True)
+        fragments += definition(source, "    inline constexpr std::array<std::string_view, 9> generated_child_runtime_assets", True)
+        fragments += definition(source, "    inline constexpr std::array<std::array<std::string_view, 2>, 8> generated_child_runtime_notices", True)
+        fragments += definition(source, "    [[nodiscard]] static std::string generated_child_runtime_notices_msbuild(")
         fragments += definition(source, "    [[nodiscard]] static std::string generated_child_runtime_assets_msbuild(")
         fragments += definition(source, "    [[nodiscard]] static std::string generated_child_runtime_assets_cmake(")
         start = source.index("    [[nodiscard]] static bool repair_generated_windows_dependency_script(")
@@ -60,6 +62,11 @@ class GeneratedProjectDependencies(unittest.TestCase):
             "        const std::string windowsBuildScriptText =", 1)[0]
         script_expression = source.split("        const std::string windowsBuildScriptText =", 1)[1].split(
             "        const std::string linuxBuildScriptText =", 1)[0]
+        # Execute the existing-project migration branch verbatim as well as
+        # the fresh emitter. Keep unrelated project content and repeat safely.
+        repair_begin = source.index('            if (projectText.find("<Target Name=\\\"EpochCopyRequiredRuntimeAssets')
+        repair_end = source.index("            // Repair already materialized", repair_begin)
+        fragments += "\nbool repair_runtime_assets(std::string& projectText) {\n" + source[repair_begin:repair_end] + "return true; }\n"
         body = r'''
 #include <cassert>
 #include <algorithm>
@@ -98,6 +105,19 @@ std::ofstream(windowsProject,std::ios::binary)<<windowsProjectText;
 std::ofstream(output/"build_project.ps1",std::ios::binary)<<windowsBuildScriptText;
 std::ofstream(output/"runtime-assets.cmake",std::ios::binary)<<generated_child_runtime_assets_cmake();
 std::ofstream(output/"runtime-assets.xml",std::ios::binary)<<generated_child_runtime_assets_msbuild();
+auto legacyProject=windowsProjectText;
+replace_all(legacyProject,generated_child_runtime_notices_msbuild(),"");
+assert(legacyProject!=windowsProjectText);
+assert(repair_runtime_assets(legacyProject));
+const auto repairedProject=legacyProject;
+assert(repair_runtime_assets(legacyProject));assert(legacyProject==repairedProject);
+assert(legacyProject.find(generated_child_runtime_notices_msbuild())!=std::string::npos);
+std::ofstream(output/"MigratedDependencyFixture.vcxproj",std::ios::binary)<<legacyProject;
+auto oldProject=windowsProjectText;
+replace_all(oldProject,generated_child_runtime_assets_msbuild(),"");
+assert(repair_runtime_assets(oldProject));assert(oldProject==windowsProjectText);
+auto customProject=std::string{"custom build without an extension target marker"};
+assert(!repair_runtime_assets(customProject));assert(customProject=="custom build without an extension target marker");
 auto current=windowsBuildScriptText;assert(repair_generated_windows_dependency_script(current));assert(current==windowsBuildScriptText);
 auto previousTracking=windowsBuildScriptText;
 replace_all(previousTracking,"/p:UseMultiToolTask=false","/p:UseMultiToolTask=true");
@@ -343,18 +363,24 @@ assert(repair_generated_windows_dependency_script(current));assert(current==wind
 
     def test_required_runtime_assets_copy_exactly_with_both_build_owners(self):
         names = ("fonts/Roboto-Regular.ttf", "fonts/OFL.txt", "vulkan/texture.ppm", "vulkan/shaders/vert.spv",
-            "vulkan/shaders/frag.spv", "vulkan/shaders/gui_vert.spv", "vulkan/shaders/gui_frag.spv")
+            "vulkan/shaders/frag.spv", "vulkan/shaders/gui_vert.spv", "vulkan/shaders/gui_frag.spv",
+            "vulkan/shaders/atmosphere.vert.spv", "vulkan/shaders/atmosphere.frag.spv",
+            "vulkan/shaders/clouds.vert.spv", "vulkan/shaders/clouds.frag.spv")
         self.assertTrue(self.msbuild.is_file(), "Installed MSVC is missing x64 MSBuild")
         staged = self.scratch / "staged-msbuild"
-        result = subprocess.run([str(self.msbuild), str(self.output / "DependencyFixture.vcxproj"), "/nologo", "/nr:false",
+        result = subprocess.run([str(self.msbuild), str(self.output / "MigratedDependencyFixture.vcxproj"), "/nologo", "/nr:false",
             "/t:EpochCopyRequiredRuntimeAssets", "/p:Configuration=Release", "/p:Platform=x64", f"/p:OutDir={staged}\\"],
             cwd=self.output, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         digest = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
         for name in names:
             self.assertEqual(digest(staged / "assets" / name), digest(ROOT / "Engine/assets" / name))
-        self.assertEqual(len(list(staged.rglob("*.*"))), len(names))
-        # An ordinary CMake consumer uses the same explicit seven files. This
+        libraries = ("EpochGui", "EpochPlatformEngine", "EpochAudioEngine", "EpochMediaEngine")
+        for library in libraries:
+            for notice, target in (("LICENSE", library.lower() + ".txt"), ("NOTICE", library.lower() + "-NOTICE.txt")):
+                self.assertEqual(digest(staged / "licenses" / target), digest(ROOT / "Engine/dep" / library / notice))
+        self.assertEqual(len([p for p in staged.rglob("*") if p.is_file()]), len(names) + 8)
+        # An ordinary CMake consumer uses the same explicit assets and notices. This
         # target runs only cmake -E copy/touch, not an Engine or GPU executable.
         consumer, build = self.scratch / "asset-consumer", self.scratch / "asset-build"
         consumer.mkdir()
@@ -369,6 +395,10 @@ assert(repair_generated_windows_dependency_script(current));assert(current==wind
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         for name in names:
             self.assertEqual(digest(self.scratch / "staged-cmake/assets" / name), digest(ROOT / "Engine/assets" / name))
+        for library in libraries:
+            for notice, target in (("LICENSE", library.lower() + ".txt"), ("NOTICE", library.lower() + "-NOTICE.txt")):
+                self.assertEqual(digest(self.scratch / "staged-cmake/licenses" / target), digest(ROOT / "Engine/dep" / library / notice))
+        self.assertEqual(len([p for p in (self.scratch / "staged-cmake").rglob("*") if p.is_file()]), len(names) + 8)
         # Fail closed for a missing required resource, including from a build
         # tree that already exists. Never fill it from another checkout/root.
         bad = self.scratch / "missing-assets"
@@ -386,6 +416,18 @@ assert(repair_generated_windows_dependency_script(current));assert(current==wind
         result = subprocess.run(["cmake", "-S", str(consumer), "-B", str(build)], capture_output=True, text=True)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("Required Engine runtime asset is missing", result.stdout + result.stderr)
+        # Valid rendering assets are insufficient: distribution notices are
+        # required as well, from this exact admitted dependency source root.
+        for name in names:
+            destination = bad / "Engine/assets" / name
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(ROOT / "Engine/assets" / name, destination)
+        result = subprocess.run([str(self.msbuild), str(project), "/nologo", "/nr:false", "/t:EpochCopyRequiredRuntimeAssets"], capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("EpochGui", result.stdout)
+        result = subprocess.run(["cmake", "-S", str(consumer), "-B", str(build)], capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Required Engine dependency notice is missing", result.stdout + result.stderr)
 
 
 if __name__ == "__main__":

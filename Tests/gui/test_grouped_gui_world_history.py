@@ -49,10 +49,10 @@ struct EditorState {
  bool guiDocumentLoadAttempted{true},guiDocumentReplaceArmed{};std::uint64_t guiDocumentSavedRevision{};
  std::string guiDocumentSourcePath;
  std::unique_ptr<SchedulerPort> taskScheduler;
- std::optional<int> forestSurfacePending,forestSurfacePlacement;
+ std::optional<int> forestSurfacePending,forestSurfacePlacement,forestLassoGesture;
  unsigned forestSurfaceCancellation{};
  scene::SceneObjectId forestBrushTerrain{scene::kInvalidSceneObjectId};
- std::optional<std::array<double,3>> forestBrushLastDirection;
+ std::vector<std::array<double,3>> forestBrushDirections;
 
 };
 void push_editor_log(EditorState&,const std::string&){}
@@ -79,6 +79,7 @@ struct Fixture {
   state.guiDocument=std::make_unique<GuiDocument>(DocumentHandle{0,1},BranchIdentity{1,1});
   auto canvas=state.guiDocument->create_widget({.kind=WidgetKind::canvas,.name="Canvas",.content=CanvasContent{}});
   WidgetDescriptor descriptor{.kind=WidgetKind::button,.name="Button",.layout={.x=40,.y=20,.width=100,.height=30},.content=ButtonContent{"Home"}};
+  descriptor.interaction.action="example.home";
   button=state.guiDocument->create_widget(descriptor,canvas.widget).widget;initial=descriptor.layout;state.guiDocumentRoot=canvas.widget;
   scene::SceneSnapshot snapshot;snapshot.scene_id="grouped_layout";snapshot.project_id="history_project";
   snapshot.objects.push_back({.id=7,.name="ButtonProxy",.type="GuiButton",.category="UI",
@@ -186,9 +187,44 @@ int bounded_retention(){
  REQUIRE(s.guiDocumentStatus.find("full")!=std::string::npos);
  return 0;
 }
+int rename_roundtrip(){
+ Fixture f;auto& s=f.state;const auto* address=s.guiDocument.get();
+ const auto original=*s.guiDocument->widget(f.button);
+ const auto worldBefore=s.sceneDocument.revision();const auto guiBefore=s.guiDocument->revision();
+ REQUIRE(s.guiDocument->rename_widget(f.button,"Canvas").code==ResultCode::duplicate_name);
+ REQUIRE(s.guiDocument->rename_widget(f.button," \t").code==ResultCode::empty_name);
+ REQUIRE(s.guiDocument->rename_widget(f.button,"line\nbreak").code==ResultCode::invalid_text);
+ REQUIRE(s.guiDocument->rename_widget(f.button,std::string(257,'a')).code==ResultCode::string_limit_exceeded);
+ REQUIRE(s.guiDocument->rename_widget(f.button,"Button").code==ResultCode::no_change);
+ REQUIRE(s.sceneDocument.revision()==worldBefore&&s.guiDocument->revision()==guiBefore);
+
+ REQUIRE(commit_gui_widget_rename(s,f.button,"CalculatorExpression"));
+ const auto next=s.guiDocument->widget(f.button);REQUIRE(next&&next->descriptor.name=="CalculatorExpression");
+ REQUIRE(next->parent==original.parent&&next->descriptor.interaction==original.descriptor.interaction);
+ REQUIRE(s.entities[0].name=="CalculatorExpression"&&s.selectedEntityId==7&&address==s.guiDocument.get());
+ REQUIRE(s.guiDocumentWidgets.at(7)==f.button);
+ REQUIRE(s.guiDocument->journal().back().kind()==OperationKind::widget_renamed);
+ const auto bytes=serialize_gui_document(s.guiDocument->snapshot());REQUIRE(bytes);
+ const auto loaded=deserialize_gui_document(bytes.bytes);REQUIRE(loaded);
+ const GuiDocument reopened{*loaded.snapshot};
+ REQUIRE(reopened.widget(f.button)->descriptor==next->descriptor&&reopened.widget(f.button)->parent==original.parent);
+ REQUIRE(synchronize_gui_document(s)&&s.guiDocument->widget(f.button)->descriptor==next->descriptor);
+ s.guiContentEditorWidget=3;
+ REQUIRE(undo_gui_document(s)&&s.guiContentEditorWidget==0);
+ REQUIRE(s.entities[0].name=="ButtonProxy"&&s.guiDocument->widget(f.button)->descriptor.name=="Button");
+ REQUIRE(redo_editor_scene(s)&&s.entities[0].name=="CalculatorExpression"&&s.guiDocumentWidgets.at(7)==f.button);
+ REQUIRE(s.selectedEntityId==7&&s.entities[1].name=="Cube");
+
+ Fixture unattached;auto& root=unattached.state;
+ const auto reference=root.sceneDocument.revision();
+ REQUIRE(commit_gui_widget_rename(root,root.guiDocumentRoot,"OtherCanvas"));
+ REQUIRE(root.sceneDocument.revision()==reference&&root.guiDocument->widget(root.guiDocumentRoot)->descriptor.name=="OtherCanvas");
+ REQUIRE(root.guiDocument->undo()&&root.guiDocument->widget(root.guiDocumentRoot)->descriptor.name=="Canvas");
+ return 0;
+}
 int main(){
  REQUIRE(editor_authoring_history::run_contract()==editor_authoring_history::ContractFailure::none);
- for(auto test:{layout_roundtrip,stale_and_redo,failure_preserves,identity_acceptance,bounded_retention})if(const int result=test())return result;
+ for(auto test:{layout_roundtrip,stale_and_redo,failure_preserves,identity_acceptance,bounded_retention,rename_roundtrip})if(const int result=test())return result;
  REQUIRE(fallback_projection_calls==0);
  std::puts("grouped_layout_contract=PASS; paired_journals, repeat, stale, redo, identity, staged_failure, capacity");return 0;
 }
@@ -202,11 +238,13 @@ def fixture():
         "        [[nodiscard]] bool is_gui_authoring_entity(",
         "        [[nodiscard]] authoring::gui::WidgetDescriptor\n        gui_widget_descriptor_from_entity(",
         "        [[nodiscard]] bool gui_layout_matches_scene_projection(",
+        "        [[nodiscard]] authoring::gui::MutationResult create_authored_gui_widget(",
         "        [[nodiscard]] authoring::gui::GuiDocument*\n        synchronize_gui_document(",
         "        [[nodiscard]] std::array<editor_authoring_history::GroupState, 2>\n        gui_world_group_states(",
         "        [[nodiscard]] bool prepare_gui_world_projection(",
         "        void publish_gui_world_history(",
         "        [[nodiscard]] bool commit_gui_layout_edit(",
+        "        [[nodiscard]] bool commit_gui_widget_rename(",
         "        [[nodiscard]] std::optional<bool> try_grouped_gui_world_history(",
         "        [[nodiscard]] bool undo_gui_document(",
         "        [[nodiscard]] bool redo_gui_document("))
@@ -225,6 +263,8 @@ class GroupedGuiWorldHistory(unittest.TestCase):
         inspector=(app/"editor.frame_inspector.inl").read_text(encoding="utf-8")
         layout=inspector[inspector.index("                    if (layoutChanged)"):inspector.index('                    gui::label("Interaction")')]
         self.assertIn("commit_gui_layout_edit(",layout)
+        rename=inspector[inspector.index('                    gui::label("Identity")'):inspector.index('                    gui::label("Content")',inspector.index('                    gui::label("Identity")'))]
+        self.assertIn("commit_gui_widget_rename(",rename)
         outliner=(app/"editor.frame_outliner.inl").read_text(encoding="utf-8")
         flow=outliner[outliner.index('                            gui::label("Layout Flow")'):outliner.index('                            gui::label("Appearance")')]
         self.assertIn("commit_gui_layout_edit(",flow)
@@ -232,9 +272,10 @@ class GroupedGuiWorldHistory(unittest.TestCase):
     def test_actual_layout_and_history_owners(self):
         proof=ROOT/"build/validation/gui-world-history-repair-oct27/actual"
         proof.mkdir(parents=True,exist_ok=True)
+        temporary=proof/"tmp";temporary.mkdir(exist_ok=True)
         (proof/"editor.grouped_history_contract.cpp").write_text(fixture(),encoding="utf-8")
         modules={}
-        for path in (ROOT/"Engine/modules").glob("*.ixx"):
+        for path in (ROOT/"Engine/modules").rglob("*.ixx"):
             match=re.search(r"^export module\s+([\w.:]+);",path.read_text(encoding="utf-8-sig"),re.M)
             if match:modules[match.group(1)]=path
         pending=["authoring.gui_document","scene.document","editor.authoring_history","core.sha256"]
@@ -246,6 +287,7 @@ class GroupedGuiWorldHistory(unittest.TestCase):
             pending+=re.findall(r"^(?:export\s+)?import\s+([\w.:]+);",modules[name].read_text(encoding="utf-8-sig"),re.M)
         files=" ".join('"'+modules[name].as_posix()+'"' for name in sorted(closure))
         (proof/"CMakeLists.txt").write_text(f'''cmake_minimum_required(VERSION 3.30)
+set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT Embedded)
 project(GroupedGuiWorldHistory LANGUAGES CXX)
 add_executable(grouped_history editor.grouped_history_contract.cpp
  "{(ROOT/"Engine/src/authoring/gui/authoring.gui_document_codec.cpp").as_posix()}"
@@ -266,9 +308,9 @@ set_tests_properties(grouped_layout_owners PROPERTIES TIMEOUT 30)
             build=["cmake","--build",str(proof/"cmake"),"--config",config,"--parallel","1"]
             if os.name=="nt":build += ["--","/nr:false","/p:UseMultiToolTask=false","/p:CL_MPCount=1"]
             commands += [(config+"-build",build),(config+"-contract",["ctest","--test-dir",str(proof/"cmake"),"-C",config,"--output-on-failure"])]
-        receipt={"actual_modules":len(closure),"scope":"Actual layout/journal/coordinator and raw Undo/Redo owners; source catalog/template loading and renderer are recorded ports; no Engine/native claim","phases":[]}
+        receipt={"actual_modules":len(closure),"scope":"Actual layout and rename journals, coordinator and Undo/Redo owners; source catalog/template loading and renderer are recorded ports; no Engine/native claim","phases":[]}
         for label,command in commands:
-            result=subprocess.run(command,cwd=ROOT,env=dict(os.environ,MSBUILDDISABLENODEREUSE="1"),capture_output=True,text=True,timeout=180)
+            result=subprocess.run(command,cwd=ROOT,env=dict(os.environ,MSBUILDDISABLENODEREUSE="1",TEMP=str(temporary),TMP=str(temporary),TMPDIR=str(temporary)),capture_output=True,text=True,timeout=180)
             (proof/(label+".log")).write_text(result.stdout+result.stderr,encoding="utf-8")
             receipt["phases"].append({"phase":label,"exit":result.returncode,"command":command})
             (proof/"result.json").write_text(json.dumps(receipt,indent=2)+"\n",encoding="utf-8")

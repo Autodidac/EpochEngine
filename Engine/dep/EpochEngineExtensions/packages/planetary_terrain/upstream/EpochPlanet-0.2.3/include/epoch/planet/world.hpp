@@ -32,6 +32,9 @@ struct SurfaceSample { double height{},temperature{},moisture{};FVec3 color{}; }
 [[nodiscard]] double noise3(DVec3 p,std::uint32_t seed) noexcept;
 [[nodiscard]] double fbm(DVec3 p,std::uint32_t seed,int octaves=5) noexcept;
 [[nodiscard]] double sample_height(const Body& body,DVec3 unit_direction) noexcept;
+[[nodiscard]] inline double terrain_relief_bound(const Body& body) noexcept {
+    return 1.18*std::abs(body.height_scale)+9.0*std::abs(body.geography_scale);
+}
 [[nodiscard]] SurfaceSample sample_surface(const Body& body,DVec3 unit_direction) noexcept;
 [[nodiscard]] DVec3 surface_normal(const Body& body,DVec3 direction,double sample_spacing=3.0) noexcept;
 [[nodiscard]] std::string_view kind_name(BodyKind kind) noexcept;

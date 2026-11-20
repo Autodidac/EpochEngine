@@ -189,6 +189,7 @@ namespace epochengine::anativecontext
         auto& sr = s_softrendererstate;
 
         sr.framebuffer.clear();
+        std::vector<float>{}.swap(sr.previewDepth);
         cubeTexture.reset();
 
 #if defined(_WIN32)
@@ -214,6 +215,7 @@ namespace epochengine::anativecontext
     }
 
     void draw_sprite(SpriteHandle, std::span<const TextureAtlas* const>, float, float, float, float) noexcept {}
+    void draw_sprite_pixels(SpriteHandle, std::span<const TextureAtlas* const>, float, float, float, float) noexcept {}
     bool softrenderer_process(core::Context&, core::CommandQueue&) { return false; }
     void softrenderer_cleanup(std::shared_ptr<epochengine::core::Context>&) {}
     int get_width() { return 0; }

@@ -15,6 +15,38 @@
 
 namespace epochengine::editor_ai_source_intent
 {
+    // An explicit conversational scope overrides action words in the design
+    // being discussed. "Read-only" alone is deliberately insufficient: an
+    // operator may still request inspection through admitted read-only tools.
+    [[nodiscard]] inline bool requests_chat_only(std::string_view request)
+    {
+        while (!request.empty() && (request.front() == ' ' || request.front() == '\t'
+            || request.front() == '\r' || request.front() == '\n')) request.remove_prefix(1u);
+        const auto line_end = request.find_first_of("\r\n");
+        request = request.substr(0u, line_end);
+        if (request.size() > 512u) request = request.substr(0u, 512u);
+        std::string lower;
+        lower.reserve(request.size());
+        for (const unsigned char c : request)
+            lower += static_cast<char>(c >= 'A' && c <= 'Z' ? c - 'A' + 'a' : c);
+        std::string_view scope{lower};
+        for (const auto prefix : {"please ", "can you ", "could you "})
+            if (scope.starts_with(prefix)) scope.remove_prefix(std::string_view{prefix}.size());
+        const auto starts = [&](std::string_view phrase) {
+            return scope.starts_with(phrase) && (scope.size() == phrase.size()
+                || scope[phrase.size()] == ' ' || scope[phrase.size()] == ':'
+                || scope[phrase.size()] == ';' || scope[phrase.size()] == '.');
+        };
+        if (starts("chat only") || starts("chat-only") || starts("just answer")
+            || starts("answer in chat only")) return true;
+        if (!(starts("read-only") || starts("read only"))) return false;
+        // Only an instruction heading, before its first clause terminator;
+        // later quoted examples cannot silently change the requested lane.
+        scope = scope.substr(0u, scope.find_first_of(".;"));
+        return scope.find(" in chat only") != std::string_view::npos
+            || scope.find(" chat-only") != std::string_view::npos;
+    }
+
     // The Project Assistant can mutate scene objects and author project GUI
     // widgets; it cannot modify the C++ editor theme registry or its saved
     // preference schema. Select the guarded Engine Source lane *before*
@@ -22,6 +54,7 @@ namespace epochengine::editor_ai_source_intent
     // internal selector IDs, code paths, or configuration field names.
     [[nodiscard]] inline bool requires_engine_source(std::string_view request)
     {
+        if (requests_chat_only(request)) return false;
         std::string lower{};
         lower.reserve(request.size());
         for (const unsigned char c : request)

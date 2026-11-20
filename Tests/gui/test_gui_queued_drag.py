@@ -11,7 +11,7 @@ from Tests.build.test_opengl_sprite_stream import definition
 ROOT = Path(__file__).resolve().parents[2]
 FRAME = ROOT / "Engine/src/epochgui/controls/gui.frame_lifecycle.inl"
 GUI = ROOT / "Engine/src/epochgui/gui.engine.cpp"
-API = ROOT / "Engine/modules/gui.engine.ixx"
+API = ROOT / "Engine/modules/gui/gui.engine.ixx"
 
 
 def fixture(before_drag=None):
@@ -58,6 +58,8 @@ namespace gui_lib=epochengine::gui_lib;
 struct TraceRecord{std::string tag,message;};std::vector<TraceRecord> traceRecords;bool traceThrows{};
 namespace epochengine::logger {void info(std::string_view tag,std::string message){if(traceThrows)throw std::runtime_error("trace port");traceRecords.push_back({std::string{tag},std::move(message)});}}
 namespace core {namespace cli{inline bool trace_menu_button0_rect=false;}struct Context{
+ struct NativeTextInputArea{float x{},y{},width{},height{};bool activate{};};
+ void(*update_native_text_input)(const Context&,std::optional<NativeTextInputArea>) noexcept{};
  bool focus=true,pointer=true,wheel=true;void* windowData{};
  void* get_hwnd(){return this;}bool has_input_focus_safe(){return focus;}
  bool has_pointer_input_safe(){return pointer;}bool has_hover_scroll_safe(){return wheel;}
@@ -69,6 +71,7 @@ TYPES
 struct Frame{
  std::shared_ptr<core::Context> ctxShared;core::Context* ctx{};
  const void* visitedActiveWidget{};
+ std::optional<core::Context::NativeTextInputArea> nativeTextInput{};
  float deltaTime{},caretTimer{};bool caretVisible{};
  bool mouseDown{},prevMouseDown{},mouseRightDown{},prevMouseRightDown{},pointerInputAllowed=true,keyboardFocusCancelled{};
  Vec2 mousePos{};int mouseWheelDelta{};std::vector<InputEvent> events;

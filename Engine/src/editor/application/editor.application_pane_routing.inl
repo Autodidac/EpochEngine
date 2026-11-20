@@ -113,7 +113,7 @@
             switch (surface)
             {
             case EditorMainSurface::Scene:
-                return "3D Preview";
+                return "Scene Preview";
             case EditorMainSurface::Game2D:
                 return "2D / UI";
             case EditorMainSurface::Assets:
@@ -601,7 +601,7 @@
         }
 
         [[nodiscard]] std::vector<DetachedAiChatCommand>
-            consume_detached_ai_chat_commands(const core::Context* ownerContext)
+            consume_detached_ai_chat_commands(const core::Context* ownerContext, bool input_reserved)
         {
             std::vector<DetachedAiChatCommand> commands{};
             if (!ownerContext)
@@ -612,7 +612,8 @@
             for (auto it = storage.detachedAiChatCommands.begin();
                 it != storage.detachedAiChatCommands.end();)
             {
-                if (it->ownerContext != ownerContext)
+                if (it->ownerContext != ownerContext
+                    || (input_reserved && it->kind != DetachedAiChatCommandKind::stop_pending))
                 {
                     ++it;
                     continue;

@@ -10,17 +10,22 @@
         const std::string composerMenuId = options.log_id.empty()
             ? std::string{options.title} : std::string{options.log_id};
         const auto composerMenu = g_consoleComposerMenus.find(composerMenuId);
+        if (options.draft_only && composerMenu != g_consoleComposerMenus.end())
+        {
+            composerMenu->second.open = false;
+            composerMenu->second.group.reset();
+        }
         const bool composerPopupWasOpen = options.chat_composer
             && composerMenu != g_consoleComposerMenus.end() && composerMenu->second.open;
         if (composerPopupWasOpen
-            || (options.model_picker_open && !options.model_picker_actions.empty()))
+            || (!options.draft_only && options.model_picker_open && !options.model_picker_actions.empty()))
             block_background_for_popup();
         begin_window(options.title, options.position, options.size, true, options.show_title_bar);
         if (!g_frame.insideWindow || !g_frame.ctx) { end_window(); return result; }
 
         // A drop belongs only to the visible chat surface under its own native
         // coordinates. Never attach a scene drop or deliver it to another dock.
-        if (options.chat_composer)
+        if (options.chat_composer && !options.draft_only)
             for (auto event = g_frame.events.begin(); event != g_frame.events.end();)
             {
                 if (event->type == EventType::FileDrop
@@ -229,7 +234,8 @@
                 const Vec2 actionPosition{actionX, rowY};
                 const Vec2 actionSize{actionWidth, controlRowHeight};
                 bool activatedOnPress = false;
-                if (action.enabled && action.activate_on_press
+                const bool enabled = action.enabled && (!options.draft_only || action.inspection_only);
+                if (enabled && action.activate_on_press
                     && point_in_rect(
                         g_frame.mousePos,
                         actionPosition.x,
@@ -247,7 +253,7 @@
                     action.label,
                     actionSize,
                     false,
-                    action.enabled,
+                    enabled,
                     action.tone);
                 if (activatedOnPress
                     || (!action.activate_on_press && clicked))
@@ -263,6 +269,7 @@
             set_cursor({contentX, contentTopY});
             if (options.task_editing && options.task_edit_buffer)
             {
+                const ScopedInputSuppression taskInput{options.draft_only};
                 result.task_input = edit_box(
                     *options.task_edit_buffer,
                     {availableWidth, taskValueHeight},
@@ -316,7 +323,10 @@
             const std::string settingsId = std::string{options.log_id} + ".settings";
             (void)begin_scroll_area(ScrollAreaOptions{
                 .id = settingsId, .size = {availableWidth, inlineHeight}});
-            options.inline_controls((std::max)(1.0f, availableWidth - 20.0f));
+            {
+                const ScopedInputSuppression settingsInput{options.draft_only};
+                options.inline_controls((std::max)(1.0f, availableWidth - 20.0f));
+            }
             end_scroll_area();
         }
 
@@ -333,7 +343,7 @@
                 .line_roles = options.line_roles,
                 .line_run_details = options.line_run_details,
                 .retryable_lines = options.retryable_lines,
-                .retry_enabled = options.retry_enabled,
+                .retry_enabled = options.retry_enabled && !options.draft_only,
                 .message_bubbles = options.message_bubbles,
                 .conversation_style = options.conversation_style,
                 .expand_activity = options.expand_activity,
@@ -390,7 +400,7 @@
                         x + 57.0f, y + 7.0f, kFontScale);
                     draw_text_line("Image attached", x + 57.0f, y + 30.0f, kFontScale);
                     set_cursor({x + cell - 30.0f, y + 13.0f});
-                    if (button_with_state("x", {26.0f, 26.0f}, false, true, SemanticTone::neutral))
+                    if (button_with_state("x", {26.0f, 26.0f}, false, !options.draft_only, SemanticTone::neutral))
                         result.attachment_remove_index = index;
                 }
                 set_cursor({logPos.x, controlsY});
@@ -412,7 +422,7 @@
                             {(std::max)(1.0f, cell - 32.0f), 34.0f}, expanded, true, SemanticTone::info))
                         filePreview = expanded ? ComposerFilePreview{} : ComposerFilePreview{file.name, file.content};
                     set_cursor({x + cell - 28.0f, y + 4.0f});
-                    if (button_with_state("x", {26.0f, 26.0f}, false, true, SemanticTone::neutral))
+                    if (button_with_state("x", {26.0f, 26.0f}, false, !options.draft_only, SemanticTone::neutral))
                         result.file_remove_index = index;
                 }
                 if (filePreviewHeight > 0.0f)
@@ -432,7 +442,7 @@
                 {
                     set_cursor({logPos.x + index * (chipWidth + 4.0f), controlsY - attachmentHeight});
                     if (button_with_state(std::string{options.composer_attachment_labels[index]} + " x",
-                            {chipWidth, 26.0f}, false, true, SemanticTone::info))
+                            {chipWidth, 26.0f}, false, !options.draft_only, SemanticTone::info))
                         result.attachment_remove_index = index;
                 }
                 set_cursor({logPos.x, controlsY});
@@ -456,25 +466,22 @@
                 const auto& menuId = composerMenuId;
                 auto& menu = g_consoleComposerMenus[menuId];
                 if (composerPopupWasOpen) begin_application_popup_input();
-                const bool menuClicked = button_with_state("",
+                const bool menuClicked = button_with_state("Add to chat",
                     {composerLayout.add.width, composerLayout.add.height},
-                    false, true, SemanticTone::neutral, true);
+                    false, !options.draft_only, SemanticTone::neutral, true, false, ButtonIcon::add);
                 if (composerPopupWasOpen) end_application_popup_input();
-                const float addCenterX = logPos.x + composerLayout.add.x + composerLayout.add.width * 0.5f;
-                const float addCenterY = rowY + composerLayout.add.y + composerLayout.add.height * 0.5f;
-                const auto addMark = active_palette().buttonActive;
-                draw_sprite(addMark, addCenterX - 6.0f, addCenterY - 1.0f, 12.0f, 2.0f);
-                draw_sprite(addMark, addCenterX - 1.0f, addCenterY - 6.0f, 2.0f, 12.0f);
                 if (menuClicked)
                 {
                     menu.open = !menu.open;
                     menu.group.reset();
                 }
                 set_cursor(at(composerLayout.input));
+                static const std::function<bool()> textOnlyPaste{};
                 result.input = edit_box(*options.input,
                     {composerLayout.input.width, composerLayout.input.height},
                     options.max_input_chars, true, options.input_keyboard_policy,
-                    true, options.composer_placeholder, true, true, options.composer_paste);
+                    !options.draft_only, options.composer_placeholder, true, true,
+                    options.draft_only ? textOnlyPaste : options.composer_paste);
                 if (composerLayout.has_microphone)
                 {
                     set_cursor(at(composerLayout.microphone));
@@ -483,7 +490,7 @@
                     const bool microphoneClicked = button_with_state("",
                         {composerLayout.microphone.width,
                             composerLayout.microphone.height},
-                        false, true, SemanticTone::neutral, true);
+                        false, !options.draft_only, SemanticTone::neutral, true);
                     const float centerX = logPos.x + composerLayout.microphone.x
                         + composerLayout.microphone.width * 0.5f;
                     const float centerY = rowY + composerLayout.microphone.y
@@ -517,7 +524,7 @@
                     set_cursor(at(composerLayout.pause));
                     if (button_with_state(options.composer_paused ? ">" : "II",
                             {composerLayout.pause.width, composerLayout.pause.height},
-                            false, true, options.composer_paused
+                            false, !options.draft_only, options.composer_paused
                                 ? SemanticTone::success : SemanticTone::neutral, true))
                         result.composer_pause_clicked = true;
                 }
@@ -660,7 +667,7 @@
             }
         }
 
-        if (options.model_picker_open && !options.model_picker_actions.empty())
+        if (!options.draft_only && options.model_picker_open && !options.model_picker_actions.empty())
         {
             const float itemHeight = 31.0f;
             const float menuWidth = availableWidth;
@@ -713,6 +720,7 @@
                 result.footer_action_index);
         }
 
+        if (options.draft_only) result.input.submitted = false;
         end_window();
         return result;
     }

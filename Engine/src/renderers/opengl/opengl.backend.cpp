@@ -166,6 +166,7 @@ namespace epochengine::openglbackend
         ctx->present = nullptr;
         ctx->get_width = openglcontext::opengl_get_width;
         ctx->get_height = openglcontext::opengl_get_height;
+        ctx->preview_density_clouds = true;
         ctx->frame_pacing_capabilities = perf::frame_pacing_capabilities_for(
             perf::frame_pacing_backend::opengl);
         ctx->apply_frame_pacing = [](

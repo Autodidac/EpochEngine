@@ -8,6 +8,7 @@ executable, model, dependency installation, copied implementation or v2 migratio
 is involved. Successful scratch builds are removed; failed evidence is retained.
 """
 from pathlib import Path
+from Tests.support.cpp import engine_module_source
 import hashlib
 import json
 import os
@@ -71,7 +72,7 @@ class ForestMaterializedCodec(unittest.TestCase):
             environment[name] = str(temporary)
         try:
             engine = ROOT / "Engine"
-            module_paths = "\n".join(f'    "{(engine / "modules" / (name + ".ixx")).as_posix()}"' for name in MODULES)
+            module_paths = "\n".join(f'    "{(engine_module_source(engine / "modules", name + ".ixx")).as_posix()}"' for name in MODULES)
             # Refer directly to actual owners. Do not mirror module definitions
             # or generate substitutes for the compiler/decoder under test.
             (source / "CMakeLists.txt").write_text(f'''cmake_minimum_required(VERSION 3.28)
@@ -149,7 +150,7 @@ target_link_libraries(forest_materialized_contract PRIVATE forest_codec_owners)
                     for path in [engine / "src/project/project.forest_library.cpp",
                                  ROOT / "Tests/packages/project.forest_materialized_contract.cpp",
                                  ROOT / "Tests/packages/test_forest_materialized_codec.py",
-                                 *[engine / "modules" / (name + ".ixx") for name in MODULES]]
+                                 *[engine_module_source(engine / "modules", name + ".ixx") for name in MODULES]]
                 },
             }
             (parent / "forest-materialized-last.json").write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")

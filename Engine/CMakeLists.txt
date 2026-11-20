@@ -343,29 +343,29 @@ if(BUILD_TESTING)
                 ${CMAKE_CURRENT_SOURCE_DIR}/modules/asset.mesh_artifact.ixx
                 ${CMAKE_CURRENT_SOURCE_DIR}/modules/asset.cloud_volume.ixx
                 ${CMAKE_CURRENT_SOURCE_DIR}/modules/asset.texture_artifact.ixx
-                ${CMAKE_CURRENT_SOURCE_DIR}/modules/authoring.document.ixx
-                ${CMAKE_CURRENT_SOURCE_DIR}/modules/authoring.texture.ixx
-                ${CMAKE_CURRENT_SOURCE_DIR}/modules/authoring.texture_detail.ixx
-                ${CMAKE_CURRENT_SOURCE_DIR}/modules/editor.application.ixx
-                ${CMAKE_CURRENT_SOURCE_DIR}/modules/package.registry.ixx
-                ${CMAKE_CURRENT_SOURCE_DIR}/modules/render.arcade.ixx
-                ${CMAKE_CURRENT_SOURCE_DIR}/modules/render.camera.ixx
-                ${CMAKE_CURRENT_SOURCE_DIR}/modules/render.canvas2d.ixx
-                ${CMAKE_CURRENT_SOURCE_DIR}/modules/render.device.ixx
-                ${CMAKE_CURRENT_SOURCE_DIR}/modules/render.graph.ixx
-                ${CMAKE_CURRENT_SOURCE_DIR}/modules/render.lighting.ixx
-                ${CMAKE_CURRENT_SOURCE_DIR}/modules/render.math.ixx
-                ${CMAKE_CURRENT_SOURCE_DIR}/modules/render.preview_grid.ixx
-                ${CMAKE_CURRENT_SOURCE_DIR}/modules/render.ray.ixx
-                ${CMAKE_CURRENT_SOURCE_DIR}/modules/render.texture_artifact.ixx
-                ${CMAKE_CURRENT_SOURCE_DIR}/modules/render.texture_residency.ixx
-                ${CMAKE_CURRENT_SOURCE_DIR}/modules/scene.document.ixx
-                ${CMAKE_CURRENT_SOURCE_DIR}/modules/scene.runtime.ixx
-                ${CMAKE_CURRENT_SOURCE_DIR}/modules/scene.serializer.ixx
-                ${CMAKE_CURRENT_SOURCE_DIR}/modules/scene.snapshot.ixx
-                ${CMAKE_CURRENT_SOURCE_DIR}/modules/scene.tier0.ixx
-                ${CMAKE_CURRENT_SOURCE_DIR}/modules/terrain.foundation.ixx
-                ${CMAKE_CURRENT_SOURCE_DIR}/modules/visuals.engine.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/authoring/authoring.document.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/authoring/authoring.texture.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/authoring/authoring.texture_detail.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/editor/editor.application.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/package/package.registry.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/render/render.arcade.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/render/render.camera.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/render/render.canvas2d.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/render/render.device.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/render/render.graph.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/render/render.lighting.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/render/render.math.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/render/render.preview_grid.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/render/render.ray.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/render/render.texture_artifact.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/render/render.texture_residency.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/scene/scene.document.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/scene/scene.runtime.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/scene/scene.serializer.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/scene/scene.snapshot.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/scene/scene.tier0.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/terrain/terrain.foundation.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/visuals/visuals.engine.ixx
     )
     target_include_directories(epoch_mesh_artifact_contract PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -388,9 +388,9 @@ if(BUILD_TESTING)
             FILE_SET epoch_texture_streaming_modules TYPE CXX_MODULES
                 BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/modules
                 FILES
-                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/assets.streaming.ixx
-                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/project.asset_registry.ixx
-                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/asset.texture_import.ixx
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/assets/assets.streaming.ixx
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/project/project.asset_registry.ixx
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/asset/asset.texture_import.ixx
                     ${CMAKE_CURRENT_SOURCE_DIR}/modules/asset.texture_artifact.ixx)
         epoch_apply_cxx_dialect(epoch_texture_streaming_contract)
         epoch_apply_warnings(epoch_texture_streaming_contract)
@@ -408,7 +408,7 @@ if(BUILD_TESTING)
         target_sources(epoch_platform_work_admission_contract PRIVATE
             FILE_SET epoch_platform_work_admission_modules TYPE CXX_MODULES
                 BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/modules
-                FILES ${CMAKE_CURRENT_SOURCE_DIR}/modules/platform.work_admission.ixx)
+                FILES ${CMAKE_CURRENT_SOURCE_DIR}/modules/platform/platform.work_admission.ixx)
         epoch_apply_cxx_dialect(epoch_platform_work_admission_contract)
         epoch_apply_warnings(epoch_platform_work_admission_contract)
         epoch_apply_sanitizers(epoch_platform_work_admission_contract)
@@ -431,13 +431,13 @@ if(BUILD_TESTING)
                 BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/modules
                 FILES
 
-                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/core.logger.ixx
-                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/core.mpmc_bounded_queue.ixx
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/core/core.logger.ixx
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/core/core.mpmc_bounded_queue.ixx
 
-                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/systems.registry.ixx
-                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/systems.task.ixx
-                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/taskgraph.dotsystem.ixx
-                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/editor.task_scheduler.ixx
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/systems/systems.registry.ixx
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/systems/systems.task.ixx
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/taskgraph/taskgraph.dotsystem.ixx
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/editor/editor.task_scheduler.ixx
         )
         target_include_directories(epoch_editor_task_scheduler_contract PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}/include
@@ -464,15 +464,15 @@ if(BUILD_TESTING)
             FILE_SET epoch_neuromorphic_modules TYPE CXX_MODULES
                 BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/modules
                 FILES
-                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/authoring.document.ixx
-                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/authoring.task_graph.ixx
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/authoring/authoring.document.ixx
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/authoring/authoring.task_graph.ixx
 
-                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/scene.snapshot.ixx
-                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/timeline.system.ixx
-                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/simulation.neuromorphic.ixx
-                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/simulation.neuromorphic_adapters.ixx
-                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/render.neuromorphic_camera.ixx
-                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/render.neuromorphic_invalidation.ixx
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/scene/scene.snapshot.ixx
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/timeline/timeline.system.ixx
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/simulation/simulation.neuromorphic.ixx
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/simulation/simulation.neuromorphic_adapters.ixx
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/render/render.neuromorphic_camera.ixx
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/render/render.neuromorphic_invalidation.ixx
         )
         target_include_directories(epoch_neuromorphic_contract PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}
@@ -517,9 +517,9 @@ if(BUILD_TESTING)
             FILE_SET epoch_core_candidate_data_modules TYPE CXX_MODULES
                 BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/modules
                 FILES
-                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/core.path.ixx
-                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/platform.child_process.ixx
-                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/core.sha256.ixx)
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/core/core.path.ixx
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/platform/platform.child_process.ixx
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/core/core.sha256.ixx)
         target_compile_definitions(epoch_core_candidate_data_contract PRIVATE
             EPOCH_CORE_CANDIDATE_DATA_CONTRACT_MAIN=1)
         epoch_apply_cxx_dialect(epoch_core_candidate_data_contract)
@@ -540,8 +540,8 @@ if(BUILD_TESTING)
             FILE_SET epoch_platform_child_process_modules TYPE CXX_MODULES
                 BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/modules
                 FILES
-                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/platform.child_process.ixx
-                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/core.sha256.ixx
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/platform/platform.child_process.ixx
+                    ${CMAKE_CURRENT_SOURCE_DIR}/modules/core/core.sha256.ixx
         )
         target_compile_definitions(
             epoch_platform_child_process_contract
@@ -564,6 +564,9 @@ if(BUILD_TESTING)
         
         
         
+        if(WIN32)
+            
+        endif()
         
 
         # Filesystem transactions/materialization use synthetic fixtures only;
@@ -641,7 +644,7 @@ if(EPOCH_CONFIGURES_MODULE_TARGETS AND
     target_sources(epoch_platform_filesystem PUBLIC
         FILE_SET epoch_platform_filesystem_modules TYPE CXX_MODULES
             BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/modules
-            FILES ${CMAKE_CURRENT_SOURCE_DIR}/modules/platform.filesystem.ixx)
+            FILES ${CMAKE_CURRENT_SOURCE_DIR}/modules/platform/platform.filesystem.ixx)
     target_include_directories(epoch_platform_filesystem PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include)
     set_target_properties(epoch_platform_filesystem PROPERTIES
@@ -669,17 +672,17 @@ if(EPOCH_BUILD_AI_TRANSPORT_CONTRACT)
         FILE_SET epoch_ai_transport_modules TYPE CXX_MODULES
             BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/modules
             FILES
-                ${CMAKE_CURRENT_SOURCE_DIR}/modules/ai.engine.ixx
-                ${CMAKE_CURRENT_SOURCE_DIR}/modules/ai.runtime.ixx
-                ${CMAKE_CURRENT_SOURCE_DIR}/modules/ai.session.ixx
-                ${CMAKE_CURRENT_SOURCE_DIR}/modules/ai.voice_session.ixx
-                ${CMAKE_CURRENT_SOURCE_DIR}/modules/ai.mcp.ixx
-                ${CMAKE_CURRENT_SOURCE_DIR}/modules/ai.eval.ixx
-                ${CMAKE_CURRENT_SOURCE_DIR}/modules/ai.model_install.ixx
-                ${CMAKE_CURRENT_SOURCE_DIR}/modules/ai.project_profile.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/ai/ai.engine.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/ai/ai.runtime.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/ai/ai.session.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/ai/ai.voice_session.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/ai/ai.mcp.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/ai/ai.eval.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/ai/ai.model_install.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/ai/ai.project_profile.ixx
 
-                ${CMAKE_CURRENT_SOURCE_DIR}/modules/core.path.ixx
-                ${CMAKE_CURRENT_SOURCE_DIR}/modules/core.sha256.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/core/core.path.ixx
+                ${CMAKE_CURRENT_SOURCE_DIR}/modules/core/core.sha256.ixx
     )
 
     target_include_directories(epoch_ai_transport_contract PRIVATE
@@ -957,6 +960,7 @@ set(EPOCH_SOURCES
     src/epoch/epoch.headers.cpp
     src/renderers/platform/platform.context_epoch.cpp
     src/platform/platform.child_process.cpp
+    src/platform/platform.process_observation.hpp
 
     src/platform/platform.work_admission.cpp
     src/render/render.graph_epoch.cpp
@@ -1076,7 +1080,7 @@ if(WIN32)
         src/renderers/opengl/opengl.frame_capture.cpp
         resource/WinResource.rc
     )
-elseif(UNIX AND NOT APPLE)
+elseif(UNIX AND NOT APPLE AND NOT ANDROID)
     list(APPEND EPOCH_SOURCES
         src/renderers/host/host.context_linux.cpp
     )
@@ -1134,7 +1138,6 @@ if(EPOCH_ENABLE_NATIVE_AI)
     target_compile_definitions(epoch_ai_native PRIVATE
         $<$<PLATFORM_ID:Windows>:NOMINMAX;WIN32_LEAN_AND_MEAN>)
     list(APPEND EPOCH_SOURCES src/ai/ai.native_runtime.cpp)
-    list(APPEND EPOCH_SOURCES src/ai/ai.voice_runtime_win.cpp)
     if(WIN32)
         target_link_libraries(epoch_ai_native PUBLIC sapi ole32 uuid)
     endif()
@@ -1142,7 +1145,19 @@ if(EPOCH_ENABLE_NATIVE_AI)
         target_sources(epoch_ai_transport_contract PRIVATE src/ai/ai.native_runtime.cpp)
         target_link_libraries(epoch_ai_transport_contract PRIVATE epoch_ai_native)
     endif()
+else()
+    list(APPEND EPOCH_SOURCES
+        src/ai/ai.native_disabled.cpp
+        src/ai/native/ai.backend_core_error.cpp
+        src/ai/native/ai.backend_process_process.cpp
+    )
+    if(WIN32)
+        list(APPEND EPOCH_SOURCES src/ai/native/ai.backend_process_process_windows.cpp)
+    elseif(NOT ANDROID)
+        list(APPEND EPOCH_SOURCES src/ai/native/ai.backend_process_process_posix.cpp)
+    endif()
 endif()
+list(APPEND EPOCH_SOURCES src/ai/ai.voice_runtime_win.cpp)
 
 if(EPOCH_BUILD_STATIC_RUNTIME)
     add_library(epoch STATIC ${EPOCH_SOURCES})
@@ -1344,17 +1359,32 @@ set(EPOCH_MODULE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/modules)
 # workaround source-local instead of lowering engine-wide Release optimization.
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND UNIX AND NOT APPLE)
     set_source_files_properties(
-        "${EPOCH_MODULE_DIR}/core.commandline.ixx"
+        "${EPOCH_MODULE_DIR}/core/core.commandline.ixx"
         PROPERTIES COMPILE_OPTIONS "$<$<CONFIG:Release>:-O0>"
     )
     set_source_files_properties(
-        "${EPOCH_MODULE_DIR}/network.core.ixx"
+        "${EPOCH_MODULE_DIR}/network/network.core.ixx"
         PROPERTIES COMPILE_OPTIONS "$<$<CONFIG:Release>:-O0>"
+    )
+endif()
+if(ANDROID AND CMAKE_HOST_WIN32 AND CMAKE_CXX_COMPILER_ID MATCHES "Clang"
+    AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 21
+    AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 22)
+    # Windows-hosted NDK r30 crashes in Release code generation for these units.
+    set_source_files_properties(
+        src/ai/ai.engine.cpp
+        src/ai/ai.asset_jobs.cpp
+        PROPERTIES COMPILE_OPTIONS "$<$<CONFIG:Release>:-O0>"
+    )
+    set_source_files_properties(
+        src/editor/editor.application.cpp
+        src/editor/editor.asset_generation.cpp
+        PROPERTIES COMPILE_OPTIONS "$<$<CONFIG:Release>:-O0;-g0>"
     )
 endif()
 # Engine adapters such as gui.frame_limit_control stay in this module set;
 # the standalone EpochGui target remains independent of perf.tier.
-file(GLOB EPOCH_MODULE_FILES CONFIGURE_DEPENDS ${EPOCH_MODULE_DIR}/*.ixx)
+file(GLOB_RECURSE EPOCH_MODULE_FILES CONFIGURE_DEPENDS ${EPOCH_MODULE_DIR}/*.ixx)
 list(SORT EPOCH_MODULE_FILES)
 
 target_include_directories(epoch PRIVATE
@@ -1370,6 +1400,8 @@ target_link_libraries(epoch PRIVATE epoch_gui Epoch::AudioEngine Epoch::MediaEng
 if(EPOCH_ENABLE_NATIVE_AI)
     target_link_libraries(epoch PRIVATE epoch_ai_native)
     target_include_directories(epoch PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/ai/native")
+elseif(WIN32)
+    target_link_libraries(epoch PRIVATE sapi ole32 uuid)
 endif()
 
 find_path(CGLTF_INCLUDE_DIR cgltf.h)
@@ -1435,6 +1467,8 @@ if(GLSLANG_VALIDATOR OR GLSLC)
             ${EPOCH_VULKAN_SHADER_DIR}/frag.spv
             ${EPOCH_VULKAN_SHADER_DIR}/gui_vert.spv
             ${EPOCH_VULKAN_SHADER_DIR}/gui_frag.spv
+            ${EPOCH_VULKAN_SHADER_DIR}/atmosphere.vert.spv
+            ${EPOCH_VULKAN_SHADER_DIR}/atmosphere.frag.spv
         COMMAND "${_epoch_shader_compiler}" ${_epoch_shader_vertex_options}
             ${CMAKE_CURRENT_SOURCE_DIR}/assets/vulkan/shaders/vert.glsl
             -o ${EPOCH_VULKAN_SHADER_DIR}/vert.spv
@@ -1447,14 +1481,61 @@ if(GLSLANG_VALIDATOR OR GLSLC)
         COMMAND "${_epoch_shader_compiler}" ${_epoch_shader_fragment_options}
             ${CMAKE_CURRENT_SOURCE_DIR}/assets/vulkan/shaders/gui_frag.glsl
             -o ${EPOCH_VULKAN_SHADER_DIR}/gui_frag.spv
+        COMMAND "${_epoch_shader_compiler}" ${_epoch_shader_vertex_options}
+            ${CMAKE_CURRENT_SOURCE_DIR}/assets/vulkan/shaders/atmosphere.vert.glsl
+            -o ${EPOCH_VULKAN_SHADER_DIR}/atmosphere.vert.spv
+        COMMAND "${_epoch_shader_compiler}" ${_epoch_shader_fragment_options}
+            ${CMAKE_CURRENT_SOURCE_DIR}/assets/vulkan/shaders/atmosphere.frag.glsl
+            -o ${EPOCH_VULKAN_SHADER_DIR}/atmosphere.frag.spv
         DEPENDS
             ${CMAKE_CURRENT_SOURCE_DIR}/assets/vulkan/shaders/vert.glsl
             ${CMAKE_CURRENT_SOURCE_DIR}/assets/vulkan/shaders/frag.glsl
             ${CMAKE_CURRENT_SOURCE_DIR}/assets/vulkan/shaders/gui_vert.glsl
             ${CMAKE_CURRENT_SOURCE_DIR}/assets/vulkan/shaders/gui_frag.glsl
+            ${CMAKE_CURRENT_SOURCE_DIR}/assets/vulkan/shaders/atmosphere.vert.glsl
+            ${CMAKE_CURRENT_SOURCE_DIR}/assets/vulkan/shaders/atmosphere.frag.glsl
         COMMENT "Compiling Vulkan GLSL shaders to SPIR-V"
         VERBATIM
     )
+
+    set(_epoch_cloud_shader_outputs
+        "${EPOCH_VULKAN_SHADER_DIR}/clouds.vert.spv"
+        "${EPOCH_VULKAN_SHADER_DIR}/clouds.frag.spv")
+    find_package(Python3 QUIET COMPONENTS Interpreter)
+    if(Python3_Interpreter_FOUND)
+        set(_epoch_cloud_shader_source "${CMAKE_CURRENT_SOURCE_DIR}/assets/vulkan/shaders")
+        set(_epoch_cloud_shader_header "${CMAKE_CURRENT_SOURCE_DIR}/src/render/render.cloud_shader.hpp")
+        set(_epoch_cloud_shader_generator "${CMAKE_CURRENT_SOURCE_DIR}/../Tools/build/generate_vulkan_cloud_shader.py")
+        set(_epoch_cloud_include_dir "${CMAKE_CURRENT_BINARY_DIR}/generated/vulkan-shaders")
+        set(_epoch_cloud_include "${_epoch_cloud_include_dir}/cloud_trace.generated.glsl")
+        add_custom_command(
+            OUTPUT "${_epoch_cloud_include}"
+            COMMAND "${CMAKE_COMMAND}" -E make_directory "${_epoch_cloud_include_dir}"
+            COMMAND "${Python3_EXECUTABLE}" "${_epoch_cloud_shader_generator}"
+                --input "${_epoch_cloud_shader_header}" --output "${_epoch_cloud_include}"
+            DEPENDS "${_epoch_cloud_shader_header}" "${_epoch_cloud_shader_generator}"
+            VERBATIM
+        )
+        add_custom_command(
+            OUTPUT ${_epoch_cloud_shader_outputs}
+            COMMAND "${_epoch_shader_compiler}" ${_epoch_shader_vertex_options}
+                "${_epoch_cloud_shader_source}/clouds.vert.glsl" -o "${EPOCH_VULKAN_SHADER_DIR}/clouds.vert.spv"
+            COMMAND "${_epoch_shader_compiler}" ${_epoch_shader_fragment_options}
+                "-I${_epoch_cloud_include_dir}"
+                "${_epoch_cloud_shader_source}/clouds.frag.glsl" -o "${EPOCH_VULKAN_SHADER_DIR}/clouds.frag.spv"
+            DEPENDS "${_epoch_cloud_include}"
+                "${_epoch_cloud_shader_source}/clouds.vert.glsl"
+                "${_epoch_cloud_shader_source}/clouds.frag.glsl"
+            COMMENT "Compiling Vulkan cloud shaders to SPIR-V"
+            VERBATIM
+        )
+    else()
+        message(STATUS "Python3 not found; using checked-in Vulkan cloud SPIR-V shaders.")
+        foreach(shader clouds.vert clouds.frag)
+            configure_file("${CMAKE_CURRENT_SOURCE_DIR}/assets/vulkan/shaders/${shader}.spv"
+                "${EPOCH_VULKAN_SHADER_DIR}/${shader}.spv" COPYONLY)
+        endforeach()
+    endif()
 
     add_custom_target(epoch_vulkan_shaders
         DEPENDS
@@ -1462,12 +1543,19 @@ if(GLSLANG_VALIDATOR OR GLSLC)
             ${EPOCH_VULKAN_SHADER_DIR}/frag.spv
             ${EPOCH_VULKAN_SHADER_DIR}/gui_vert.spv
             ${EPOCH_VULKAN_SHADER_DIR}/gui_frag.spv
+            ${EPOCH_VULKAN_SHADER_DIR}/atmosphere.vert.spv
+            ${EPOCH_VULKAN_SHADER_DIR}/atmosphere.frag.spv
+            ${_epoch_cloud_shader_outputs}
     )
 
     add_dependencies(epoch epoch_vulkan_shaders)
     add_dependencies(epoch_renderer_smoke epoch_vulkan_shaders)
 else()
-    message(WARNING "glslangValidator/glslc not found; Vulkan SPIR-V shaders will not be generated.")
+    message(STATUS "glslangValidator/glslc not found; using checked-in Vulkan SPIR-V shaders.")
+    foreach(shader vert frag gui_vert gui_frag atmosphere.vert atmosphere.frag clouds.vert clouds.frag)
+        configure_file("${CMAKE_CURRENT_SOURCE_DIR}/assets/vulkan/shaders/${shader}.spv"
+            "${EPOCH_VULKAN_SHADER_DIR}/${shader}.spv" COPYONLY)
+    endforeach()
 endif()
 
 epoch_apply_cxx_dialect(epoch)
@@ -1636,6 +1724,9 @@ if(EPOCH_SDL_ACTIVE OR EPOCH_PHYSICAL_AUDIO_ACTIVE OR EPOCH_PHYSICAL_INPUT_ACTIV
     endif()
 
     if(EPOCH_SDL_ACTIVE AND EPOCH_SDL3_AVAILABLE)
+        if(ANDROID)
+            target_link_libraries(epoch PRIVATE GLESv3)
+        endif()
         find_package(SDL3_image CONFIG QUIET)
         if(SDL3_image_FOUND)
             target_link_libraries(epoch PRIVATE SDL3_image::SDL3_image)
@@ -1859,7 +1950,7 @@ if(EPOCH_GLAD_NEED_HEADERS)
 endif()
 set(EPOCH_ACTIVE_MODULE_FILES ${EPOCH_MODULE_FILES})
 # The shared platform target above is the single provider for linked consumers.
-list(REMOVE_ITEM EPOCH_ACTIVE_MODULE_FILES ${EPOCH_MODULE_DIR}/platform.filesystem.ixx)
+list(REMOVE_ITEM EPOCH_ACTIVE_MODULE_FILES ${EPOCH_MODULE_DIR}/platform/platform.filesystem.ixx)
 
 function(epoch_exclude_modules list_var regex_pattern)
     set(_epoch_filtered ${${list_var}})
@@ -1912,11 +2003,24 @@ endif()
 
 if(NOT EPOCH_OPENGL_ACTIVE)
     epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[(^|[/\\])opengl\.]])
+    set_source_files_properties(
+        src/renderers/opengl/opengl.backend.cpp
+        src/renderers/opengl/opengl.context.cpp
+        src/renderers/opengl/opengl.context_init.cpp
+        src/renderers/opengl/opengl.context_process.cpp
+        src/renderers/opengl/opengl.context_cleanup.cpp
+        src/renderers/opengl/opengl.frame_capture.cpp
+        src/renderers/opengl/opengl.context_detail.cpp
+        src/renderers/opengl/opengl.scene_preview.cpp
+        src/renderers/opengl/opengl.canvas2d_scene.cpp
+        src/renderers/opengl/opengl.context_process_impl.cpp
+        PROPERTIES HEADER_FILE_ONLY TRUE
+    )
     if(WIN32 AND (EPOCH_SFML_ACTIVE OR EPOCH_RAYLIB_ACTIVE))
         # Native presentation helpers do not enable the OpenGL renderer or its GLAD table.
         list(APPEND EPOCH_ACTIVE_MODULE_FILES
-            ${EPOCH_MODULE_DIR}/opengl.platform.ixx
-            ${EPOCH_MODULE_DIR}/opengl.native_present.ixx)
+            ${EPOCH_MODULE_DIR}/opengl/opengl.platform.ixx
+            ${EPOCH_MODULE_DIR}/opengl/opengl.native_present.ixx)
     else()
         set_source_files_properties(src/renderers/opengl/opengl.native_present.cpp
             PROPERTIES HEADER_FILE_ONLY TRUE)
@@ -1925,6 +2029,15 @@ endif()
 
 if(NOT EPOCH_SOFTWARE_RENDERER_ACTIVE)
     epoch_exclude_modules(EPOCH_ACTIVE_MODULE_FILES [[(^|[/\\])software\.]])
+    set_source_files_properties(
+        src/renderers/software/software.context.cpp
+        src/renderers/software/software.context_capture.cpp
+        src/renderers/software/software.context_draw.cpp
+        src/renderers/software/software.context_present.cpp
+        src/renderers/software/software.context_preview.cpp
+        src/renderers/software/software.context_render.cpp
+        PROPERTIES HEADER_FILE_ONLY TRUE
+    )
 endif()
 
 if(NOT WIN32)
@@ -1975,7 +2088,7 @@ set(EPOCH_PROJECT_PUBLIC_MODULE_FILES
     ${EPOCH_MODULE_DIR}/asset.texture_artifact.ixx
     ${EPOCH_MODULE_DIR}/asset.mesh_artifact.ixx
     ${EPOCH_MODULE_DIR}/asset.cloud_volume.ixx
-    ${EPOCH_MODULE_DIR}/water.wave.ixx
+    ${EPOCH_MODULE_DIR}/water/water.wave.ixx
     ${EPOCH_MODULE_DIR}/project.planetary_snapshot.ixx
     ${EPOCH_MODULE_DIR}/project.planetary_runtime.ixx)
 list(REMOVE_ITEM EPOCH_ACTIVE_MODULE_FILES ${EPOCH_PROJECT_PUBLIC_MODULE_FILES})
@@ -1994,6 +2107,13 @@ if(_epoch_managed_output AND NOT EPOCH_BUILD_STATIC_RUNTIME)
         COMMAND ${CMAKE_COMMAND} -E copy_directory
             "${CMAKE_CURRENT_BINARY_DIR}/assets" "$<TARGET_FILE_DIR:epoch>/assets"
         VERBATIM)
+    if(TARGET epoch_vulkan_shaders)
+        # Shader-only rebuilds can leave the executable link up to date.
+        add_custom_command(TARGET epoch_vulkan_shaders POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different
+                "${EPOCH_VULKAN_SHADER_DIR}" "$<TARGET_FILE_DIR:epoch>/assets/vulkan/shaders"
+            VERBATIM)
+    endif()
 endif()
 if(BUILD_TESTING)
     add_executable(epoch_input_controller_contract
@@ -2003,7 +2123,7 @@ if(BUILD_TESTING)
     target_sources(epoch_input_controller_contract PRIVATE
         FILE_SET epoch_input_controller_modules TYPE CXX_MODULES
             BASE_DIRS ${EPOCH_MODULE_DIR}
-            FILES ${EPOCH_MODULE_DIR}/input.controller.ixx
+            FILES ${EPOCH_MODULE_DIR}/input/input.controller.ixx
     )
     target_include_directories(epoch_input_controller_contract PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
@@ -2043,7 +2163,7 @@ if(BUILD_TESTING)
         FILE_SET epoch_audio_import_modules TYPE CXX_MODULES
             BASE_DIRS ${EPOCH_MODULE_DIR}
             FILES
-                ${EPOCH_MODULE_DIR}/asset.audio_import.ixx
+                ${EPOCH_MODULE_DIR}/asset/asset.audio_import.ixx
     )
     target_include_directories(epoch_audio_import_contract PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
@@ -2071,11 +2191,11 @@ if(BUILD_TESTING)
         FILE_SET epoch_project_audio_profile_modules TYPE CXX_MODULES
             BASE_DIRS ${EPOCH_MODULE_DIR}
             FILES
-                ${EPOCH_MODULE_DIR}/core.sha256.ixx
-                ${EPOCH_MODULE_DIR}/platform.filesystem.ixx
-                ${EPOCH_MODULE_DIR}/project.asset_registry.ixx
-                ${EPOCH_MODULE_DIR}/asset.audio_import.ixx
-                ${EPOCH_MODULE_DIR}/project.audio_profile.ixx
+                ${EPOCH_MODULE_DIR}/core/core.sha256.ixx
+                ${EPOCH_MODULE_DIR}/platform/platform.filesystem.ixx
+                ${EPOCH_MODULE_DIR}/project/project.asset_registry.ixx
+                ${EPOCH_MODULE_DIR}/asset/asset.audio_import.ixx
+                ${EPOCH_MODULE_DIR}/project/project.audio_profile.ixx
     )
     target_include_directories(epoch_project_audio_profile_contract PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
@@ -2105,7 +2225,7 @@ if(BUILD_TESTING)
     target_sources(epoch_scene_surface_alignment_contract PRIVATE
         FILE_SET epoch_scene_surface_alignment_modules TYPE CXX_MODULES
             BASE_DIRS ${EPOCH_MODULE_DIR}
-            FILES ${EPOCH_MODULE_DIR}/scene.surface_alignment.ixx
+            FILES ${EPOCH_MODULE_DIR}/scene/scene.surface_alignment.ixx
     )
     target_compile_definitions(epoch_scene_surface_alignment_contract PRIVATE
         EPOCH_SCENE_SURFACE_ALIGNMENT_CONTRACT_MAIN=1
@@ -2130,8 +2250,8 @@ if(BUILD_TESTING)
         FILE_SET epoch_voxel_sdf_modules TYPE CXX_MODULES
             BASE_DIRS ${EPOCH_MODULE_DIR}
             FILES
-                ${EPOCH_MODULE_DIR}/voxel.field.ixx
-                ${EPOCH_MODULE_DIR}/voxel.sdf.ixx
+                ${EPOCH_MODULE_DIR}/voxel/voxel.field.ixx
+                ${EPOCH_MODULE_DIR}/voxel/voxel.sdf.ixx
     )
     target_compile_definitions(epoch_voxel_sdf_contract PRIVATE
         EPOCH_VOXEL_SDF_CONTRACT_MAIN=1
@@ -2149,11 +2269,11 @@ if(BUILD_TESTING)
         FILE_SET epoch_water_system_modules TYPE CXX_MODULES
             BASE_DIRS ${EPOCH_MODULE_DIR}
             FILES
-                ${EPOCH_MODULE_DIR}/render.math.ixx
-                ${EPOCH_MODULE_DIR}/voxel.field.ixx
-                ${EPOCH_MODULE_DIR}/voxel.storage.ixx
-                ${EPOCH_MODULE_DIR}/water.wave.ixx
-                ${EPOCH_MODULE_DIR}/water.system.ixx
+                ${EPOCH_MODULE_DIR}/render/render.math.ixx
+                ${EPOCH_MODULE_DIR}/voxel/voxel.field.ixx
+                ${EPOCH_MODULE_DIR}/voxel/voxel.storage.ixx
+                ${EPOCH_MODULE_DIR}/water/water.wave.ixx
+                ${EPOCH_MODULE_DIR}/water/water.system.ixx
     )
     epoch_apply_cxx_dialect(epoch_water_system_contract)
     epoch_apply_warnings(epoch_water_system_contract)
@@ -2171,12 +2291,12 @@ if(BUILD_TESTING)
         FILE_SET epoch_water_surface_modules TYPE CXX_MODULES
             BASE_DIRS ${EPOCH_MODULE_DIR}
             FILES
-                ${EPOCH_MODULE_DIR}/render.math.ixx
-                ${EPOCH_MODULE_DIR}/voxel.field.ixx
-                ${EPOCH_MODULE_DIR}/voxel.storage.ixx
-                ${EPOCH_MODULE_DIR}/water.wave.ixx
-                ${EPOCH_MODULE_DIR}/water.system.ixx
-                ${EPOCH_MODULE_DIR}/water.surface.ixx
+                ${EPOCH_MODULE_DIR}/render/render.math.ixx
+                ${EPOCH_MODULE_DIR}/voxel/voxel.field.ixx
+                ${EPOCH_MODULE_DIR}/voxel/voxel.storage.ixx
+                ${EPOCH_MODULE_DIR}/water/water.wave.ixx
+                ${EPOCH_MODULE_DIR}/water/water.system.ixx
+                ${EPOCH_MODULE_DIR}/water/water.surface.ixx
                 ${EPOCH_MODULE_DIR}/asset.texture_artifact.ixx
                 ${EPOCH_MODULE_DIR}/asset.mesh_artifact.ixx
                 ${EPOCH_MODULE_DIR}/asset.cloud_volume.ixx
@@ -2195,9 +2315,9 @@ if(BUILD_TESTING)
         FILE_SET epoch_ai_model_install_modules TYPE CXX_MODULES
             BASE_DIRS ${EPOCH_MODULE_DIR}
             FILES
-                ${EPOCH_MODULE_DIR}/core.sha256.ixx
-                ${EPOCH_MODULE_DIR}/platform.filesystem.ixx
-                ${EPOCH_MODULE_DIR}/ai.model_install.ixx
+                ${EPOCH_MODULE_DIR}/core/core.sha256.ixx
+                ${EPOCH_MODULE_DIR}/platform/platform.filesystem.ixx
+                ${EPOCH_MODULE_DIR}/ai/ai.model_install.ixx
     )
     target_compile_definitions(epoch_ai_model_install_contract PRIVATE
         EPOCH_AI_MODEL_INSTALL_CONTRACT_MAIN=1
@@ -2217,7 +2337,7 @@ if(BUILD_TESTING)
     target_sources(epoch_physics_manager_contract PRIVATE
         FILE_SET epoch_physics_manager_modules TYPE CXX_MODULES
             BASE_DIRS ${EPOCH_MODULE_DIR}
-            FILES ${EPOCH_MODULE_DIR}/physics.manager.ixx
+            FILES ${EPOCH_MODULE_DIR}/physics/physics.manager.ixx
     )
     target_include_directories(epoch_physics_manager_contract PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
@@ -2244,8 +2364,8 @@ if(BUILD_TESTING)
         FILE_SET epoch_physics_solver2d_modules TYPE CXX_MODULES
             BASE_DIRS ${EPOCH_MODULE_DIR}
             FILES
-                ${EPOCH_MODULE_DIR}/physics.manager.ixx
-                ${EPOCH_MODULE_DIR}/physics.solver2d.ixx
+                ${EPOCH_MODULE_DIR}/physics/physics.manager.ixx
+                ${EPOCH_MODULE_DIR}/physics/physics.solver2d.ixx
     )
     target_include_directories(epoch_physics_solver2d_contract PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
@@ -2272,11 +2392,11 @@ if(BUILD_TESTING)
         FILE_SET epoch_project_sprite_animation_modules TYPE CXX_MODULES
             BASE_DIRS ${EPOCH_MODULE_DIR}
             FILES
-                ${EPOCH_MODULE_DIR}/platform.filesystem.ixx
+                ${EPOCH_MODULE_DIR}/platform/platform.filesystem.ixx
                 ${EPOCH_MODULE_DIR}/asset.texture_artifact.ixx
-                ${EPOCH_MODULE_DIR}/authoring.document.ixx
-                ${EPOCH_MODULE_DIR}/project.asset_registry.ixx
-                ${EPOCH_MODULE_DIR}/project.sprite_animation.ixx
+                ${EPOCH_MODULE_DIR}/authoring/authoring.document.ixx
+                ${EPOCH_MODULE_DIR}/project/project.asset_registry.ixx
+                ${EPOCH_MODULE_DIR}/project/project.sprite_animation.ixx
     )
     target_include_directories(epoch_project_sprite_animation_contract PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
@@ -2305,10 +2425,10 @@ if(BUILD_TESTING)
             BASE_DIRS ${EPOCH_MODULE_DIR}
             FILES
 
-                ${EPOCH_MODULE_DIR}/core.logger.ixx
-                ${EPOCH_MODULE_DIR}/platform.filesystem.ixx
-                ${EPOCH_MODULE_DIR}/project.asset_registry.ixx
-                ${EPOCH_MODULE_DIR}/project.input_profile.ixx
+                ${EPOCH_MODULE_DIR}/core/core.logger.ixx
+                ${EPOCH_MODULE_DIR}/platform/platform.filesystem.ixx
+                ${EPOCH_MODULE_DIR}/project/project.asset_registry.ixx
+                ${EPOCH_MODULE_DIR}/project/project.input_profile.ixx
     )
     target_include_directories(epoch_project_input_profile_contract PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
@@ -2338,12 +2458,12 @@ if(BUILD_TESTING)
         FILE_SET epoch_project_input_controller_modules TYPE CXX_MODULES
             BASE_DIRS ${EPOCH_MODULE_DIR}
             FILES
-                ${EPOCH_MODULE_DIR}/core.logger.ixx
-                ${EPOCH_MODULE_DIR}/input.controller.ixx
-                ${EPOCH_MODULE_DIR}/platform.filesystem.ixx
-                ${EPOCH_MODULE_DIR}/project.asset_registry.ixx
-                ${EPOCH_MODULE_DIR}/project.input_profile.ixx
-                ${EPOCH_MODULE_DIR}/project.input_controller.ixx
+                ${EPOCH_MODULE_DIR}/core/core.logger.ixx
+                ${EPOCH_MODULE_DIR}/input/input.controller.ixx
+                ${EPOCH_MODULE_DIR}/platform/platform.filesystem.ixx
+                ${EPOCH_MODULE_DIR}/project/project.asset_registry.ixx
+                ${EPOCH_MODULE_DIR}/project/project.input_profile.ixx
+                ${EPOCH_MODULE_DIR}/project/project.input_controller.ixx
     )
     target_include_directories(epoch_project_input_controller_contract PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
@@ -2374,13 +2494,13 @@ if(BUILD_TESTING)
         FILE_SET epoch_editor_project_input_settings_modules TYPE CXX_MODULES
             BASE_DIRS ${EPOCH_MODULE_DIR}
             FILES
-                ${EPOCH_MODULE_DIR}/core.logger.ixx
-                ${EPOCH_MODULE_DIR}/input.controller.ixx
-                ${EPOCH_MODULE_DIR}/platform.filesystem.ixx
-                ${EPOCH_MODULE_DIR}/project.asset_registry.ixx
-                ${EPOCH_MODULE_DIR}/project.input_profile.ixx
-                ${EPOCH_MODULE_DIR}/project.input_controller.ixx
-                ${EPOCH_MODULE_DIR}/editor.project_input_settings.ixx
+                ${EPOCH_MODULE_DIR}/core/core.logger.ixx
+                ${EPOCH_MODULE_DIR}/input/input.controller.ixx
+                ${EPOCH_MODULE_DIR}/platform/platform.filesystem.ixx
+                ${EPOCH_MODULE_DIR}/project/project.asset_registry.ixx
+                ${EPOCH_MODULE_DIR}/project/project.input_profile.ixx
+                ${EPOCH_MODULE_DIR}/project/project.input_controller.ixx
+                ${EPOCH_MODULE_DIR}/editor/editor.project_input_settings.ixx
     )
     target_include_directories(epoch_editor_project_input_settings_contract PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
@@ -2407,9 +2527,9 @@ if(BUILD_TESTING)
         FILE_SET epoch_editor_hierarchy_adapter_modules TYPE CXX_MODULES
             BASE_DIRS ${EPOCH_MODULE_DIR}
             FILES
-                ${EPOCH_MODULE_DIR}/authoring.document.ixx
-                ${EPOCH_MODULE_DIR}/authoring.gui_document.ixx
-                ${EPOCH_MODULE_DIR}/editor.hierarchy_adapter.ixx
+                ${EPOCH_MODULE_DIR}/authoring/authoring.document.ixx
+                ${EPOCH_MODULE_DIR}/authoring/authoring.gui_document.ixx
+                ${EPOCH_MODULE_DIR}/editor/editor.hierarchy_adapter.ixx
     )
     target_include_directories(epoch_editor_hierarchy_adapter_contract PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/dep/EpochGui/include
@@ -2435,9 +2555,9 @@ if(BUILD_TESTING)
         FILE_SET epoch_project_actor2d_modules TYPE CXX_MODULES
             BASE_DIRS ${EPOCH_MODULE_DIR}
             FILES
-                ${EPOCH_MODULE_DIR}/physics.manager.ixx
-                ${EPOCH_MODULE_DIR}/physics.solver2d.ixx
-                ${EPOCH_MODULE_DIR}/project.actor2d_runtime.ixx
+                ${EPOCH_MODULE_DIR}/physics/physics.manager.ixx
+                ${EPOCH_MODULE_DIR}/physics/physics.solver2d.ixx
+                ${EPOCH_MODULE_DIR}/project/project.actor2d_runtime.ixx
     )
     target_include_directories(epoch_project_actor2d_contract PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
@@ -2456,6 +2576,9 @@ if(BUILD_TESTING)
     )
     add_executable(epoch_project_gui_library_contract
         src/assets/gui/asset.gui_artifact.cpp
+        src/authoring/gui/authoring.gui_document_codec.cpp
+        src/authoring/gui/authoring.gui_templates.cpp
+        src/authoring/gui/authoring.gui_compiler.cpp
         src/project/project.gui_library.cpp
         src/project/project.gui_library_contract.cpp
     )
@@ -2463,10 +2586,14 @@ if(BUILD_TESTING)
         FILE_SET epoch_project_gui_library_modules TYPE CXX_MODULES
             BASE_DIRS ${EPOCH_MODULE_DIR}
             FILES
-                ${EPOCH_MODULE_DIR}/core.sha256.ixx
-                ${EPOCH_MODULE_DIR}/project.asset_registry.ixx
-                ${EPOCH_MODULE_DIR}/asset.gui_artifact.ixx
-                ${EPOCH_MODULE_DIR}/project.gui_library.ixx
+                ${EPOCH_MODULE_DIR}/core/core.sha256.ixx
+                ${EPOCH_MODULE_DIR}/authoring/authoring.document.ixx
+                ${EPOCH_MODULE_DIR}/authoring/authoring.gui_document.ixx
+                ${EPOCH_MODULE_DIR}/authoring/authoring.gui_compiler.ixx
+                ${EPOCH_MODULE_DIR}/project/project.asset_registry.ixx
+                ${EPOCH_MODULE_DIR}/asset/asset.gui_artifact.ixx
+                ${EPOCH_MODULE_DIR}/project/project.gui_library.ixx
+                ${EPOCH_MODULE_DIR}/platform/platform.filesystem.ixx
     )
     target_include_directories(epoch_project_gui_library_contract PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
@@ -2493,9 +2620,9 @@ if(BUILD_TESTING)
         FILE_SET epoch_project_gui_runtime_modules TYPE CXX_MODULES
             BASE_DIRS ${EPOCH_MODULE_DIR}
             FILES
-                ${EPOCH_MODULE_DIR}/core.sha256.ixx
-                ${EPOCH_MODULE_DIR}/asset.gui_artifact.ixx
-                ${EPOCH_MODULE_DIR}/project.gui_runtime.ixx
+                ${EPOCH_MODULE_DIR}/core/core.sha256.ixx
+                ${EPOCH_MODULE_DIR}/asset/asset.gui_artifact.ixx
+                ${EPOCH_MODULE_DIR}/project/project.gui_runtime.ixx
     )
     target_include_directories(epoch_project_gui_runtime_contract PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
@@ -2523,9 +2650,9 @@ if(BUILD_TESTING)
             FILE_SET epoch_authoring_gui_document_modules TYPE CXX_MODULES
                 BASE_DIRS ${EPOCH_MODULE_DIR}
                 FILES
-                    ${EPOCH_MODULE_DIR}/core.sha256.ixx
-                    ${EPOCH_MODULE_DIR}/authoring.document.ixx
-                    ${EPOCH_MODULE_DIR}/authoring.gui_document.ixx
+                    ${EPOCH_MODULE_DIR}/core/core.sha256.ixx
+                    ${EPOCH_MODULE_DIR}/authoring/authoring.document.ixx
+                    ${EPOCH_MODULE_DIR}/authoring/authoring.gui_document.ixx
         )
         target_include_directories(epoch_authoring_gui_document_contract PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}
@@ -2554,11 +2681,11 @@ if(BUILD_TESTING)
             FILE_SET epoch_authoring_gui_compiler_modules TYPE CXX_MODULES
                 BASE_DIRS ${EPOCH_MODULE_DIR}
                 FILES
-                    ${EPOCH_MODULE_DIR}/core.sha256.ixx
-                    ${EPOCH_MODULE_DIR}/authoring.document.ixx
-                    ${EPOCH_MODULE_DIR}/asset.gui_artifact.ixx
-                    ${EPOCH_MODULE_DIR}/authoring.gui_document.ixx
-                    ${EPOCH_MODULE_DIR}/authoring.gui_compiler.ixx
+                    ${EPOCH_MODULE_DIR}/core/core.sha256.ixx
+                    ${EPOCH_MODULE_DIR}/authoring/authoring.document.ixx
+                    ${EPOCH_MODULE_DIR}/asset/asset.gui_artifact.ixx
+                    ${EPOCH_MODULE_DIR}/authoring/authoring.gui_document.ixx
+                    ${EPOCH_MODULE_DIR}/authoring/authoring.gui_compiler.ixx
         )
         target_include_directories(epoch_authoring_gui_compiler_contract PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}
@@ -2588,8 +2715,8 @@ if(BUILD_TESTING)
                 BASE_DIRS ${EPOCH_MODULE_DIR}
                 FILES
                     ${EPOCH_MODULE_DIR}/asset.texture_artifact.ixx
-                    ${EPOCH_MODULE_DIR}/authoring.texture.ixx
-                    ${EPOCH_MODULE_DIR}/authoring.texture_detail.ixx
+                    ${EPOCH_MODULE_DIR}/authoring/authoring.texture.ixx
+                    ${EPOCH_MODULE_DIR}/authoring/authoring.texture_detail.ixx
         )
         target_include_directories(epoch_authoring_texture_contract PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}
@@ -2617,9 +2744,9 @@ if(BUILD_TESTING)
             FILE_SET epoch_authoring_tilemap_modules TYPE CXX_MODULES
                 BASE_DIRS ${EPOCH_MODULE_DIR}
                 FILES
-                    ${EPOCH_MODULE_DIR}/authoring.document.ixx
-                    ${EPOCH_MODULE_DIR}/asset.tilemap_artifact.ixx
-                    ${EPOCH_MODULE_DIR}/authoring.tilemap.ixx
+                    ${EPOCH_MODULE_DIR}/authoring/authoring.document.ixx
+                    ${EPOCH_MODULE_DIR}/asset/asset.tilemap_artifact.ixx
+                    ${EPOCH_MODULE_DIR}/authoring/authoring.tilemap.ixx
         )
         target_include_directories(epoch_authoring_tilemap_contract PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}
@@ -2644,7 +2771,7 @@ if(BUILD_TESTING)
     target_sources(epoch_render_context_frame_contract PRIVATE
         FILE_SET epoch_render_context_frame_modules TYPE CXX_MODULES
             BASE_DIRS ${EPOCH_MODULE_DIR}
-            FILES ${EPOCH_MODULE_DIR}/render.context_frame.ixx
+            FILES ${EPOCH_MODULE_DIR}/render/render.context_frame.ixx
     )
     epoch_apply_cxx_dialect(epoch_render_context_frame_contract)
     epoch_apply_warnings(epoch_render_context_frame_contract)
@@ -2670,8 +2797,8 @@ if(BUILD_TESTING)
         FILE_SET epoch_ai_mcp_stdio_modules TYPE CXX_MODULES
             BASE_DIRS ${EPOCH_MODULE_DIR}
             FILES
-                ${EPOCH_MODULE_DIR}/ai.mcp.ixx
-                ${EPOCH_MODULE_DIR}/ai.mcp_stdio.ixx
+                ${EPOCH_MODULE_DIR}/ai/ai.mcp.ixx
+                ${EPOCH_MODULE_DIR}/ai/ai.mcp_stdio.ixx
     )
     target_compile_definitions(epoch_ai_mcp_stdio_contract PRIVATE
         EPOCH_AI_MCP_STDIO_CONTRACT_MAIN=1
@@ -2709,7 +2836,9 @@ if(BUILD_TESTING)
     
     
     
+    
 
+    
     
     
     
@@ -2733,7 +2862,7 @@ if(BUILD_TESTING)
     target_sources(epoch_ai_voice_session_contract PRIVATE
         FILE_SET epoch_ai_voice_session_modules TYPE CXX_MODULES
             BASE_DIRS ${EPOCH_MODULE_DIR}
-            FILES ${EPOCH_MODULE_DIR}/ai.voice_session.ixx
+            FILES ${EPOCH_MODULE_DIR}/ai/ai.voice_session.ixx
     )
     epoch_apply_cxx_dialect(epoch_ai_voice_session_contract)
     epoch_apply_warnings(epoch_ai_voice_session_contract)
@@ -2782,12 +2911,12 @@ if(BUILD_TESTING)
             BASE_DIRS ${EPOCH_MODULE_DIR}
             FILES
 
-                ${EPOCH_MODULE_DIR}/core.logger.ixx
-                ${EPOCH_MODULE_DIR}/core.path.ixx
-                ${EPOCH_MODULE_DIR}/platform.filesystem.ixx
-                ${EPOCH_MODULE_DIR}/platform.child_process.ixx
-                ${EPOCH_MODULE_DIR}/core.sha256.ixx
-                ${EPOCH_MODULE_DIR}/scripting.compiler.ixx
+                ${EPOCH_MODULE_DIR}/core/core.logger.ixx
+                ${EPOCH_MODULE_DIR}/core/core.path.ixx
+                ${EPOCH_MODULE_DIR}/platform/platform.filesystem.ixx
+                ${EPOCH_MODULE_DIR}/platform/platform.child_process.ixx
+                ${EPOCH_MODULE_DIR}/core/core.sha256.ixx
+                ${EPOCH_MODULE_DIR}/scripting/scripting.compiler.ixx
     )
     target_include_directories(epoch_script_compiler_contract PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
@@ -2851,7 +2980,7 @@ if(BUILD_TESTING)
     target_sources(epoch_editor_workspace_layout_contract PRIVATE
         FILE_SET epoch_editor_workspace_layout_modules TYPE CXX_MODULES
             BASE_DIRS ${EPOCH_MODULE_DIR}
-            FILES ${EPOCH_MODULE_DIR}/editor.workspace_layout.ixx
+            FILES ${EPOCH_MODULE_DIR}/editor/editor.workspace_layout.ixx
     )
     epoch_apply_cxx_dialect(epoch_editor_workspace_layout_contract)
     epoch_apply_warnings(epoch_editor_workspace_layout_contract)
@@ -2868,7 +2997,7 @@ if(BUILD_TESTING)
     target_sources(epoch_build_validation_contract PRIVATE
         FILE_SET epoch_build_validation_modules TYPE CXX_MODULES
             BASE_DIRS ${EPOCH_MODULE_DIR}
-            FILES ${EPOCH_MODULE_DIR}/epoch.build_validation.ixx
+            FILES ${EPOCH_MODULE_DIR}/epoch/epoch.build_validation.ixx
     )
     target_compile_definitions(epoch_build_validation_contract PRIVATE
         EPOCH_BUILD_VALIDATION_CONTRACT_MAIN=1
@@ -2889,8 +3018,8 @@ if(BUILD_TESTING)
         FILE_SET epoch_editor_code_workspace_modules TYPE CXX_MODULES
             BASE_DIRS ${EPOCH_MODULE_DIR}
             FILES
-                ${EPOCH_MODULE_DIR}/platform.filesystem.ixx
-                ${EPOCH_MODULE_DIR}/editor.code_workspace.ixx
+                ${EPOCH_MODULE_DIR}/platform/platform.filesystem.ixx
+                ${EPOCH_MODULE_DIR}/editor/editor.code_workspace.ixx
     )
     target_compile_definitions(epoch_editor_code_workspace_contract PRIVATE
         EPOCH_EDITOR_CODE_WORKSPACE_CONTRACT_MAIN=1
@@ -2908,7 +3037,7 @@ if(BUILD_TESTING)
     target_sources(epoch_platform_file_lease_contract PRIVATE
         FILE_SET platform_file_lease_modules TYPE CXX_MODULES
             BASE_DIRS ${EPOCH_MODULE_DIR}
-            FILES ${EPOCH_MODULE_DIR}/platform.filesystem.ixx)
+            FILES ${EPOCH_MODULE_DIR}/platform/platform.filesystem.ixx)
     epoch_apply_cxx_dialect(epoch_platform_file_lease_contract)
     epoch_apply_warnings(epoch_platform_file_lease_contract)
     epoch_apply_sanitizers(epoch_platform_file_lease_contract)
@@ -2929,7 +3058,7 @@ if(BUILD_TESTING)
     target_sources(epoch_editor_workspace_commands_contract PRIVATE
         FILE_SET epoch_editor_workspace_commands_modules TYPE CXX_MODULES
             BASE_DIRS ${EPOCH_MODULE_DIR}
-            FILES ${EPOCH_MODULE_DIR}/editor.workspace_commands.ixx
+            FILES ${EPOCH_MODULE_DIR}/editor/editor.workspace_commands.ixx
     )
     epoch_apply_cxx_dialect(epoch_editor_workspace_commands_contract)
     epoch_apply_warnings(epoch_editor_workspace_commands_contract)
@@ -2948,9 +3077,9 @@ if(BUILD_TESTING)
                 ${EPOCH_MODULE_DIR}/asset.texture_artifact.ixx
                 ${EPOCH_MODULE_DIR}/asset.mesh_artifact.ixx
                 ${EPOCH_MODULE_DIR}/asset.cloud_volume.ixx
-                ${EPOCH_MODULE_DIR}/water.wave.ixx
+                ${EPOCH_MODULE_DIR}/water/water.wave.ixx
                 ${EPOCH_MODULE_DIR}/project.planetary_snapshot.ixx
-                ${EPOCH_MODULE_DIR}/project.planetary.ixx)
+                ${EPOCH_MODULE_DIR}/project/project.planetary.ixx)
     epoch_apply_cxx_dialect(epoch_project_planetary_settings_contract)
     epoch_apply_warnings(epoch_project_planetary_settings_contract)
     add_test(NAME epoch_project_planetary_settings_contract COMMAND epoch_project_planetary_settings_contract)
@@ -2964,11 +3093,11 @@ if(BUILD_TESTING)
         FILE_SET epoch_package_source_install_modules TYPE CXX_MODULES
             BASE_DIRS ${EPOCH_MODULE_DIR}
             FILES
-                ${EPOCH_MODULE_DIR}/core.sha256.ixx
-                ${EPOCH_MODULE_DIR}/package.registry.ixx
-                ${EPOCH_MODULE_DIR}/package.catalog.ixx
-                ${EPOCH_MODULE_DIR}/package.source_install.ixx
-                ${EPOCH_MODULE_DIR}/platform.filesystem.ixx
+                ${EPOCH_MODULE_DIR}/core/core.sha256.ixx
+                ${EPOCH_MODULE_DIR}/package/package.registry.ixx
+                ${EPOCH_MODULE_DIR}/package/package.catalog.ixx
+                ${EPOCH_MODULE_DIR}/package/package.source_install.ixx
+                ${EPOCH_MODULE_DIR}/platform/platform.filesystem.ixx
     )
     if(WIN32)
         target_sources(epoch_package_source_install_contract PRIVATE resource/epoch.manifest)
@@ -2985,7 +3114,7 @@ if(BUILD_TESTING)
     target_sources(epoch_editor_authoring_history_contract PRIVATE
         FILE_SET epoch_editor_authoring_history_modules TYPE CXX_MODULES
             BASE_DIRS ${EPOCH_MODULE_DIR}
-            FILES ${EPOCH_MODULE_DIR}/editor.authoring_history.ixx
+            FILES ${EPOCH_MODULE_DIR}/editor/editor.authoring_history.ixx
     )
     epoch_apply_cxx_dialect(epoch_editor_authoring_history_contract)
     epoch_apply_warnings(epoch_editor_authoring_history_contract)
@@ -3003,8 +3132,8 @@ if(BUILD_TESTING)
             FILE_SET epoch_authoring_task_graph_modules TYPE CXX_MODULES
                 BASE_DIRS ${EPOCH_MODULE_DIR}
                 FILES
-                    ${EPOCH_MODULE_DIR}/authoring.document.ixx
-                    ${EPOCH_MODULE_DIR}/authoring.task_graph.ixx
+                    ${EPOCH_MODULE_DIR}/authoring/authoring.document.ixx
+                    ${EPOCH_MODULE_DIR}/authoring/authoring.task_graph.ixx
         )
         target_compile_definitions(epoch_authoring_task_graph_contract PRIVATE
             EPOCH_AUTHORING_TASK_GRAPH_CONTRACT_MAIN=1
@@ -3023,7 +3152,7 @@ if(BUILD_TESTING)
     target_sources(epoch_updater_platform_policy_contract PRIVATE
         FILE_SET updater_platform_policy_modules TYPE CXX_MODULES
             BASE_DIRS ${EPOCH_MODULE_DIR}
-            FILES "${EPOCH_MODULE_DIR}/updater.platform_policy.ixx")
+            FILES "${EPOCH_MODULE_DIR}/updater/updater.platform_policy.ixx")
     target_link_libraries(epoch_updater_platform_policy_contract PRIVATE Epoch::PlatformEngine)
     epoch_apply_cxx_dialect(epoch_updater_platform_policy_contract)
     epoch_apply_warnings(epoch_updater_platform_policy_contract)
@@ -3051,6 +3180,8 @@ if(BUILD_TESTING)
             COMMAND ${CMAKE_COMMAND} -E copy_directory
                 "${CMAKE_CURRENT_SOURCE_DIR}/assets"
                 "$<TARGET_FILE_DIR:epoch>/assets"
+            COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different
+                "${EPOCH_VULKAN_SHADER_DIR}" "$<TARGET_FILE_DIR:epoch>/assets/vulkan/shaders"
             VERBATIM
         )
         foreach(_epoch_linux_renderer IN ITEMS opengl sdl sfml raylib vulkan software)
@@ -3183,7 +3314,7 @@ if(NOT WIN32)
     endif()
 endif()
 
-if(UNIX AND NOT APPLE)
+if(UNIX AND NOT APPLE AND NOT ANDROID)
     # vcpkg's native Linux triplet contributes a find root for manifest
     # packages. X11 and OpenGL remain host integration libraries, so allow
     # CMake to search both that root and the host while resolving them.

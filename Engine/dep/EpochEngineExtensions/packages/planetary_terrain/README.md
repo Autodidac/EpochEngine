@@ -10,8 +10,8 @@ startup service, model load, renderer, viewer loop or worker pool.
 `EpochEngineExtensions::PlanetaryCore` exposes `import planet.terrain;` and the
 `epoch::extensions::planetary_terrain::core` namespace. This is an independently
 consumable C++23 **module facade over one upstream ABI**, not a completed
-conversion of the upstream implementation into module units. The unchanged
-`world.cpp`, `terrain.cpp` and three headers remain the only algorithm owners.
+conversion of the upstream implementation into module units. The adapted
+`world.cpp`, `terrain.cpp` and upstream headers own the algorithms.
 The original `epoch_extension_planetary_terrain` sampler target/header stays
 compatible and separate.
 
@@ -20,6 +20,12 @@ meshes, parent-triangle geomorph deltas, bounded tile/LOD planning and stop-toke
 cancellation. Positions and tile anchors use doubles until the vertex anchor is
 subtracted. A renderer computes `body_center + tile_anchor - camera_position` in
 doubles; uploading absolute planetary positions as floats breaks this contract.
+
+Temperate terrain blends grass, dry ground, rock, snow and coast by moisture,
+elevation and temperature. Curved tiles expose stone on steep slopes using the
+existing metric normal stencil. The color calculation shares body coordinates
+across LODs and needs no texture upload. Per-pixel ground texture and native visual
+acceptance remain open.
 
 The upstream subset is under `upstream/EpochPlanet-0.2.3`; exact source hashes and
 exclusions are in [provenance](upstream/provenance.json). These newly-written
@@ -140,6 +146,14 @@ with `epoch.planet.stream.v1`, then reports `request_id`, `snapshot_ready`,
 `content_key`, `vertices` and `indices` as `name=value` lines. A ready snapshot
 also contains the validated `terrain.epoch_mesh` and `terrain.preview.json`.
 Its scale stays at10 divided by the body radius while detail changes.
+
+For a fixed-pose metric mesh, append `--metric-frame-v1` and
+`--view-footprint-v1 fx,fy,fz,aspect,ux,uy,uz` after the export settings.
+Run steps until the receipt reports `snapshot_ready=1` and `pending=0`.
+Keep `terrain.epoch_mesh` and `terrain.frame` together. Enable
+`--patch-transport-v1` only for consumers that select and transition the
+patches themselves. Its mesh contains both the selected tiles and their
+retained ancestors. The cloud and water sidecars use that transport.
 
 The independent streaming consumer checks real far/near detail transitions,
 complete coverage, balanced edges, memory limits, eviction, cancellation and

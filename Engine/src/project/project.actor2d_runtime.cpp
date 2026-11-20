@@ -436,6 +436,7 @@ namespace epochengine::project_actor2d
         if (impl_->solver.paused() != paused)
         {
             impl_->solver.set_paused(paused);
+            impl_->pending_jump = false;
             ++impl_->metrics.pause_transitions;
             impl_->sync_actor_state(true);
         }
@@ -486,7 +487,6 @@ namespace epochengine::project_actor2d
 
         impl_->last_input_sequence = input.sequence;
         ++impl_->metrics.accepted_input_frames;
-        impl_->pending_jump = impl_->pending_jump || input.jump_pressed;
         std::uint32_t nextEventOrder{1u};
         const auto appendEvent = [&](ActorEventKind kind, bool enabled = false)
         {
@@ -525,6 +525,9 @@ namespace epochengine::project_actor2d
             result.state = impl_->state;
             return result;
         }
+        // A frame spent resuming cannot queue a jump from the pause screen.
+        if (!input.pause_pressed)
+            impl_->pending_jump = impl_->pending_jump || input.jump_pressed;
         if (fixedSteps == 0u)
         {
             result.code = ResultCode::ready;

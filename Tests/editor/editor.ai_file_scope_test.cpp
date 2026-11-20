@@ -75,6 +75,7 @@ int main(int argc, char** argv)
         || !allows_text(game / "scripts/game.cpp", owner)) return 12;
 #if defined(EPOCH_TEST_PUBLIC_GUI_PATHS)
     set_test_engine_root(owner);
+    EditorState editor{};
     if (project_ai_scope_allowed(owner.string())
         || project_ai_scope_allowed((owner / "Engine/src").string())
         || project_ai_scope_allowed(clone.string())
@@ -83,7 +84,7 @@ int main(int argc, char** argv)
         || !project_ai_scope_allowed({})) return 13;
     const auto denied = [&](const fs::path& path) {
         AiChat chat;
-        return !append_ai_chat_attachment(chat, path)
+        return !append_ai_chat_attachment(editor, chat, path)
             && chat.draftReferenceFiles.empty() && chat.draftReferenceImages.empty();
     };
     if (!denied(source) || !denied(source.parent_path() / "../src/test.cpp")
@@ -91,7 +92,7 @@ int main(int argc, char** argv)
         || !denied(clone / "Engine/src/test.cpp")) return 14;
     if (fs::exists(game / "linked-source") && !denied(game / "linked-source/test.cpp")) return 15;
     AiChat ordinary;
-    if (!append_ai_chat_attachment(ordinary, game / "scripts/game.cpp")
+    if (!append_ai_chat_attachment(editor, ordinary, game / "scripts/game.cpp")
         || ordinary.draftReferenceFiles.size() != 1u
         || ordinary.draftReferenceFiles.front().content != "fixture") return 16;
     // A complete 1x1 PNG remains an ordinary reference attachment. Thumbnail
@@ -102,7 +103,7 @@ int main(int argc, char** argv)
     const auto image = owner / "cache/reference.png";
     if (!write(image, {reinterpret_cast<const char*>(png), sizeof(png)})) return 17;
     AiChat visual;
-    if (!append_ai_chat_attachment(visual, image)
+    if (!append_ai_chat_attachment(editor, visual, image, image)
         || visual.draftReferenceImages.size() != 1u
         || !visual.draftReferenceFiles.empty()
         || visual.draftReferenceImages.front().mime != "image/png") return 18;

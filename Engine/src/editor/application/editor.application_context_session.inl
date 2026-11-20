@@ -25,15 +25,12 @@
             if (inserted)
             {
                 it->second.initialized = true;
+                it->second.editorFrameLimitFps = perf::target_fps_for(
+                    recommended_editor_performance_tier(ctx, std::thread::hardware_concurrency()));
                 if (core::cli::frame_limit_explicit)
                 {
                     it->second.editorFrameLimitFps = core::cli::frame_limit_fps;
                     it->second.editorFrameVsyncRequested = core::cli::frame_vsync_requested;
-                }
-                else
-                {
-                    it->second.editorFrameLimitFps = perf::target_fps_for(
-                        recommended_editor_performance_tier(ctx, std::thread::hardware_concurrency()));
                 }
                 it->second.automationCommand = read_editor_automation_command();
                 it->second.timeControl.fixed_dt_seconds = 1.0 / 60.0;
@@ -144,6 +141,19 @@
 
         // Called by the owning context while parking, or after detachment for
         // close. No storage lock spans native attachment removal or a join.
+        [[nodiscard]] bool editor_assistant_work_active(const EditorState& editor, const AiChat& chat)
+        {
+            const bool projectAssistantWorking = chat.pending || chat.worker.joinable()
+                || editor.aiDeferredRequestKind != AiDeferredRequestKind::None
+                || editor.aiToolAwaitingReply || editor.aiAuthoringAwaitingReply
+                || editor.aiDirectRuntimePending.has_value()
+                || editor.aiAuthoringApplyPending.has_value()
+                || editor.aiToolTestPending.has_value()
+                || editor.aiContinuousBuildPending.has_value()
+                || (editor.aiProjectScriptRunAfterBuild && editor.scriptBuildPending.has_value());
+            return projectAssistantWorking;
+        }
+
         [[nodiscard]] bool editor_automation_input_reserved(const EditorState& editor, const AiChat& chat)
         {
             // Derive this every frame from owned work, never from a persisted
@@ -165,6 +175,22 @@
                 || editor.waterAttachmentPending.has_value();
             if (hostWork) return true;
             return chat.pending || chat.worker.joinable();
+        }
+
+        // Only call this around a single inspection widget (scroll/text/display scope).
+        // Restore the same lock before any sibling action or editable document.
+        template<class Draw>
+        decltype(auto) render_automation_inspection(
+            std::optional<gui::ScopedInputSuppression>& reserved, bool available, Draw&& draw)
+        {
+            if (!reserved || !available) return draw();
+            reserved.reset();
+            struct RestoreInputLock final
+            {
+                std::optional<gui::ScopedInputSuppression>& reserved;
+                ~RestoreInputLock() noexcept { reserved.emplace(true, true); }
+            } restore{reserved};
+            return draw();
         }
 
         void request_editor_automation_stop(EditorState& editor)

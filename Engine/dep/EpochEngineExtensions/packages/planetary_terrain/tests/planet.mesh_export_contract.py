@@ -46,7 +46,9 @@ def verify_ocean_vertices(dry_bytes, wet_bytes, recipe):
         return sum(x * y for x, y in zip(a, b))
     def cross(a, b):
         return (a[1]*b[2] - a[2]*b[1], a[2]*b[0] - a[0]*b[2], a[0]*b[1] - a[1]*b[0])
-    sea_samples = shoreline = surface_crossings = 0
+    deep = (0.015, 0.085, 0.12)
+    shallow = (0.038, 0.235, 0.212)
+    sea_samples = shoreline = surface_crossings = deep_samples = shallow_samples = 0
     for patch, (base, end) in enumerate(zip(bases, bases[1:])):
         water = base + layer
         clipped = water + layer
@@ -55,7 +57,14 @@ def verify_ocean_vertices(dry_bytes, wet_bytes, recipe):
             assert all(math.isfinite(v) for v in positions[i] + normals[i]), 'Nonfinite ocean vertex'
             assert abs(math.sqrt(dot(normals[i], normals[i])) - 1) <= 1e-5, 'Opaque ocean normal is invalid'
             color = struct.unpack_from('<fff', wet_bytes, 48 + i * 44 + 32)
-            assert max(abs(a - b) for a, b in zip(color, (0.015, 0.085, 0.12))) < 1e-7
+            # This coarse baked fixture fades foam and retains depth tint.
+            # The same blend weight must account for all three channels.
+            tint = (color[1] - deep[1]) / (shallow[1] - deep[1])
+            assert -1e-6 <= tint <= 1.0 + 1e-6, 'Ocean tint outside the depth palette'
+            assert all(abs(c - (d + (s - d) * tint)) < 1e-6 for c, d, s in zip(color, deep, shallow)), 'Invalid ocean tint'
+            if i < water + grid:
+                deep_samples += tint < 1e-6
+                shallow_samples += tint > 1e-4
         for i in range(water, water + grid):
             assert abs(math.sqrt(dot(positions[i], positions[i])) - 10) <= 1e-5, 'Original sea sample left sea level'
             sea_samples += 1
@@ -104,6 +113,7 @@ def verify_ocean_vertices(dry_bytes, wet_bytes, recipe):
             if any(base <= i < end for i in ids):
                 assert all(base <= i < end for i in ids), 'Ocean crosses patch ranges'
     assert sea_samples and shoreline and surface_crossings, 'Fixture did not exercise sea samples and clipped shores'
+    assert deep_samples and shallow_samples, 'Fixture lost deep or shallow tint'
     return {'sea_samples': sea_samples, 'shoreline_vertices': shoreline, 'surface_crossings': surface_crossings}
 
 
@@ -219,6 +229,7 @@ def main():
             ('sea radius', sea, 0, tuple(value * 1.001 for value in original_sea)),
             ('sea normal', sea, 12, (0., 0., 0.)),
             ('nonfinite sea', sea, 0, (math.nan, original_sea[1], original_sea[2])),
+            ('sea tint', sea, 32, (0.03, 0.15, 0.2)),
             ('shore offset', shore, 0, (original_shore[0] + .01,
                                        original_shore[1] + .02, original_shore[2] - .01)),
             ('spherical shore projection', shore, 0,

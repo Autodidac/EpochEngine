@@ -16,7 +16,7 @@ from Tests.support.cpp import compile_and_run
 
 ROOT = Path(__file__).resolve().parents[2]
 OWNER = "Engine/src/renderers/opengl/opengl.native_present.cpp"
-INTERFACE = "Engine/modules/opengl.native_present.ixx"
+INTERFACE = "Engine/modules/opengl/opengl.native_present.ixx"
 
 
 def actual_owner(recording):
@@ -616,7 +616,7 @@ class OpenGLNativePresent(unittest.TestCase):
         ), indent=2) + "\n", encoding="utf-8")
 
     def test_actual_resolver_initializes_fallback_once_concurrently(self):
-        path = "Engine/modules/opengl.platform.ixx"
+        path = "Engine/modules/opengl/opengl.platform.ixx"
         owner = (ROOT / path).read_text(encoding="utf-8")
         resolver = body_of(owner, "inline void* get_proc_address(const char* name) noexcept")
         resolver = resolver.replace("#if defined(_WIN32)", "#if 1")

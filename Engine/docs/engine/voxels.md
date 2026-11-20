@@ -69,20 +69,47 @@ Epoch now treats the voxel and plant direction as two layers:
   subset is promoted into EpochEngine API contracts. The engine repo keeps
   descriptors, package gates, cache/update plumbing, and stable interfaces
   rather than cloning terrain/ocean/server prototype trees into mainline.
-- Forest Factory is a core feature because repeatable procedural vegetation and
-  voxel occupancy are part of Epoch's runtime/generation spine. It still remains
-  project opt-in: Plant Lab may author/preview vegetation without adding package
-  assets, but importing or placing a plant through Forest Factory in the main
-  editor scene must activate the `engine_forest_factory` package manifest and
-  generated assets for that project.
-- The production Forest Factory package contract is tracked in
-  `forest_factory.md`. The Plant Lab launcher application is
-  engine-owned; the external Plant Lab repository is provenance/reference
-  source; the Site-hosted `EpochEngineExtensions` repository owns package payload
-  routing; EpochEngine mainline owns the renderer-neutral contract and
-  activation gate first.
+- Forest Factory/Plant Lab authoring and heavy vegetation payloads follow the
+  optional Extensions boundary; lightweight deterministic descriptors remain
+  reusable core contracts. Main-scene placement activates the project's
+  `engine_forest_factory` manifest/assets. Existing engine-owned authoring code
+  is not proof that extraction is complete. See [Forest Factory](forest_factory.md)
+  for activation and remaining independent-consumer acceptance. The external
+  Plant Lab repository is provenance/reference, not another runtime owner.
 
 ## Source of truth and representations
+
+### Editable space sandbox example
+
+Build an original importable project example with separate authored volumes
+for ships, stations and mineable objects. The block profile exposes discrete
+placement and removal. The smooth density profile extracts terrain with a
+marching-cubes surface while retaining editable density and material cells.
+The project selects planetary terrain and water only for the planet. Joining
+the sandbox and the planet in one scene must preserve their separate storage,
+collision and streaming budgets.
+
+Each ship owns a sparse chunk grid in its own local coordinate frame. Ship
+translation and rotation update its transform and broad-phase bounds, keeping
+cell data and local mesh caches intact. Stationary grids use the same storage
+and edit rules with a fixed transform. A block planet can compose the block
+provider with a planetary scene, while a smooth planet uses its density
+provider. Profile ship movement, voxel edits, and planet streaming together.
+Measure frame-time spikes, dirty chunks rebuilt per edit, draw/physics cost,
+and resident bytes. Use those results to set demo budgets.
+
+Ship construction, smooth excavation, large-scale flight, planet landing
+and surface exploration should compose from the same optional package
+catalog. The starter example targets a low hardware tier. Higher tiers
+should demonstrate richer materials, lighting, clouds and scene detail
+on the same authored project. Validate real project workflows and visual
+quality on each supported tier before claiming parity.
+
+First demonstrate place, remove, ray pick, collision, save and reopen for a
+bounded structure. Next add smooth excavation and move between a constructed
+object and the planet in the same Play session. Use the existing CPU tracing
+contract for picking and queries. GPU path tracing is an optional renderer
+capability with its own acceptance.
 
 Planet shape and terrain representation are independent choices. Classic
 procedural or fixed terrain remains valid; editable SDF/voxel terrain and an
@@ -127,19 +154,19 @@ it does not establish complete camera-relative large-world precision. All geomet
 and camera must eventually subtract the same double origin before render floats,
 without replacing saved positions. Native Moon/Earth ground quality remains open.
 
-Ground detail also needs patch-local precision. The existing merged overview
-already converts complete body positions to floats; restoring its scale cannot
-recover the lost precision. The supplied generator still creates the original
-`parent_delta`, but the current static mesh exporter discards it. Smooth original
-LOD needs patch anchors and transition endpoints/weights to reach the existing
-per-frame renderer, with bounded outgoing geometry retained until transition
-completion. Baking another snapshot on each CLI invocation would still pop.
-Patch-local double precision and transition payloads remain unimplemented. Audit:
-`Artifacts/Reports/planet-metric-authoring-audit-oct28/result.json`.
-Current integration proof: `Artifacts/Reports/planet-size-integration-oct28/`.
+Ground detail requires patch-local precision and bounded transition geometry.
+The October28 audit recorded overview float precision loss and discarded
+`parent_delta`; it is historical evidence, not the current implementation map
+(`Artifacts/Reports/planet-metric-authoring-audit-oct28/result.json`). Current
+`planet.stream_export.cpp` uses bounded metric origins; `water.planetary` retains
+parent interpolation and shoreline clipping. Native ground quality and smooth
+transitions remain acceptance gates in [renderer contracts](renderers.md).
+The earlier unit integration receipt remains
+`Artifacts/Reports/planet-size-integration-oct28/`.
 
-Durable state is the generation recipe plus versioned volume/material edits and
-project/world identity. Loaded chunks, extracted meshes, heightfield proxies,
+Durable state flows from `authoring.*` documents/recipes and versioned edits,
+through `asset.*` compiled artifacts and `project.*` admission, to disposable
+`render.*` residency. World/project identity and temporal revision remain authoritative. Loaded chunks, extracted meshes, heightfield proxies,
 collision/navigation structures and GPU buffers are reproducible derived data.
 Use temporal/world revisions to reject stale jobs after edits or rewind.
 
@@ -160,7 +187,7 @@ including cave/overhang and snow-like deposition samples. This is geometry editi
 not evidence of granular snow, fluid simulation, meshing or a playable planet.
 Each later feature needs controls, persistence, resources and acceptance together.
 
-October25 implemented slice: `Engine/modules/voxel.sdf.ixx` owns finite analytic
+October25 implemented slice: `Engine/modules/voxel/voxel.sdf.ixx` owns finite analytic
 sphere/axis-aligned-box samples, explicit sample validity/distance quality/material
 and hard CSG. `EditVolume` retains at most64 ordered edits; rejected edits leave
 the volume unchanged. `Engine/src/voxel/voxel.sdf_contract.cpp` proves units/signs,
@@ -557,6 +584,52 @@ project. Changing a mode is an explicit, undoable conversion or new world, not
 silent destruction of existing edits. Hemisphere boundaries need a visible
 choice for the horizon/edge and collision/navigation limits. Universe does not
 imply orbital simulation or unrelated networking is required.
+
+### World generation controls
+
+Keep installed extension settings in a distinct Project section with clear
+Terrain, Clouds, Water and Atmosphere headings. Full-world generation previews
+and applies a reproducible recipe. Each enabled subsystem also has its own
+seed and regeneration action. Cloud shape and coverage can change without
+rebuilding terrain. Water and atmospheric colors can be edited independently
+and reopen with the same values. Keep geometry regeneration, material edits
+and changes to existing placements separately reviewable and undoable.
+
+Use the same authoring flow for Classic, streamed Tiled, Hemisphere, Planet
+and Universe, with controls shown when the chosen world supports them.
+For Universe, start with a deterministic hierarchy of galaxies, systems
+and bodies. Zoom switches from a coarse overview to selected-system and
+body detail. Stream only what nearby or selected views need. Preserve stable
+identities and seeds so zooming out and returning restores the same world.
+
+Provide an Earth-like preset with editable land, ocean, climate and relief
+parameters. Hemisphere recipes choose orientation and edge treatment.
+Support an authored mountain rim as an optional generator rule, with matching
+collision and navigation boundaries and separate controls for rim width,
+height and continuity. Verify the result from ground level and from above
+using a camera that does not request extra LOD.
+
+### Native world-variant acceptance matrix — November 17
+
+Operator requires every world variant to work through the same project workflow.
+"Universal" describes Epoch's application range; universe is a world coverage
+choice, not permission to load terrain into software-only projects. Keep classic
+terrain representation distinct from small-world/tiled/hemisphere/planet coverage.
+The following are required native checks, not newly verified capabilities:
+
+| Saved fixture | Required native evidence |
+| --- | --- |
+| Small world / classic terrain | Create and reopen a bounded terrain; move/select objects; material, collision and camera correctness; Build/Run matches Preview. |
+| Tiled 3D terrain | Cross tile borders at walking and flying speeds; no geometry/water cracks, duplicate trees or LOD pops; retain edits after unload/reload. |
+| Hemisphere / single planet | Boundary or poles/seams as applicable; surface placement and orbital travel; coherent water/cloud coverage and light direction. |
+| Universe / multiple bodies | Select/focus and travel between bodies; origin rebasing, body-specific edits/weather, bounded residency; background bodies retain appropriate representations. |
+| Mixed / GUI-only application | Explicitly selected world systems only; HUD belongs to runtime, not authoring Preview; absent world packages do not prevent software startup. |
+
+For each supported backend/host, record exact executable and package revision,
+fixture/seed, save/reopen and Run result, frame-time/streaming evidence and clean
+retirement. Test embedded and external presentation separately; unsupported
+capabilities must explain the limitation rather than silently lose a world.
+Current cloud showcase proves neither this matrix nor cross-backend parity.
 
 Test one grid, tiled seams, hemisphere boundary, closed-planet seams/poles,
 multiple-body origin changes, cancellation, bounded streaming, save/reopen and

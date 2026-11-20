@@ -9,6 +9,14 @@ try {
         if ($dep.portable_source_manifest) {
             $portable = Get-Content -LiteralPath $dep.portable_source_manifest -Raw | ConvertFrom-Json
             if ($portable.upstream_revision -ne $dep.upstream_revision) { throw "Portable source pin differs: $($dep.name)" }
+            $publishedRevision = $dep.published_upstream_revision
+            if ($portable.published_revision -and $portable.published_revision -cne $publishedRevision) {
+                throw "Portable published revision differs: $($dep.name)"
+            }
+            if ($portable.publication_status -eq 'published_source' -and
+                $portable.upstream_revision -cne $publishedRevision) {
+                throw "Published portable source pin differs from its published revision: $($dep.name)"
+            }
             $ownerRoot = (Resolve-Path -LiteralPath $dep.path).Path.TrimEnd('\')
             $expected = @()
             foreach ($entry in $portable.files) {
@@ -24,7 +32,15 @@ try {
             if (Compare-Object ($expected | Sort-Object) ($actual | Sort-Object)) { throw "Portable source inventory differs: $($dep.name)" }
             if ($Remote) {
                 $upstreamTree = & gh api "repos/$($dep.repository)/commits/$($dep.upstream_revision)" --jq '.commit.tree.sha'
-                if ($LASTEXITCODE -ne 0 -or $upstreamTree -ne $dep.upstream_tree) { throw "Pinned portable source identity differs: $($dep.name)" }
+                if ($LASTEXITCODE -ne 0) { throw "Could not read pinned portable source from GitHub: $($dep.name)" }
+                if ($upstreamTree -ne $dep.upstream_tree) { throw "Pinned portable source identity differs: $($dep.name)" }
+                if ($publishedRevision -and $publishedRevision -cne $dep.upstream_revision) {
+                    $publishedCommit = & gh api "repos/$($dep.repository)/commits/$publishedRevision" --jq '.sha'
+                    if ($LASTEXITCODE -ne 0) { throw "Could not read published portable source from GitHub: $($dep.name)" }
+                    if ($publishedCommit -cne $publishedRevision) {
+                        throw "Published portable source identity differs: $($dep.name)"
+                    }
+                }
             }
             if ($portable.publication_status -eq 'local_unpublished_changes') {
                 if ($dep.publication_status -ne $portable.publication_status -or !$portable.pending_changes) {
@@ -36,7 +52,8 @@ try {
                         throw "Pending portable source identity is inconsistent: $($dep.name)/$($pending.path)"
                     }
                 }
-                Write-Output "$($dep.name): $($expected.Count) local portable files verified with unpublished changes; published baseline $($portable.upstream_revision) unchanged. No standalone sync/publication claim."
+                $published = if ($publishedRevision) { "published revision $publishedRevision" } else { 'no published revision recorded' }
+                Write-Output "$($dep.name): $($expected.Count) local portable files verified with unpublished changes. Upstream checkpoint $($portable.upstream_revision), $published."
             } elseif ($portable.pending_source_changes.bundled_only_changes) {
                 foreach ($pending in $portable.pending_source_changes.bundled_only_changes) {
                     $record = @($portable.files | Where-Object path -eq $pending.path)

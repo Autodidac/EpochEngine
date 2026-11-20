@@ -133,6 +133,10 @@
                     open_editor_surface(EditorMainSurface::Scene, "Add Light");
                     add_entity(editor, "light");
                 });
+                menu_item("Add Lightning", [&]() {
+                    open_editor_surface(EditorMainSurface::Scene, "Add Lightning");
+                    add_entity(editor, "lightning");
+                });
                 menu_item("Add Spawn", [&]() {
                     open_editor_surface(EditorMainSurface::Scene, "Add Spawn");
                     add_entity(editor, "spawn");
@@ -159,6 +163,7 @@
                     const bool detached = pane_route_is_detached(route);
                     const bool shown = pane_is_shown(route);
                     menu_item(detached ? "Return Assistant Chat" : "Assistant Chat", [&, route, detached, shown]() {
+                            if (shown && !detached && editor_assistant_work_active(editor, chat)) return;
                             if (detached) restore_detached_pane_to_dock(route);
                             set_pane_shown(route, detached || !shown);
                             if (detached || !shown)
@@ -286,6 +291,9 @@
 
         open_dropdown("Tasks", TopMenu::Tasks, [&]()
         {
+            const auto& tasks = observe_frame_tasks();
+            const auto toolbarActivity = editor_tasks::activity_snapshot(tasks);
+            const auto [toolbarRunning, toolbarQueued] = task_counts_for(toolbarActivity);
             const auto show_task_status = [&]() {
                 editor.openMenu = TopMenu::None;
                 open_editor_surface(EditorMainSurface::Systems, "Tasks status");
@@ -303,7 +311,6 @@
                 show_task_status, {.tone = gui::SemanticTone::muted});
             if (editor.taskScheduler)
             {
-                const auto tasks = editor.taskScheduler->snapshot(0u);
                 menu_item(epochengine::format_text("Completed Editor tasks: {}", tasks.completedCount),
                     show_task_status, {.tone = tasks.completedCount > 0u
                         ? gui::SemanticTone::success : gui::SemanticTone::muted});
@@ -336,6 +343,22 @@
                 open_editor_surface(EditorMainSurface::Project, "Project details");
                 push_editor_log(editor, std::string("[help] Active project: ") + editor.projectName);
             });
+#if defined(_WIN32) && EPOCH_SINGLE_PARENT
+            if (const auto* manager = core::GetActiveMultiContextManager();
+                manager && manager->IsRunning() && manager->GetParentWindow())
+            {
+                menu_item("Undock renderer pane", [] {}, {
+                    .shortcut = "Alt + left-drag the top edge out",
+                    .enabled = false, .separator_before = true,
+                    .tone = gui::SemanticTone::muted});
+                menu_item("Snap floating pane", [] {}, {
+                    .shortcut = "Drag the title bar",
+                    .enabled = false, .tone = gui::SemanticTone::muted});
+                menu_item("Redock floating pane", [] {}, {
+                    .shortcut = "Alt + left-drag the title bar in",
+                    .enabled = false, .tone = gui::SemanticTone::muted});
+            }
+#endif
         });
 
         if (editor.openMenu == TopMenu::None || modal_visible_now())

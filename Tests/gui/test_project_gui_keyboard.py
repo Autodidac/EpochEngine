@@ -1,5 +1,6 @@
 """Real ordered GUI keyboard owner + project adapter + RuntimeSession, CPU only."""
 from pathlib import Path
+from Tests.support.cpp import engine_module_source
 import hashlib
 import json
 import os
@@ -12,14 +13,18 @@ from Tests.gui.test_gui_queued_drag import fixture as queue_fixture
 ROOT = Path(__file__).resolve().parents[2]
 GUI = ROOT / "Engine/src/epochgui"
 ADAPTER = ROOT / "Engine/src/project/project.gui_epochgui.cpp"
+ADAPTER_API = ROOT / "Engine/modules/project/project.gui_epochgui.ixx"
+PLAY_SCENE = ROOT / "Engine/src/epoch/implementation/epoch.project_play_scene.inl"
+CALCULATOR = ROOT / "Engine/examples/BasicSoftwareExampleCalculator/source/calculator.arithmetic.hpp"
 
 
 def fixture():
-    api = (ROOT / "Engine/modules/gui.engine.ixx").read_text(encoding="utf-8")
+    api = (ROOT / "Engine/modules/gui/gui.engine.ixx").read_text(encoding="utf-8")
     text = (GUI / "controls/gui.text_controls.inl").read_text(encoding="utf-8")
     frame = (GUI / "controls/gui.frame_lifecycle.inl").read_text(encoding="utf-8")
     owner = (GUI / "gui.engine.cpp").read_text(encoding="utf-8")
     adapter = ADAPTER.read_text(encoding="utf-8")
+    adapter_api = ADAPTER_API.read_text(encoding="utf-8")
     base = queue_fixture()
     base = base[:base.index("void fast_sequences(")]
     base = base.replace("#include <algorithm>", "#include <functional>\n#include <ranges>\n#include <unordered_map>\n#include <algorithm>")
@@ -34,7 +39,11 @@ def fixture():
     base = base.replace("bool testPopup{};\nvoid reset_frame(){", "void reset_frame(){")
     declarations = "\n".join(definition(api, marker, True).replace("export ", "") for marker in (
         "    export struct KeyboardInputTarget", "    export struct KeyboardInputOptions",
-        "    export class ScopedInputSuppression"))
+        "    export class ScopedInputSuppression", "    export class ScopedTextScale",
+        "    export enum class ButtonIcon", "    export struct InlineButtonSpec",
+        "    export enum class InlineButtonSizing", "    export enum class InlineButtonAlignment",
+        "    export struct InlineButtonRowOptions", "    export struct Color",
+        "    export struct AuthoredButtonStyle"))
     states = definition(owner, "        struct EditBoxTextState", True)
     key_helpers = text[text.index("    struct EditBoxEventResult final"):text.index("    EditBoxResult edit_box(")]
     scope = frame[frame.index("    ScopedInputSuppression::ScopedInputSuppression("):frame.index("    Vec2 mouse_position()")]
@@ -44,18 +53,22 @@ STATES
 std::map<const void*,EditBoxTextState> g_editBoxTextStates;
 std::map<const void*,int> g_editBoxMenuStates;
 std::map<const void*,bool> g_textFieldSelectAllStates;
-constexpr float kFontScale=1,kBoxInnerPadding=4;
+float kFontScale=1;constexpr float kBoxInnerPadding=4;
+float measuredTextScale{};
 float base_line_height(float){return 12;}float line_advance_amount(float){return 14;}
 float space_advance(float){return 8;}
 std::string clipboard;
 bool clipboard_write_text(std::string_view value){clipboard=value;return true;}
 std::string clipboard_read_text(){return clipboard;}
 gui_lib::TextControlMetrics edit_box_text_metrics(const gui_lib::TextControlState& control,
- float,float,float,float,bool){return {.content_size={float(control.text.size()*8),14},
+ float scale,float,float,float,bool){measuredTextScale=scale;return {.content_size={float(control.text.size()*8),14},
  .caret_position={float(control.caret*8),0},.caret_size={1,12},.valid=true};}
 """.replace("STATES", states)
     capture = definition(frame, "    bool keyboard_input_captured(")
-    base = base.replace("}\nusing namespace gui;", declarations+ports+capture+key_helpers+scope+"\n}\nusing namespace gui;", 1)
+    pointer_edges = definition(frame, "    void visit_left_pointer_edges(")
+    scale_owner = owner[owner.index("    ScopedTextScale::ScopedTextScale("):
+                        owner.index("    ScopedRoundedRectangles::ScopedRoundedRectangles(")]
+    base = base.replace("}\nusing namespace gui;", declarations+ports+capture+key_helpers+scope+scale_owner+pointer_edges+"\n}\nusing namespace gui;", 1)
     # A neutral draw port records the adapter's real per-widget call. All key,
     # text state, queue, admission, mutation and focus behavior above is real.
     base += r"""
@@ -69,30 +82,43 @@ struct ImageFit{static constexpr int Contain=1;};
 struct ContentClipScope{Vec2 low=g_frame.contentMin,high=g_frame.contentMax;
  ContentClipScope(Vec2 a,Vec2 b){g_frame.contentMin=a;g_frame.contentMax=b;}
  ~ContentClipScope(){g_frame.contentMin=low;g_frame.contentMax=high;}};
-unsigned selectedPaint{},stableFields{};
+unsigned selectedPaint{},stableFields{},disabledPaint{};float paintedTextScale{};
+float paintedFieldScale{};Vec2 paintedFieldSize{},paintedButtonSize{};
 void begin_window(std::string_view,Vec2 position,Vec2 size,bool){g_frame.insideWindow=true;g_frame.contentMin=position;g_frame.contentMax={position.x+size.x,position.y+size.y};}
 void end_window(){}void begin_top_layer(){}void end_top_layer(){}
 void panel_rect(Vec2,Vec2){}void wrapped_label(std::string_view,float){}
-bool button_selected(std::string_view,Vec2,bool focused){selectedPaint+=focused;return false;}
+bool button_selected(std::string_view,Vec2,bool focused){selectedPaint+=focused;paintedTextScale=kFontScale;return false;}
+bool authored_button(std::string_view,Vec2 size,bool focused,bool enabled,const AuthoredButtonStyle& style){
+ CHECK(style.face.r==41&&style.border.r==82&&style.border_width==1.0f&&style.corner_radius==2.0f);
+ if(!enabled)++disabledPaint;
+ selectedPaint+=focused;paintedTextScale=kFontScale;paintedButtonSize=size;return false;
+}
+std::optional<std::size_t> inline_button_row(std::span<const InlineButtonSpec>items,float,float,const InlineButtonRowOptions&){CHECK(items.size()==1&&!items.front().enabled);++disabledPaint;return std::nullopt;}
 ImageBoxResult image_box(const ImageBoxOptions&){return {};}
 SliderResult slider(const SliderOptions&){return {};}
-EditBoxResult edit_box(std::string&,Vec2,std::size_t,bool,TextInputKeyboardPolicy,bool,std::string_view,bool stable){CHECK(stable);++stableFields;return {};}
+EditBoxResult edit_box(std::string&,Vec2 size,std::size_t,bool,TextInputKeyboardPolicy,bool,std::string_view,bool stable){
+ CHECK(stable);++stableFields;paintedFieldScale=kFontScale;paintedFieldSize=size;return {};
+}
 Vec2 mouse_position(){return g_frame.mousePos;}bool was_mouse_released(){return left_release_available();}
 }
 namespace epochengine::project_gui{
 using SpriteHandle=gui::SpriteHandle;
 namespace project_gui_runtime=epochengine::project_gui_runtime;
 namespace asset=epochengine::asset;
+ADAPTER_MODES
 struct EpochGuiRenderResult{project_gui_runtime::RuntimeCode code{};bool pointer_captured{};unsigned visible_widgets{},resolved_images{};std::vector<project_gui_runtime::RuntimeEvent>events;};
 class EpochGuiAdapter{public:
  struct ImageState{SpriteHandle sprite;unsigned width{},height{};};
  std::map<std::uint64_t,std::string>text_state_;std::map<std::string,ImageState>images_;
+ gui::DragSurfaceState tool_pointer_{};
  bool valid()const{return true;}ImageState& resolve_image(std::string_view){static ImageState image;return image;}
  ~EpochGuiAdapter()noexcept;void clear()noexcept;
  void render_tabs(project_gui_runtime::RuntimeSession&,const project_gui_runtime::RuntimeFrame&){}
- project_gui_runtime::RuntimeCode dispatch_keyboard(project_gui_runtime::RuntimeSession&,const project_gui_runtime::RuntimeFrame&);
+ project_gui_runtime::RuntimeCode dispatch_keyboard(project_gui_runtime::RuntimeSession&,const project_gui_runtime::RuntimeFrame&,const std::function<bool(const gui::InputEvent&)>&);
  void render_widget(project_gui_runtime::RuntimeSession&,const project_gui_runtime::WidgetView&);
- EpochGuiRenderResult render(project_gui_runtime::RuntimeSession&,project_gui_runtime::Float2)noexcept;
+ EpochGuiRenderResult render(project_gui_runtime::RuntimeSession&,project_gui_runtime::Float2,
+  const std::function<bool(const gui::InputEvent&)>& = {},PointerDelivery = PointerDelivery::frame_snapshot,
+  TextScaling = TextScaling::canvas,project_gui_runtime::Float2 = {})noexcept;
 };
 ADAPTER_HELPERS
 ADAPTER_METHODS
@@ -118,8 +144,10 @@ using Kind=epochengine::asset::gui::WidgetKind;
     artifact = "\n".join(definition(contract, marker) for marker in (
         "        [[nodiscard]] asset::gui::CompiledWidget widget(",
         "        [[nodiscard]] asset::gui::CompiledGuiArtifact artifact()"))
-    base = base.replace("ADAPTER_HELPERS",helpers).replace("ADAPTER_METHODS",methods).replace("ARTIFACT_HELPERS",artifact)
-    return base + CASES
+    modes = "\n".join(definition(adapter_api, f"    enum class {mode}", True)
+                      for mode in ("PointerDelivery", "TextScaling"))
+    base = base.replace("ADAPTER_MODES", modes).replace("ADAPTER_HELPERS",helpers).replace("ADAPTER_METHODS",methods).replace("ARTIFACT_HELPERS",artifact)
+    return f'#include "{CALCULATOR.as_posix()}"\n#include <cmath>\n' + base + CASES
 
 
 CASES = r"""
@@ -129,12 +157,136 @@ auto source(){auto value=fixture::artifact();auto second=value.widgets[3];second
  value.widgets[4].tab_index=3;value.widgets[1].children.insert(value.widgets[1].children.begin()+2,8);value.widgets.push_back(second);
  value.identity.key=epochengine::asset::gui::payload_content(value);return value;}
 auto view(rt::RuntimeSession& runtime,std::uint64_t id){auto frame=runtime.build_frame({800,600});for(const auto& entry:frame.widgets)if(entry.id.value==id)return entry;CHECK(false);return frame.widgets[0];}
-void tick_keys(const std::shared_ptr<core::Context>& context,std::initializer_list<InputEvent> events,bool down=false){tick(context,events,down);g_frame.contentMin={0,0};g_frame.contentMax={800,600};}
+void tick_keys(const std::shared_ptr<core::Context>& context,std::initializer_list<InputEvent> events,bool down=false,Vec2 pointer={}){tick(context,events,down,pointer);g_frame.contentMin={0,0};g_frame.contentMax={800,600};}
 void render(Adapter& adapter,rt::RuntimeSession& runtime){auto result=adapter.render(runtime,{800,600});CHECK(result.code==rt::RuntimeCode::ready||result.code==rt::RuntimeCode::no_change);}
+void text_field_press_focus(const std::shared_ptr<core::Context>& context){
+ using epochengine::project_gui::PointerDelivery;
+ for(const auto mode:{PointerDelivery::frame_snapshot,PointerDelivery::ordered}){
+  fresh(context);Adapter adapter;
+  auto artifact=source();artifact.widgets[3].action="project.field.selected";
+  artifact.identity.key=epochengine::asset::gui::payload_content(artifact);
+  rt::RuntimeSession runtime{std::move(artifact)};CHECK(runtime.valid());
+  const auto bounds=view(runtime,4).bounds;
+  const float x=bounds.x+10,y=bounds.y+10;
+  const auto draw=[&](){return adapter.render(runtime,{800,600},{},mode);};
+  tick_keys(context,{event(EventType::MouseDown,x,y)},true,{x,y});
+  auto pressed=draw();
+  CHECK(runtime.focused_widget().value==4&&runtime.keyboard_captured());
+  CHECK(pressed.events.size()==1&&pressed.events[0].kind==rt::EventKind::focus_changed);
+  const auto active=g_contextActiveWidgets[context.get()];
+  CHECK(active==&adapter.text_state_.at(4));
+  tick_keys(context,{},true,{x,y});
+  CHECK(draw().events.empty()&&g_contextActiveWidgets[context.get()]==active);
+  tick_keys(context,{event(EventType::MouseUp,x,y)},false,{x,y});
+  auto released=draw();
+  CHECK(released.events.size()==1&&released.events[0].kind==rt::EventKind::activated);
+  CHECK(released.events[0].action=="project.field.selected"&&g_contextActiveWidgets[context.get()]==active);
+  tick_keys(context,{text("!")});(void)draw();CHECK(view(runtime,4).primary_text=="Epoch!");
+ }
+}
+void rapid_calculator_taps(const std::shared_ptr<core::Context>& context){
+ using epochengine::project_gui::PointerDelivery;
+ fresh(context);Adapter adapter;
+ auto artifact=fixture::artifact();
+ artifact.widgets[2].action="calculator.7";
+ auto secondKey=artifact.widgets[2];secondKey.id={9};secondKey.name="SecondKey";
+ secondKey.tab_index=-1;secondKey.focusable=false;secondKey.action="calculator.6";
+ artifact.widgets[1].children.insert(artifact.widgets[1].children.begin()+1,8);
+ artifact.widgets.push_back(std::move(secondKey));
+ artifact.identity.key=epochengine::asset::gui::payload_content(artifact);
+ rt::RuntimeSession runtime{std::move(artifact)};CHECK(runtime.valid());
+ const auto first=view(runtime,3).bounds,second=view(runtime,9).bounds;
+ const float x1=first.x+10,y1=first.y+10,x2=second.x+10,y2=second.y+10;
+ const auto input=[&](){
+  tick_keys(context,{event(EventType::MouseDown,x1,y1),event(EventType::MouseUp,x1,y1),
+   event(EventType::MouseDown,x2,y2),event(EventType::MouseUp,x2,y2),
+   event(EventType::MouseMove,799,599)});
+ };
+ const auto display=[](const auto& result){
+  calculator_example::Calculator calculator;
+  for(const auto& action:result.events)if(action.kind==rt::EventKind::activated){
+   const auto* button=calculator_example::find_key(action.action);CHECK(button);calculator.press(*button);
+  }
+  return calculator.display();
+ };
+ const auto ordered=[&](){return display(adapter.render(runtime,{800,600},{},PointerDelivery::ordered));};
+ input();CHECK(ordered()=="76");
+ input();CHECK(display(adapter.render(runtime,{800,600}))=="0");
+ input();{ScopedInputSuppression suppressed;CHECK(ordered()=="0");}
+ input();g_frame.mouseReleaseConsumed=true;CHECK(ordered()=="0");
+ input();g_frame.mousePressConsumed=true;CHECK(ordered()=="0");
+ input();g_frame.selectPopupCapturedThisFrame=true;CHECK(ordered()=="0");
+ input();g_frame.modalInput.begin({{0,0},{800,600}});
+ g_frame.modalInput.require_owner_scope();CHECK(ordered()=="0");
+ input();g_frame.contentMax.y=y2-1;CHECK(ordered()=="7");
+ tick_keys(context,{event(EventType::MouseDown,x1,y1),{.type=EventType::FocusLost},
+  event(EventType::MouseUp,x1,y1),event(EventType::MouseDown,x2,y2),event(EventType::MouseUp,x2,y2)});
+ CHECK(ordered()=="6");
+ tick_keys(context,{event(EventType::MouseDown,x1,y1),event(EventType::MouseUp,x2,y2)});
+ CHECK(ordered()=="0");
+ tick_keys(context,{event(EventType::MouseDown,x1,y1),event(EventType::MouseUp,x1+1,y1)});
+ CHECK(ordered()=="7");
+ tick_keys(context,{event(EventType::MouseDown,x1,y1),event(EventType::MouseMove,x1+5,y1),
+  event(EventType::MouseUp,x1,y1)});
+ CHECK(ordered()=="0");
+ tick_keys(context,{event(EventType::MouseDown,x1,y1)},true);CHECK(ordered()=="0");
+ tick_keys(context,{event(EventType::MouseUp,x1,y1)});CHECK(ordered()=="7");
+ tick_keys(context,{event(EventType::MouseDown,x1,y1)},true);CHECK(ordered()=="0");
+ tick_keys(context,{event(EventType::MouseMove,x2,y2)},true);CHECK(ordered()=="0");
+ tick_keys(context,{event(EventType::MouseUp,x2,y2)});CHECK(ordered()=="0");
+ tick_keys(context,{event(EventType::MouseDown,x1,y1)},true);CHECK(ordered()=="0");
+ tick_keys(context,{event(EventType::MouseMove,x1+5,y1)},true);CHECK(ordered()=="0");
+ tick_keys(context,{event(EventType::MouseUp,x1,y1)});CHECK(ordered()=="0");
+ tick_keys(context,{event(EventType::MouseDown,x1,y1)},true);CHECK(ordered()=="0");
+ tick_keys(context,{{.type=EventType::FocusLost},event(EventType::MouseUp,x1,y1)});
+ CHECK(ordered()=="0");
+}
+void desktop_tool_text_scaling(const std::shared_ptr<core::Context>& context){
+ using namespace epochengine::project_gui;
+ fresh(context);
+ Adapter tool;
+ auto artifact=fixture::artifact();
+ auto& field=artifact.widgets[3];
+ field.multiline=true;
+ field.read_only=true;
+ field.primary_text="First line\nSecond line";
+ artifact.identity.key=epochengine::asset::gui::payload_content(artifact);
+ rt::RuntimeSession runtime{artifact};
+ CHECK(runtime.focus({4})==rt::RuntimeCode::ready);
+ const auto originalField=view(runtime,4).bounds;
+ const auto originalButton=view(runtime,3).bounds;
+ const auto close=[](float a,float b){return std::abs(a-b)<.001f;};
+ for(const auto viewport:{rt::Float2{520,390},rt::Float2{800,600},rt::Float2{1736,1302}}){
+  const float canvasFactor=viewport.x/800.f;
+  const float expectedText=1.25f*(std::min)(canvasFactor,1.f);
+  clipboard.clear();
+  measuredTextScale=paintedTextScale=paintedFieldScale=0.f;
+  tick_keys(context,{key('A',false,true),key('C',false,true)});
+  {
+   ScopedTextScale enclosing{1.25f};
+   const auto result=tool.render(runtime,viewport,{},PointerDelivery::ordered,TextScaling::desktop);
+   CHECK(result.code==rt::RuntimeCode::ready && close(kFontScale,1.25f));
+  }
+  CHECK(close(kFontScale,1.f));
+  CHECK(close(measuredTextScale,expectedText) && close(paintedFieldScale,expectedText)
+     && close(paintedTextScale,expectedText));
+  CHECK(close(paintedFieldSize.x,originalField.width*canvasFactor)
+     && close(paintedFieldSize.y,originalField.height*canvasFactor)
+     && close(paintedButtonSize.x,originalButton.width*canvasFactor)
+     && close(paintedButtonSize.y,originalButton.height*canvasFactor));
+  CHECK(clipboard==field.primary_text && runtime.focused_widget().value==4
+     && view(runtime,4).primary_text==field.primary_text);
+ }
+}
 int main(){
  auto context=std::make_shared<core::Context>();fresh(context);Adapter adapter;rt::RuntimeSession runtime{source()};CHECK(runtime.valid());
  // No GUI focus: Tab and Space remain available to scene/game input.
  tick_keys(context,{key(9),key(32)});render(adapter,runtime);CHECK(g_frame.events.size()==2&&!runtime.keyboard_captured());
+ int commands=0;auto command=[&](const gui::InputEvent& event){
+  if(event.type==EventType::TextInput||(event.type==EventType::KeyDown&&(event.key==8||event.key==13||event.key==46))){++commands;return true;}return false;};
+ tick_keys(context,{text("1"),text("+"),text("2")});(void)adapter.render(runtime,{800,600},command);CHECK(commands==3&&g_frame.events.empty());
+ testPopup=true;tick_keys(context,{text("3")});(void)adapter.render(runtime,{800,600},command);CHECK(commands==3);testPopup=false;
+
  // Actual pointer release establishes canonical focus; its focused button
  // captures gameplay keys and paints selected through the existing control.
  auto button=view(runtime,3);const Vec2 buttonPoint{button.bounds.x+10,button.bounds.y+10};
@@ -143,6 +295,11 @@ int main(){
  tick_keys(context,{key(13),{.type=EventType::KeyUp,.key=13},text("\r")});auto activated=adapter.render(runtime,{800,600});
  CHECK(std::count_if(activated.events.begin(),activated.events.end(),[](const auto& event){return event.kind==rt::EventKind::activated;})==1);
  CHECK(runtime.focus({4})==rt::RuntimeCode::ready);(void)runtime.drain_events();
+ // Typing a calculator question owns digits and editing keys, including Enter.
+ tick_keys(context,{text("27"),key(8),key(13)});(void)adapter.render(runtime,{800,600},command);
+ CHECK(commands==3&&view(runtime,4).primary_text=="Epoch2");
+ tick_keys(context,{key(8),key(46)});(void)adapter.render(runtime,{800,600},command);
+ CHECK(commands==3&&view(runtime,4).primary_text=="Epoch");
  tick_keys(context,{text("A"),key(9),text("\t"),text("C")});render(adapter,runtime);
  CHECK(view(runtime,4).primary_text=="EpochA"&&view(runtime,9).primary_text=="BC"&&runtime.focused_widget().value==9);
  // Reverse traversal is independent of paint order and retains UTF8 caret/undo.
@@ -236,11 +393,28 @@ int main(){
  CHECK(idleRuntime.focus({4})==rt::RuntimeCode::ready);(void)idleRuntime.drain_events();
  tick_keys(context,{});render(idle,idleRuntime);beforeFrames=idleRuntime.metrics().frames_built;
  tick_keys(context,{});render(idle,idleRuntime);CHECK(idleRuntime.metrics().frames_built==beforeFrames+1);
+ // The actual scoped text owner follows canvas projection and restores its
+ // caller's scale. Resized project widgets must not clip unscaled captions.
+ CHECK(idleRuntime.clear_focus()==rt::RuntimeCode::ready);(void)idleRuntime.drain_events();
+ for(const auto viewport:{rt::Float2{400,300},rt::Float2{800,600},rt::Float2{1600,1200}}){
+  tick_keys(context,{});paintedTextScale=0;
+  {ScopedTextScale enclosing{1.25f};auto result=idle.render(idleRuntime,viewport);
+   CHECK(result.code==rt::RuntimeCode::ready&&std::abs(paintedTextScale-1.25f*viewport.x/800.f)<.001f);
+   CHECK(std::abs(kFontScale-1.25f)<.001f);}
+  CHECK(kFontScale==1.f);
+ }
+ // Capability gating uses the existing primitive's disabled paint path, not
+ // merely suppressed input on a button that still appears actionable.
+ CHECK(idleRuntime.set_action_enabled({3},false)==rt::RuntimeCode::ready);
+ disabledPaint=0;tick_keys(context,{});render(idle,idleRuntime);CHECK(disabledPaint==1);
  const auto textIdentity=&idle.text_state_.at(4);g_contextActiveWidgets[other.get()]=textIdentity;
  int unrelated{};g_contextActiveWidgets[reinterpret_cast<void*>(7)]=&unrelated;
  idle.clear();CHECK(g_contextActiveWidgets[context.get()]==nullptr&&g_contextActiveWidgets[other.get()]==nullptr
   &&g_contextActiveWidgets[reinterpret_cast<void*>(7)]==&unrelated&&!g_editBoxTextStates.contains(textIdentity));
  CHECK(rt::run_contract()==rt::ContractFailure::none);
+ text_field_press_focus(context);
+ rapid_calculator_taps(context);
+ desktop_tool_text_scaling(context);
  return 0;
 }
 """
@@ -255,16 +429,21 @@ class ProjectGuiKeyboard(unittest.TestCase):
         text = (GUI / "controls/gui.text_controls.inl").read_text(encoding="utf-8")
         ordinary = definition(text,"    EditBoxResult edit_box(")
         self.assertIn("dispatch_edit_box_event(event, multiline, submit_on_enter",ordinary)
-        runtime = (ROOT/"Engine/src/epoch/implementation/epoch.project_play_scene.inl").read_text(encoding="utf-8")
+        runtime = PLAY_SCENE.read_text(encoding="utf-8")
         self.assertLess(runtime.index("m_projectGuiRuntime->keyboard_captured()"),runtime.index("advance_gameplay("))
         self.assertLess(runtime.index("advance_gameplay("),runtime.index("gui::begin_frame("))
+        self.assertEqual(runtime.count("PointerDelivery::ordered"), 1)
+        application = definition(runtime, "            void frame_gui_application(")
+        self.assertIn("PointerDelivery::ordered", application)
+        self.assertEqual(runtime.count("TextScaling::desktop"), 1)
+        self.assertIn("TextScaling::desktop", application)
         identity = hashlib.sha256(code.encode()).hexdigest()[:12]
         report = ROOT/"Artifacts/Reports/project-gui-keyboard-oct28"/identity
         report.mkdir(parents=True,exist_ok=True)
         (report/"consumer.cpp").write_text(code,encoding="utf-8")
         current_render = definition(ADAPTER.read_text(encoding="utf-8"),"    EpochGuiRenderResult EpochGuiAdapter::render(")
         # Exercise the regression without depending on a dirty checkout or Git history.
-        keyboard_dispatch = """            const auto keyboard = dispatch_keyboard(runtime, frame);
+        keyboard_dispatch = """            const auto keyboard = dispatch_keyboard(runtime, frame, command);
             if (keyboard != project_gui_runtime::RuntimeCode::ready
                 && keyboard != project_gui_runtime::RuntimeCode::no_change)
                 result.code = keyboard;
@@ -280,7 +459,7 @@ int main(){auto context=std::make_shared<core::Context>();fresh(context);Adapter
 '''
         (report/"before.cpp").write_text(before,encoding="utf-8")
         before_line = before[:before.index("CHECK(runtime.focused_widget().value==9);")].count("\n")+1
-        modules = [ROOT/"Engine/modules"/name for name in ("core.sha256.ixx","asset.gui_artifact.ixx","project.gui_runtime.ixx")]
+        modules = [engine_module_source(ROOT/"Engine/modules", name) for name in ("core.sha256.ixx","asset.gui_artifact.ixx","project.gui_runtime.ixx")]
         portable = ROOT/"Engine/dep/EpochGui"
         modules += [portable/"modules"/name for name in ("epoch.gui.ixx","epoch.gui.input.ixx")]
         sources = [ROOT/"Engine/src/assets/gui/asset.gui_artifact.cpp",ROOT/"Engine/src/project/project.gui_runtime.cpp",ROOT/"Engine/src/project/project.gui_runtime_contract.cpp",
@@ -317,12 +496,12 @@ int main(){auto context=std::make_shared<core::Context>();fresh(context);Adapter
                     "expected_exit":81,"expected_assertion_line":before_line,
                     "negative_render_sha256":hashlib.sha256(before_render.encode()).hexdigest()})
             (report/"result.json").write_text(json.dumps({"passed":completed.returncode==0 and index==len(commands)-1,
-                "scope":"Actual queued input/filter/begin_frame, shared ordered text command/caret owner, actual adapter render/dispatch/widget caller and real artifact+RuntimeSession modules. Neutral drawing/clipboard/metric ports; no native input, renderer or model.",
+                "scope":"Actual queued input and text, GUI tool pointer delivery and desktop text cap, runtime geometry, and calculator arithmetic. Neutral drawing, clipboard and metric ports; no native input, renderer or model.",
                 "owners":{str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in [ADAPTER,
-                    ROOT/'Engine/modules/project.gui_epochgui.ixx',ROOT/'Engine/modules/project.gui_runtime.ixx',
+                    ADAPTER_API,PLAY_SCENE,ROOT/'Engine/modules/project/project.gui_runtime.ixx',
                     ROOT/'Engine/src/project/project.gui_runtime.cpp',ROOT/'Engine/src/project/project.gui_runtime_contract.cpp',
-                    ROOT/'Engine/modules/gui.engine.ixx',GUI/'gui.engine.cpp',GUI/'controls/gui.frame_lifecycle.inl',
-                    GUI/'controls/gui.text_controls.inl',Path(__file__)]},"commands":runs},indent=2),encoding="utf-8")
+                    ROOT/'Engine/modules/gui/gui.engine.ixx',GUI/'gui.engine.cpp',GUI/'controls/gui.frame_lifecycle.inl',
+                    GUI/'controls/gui.text_controls.inl',CALCULATOR,Path(__file__)]},"commands":runs},indent=2),encoding="utf-8")
             self.assertEqual(completed.returncode,0,completed.stdout[-7500:]+completed.stderr[-2500:])
 
 

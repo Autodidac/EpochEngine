@@ -12,7 +12,8 @@
             bool interactive)
         {
             using namespace authoring::gui;
-            const gui::ScopedTextScale textScale{canvasScale};
+            const bool desktopText = state.projectKind == editor_project_kind_name(EditorProjectKind::Tool);
+            const gui::ScopedTextScale textScale{desktopText ? (std::min)(canvasScale, 1.0f) : canvasScale};
             const std::string label = gui_widget_display_text(widget);
             const bool selected =
                 gui_widget_selected(state, widget.handle);
@@ -435,7 +436,6 @@
             const auto frame = compute_gui_document_canvas(*document, pos, size,
                 state.guiCanvasView.zoom, state.guiCanvasView.pan);
             state.guiCanvasView.pan = frame.pan;
-            gui::panel_rect(frame.position, frame.size);
             return frame;
         }
 
@@ -520,6 +520,11 @@
                 }
             }
             else view.drag={};
+            // Keep the authoring surface bounded inside the workspace. Paint
+            // using the updated pan so its edge tracks the authored widgets.
+            gui::panel_rect(frame.position, frame.size);
+            if (interactive)
+                gui::selection_outline(frame.position, frame.size, 2.0f);
             const gui::ContentClipScope documentClip{
                 frame.position,
                 {frame.position.x + frame.size.x, frame.position.y + frame.size.y}};

@@ -8,12 +8,15 @@ module;
 #include <span>
 #include <stop_token>
 #include <string>
+#include <string_view>
 #include <vector>
 
 export module project.planetary_snapshot;
 import asset.mesh_artifact;
 import asset.cloud_volume;
 import water.wave;
+
+namespace epochengine::project_planetary_snapshot { struct WetLatticeSamples; }
 
 export namespace epochengine::project_planetary_snapshot
 {
@@ -49,6 +52,15 @@ export namespace epochengine::project_planetary_snapshot
         double skirt_depth_meters{};
         std::uint32_t surface_vertex{}; // Top-edge wetness for a lowered skirt.
     };
+    // An admitted terrain provider owns the exact undeformed cube lattice.
+    // The returned surface indices are local to this patch.
+    class WaterLatticeProvider
+    {
+    public:
+        virtual ~WaterLatticeProvider() = default;
+        [[nodiscard]] virtual std::optional<std::vector<WaterVertex>> build_basis(TileKey,
+            double radius_meters, std::uint32_t cells, bool skirts, std::stop_token) const = 0;
+    };
     struct WaterTriangle final
     {
         std::array<std::uint32_t,3> water{}, ground{};
@@ -62,6 +74,7 @@ export namespace epochengine::project_planetary_snapshot
         double radius_meters{}, wind_period_seconds{604800.0};
         std::shared_ptr<const asset::mesh::Artifact> artifact{};
         // v5 replaces opaque lobes with bounded body-local metric density.
+        // v6 includes the conservatively inscribed solid radius.
         // Legacy v4 artifacts remain readable, but cannot accompany density.
         std::optional<asset::cloud_volume::Recipe> density{};
     };
@@ -77,11 +90,18 @@ export namespace epochengine::project_planetary_snapshot
         std::array<double,3> water_origin_meters{};
         std::vector<WaterVertex> water_vertices{};
         std::vector<WaterTriangle> water_triangles{};
+        std::shared_ptr<const asset::mesh::SphericalWaterAppearance> water_appearance{};
     };
     struct Snapshot final
     {
         std::shared_ptr<const asset::mesh::Artifact> artifact{};
         Metadata metadata{};
+        // Host-verified provider frame, in body-local metres. An absent
+        // origin keeps legacy artifact coordinates and their original rules.
+        std::optional<std::array<double,3>> metric_origin_meters{};
+        // Provider receipt carried by the host. The snapshot codec does not
+        // encode a clock, and legacy callers can leave this unset.
+        std::optional<double> water_sample_seconds{};
     };
     struct Limits final
     {
@@ -90,6 +110,31 @@ export namespace epochengine::project_planetary_snapshot
         std::uint64_t maximum_metadata_bytes{16ull*1024u*1024u};
         std::uint64_t maximum_retained_bytes{20ull*1024u*1024u};
         std::uint64_t maximum_transient_bytes{16ull*1024u*1024u};
+    };
+    struct SelectedCut final
+    {
+        std::shared_ptr<const Snapshot> source{};
+        std::shared_ptr<const asset::mesh::Artifact> artifact{};
+        std::shared_ptr<const asset::mesh::SphericalWaterAppearance> water_appearance{};
+    };
+    // The transport decoder owns the only unchecked-to-checked transition.
+    // The already verified hierarchy and artifact cannot be substituted.
+    class DecodedSnapshot final
+    {
+        Snapshot snapshot_;
+        Limits limits_;
+        DecodedSnapshot(Snapshot snapshot, Limits limits) noexcept;
+    public:
+        DecodedSnapshot(DecodedSnapshot&&) noexcept = default;
+        [[nodiscard]] static std::optional<DecodedSnapshot> read(
+            std::span<const std::byte>, std::shared_ptr<const asset::mesh::Artifact>, const Identity&,
+            Limits, std::stop_token, std::optional<std::array<double,3>> metric_origin = {}) noexcept;
+        [[nodiscard]] const Metadata& metadata() const noexcept { return snapshot_.metadata; }
+        [[nodiscard]] const std::shared_ptr<const asset::mesh::Artifact>& artifact() const noexcept { return snapshot_.artifact; }
+        [[nodiscard]] bool read_water_appearance(std::span<const std::byte>, std::stop_token = {}) noexcept;
+        [[nodiscard]] bool normalize_cloud_center(const std::array<double,3>& world_source_origin) noexcept;
+        [[nodiscard]] SelectedCut materialize_selected(std::stop_token = {},
+            std::optional<double> verified_water_seconds = {}) && noexcept;
     };
     // Body-local metres subtracted before narrowing mesh vertices to floats.
     // v1 providers use the exact camera. Opt-in v2 bounds a distant camera's
@@ -103,11 +148,25 @@ export namespace epochengine::project_planetary_snapshot
     [[nodiscard]] std::vector<std::byte> encode(const Metadata&, const asset::mesh::Artifact&, Limits = {}) noexcept;
     [[nodiscard]] std::optional<Metadata> decode(std::span<const std::byte>,
         const asset::mesh::Artifact&, const Identity& expected, Limits = {}, std::stop_token = {}) noexcept;
+    // Optional producer sidecar. One entry per underlying patch, with a zero
+    // entry for dry patches. Admission retains only nonempty water ranges.
+    inline constexpr std::size_t maximum_water_appearance_bytes = 52u + 4096u * 12u + 32u;
+    [[nodiscard]] std::vector<std::byte> encode_water_appearance(
+        std::span<const asset::mesh::SphericalWaterRange>, const Identity&) noexcept;
+    [[nodiscard]] std::shared_ptr<const asset::mesh::SphericalWaterAppearance> admit_water_appearance(
+        std::span<const asset::mesh::SphericalWaterRange>, const asset::mesh::Artifact&, const Metadata&,
+        std::stop_token = {}) noexcept;
+    [[nodiscard]] std::shared_ptr<const asset::mesh::SphericalWaterAppearance> decode_water_appearance(
+        std::span<const std::byte>, const asset::mesh::Artifact&, const Metadata&,
+        std::stop_token = {}) noexcept;
     // A caller-owned worker updates only the explicit ocean recipe at the
     // immutable FFT tile's actual time. It never remeshes terrain, starts a
     // process or changes the source snapshot. Old v1/dry snapshots return null.
+    [[nodiscard]] bool requires_water_edge_resample(const Snapshot&) noexcept;
+    [[nodiscard]] std::uint64_t retained_snapshot_bytes(const Snapshot&) noexcept;
     [[nodiscard]] std::shared_ptr<const asset::mesh::Artifact> resample_water(
-        const Snapshot&, const water::wave::Tile&, Limits = {}, std::stop_token = {}) noexcept;
+        const Snapshot&, const water::wave::Tile&, Limits = {}, std::stop_token = {},
+        std::shared_ptr<const asset::mesh::SphericalWaterAppearance>* appearance = nullptr) noexcept;
 
     struct DrawPatch final
     {
@@ -116,13 +175,22 @@ export namespace epochengine::project_planetary_snapshot
         float morph{}; // zero=fine; one=exact immediate parent triangle.
     };
     enum class InitialCut : std::uint8_t { coarse_roots, selected_patches };
+    struct WetTransitionFailure final
+    {
+        std::string_view reason{};
+        std::optional<TileKey> patch{};
+    };
     // Value state owned by the existing scene packet lifecycle. It owns no
     // thread, clock, worker, renderer, or publication mechanism.
     class Transition final
     {
+        friend class DecodedSnapshot;
         std::shared_ptr<const Snapshot> target_{};
         std::vector<DrawPatch> active_{};
+        std::shared_ptr<WetLatticeSamples> wet_samples_{};
         Limits limits_{};
+        [[nodiscard]] bool admit_validated(std::shared_ptr<const Snapshot>, std::stop_token, InitialCut) noexcept;
+        [[nodiscard]] bool advance_cut(double, bool, std::stop_token, bool, WetTransitionFailure*) noexcept;
     public:
         explicit Transition(Limits limits = {}) : limits_(limits) {}
         // Animated scene owners start at coarse roots. A nonanimated consumer
@@ -132,9 +200,27 @@ export namespace epochengine::project_planetary_snapshot
         // Invalid/negative time and cancellation retain the previous complete
         // cut. Pause freezes morph phase; simulation time is not this clock.
         [[nodiscard]] bool advance(double elapsed_seconds, bool paused = false, std::stop_token = {}) noexcept;
+        // The wet worker defers quartets with unresolved edge or corner
+        // dependencies. Unsupported or cancelled steps retain the current cut.
+        [[nodiscard]] bool advance_wet(double elapsed_seconds, bool paused = false,
+            std::stop_token = {}, WetTransitionFailure* failure = nullptr) noexcept;
+        [[nodiscard]] bool needs_retained_water_sample() const noexcept;
+        [[nodiscard]] bool prepare_retained_water(std::uint32_t cells,
+            std::shared_ptr<const water::wave::Tile>, std::shared_ptr<const WaterLatticeProvider>,
+            std::uint64_t retained_display_bytes, std::stop_token = {}) noexcept;
         [[nodiscard]] std::span<const DrawPatch> draw() const noexcept { return active_; }
         [[nodiscard]] bool settled() const noexcept;
-        [[nodiscard]] std::shared_ptr<const asset::mesh::Artifact> materialize(std::stop_token = {}) const noexcept;
-        void clear() noexcept { active_.clear(); target_.reset(); }
+        // With metric snapshots the result is in the latest admitted target's
+        // origin, even while older patches contribute to the complete cut.
+        [[nodiscard]] std::shared_ptr<const asset::mesh::Artifact> materialize(std::stop_token = {},
+            std::shared_ptr<const asset::mesh::SphericalWaterAppearance>* appearance = nullptr) const noexcept;
+        // Worker-only fixed-phase materialization of the active cut. Every wet
+        // source uses the current provider sample or a worker-owned re-evaluation. Missing recipes,
+        // cancellation and exhausted budgets leave publication to the caller.
+        [[nodiscard]] std::shared_ptr<const asset::mesh::Artifact> materialize_wet(std::uint32_t cells,
+            double sampled_seconds, std::stop_token = {},
+            std::shared_ptr<const asset::mesh::SphericalWaterAppearance>* appearance = nullptr,
+            std::uint64_t retained_display_bytes = 0u, WetTransitionFailure* failure = nullptr) const noexcept;
+        void clear() noexcept { wet_samples_.reset(); active_.clear(); target_.reset(); }
     };
 }

@@ -100,7 +100,7 @@ bool Simulation::land(std::size_t index) {
         if(sample.height>180*scale&&sample.height<2500*scale&&sample.temperature>0.25) break;
         d=normalized(rotate(d,normalized(DVec3{0.17,1,0.23}),0.073)+DVec3{0.001,-0.002,0.001});
     }
-    camera_.position=center+d*(world_.ground_radius(index,d)+1.8);
+    camera_.position=center+d*(world_.ground_radius(index,d)+surface_clearance_meters);
     const auto east=tangent(d);
     camera_.forward=normalized(east+d*0.06);camera_.up=d;camera_.orthonormalize();speed_=0;fall_velocity_={};reset_interpolation();
     return true;
@@ -110,7 +110,7 @@ void Simulation::toggle_walk() {
     if(world_.body(anchor_).kind==BodyKind::gas) return;
     if(altitude()<500) {
         mode_=TravelMode::walk;const auto d=radial_up();
-        camera_.position=world_.center(anchor_,seconds_)+d*(world_.ground_radius(anchor_,d)+1.8);
+        camera_.position=world_.center(anchor_,seconds_)+d*(world_.ground_radius(anchor_,d)+surface_clearance_meters);
         fall_velocity_={};reset_interpolation();
     }
 }
@@ -150,7 +150,7 @@ DVec3 Simulation::resolve_motion(DVec3 from,DVec3 to) const {
         const double start=std::max(0.0,near_t),end=std::min(first,far_t);
         if(end<start) continue;
         const auto clearance=[&](double t) {
-            const auto p=local+direction*t;return length(p)-world_.ground_radius(b.id,normalized(p))-1.8;
+            const auto p=local+direction*t;return length(p)-world_.ground_radius(b.id,normalized(p))-surface_clearance_meters;
         };
         double previous=start;
         // Swept collision catches entering/leaving a body in a single high-speed frame.
@@ -168,7 +168,7 @@ DVec3 Simulation::resolve_motion(DVec3 from,DVec3 to) const {
     auto result=from+direction*first;
     const auto nearest=body_scope_.value_or(world_.nearest(result,seconds_));const auto center=world_.center(nearest,seconds_);
     const auto local=result-center,up=normalized(local);
-    const double ground=world_.ground_radius(nearest,up)+1.8;
+    const double ground=world_.ground_radius(nearest,up)+surface_clearance_meters;
     if(length(local)<ground) result=center+up*ground;
     return result;
 }
@@ -205,7 +205,7 @@ void Simulation::step(double dt,const PilotInput& input) {
         if(mode_==TravelMode::walk) {
             const auto center=world_.center(anchor_,seconds_);
             const auto direction=normalized(start+move*rate*dt-center);
-            camera_.position=center+direction*(world_.ground_radius(anchor_,direction)+1.8);
+            camera_.position=center+direction*(world_.ground_radius(anchor_,direction)+surface_clearance_meters);
             // Parallel transport the whole frame before leveling; preserve manual pitch.
             const auto axis=cross(up,direction);const auto sine=length(axis);
             if(sine>1e-12) {

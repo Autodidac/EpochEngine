@@ -30,7 +30,8 @@ class GuiSnapshotPublication(unittest.TestCase):
             definition(source, '[[nodiscard]] static bool same_queued_draw('),
             definition(source, '[[nodiscard]] static bool same_queued_draws('),
             'static std::unordered_map<const void*, DeferredDrawBatch, PtrHash> g_topLayerDrawBatches;',
-            'struct Frame { std::vector<QueuedSpriteDraw> topLayerDraws; }; static Frame g_frame;',
+            'namespace core::cli {inline bool trace_menu_button0_rect=false;}',
+            'struct Frame { std::vector<QueuedSpriteDraw> topLayerDraws; bool tracePopupPublication{}; }; static Frame g_frame;',
             definition(source, 'static void publish_deferred_draw_batch('),
             definition(source, 'static void store_top_layer_batch('),
         ))
@@ -198,8 +199,11 @@ int main(int argc,char**argv) {
     CHECK(ordered->front().handle.value==6&&ordered->back().handle.value==7);
 
     // Exercise the actual top-layer caller, including its empty transition.
+    core::cli::trace_menu_button0_rect=true;
+    g_frame.tracePopupPublication=true;
     g_frame.topLayerDraws = draws(5);
     store_top_layer_batch(&ctx);
+    CHECK(g_topLayerDrawBatches[&ctx].tracePopupReplay && !g_frame.tracePopupPublication);
     CHECK(g_topLayerDrawBatches[&ctx].generation == 1u);
     auto top = g_topLayerDrawBatches[&ctx].draws;
     store_top_layer_batch(&ctx);

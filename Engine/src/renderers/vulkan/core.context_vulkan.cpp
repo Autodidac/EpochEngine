@@ -100,6 +100,10 @@ namespace
         const unsigned h = static_cast<unsigned>((std::max)(1, ctx->height));
 
         ctx->init_failed = false;
+        epochengine::logger::get(kLogVulkan).log(
+            epochengine::logger::LogLevel::INFO,
+            "Starting Vulkan backend initialization.",
+            std::source_location::current());
         try
         {
             ctx->init_failed = !epochengine::vulkancontext::vulkan_initialize(ctx, native, w, h, ctx->onResize);

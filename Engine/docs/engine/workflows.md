@@ -25,19 +25,46 @@ main builds and native control checks remain separate.
 
 Current visible names: **Automation** is the main workflow workspace;
 **Assistant Chat** is the separate conversation pane. Saved route identities
-remain unchanged. The World workspace/scene viewport is **3D Preview**, and its
-object list is **3D Objects**. The project action is **Run**; its selected build
+remain unchanged. **Main Scene** is the authoring workspace, **Scene Preview** is its
+viewport, and **Scene Hierarchy** is its object tree. The project action is **Run**; its selected build
 configuration remains visible in project settings and Output. These latest
 source changes have build/CPU proof; native acceptance is tracked in active_pass.
 A fresh project Run opens Output and invokes the selected configuration's
 incremental build before launch. Run focuses an already running project.
-For a selected attached mesh, **3D Objects** offers **Detach from Terrain** in
+For a selected attached mesh, **Scene Hierarchy** offers **Detach from Terrain** in
 its context menu. This keeps its world pose and makes the change undoable.
-In **3D Preview**, choose **Inspect LOD** from the camera view menu to move a
+In **Main Scene → Scene Preview**, choose **Inspect LOD** from the camera view menu to move a
 separate camera over the last accepted planetary terrain detail. **Exit Inspect**
-restores the previous camera and resumes streaming. A selected object's transform
-gizmo uses world X, Y and Z, extends past its bounds, and highlights the axis
-chosen in the viewport's move-tool selector.
+restores the previous camera and resumes streaming. A selected object's move
+gizmo uses world X, Y and Z. Drag a visible axis shaft to constrain motion to
+that axis. The existing move-tool selector also supports choosing an axis in
+advance. Releasing a moved selection records one undoable edit.
+Extend the existing Inspect LOD view with explicit stream-target ownership.
+During Play, terrain follows the player while detached inspection can view
+the accepted cut. Also retain a frozen-cut option for repeatable comparisons.
+Allow a configurable debug or cinematic camera to be selected, attached to a
+scene object or detached while preserving its pose. Expose applicable camera,
+focus and attachment actions in Scene Hierarchy context menus. Verify switching
+views does not change the selected stream target or saved player pose.
+
+The camera readout reports perspective **Distance** or orthographic vertical
+**Span** in compact scene units (k/M/B), and **Free camera** in FPS mode; it is
+not a magnification percentage. The build notice uses the shared wrapping button
+row with Show Output and Cancel Build, reserving its measured height above the
+viewport. These latest presentation changes await native acceptance.
+These arrows are currently visual markers, not individually pickable handles.
+The November 17 requested interactive gizmo remains open: drag X/Y/Z directly
+for constrained translation, plus rotation and scale handles. Reuse
+`editor.application_scene_preview.inl::append_editor_translation_gizmo` geometry
+and `editor.application_document_editing.inl` selection/drag ownership. Existing
+`commit_scene_group_drag` submits full position/rotation/scale through one
+`ObjectTransformChangedOperation` transaction; do not create a second undo or
+transform system. First add axis-handle hit testing before object/marquee picking,
+then feed its selected axis into the existing constrained drag. Rotation/scale
+need explicit modes and initial full-transform snapshots, correct group pivots,
+cancel restoration and one commit on release. Validate obscured/edge-on handles,
+large-world origins, parenting, selection, Undo/Redo, save/reopen and native input;
+current arrow-geometry tests do not prove interaction.
 October31 source repairs make ordinary Run default to Release when the project
 has no saved configuration. An explicit Debug choice remains Debug, and private
 self-iteration still validates Debug first. Managed build scripts retain minimal
@@ -66,7 +93,7 @@ overlay priority so their choices remain visible above the hosted project;
 wrapped viewport controls reserve space above the child window. CPU checks cover
 these paths; the active pass records matching native acceptance separately.
 
-The Editor **Solid / Wireframe** control now sends one fixed mesh-display
+The Editor **Materials / Solid / Wireframe** control sends one fixed mesh-display
 request through its owned process supervisor. Two explicit private anonymous
 pipes carry32-byte commands and acknowledgements; stdio remains disconnected
 from commands. The lease binds project generation, scene identity, executable identity,
@@ -79,6 +106,12 @@ refuses the change; this is publication evidence, not GPU/pixel acceptance.
 The project Controls panel no longer carries the large wireframe debug action.
 Standalone F2 remains available; a claimed Editor control lease owns that mode.
 Existing generated executables must be rebuilt with this source to gain control.
+Protocol 3 rejects older peers: their Solid meant textured materials, whereas
+current Solid means neutral lit geometry with alpha cutouts preserved. Materials
+keeps the existing material rendering and is the default. F2 cycles the Editor
+viewport selector while it owns keyboard focus. Standalone F2 toggles Wireframe
+and Materials. These display choices do not modify project materials; async scene
+publication and its cache keys retain the exact requested mode.
 Repeated wireframe publications reuse shared depth geometry without charging its
 storage twice. The same128MiB limit still rejects actual oversized replacements
 and retains the last admitted scene.
@@ -110,6 +143,21 @@ radius text instead of replacing them with the older saved recipe. Actual-owner
 Debug/Release regressions cover that loss and normal reopen behavior. The latest
 operator generation produced new Earth-radius geometry; its still-open settings
 report must not be inferred from an unchanged timestamp for identical recipe bytes.
+Windows terrain generation and generated-project linking select the Visual
+Studio x64 compiler host. The isolated Windows worker supplies processor
+architecture from the OS so Visual Studio resolves the requested host.
+Generation and project linking keep separate caches keyed to their compiler
+environment. On Windows, a generated application gets the shared wave module
+from `EpochEngine.lib`. The separately linked exporter owns its own wave
+archive. An ordinary Editor Build or Run refreshes older managed planetary
+link settings before compiling the application.
+
+The Terrain form keeps **Build & Generate**, **Save Settings** and **Cancel**
+together at the top, before changing status text and the settings controls.
+Actions still dispatch after validating the completed form. The actual-form
+Debug/Release fixture verifies narrow/wide layouts, long status text, edited
+values and busy/invalid guards (`Tests/gui/test_planetary_settings_ui.py`).
+Native placement in the rebuilt Editor remains to be checked.
 
 **Original planetary sunlight** is an explicit project option. It adds the
 original simulation's moving sun during Run and preserves authored lights and
@@ -219,7 +267,7 @@ lake and generated native plant set remain open. When opening the saved project
 again, use its host-listed ID.
 
 With the desired Plant Lab design open, select a tree from the existing forest
-in **3D Objects**. Send this in Assistant Chat.
+in **Scene Hierarchy**. Send this in Assistant Chat.
 
 ```text
 Add a custom textured tree to the selected forest:
@@ -241,7 +289,7 @@ the selected forest.` or use **Add Current Plant to Selected Forest** in Forest
 Factory's painting view.
 
 Once the generated beacon GLB is visible, select one painted tree from the
-saved forest in **3D Objects**. Send `Set up landing near the selected forest
+saved forest in **Scene Hierarchy**. Send `Set up landing near the selected forest
 with the current generated 3D model.` in **Assistant Chat**. Review the forest,
 model dimensions and exact GLB. Approval samples a walking approach outside
 the forest. A successful setup imports the solid beacon, places the primary
@@ -302,8 +350,8 @@ For a generated world with Ocean On, send
 same model and the named ocean body. Approval starts a search for dry
 procedural terrain within 100 m of water. Escape stops the search. The
 importer places the GLB upright with its lowest local point at the sampled
-elevation. It keeps all parts together and returns to 3D Preview. The parts
-appear beneath the terrain in 3D Objects and follow moves, rotations and
+elevation. It keeps all parts together and returns to Main Scene. The parts
+appear beneath the terrain in Scene Hierarchy and follow moves, rotations and
 uniform scale edits to that terrain. During planetary exploration, they
 follow the admitted body and camera rebasing. Save Project retains the
 attachment in snapshot format 9. Older scenes still open in this Editor.
@@ -324,7 +372,25 @@ part uses its rotated mesh bounds and blocks walking, including boosted steps.
 Enable only the parts that should be solid. Flight uses the existing terrain
 physics. Walk collision is off on new imports.
 
-To author a surface start, select one terrain-attached model in **3D Objects**
+To place the primary PlayerStart from your view, select the generated planet
+in **Scene Hierarchy** and choose **Place Player Start Below View** in
+**Properties**. This samples the selected body's ground in the radial
+direction from the body center to the Scene Preview camera. It saves the
+spawn with the view's heading along the surface. The authored camera keeps
+its transform. Wet or steep ground and a changed scene leave the spawn in
+place.
+
+Frame the planet in Perspective, select its generated body, then choose
+**Set Project Camera from View** in **Properties**. This saves the primary
+Camera's position, heading, pitch and roll on that body. The camera follows
+terrain edits and appears beneath it in Scene Hierarchy. Select the Camera
+and choose **View from Camera** to return 3D Preview to its saved view and
+continue navigating. After regeneration, capture the view again to bind it
+to the new terrain. **Detach from Terrain** keeps the saved pose. Older
+Editors that support the scene's other features can reopen it after detaching
+the camera.
+
+You can also select one terrain-attached model in **Scene Hierarchy**
 and send `Set the player start at the selected shoreline model.` in
 **Assistant Chat**. Approve the placement and save the project. The command
 moves the existing primary PlayerStart to the model and selects PlayerStart
@@ -335,7 +401,7 @@ If the terrain changed, the point is underwater, or PlayerStart is more than
 100 m from the surface, Play reports the rejection and retains the provider's
 default orbit.
 
-To set the win condition, select one imported beacon mesh in **3D Objects**
+To set the win condition, select one imported beacon mesh in **Scene Hierarchy**
 and send `Set the selected model as the reach objective within 5 m.` in
 **Assistant Chat**. The approval shows the target and radius. Omitting the
 distance uses 5 m. Use **Save Project** to retain it. During planetary Play,
@@ -461,6 +527,81 @@ Public source check does not prove private authentication, an installed runtime
 handoff, or Linux acceptance. Development owners can obtain private runtime
 downloads through the authenticated Site; that is not an automatic updater test.
 
+### Hypothetical Epoch 1.0 license and contribution plan
+
+This proposal applies to a future Epoch Engine 1.0 release. The current
+Engine license and owner-authenticated Development distribution govern today.
+A release decision would approve the exact source and tools allowed into 1.0.
+
+**License structure.** Use a zero-price, source-available 1.0 license for
+Epoch-owned files where Epoch can grant the required rights. Define permission
+to use, fork, build and modify 1.0, including which distribution and commercial
+uses the grant permits. Make the contribution condition explicit in a
+versioned agreement users review before adopting the 1.0 self-iteration
+workflow. Reserve licensing for later releases under separate paid terms.
+Keep access to the published 1.0 grant and its source over time. Confirm
+before publication whether any maintenance builds share the 1.0 grant.
+
+Epoch's current [Engine license](../../../LICENSE) expressly leaves disclosure
+of modifications optional. A mandatory contribution requirement would need
+new terms for the future grant. Existing recipients keep the rights they
+received. Treat that proposed Engine grant as source-available. The Open
+Source Definition requires rights to modify and redistribute derived works.
+[Open Source Definition](https://opensource.org/osd).
+
+**Fork and build.** The user forks the admitted 1.0 repository and downloads
+the compatible release. After a reviewed Engine change, Save would
+materialize complete authorized source and build inputs. Exporting a project
+with the full Editor source its edition permits would use the same source
+admission path. The user can compile and use that copy with a separate
+source/fork identity, install identity, and build receipt. Keep source
+revision, version, edition, and approved updater trust explicit. A separate
+identity can distinguish two installs with the same reproducible build bytes.
+GitHub grants viewing and on-platform forking of public repos through its
+terms. The 1.0 license would specify use outside that service.
+[GitHub Terms, section D](https://docs.github.com/en/site-policy/github-terms/github-terms-of-service#d-user-generated-content).
+
+**Contribution requirement.** For a retained Engine bug fix or feature under
+the proposed 1.0 self-iteration terms, prepare a focused pull request from
+the user's fork against the maintained 1.0 source. Include the code change,
+its intent and its tests. Leave drafts, discarded attempts, generated games
+and other user project content outside that requirement. Give the author a
+final review of the exact files and destination before any upload. Provide a
+private reporting route for security or confidential findings. The user
+chooses public credit subject to required notices and Git history visibility.
+The maintainer decides what to merge. Submission fulfills the proposed
+obligation independently of merge approval.
+
+**Rights needed for future paid releases.** Before accepting a contribution
+for reuse, record a contributor agreement that grants Epoch the rights it
+needs to modify, redistribute and sublicense that contribution in both the
+free and paid editions. The contributor keeps ownership of their own work.
+Verify the contributor's authority for employer-owned or third-party
+material, and settle the necessary patent and attribution terms. GitHub's
+default contribution license follows the repository's license. It recognizes
+a separate contributor agreement. Apache's published agreement is an example
+of explicit grants, for comparison with Epoch's own needs.
+[GitHub Terms, section D](https://docs.github.com/en/site-policy/github-terms/github-terms-of-service#d-user-generated-content).
+[Apache contributor agreement](https://www.apache.org/licenses/icla.pdf).
+
+**Dependencies and private source.** Apply any contribution conditions
+only to files Epoch has the authority to license that way. Keep MPL 2.0
+dependencies, covered modifications, notices, and corresponding source
+availability under the MPL. Its terms allow a larger work under separate
+terms while preserving recipients' rights to covered source. Other code,
+assets, and models retain their own licenses. Audit the manifest per
+component, including source obligations and any commercial or redistribution
+limits. Keep existing private Development source, credentials, model files,
+and user data outside the hypothetical fork and PR payload.
+[MPL 2.0, sections 1 and 3](https://www.mozilla.org/en-US/MPL/2.0/).
+[Mozilla's MPL FAQ](https://www.mozilla.org/en-US/MPL/2.0/FAQ/).
+
+Before release, have counsel review the copyright inventory, proposed grant,
+contribution terms, and distribution scope. Test that a clean install can
+build one permitted fork, review and submit one scoped contribution, and
+update through its own channel. Verify the edition and license boundary in
+every exported form.
+
 ## Startup model
 
 - A fresh standard Editor opens without a project or seeded demo objects. The
@@ -477,6 +618,14 @@ downloads through the authenticated Site; that is not an automatic updater test.
   Renderer-free geometry proof does not replace native resize/save-reload proof.
   Package Manager sizes from the live editor viewport and keeps
   its action footer inside the visible dialog.
+- Native bounds are not restored by pane persistence (verified November17):
+  `editor.application_layout_persistence.inl` schema14 saves internal panes,
+  splits and preferences; `host.context_win.cpp` standalone startup uses CLI
+  width/height and Windows `CW_USEDEFAULT` position. Reusing the same mutable
+  data root does not preserve an operator-arranged outer window. Future work
+  must persist actual host placement and restore it with monitor/work-area
+  validation; screenshots are not authoritative bounds. Until implemented,
+  launch normally and do not resize/reposition the operator's window.
 - routed native tool panes remain independent top-level windows while dragged.
   The parent editor renders and publishes exact compatible tab-strip insertion
   slots; the host reparents only after deliberate release, with 50% held-window
@@ -503,7 +652,12 @@ downloads through the authenticated Site; that is not an automatic updater test.
   signed release manifest and complete payload,
   and stages replacement before considering source. Signed Public source is
   available as an explicit choice or as the fallback when a compatible package
-  is absent or fails verification or staging.
+  is absent or fails verification or staging. The Public source version module
+  on `main` selects the exact `v<version>` tag. The updater reads the signed
+  integrity manifest at that tag, checks the matching edition, version and
+  archive URL, then checks the complete ZIP digest and extracted source tree.
+  Source-only prereleases can use this path. Missing or mismatched evidence
+  stops source installation.
 - the active packaged asset contract is versioned runtime archives such as
   `epoch_win10_x64_vX.Y.Z.zip` and `epoch_linux_x64_vX.Y.Z.tar.gz`
 - the updater extracts the packaged version directly from the archive name
@@ -847,6 +1001,13 @@ downloads through the authenticated Site; that is not an automatic updater test.
 
 ## Project Save, Build, And External Run
 
+Unlimited is the idle foreground Editor policy. Active build and automation
+work applies the host's 10 FPS ceiling even when the Editor has focus. A
+stricter existing pacing limit still applies. Assistant Chat stays available
+for progress and Stop while Project Assistant or self-iteration owns work,
+including request setup before the model responds. During a manual build,
+the Assistant Chat tab can be closed if the Assistant is idle.
+
 ### Project input and creation defaults
 
 Generated game/platformer shells receive the canonical project input profile
@@ -908,6 +1069,15 @@ cancellation, and current-pass eye proof remain acceptance work; build-safe
 contracts must not be described as a live runtime pass.
 
 ## Scripting and reload workflow
+
+The caped-pilot and ship example requires saved, project-local script bindings
+on two distinct scene objects. In Editor Play and standalone Run, the same
+script inputs should select walking and flight animations, board the ship,
+switch control and return it to the pilot. The runtime owns physics,
+planet-relative transforms and camera updates. The current `run_script_v2`
+contract is a synchronous authoring entry for copying timeline keys. Live
+script callbacks need a separately versioned entry and project/scene/object
+scope. Teardown must retire the binding before its scene object unloads.
 
 For bounded timeline movement, select a movable object in an open project.
 **Open Movement Script** copies the reusable template into that project's
@@ -1027,6 +1197,19 @@ for the exact limits and evidence.
   Save Project, Build, and external Run require both GUI and scene publication
   evidence. The scene/canvas view is a preview projection, not GUI authority.
 
+  Project > Systems exposes **Screen-space GUI** through the existing Run
+  settings. The manifest boolean `screen_space_gui_enabled` defaults to true
+  for legacy manifests; nonboolean or duplicate values are rejected. Disabling
+  it skips the authored overlay's runtime preparation on the next Run without
+  deleting its document, blocking authoring, or hiding diagnostic Project
+  Controls. Project selection, context snapshots and same-project Save retain
+  the setting. Existing malformed or unreadable manifests disable this runtime
+  overlay; a genuinely absent legacy manifest retains the default.
+  CPU persistence checks pass in
+  `Artifacts/Reports/project-settings-save-nov01/cpu-1794806829370459900/`.
+  Native toggle/render/input acceptance remains pending the integration build.
+  This is runtime enablement, not removal of GUI libraries from the build.
+
   The editor also recognizes one exact historical generated source: the
   canonical snapshot containing only Epoch's default `MainCanvas` root. That
   complete serialized shape, and no broader “single root” heuristic, may
@@ -1043,6 +1226,11 @@ for the exact limits and evidence.
   is the explicit host command. GUI keyboard capture suppresses physical
   gameplay sampling without suppressing admitted GUI impulses. Arbitrary
   application/script command routing remains future work.
+- In Windows Play, the focused native window supplies the first down edge
+  and its modifiers when the host delivers keyboard messages. The project
+  samples held state separately, so a tap between frames triggers an action
+  without adding held movement. A context consumes its own pending presses
+  once. Focus loss, GUI capture and entry from authoring discard stale presses.
 - physical controller ownership remains process-wide in `input.controller`.
   `project.input_controller` reads one immutable generation-checked snapshot,
   maps only sources declared by the compiled project profile, preserves held and
@@ -1106,6 +1294,13 @@ execution.
   selection stays runtime-driven through `--backend`, not a project rewrite.
 - generated child projects expose `--project-self-test` so Sandbox and
   ProjectLauncher output can be verified without opening GUI windows.
+  A generated project with a declared GUI can start from the saved
+  `Assets/Gui/main.epochgui` and an empty derived Library. The project GUI
+  library compiles the saved document, publishes it without replacing an
+  occupied file, then verifies and loads the exact artifact. The same path
+  serves normal Play for a project with admitted screen-space GUI settings.
+  Exact regeneration uses the saved source again after quarantine. A
+  manifest-less legacy project can still load its existing compiled GUI.
 - the editor exposes explicit Open Project, Switch Project, and Close Project
   commands over discovered profiles. Open admits the selected authoring scene;
   Close releases project-bound editor/runtime evidence and returns to the
@@ -1239,6 +1434,11 @@ execution.
   Game-only builds can compile out map authoring and restore the same exact
   Library artifact. Missing source may fall back only under explicit
   prefer-source policy; malformed source always fails closed.
+- Tile attachment records the texture's color encoding and straight alpha.
+  Preview and Play bind the exact tile texture revision and interpret its
+  published encoding. Older saved maps with starter defaults therefore render
+  without rewriting those maps or changing their texture identity. The Editor
+  validates tile and entity texture bindings together before publishing.
 - map source and semantic history remain canonical, Library output is
   reproducible, and Canvas2D scene/resource residency is disposable. Context
   exit or replacement retires only the physical scene publication.
@@ -1293,7 +1493,14 @@ execution.
   group handles grant no attach, stop or release authority. A missing window
   times out after15 seconds; failed attachment stops the owned child and reports
   the reason rather than falling back to a separate window. A host/platform
-  without native attachment support reports that before starting a build.
+  without native attachment support refuses an explicit In Editor request before
+  starting a build. It does not silently launch a separate window while the
+  selector still says In Editor. The same admission is checked again after the
+  build, preserving its accepted artifact if the host became unavailable.
+  OpenGL-editor/Vulkan-child embedding still refuses with an actionable status
+  because its native presentation stability has not been accepted. The operator
+  can choose Separate Window or OpenGL for that project; no selection is changed
+  automatically and a later compatible request is evaluated afresh.
   Each new launch retains merged stdout/stderr in a separate project
   `Artifacts/Reports/runtime-...log`, with the path in Output and failure status.
   Repeated Run focuses the same verified owned process before reserving another
@@ -1305,8 +1512,10 @@ execution.
   legacy latest log is not the durable attempt record. Completion exposes that
   transcript only for its captured project, build generation and configuration.
   In particular, a Windows standalone Editor without a docking parent is not
-  claimed to support this embedded route. Existing generic attachment leases
-  own detach/retirement; the platform process owner can close its PID/thread-
+  claimed to support this embedded route; use the normal parented Editor host
+  for the supported Windows embedding path. Cross-backend and other-platform
+  native embedding parity remains a separate acceptance gate. Existing generic
+  attachment leases own detach/retirement; the platform process owner can close its PID/thread-
   verified observed window after parenting removes it from top-level enumeration.
   Focused Debug/Release CPU routing/ownership and actual process-lifecycle
   contracts pass. Windows OpenGL native placement, wireframe input, workspace
@@ -1379,6 +1588,24 @@ execution.
   llama transport strips only line-framed bytes outside a complete structured
   envelope. Unique-search remains mandatory, so an ambiguous edit is rejected
   rather than assigned an inferred target.
+
+Retained lifecycle acceptance details (November 17 reconciliation):
+
+- Generated-project Build-to-Run must reject completion for a stale or wrong
+  project/revision/build generation. Exercise rapid project switches while the
+  old build completes; launch only the captured accepted artifact. Existing
+  project/configuration/transcript binding does not alone prove this native race.
+- Compiled-only sprite reopening after authored source deletion must preserve
+  the compiled artifact without silently recreating authoring source. The fixture
+  in `Engine/src/project/project.sprite_animation_contract.cpp` removes the source
+  and reopens compiled-only data. This CPU/filesystem case does not prove that an
+  external generated child loads and plays the same compiled sprite artifact.
+- Candidate Save Cancel must retain the verified candidate. Before any approved
+  copy, revalidate mutable original-source identity, source/path aliases and the
+  new destination; never overwrite the original or an existing destination.
+  Exercise cancellation and the actual copy separately through the native flow.
+  Approval/completion contracts such as `Tests/ai/test_candidate_saved_retirement.py`
+  do not alone establish the native dialog, validation and copy acceptance.
 
 - project shells should only be materialized by explicit operator action:
   File > Save Project, Project > Save Active Project, or the centered Run
@@ -1632,13 +1859,13 @@ Current source ownership:
 
 | Responsibility | Primary files/modules |
 | --- | --- |
-| Editor command/result payloads | `Engine/modules/editor.core.ixx` |
+| Editor command/result payloads | `Engine/modules/editor/editor.core.ixx` |
 | Toolbar context combobox and visible status | `Engine/src/editor/editor.application.cpp` |
 | Editor state capture/restore for handoff | `Engine/src/editor/editor.application.cpp` |
 | Session loop, live context discovery, handoff fallback | `Engine/src/epoch/epoch.engine_legacy.cpp` |
-| Native detached context/window request and `WindowData::guiRoute` | `Engine/modules/context.multiplexer.ixx`, `Engine/modules/context.window.ixx`, `Engine/src/renderers/host/host.context_win.cpp`, `Engine/src/renderers/host/host.context_linux.cpp` |
+| Native detached context/window request and `WindowData::guiRoute` | `Engine/modules/context/context.multiplexer.ixx`, `Engine/modules/context/context.window.ixx`, `Engine/src/renderers/host/host.context_win.cpp`, `Engine/src/renderers/host/host.context_linux.cpp` |
 | Reusable GUI layout state | `Engine/include/gui`, `Engine/src/epochgui`, `Engine/dep/EpochGui` |
-| Engine GUI adapter/render/input bridge | `Engine/modules/gui.engine.ixx`, `Engine/src/epochgui/gui.engine.cpp` |
+| Engine GUI adapter/render/input bridge | `Engine/modules/gui/gui.engine.ixx`, `Engine/src/epochgui/gui.engine.cpp` |
 
 Context switching acceptance:
 
@@ -1868,6 +2095,8 @@ the write ranges are explicitly isolated.
   game-only builds restore the compiled artifact without requiring animation UI.
   ProjectPlayScene samples fixed-tick animation state and publishes logical
   source rectangles and facing through the existing Canvas2D resource closure.
+  The play camera follows the actor and frames more of the surface below.
+  The separate Editor map overview keeps its own camera.
 - `RunContextSessionLoop` owns one `audio.playback_runtime` for the process.
   Renderer/context replacement does not close or duplicate its optional SDL3
   device. ProjectPlayScene acquires one generation-checked session, routes actor
@@ -2323,6 +2552,65 @@ dependencies, visible controls and reproducible build/run instructions. Label
 planned, source-only and native-accepted examples separately. No calculator or
 complete example catalog was established by this audit.
 
+### Calculator software example — November 17
+
+The saved project includes a scientific panel alongside the basic keypad.
+Its calculation action reads the authored expression field by name and uses the
+project-owned evaluator. Parentheses, powers, standard functions, and degree
+and radian modes are available in manual use. The Worked steps display uses
+intermediate values recorded by that evaluator in actual calculation order.
+The authored **Next tip** control cycles practical examples without changing
+the current expression, angle unit, result or worked steps.
+**Run example** loads the selected tip into the same scientific input and
+calculates with the current angle unit, using the ordinary result and worked
+steps fields.
+Reproduce the layout and actions
+through [GUI Hierarchy](../../examples/BasicSoftwareExampleCalculator/README.md).
+The existing project import, GUI compilation, action delivery and saved
+calculator contracts passed Windows Debug and Release with the new panel.
+Native acceptance and the optional calculator coach are recorded separately in
+[mission cache](../../../Changes/mission_cache.md#calculator-coach-and-redistributable-ai-example).
+
+In **Asset → Package Manager → Project Examples**, select **Basic AI-Enabled
+Calculator** and choose **Import Project**. Import creates a fresh Software / Tool
+project under Projects. Open that copy from the Project workspace and edit the GUI
+from the UI workspace. The example implements decimals, signs, clear, backspace and
+the four arithmetic operations in its [project source](../../examples/BasicSoftwareExampleCalculator/README.md).
+Import requires the matching Epoch source edition and leaves opening, building and
+running to the normal Project actions.
+
+A Software / Tool project may supply `source/project.gui_application.hpp` beside
+the managed entry. The header provides `make_project_gui_application()`. The
+generated executable binds its manifest and dispatches admitted EpochGui action
+and keyboard events to the supplied app. The GUI adapter keeps ownership of
+focus, painting and widgets. The Editor reads authored GUI data during preview.
+This executable path skips game scene and model initialization. Project settings
+select the renderer; the calculator recommends Software where available.
+For a Tool with this application entry, **In Editor** uses the accepted project
+executable attached to a supported docked viewport. **Full Screen** expands
+that viewport when selected. Generic scene Play cannot run the project's
+application callbacks. A standalone host without embedding support reports
+the limitation and offers the existing **Separate Window** choice.
+
+The Software / Tool GUI placement workspace exposes **Run In Editor**,
+**Cancel Build** and **Show Output** through the existing project lifecycle.
+It keeps Cancel in a separate slot when a build settles and offers **Stop**
+for a running project. Source integration and native acceptance are recorded
+separately in the active pass.
+
+The Software / Tool route dispatches admitted pointer taps in event order when
+multiple taps arrive in one frame. The press stays bound to its original target
+across frames. Focus loss or a drag cancels that press, including when it ends
+on another button. The game HUD keeps its existing Project Controls capture.
+Debug and Release adapter fixtures exercise the calculator arithmetic and
+input queue. Native keyboard and rapid-tap delivery still require a docked check.
+
+For a blank docked viewport, run the Windows host with `--trace-menu-button0`.
+The bounded `Context.ExternalViewport` trace records the final requested slot,
+native visibility and sibling order. The Software child's initial client size
+can describe bootstrap placement. Compare the placement trace and the child's
+framebuffer with the composed Editor before changing frame order.
+
 Existing reusable owners are `game.core` grid/index/neighbour helpers,
 `game.*` mini-runtime scenes, the `engine_arcade` IDs in `package.registry` and
 `render.arcade`, and `make_scene_from_id` in the runtime owner. The registered
@@ -2332,12 +2620,12 @@ a second game manager. New games should extend the shared registration/factory
 and grid/input/resource owners, consolidating duplicated ID declarations where
 needed, rather than copying gameplay into every generated project.
 
-Code presence is not full game acceptance. Minesweeper contains mine/count grids,
-left-click reveal/flood logic and win/mine exit paths; its assets, complete
-controls and native playability still need proof. Source review also finds that
-the clicked zero-cell is marked revealed before its flood routine returns early
-on an already revealed seed; the intended neighbour cascade needs repair and an
-actual-owner test. This is source evidence, not a native retest. The current
+Minesweeper contains mine/count grids, left-click reveal and win/mine exit paths.
+The current scene sends an unrevealed zero into the existing flood routine. Its
+Debug and Release actual-owner fixture passed on November 17, covering the seed
+and its neighbours, input bounds, number and mine clicks, and held-click
+behavior. Receipt: `Artifacts/Reports/linux-parity-20261117/minesweeper-owner-recheck.log`.
+Native assets, controls and playability still need proof. The current
 Snake frame draws a head and accepts Escape, so it does not establish a playable
 Snake game.
 
@@ -2363,3 +2651,10 @@ extend the existing kernel owners, run real builds/contracts and a bounded game
 test, then present Preserve/Revise/Reject. No automatic source promotion follows.
 Public can run the resulting approved built-in game without receiving private
 self-coding or own-engine-source access.
+
+November17 software workspace correction: ordinary Tool profiles select the existing
+2D GUI authoring workspace on open/reopen, including calculator examples; Game and
+Editor profiles retain their application route. New Project offers project types
+only. Open the saved calculator using the ordinary Software / Tool project path. Existing ToolProject01 and authored projects are not overwritten.
+CPU routing and forest creation regression checks passed (0.618s/2.695s); native
+workspace/example acceptance and model-driven creation remain pending.

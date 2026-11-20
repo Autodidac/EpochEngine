@@ -9,6 +9,11 @@
                 return true;
             }
 
+            if (editor_ai_source_intent::requests_chat_only(input))
+            {
+                return dispatch_ai_intent(AiChatIntent::ProjectChat, input);
+            }
+
             // Goal lifecycle is owned by chat, not by a second form above it.
             // Explicit goal commands are processed by the host even when the
             // model is unavailable, without granting authority to bypass

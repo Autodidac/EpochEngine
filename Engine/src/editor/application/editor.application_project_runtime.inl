@@ -63,6 +63,7 @@
                 resolve_editor_path(std::filesystem::path{ editor.projectRoot });
             std::vector<std::filesystem::path> buildInputs{
                 project_entry_source_path(editor.projectRoot),
+                root / "source" / "project.gui_application.hpp",
                 project_windows_vcxproj_path(editor.projectRoot),
                 project_windows_build_script_path(editor.projectRoot),
                 project_linux_build_script_path(editor.projectRoot),
@@ -311,17 +312,18 @@
 #endif
         }
 
-        [[nodiscard]] bool resolve_project_runtime_embedding(EditorState& editor,
+        [[nodiscard]] bool validate_project_runtime_presentation(EditorState& editor,
             const core::Context* host, bool requested, std::string_view projectBackend)
         {
-            if (!requested) return false;
+            if (!requested) return true;
             std::string_view reason;
             if (!project_runtime_embedding_supported())
-                reason = "This Editor window cannot host a project window.";
+                reason = "This Editor window has no supported project-window host. Use a dock-capable Editor window or choose Separate Window.";
             else if (host && host->type == core::ContextType::OpenGL && projectBackend == "vulkan")
-                reason = "Vulkan project presentation is unreliable inside the OpenGL Editor.";
+                reason = "Vulkan project presentation inside the OpenGL Editor has not passed native stability checks. Choose OpenGL for this project or Separate Window.";
             if (reason.empty()) return true;
-            push_editor_log(editor, "[project] " + std::string{reason} + " Using Separate Window.");
+            editor.projectRuntimeStatus = "Run In Editor unavailable: " + std::string{reason};
+            push_editor_log(editor, "[project] " + editor.projectRuntimeStatus);
             return false;
         }
 
@@ -404,14 +406,13 @@
                 .project_id=editor.projectId,.scene_id=profile?std::string{profile->runtime_scene_id}:std::string{}};
         }
 
-        [[nodiscard]] bool request_project_runtime_mesh_mode(EditorState& editor,bool wireframe)
+        [[nodiscard]] bool request_project_runtime_mesh_mode(EditorState& editor,platform::child_process::MeshDrawMode mode)
         {
             if(!editor.projectRuntimeSnapshot||!project_runtime_identity_current(editor,*editor.projectRuntimeSnapshot)
                 ||!editor.projectRuntimeInEditor||!editor.projectRuntimeWindow)return false;
             const bool sent=platform::child_process::request_runtime_mesh_mode(editor.projectRuntimeProcess,
                 project_runtime_control_lease(editor),editor.projectRuntimeLaunch.executable,
-                editor.projectRuntimeLaunch.correlation,wireframe?platform::child_process::MeshDrawMode::wireframe
-                    :platform::child_process::MeshDrawMode::solid);
+                editor.projectRuntimeLaunch.correlation,mode);
             if(sent)editor.projectRuntimeSnapshot=platform::child_process::snapshot(editor.projectRuntimeProcess);
             return sent;
         }
@@ -480,15 +481,19 @@
             }
             if (attached)
             {
-                if (editor.projectRuntimeWindow != observed.platform_window_id)
-                    logger::get("Engine.Editor.Project").log(logger::LogLevel::INFO,
-                        "Owned runtime window admitted. " + observed.message,
-                        std::source_location::current());
+                const bool newlyAttached = editor.projectRuntimeWindow != observed.platform_window_id;
                 editor.projectRuntimeWindow = static_cast<std::uintptr_t>(observed.platform_window_id);
                 editor.projectRuntimeWindowProcess = observed.platform_process_id;
                 if (present_project_runtime_viewport(editor))
                 {
                     editor.projectRuntimeStatus = "Project running in the Editor scene viewport.";
+                    if (newlyAttached)
+                    {
+                        logger::get("Engine.Editor.Project").log(logger::LogLevel::INFO,
+                            "Owned runtime window admitted. " + observed.message,
+                            std::source_location::current());
+                        push_editor_log(editor, "[run] " + editor.projectRuntimeStatus);
+                    }
                     using Status=platform::child_process::RuntimeControlStatus;
                     const auto& control=observed.runtime_control;
                     if(control.status==Status::pending)editor.projectRuntimeStatus="Mesh display requested; waiting for the running project's frame acknowledgement.";
@@ -509,6 +514,17 @@
             editor.projectRuntimeForceStopAvailable = true;
             editor.projectRuntimeStatus = editor.projectRuntimeAttachmentError;
             return false;
+        }
+
+        [[nodiscard]] std::string project_active_runtime_status(
+            const platform::child_process::ProcessSnapshot& observed)
+        {
+            const auto state = platform::child_process::process_state_name(observed.state);
+            if (observed.state == platform::child_process::ProcessState::stop_requested)
+                return epochengine::format_text("{} | PID {}", state, observed.platform_process_id);
+
+            return epochengine::format_text("{} | PID {} | {:.2f}s", state,
+                observed.platform_process_id, static_cast<double>(observed.runtime_ns) / 1'000'000'000.0);
         }
 
         void reconcile_project_runtime(EditorState& editor)
@@ -544,12 +560,7 @@
                 {
                     (void)editor.projectLifecycle.record_runtime_started();
                 }
-                editor.projectRuntimeStatus = epochengine::format_text(
-                    "{} | PID {} | {:.2f}s",
-                    platform::child_process::process_state_name(observed->state),
-                    observed->platform_process_id,
-                    static_cast<double>(observed->runtime_ns)
-                        / 1'000'000'000.0);
+                editor.projectRuntimeStatus = project_active_runtime_status(*observed);
                 editor.projectRuntimeForceStopAvailable =
                     editor.projectRuntimeForceStopAvailable
                     || observed->state
@@ -577,6 +588,7 @@
                     observed->message);
             if (!editor.projectRuntimeAttachmentError.empty())
                 editor.projectRuntimeStatus = editor.projectRuntimeAttachmentError + " " + editor.projectRuntimeStatus;
+            push_editor_log(editor, "[run] " + editor.projectRuntimeStatus);
             (void)platform::child_process::release(observed->handle);
             editor.projectRuntimeProcess = {};
             editor.projectRuntimeLaunch = {};
@@ -650,7 +662,8 @@
             double frameLimit,
             previewgrid::CameraMode cameraMode,
             input::ProfilePreset inputProfile,
-            bool inEditor = false)
+            bool inEditor = false,
+            std::shared_ptr<void> modelAdmission = {})
         {
             if (inEditor && !project_runtime_embedding_supported())
             {
@@ -698,6 +711,18 @@
                 }
             }
 
+            // Build retirement precedes this frame. Refuse a manual model reload
+            // that raced the accepted build instead of overlapping the child.
+            const auto nativeState = ai::native_runtime::snapshot();
+            if (!modelAdmission || nativeState.busy || nativeState.loaded
+                || std::any_of(nativeState.models.begin(), nativeState.models.end(),
+                    [](const auto& model) { return model.active; }))
+            {
+                editor.projectRuntimeStatus =
+                    "Editor model activity resumed after the build. Finish or unload it, then press Run to hand resources to the project.";
+                return false;
+            }
+
             const auto outputLog = prepare_project_runtime_log(editor);
             if (outputLog.empty())
             {
@@ -725,6 +750,7 @@
             request.append_output = true;
             request.disconnect_standard_input = true;
             request.suppress_console = true;
+            request.retirement_guard = std::move(modelAdmission);
             std::error_code imageError;
             const auto imageBytes = std::filesystem::file_size(request.executable, imageError);
             if (imageError) { editor.projectRuntimeStatus = "Launch blocked because the accepted executable cannot be read."; return false; }
@@ -848,6 +874,27 @@
                 return false;
             }
 
+            if (editor.projectBuildReusesReviewedArtifact)
+            {
+                if (build.cancelled || !build.succeeded || !build.model_admission)
+                    return false;
+                const auto current = project_child_build_freshness(editor);
+                const auto& generations = editor.projectLifecycle.evidence().generations;
+                const auto digest = project_output_digest(output);
+                const auto decision = editor.projectLifecycle.decision(project_lifecycle::Request::run);
+                const bool stillReviewed = buildGeneration != 0u
+                    && decision.action == project_lifecycle::Action::launch_runtime
+                    && generations.output_artifact.build_generation == buildGeneration
+                    && generations.output_artifact.valid_for(generations.selected_project, generations.build_inputs)
+                    && !current.rebuildRequired && current.inputFingerprint != 0u
+                    && current.inputFingerprint == editor.projectLifecycle.build_input_fingerprint()
+                    && editor.projectBuildAcceptedOutputDigest.valid()
+                    && digest && *digest == editor.projectBuildAcceptedOutputDigest;
+                if (!stillReviewed)
+                    push_editor_log(editor, "[project] Reviewed Run refused because its accepted inputs or executable changed during model retirement.");
+                return stillReviewed;
+            }
+
             if (buildGeneration == 0u)
             {
                 editor.projectLifecycle.observe_output_missing();
@@ -910,6 +957,11 @@
 
         void abandon_project_build_lifecycle(EditorState& editor) noexcept
         {
+            if (editor.projectBuildReusesReviewedArtifact)
+            {
+                editor.projectBuildLifecycleGeneration = 0u;
+                return;
+            }
             if (editor.projectBuildLifecycleGeneration != 0u)
             {
                 (void)editor.projectLifecycle.fail_build(
@@ -925,12 +977,13 @@
             editor.projectBuildCancellation = {};
             editor.projectBuildProgressSample = {};
             editor.projectBuildRunAfterBuild = false;
+            editor.projectBuildReusesReviewedArtifact = false;
             editor.projectBuildRunInEditor = false;
             editor.projectBuildRunScene.clear();
             editor.projectBuildOutputPath.clear();
             editor.projectBuildRunBackend.clear();
             editor.projectBuildRunFrameLimitFps = editor.projectRunFrameLimitFps;
-            editor.projectBuildRunCameraMode = editor.projectCameraMode;
+            editor.projectBuildRunCameraMode = previewgrid::CameraMode::Editor;
             editor.projectBuildRunInputProfile = editor.inputProfilePreset;
             editor.projectBuildProjectKey = 0u;
             editor.projectBuildProjectId.clear();
@@ -941,7 +994,9 @@
             EditorState& editor,
             std::string_view source)
         {
-            if (!editor.projectBuildPending
+            // Only the frame settlement can launch a reviewed Run. Other
+            // actions must not consume its completed retirement handoff.
+            if (editor.projectBuildReusesReviewedArtifact || !editor.projectBuildPending
                 || editor.projectBuildPending->wait_for(
                     std::chrono::milliseconds(0)) != std::future_status::ready)
             {
@@ -953,6 +1008,8 @@
                 const auto build = editor.projectBuildPending->get();
                 const bool ownedBySelectedProject =
                     project_build_targets_selected_project(editor);
+                const auto diagnosticGeneration = ownedBySelectedProject && !editor.projectBuildReusesReviewedArtifact
+                    ? editor.projectBuildLifecycleGeneration : 0u;
                 retain_project_build_transcript(editor, build);
                 const std::string completedProject =
                     editor.projectBuildProjectId;
@@ -992,6 +1049,7 @@
                     editor.projectBuildDiagnosticTail =
                         editor.projectBuildStatus;
                 }
+                editor.projectBuildDiagnosticGeneration = accepted ? 0u : diagnosticGeneration;
                 push_editor_log(editor,
                     std::string("[project] Cleared completed build before ")
                     + std::string(source)
@@ -1087,6 +1145,8 @@
         [[nodiscard]] std::string project_build_activity_label(const EditorState& editor)
         {
             if (!editor.projectBuildPending) return {};
+            if (editor.projectBuildReusesReviewedArtifact)
+                return editor.projectBuildStatus.starts_with("Cancel") ? "Cancelling Run..." : "Preparing Run...";
             const auto& configuration = editor.projectBuildRequestedConfiguration.empty()
                 ? editor.projectBuildConfiguration : editor.projectBuildRequestedConfiguration;
             return std::string{editor.projectBuildStatus.starts_with("Cancel") ? "Cancelling "
@@ -1120,7 +1180,7 @@
 
         void refresh_project_build_progress(EditorState& editor)
         {
-            if (!editor.taskScheduler || !editor.projectBuildCancellation.valid()
+            if (editor.projectBuildReusesReviewedArtifact || !editor.taskScheduler || !editor.projectBuildCancellation.valid()
                 || !project_build_targets_selected_project(editor)) return;
             const auto now = std::chrono::steady_clock::now();
             if (editor.projectBuildProgressSample != std::chrono::steady_clock::time_point{}
@@ -1150,9 +1210,11 @@
                 || code == taskgraph::CancelCode::requested)
             {
                 editor.projectBuildRunAfterBuild = false;
-                editor.projectBuildStatus = code == taskgraph::CancelCode::cancelled
-                    ? "Project build cancelled before process start."
-                    : "Cancelling project build process tree...";
+                editor.projectBuildStatus = editor.projectBuildReusesReviewedArtifact
+                    ? "Cancelling reviewed Run; waiting for model retirement to settle."
+                    : code == taskgraph::CancelCode::cancelled
+                        ? "Project build cancelled before process start."
+                        : "Cancelling project build process tree...";
                 push_editor_log(editor, "[project] " + editor.projectBuildStatus);
                 return true;
             }
@@ -1210,6 +1272,7 @@
             editor.projectRuntimeSnapshot.reset();
             editor.projectRuntimeForceStopAvailable = false;
             reset_project_build_request(editor);
+            editor.projectCameraMode.reset();
             reset_project_bound_editor_state(
                 editor,
                 "No project GUI document is open.");
@@ -1278,7 +1341,8 @@
             EditorState& editor,
             bool runAfterBuild,
             std::string_view reason,
-            bool runInEditor = false)
+            bool runInEditor = false,
+            std::uint64_t reviewedRunGeneration = 0u)
         {
             clear_completed_editor_builds(editor, "project build request");
 
@@ -1311,49 +1375,33 @@
                 return;
             }
 
-            repair_active_project_evidence(editor);
-
-            const auto dependency=project_planetary::prepare_runtime_dependency(
-                resolve_editor_path(std::filesystem::path{editor.projectRoot}));
-            if(!dependency.ok)
+            const bool reviewedRun = reviewedRunGeneration != 0u;
+            std::uint64_t buildGeneration = reviewedRunGeneration;
+            if (!reviewedRun)
             {
-                editor.projectBuildStatus=dependency.message;
-                push_editor_log(editor,"[project] "+dependency.message);
-                return;
+                repair_active_project_evidence(editor);
+                const auto dependency=project_planetary::prepare_runtime_dependency(
+                    resolve_editor_path(std::filesystem::path{editor.projectRoot}));
+                if (!dependency.ok)
+                {
+                    editor.projectBuildStatus=dependency.message;
+                    push_editor_log(editor,"[project] "+dependency.message);
+                    return;
+                }
+                const ProjectBuildFreshness freshness = project_child_build_freshness(editor);
+                const bool inputsObserved = editor.projectLifecycle.observe_build_inputs(freshness.inputFingerprint);
+                const auto decision = editor.projectLifecycle.decision(project_lifecycle::Request::build);
+                if (!inputsObserved || decision.action != project_lifecycle::Action::build_project)
+                {
+                    editor.projectBuildStatus = epochengine::format_text(
+                        "Build blocked: {} ({}).",
+                        project_lifecycle::action_name(decision.action),
+                        project_lifecycle::block_reason_name(decision.reason));
+                    push_editor_log(editor, "[project] " + editor.projectBuildStatus);
+                    return;
+                }
+                buildGeneration = editor.projectLifecycle.begin_build();
             }
-            const ProjectBuildFreshness freshness =
-                project_child_build_freshness(editor);
-            if (!editor.projectLifecycle.observe_build_inputs(
-                    freshness.inputFingerprint))
-            {
-                const auto decision =
-                    editor.projectLifecycle.decision(
-                        project_lifecycle::Request::build);
-                editor.projectBuildStatus = epochengine::format_text(
-                    "Build blocked: {} ({}).",
-                    project_lifecycle::action_name(decision.action),
-                    project_lifecycle::block_reason_name(decision.reason));
-                push_editor_log(
-                    editor, "[project] " + editor.projectBuildStatus);
-                return;
-            }
-
-            const auto buildDecision =
-                editor.projectLifecycle.decision(
-                    project_lifecycle::Request::build);
-            if (buildDecision.action != project_lifecycle::Action::build_project)
-            {
-                editor.projectBuildStatus = epochengine::format_text(
-                    "Build blocked: {} ({}).",
-                    project_lifecycle::action_name(buildDecision.action),
-                    project_lifecycle::block_reason_name(buildDecision.reason));
-                push_editor_log(
-                    editor, "[project] " + editor.projectBuildStatus);
-                return;
-            }
-
-            const std::uint64_t buildGeneration =
-                editor.projectLifecycle.begin_build();
             if (buildGeneration == 0u)
             {
                 editor.projectBuildStatus =
@@ -1363,6 +1411,7 @@
                 return;
             }
             editor.projectBuildLifecycleGeneration = buildGeneration;
+            editor.projectBuildReusesReviewedArtifact = reviewedRun;
             editor.projectBuildProjectKey = editor.projectLifecycle.evidence()
                 .generations.selected_project.project_key;
             editor.projectBuildProjectId = editor.projectId;
@@ -1380,27 +1429,53 @@
                 : editor.projectRunBackend;
             editor.projectBuildRunFrameLimitFps =
                 editor.projectRunFrameLimitFps;
-            editor.projectBuildRunCameraMode = editor.projectCameraMode;
+            editor.projectBuildRunCameraMode = project_camera_for_run(editor);
             editor.projectBuildRunInputProfile = editor.inputProfilePreset;
             editor.projectBuildDiagnosticTail.clear();
             editor.projectBuildProgressSample = {};
-            editor.projectBuildStatus =
-                std::string(runAfterBuild ? "Build/run queued: " : "Build queued: ")
+            editor.projectBuildStatus = reviewedRun
+                ? "Reviewed Run queued. Checking resources before launching the accepted executable."
+                : std::string(runAfterBuild ? "Build/run queued: " : "Build queued: ")
                 + std::string(reason)
                 + " [generation "
                 + std::to_string(buildGeneration)
-                + "]";
+                + "]. Checking resources before compiling.";
             push_editor_log(editor, "[project] " + editor.projectBuildStatus);
 
             try
             {
                 auto submitted = schedule_editor_cancellable_task(
                     editor,
-                    "Project Build",
+                    reviewedRun ? "Reviewed Project Run" : "Project Build",
                     [root = editor.projectRoot,
-                     configuration = editor.projectBuildRequestedConfiguration](std::stop_token cancellation)
+                     configuration = editor.projectBuildRequestedConfiguration,
+                     reviewedRun](std::stop_token cancellation)
                     {
-                        return editor_build_project(root, cancellation, configuration);
+                        EditorProjectBuildResult result{};
+                        const auto handoff = ai::native_runtime::run_asset_stage(
+                            [&](std::stop_token stop, const ai::native_runtime::AssetStagePermit& permit)
+                            {
+                                if (!permit.valid()) return ai::native_runtime::AssetStageCompletion{};
+                                if (reviewedRun)
+                                {
+                                    result.cancelled = stop.stop_requested();
+                                    result.succeeded = !result.cancelled;
+                                }
+                                else
+                                    result = editor_build_project(root, stop, configuration);
+                                return ai::native_runtime::AssetStageCompletion{
+                                    result.succeeded, result.workers_retired};
+                            }, cancellation, std::chrono::seconds{600},
+                            ai::native_runtime::AssetStageRestoration::leave_unloaded);
+                        result.model_admission = handoff.admission_claim;
+                        if (!handoff.stage_started || !handoff.workers_retired)
+                        {
+                            result.succeeded = false;
+                            result.cancelled = cancellation.stop_requested();
+                            result.summary = std::string{reviewedRun ? "Reviewed Run handoff failed: "
+                                : "Project build handoff failed: "} + handoff.diagnostic;
+                        }
+                        return result;
                     });
                 editor.projectBuildCancellation = submitted.cancellation;
                 editor.projectBuildPending.emplace(
@@ -1411,7 +1486,8 @@
                 abandon_project_build_lifecycle(editor);
                 reset_project_build_request(editor);
                 editor.projectBuildStatus =
-                    std::string("Could not schedule project build: ") + ex.what();
+                    std::string(reviewedRun ? "Could not schedule reviewed Run: "
+                        : "Could not schedule project build: ") + ex.what();
                 push_editor_log(
                     editor, "[project] " + editor.projectBuildStatus);
             }
@@ -1420,7 +1496,8 @@
                 abandon_project_build_lifecycle(editor);
                 reset_project_build_request(editor);
                 editor.projectBuildStatus =
-                    "Could not schedule project build: unknown scheduler failure.";
+                    reviewedRun ? "Could not schedule reviewed Run: unknown scheduler failure."
+                        : "Could not schedule project build: unknown scheduler failure.";
                 push_editor_log(
                     editor, "[project] " + editor.projectBuildStatus);
             }

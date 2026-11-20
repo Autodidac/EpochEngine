@@ -31,6 +31,20 @@ export namespace epochengine::asset::mesh
         std::array<float, 2> uv{};
         std::array<float, 3> color{0.55f, 0.65f, 0.40f};
     };
+    struct SphericalWaterRange final
+    {
+        std::uint32_t first_vertex{}, vertex_count{};
+        float specular_scale{};
+        bool vertex_specular{}; // Transient water draw: UV.x carries the resolved scale.
+        friend bool operator==(const SphericalWaterRange&, const SphericalWaterRange&) = default;
+    };
+    // Transient appearance accompanying a specific artifact. The generic mesh
+    // codec does not serialize or infer these ranges.
+    struct SphericalWaterAppearance final
+    {
+        ContentHash artifact_key{};
+        std::vector<SphericalWaterRange> ranges{};
+    };
     struct Limits final
     {
         std::uint32_t maximum_vertices{65'536u};
@@ -218,10 +232,13 @@ export namespace epochengine::asset::mesh
                 [&](std::size_t index) { return vertices[index].position; })) return {};
         try
         {
+            // The canonical hash owns a temporary serialized payload. Finish
+            // it before copying the input into the retained mesh buffers.
+            const auto key = detail::content_key(vertices, indices);
             auto artifact = std::shared_ptr<Artifact>{new Artifact{}};
             artifact->vertices_.assign(vertices.begin(), vertices.end());
             artifact->indices_.assign(indices.begin(), indices.end());
-            artifact->key_ = detail::content_key(vertices, indices);
+            artifact->key_ = key;
             artifact->derive_bounds();
             return {Code::ready, std::move(artifact)};
         }

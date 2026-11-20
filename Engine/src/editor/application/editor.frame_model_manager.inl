@@ -115,8 +115,8 @@
             // hiding the active view in stacked transport/section dropdowns.
             editor.aiModelManagerSection = static_cast<int>(managerSectionIndex);
             std::vector<gui::SegmentedButtonSpec> managerViews;
-            constexpr std::string_view localViews[]{"Installed", "Browse", "Local API", "Direct GGUF"};
-            constexpr int localViewTabs[]{0, 3, 1, 2};
+            constexpr std::string_view localViews[]{"Installed", "Browse", "Tiers", "Local API", "Direct GGUF"};
+            constexpr int localViewTabs[]{0, 3, 4, 1, 2};
             for (std::size_t i{}; i < std::size(localViews); ++i)
                 managerViews.push_back({localViews[i], 0.0f,
                     editor.aiModelManagerSection == 0 && editor.aiModelManagerTab == localViewTabs[i]});
@@ -136,7 +136,7 @@
                     if (index < std::size(localViewTabs)) {
                         editor.aiModelManagerSection = 0;
                         editor.aiModelManagerTab = localViewTabs[index];
-                    } else editor.aiModelManagerSection = static_cast<int>(index - 3u);
+                    } else editor.aiModelManagerSection = static_cast<int>(index - std::size(localViewTabs) + 1u);
                 }
                 gui::set_cursor({managerContentX, gui::cursor_position().y});
                 first += count;
@@ -157,7 +157,7 @@
             if (editor.packageModelInstall)
                 visibleManagerFooterActions.push_back({.label="Cancel download / verification"});
             if (nativeState.busy)
-                visibleManagerFooterActions.push_back({.label="Cancel Loading"});
+                visibleManagerFooterActions.push_back({.label="Cancel model operation"});
             visibleManagerFooterActions.push_back({.label="Close Model Manager"});
             const gui::InlineButtonRowOptions managerFooterLayout{
                 .sizing = gui::InlineButtonSizing::FitContent,
@@ -174,7 +174,11 @@
             const gui::Vec2 managerBodyOrigin = gui::cursor_position();
             (void)gui::begin_scroll_area(gui::ScrollAreaOptions{
                 .id = "epoch-model-manager-body-" + std::to_string(editor.aiModelManagerSection)
-                    + "-" + std::to_string(editor.aiModelManagerTab),
+                    + "-" + std::to_string(editor.aiModelManagerTab)
+                    + (editor.aiModelManagerSection == 0 && editor.aiModelManagerTab == 4
+                        ? "-" + std::to_string(editor.aiModelGuidePage) + "-" + std::to_string(editor.aiModelGuideCategory)
+                            + "-" + std::to_string(editor.aiModelComparisonGroup)
+                        : std::string{}),
                 .size = {managerWidth, managerBodyHeight},
                 .content_height = 0.0f, // previous frame's measured content height
                 .draw_background = true,
@@ -201,6 +205,7 @@
             }
             else if (editor.aiModelManagerSection == 2)
             {
+                render_model_routing_guide(managerControlWidth, nativeState);
                 gui::section_heading("Routing and Provider Policy");
                 gui::wrapped_label("Role assignments are independent of connection types. Native/local models are preferred for implementation; optional Codex review requires permission.", managerWidth);
                 render_ai_model_picker(editor, managerControlWidth, "manager-routing-method", false);
@@ -208,11 +213,17 @@
                     (void)gui::toggle_switch("Automatically select discovered API model",
                         editor.aiAutomaticModelSelection, {managerControlWidth, 28.0f});
             }
+            else if (editor.aiModelManagerTab == 4)
+            {
+                render_model_capability_guide(editor, managerWidth, nativeState);
+            }
             else if (editor.aiModelManagerTab == 3)
             {
                 // Offers are metadata only; selection never registers, downloads or loads.
                 namespace offers = epoch_ai::model::catalog;
                 gui::section_heading("Browse models", gui::SemanticTone::info);
+                if (gui::inline_button_row(std::array{gui::InlineButtonSpec{.label="Model tiers & comparison"}},
+                        28.0f, 6.0f, managerActionLayout)) { editor.aiModelManagerSection = 0; editor.aiModelManagerTab = 4; }
                 gui::wrapped_label("Optional downloads. Installing a file does not load or select its model.", managerWidth);
                 const auto offerCacheRoot = native::model_install_cache_root();
                 if (offerCacheRoot.empty())
@@ -232,6 +243,7 @@
                     selectedOffer = &offers::offers()[*offerChoice.selected_index];
                     editor.aiModelCatalogSelection = selectedOffer->id;
                     editor.aiModelCatalogApproval.clear();
+                    editor.aiModelPendingDownloadDeletion.clear();
                     editor.aiModelCatalogDetailsOpen = false;
                 }
                 if (selectedOffer) {
@@ -257,14 +269,46 @@
                     const bool offerIdle = !offerCacheRoot.empty() && !editor.packageModelInstall && !nativeState.busy && !modelRequestActive;
                     const bool alreadyRegistered = std::ranges::any_of(nativeState.models,
                         [&](const auto& model) {return model.id == offer.id;});
+                    const auto installPlan = offers::download_allowed(offer)
+                        ? ai::model_install::plan_for(offer.package_id) : std::nullopt;
+                    const auto installedRoot = installPlan && !offerCacheRoot.empty()
+                        ? ai::model_install::version_root(offerCacheRoot, *installPlan)
+                        : std::filesystem::path{};
+                    const bool downloaded = !installedRoot.empty()
+                        && model_snapshot_installed(*installPlan, offerCacheRoot);
+                    const bool anyLoaded = std::ranges::any_of(nativeState.models,
+                        [](const auto& model) {return model.active;});
                     if (const auto action = gui::inline_button_row(std::array{
-                            gui::InlineButtonSpec{.label="Download pinned weights",
-                                .enabled=reviewed && offerIdle && offers::download_allowed(offer)},
+                            gui::InlineButtonSpec{.label=downloaded ? "Downloaded" : "Download pinned weights",
+                                .enabled=!downloaded && reviewed && offerIdle && offers::download_allowed(offer)},
                             gui::InlineButtonSpec{.label=alreadyRegistered ? "Already registered" : "Verify & Register",
                                 .enabled=reviewed && offerIdle && !alreadyRegistered && offers::manual_registration_allowed(offer)}},
                             30.0f, 6.0f, managerActionLayout)) {
                         if (*action == 0u) (void)start_model_offer_install(editor, offer.id);
                         else (void)start_model_offer_registration(editor, offer.id);
+                    }
+                    if (downloaded) {
+                        const bool allowDelete = offerIdle && !anyLoaded;
+                        if (editor.aiModelPendingDownloadDeletion != approvalKey) {
+                            if (gui::inline_button_row(std::array{gui::InlineButtonSpec{
+                                    .label="Delete download", .enabled=allowDelete}}, 30.0f, 6.0f, managerActionLayout))
+                                editor.aiModelPendingDownloadDeletion = approvalKey;
+                            if (anyLoaded) gui::wrapped_label("Unload local models to delete this download.", managerWidth);
+                        } else {
+                            gui::wrapped_label("Delete the downloaded files for " + std::string{offer.label}
+                                + "? The profile and settings stay available.", managerWidth);
+                            modelInfo("Installed files", installedRoot.generic_string());
+                            if (const auto choice = gui::inline_button_row(std::array{
+                                    gui::InlineButtonSpec{.label="Confirm Delete", .enabled=allowDelete},
+                                    gui::InlineButtonSpec{.label="Cancel"}}, 30.0f, 6.0f, managerActionLayout)) {
+                                if (*choice == 0u)
+                                    editor.aiModelManagerFeedback = native::delete_model_offer_download(
+                                        std::string{offer.package_id})
+                                        ? "Checking the exact download before removal."
+                                        : "Could not start removal. Wait for model work to finish.";
+                                editor.aiModelPendingDownloadDeletion.clear();
+                            }
+                        }
                     }
                     if (gui::inline_button_row(std::array{gui::InlineButtonSpec{
                             .label=editor.aiModelCatalogDetailsOpen ? "Hide source & verification" : "Source & verification >"}},
@@ -295,7 +339,9 @@
                         if (const auto* offer = epoch_ai::model::catalog::find(model.id)) return offer->label;
                     return model.label.empty() ? std::string_view{model.id} : std::string_view{model.label};
                 };
-                gui::section_heading("Installed models", gui::SemanticTone::info);
+                gui::section_heading("Registered models", gui::SemanticTone::info);
+                if (gui::inline_button_row(std::array{gui::InlineButtonSpec{.label="Model tiers & comparison"}},
+                        28.0f, 6.0f, managerActionLayout)) { editor.aiModelManagerSection = 0; editor.aiModelManagerTab = 4; }
                 gui::semantic_block(nativeState.phase,
                     !nativeState.inventory_error.empty() ? gui::SemanticTone::error
                         : nativeState.busy ? gui::SemanticTone::warning
@@ -322,7 +368,7 @@
                         managerWidth);
                 if (nativeState.inventory_preview)
                     gui::wrapped_label(
-                        "Read-only profile inventory: cache/installation status is unverified until a native runtime is explicitly loaded.",
+                        "Saved profiles are not installed files. Rescan checks local paths; file presence does not prove model compatibility.",
                         managerWidth);
                 // Alphabetic names before numeric-leading names in the GUI.
                 // Loading priority is independent: smallest resident weight first.
@@ -335,6 +381,9 @@
                             const auto& item = nativeState.models[index];
                             return registeredModelLabel(item);
                         };
+                        const bool leftVariant = nativeState.models[left].behavior.flagged();
+                        const bool rightVariant = nativeState.models[right].behavior.flagged();
+                        if (leftVariant != rightVariant) return !leftVariant;
                         const auto lhs = label(left), rhs = label(right);
                         const auto alpha = [](std::string_view value) {
                             return !value.empty() && std::isalpha(
@@ -350,8 +399,11 @@
                 labels.reserve(modelDisplayOrder.size());
                 for (const auto index : modelDisplayOrder) {
                     const auto& model = nativeState.models[index];
+                    const auto rating = ai::model_capability::assess(model.id,
+                        model.tuning.capability_tier, model.behavior.flagged());
                     labels.push_back(ai::model_behavior::choice_label(
-                        registeredModelLabel(model), model.behavior));
+                        registeredModelLabel(model), model.behavior) + " ["
+                        + std::string{ai::model_capability::band(rating.tier).label} + "]");
                 }
                 std::vector<std::string_view> labelViews{};
                 for (const auto& label : labels) labelViews.push_back(label);
@@ -367,7 +419,8 @@
                     }
                 gui::wrapped_label("GPU placement is saved per model. Automatic fit adapts to available VRAM; Exact layers keeps your requested count. "
                     "Hardware and resident-model budgets may reduce the loaded count. Reload to apply. External runtimes manage their own offload.",managerWidth);
-                gui::label("Quick test message (up to 96 reply tokens)");
+                gui::label("Optional model test prompt");
+                gui::wrapped_label("This text is sent to the model when you run a quick test (up to 96 reply tokens). You do not need to answer it or edit it to load a model.", managerWidth);
                 (void)gui::edit_box(editor.aiNativeTestPrompt,{managerWidth,58.0f},512u,true);
                 const auto chooseRegisteredGroup = [&](bool variants) {
                     std::vector<std::string_view> options;
@@ -494,8 +547,9 @@
                 {
                     const std::string label = model.label.empty() ? model.id : model.label;
                     const std::string status = model.active ? "Loaded"
-                        : nativeState.inventory_preview ? "Registered (cache unchecked)"
-                        : model.installed ? "Cached" : "Available to install";
+                        : nativeState.inventory_preview ? (model.weights_status.empty() ? "Registered; files unchecked" : model.weights_status)
+                        : model.installed ? "Cached"
+                        : model.weights_status.empty() ? "Files unavailable" : model.weights_status;
                     // The picker lists every model. Show readable details only
                     // for the selected model instead of repeating the inventory.
                     if (model.id != (nativeModelId.empty() ? nativeState.model : nativeModelId))
@@ -597,6 +651,8 @@
                     [&](const auto& model) { return model.id == selectedNativeId; });
                 if (selectedNativeIt != nativeState.models.end())
                 {
+                    const bool edgeStreaming = selectedNativeId == ai::model_capability::edge0_id
+                        || selectedNativeIt->local_weights_filename == ai::model_capability::edge0_skeleton;
                     modelInfo("Image input", !selectedNativeIt->active ? "Not loaded"
                         : !selectedNativeIt->image_input_known ? "Unconfirmed"
                         : selectedNativeIt->image_input_supported ? "Ready" : "Unavailable in loaded runtime", 150.0f);
@@ -604,6 +660,37 @@
                         gui::wrapped_label("Image attachments need a loaded vision projector or a vision-capable Local API connection. "
                             "A Qwen model name alone does not enable images; text coding can continue.", managerWidth);
                     gui::section_heading("Selected model settings", gui::SemanticTone::info);
+                    {
+                        namespace capability = ai::model_capability;
+                        const auto rating = capability::assess(selectedNativeId,
+                            selectedNativeIt->tuning.capability_tier, selectedNativeIt->behavior.flagged());
+                        gui::semantic_block(std::string{capability::band(rating.tier).label},
+                            model_capability_tone(rating.tier), managerWidth);
+                        gui::wrapped_label(rating.basis, managerWidth);
+                        gui::wrapped_label("Assess by performance against the reference set, not parameter count. "
+                            "Modified variants can use every tier. This classification saves separately from loading "
+                            "and does not certify benchmarks or change the current responder.", managerWidth);
+                        std::vector<std::string_view> tierNames{"Use reference assessment"};
+                        std::vector<std::string_view> tierKeys{"reference"};
+                        for (const auto& band : capability::bands) {
+                            tierNames.push_back(band.label); tierKeys.push_back(band.key);
+                        }
+                        std::string_view selectedTier = tierNames.front();
+                        for (std::size_t i = 1; i < tierKeys.size(); ++i)
+                            if (tierKeys[i] == selectedNativeIt->tuning.capability_tier) selectedTier = tierNames[i];
+                        const auto tier = gui::select_box(gui::SelectBoxOptions{
+                            .id="epoch-capability-"+selectedNativeId, .selected=selectedTier,
+                            .options=tierNames, .size={managerWidth,30.0f}, .max_visible_options=8u,
+                            .enabled=!modelRequestActive && !nativeState.busy});
+                        if (tier.changed && tier.selected_index && *tier.selected_index < tierKeys.size()) {
+                            auto updated = selectedNativeIt->tuning;
+                            updated.capability_tier = tierKeys[*tier.selected_index];
+                            if (native::save_model_tuning(selectedNativeId, updated)) {
+                                editor.aiNativeTuningDraft[selectedNativeId] = updated;
+                                editor.aiModelManagerFeedback = "Capability assessment save queued; current roles and loaded models are unchanged.";
+                            }
+                        }
+                    }
                     modelInfo("Idle unload", selectedNativeIt->tuning.idle_timeout_minutes == 0u
                         ? std::string{"Keep resident"}
                         : epochengine::format_text("{} minutes; {} seconds since useful work",
@@ -634,7 +721,7 @@
                     const std::array presetActions{
                         gui::InlineButtonSpec{.label="Save hardware defaults", .width=0.0f,
                             .enabled=!modelRequestActive && !nativeState.busy}};
-                    if (gui::inline_button_row(presetActions, 30.0f, 6.0f, managerActionLayout))
+                    if (!edgeStreaming && gui::inline_button_row(presetActions, 30.0f, 6.0f, managerActionLayout))
                     {
                         auto defaults = selectedNativeIt->tuning;
                         defaults.runtime_policy = "automatic";
@@ -674,7 +761,7 @@
                             .id="epoch-native-policy-"+selectedNativeId,
                             .selected=tune.runtime_policy, .options=policies,
                             .size={managerWidth,30.0f},
-                        .fit_content=true, .alignment=gui::InlineButtonAlignment::Center, .enabled=canEdit});
+                        .fit_content=true, .alignment=gui::InlineButtonAlignment::Center, .enabled=canEdit && !edgeStreaming});
                         if (policy.changed && policy.selected_index)
                             tune.runtime_policy = std::string{policies[*policy.selected_index]};
                         // uint32 slider helper: controlled draft values, unique
@@ -800,12 +887,20 @@
                         .fit_content=true, .alignment=gui::InlineButtonAlignment::Center,.enabled=canEdit});
                         if (kvV.changed && kvV.selected_index)
                             tune.kv_type_v=std::string{kvOptions[*kvV.selected_index]};
-                        (void)gui::toggle_switch("KV GPU offload##epoch-native-kv",
-                            tune.kv_offload,{managerWidth,28.0f});
-                        (void)gui::toggle_switch("Pin CPU KV memory##epoch-native-kvpin",
-                            tune.kv_cpu_pinned,{managerWidth,28.0f});
+                        if (edgeStreaming)
+                            gui::wrapped_label("Edge0 offers the zero-layer baseline and four/eight-layer GPU trials. Eight is not yet performance-qualified. "
+                                "The trial needs a 16 GiB-class CUDA card and applies on reload.", managerWidth);
+                        else
+                        {
+                            (void)gui::toggle_switch("KV GPU offload##epoch-native-kv",
+                                tune.kv_offload,{managerWidth,28.0f});
+                            (void)gui::toggle_switch("Pin CPU KV memory##epoch-native-kvpin",
+                                tune.kv_cpu_pinned,{managerWidth,28.0f});
+                        }
+                        constexpr float edgeTrialLayers =
+                            static_cast<float>(ai::model_capability::edge0_trial_kv_gpu_layers);
                         number("kv-gpu-layers", "KV GPU layers",tune.kv_gpu_layers,
-                            0.0f,128.0f,1.0f);
+                            0.0f, edgeStreaming ? static_cast<float>(ai::model_capability::edge0_extended_trial_kv_gpu_layers) : 128.0f, edgeStreaming ? edgeTrialLayers : 1.0f);
                         gui::section_heading("System memory and caches");
                         gui::wrapped_label("Windows shared GPU memory is driver-managed "
                             "system RAM. It cannot be increased like dedicated VRAM using "
@@ -979,6 +1074,7 @@
                             nativeState.last_response_model), managerWidth);
                 gui::wrapped_label("Import Model Profile adds an existing local model from its manifest.json, including saved tuning. Development and Public keep separate registrations; importing does not load weights or copy chat history.", managerWidth);
                 gui::wrapped_label("Load Additional preserves the current foundation. Load & Use assigns the chosen model as foundation. Unload Selected preserves other resident runtimes. RAM/VRAM and context KV caches are shared system resources; tune each profile to avoid OOM. Performance counts track inference and agent outcomes separately; a completed response is not a verified code build. Same-class baseline comparisons require sufficient measurements and are observational, not guaranteed time savings.", managerWidth);
+                render_native_model_discovery(editor, managerWidth, nativeState);
                 gui::wrapped_label("Optional: add an Epoch-managed native GGUF profile (not required for external API models).", managerWidth);
                 gui::label("Model ID");
                 (void)gui::edit_box(editor.aiRegisteredModelId,

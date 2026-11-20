@@ -19,8 +19,8 @@ export namespace epochengine::gui_lib
     inline constexpr std::string_view library_name = "EpochGui";
     inline constexpr int version_major = 0;
     inline constexpr int version_minor = 90;
-    inline constexpr int version_revision = 2;
-    inline constexpr std::string_view version_string = "0.90.2";
+    inline constexpr int version_revision = 4;
+    inline constexpr std::string_view version_string = "0.90.4";
 
     enum class SemanticTone : std::uint8_t
     {
@@ -43,6 +43,51 @@ export namespace epochengine::gui_lib
         std::uint8_t b{};
         std::uint8_t a{255};
     };
+
+    // Fit a tinted overlay over unknown SDR scenery. The text colour is opaque.
+    // Retain the tint at full opacity when the palette itself lacks contrast.
+    [[nodiscard]] inline Rgba8 translucent_surface(
+        Rgba8 tint, Rgba8 text, std::uint8_t minimum_alpha) noexcept
+    {
+        tint.a = 255;
+        if (minimum_alpha == 255 || text.a != 255) return tint;
+
+        const auto luminance = [](Rgba8 color, double intensity = 1.0) noexcept {
+            const auto linear = [intensity](std::uint8_t channel) noexcept {
+                const double srgb = intensity * static_cast<double>(channel) / 255.0;
+                return srgb <= 0.04045 ? srgb / 12.92 : std::pow((srgb + 0.055) / 1.055, 2.4);
+            };
+            return 0.2126 * linear(color.r) + 0.7152 * linear(color.g) + 0.0722 * linear(color.b);
+        };
+        constexpr double contrast = 4.5;
+        constexpr double offset = 0.05;
+        const double tintLuminance = luminance(tint);
+        const double textLuminance = luminance(text);
+        const bool lightText = textLuminance > tintLuminance;
+        const auto readable = [&](unsigned alpha) noexcept {
+            const double opacity = static_cast<double>(alpha) / 255.0;
+            if (lightText)
+            {
+                // Linear compositing over white gives the highest background luminance.
+                const double background = opacity * tintLuminance + (1.0 - opacity);
+                return textLuminance + offset >= contrast * (background + offset);
+            }
+            // sRGB compositing over black gives the lowest background luminance.
+            const double background = luminance(tint, opacity);
+            return background + offset >= contrast * (textLuminance + offset);
+        };
+
+        unsigned low = minimum_alpha;
+        unsigned high = 255;
+        while (low < high)
+        {
+            const unsigned middle = low + (high - low) / 2;
+            if (readable(middle)) high = middle;
+            else low = middle + 1;
+        }
+        tint.a = static_cast<std::uint8_t>(low);
+        return tint;
+    }
 
     struct SemanticColors
     {
@@ -1478,7 +1523,7 @@ export namespace epochengine::gui_lib
             layout.button = button;
             layout.label = Rect{
                 {button.position.x + padding, button.position.y},
-                {labelWidth, button.size.y - indicatorHeight}};
+                {labelWidth, button.size.y}};
             layout.indicator = Rect{
                 {button.position.x, button.position.y + button.size.y - indicatorHeight},
                 {button.size.x, indicatorHeight}};
@@ -1486,7 +1531,7 @@ export namespace epochengine::gui_lib
             {
                 layout.close_button = Rect{
                     {button.position.x + button.size.x - closeExtent,
-                     button.position.y},
+                     button.position.y + (button.size.y - closeExtent) * 0.5f},
                     {closeExtent, closeExtent}};
             }
             layout.active = active;

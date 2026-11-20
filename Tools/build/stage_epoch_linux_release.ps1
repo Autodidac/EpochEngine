@@ -142,6 +142,13 @@ if (Test-Path -LiteralPath (Join-Path $binaryRoot 'lib')) {
     Copy-Item -LiteralPath (Join-Path $binaryRoot 'lib') -Destination (Join-Path $stage 'lib') -Recurse -Force
 }
 Copy-Item -LiteralPath $assets -Destination (Join-Path $stage 'assets') -Recurse -Force
+foreach ($shader in 'clouds.vert.spv', 'clouds.frag.spv') {
+    $relative = "assets\vulkan\shaders\$shader"
+    $builtShader = Join-Path $binaryRoot $relative
+    if (Test-Path -LiteralPath $builtShader -PathType Leaf) {
+        Copy-Item -LiteralPath $builtShader -Destination (Join-Path $stage $relative) -Force
+    }
+}
 Copy-Item -LiteralPath $license -Destination (Join-Path $stage 'LICENSE') -Force
 Copy-Item -LiteralPath $readme -Destination (Join-Path $stage 'README.md') -Force
 & $noticeScript -RepoRoot $repo -VcpkgInstalledRoot $vcpkgInstalled -Destination $stage
@@ -234,6 +241,7 @@ Move-EpochPackageValidationEvidence -Stage $stage -VerifyLogs $verifyLogs -Packa
 
 Write-EpochRuntimeDistribution -Stage $stage -Edition $edition.Id -Version $Version
 
+Assert-EpochRuntimeHasNoModelWeights -Stage $stage
 $archiveScript = "set -euo pipefail; tar -C '$outWsl' -czf '$tarWsl' '$stageName'; tar -tzvf '$tarWsl' '$stageName/epoch' '$stageName/epoch-distribution.json' '$stageName/assets/fonts/Roboto-Regular.ttf' '$stageName/THIRD_PARTY_NOTICES.txt' '$stageName/THIRD_PARTY_COMPONENTS.json'; if tar -tzf '$tarWsl' | grep -E '/(logs|cache)/'; then echo 'Release archive must not include generated logs or runtime cache.' >&2; exit 1; fi"
 Invoke-LinuxScript -Script $archiveScript -Label 'Linux release archive validation'
 

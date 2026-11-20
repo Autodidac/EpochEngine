@@ -16,6 +16,7 @@ class SettingsViewportGeometry(unittest.TestCase):
         block=settings[start:settings.index("            const std::array previewActions",start)]
         choices=definition(owner,"        [[nodiscard]] std::span<const ProjectCameraChoice> project_camera_choices()")
         label=definition(owner,"        [[nodiscard]] std::string_view project_camera_label(")
+        project=definition(owner,"        void draw_project_run_camera(")
         code=r'''
 #include <array>
 #include <memory>
@@ -37,25 +38,33 @@ std::string_view chosenId;std::size_t chosenIndex{};bool wasEnabled{};
 void set_cursor(Vec2){}void label(std::string_view){}
 SelectBoxResult select_box(const SelectBoxOptions& options){if(options.id!=chosenId)return {};wasEnabled=options.enabled;return {true,chosenIndex};}
 }
-struct Editor{previewgrid::CameraMode viewportCameraMode=previewgrid::CameraMode::Editor,projectCameraMode=previewgrid::CameraMode::Editor;bool reserved{};};
-bool editor_project_viewport_input_reserved(const Editor& editor){return editor.reserved;}
-void ensure_2d_canvas_entity(Editor&){}void push_editor_log(Editor&,const std::string&){}
-void draw(Editor& editor,const std::shared_ptr<int>& ctx){const gui::Vec2 contentPos{};const float settingsControlWidth=320;const auto settings_row=[](float=8.0f){};
+struct EditorState{previewgrid::CameraMode viewportCameraMode=previewgrid::CameraMode::Editor;std::optional<previewgrid::CameraMode> projectCameraMode;std::string_view projectId="game";bool reserved{};};
+bool editor_project_viewport_input_reserved(const EditorState& editor){return editor.reserved;}
+bool has_open_project(const EditorState& editor){return !editor.projectId.empty();}
+unsigned writes{};bool canWrite=true;
+bool persist_project_run_settings(EditorState&){++writes;return canWrite;}
+void push_editor_log(EditorState&,const std::string&){}
+PROJECT
+void draw(EditorState& editor,const std::shared_ptr<int>& ctx){const gui::Vec2 contentPos{};const float settingsControlWidth=320;const auto settings_row=[](float=8.0f){};
 BLOCK
 }
 #define CHECK(x) do{if(!(x))return __LINE__;}while(false)
-int main(){Editor editor;auto ctx=std::make_shared<int>();
+int main(){EditorState editor;auto ctx=std::make_shared<int>();
 gui::chosenId="settings-editor-camera-select";gui::chosenIndex=1;draw(editor,ctx);
 CHECK(gui::wasEnabled&&editor.viewportCameraMode==previewgrid::CameraMode::FPS);
-CHECK(editor.projectCameraMode==previewgrid::CameraMode::Editor&&previewgrid::calls==1);
+CHECK(!editor.projectCameraMode&&previewgrid::calls==1&&writes==0);
 CHECK(previewgrid::selected==previewgrid::CameraMode::FPS);
-gui::chosenId="settings-project-camera-select";gui::chosenIndex=2;draw(editor,ctx);
-CHECK(editor.viewportCameraMode==previewgrid::CameraMode::FPS&&editor.projectCameraMode==previewgrid::CameraMode::Canvas2D&&previewgrid::calls==1);
+gui::chosenId="settings-project-camera-select";gui::chosenIndex=3;draw(editor,ctx);
+CHECK(editor.viewportCameraMode==previewgrid::CameraMode::FPS&&editor.projectCameraMode==previewgrid::CameraMode::Canvas2D&&previewgrid::calls==1&&writes==1);
+canWrite=false;gui::chosenIndex=2;draw(editor,ctx);CHECK(editor.projectCameraMode==previewgrid::CameraMode::Canvas2D&&writes==2);
+canWrite=true;gui::chosenIndex=0;draw(editor,ctx);CHECK(!editor.projectCameraMode&&writes==3);
+editor.projectId={};gui::chosenIndex=3;draw(editor,ctx);CHECK(!gui::wasEnabled&&!editor.projectCameraMode&&writes==3);
+editor.projectId="game";
 editor.reserved=true;gui::chosenId="settings-editor-camera-select";gui::chosenIndex=0;draw(editor,ctx);
 CHECK(!gui::wasEnabled&&editor.viewportCameraMode==previewgrid::CameraMode::FPS&&previewgrid::calls==1);
 editor.reserved=false;draw(editor,{});CHECK(!gui::wasEnabled&&previewgrid::calls==1);
 return 0;}
-'''.replace("CHOICES",choices).replace("LABEL",label).replace("BLOCK",block)
+'''.replace("CHOICES",choices).replace("LABEL",label).replace("PROJECT",project).replace("BLOCK",block)
         report=ROOT/"Artifacts/Reports/editor-camera-switch-oct31"/str(time.time_ns())
         report.mkdir(parents=True)
         source=report/"contract.cpp";source.write_text(code,encoding="utf-8")
@@ -68,7 +77,7 @@ return 0;}
         shell = bootstrap[bootstrap.index("        const gui::Vec2 editorSettingsDefaultSize"):bootstrap.index("        const gui::Vec2 aiModelManagerDefaultSize")]
         block = settings[settings.index("        if (editor.showSettingsModal && editorSettingsOwnsInput)"):]
         core = (ROOT / "Engine/dep/EpochGui/src/epochgui/floating_window.cpp").read_text(encoding="utf-8").replace("module;", "").replace("module epoch.gui;", "")
-        module = (ROOT / "Engine/modules/gui.engine.ixx").read_text(encoding="utf-8")
+        module = (ROOT / "Engine/modules/gui/gui.engine.ixx").read_text(encoding="utf-8")
         navigation = (ROOT / "Engine/src/epochgui/controls/gui.navigation_chrome.inl").read_text(encoding="utf-8")
         layout = definition(navigation, "    struct InlineButtonRowLayout", True) + definition(navigation, "    [[nodiscard]] static InlineButtonRowLayout make_inline_button_layout(")
         types = "\n".join(definition(module, "    export " + kind + " " + name, True).replace("export ", "") for kind,name in (
@@ -159,6 +168,9 @@ std::string_view frame_limit_label(double){return "120";}std::string frame_limit
 bool frame_limit_control(std::string_view id,double&,bool& manual,float width,bool=false){gui::record(id,{width,manual?96.0f:32.0f});return false;}
 struct CameraChoice{std::string_view label;previewgrid::CameraMode mode;};auto project_camera_choices(){return std::array{CameraChoice{"Editor",previewgrid::CameraMode::Editor},CameraChoice{"FPS",previewgrid::CameraMode::FPS},CameraChoice{"2D",previewgrid::CameraMode::Canvas2D}};}
 std::string_view project_camera_label(previewgrid::CameraMode){return "Editor";}bool editor_project_viewport_input_reserved(Editor& e){return e.reserved;}
+void draw_project_run_camera(Editor&,std::string_view id,float width){
+ (void)gui::select_box(gui::SelectBoxOptions{.id=id,.size={width,30.0f}});
+}
 void persist_project_run_settings(Editor&){}
 bool editor_project_viewport_covered(Editor&){return false;}void ensure_2d_canvas_entity(Editor&){}void handle_scene_tool(Editor&,void*,std::string_view){}void reset_editor_layout(Editor&){}
 void draw(Editor& editor,std::shared_ptr<Context> ctx,float w,float h) {

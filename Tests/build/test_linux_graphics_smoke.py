@@ -53,6 +53,24 @@ class LinuxGraphicsSmoke(unittest.TestCase):
         self.assertEqual(result['automatic_update_requests'],2)
         self.assertEqual(smoke.classify(READY+DONE,0,False)['automatic_update_requests'],0)
 
+    def test_software_opengl_requires_observed_mesa_cpu_provider_before_readiness(self):
+        def identity(name):
+            return f'[INFO] OpenGL: Current context=0x2 GL_VENDOR="Mesa" GL_RENDERER="{name}"\n'
+
+        for name in ("llvmpipe (LLVM 22.1.8, 256 bits)", "softpipe"):
+            result = smoke.classify(identity(name) + READY + DONE, 0, False, software_opengl=True)
+            self.assertEqual(result["result"], "pass")
+            self.assertEqual(result["observed_gl_renderers"], [name])
+            self.assertTrue(result["software_opengl_verified"])
+
+        for log in (READY + DONE, identity("NVIDIA GeForce") + READY + DONE,
+                    READY + identity("llvmpipe") + DONE,
+                    identity("softpipe") + READY + identity("NVIDIA GeForce") + DONE):
+            with self.subTest(log=log):
+                result = smoke.classify(log, 0, False, software_opengl=True)
+                self.assertEqual(result["result"], "fail")
+                self.assertFalse(result["software_opengl_verified"])
+
     def test_actual_editor_smoke_suppresses_only_automatic_discovery(self):
         lifecycle=(ROOT/'Engine/src/editor/application/editor.application_context_lifecycle.inl').read_text(encoding='utf-8')
         suppress=definition(lifecycle,'    void editor_suppress_startup_update_check(')

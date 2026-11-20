@@ -20,8 +20,8 @@ def definition(source, start):
 
 class RttContextOwnership(unittest.TestCase):
     def test_actual_two_device_and_two_context_lifetimes(self):
-        device_path = ROOT / "Engine/modules/render.device_opengl_family.ixx"
-        native_path = ROOT / "Engine/modules/opengl.textures.ixx"
+        device_path = ROOT / "Engine/modules/render/render.device_opengl_family.ixx"
+        native_path = ROOT / "Engine/modules/opengl/opengl.textures.ixx"
         device = device_path.read_text(encoding="utf-8")
         native = native_path.read_text(encoding="utf-8")
         record_types = "\n".join(definition(device, "    struct " + name) + ";" for name in (

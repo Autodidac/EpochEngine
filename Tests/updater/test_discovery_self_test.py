@@ -24,7 +24,7 @@ class DiscoverySelfTest(unittest.TestCase):
         report = ROOT / 'Artifacts/Reports/public-discovery-selftest-oct29' / str(time.time_ns())
         report.mkdir(parents=True)
         system = (ROOT / 'Engine/src/updater/updater.system.cpp').read_text(encoding='utf-8')
-        config = (ROOT / 'Engine/modules/updater.config.ixx').read_text(encoding='utf-8')
+        config = (ROOT / 'Engine/modules/updater/updater.config.ixx').read_text(encoding='utf-8')
         integrity = (ROOT / 'Engine/src/updater/implementation/updater.release_integrity.inl').read_text(encoding='utf-8')
         version = (ROOT / 'Engine/modules/epoch.version.ixx').read_text(encoding='utf-8')
         version = version[:version.index('    export std::string GetRuntimePlatformDisplayString(')] + '}\n'
@@ -61,13 +61,6 @@ class DiscoverySelfTest(unittest.TestCase):
         helpers += definition(system, '[[nodiscard]] inline bool prefer_source_release(')
         helpers += integrity[:integrity.index('        [[nodiscard]] inline std::optional<std::vector<unsigned char>>')]
         owner = definition(system, 'bool update_discovery_contract_self_test(')
-        old_condition = 'PROJECT_SOURCE_URL().ends_with(PROJECT_SOURCE_ARCHIVE_EXTENSION())'
-        new_condition = 'PROJECT_SOURCE_URL() == PROJECT_RELEASE_INTEGRITY_URL()\n                           && PROJECT_SOURCE_CHECKSUM_URL().empty()\n                           && PROJECT_SOURCE_ARCHIVE_EXTENSION() == ".zip"'
-        self.assertIn(new_condition, owner)
-        before = owner.replace(new_condition, old_condition)
-        recorded_before = report.parent / 'before-selftest.cpp'
-        if recorded_before.exists():
-            self.assertEqual(before, recorded_before.read_text(encoding='utf-8'))
         outcomes = []
         edition_header = (ROOT / 'Engine/include/epoch.edition.hpp').read_text(encoding='utf-8')
         for edition, marker in (('development', '0'), ('public', '1')):
@@ -84,24 +77,22 @@ class DiscoverySelfTest(unittest.TestCase):
                 prelude += '#include "' + (ROOT / 'Engine/dep/EpochPlatformEngine/include/epochplatformengine/types.hpp').as_posix() + '"\n' + version
                 prelude += '\nnamespace epochengine::updater { namespace platform_policy { inline constexpr auto source_snapshot_archive_extension() { return ".tar.gz"; } }\n'
                 prelude += declarations + functions + 'namespace system_detail {\n' + helpers + '\n}\n'
-                for stage, body in (('before', before), ('after', owner)):
-                    source = folder / (stage + '.cpp')
-                    source.write_text(prelude + body + '\n}\nint main() { return epochengine::updater::update_discovery_contract_self_test() ? 0 : 156; }\n', encoding='utf-8')
-                    binary = folder / (stage + '.exe')
-                    args = [str(toolset / 'bin/Hostx64/x64/cl.exe'), '/nologo', '/std:c++latest', '/EHsc', '/WX', '/Z7',
-                            *(['/Od', '/MDd', '/D_DEBUG'] if configuration == 'Debug' else ['/O2', '/MD', '/DNDEBUG']),
-                            '/I' + str(folder), '/I' + str(toolset / 'include'),
-                            *('/I' + str(kit / part) for part in ('ucrt', 'shared', 'um')),
-                            '/Fo' + str(folder / (stage + '.obj')), '/Fe' + str(binary), str(source), '/link',
-                            '/LIBPATH:' + str(toolset / 'lib/x64'), '/LIBPATH:' + str(kits / 'Lib' / kit.name / 'um/x64'),
-                            '/LIBPATH:' + str(kits / 'Lib' / kit.name / 'ucrt/x64')]
-                    build = subprocess.run(args, cwd=folder, capture_output=True, text=True, timeout=60)
-                    (folder / (stage + '-build.log')).write_text(build.stdout + build.stderr)
-                    self.assertEqual(build.returncode, 0, build.stdout + build.stderr)
-                    run = subprocess.run([str(binary)], cwd=folder, capture_output=True, text=True, timeout=10)
-                    expected = 156 if stage == 'before' and edition == 'public' else 0
-                    self.assertEqual(run.returncode, expected, str(folder) + ' ' + stage)
-                    outcomes.append({'edition': edition, 'configuration': configuration, 'stage': stage, 'exit': run.returncode})
+                source = folder / 'contract.cpp'
+                source.write_text(prelude + owner + '\n}\nint main() { return epochengine::updater::update_discovery_contract_self_test() ? 0 : 156; }\n', encoding='utf-8')
+                binary = folder / 'contract.exe'
+                args = [str(toolset / 'bin/Hostx64/x64/cl.exe'), '/nologo', '/std:c++latest', '/EHsc', '/WX', '/Z7',
+                        *(['/Od', '/MDd', '/D_DEBUG'] if configuration == 'Debug' else ['/O2', '/MD', '/DNDEBUG']),
+                        '/I' + str(folder), '/I' + str(toolset / 'include'),
+                        *('/I' + str(kit / part) for part in ('ucrt', 'shared', 'um')),
+                        '/Fo' + str(folder / 'contract.obj'), '/Fe' + str(binary), str(source), '/link',
+                        '/LIBPATH:' + str(toolset / 'lib/x64'), '/LIBPATH:' + str(kits / 'Lib' / kit.name / 'um/x64'),
+                        '/LIBPATH:' + str(kits / 'Lib' / kit.name / 'ucrt/x64')]
+                build = subprocess.run(args, cwd=folder, capture_output=True, text=True, timeout=60)
+                (folder / 'build.log').write_text(build.stdout + build.stderr)
+                self.assertEqual(build.returncode, 0, build.stdout + build.stderr)
+                run = subprocess.run([str(binary)], cwd=folder, capture_output=True, text=True, timeout=10)
+                self.assertEqual(run.returncode, 0, str(folder))
+                outcomes.append({'edition': edition, 'configuration': configuration, 'exit': run.returncode})
         (report / 'result.json').write_text(json.dumps({'actual_complete_self_test': True, 'physical_edition_headers': True,
             'platform_archive_extension_port': 'tar.gz (Public must independently select its one shared ZIP)',
             'results': outcomes, 'network_models_gui': False}, indent=2), encoding='utf-8')

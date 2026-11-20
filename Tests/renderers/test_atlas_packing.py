@@ -11,9 +11,9 @@ ROOT = Path(__file__).resolve().parents[2]
 
 class AtlasPacking(unittest.TestCase):
     def test_actual_atlas_against_original_first_fit(self):
-        module = (ROOT/'Engine/modules/atlas.texture.ixx').read_text(encoding='utf-8')
+        module = (ROOT/'Engine/modules/atlas/atlas.texture.ixx').read_text(encoding='utf-8')
         module = module.replace('module;', '').replace('export module atlas.texture;', '')
-        module = module.replace('#include "../include/engine.config.hpp"', '')
+        module = module.replace('#include "../../include/engine.config.hpp"', '')
         module = module.replace('import texture.core;', '').replace('import core.logger;', '')
         module = module.replace('export namespace epochengine', 'namespace epochengine')
         code = (ROOT/'Tests/renderers/atlas.packing_contract.cpp').read_text(encoding='utf-8').replace('ATLAS_PRODUCTION', module)

@@ -13,7 +13,7 @@ module;
 #   ifndef WIN32_LEAN_AND_MEAN
 #       define WIN32_LEAN_AND_MEAN
 #   endif
-#elif defined(__linux__)
+#elif defined(__linux__) && !defined(__ANDROID__)
 #   include <X11/Xlib.h>
 #   include <X11/Xutil.h>
 #   ifdef None
@@ -60,7 +60,7 @@ namespace epochengine::anativecontext
 
             if (hdc)
             {
-                SetDIBitsToDevice(
+                const int copiedRows = SetDIBitsToDevice(
                     hdc,
                     0,
                     0,
@@ -76,13 +76,13 @@ namespace epochengine::anativecontext
 
                 if (tempDC && sr.hwnd)
                     ReleaseDC(sr.hwnd, hdc);
-                return true;
+                return copiedRows == sr.height;
             }
 
             if (tempDC && sr.hwnd)
                 ReleaseDC(sr.hwnd, hdc);
             return false;
-#elif defined(__linux__)
+#elif defined(__linux__) && !defined(__ANDROID__)
             if (sr.framebuffer.empty() || sr.width <= 0 || sr.height <= 0)
                 return false;
 

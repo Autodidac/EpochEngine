@@ -17,7 +17,7 @@ ORIGINAL_FIXTURE=lambda:jobs_test.fixture(ROOT)
 
 def workspace_fixture():
     fixture=ORIGINAL_FIXTURE().split("int main(int argc,char**argv)")[0]
-    api=(ROOT/"Engine/modules/editor.asset_generation.ixx").read_text(encoding="utf-8")
+    api=(ROOT/"Engine/modules/editor/editor.asset_generation.ixx").read_text(encoding="utf-8")
     api=api[api.index("export namespace epochengine::editor_asset_generation"):].replace("export namespace","namespace",1)
     owner=(ROOT/"Engine/src/editor/editor.asset_generation.cpp").read_text(encoding="utf-8")
     body=owner[owner.index("namespace epochengine::editor_asset_generation"):owner.index("    bool prepare_preview(State& state)")]+"}\n"
@@ -335,7 +335,7 @@ int main(int argc,char**argv){
  auto lateResult=workspace::execute(second,project,state.phase,late.get_token());CHECK(!lateResult.result&&lateResult.result.code==jobs::Code::cancelled&&fs::exists(lateResult.result.output));native::cancel_after=nullptr;
  second.work_directory=root/"jobs/prelaunch-refused";second.alternative_model_backend->preflight=[](const auto&){return std::string{"missing backend"};};
  const auto calls=native::handoffs;auto refused=workspace::execute(second,project,state.phase,{});CHECK(!refused.result&&native::handoffs==calls);
- CHECK(!fs::exists(root/"Assets")&&!fs::exists(root/"worlds")&&!native::idle::work_gate.protected_work());
+ CHECK(!fs::exists(root/"Assets")&&!fs::exists(root/"worlds")&&!native::idle::work_gate().protected_work());
 }
 '''
 
@@ -349,7 +349,7 @@ class AssetGenerationWorkspace(unittest.TestCase):
         report.mkdir(parents=True,exist_ok=True)
         (report/"controller-result.json").write_text(json.dumps({"passed":True,"elapsed_seconds":(time.time_ns()-started)/1e9,
             "actual_job_fixture":str(newest),"commands":result["commands"],"owners":{p:hashlib.sha256((ROOT/p).read_bytes()).hexdigest() for p in (
-                "Engine/modules/editor.asset_generation.ixx","Engine/src/editor/editor.asset_generation.cpp","Engine/modules/ai.asset_jobs.ixx","Engine/src/ai/ai.asset_jobs.cpp")},
+                "Engine/modules/editor/editor.asset_generation.ixx","Engine/src/editor/editor.asset_generation.cpp","Engine/modules/ai/ai.asset_jobs.ixx","Engine/src/ai/ai.asset_jobs.cpp")},
             "scope":"Actual controller and job production algorithms, real PNG/GLB/artifact/hash decoders. Explicit GUI type and native handoff/hardware/supervisor ports; no GUI/native worker/model/GPU. Native draw and actual model restoration require separate integration acceptance."},indent=2),encoding="utf-8")
 
 if __name__=="__main__":unittest.main()

@@ -81,6 +81,7 @@ module;
 #include <vulkan/vulkan.hpp>
 
 #include <algorithm>
+#include <atomic>
 #include <cassert>
 #include <chrono>
 #include <cstddef>
@@ -185,6 +186,7 @@ namespace epochengine::vulkancontext
         createCommandPool();
         createDepthResources();
         createFramebuffers();
+        createCloudBindings();
         createTextureImage();
         createTextureImageView();
         createTextureSampler();
@@ -494,6 +496,8 @@ namespace epochengine::vulkancontext
         }
 
         cleanupSwapChain();
+        if (const auto ctx = context.lock())
+            ctx->preview_density_clouds.store(false, std::memory_order_relaxed);
 
         framebuffers.clear();
 

@@ -35,6 +35,15 @@ module;
 #include "epoch.build_layout.hpp"
 #include "updater.distribution.hpp"
 
+#if defined(__ANDROID__)
+#include "engine.config.hpp"
+#if defined(EPOCH_USING_SDL) && EPOCH_USING_SDL == 1
+#include <SDL3/SDL_system.h>
+#include <fcntl.h>
+#include <unistd.h>
+#endif
+#endif
+
 #include <algorithm>
 #include <array>
 #include <cassert>
@@ -387,11 +396,13 @@ namespace epochengine
                 || fs::is_symlink(fs::symlink_status(requested)) || !fs::is_regular_file(selected))
             { result.summary = "Generated project manifest is unavailable or redirected."; return result; }
             const auto parsed = parse_manifest_project_profile(selected, &result.summary);
+            if (!parsed) return result;
+            if (parsed->id != expected_project_id)
+            { result.summary = "Generated project identity does not match this executable."; return result; }
             const auto edition = inspect_json_string_field(read_text_file(selected), "engine_edition");
-            if (!parsed || parsed->id != expected_project_id
-                || edition.state != JsonStringFieldState::present
+            if (edition.state != JsonStringFieldState::present
                 || edition.value != updater::distribution::edition_id)
-            { result.summary = "Generated project manifest identity or edition does not match this executable."; return result; }
+            { result.summary = "Generated project source edition does not match this executable."; return result; }
             const auto root = fs::canonical(selected.parent_path());
             const auto scene = fs::canonical(fs::path{parsed->scene_path});
             const auto relative = scene.lexically_relative(root);
@@ -568,6 +579,211 @@ namespace epochengine
     std::filesystem::path editor_projects_root() noexcept
     {
         return resolve_projects_root();
+    }
+
+    namespace
+    {
+        constexpr std::string_view kProjectExampleManifest = "project.epoch.json";
+        constexpr std::array kCalculatorExampleFiles{
+            ".gitignore", "Assets/Gui/main.epochgui", "BasicSoftwareExampleCalculator.vcxproj",
+            "android/calculator.coach.cmake", "android/EpochCalculatorCoach.java", "android/EpochCalculatorCoachModelActivity.java",
+            "android/EpochCalculatorCoachService.java", "android/verify_coach_source.py", "android/llama.cpp.LICENSE",
+            "build_project.ps1", "build_project.sh", "CMakeLists.txt", "epoch.project.cmake",
+            "README.md", "scripts/tool_bootstrap.ascript.cpp", "source/calculator.arithmetic.hpp",
+            "source/calculator.coach.hpp", "source/calculator.coach_android.hpp", "source/calculator.coach_android_worker.cpp",
+            "source/calculator.scientific.hpp", "source/epoch.main.cpp",
+            "source/project.gui_application.hpp", "worlds/tool.epoch"};
+        constexpr std::array kPlatformerExampleFiles{
+            ".gitignore", "Assets/Animations/sprite_animations.epochanim", "Assets/Audio/default_ambient.wav",
+            "Assets/Audio/default_jump.wav", "Assets/Audio/default_land.wav", "Assets/Audio/project_audio.epochaudio",
+            "Assets/Config/input_profile.epochinput", "Assets/Gui/main.epochgui", "Assets/Maps/main.epochmap",
+            "Assets/Textures/starter_actor.epoch_texture", "PlatformerExample2D.vcxproj", "build_project.ps1",
+            "build_project.sh", "CMakeLists.txt", "epoch.project.cmake", "README.md",
+            "scripts/project_demo_bootstrap.ascript.cpp", "source/epoch.main.cpp", "worlds/main.epoch"};
+
+        constexpr std::array kBundledProjectExamples{
+            EditorProjectExample{"BasicSoftwareExampleCalculator",
+                "Basic AI-Enabled Calculator",
+                "A Software / Tool project with an editable scientific calculator and worked steps."},
+            EditorProjectExample{"PlatformerExample2D", "2D Platformer Example",
+                "A Canvas2D Game project with an editable map, movement, collision, animation, and audio."}};
+        constexpr std::array kBundledProjectExampleFiles{
+            std::span<const char* const>{kCalculatorExampleFiles},
+            std::span<const char* const>{kPlatformerExampleFiles}};
+
+        [[nodiscard]] std::optional<std::string> read_bundled_project_example_file(
+            const fs::path& path, std::uintmax_t maximum_size)
+        {
+            std::error_code error;
+            if (!fs::is_regular_file(fs::symlink_status(path, error)) || error
+                || fs::canonical(path, error) != path || error
+                || fs::hard_link_count(path, error) != 1u || error)
+                return {};
+            const auto bytes = fs::file_size(path, error);
+            if (error || bytes > maximum_size)
+                return {};
+            std::string content(static_cast<std::size_t>(bytes), '\0');
+            std::ifstream stream{path, std::ios::binary};
+            if (!stream.read(content.data(), static_cast<std::streamsize>(content.size()))
+                || stream.peek() != std::char_traits<char>::eof() || stream.bad())
+                return {};
+            return content;
+        }
+
+        [[nodiscard]] bool bind_bundled_project_example_build_file(std::string_view file,
+            const fs::path& repo, std::string& content)
+        {
+            if (file.ends_with(".vcxproj"))
+            {
+                replace_all(content, "\r\n", "\n");
+                const auto first = content.find("    <EpochRepoRoot Condition=");
+                const auto last = content.find("    <EpochEngineLibraryDirectory", first);
+                if (first == content.npos || last == content.npos)
+                    return false;
+                const auto path = to_windows_path(repo.string()) + "\\";
+                content.replace(first, last - first,
+                    "    <EpochRepoRoot>" + xml_escape(path) + "</EpochRepoRoot>\n");
+                replace_all(content, "<ProjectReference Include=\"$(EpochRepoRoot)",
+                    "<ProjectReference Include=\"" + xml_escape(path));
+                return true;
+            }
+            if (file == "build_project.ps1")
+            {
+                replace_all(content, "\r\n", "\n");
+                const auto path = to_windows_path(repo.string());
+                const auto first = content.find("$repoRoot = if (");
+                const auto last = content.find("\n& python ", first);
+                if (first == content.npos || last == content.npos)
+                    return false;
+                content.replace(first, last - first,
+                    "$repoRoot = '" + powershell_escape_single_quoted(path) + "'");
+                return replace_delimited_value(content, "$vcpkgManifestRoot = ", "\n",
+                    "'" + powershell_escape_single_quoted(
+                        to_windows_path((repo / "Engine").string())) + "'");
+            }
+            if (file == "build_project.sh")
+            {
+                replace_all(content, "\r\n", "\n");
+                return replace_delimited_value(content, "repo_root=", "\n",
+                    "'" + bash_escape_single_quoted(repo.generic_string()) + "'");
+            }
+            if (file == "epoch.project.cmake")
+                return replace_delimited_value(content, "set(EPOCH_REPO_ROOT \"", "\" CACHE PATH",
+                    json_escape(repo.generic_string()));
+            return true;
+        }
+    }
+
+    std::span<const EditorProjectExample> editor_bundled_project_examples() noexcept
+    {
+        return kBundledProjectExamples;
+    }
+
+    EditorProjectAdmissionResult editor_import_bundled_project_example(std::string_view id)
+    {
+        const auto example = std::ranges::find(kBundledProjectExamples, id, &EditorProjectExample::id);
+        if (example == kBundledProjectExamples.end())
+            return {.summary = "The example is not in the local project catalog."};
+        const auto index = static_cast<std::size_t>(example - kBundledProjectExamples.begin());
+
+        const auto destinationRoot = editor_projects_root();
+        std::error_code error;
+        const auto canonicalRepo = fs::canonical(resolve_epoch_repo_root({}), error);
+        if (error || !is_epoch_repo_root(canonicalRepo)
+            || !generated_project_source_edition_allowed(canonicalRepo))
+            return {.summary = "Install the matching Epoch source edition to import bundled examples."};
+        // Generated shell bindings must be literal in CMake and MSBuild.
+        if (canonicalRepo.generic_string().find_first_of("$;\r\n") != std::string::npos)
+            return {.summary = "The Epoch source path contains unsupported build separators."};
+        if (destinationRoot.empty() || !destinationRoot.is_absolute()
+            || fs::weakly_canonical(destinationRoot, error) != destinationRoot || error)
+            return {.summary = "The Projects directory is unavailable or redirected."};
+        const auto destination = destinationRoot / example->id;
+
+        editor_refresh_project_profiles();
+        if (editor_find_project_profile(example->id))
+            return {.summary = "A saved project already uses this example's ID. Open it from Projects."};
+        const auto source = canonicalRepo / "Engine/examples" / example->id;
+        constexpr std::uintmax_t maximum_bytes = 32u * 1024u * 1024u;
+        std::uintmax_t available = maximum_bytes;
+        auto manifest = read_bundled_project_example_file(source / kProjectExampleManifest, available);
+        if (!manifest)
+            return {.summary = "The local example manifest is missing or could not be read safely."};
+        const auto manifestId = extract_json_string_field(*manifest, "id");
+        const auto edition = extract_json_string_field(*manifest, "engine_edition");
+        if (!manifestId || *manifestId != example->id || !edition || *edition != updater::distribution::edition_id)
+            return {.summary = "The example manifest does not match its approved ID and source edition."};
+        available -= manifest->size();
+
+        std::vector<std::pair<fs::path, std::string>> files;
+        for (const std::string_view file : kBundledProjectExampleFiles[index])
+        {
+            auto content = read_bundled_project_example_file(source / file, available);
+            if (!content)
+                return {.summary = "The local example is missing a required authored file or exceeds its import limit."};
+            available -= content->size();
+            if (!bind_bundled_project_example_build_file(file, canonicalRepo, *content))
+                return {.summary = "The example's build file could not be bound to this source checkout."};
+            files.emplace_back(file, std::move(*content));
+        }
+
+        // Claim the instance before writing. The ordinary project scanner sees
+        // only completed imports because the visible manifest is published last.
+        if (!claim_new_project_root(destination))
+            return {.summary = "The example destination already exists or could not be created."};
+        std::vector<fs::path> ownedDirectories{destination};
+        std::vector<std::pair<fs::path, std::string_view>> ownedFiles;
+        ownedFiles.reserve(files.size() + 1u);
+        const auto discard = [&] {
+            for (const auto& [path, expected] : ownedFiles)
+            {
+                std::error_code cleanup;
+                const auto current = read_bundled_project_example_file(path, expected.size());
+                if (current && *current == expected)
+                    fs::remove(path, cleanup);
+            }
+            for (auto it = ownedDirectories.rbegin(); it != ownedDirectories.rend(); ++it)
+            {
+                std::error_code cleanup;
+                if (fs::weakly_canonical(*it, cleanup) == *it && !cleanup)
+                    fs::remove(*it, cleanup);
+            }
+        };
+        for (const auto& [file, content] : files)
+        {
+            auto parent = destination;
+            for (const auto& part : file.parent_path())
+            {
+                parent /= part;
+                if (std::ranges::find(ownedDirectories, parent) != ownedDirectories.end()) continue;
+                if (!fs::create_directory(parent, error) || error)
+                {
+                    discard();
+                    return {.summary = "Could not stage an example subdirectory."};
+                }
+                ownedDirectories.push_back(parent);
+            }
+            const auto target = destination / file;
+            const auto bytes = std::as_bytes(std::span{content.data(), content.size()});
+            if (fs::weakly_canonical(parent, error) != parent || error
+                || !platform::filesystem::exclusive_create_and_write(target, bytes, error))
+            {
+                discard();
+                return {.summary = "Could not stage the example project files."};
+            }
+            ownedFiles.emplace_back(target, content);
+        }
+        const auto published = destination / kProjectExampleManifest;
+        if (!publish_new_project_manifest(published, *manifest))
+        {
+            discard();
+            return {.summary = "The example manifest could not be published into Projects."};
+        }
+        ownedFiles.emplace_back(published, *manifest);
+        const auto admitted = editor_admit_project_manifest(published.generic_string());
+        if (!admitted.succeeded)
+            discard();
+        return admitted;
     }
 
     std::span<const EditorProjectProfile> editor_project_profiles() noexcept
@@ -1038,6 +1254,10 @@ namespace epochengine
     {
         if (!display_name.empty() && !ai::valid_project_display_name(display_name))
             return {.summary = "Invalid project display name. No files were written."};
+#if defined(__ANDROID__)
+        if (kind != EditorProjectKind::Game && kind != EditorProjectKind::Tool)
+            return {.summary = "Create an Android Game or Software / Tool project."};
+#endif
         const auto projectsRoot = resolve_projects_root();
         const std::string projectName = next_generated_project_name(kind, projectsRoot);
         if (projectName.empty())
@@ -1046,7 +1266,7 @@ namespace epochengine
             ? "tool_bootstrap"
             : "project_demo_bootstrap";
 
-        return write_project_shell(ProjectShellSpec{
+        const ProjectShellSpec spec{
             .kind = kind,
             .project_name = display_name.empty() ? projectName : std::string{display_name},
             .project_id = projectName,
@@ -1059,8 +1279,11 @@ namespace epochengine
                 kind, input_provision)
                 ? std::string{epochengine::project_input::canonical_source_path}
                 : std::string{},
+#if defined(__ANDROID__)
+            .gui_path = std::string{epochengine::project_gui::canonical_source_path},
+#endif
             .template_family = kind == EditorProjectKind::Editor ? "editor-project"
-                : (kind == EditorProjectKind::Tool ? "tool-project" : "game-project"),
+                    : (kind == EditorProjectKind::Tool ? "tool-project" : "game-project"),
             .script_id = defaultScript,
             .description = kind == EditorProjectKind::Editor
                 ? "Epoch Editor application linked to this edition's admitted engine source."
@@ -1071,7 +1294,16 @@ namespace epochengine
             .include_engine_arcade_package = false,
             .overwrite_existing = false,
             .require_fresh_root = true
-        });
+        };
+#if defined(__ANDROID__)
+#if defined(EPOCH_USING_SDL) && EPOCH_USING_SDL == 1
+        return write_android_project_shell(spec);
+#else
+        return {.summary = "Android project creation requires the SDL application host."};
+#endif
+#else
+        return write_project_shell(spec);
+#endif
     }
 
     EditorProjectCreationResult editor_ensure_project_shell(std::string_view project_id)
@@ -2740,12 +2972,104 @@ namespace epochengine
         return true;
     }
 
+    bool editor_record_published_tilemap(
+        std::string_view project_root, std::string_view logical_path, std::string& diagnostic)
+    {
+        diagnostic.clear();
+        const auto* profile = find_project_profile_by_root(project_root);
+        if (!profile)
+        {
+            diagnostic = "Open an admitted project to record its tile-map source.";
+            return false;
+        }
+        if (profile->kind != EditorProjectKind::Game || is_builtin_project_id(profile->id))
+            return true;
+
+        const fs::path root = resolve_project_root_path(fs::path{project_root});
+        const fs::path manifest = root / "project.epoch.json";
+        const auto original = read_project_build_configuration_manifest(root);
+        auto document = original ? parse_project_build_configuration_manifest(*original) : std::nullopt;
+        if (!document || extract_json_string_field(*original, "id") != profile->id
+            || extract_json_string_field(*original, "kind") != "game")
+        {
+            diagnostic = "The selected Game manifest changed or could not be read safely.";
+            return false;
+        }
+        const auto refresh_profile = [&] {
+            for (auto& admitted : admitted_project_profiles())
+                if (admitted.manifest_path == manifest.generic_string())
+                    admitted.tilemap_path = logical_path;
+            invalidate_project_profile_cache();
+        };
+        const auto field = document->find("tilemap");
+        if (field != document->end())
+        {
+            if (field->is_string() && field->get<std::string>() == logical_path)
+            {
+                if (profile->tilemap_path != logical_path)
+                    refresh_profile();
+                return true;
+            }
+            if (!field->is_string() || !field->get_ref<const std::string&>().empty())
+            {
+                diagnostic = "The project already declares a different tile-map source.";
+                return false;
+            }
+        }
+        const auto edition = document->find("engine_edition");
+        if (edition != document->end()
+            && (!edition->is_string() || edition->get_ref<const std::string&>() != updater::distribution::edition_id))
+        {
+            diagnostic = "The Game manifest belongs to a different source edition.";
+            return false;
+        }
+
+        const fs::path source = root / fs::path{logical_path};
+        std::error_code error;
+        if (!logical_path.starts_with("Assets/Maps/") || source.extension() != ".epochmap"
+            || !project_path_below(source, root)
+            || fs::canonical(source, error) != source || error
+            || !fs::is_regular_file(fs::symlink_status(source, error)) || error
+            || fs::hard_link_count(source, error) != 1u || error)
+        {
+            diagnostic = "The saved tile map must be an ordinary project-local source in Assets/Maps.";
+            return false;
+        }
+
+        (*document)["tilemap"] = logical_path;
+        const auto updated = document->dump(2) + "\n";
+        const auto temporary = root / "project.epoch.json.tilemap.write";
+        if (!platform::filesystem::exclusive_create_and_write(
+                temporary, std::as_bytes(std::span{updated.data(), updated.size()}), error))
+        {
+            diagnostic = "A temporary manifest could not be created. Retry saving the map.";
+            return false;
+        }
+        if (read_project_build_configuration_manifest(root) != original
+            || !platform::filesystem::atomic_replace_same_filesystem(temporary, manifest, error))
+        {
+            std::error_code cleanup;
+            (void)fs::remove(temporary, cleanup);
+            diagnostic = "The Game manifest changed or could not be published. Retry saving the map.";
+            return false;
+        }
+
+        if (read_project_build_configuration_manifest(root) != updated)
+        {
+            diagnostic = "The Game manifest changed before readback. Retry saving the map.";
+            return false;
+        }
+        refresh_profile();
+        return true;
+    }
+
     [[nodiscard]] static bool valid_project_run_settings(const EditorProjectRunSettings& settings)
     {
         const auto& backend = settings.backend;
         return (backend == "opengl" || backend == "vulkan" || backend == "directx"
-                || backend == "raylib" || backend == "sdl" || backend == "sfml")
-            && std::isfinite(settings.frame_limit_fps) && settings.frame_limit_fps >= 0.0;
+                || backend == "raylib" || backend == "sdl" || backend == "sfml" || backend == "software")
+            && std::isfinite(settings.frame_limit_fps) && settings.frame_limit_fps >= 0.0
+            && (!settings.camera || !editor_project_camera_token(*settings.camera).empty());
     }
 
     std::optional<EditorProjectRunSettings> editor_project_run_settings(std::string_view project_root)
@@ -2767,13 +3091,26 @@ namespace epochengine
             if (!field->is_number()) return {};
             settings.frame_limit_fps = field->get<double>();
         }
+        if (const auto field = document->find("screen_space_gui_enabled"); field != document->end())
+        {
+            if (!field->is_boolean()) return {};
+            settings.screen_space_gui_enabled = field->get<bool>();
+        }
+        if (const auto field = document->find("run_camera"); field != document->end())
+        {
+            if (!field->is_string()) return {};
+            const auto& token = field->get_ref<const std::string&>();
+            settings.camera = editor_project_camera_from_token(token);
+            if (!settings.camera || editor_project_camera_token(*settings.camera) != token)
+                return {};
+        }
         return valid_project_run_settings(settings) ? std::optional{settings} : std::nullopt;
     }
 
     bool editor_set_project_run_settings(std::string_view project_root,
         const EditorProjectRunSettings& settings, std::string& diagnostic)
     {
-        diagnostic = "Choose a supported project backend and a finite, nonnegative frame limit.";
+        diagnostic = "Choose a supported project backend, frame limit and Run camera.";
         if (!valid_project_run_settings(settings) || !find_project_profile_by_root(project_root)) return false;
         const auto root = resolve_project_root_path(fs::path{project_root});
         if (root.empty()) return false;
@@ -2787,6 +3124,11 @@ namespace epochengine
         { diagnostic = "Save this project's matching-edition source before changing its Run settings."; return false; }
         (*document)["run_backend"] = settings.backend;
         (*document)["run_frame_limit_fps"] = settings.frame_limit_fps;
+        (*document)["screen_space_gui_enabled"] = settings.screen_space_gui_enabled;
+        if (settings.camera)
+            (*document)["run_camera"] = editor_project_camera_token(*settings.camera);
+        else
+            document->erase("run_camera");
         const auto updated = document->dump(2) + "\n";
         if (updated != *original)
         {
@@ -2956,6 +3298,9 @@ namespace epochengine
         std::stop_token cancellation,
         std::string_view configuration)
     {
+#if defined(__ANDROID__)
+        return {false, "Android package builds run on Windows using Tools/build/build_epoch_android_project.ps1."};
+#endif
         if (project_root.empty())
             return {false, "No active project root selected."};
         if (!editor_project_build_configuration_supported(configuration)
@@ -3112,15 +3457,44 @@ namespace epochengine
             platform::child_process::launch_or_focus(request);
         if (launched.code != platform::child_process::LaunchCode::started)
         {
+            bool workersRetired = true;
+            if (launched.owns_new_process())
+            {
+                auto observed = platform::child_process::snapshot(launched.handle);
+                if (observed && observed->active())
+                {
+                    (void)platform::child_process::stop(
+                        launched.handle, platform::child_process::StopMode::force);
+                    (void)platform::child_process::wait(
+                        launched.handle, {}, 5'000'000'000ull);
+                    observed = platform::child_process::snapshot(launched.handle);
+                }
+                workersRetired = observed && !observed->active();
+                if (workersRetired)
+                    (void)platform::child_process::release(launched.handle);
+            }
             return finish({
                 false,
                 "Project build process could not start: " + launched.message,
                 outputPath.generic_string(),
-                logPath.generic_string()});
+                logPath.generic_string(),
+                false,
+                workersRetired});
         }
 
         const platform::child_process::WaitResult waited =
             platform::child_process::wait(launched.handle, cancellation);
+        const auto settledProcess = platform::child_process::snapshot(launched.handle);
+        if (!settledProcess || settledProcess->active())
+        {
+            return finish({
+                false,
+                "Project build worker retirement is unverified: " + waited.message,
+                outputPath.generic_string(),
+                logPath.generic_string(),
+                cancellation.stop_requested(),
+                false});
+        }
         (void)platform::child_process::release(launched.handle);
         if (waited.code == platform::child_process::WaitCode::cancelled)
         {

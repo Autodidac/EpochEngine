@@ -211,6 +211,24 @@ int main(int argc, char** argv)
     const auto solid = preview::object_solid_vertices_for(&context);
     MESH_CHECK(solid.size() == 6u && solid[0].position.x == 1.0f
         && solid[0].position.y == 2.0f && solid[0].position.z == -3.0f);
+    {
+        int effectContext{};
+        auto effect = marker;
+        effect.color = {0.41f, 0.68f, 0.93f};
+        effect.selected = true;
+        MESH_CHECK(preview::set_object_markers(&effectContext, {&effect, 1u}));
+        const auto litRevision = preview::preview_content_revision_for(&effectContext);
+        effect.unlit = true;
+        MESH_CHECK(preview::set_object_markers(&effectContext, {&effect, 1u}));
+        MESH_CHECK(preview::preview_content_revision_for(&effectContext) != litRevision);
+        const auto unlit = preview::object_solid_vertices_for(&effectContext);
+        const auto& source = first.artifact->vertices()[first.artifact->indices().front()];
+        MESH_CHECK(unlit.size() == solid.size()
+            && unlit[0].color.x == source.color[0] * effect.color.x
+            && unlit[0].color.y == source.color[1] * effect.color.y
+            && unlit[0].color.z == source.color[2] * effect.color.z);
+        preview::cleanup_context(&effectContext);
+    }
     marker.mesh = decoded.artifact;
     MESH_CHECK(preview::set_object_markers(&context, {&marker, 1u}));
     MESH_CHECK(preview::preview_content_revision_for(&context) == revision);

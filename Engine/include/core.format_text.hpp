@@ -228,7 +228,10 @@ namespace epochengine
                     return format_value(std::get<Index>(values), spec);
                 return format_tuple_value<Index + 1u>(values, requested, spec);
             }
-            throw std::invalid_argument("Epoch format argument index is out of range");
+            else
+            {
+                throw std::invalid_argument("Epoch format argument index is out of range");
+            }
         }
     }
 

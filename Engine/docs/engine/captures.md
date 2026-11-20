@@ -3,10 +3,14 @@
 This doc records the working validation loop for backend, editor, AI, and
 systems passes so future automation can follow one predictable method.
 
-Native launches below require the operator's explicit exact-run approval under
-AGENTS.md. A request to update docs/screenshots is not permission to launch a
-model, GUI, candidate or GPU test. Reuse attributed operator captures when no
-new run is authorized; never relabel an older screenshot as a newer binary.
+Read [AGENTS.md](../../../AGENTS.md) and the
+[active pass](../../../Changes/active_pass.md) for the current authorized run
+and competing-work limits. Bounded local repair/retest authority does not need
+repeated approval. A screenshot session uses only the selected Editor/project;
+it does not authorize a model load, unrelated build, publication or interruption
+of another test. The release software-OpenGL smoke needs no separate approval.
+Reuse attributed captures when live testing is held; never relabel an older
+screenshot as a newer binary.
 
 The v0.90.35 README uses the operator's October 7 v0.90.34 AI workbench capture
 at `Images/readme/windows-ai-workbench-v09034-20261007.png`. It shows cumulative
@@ -17,13 +21,19 @@ Older images remain additive archives.
 
 For Windows editor and multicontext smoke tests, launch from:
 
-- `x64/Debug/`
-- `x64/Release/`
-- `x64/ReleaseWithDebugInfo/` for the Windows/MSVC optimized-symbols mode
+- `Artifacts/Runtime/windows/development/x64/Debug/`
+- `Artifacts/Runtime/windows/development/x64/Release/`
+- `Artifacts/Runtime/windows/development/x64/ReleaseWithDebugInfo/` for the
+  Windows/MSVC optimized-symbols mode
 
-The same-project CMake BuildAll workflow instead places asset-bearing outputs
-under `build/windows-msvc-debug/Engine/{Debug,Release,RelWithDebInfo}`. There is
-no `BuildAll` executable or separate combined-build project.
+Public source uses `public` in place of `development`; the physical edition
+marker selects that directory. [EpochOutputLayout.props](../../../Tools/MSVC/EpochOutputLayout.props)
+is the direct-MSVC owner. Managed CMake products use
+`Artifacts/Runtime/cmake/<preset>` with a configuration suffix for
+multi-configuration generators. Configure trees remain in
+`Artifacts/Intermediate/cmake/<preset>`. BuildAll dispatches the existing CMake
+workflow; there is no `BuildAll` executable or separate combined-build project.
+Do not fall back to an old `x64` binary when the graph declares this layout.
 
 Those folders carry the runtime assets used by the main editor host and the
 docked backend panes. Do not launch disposable tests from source folders unless
@@ -33,18 +43,43 @@ you are deliberately testing a broken-path scenario.
 
 For runtime/editor/backend changes:
 
-1. Build `EpochEditor | Debug | x64`
-2. Build `EpochEditor | Release | x64`
-3. Launch the real binary from `x64/Debug/`
-4. Verify the intended contexts appear, render, and respond to input
-5. Capture proof through the engine where possible
-6. Close live windows before finishing the pass
-7. Clean up disposable logs/captures created outside the proper runtime path
+1. Build and check the changed production path using the
+   [validation commands](../../../AGENTS.md#3-current-validation-commands).
+   Reuse a verified exact binary for a screenshot-only session.
+2. Record executable hash, edition, version, configuration and source/build receipt.
+3. Launch from its asset-bearing output folder with a fresh checkout-local
+   `--candidate-data-root`, or reuse the identified existing Editor. Use the
+   selected Release build for showcase images. Keep test data separate from the
+   operator's saved project.
+4. Verify the intended context and scene are ready, render, and respond to input.
+5. Capture proof through the engine where possible, then inspect the actual image.
+6. Retire only owned test processes, unless the operator asked to leave the
+   identified Editor open. Preserve unrelated windows and running tests.
+7. Keep captures and receipts checkout-local. Do not delete diagnostic evidence
+   or operator data as routine cleanup.
+
+For a model-free candidate screenshot, provide the complete process-local
+native-input binding: `EPOCH_AI_SHARED_NATIVE_INPUTS_DISABLED=1` **and**
+`EPOCH_AI_SHARED_MODEL_CACHE_ROOT=<absolute checkout-local empty model-cache>`.
+Leave the child runtime executable and DLL-directory overrides absent. The
+`ai.native_shared_inputs.hpp::from_environment` contract rejects the disabled
+flag alone with `Incomplete shared native input binding`; disabled is not an
+independent Boolean switch. The November 15 first screenshot launch reproduced
+that refusal and its owned process retired. The corrected binding permits
+catalog-only operation without discovering or copying a native runtime. Do not
+change the user's saved model configuration for a screenshot.
+
+Candidate projects must be physically under that data root's `Projects/`.
+Preserve their manifest IDs by using a fresh data root when an existing test
+already owns the same ID. To preload an admitted copied project, set
+`EPOCH_EDITOR_PROJECT_ID` and `EPOCH_EDITOR_PROJECT_MANIFEST` only in the launched
+process; the manifest must point inside its private Projects directory.
 
 For release-facing passes, add two more checks:
 
-8. Launch `EpochEditor.exe` once with no extra args from `x64/Release/`
-   and confirm the expected packaged shell actually appears instead of hanging
+8. Check the exact staged package using the
+   [release procedure](../build/scripts.md#version-advancement), including its
+   bounded software-renderer smoke. Native presentation remains a separate check.
 9. If a Windows zip is being published, verify the staged release folder carries
    the VC143 CRT DLLs app-local before zipping
 
@@ -122,17 +157,75 @@ When the pass is multicontext-specific, validate:
 Available knobs:
 
 - runtime flag: `--capture`
+- runtime flag: `--capture-frame <1-36000>` to delay a native capture without smoke mode
 - runtime flag: `--smoke`
 - env var: `EPOCH_CAPTURE_DIR`
 - warmup control: `capture_warmup_frames` in `core.commandline`
 
-Capture outputs commonly land under:
+`--candidate-data-root <root>` routes captures to `<root>/logs/captures/` and
+wins over `EPOCH_CAPTURE_DIR`. Without that private data root, the explicit
+`EPOCH_CAPTURE_DIR` applies, otherwise captures use executable-local
+`logs/captures/`. The owner is `Engine/src/platform/core.path.cpp`.
 
-```text
-logs/captures/
-```
+`--capture` requests one frame per backend/window. `--smoke` adds the current
+12-frame warmup in `core.commandline`; it does not wait for terrain streaming,
+package admission or asynchronous assets to finish. `--scene` supplies a scene
+hint/capture stem, not a project file to open. For settled showcase images use
+Tools > Copy Window Screenshot (`F12`) after the real scene is ready. This
+engine action copies to the clipboard. Save that captured image explicitly and
+verify the saved file. A target-window capture is a fallback.
+
+For scripted world captures use `--capture --capture-frame 900` and verify
+terrain residency in the captured frame. The number is counted per backend
+window. It leaves the separately timed Windows parent-window smoke proof alone.
+For the OpenGL pass probe, set `EPOCH_OPENGL_PREVIEW_SAMPLE_RADIUS` to the
+camera distance divided by the body radius. `EPOCH_OPENGL_PREVIEW_SAMPLE_PIXEL`
+adds one viewport-relative `x,y` sample measured from the bottom left.
+`EPOCH_OPENGL_PREVIEW_SAMPLE_DWELL_MS` extends the stable-camera wait from
+750 ms up to 30,000 ms when streamed geometry settles after the camera.
+For an explicit Software project smoke, the warmup counts frames after the
+renderer draws the project preview or replays the GUI of a GUI-only project.
+The Canvas2D fallback grid leaves the screenshot available for a later frame.
+Check the run log and a later native frame if startup capture is inconclusive.
 
 Prefer engine-owned capture over ad hoc desktop grabs whenever possible.
+
+## Current world and cloud showcase
+
+Use an orbit image and a surface image of the same identified project. Compose
+from a lit view with terrain, water and useful cloud depth visible, then retain
+one full Editor image showing the actual authoring workflow. Wait for accepted
+terrain and texture residency; a settled frame is required even if FPS is high.
+Record cloud visibility, camera/location, simulation time and the selected view
+mode. Wireframe intentionally omits the cloud composition.
+
+The current OpenGL density path is owned by `opengl.cloud_volume`, using the
+`asset.cloud_volume` recipe delivered by the optional Planetary provider in a
+v5 `terrain.epoch_planet_patch`. The November 12 source has regional coverage,
+advecting fronts and varied vertical density. Consult
+[renderer evidence](renderers.md#evidence-policy) for implemented and unverified
+parts. Old body inventories (`.epoch_pbod`) and old geometric clouds do not
+prove density transport. A screenshot of a blank or coarse startup scene does
+not prove the new clouds.
+
+Before opening an existing project, verify its admitted Planet and Water
+sources, saved recipe and matching provider receipt. A disposable copy must
+preserve those required inputs and the exact admitted `Packages/.runtime`
+provider when reusing a verified build. Copying only Assets/worlds leaves no
+provider for cloud/LOD work. Never synthesize cloud data or bypass admission
+just to obtain a screenshot. A source/package upgrade goes through Package
+Manager review and regeneration; record if this needs a later build rather than
+silently starting one alongside another workload.
+
+For each chosen image, keep a concise receipt in the owning pass with the
+capture path/hash, executable identity, source/build receipt, project identity,
+backend, time and limitations. Store diagnostic attempts under
+`Artifacts/Reports/<pass>/`. Approved reusable images are additive under
+`Images/readme/`; preserve old images. Inspect every image for private paths,
+chat/source text and credentials before any public use. A screenshot session
+does not change the root README, its badges, layout, captions or image links.
+Follow the [version procedure](../build/scripts.md#version-advancement) for a
+later publication; do not advance a version just to name a capture.
 
 ## Screenshot guidance
 
@@ -152,17 +245,17 @@ Prefer engine-owned capture over ad hoc desktop grabs whenever possible.
 - refresh the README per-backend proofs from clean startup-only full-window
   captures instead of reusing stale crops after layout, palette, or dock
   chrome changes
-- refresh the README multicontext proof at least every 10th feature version, or
-  sooner whenever visible renderer color, layout, or docking behavior changes
-  enough that the existing proof is misleading
+- flag an outdated README proof when visible renderer color, layout or docking
+  behavior makes it misleading; stage a fresh image without rewriting the README
+  until that publication change is requested
 - README proof must reflect the current source and evidence matrix. Use the
   seven-provider regression plan for release evidence; include Software when
   proving the CPU fallback rather than presenting an obsolete fixed lineup.
-- the current PowerShell harness screenshot is diagnostic proof, not the final
-  long-term screenshot system; the target remains an engine-owned parent-window
-  proof path for fullscreen multicontext captures
+- use the current engine-owned full-window capture where available; retain
+  harness captures as attributed diagnostic evidence and verify all child panes
+  are present before claiming full multicontext proof
 - if the engine-owned software capture path is black or otherwise invalid, use
-  an honest asset-bearing desktop capture from `x64/Debug` or `x64/Release`
+  an honest target-window capture from the verified asset-bearing output folder
   instead of publishing a misleading proof image
 - if a supposedly valid proof still shows fake wrapper ownership, oversized
   child rects, or an early maximize crash, do not update the README screenshot
@@ -195,49 +288,16 @@ Prefer engine-owned capture over ad hoc desktop grabs whenever possible.
 
 ## AI smoke prompts
 
-When a local helper model is running, use at least one editor-context prompt and
-one C++/engine prompt:
+The [AI runtime contract](ai_runtime.md), [source workflow](ai_source.md) and
+[active pass](../../../Changes/active_pass.md) own model selection, permissions,
+resource limits and exact test scope. A screenshot run does not start inference.
+When an AI workflow is in scope, reuse its existing admitted engine path and
+selected model; do not add external helper servers or repeated readiness prompts.
+Record the actual model, visible result, cancellation/retirement and resource
+receipt. A model list or healthy service alone does not prove a completed task.
+Keep raw transcripts and mutable state in the selected local data root, outside
+public source/release payloads. Do not surface hidden reasoning as an answer.
 
-- `In Epoch editor, project 'Sandbox' has 6 entities. Suggest one concrete next edit and one gameplay follow-up.`
-- `Explain why mixed C++23 module units should use module; before legacy includes.`
-
-Expected smoke behavior:
-
-- the selected helper model is logged
-- discovery may list local models, but chat/tool execution should stay disabled
-  until the operator selects one in the editor
-- local helper drafting for docs/code/review is encouraged only for
-  operator-allowed models; runtime parity testing should stay on the selected
-  editor model
-- the AI dock returns a visible reply
-- if the selected model rejects explicit reasoning configuration, the
-  request path should retry without the reasoning field instead of surfacing an
-  empty reply
-- explicitly retained model exchange lands in `Engine/examples/EpochEditor/workspace/model_exchange.jsonl`
-- MCP tool traces can land in `Engine/examples/EpochEditor/workspace/tool_trace.jsonl`
-- no `Engine/examples/EpochEditor/workspace/ai/*` checkpoints, compiled models, or caches show up as
-  staged Git changes
-- if the local helper set changes, re-probe `/v1/models` and require an
-  explicit editor/operator selection before runtime chat/tooling resumes
-- when driving local helpers directly, prefer bounded `/v1/responses` or
-  `/v1/chat/completions` requests; omit explicit reasoning config when the
-  loaded model rejects it
-- probe `/v1/models` at the start of a phase, respect any already-stated
-  helper-use preference, and only ask which loaded models are allowed when that
-  allow-list is not already clear
-- for the current `9900X` + `5800` workstation target, up to five bounded local
-  helper prompts may be used for drafting/review when the operator allows them,
-  while the engine runtime itself stays on the selected editor model
-- prefer LM Studio `/v1/responses` for offloaded helper drafts, while keeping
-  the engine runtime itself on the selected local model for parity
-- if a helper returns blank `content` with only `reasoning_content`, treat the
-  pass as a model/API configuration failure for user-visible chat. Do not
-  surface or harvest hidden reasoning as an assistant answer; retry with a
-  content-producing model/configuration or keep the pass as private diagnostic
-  evidence outside reviewed session traces.
-- if allowed helpers split text and vision strengths, keep the selected editor
-  model as runtime parity and use the vision-capable helper for screenshot
-  review, pane/layout checks, and color/parity triage
 - for GUI behavior changes, helper review prompts should explicitly check theme
   mode names, menu click capture, detached pane identity, and whether any click
   behind a visible menu fired a different command
@@ -246,10 +306,9 @@ Expected smoke behavior:
 - keep startup-render proof and dock/undock validation as separate harness passes:
   use the normal harness path for drag truth, and opt into `-CaptureStartupProof`
   only when you are intentionally collecting first-frame rendered-content samples
-- for README or doc screenshot refreshes, prefer the new startup-only harness
-  path: pair `-CaptureStartupProof` with `-StartupOnly` so proof capture does
-  not depend on synthetic drag input when the runtime bug under investigation is
-  unrelated to startup layout
+- for startup-layout evidence, pair the existing harness's
+  `-CaptureStartupProof` with `-StartupOnly` to avoid synthetic drag dependencies.
+  Use a later settled capture for project, terrain, cloud or texture showcases.
 - when validating proxy-child backends, prefer the new `ContractMode` and
   `LateDetached` fields over older assumptions that every backend should already
   be redocked before mouse release
@@ -276,8 +335,9 @@ Expected smoke behavior:
 - when validating SFML redock, trust the actual release position more than the
   last remembered drag point; the Win32 path now redocks from the release-point
   test specifically to avoid stale drag-state failures in loaded full-grid runs
-- if a serial harness run leaves a non-responding `EpochEditor`, kill it
-  and discard that run instead of treating the JSON as evidence
+- if a serial harness run leaves a non-responding `EpochEditor`, preserve the
+  failure evidence, retire only its exact owned process tree, and stop runtime
+  probing until the cause is understood. Do not terminate an operator Editor.
 
 ## Release asset checks
 
@@ -312,20 +372,14 @@ Expected smoke behavior:
 - black or empty software captures are not valid proof; they should trigger
   deeper investigation or a different honest capture path
 
-## Commit pattern memory
+## Publication and source identity
 
-The working commit/push pattern is:
-
-- sync with `origin/main`
-- keep unrelated dirt out of the pass
-- bump canonical `epoch.version.ixx` and mirror its source identity in the
-  updater-facing `engine.version.ixx` compatibility module
-- keep `Changes/roadmap.md` current when the steering surface changes
-- update README/docs/changelog when the behavior is user-visible
-- use a descriptive commit title without baking the version number into the
-  commit message
-- verify builds before pushing
-- do not leave live windows or bad-folder logs behind
+Use the single [version and release procedure](../build/scripts.md#version-advancement)
+and its [Development preservation rules](../build/scripts.md#preserving-development-source).
+The capture procedure does not maintain another version checklist. A fresh
+screenshot cannot establish an edition's build, privacy, updater or Linux
+acceptance. Keep the exact source and executable receipts separate from the
+image, and label any unverified behavior honestly.
 
 ## Automation target
 
@@ -339,5 +393,5 @@ The next honest automation step is to script:
   clicks, and pane-title drag/release popouts when those areas changed
 - verify expected files landed
 - close the runtime cleanly
-- optionally refresh the README proof when the version cadence or visible
-  renderer/layout changes require it
+- stage verified showcase images additively, leaving README publication as a
+  separate requested change

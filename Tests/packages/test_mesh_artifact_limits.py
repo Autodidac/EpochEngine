@@ -31,10 +31,34 @@ import asset.mesh_artifact;
 import asset.texture_artifact;
 namespace mesh=epochengine::asset::mesh;namespace fs=std::filesystem;
 bool denyAll{},denyLarge{};std::size_t blocked{};
-void* operator new(std::size_t count){if(denyAll||(denyLarge&&count>65536)){++blocked;throw std::bad_alloc{};}if(void* p=std::malloc(count?count:1))return p;throw std::bad_alloc{};}
+struct BufferOverlap {
+ std::array<std::size_t,3> sizes;
+ std::array<void*,3> live{};
+ bool sawHash{},overlap{};
+};
+BufferOverlap* watchedBuffers{};
+void* operator new(std::size_t count){
+ if(denyAll||(denyLarge&&count>65536)){++blocked;throw std::bad_alloc{};}
+ void* allocation=std::malloc(count?count:1);
+ if(!allocation)throw std::bad_alloc{};
+ if(watchedBuffers){
+  auto& watch=*watchedBuffers;
+  for(std::size_t slot=0;slot<watch.sizes.size();++slot)
+   // MSVC may reserve a small prefix to align large vector allocations.
+   if(count>=watch.sizes[slot]&&count-watch.sizes[slot]<=64u)watch.live[slot]=allocation;
+  watch.sawHash|=watch.live[0]!=nullptr;
+  watch.overlap|=watch.live[0]&&(watch.live[1]||watch.live[2]);
+ }
+ return allocation;
+}
 void* operator new[](std::size_t count){return ::operator new(count);}
-void operator delete(void* p)noexcept{std::free(p);}void operator delete[](void* p)noexcept{std::free(p);}
-void operator delete(void* p,std::size_t)noexcept{std::free(p);}void operator delete[](void* p,std::size_t)noexcept{std::free(p);}
+void operator delete(void* p)noexcept{
+ if(watchedBuffers)for(auto& allocation:watchedBuffers->live)if(allocation==p)allocation=nullptr;
+ std::free(p);
+}
+void operator delete[](void* p)noexcept{::operator delete(p);}
+void operator delete(void* p,std::size_t)noexcept{::operator delete(p);}
+void operator delete[](void* p,std::size_t)noexcept{::operator delete(p);}
 void check(bool value,int line){if(!value){std::fprintf(stderr,"Mesh limits contract failed line %d\n",line);std::exit(89);}}
 #define CHECK(...) check(static_cast<bool>((__VA_ARGS__)),__LINE__)
 template<class Action>auto noAllocation(Action action){blocked=0;denyAll=true;auto result=action();denyAll=false;CHECK(blocked==0);return result;}
@@ -79,7 +103,13 @@ int main(int argc,char**argv){
  const mesh::Limits large{300000,1600000,32ull*1024*1024};
  for(unsigned cells:{150u,210u}){auto geometry=sphere(cells);CHECK(geometry.vertices.size()>65536&&geometry.indices.size()>196608);
   CHECK(!noAllocation([&]{return mesh::build_artifact(geometry.vertices,geometry.indices);}));
-  for(unsigned cycle=0;cycle<2;++cycle){const auto built=mesh::build_artifact(geometry.vertices,geometry.indices,large);CHECK(built);
+  for(unsigned cycle=0;cycle<2;++cycle){
+   BufferOverlap watch{{8+geometry.vertices.size()*44+geometry.indices.size()*4,
+    geometry.vertices.size()*sizeof(mesh::Vertex),geometry.indices.size()*sizeof(std::uint32_t)}};
+   watchedBuffers=&watch;
+   const auto built=mesh::build_artifact(geometry.vertices,geometry.indices,large);
+   watchedBuffers=nullptr;
+   CHECK(built&&watch.sawHash&&!watch.overlap&&watch.live[1]&&watch.live[2]);
    const auto bytes=mesh::encode_artifact(*built.artifact);CHECK(bytes.size()==48+geometry.vertices.size()*44+geometry.indices.size()*4&&bytes.size()<large.maximum_bytes);
    CHECK(!noAllocation([&]{return mesh::decode_artifact(bytes);}));const auto decoded=mesh::decode_artifact(bytes,large);CHECK(decoded&&decoded.artifact->key()==built.artifact->key()&&mesh::encode_artifact(*decoded.artifact)==bytes);
    CHECK(decoded.artifact->vertices().size()==geometry.vertices.size()&&decoded.artifact->indices().size()==geometry.indices.size());
@@ -136,6 +166,7 @@ project(MeshArtifactLimits LANGUAGES CXX)
 add_executable(mesh_limits mesh.limits_contract.cpp "{(ROOT/'Engine/src/assets/texture/asset.texture_artifact.cpp').as_posix()}")
 target_compile_features(mesh_limits PRIVATE cxx_std_23)
 target_compile_options(mesh_limits PRIVATE /W3 /WX /utf-8)
+set_property(TARGET mesh_limits PROPERTY MSVC_DEBUG_INFORMATION_FORMAT Embedded)
 target_sources(mesh_limits PRIVATE FILE_SET CXX_MODULES BASE_DIRS "{(ROOT/'Engine/modules').as_posix()}" FILES "{OWNER.as_posix()}" "{(ROOT/'Engine/modules/asset.texture_artifact.ixx').as_posix()}")
 enable_testing()
 add_test(NAME actual_bounded_mesh_codec COMMAND mesh_limits "{fixture.as_posix()}/$<CONFIG>")
@@ -159,7 +190,7 @@ set_tests_properties(actual_bounded_mesh_codec PROPERTIES TIMEOUT 120)
             "scope": "Actual mesh/texture modules and hash implementation; no renderer, project or Engine runtime",
             "ownerSha256": hashlib.sha256(OWNER.read_bytes()).hexdigest(), "defaultV1Sha256": DEFAULT_V1_SHA256,
             "fixture": str(fixture), "commands": results,
-            "cases": ["unchanged defaults/v1 golden", "136806/810000 and267126/1587600 cube-sphere roundtrips under explicit32MiB", "default rejection", "three repeated invalid caps/counts/length/index/nonfinite cycles without decoded allocation", "file header/length preflight before file buffer", "absolute bounded caps accepted"],
+            "cases": ["unchanged defaults/v1 golden", "136806/810000 and267126/1587600 cube-sphere roundtrips under explicit32MiB", "hash scratch retired before mesh copy", "default rejection", "three repeated invalid caps/counts/length/index/nonfinite cycles without decoded allocation", "file header/length preflight before file buffer", "absolute bounded caps accepted"],
             "limits": "Only this codec supports explicit larger caps. Project/render/Editor residency budgets remain separate.",
         }, indent=2) + "\n", encoding="utf-8")
 

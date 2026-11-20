@@ -137,6 +137,32 @@ int main()
         {.popup={.mouse_position=disabled,.mouse_released=true}});
     CHECK(!layout.activated_id&&state.popup.open&&layout.pointer_captured);
 
+    // Cancellation drops the held button without a release. Keep the menu
+    // open, but retire its command press before any later unpaired release.
+    layout=gui::update_command_menu(state,commands,config,
+        {.popup={.mouse_position=first,.mouse_pressed=true},.pointer_down=true});
+    CHECK(state.pressed_id==1);
+    layout=gui::update_command_menu(state,commands,config,
+        {.popup={.mouse_position=first}});
+    CHECK(!state.pressed_id&&state.popup.open&&!layout.activated_id);
+    layout=gui::update_command_menu(state,commands,config,
+        {.popup={.mouse_position=first,.mouse_released=true}});
+    CHECK(!layout.activated_id&&state.popup.open);
+    // A held press survives frames without edges, and a fresh queued click
+    // still activates when both edges arrive with the button already up.
+    layout=gui::update_command_menu(state,commands,config,
+        {.popup={.mouse_position=first,.mouse_pressed=true},.pointer_down=true});
+    layout=gui::update_command_menu(state,commands,config,
+        {.popup={.mouse_position=first},.pointer_down=true});
+    CHECK(state.pressed_id==1&&!layout.activated_id);
+    layout=gui::update_command_menu(state,commands,config,
+        {.popup={.mouse_position=first,.mouse_released=true}});
+    CHECK(layout.activated_id==1&&!state.popup.open);
+    layout=gui::update_command_menu(state,commands,config,open());
+    layout=gui::update_command_menu(state,commands,config,
+        {.popup={.mouse_position=first,.mouse_pressed=true,.mouse_released=true}});
+    CHECK(layout.activated_id==1&&!state.popup.open);
+
     // Scrollbars exist only after real viewport clipping. Wheel and thumb drag
     // use the existing compiled scrollbar owner and retain bounded scroll state.
     config.viewport_size.y=150;gui::close_command_menu(state);
@@ -285,6 +311,17 @@ int main()
     const auto otherPoint=center(layout.submenus[0].rows[0].rect);
     layout=gui::update_command_menu(state,groups,config,
         {.popup={.mouse_position=childPoint,.mouse_pressed=true,.mouse_released=true},.press_position=otherPoint});
+    CHECK(!layout.activated_id&&state.popup.open&&state.submenu[0].popup.open);
+    // The same cancellation rule applies to a child pane without dismissing
+    // either pane or dispatching a command from a late release.
+    layout=gui::update_command_menu(state,groups,config,
+        {.popup={.mouse_position=childPoint,.mouse_pressed=true},.pointer_down=true});
+    CHECK(state.submenu[0].pressed_id==202);
+    layout=gui::update_command_menu(state,groups,config,
+        {.popup={.mouse_position=childPoint}});
+    CHECK(!state.submenu[0].pressed_id&&state.submenu[0].popup.open);
+    layout=gui::update_command_menu(state,groups,config,
+        {.popup={.mouse_position=childPoint,.mouse_released=true}});
     CHECK(!layout.activated_id&&state.popup.open&&state.submenu[0].popup.open);
     layout=gui::update_command_menu(state,groups,config,{.popup={.escape_pressed=true}});
     CHECK(!state.popup.open&&state.submenu.empty()&&layout.keyboard_captured);

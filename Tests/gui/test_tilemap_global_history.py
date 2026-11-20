@@ -235,7 +235,7 @@ class TileMapGlobalHistory(unittest.TestCase):
         source.write_text(fixture(), encoding="utf-8")
         available = {}
         for directory in (ROOT / "Engine/modules", ROOT / "Engine/dep/EpochPlatformEngine/modules"):
-            for path in directory.glob("*.ixx"):
+            for path in directory.rglob("*.ixx"):
                 match = re.search(r"^export module\s+([\w.:]+);", path.read_text(encoding="utf-8-sig"), re.M)
                 if match:
                     available[match.group(1)] = path
@@ -266,7 +266,8 @@ enable_testing()
 add_test(NAME actual_tilemap_global_history COMMAND tilemap_global_history)
 set_tests_properties(actual_tilemap_global_history PROPERTIES TIMEOUT 20)
 ''', encoding="utf-8")
-        commands = [["cmake", "-S", str(proof), "-B", str(build), "-G", "Visual Studio 17 2022", "-A", "x64"]]
+        commands = [["cmake", "-S", str(proof), "-B", str(build), "-G", "Visual Studio 17 2022", "-A", "x64",
+                     "-DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded"]]
         for configuration in ("Debug", "Release"):
             commands += [["cmake", "--build", str(build), "--config", configuration, "--parallel", "1"],
                          ["ctest", "--test-dir", str(build), "-C", configuration, "--output-on-failure"]]

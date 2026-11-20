@@ -12,10 +12,12 @@ module;
 #include <stop_token>
 #include <string>
 #include <string_view>
+#include <vector>
 
 export module project.planetary_runtime;
 import asset.mesh_artifact;
 import asset.cloud_volume;
+import project.planetary_snapshot;
 export import water.wave;
 
 export namespace epochengine::project_planetary_runtime
@@ -64,6 +66,8 @@ export namespace epochengine::project_planetary_runtime
         std::shared_ptr<const asset::mesh::Artifact> cloud_mesh{};
         double cloud_wind_degrees{};
         std::optional<asset::cloud_volume::Recipe> cloud_density{};
+        // Zero is airless. Missing preserves compatibility with older providers.
+        std::optional<double> atmosphere_height_meters{};
     };
     struct Sunlight final
     {
@@ -98,6 +102,11 @@ export namespace epochengine::project_planetary_runtime
         std::uint32_t body{};
         std::array<double, 3> body_local_position_meters{}, body_local_forward{};
     };
+    struct FlightStart final
+    {
+        std::uint32_t body{};
+        std::array<double, 3> body_local_position_meters{}, body_local_forward{}, body_local_up{};
+    };
 
     inline constexpr std::size_t maximum_walk_boxes = 256u;
     struct WalkBox final
@@ -124,6 +133,68 @@ export namespace epochengine::project_planetary_runtime
         }
     };
 
+    struct GroundCoverDrawPatch final
+    {
+        std::array<double,3> body_local_anchor_meters{};
+        std::shared_ptr<const asset::mesh::Artifact> mesh{};
+    };
+    inline constexpr std::size_t maximum_ground_cover_patches{9u};
+    inline constexpr std::size_t maximum_visible_ground_cover_patches{64u};
+    inline constexpr double ground_cover_view_update_meters{1.0};
+
+    // An admitted provider owns its immutable terrain sampling inputs.
+    // The scheduler can retain this handle independently of the controller.
+    class GroundCoverProvider
+    {
+    public:
+        virtual ~GroundCoverProvider() = default;
+        [[nodiscard]] virtual std::optional<GroundCoverDrawPatch> build_patch(std::uint32_t body,
+            std::array<double,3> body_local_direction,std::stop_token) const = 0;
+        // An engaged empty result is a supported neighborhood with no visible patches.
+        [[nodiscard]] virtual std::optional<std::vector<GroundCoverDrawPatch>> build_neighborhood(
+            std::uint32_t, std::array<double,3>, std::stop_token) const { return std::nullopt; }
+        [[nodiscard]] virtual std::optional<std::vector<GroundCoverDrawPatch>> build_visible_neighborhood(
+            std::uint32_t, std::array<double,3>, double, std::stop_token) const { return std::nullopt; }
+    };
+
+    enum class TerrainStatus : std::uint8_t { ready, pending, busy, cancelled, invalid, capacity, failed };
+    struct TerrainProfile final
+    {
+        std::uint32_t cells_per_tile{}, maximum_level{}, maximum_leaves{}, resident_megabytes{};
+        double patch_pixels{}, lod_hysteresis{};
+        asset::mesh::Limits artifact{};
+        project_planetary_snapshot::Limits wet_transition_limits{};
+    };
+    struct TerrainView final
+    {
+        std::uint64_t request_id{};
+        std::array<double,3> world_camera_meters{}, forward{}, up{};
+        double seconds{}, vertical_fov{}, aspect_ratio{};
+        std::uint32_t viewport_height{};
+        // The scene owns FFT evaluation and vouches for this presented sample.
+        std::shared_ptr<const water::wave::Tile> water_sample{};
+    };
+    struct TerrainBatch final
+    {
+        TerrainStatus status{TerrainStatus::failed};
+        std::uint64_t request_id{}, generation{};
+        std::size_t built{}, pending{}, draw_patches{};
+        std::uint8_t maximum_level{};
+        std::shared_ptr<const asset::mesh::Artifact> artifact{};
+        std::array<double,3> source_origin_meters{}; // Body-local metres, 1 metre per unit.
+        std::shared_ptr<const project_planetary_snapshot::Snapshot> aquatic_source{};
+        std::shared_ptr<const asset::mesh::SphericalWaterAppearance> water_appearance{};
+        std::string_view failure{};
+    };
+    // A session-owned provider advances bounded work on the host scheduler.
+    // A partial result never authorizes replacing the previous complete cut.
+    class TerrainProvider
+    {
+    public:
+        virtual ~TerrainProvider() = default;
+        [[nodiscard]] virtual TerrainBatch step(const TerrainView&,std::stop_token) = 0;
+    };
+
     class Controller
     {
     public:
@@ -135,6 +206,14 @@ export namespace epochengine::project_planetary_runtime
         [[nodiscard]] virtual std::string encode_session() const = 0;
         [[nodiscard]] virtual bool restore_session(std::string_view) = 0;
         [[nodiscard]] virtual std::shared_ptr<water::wave::Provider> water_provider() const {return {};}
+        [[nodiscard]] virtual std::shared_ptr<const project_planetary_snapshot::WaterLatticeProvider>
+            water_lattice_provider() const {return {};}
+        [[nodiscard]] virtual Result start_in_flight(const FlightStart&) { return {}; }
+        [[nodiscard]] virtual std::shared_ptr<const GroundCoverProvider> ground_cover_provider() const {return {};}
+        [[nodiscard]] virtual std::shared_ptr<TerrainProvider> create_dry_terrain_provider(
+            const TerrainProfile&) const {return {};}
+        [[nodiscard]] virtual std::shared_ptr<TerrainProvider> create_wet_terrain_provider(
+            const TerrainProfile&, std::string_view) const {return {};}
     };
     using Factory = std::unique_ptr<Controller> (*)(const Binding&);
 
@@ -189,6 +268,8 @@ export namespace epochengine::project_planetary_runtime
             if (!finite(body.center) || !std::isfinite(body.radius) || body.radius <= 0.0
                 || !body.coarse_mesh || body.coarse_mesh->vertices().empty() || body.coarse_mesh->indices().empty()
                 || !std::isfinite(body.cloud_wind_degrees)||body.cloud_wind_degrees<0.0||body.cloud_wind_degrees>=360.0
+                || (body.atmosphere_height_meters && (!std::isfinite(*body.atmosphere_height_meters)
+                    || *body.atmosphere_height_meters < 0.0))
                 || (body.cloud_density&&(!asset::cloud_volume::valid(*body.cloud_density,body.radius)||body.cloud_mesh))
                 || (body.cloud_mesh&&(body.cloud_mesh->vertices().empty()||body.cloud_mesh->indices().empty()
                     ||body.cloud_mesh->vertices().size()>24'000u||body.cloud_mesh->indices().size()>140'000u
@@ -210,6 +291,7 @@ export namespace epochengine::project_planetary_runtime
         std::shared_ptr<const asset::mesh::Artifact> cloud_mesh{};
         double cloud_wind_degrees{};
         std::optional<asset::cloud_volume::Recipe> cloud_density{};
+        double atmosphere_height{};
     };
     struct PreviewFrame final
     {
@@ -244,11 +326,14 @@ export namespace epochengine::project_planetary_runtime
             body.id=original.id;body.mesh=original.coarse_mesh;
             body.cloud_mesh=original.cloud_mesh;body.cloud_wind_degrees=original.cloud_wind_degrees;
             body.cloud_density=original.cloud_density;
+            const double legacyAtmosphere=original.cloud_density
+                ? 3.0*(original.cloud_density->base_altitude_meters+original.cloud_density->thickness_meters) : 0.0;
+            body.atmosphere_height=original.atmosphere_height_meters.value_or(legacyAtmosphere)*result.meters_to_preview;
             body.radius=original.radius*result.meters_to_preview;
             for(std::size_t axis=0;axis<3;++axis)
                 body.center[axis]=(original.center[axis]-anchor->center[axis])*result.meters_to_preview;
             const auto distance=std::hypot(body.center[0]-result.camera[0],body.center[1]-result.camera[1],body.center[2]-result.camera[2])+body.radius;
-            if(!std::isfinite(distance)||!std::isfinite(body.radius))return {};
+            if(!std::isfinite(distance)||!std::isfinite(body.radius)||!std::isfinite(body.atmosphere_height))return {};
             if(distance>result.far_distance)result.far_distance=distance;
         }
         return result;
@@ -256,9 +341,18 @@ export namespace epochengine::project_planetary_runtime
 
     namespace detail
     {
-        inline std::mutex factory_mutex{};
-        inline std::optional<Binding> admitted_binding{};
-        inline Factory factory{};
+        struct FactoryRegistration final
+        {
+            std::mutex mutex{};
+            std::optional<Binding> admitted_binding{};
+            Factory factory{};
+        };
+
+        [[nodiscard]] FactoryRegistration& factory_registration() noexcept
+        {
+            static FactoryRegistration registration{};
+            return registration;
+        }
     }
     // Trusted, linked-extension routing only, not an OS sandbox or source
     // admission policy. The existing host parser/package gate supplies this
@@ -266,32 +360,36 @@ export namespace epochengine::project_planetary_runtime
     [[nodiscard]] inline bool bind_admitted_project(const Binding& binding)
     {
         if (!valid_binding(binding)) return false;
-        std::lock_guard lock(detail::factory_mutex);
-        if (detail::admitted_binding) return *detail::admitted_binding == binding;
-        detail::admitted_binding=binding;
+        auto& registration = detail::factory_registration();
+        std::lock_guard lock(registration.mutex);
+        if (registration.admitted_binding) return *registration.admitted_binding == binding;
+        registration.admitted_binding = binding;
         return true;
     }
     [[nodiscard]] inline bool register_factory(const Binding& binding, Factory factory)
     {
         if (!factory || !valid_binding(binding)) return false;
-        std::lock_guard lock(detail::factory_mutex);
-        if (!detail::admitted_binding || *detail::admitted_binding != binding) return false;
-        if (detail::factory) return detail::factory == factory;
-        detail::factory=factory;
+        auto& registration = detail::factory_registration();
+        std::lock_guard lock(registration.mutex);
+        if (!registration.admitted_binding || *registration.admitted_binding != binding) return false;
+        if (registration.factory) return registration.factory == factory;
+        registration.factory = factory;
         return true;
     }
     [[nodiscard]] inline std::optional<Binding> admitted_project_binding()
     {
-        std::lock_guard lock(detail::factory_mutex);
-        return detail::admitted_binding;
+        auto& registration = detail::factory_registration();
+        std::lock_guard lock(registration.mutex);
+        return registration.admitted_binding;
     }
     [[nodiscard]] inline std::unique_ptr<Controller> create_controller(const Binding& binding)
     {
         Factory factory{};
         {
-            std::lock_guard lock(detail::factory_mutex);
-            if (!detail::admitted_binding || *detail::admitted_binding != binding) return {};
-            factory=detail::factory;
+            auto& registration = detail::factory_registration();
+            std::lock_guard lock(registration.mutex);
+            if (!registration.admitted_binding || *registration.admitted_binding != binding) return {};
+            factory = registration.factory;
         }
         if (!factory) return {};
         try { return factory(binding); } catch (...) { return {}; }

@@ -66,14 +66,23 @@ SurfaceSample sample_surface(const Body& b,DVec3 direction) noexcept {
     const double temp=std::clamp(1.1-std::abs(d.y)*1.15-std::max(height,0.0)/(13000.0*b.geography_scale),0.0,1.0);
     FVec3 color;
     switch(b.kind) {
-    case BodyKind::temperate:
-        if(height<0) color={0.09f,0.15f,0.13f};
-        else if(height<95*b.geography_scale) color={0.53f,0.45f,0.26f};
-        else if(temp<0.17||height>5600*b.geography_scale) color={0.82f,0.87f,0.88f};
-        else if(height>3300*b.geography_scale) color={0.27f,0.28f,0.26f};
-        else if(moisture<0.37) color={0.43f,0.36f,0.17f};
-        else color=mix(FVec3{0.07f,0.18f,0.07f},FVec3{0.24f,0.34f,0.10f},static_cast<float>(1.0-moisture));
+    case BodyKind::temperate: {
+        const double elevation=height/b.geography_scale;
+        const auto grass=static_cast<float>(smooth(0.31,0.46,moisture));
+        const auto meadow=mix(FVec3{0.28f,0.33f,0.12f},FVec3{0.11f,0.23f,0.085f},
+            static_cast<float>(smooth(0.4,0.8,moisture)));
+        const auto high_rock=static_cast<float>(smooth(2600.0,3850.0,elevation));
+        const auto snow=static_cast<float>(std::max(
+            smooth(4750.0,6100.0,elevation),1.0-smooth(0.12,0.23,temp)));
+        const auto coastal=static_cast<float>(smooth(18.0,140.0,elevation));
+        const auto shoreline=static_cast<float>(smooth(-22.0,8.0,elevation));
+        const auto sand=mix(FVec3{0.27f,0.25f,0.16f},FVec3{0.49f,0.42f,0.25f},shoreline);
+        color=mix(FVec3{0.39f,0.34f,0.17f},meadow,grass);
+        color=mix(color,FVec3{0.31f,0.32f,0.29f},high_rock);
+        color=mix(color,FVec3{0.82f,0.87f,0.88f},snow);
+        color=mix(FVec3{0.09f,0.15f,0.13f},mix(sand,color,coastal),shoreline);
         break;
+    }
     case BodyKind::desert:
         height+=b.height_scale*0.15;
         color=mix(FVec3{0.29f,0.11f,0.045f},FVec3{0.67f,0.39f,0.17f},static_cast<float>(std::clamp(ridge,0.0,1.0)));

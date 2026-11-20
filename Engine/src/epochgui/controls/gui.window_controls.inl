@@ -23,6 +23,7 @@
         const float contentWidth = (std::max)(1.0f, popup.width - scrollbarWidth - 2.0f);
         const auto& palette = active_palette();
 
+        draw_window_shadow(popup.position, {popup.width, popup.height});
         draw_sprite(palette.consoleBackground, popup.position.x, popup.position.y, popup.width, popup.height);
 
         {
@@ -82,7 +83,19 @@
         {
             ContentClipClearScope clearClip;
             for (const PendingSelectPopup& popup : g_frame.pendingSelectPopups)
+            {
+                const auto firstDraw = g_frame.topLayerDraws.size();
                 render_select_popup(popup);
+                if (popup.traceOpen)
+                {
+                    g_frame.tracePopupPublication = true;
+                    logger::info("Epoch.GUI.Popup", epochengine::format_text(
+                        "paint ctx={} options={} rect={},{},{},{} draw-range={}..{}",
+                        reinterpret_cast<std::uintptr_t>(g_frame.ctx), popup.options.size(),
+                        popup.position.x, popup.position.y, popup.width, popup.height,
+                        firstDraw, g_frame.topLayerDraws.size()));
+                }
+            }
         }
         end_top_layer();
 
@@ -99,7 +112,8 @@
         begin_window(title, position, size, draw_background, true);
     }
 
-    void begin_window(std::string_view title, Vec2 position, Vec2 size, bool draw_background, bool show_title_bar) noexcept
+    static void begin_window_impl(std::string_view title, Vec2 position, Vec2 size,
+        bool draw_background, bool show_title_bar, bool translucent) noexcept
     {
         if (!g_frame.ctx) return;
 
@@ -134,18 +148,15 @@
             // Floating/modal top layers keep their independent silhouettes.
             const bool floatingSurface = g_frame.topLayerDepth > 0
                 || !g_floatingWindowTopLayerStack.empty();
-            if (floatingSurface && g_resources.windowShadow.is_valid())
+            if (translucent)
             {
-                constexpr float shadowOffset = 4.0f;
-                draw_sprite_raw(
-                    g_resources.windowShadow,
-                    position.x + shadowOffset,
-                    position.y + shadowOffset,
-                    size.x,
-                    size.y);
+                draw_sprite(palette.overlayBackground, position.x, position.y, size.x, size.y);
             }
-            if (floatingSurface)
+            else if (floatingSurface)
+            {
+                draw_window_shadow(position, size);
                 draw_sprite(palette.windowBackground, position.x, position.y, size.x, size.y);
+            }
             else
                 draw_sprite_raw(palette.windowBackground, position.x, position.y, size.x, size.y);
         }
@@ -156,17 +167,9 @@
         {
             const float titleHeight = line_advance_amount(kTitleScale);
             titleBarHeight = titleHeight + 2.0f * kTitleBarPadding;
-            const float titleTextY = position.y + (titleBarHeight - titleHeight) * 0.5f;
             draw_sprite(palette.titleBar, position.x, position.y, size.x, titleBarHeight);
-            const std::string fittedTitle = fit_text_to_width(
-                title,
-                (std::max)(1.0f, size.x - 2.0f * kContentPadding),
-                kTitleScale);
-            draw_caption_text(
-                fittedTitle.empty() ? title : std::string_view{ fittedTitle },
-                position.x + kContentPadding,
-                titleTextY,
-                kTitleScale);
+            draw_window_caption(title, position.x + kContentPadding, position.y,
+                titleBarHeight, (std::max)(1.0f, size.x - 2.0f * kContentPadding), kTitleScale);
         }
 
         const bool fullBleedContent = !draw_background && title.empty();
@@ -184,6 +187,16 @@
             };
 
         set_cursor(g_frame.contentMin);
+    }
+
+    void begin_window(std::string_view title, Vec2 position, Vec2 size, bool draw_background, bool show_title_bar) noexcept
+    {
+        begin_window_impl(title, position, size, draw_background, show_title_bar, false);
+    }
+
+    void begin_overlay_window(std::string_view title, Vec2 position, Vec2 size, bool show_title_bar) noexcept
+    {
+        begin_window_impl(title, position, size, true, show_title_bar, true);
     }
 
     void end_window() noexcept
@@ -410,15 +423,19 @@
         // begin_window established body clipping. Chrome owns the full window,
         // then the existing scope restores the exact body clip for children.
         const ContentClipClearScope chromeClip;
-        if (options.dim_background && options.draw_background)
+        // Floating tools need a visible themed boundary even when they leave
+        // the surrounding editor interactive (and therefore have no scrim).
+        if (options.draw_background && result.window.size.x > 0.0f && result.window.size.y > 0.0f)
         {
             const auto& palette = active_palette();
             const auto& bounds = result.window;
-            const float edge = (std::min)(1.0f, (std::min)(bounds.size.x, bounds.size.y));
-            draw_sprite(palette.headingAccent, bounds.position.x, bounds.position.y, bounds.size.x, edge);
-            draw_sprite(palette.headingAccent, bounds.position.x, bounds.position.y + bounds.size.y - edge, bounds.size.x, edge);
-            draw_sprite(palette.headingAccent, bounds.position.x, bounds.position.y, edge, bounds.size.y);
-            draw_sprite(palette.headingAccent, bounds.position.x + bounds.size.x - edge, bounds.position.y, edge, bounds.size.y);
+            const float edge = (std::min)(1.0f, (std::min)(bounds.size.x, bounds.size.y) * 0.5f);
+            const auto border = state.dragging || state.resizing
+                ? palette.buttonActive : palette.buttonHover;
+            draw_sprite(border, bounds.position.x, bounds.position.y, bounds.size.x, edge);
+            draw_sprite(border, bounds.position.x, bounds.position.y + bounds.size.y - edge, bounds.size.x, edge);
+            draw_sprite(border, bounds.position.x, bounds.position.y, edge, bounds.size.y);
+            draw_sprite(border, bounds.position.x + bounds.size.x - edge, bounds.position.y, edge, bounds.size.y);
         }
         if (options.closable)
             draw_close_mark(result.close_button.position, result.close_button.size,
@@ -715,7 +732,8 @@
         from_lib(coreState, state);
     }
 
-    WidgetBounds scene_viewport(std::string_view title, Vec2 position, Vec2 size) noexcept
+    WidgetBounds scene_viewport(std::string_view title, Vec2 position, Vec2 size,
+        float caption_row_height) noexcept
     {
         WidgetBounds bounds{};
         if (!g_frame.ctx) return bounds;
@@ -729,21 +747,17 @@
         const float border = 2.0f;
 
         const bool hasTitleBar = !title.empty();
-        const float titleHeight = hasTitleBar ? line_advance_amount(kTitleScale) : 0.0f;
-        const float titleBarHeight = hasTitleBar ? (titleHeight + 2.0f * kTitleBarPadding) : 0.0f;
+        const bool sharesControlRow = caption_row_height > 0.0f;
+        const float titleBarHeight = !hasTitleBar ? 0.0f : sharesControlRow ? caption_row_height + 4.0f
+            : line_advance_amount(kTitleScale) + 2.0f * kTitleBarPadding;
         if (hasTitleBar)
         {
-            const float titleTextY = position.y + (titleBarHeight - titleHeight) * 0.5f;
             draw_sprite(palette.titleBar, position.x, position.y, width, titleBarHeight);
-            const std::string fittedTitle = fit_text_to_width(
-                title,
+            draw_window_caption(title, position.x + kContentPadding,
+                position.y + (sharesControlRow ? 2.0f : 0.0f),
+                sharesControlRow ? caption_row_height : titleBarHeight,
                 (std::max)(1.0f, width - 2.0f * kContentPadding),
-                kTitleScale);
-            draw_caption_text(
-                fittedTitle.empty() ? title : std::string_view{ fittedTitle },
-                position.x + kContentPadding,
-                titleTextY,
-                kTitleScale);
+                sharesControlRow ? kFontScale : kTitleScale);
         }
 
         const float topBorderHeight = hasTitleBar ? 0.0f : border;

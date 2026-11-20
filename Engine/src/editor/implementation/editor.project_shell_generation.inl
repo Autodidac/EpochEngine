@@ -473,8 +473,8 @@
                     epochengine::gui_lib::tile_workspace::Tool;
                 if (!tileMap.select_layer(0u)
                     || !tileMap.select_palette(0u)
-                    || !tileMap.select_tool(Tool::collision)
-                    || !tileMap.apply_cell({0u, 0u})
+                    || !tileMap.set_selected_palette_collision({
+                        .kind = epochengine::asset::tilemap::CollisionKind::full_cell})
                     || !tileMap.select_tool(Tool::pencil))
                 {
                     diagnostic =
@@ -641,8 +641,7 @@
         }
         else
         {
-            auto created = authoring_gui::make_template_document(
-                authoring_gui::TemplatePreset::game_hud);
+            auto created = authoring_gui::make_template_document(authoring_gui::TemplatePreset::game_hud);
             if (!created)
             {
                 diagnostic = "Default project GUI construction failed.";
@@ -904,14 +903,42 @@
         return write_text_file(entrySource, source);
     }
 
-    inline constexpr std::array<std::string_view, 7> generated_child_runtime_assets{
+    inline constexpr std::array<std::string_view, 11> generated_child_runtime_assets{
         "fonts/Roboto-Regular.ttf", "fonts/OFL.txt", "vulkan/texture.ppm",
         "vulkan/shaders/vert.spv", "vulkan/shaders/frag.spv",
-        "vulkan/shaders/gui_vert.spv", "vulkan/shaders/gui_frag.spv"};
+        "vulkan/shaders/gui_vert.spv", "vulkan/shaders/gui_frag.spv",
+        "vulkan/shaders/atmosphere.vert.spv", "vulkan/shaders/atmosphere.frag.spv",
+        "vulkan/shaders/clouds.vert.spv", "vulkan/shaders/clouds.frag.spv"};
+
+    // Exact dependency notices travel with ordinary child applications too,
+    // not only with Editor release archives. Keep the release collector's names.
+    inline constexpr std::array<std::array<std::string_view, 2>, 8> generated_child_runtime_notices{{
+        {"EpochGui/LICENSE", "epochgui.txt"},
+        {"EpochGui/NOTICE", "epochgui-NOTICE.txt"},
+        {"EpochPlatformEngine/LICENSE", "epochplatformengine.txt"},
+        {"EpochPlatformEngine/NOTICE", "epochplatformengine-NOTICE.txt"},
+        {"EpochAudioEngine/LICENSE", "epochaudioengine.txt"},
+        {"EpochAudioEngine/NOTICE", "epochaudioengine-NOTICE.txt"},
+        {"EpochMediaEngine/LICENSE", "epochmediaengine.txt"},
+        {"EpochMediaEngine/NOTICE", "epochmediaengine-NOTICE.txt"}}};
+
+    [[nodiscard]] static std::string generated_child_runtime_notices_msbuild()
+    {
+        std::string text = "  <ItemGroup>\n";
+        for (const auto& notice : generated_child_runtime_notices)
+        {
+            text += "    <EpochRequiredRuntimeAsset Include=\"$(EpochRepoRoot)Engine\\dep\\"
+                + to_windows_path(std::string{notice[0]}) + "\">\n"
+                "      <TargetPath>licenses\\" + std::string{notice[1]} + "</TargetPath>\n"
+                "    </EpochRequiredRuntimeAsset>\n";
+        }
+        text += "  </ItemGroup>\n";
+        return text;
+    }
 
     [[nodiscard]] static std::string generated_child_runtime_assets_msbuild()
     {
-        std::string text = "  <ItemGroup>\n";
+        std::string text = generated_child_runtime_notices_msbuild() + "  <ItemGroup>\n";
         for (const auto asset : generated_child_runtime_assets)
         {
             const auto path = to_windows_path(std::string{asset});
@@ -946,6 +973,17 @@
             "        COMMAND \"${CMAKE_COMMAND}\" -E copy_if_different \"${epoch_asset_source}\" \"${epoch_project_output_dir}/assets/${epoch_asset}\"\n"
             "        VERBATIM)\n"
             "endforeach()\n";
+        for (const auto& notice : generated_child_runtime_notices)
+        {
+            text += "set(epoch_notice_source \"${EPOCH_REPO_ROOT}/Engine/dep/" + std::string{notice[0]} + "\")\n"
+                "if(NOT EXISTS \"${epoch_notice_source}\" OR IS_DIRECTORY \"${epoch_notice_source}\" OR IS_SYMLINK \"${epoch_notice_source}\")\n"
+                "    message(FATAL_ERROR \"Required Engine dependency notice is missing or invalid: ${epoch_notice_source}\")\n"
+                "endif()\n"
+                "add_custom_command(TARGET epoch_project_runtime POST_BUILD\n"
+                "    COMMAND \"${CMAKE_COMMAND}\" -E make_directory \"${epoch_project_output_dir}/licenses\"\n"
+                "    COMMAND \"${CMAKE_COMMAND}\" -E copy_if_different \"${epoch_notice_source}\" \"${epoch_project_output_dir}/licenses/" + std::string{notice[1]} + "\"\n"
+                "    VERBATIM)\n";
+        }
         return text;
     }
 
@@ -1270,6 +1308,13 @@
                 const auto at = projectText.find(before);
                 if (at == std::string::npos) return false;
                 projectText.insert(at, generated_child_runtime_assets_msbuild());
+            }
+            else if (projectText.find("Engine\\dep\\EpochGui\\NOTICE") == std::string::npos)
+            {
+                constexpr std::string_view before{"  <ImportGroup Label=\"ExtensionTargets\" />"};
+                const auto at = projectText.find(before);
+                if (at == std::string::npos) return false;
+                projectText.insert(at, generated_child_runtime_notices_msbuild());
             }
             // Repair already materialized child .vcxproj files as well as newly
             // generated files. Without longPathAware the deep disposable test
@@ -1602,7 +1647,8 @@
             + "}\n";
     }
 
-    [[nodiscard]] static std::string make_project_entry_run_text(EditorProjectKind kind)
+    [[nodiscard]] static std::string make_project_entry_run_text(
+        EditorProjectKind kind)
     {
         if (kind == EditorProjectKind::Editor)
         {
@@ -1660,6 +1706,131 @@
         fs::remove(pending, cleanup);
         return false;
     }
+
+#if defined(__ANDROID__) && defined(EPOCH_USING_SDL) && EPOCH_USING_SDL == 1
+    [[nodiscard]] static bool sync_android_project_directory(const fs::path& directory) noexcept
+    {
+        const int descriptor = ::open(directory.c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+        if (descriptor < 0)
+            return false;
+        const bool synced = ::fsync(descriptor) == 0;
+        return ::close(descriptor) == 0 && synced;
+    }
+
+    [[nodiscard]] static EditorProjectCreationResult write_android_project_shell(const ProjectShellSpec& spec)
+    {
+        using epochengine::platform::filesystem::atomic_publish_new_same_filesystem;
+        using epochengine::platform::filesystem::exclusive_create_and_write;
+        namespace gui_document = epochengine::authoring::gui;
+
+        EditorProjectCreationResult result{
+            .project_id = spec.project_id,
+            .root_path = spec.root.generic_string(),
+            .manifest_path = (spec.root / "project.epoch.json").generic_string(),
+            .summary = "Android project storage is unavailable or redirected."
+        };
+        const char* storage = SDL_GetAndroidInternalStoragePath();
+        const fs::path privateRoot{storage ? storage : ""};
+        if (!privateRoot.is_absolute())
+            return result;
+
+        std::error_code error;
+        const auto runtime = fs::canonical(privateRoot, error) / "epoch";
+        const auto projects = runtime / "Projects";
+        if (error || spec.root != projects / spec.project_id
+            || !fs::is_directory(fs::symlink_status(runtime, error)) || error)
+            return result;
+        fs::create_directory(projects, error);
+        if (error || !fs::is_directory(fs::symlink_status(projects, error)) || error)
+            return result;
+
+        // The live project catalog sees only the final, complete directory.
+        std::string stagingName = (runtime / ".project-create-XXXXXX").string();
+        if (!::mkdtemp(stagingName.data()))
+            return result;
+        struct OwnedStage
+        {
+            fs::path path;
+            bool published{};
+            ~OwnedStage()
+            {
+                if (published)
+                    return;
+                std::error_code ignored;
+                fs::remove_all(path, ignored);
+            }
+        } staging{fs::path{stagingName}};
+
+        const bool isGame = spec.kind == EditorProjectKind::Game;
+        const auto world = isGame ? "worlds/main.epoch" : "worlds/tool.epoch";
+        const auto kind = project_manifest_kind(spec.kind);
+        const auto gui = gui_document::make_template_document(isGame
+            ? gui_document::TemplatePreset::game_hud : gui_document::TemplatePreset::mobile_app);
+        if (!gui)
+        {
+            result.summary = "Could not prepare the project interface.";
+            return result;
+        }
+        const auto guiBytes = gui_document::serialize_gui_document(gui->snapshot());
+        const auto scene = make_project_world_scene_text(spec, kind, false);
+        const auto input = spec.input_profile_path.empty() ? epochengine::project_input::SerializedProfile{} :
+            epochengine::project_input::serialize_profile_source(
+                epochengine::project_input::make_legacy_default_profile());
+        const auto writeFile = [&](std::string_view relative, std::span<const std::byte> bytes)
+        {
+            const auto path = staging.path / relative;
+            fs::create_directories(path.parent_path(), error);
+            return !error && !bytes.empty() && exclusive_create_and_write(path, bytes, error)
+                && sync_android_project_directory(path.parent_path());
+        };
+        const auto writeText = [&](std::string_view relative, std::string_view text)
+        {
+            return writeFile(relative, std::as_bytes(std::span{text.data(), text.size()}));
+        };
+        const std::string manifest =
+            "{\n"
+            "  \"engine\": \"epoch\",\n"
+            "  \"project_format\": \"" + std::string{kProjectManifestFormat} + "\",\n"
+            "  \"id\": \"" + json_escape(spec.project_id) + "\",\n"
+            "  \"display_name\": \"" + json_escape(spec.project_name) + "\",\n"
+            "  \"kind\": \"" + std::string{kind} + "\",\n"
+            "  \"template_family\": \"" + json_escape(spec.template_family) + "\",\n"
+            "  \"engine_edition\": \"" + std::string{epochengine::updater::distribution::edition_id} + "\",\n"
+            "  \"scene\": \"" + world + "\",\n"
+            "  \"gui\": \"" + spec.gui_path + "\",\n"
+            + (isGame ? "  \"run_camera\": \"fps\",\n" : "")
+            + (spec.input_profile_path.empty() ? std::string{} :
+                "  \"input_profile\": \"" + spec.input_profile_path + "\",\n")
+            + "  \"capability_profile\": \"portable\",\n"
+            "  \"build_profile\": \"" + std::string{kStaticRuntimeBuildProfile} + "\",\n"
+            "  \"support_tier\": \"baseline\"\n"
+            "}\n";
+
+        if (!guiBytes || !writeText(world, scene) || !writeFile(spec.gui_path, guiBytes.bytes)
+            || (!spec.input_profile_path.empty() && (!input || !writeFile(spec.input_profile_path, input.bytes)))
+            || !sync_android_project_directory(staging.path / "Assets")
+            || !writeText("project.epoch.json", manifest))
+        {
+            result.summary = "Could not save the new project documents. Check available app storage and try again.";
+            return result;
+        }
+
+        if (!atomic_publish_new_same_filesystem(staging.path, spec.root, error))
+        {
+            result.summary = error == std::errc::file_exists
+                ? "That project folder is already in use. Choose New Project again."
+                : "Could not publish the new project folder.";
+            return result;
+        }
+        staging.published = true;
+        result.succeeded = true;
+        result.summary = sync_android_project_directory(projects) && sync_android_project_directory(runtime)
+            ? "Created " + spec.project_name + "."
+            : "Created " + spec.project_name + ", but Android could not confirm the storage write.";
+        invalidate_project_profile_cache();
+        return result;
+    }
+#endif
 
     [[nodiscard]] static EditorProjectCreationResult write_project_shell(const ProjectShellSpec& spec)
     {
@@ -2073,14 +2244,25 @@
             "#include <cstdlib>\n"
             "#include <cstring>\n"
             "#include <string>\n"
+            "#include <string_view>\n"
             "#include <vector>\n"
             "#if defined(_WIN32)\n"
             "#  include <stdlib.h>\n"
             "#else\n"
             "#  include <unistd.h>\n"
             "#endif\n"
+            "#if defined(__ANDROID__)\n"
+            "#  include <SDL3/SDL_log.h>\n"
+            "#  include <SDL3/SDL_main.h>\n"
+            "#endif\n"
             "#include <epoch.edition.hpp>\n"
             "#include <epoch.engine.hpp>\n\n"
+            + std::string{spec.kind == EditorProjectKind::Tool
+                ? "#if __has_include(\"project.gui_application.hpp\")\n"
+                  "#  include \"project.gui_application.hpp\"\n"
+                  "#  define EPOCH_HAS_PROJECT_GUI_APPLICATION 1\n"
+                  "#endif\n\n" : ""}
+            +
             "#if defined(EPOCH_PROJECT_PLANETARY_RUNTIME)\n"
             "extern \"C\" bool epoch_install_planetary_runtime(const char*, const char*) noexcept;\n"
             "#endif\n\n"
@@ -2109,6 +2291,9 @@
             "\n"
             "    void log_project_shell_self_test_line(const char* message) noexcept\n"
             "    {\n"
+            "#if defined(__ANDROID__)\n"
+            "        SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, \"Epoch project: %s\", message ? message : \"\");\n"
+            "#endif\n"
             "        core_log_write(1u, \"Epoch.ChildProject\", message ? message : \"\");\n"
             "    }\n\n"
             "    int log_project_shell_self_test(const epochengine::project::RuntimeProjectBinding& project) noexcept\n"
@@ -2131,7 +2316,11 @@
             "            .audio_profile_path = \"" + cxx_escape(spec.audio_profile_path) + "\",\n"
             "            .gui_path = \"" + cxx_escape(spec.gui_path) + "\",\n"
             "            .scene_requires_runtime = " + std::string(spec.kind == EditorProjectKind::Game || spec.kind == EditorProjectKind::EngineDevelopment ? "true" : "false") + ",\n"
-            "            .progress_sink = log_project_shell_self_test_line};\n"
+            "            .progress_sink = log_project_shell_self_test_line"
+            + std::string{spec.kind == EditorProjectKind::Editor
+                ? ",\n            .authoring_scene_kind = epochengine::project::AuthoringSceneKind::editor"
+                : ""}
+            + "};\n"
             "        const auto acceptance = epochengine::project::VerifyArtifacts(request);\n"
             "        log_project_shell_self_test_line((std::string{\"artifact_acceptance.required_mask=\"} + std::to_string(acceptance.required_mask)).c_str());\n"
             "        log_project_shell_self_test_line((std::string{\"artifact_acceptance.verified_mask=\"} + std::to_string(acceptance.verified_mask)).c_str());\n"
@@ -2196,17 +2385,56 @@
             "        log_project_shell_self_test_line(project.summary.c_str());\n"
             "        return 2;\n"
             "    }\n"
-            "#if defined(EPOCH_PROJECT_PLANETARY_RUNTIME)\n"
+            "#if defined(EPOCH_PROJECT_PLANETARY_RUNTIME) && !defined(EPOCH_ANDROID_FIXED_SHORELINE_SHA256) \\\n"
+            "    && !defined(EPOCH_ANDROID_PLANETARY_POSE_SHA256)\n"
             "    if (!epoch_install_planetary_runtime(project.project_root.c_str(), \"" + cxx_escape(spec.project_id) + "\"))\n"
             "    {\n"
+            "#if defined(__ANDROID__)\n"
+            "        log_project_shell_self_test_line(\"Live planetary data is unavailable. The saved terrain will be used.\");\n"
+            "#else\n"
             "        log_project_shell_self_test_line(\"The planetary runtime does not match this project's approved source and settings.\");\n"
             "        return 3;\n"
+            "#endif\n"
             "    }\n"
             "#endif\n"
             "    if (has_arg(argc, argv, \"--project-self-test\"))\n"
             "        return log_project_shell_self_test(project);\n"
-            + make_project_entry_run_text(spec.kind) +
-            "    return 0;\n"
+            + std::string{spec.kind == EditorProjectKind::Tool
+                ? "#if defined(EPOCH_HAS_PROJECT_GUI_APPLICATION)\n"
+                  "    auto application = make_project_gui_application();\n"
+                  "    return epochengine::project::RunGuiApplication(\"" : ""}
+            + (spec.kind == EditorProjectKind::Tool
+                ? cxx_escape(spec.project_id) + "\", application, argc, argv);\n#else\n" : "")
+            + (spec.kind == EditorProjectKind::Game
+                ? "#if defined(__ANDROID__)\n"
+                  "#  if defined(EPOCH_ANDROID_FIXED_SHORELINE_SHA256)\n"
+                  "    return epochengine::project::RunAndroidSceneProject(\""
+                    + cxx_escape(spec.project_id) + "\", argc, argv,\n"
+                  "        {EPOCH_ANDROID_FIXED_SHORELINE_SHA256, EPOCH_ANDROID_PLANETARY_SOURCE_HASH,\n"
+                  "            EPOCH_ANDROID_FFT_SOURCE_HASH, epoch_install_planetary_runtime,\n"
+                  "            bool(EPOCH_ANDROID_SHORELINE_FLIGHT)});\n"
+                  "#  elif defined(EPOCH_ANDROID_PLANETARY_POSE_SHA256)\n"
+                  "    return epochengine::project::RunAndroidSceneProject(\""
+                    + cxx_escape(spec.project_id) + "\", argc, argv,\n"
+                  "        epochengine::project::AndroidPackagedPlanetaryPose{EPOCH_ANDROID_PLANETARY_POSE_SHA256,\n"
+                  "            EPOCH_ANDROID_PLANETARY_RECIPE_SHA256, EPOCH_ANDROID_PLANETARY_MANIFEST_SHA256,\n"
+                  "            EPOCH_ANDROID_PLANETARY_SCENE_SHA256, EPOCH_ANDROID_PLANETARY_SOURCE_HASH,\n"
+                  "            EPOCH_ANDROID_FFT_SOURCE_HASH, epoch_install_planetary_runtime,\n"
+                  "            EPOCH_ANDROID_PLANETARY_TERRAIN_SHA256, EPOCH_ANDROID_PLANETARY_FLIGHT != 0});\n"
+                  "#  else\n"
+                  "    return epochengine::project::RunAndroidSceneProject(\""
+                    + cxx_escape(spec.project_id) + "\", argc, argv);\n#  endif\n#else\n"
+                : std::string{})
+            + (spec.kind == EditorProjectKind::Editor
+                ? "#if defined(__ANDROID__)\n"
+                  "    return epochengine::project::RunAndroidEditorProject(\""
+                    + cxx_escape(spec.project_id) + "\", argc, argv);\n#else\n"
+                : std::string{})
+            + make_project_entry_run_text(spec.kind)
+            + "    return 0;\n"
+            + std::string{spec.kind == EditorProjectKind::Tool || spec.kind == EditorProjectKind::Game
+                || spec.kind == EditorProjectKind::Editor
+                ? "#endif\n" : ""} +
             "}\n";
 
         const std::string sourceAdmissionCmake =
@@ -2234,7 +2462,10 @@
             "    message(FATAL_ERROR \"EPOCH_REPO_ROOT does not contain Engine/CMakeLists.txt: ${EPOCH_REPO_ROOT}\")\n"
             "endif()\n\n"
             + sourceAdmissionCmake
-            + "add_subdirectory(\"${EPOCH_REPO_ROOT}/Engine\" \"${CMAKE_BINARY_DIR}/epoch-engine\" EXCLUDE_FROM_ALL)\n\n"
+            + "if(ANDROID)\n"
+            "    include(\"${EPOCH_REPO_ROOT}/Engine/cmake/epoch_project_android.cmake\")\n"
+            "endif()\n"
+            "add_subdirectory(\"${EPOCH_REPO_ROOT}/Engine\" \"${CMAKE_BINARY_DIR}/epoch-engine\" EXCLUDE_FROM_ALL)\n\n"
             "add_dependencies(epoch epoch_generated_source_guard)\n"
             "\n"
             "function(epoch_configure_embedded_project target)\n"
@@ -2247,6 +2478,17 @@
             "        \"${EPOCH_REPO_ROOT}/Engine/include\"\n"
             "        \"${EPOCH_REPO_ROOT}/Engine\")\n"
             "    target_link_libraries(${target} PRIVATE epoch)\n"
+            "    if(CMAKE_SYSTEM_NAME STREQUAL \"Linux\")\n"
+            "        set_target_properties(${target} PROPERTIES\n"
+            "            BUILD_WITH_INSTALL_RPATH TRUE\n"
+            "            INSTALL_RPATH \"\\$ORIGIN/lib\")\n"
+            "        add_custom_command(TARGET ${target} POST_BUILD\n"
+            "            COMMAND \"${CMAKE_COMMAND}\"\n"
+            "                \"-DEPOCH_RUNTIME_SOURCE=$<TARGET_FILE_DIR:epoch>/lib\"\n"
+            "                \"-DEPOCH_RUNTIME_DESTINATION=$<TARGET_FILE_DIR:${target}>/lib\"\n"
+            "                -P \"${EPOCH_REPO_ROOT}/Engine/cmake/epoch_stage_project_linux_libraries.cmake\"\n"
+            "            VERBATIM)\n"
+            "    endif()\n"
             "    set(epoch_dependency_fragment \"${CMAKE_CURRENT_FUNCTION_LIST_DIR}/Packages/epoch.dependencies.cmake\")\n"
             "    if(EXISTS \"${epoch_dependency_fragment}\")\n"
             "        include(\"${epoch_dependency_fragment}\")\n"
@@ -2258,6 +2500,10 @@
             "cmake_minimum_required(VERSION 4.4)\n"
             "project(EpochGeneratedProject LANGUAGES C CXX)\n\n"
             "include(\"${CMAKE_CURRENT_LIST_DIR}/epoch.project.cmake\")\n"
+            "if(ANDROID)\n"
+            "    epoch_add_android_project_runtime()\n"
+            "    return()\n"
+            "endif()\n"
             "add_executable(epoch_project_runtime source/epoch.main.cpp)\n"
             "epoch_configure_embedded_project(epoch_project_runtime)\n"
             // The host editor is longPathAware; generated executables must be
@@ -2590,7 +2836,7 @@
             "  exit 3\n"
             "fi\n\n"
             "\"$engine_dir/build.sh\" --bootstrap-current-toolchain --tool-cache-root \"$tool_cache_root\" --check-toolchain clang \"$configuration\"\n"
-            "source \"$engine_dir/unix/current_toolchain.env\"\n\n"
+            "source <(sed 's/\\r$//' \"$engine_dir/unix/current_toolchain.env\")\n\n"
             "resolve_tool() {\n"
             "  local candidate\n"
             "  for candidate in \"$@\"; do\n"
@@ -2621,8 +2867,13 @@
             "  return 1\n"
             "}\n\n"
             "vcpkg_root=\"$(resolve_vcpkg_root)\" || { echo \"[ERROR] vcpkg was not found. Set EPOCH_VCPKG_ROOT or VCPKG_ROOT.\" >&2; exit 5; }\n"
-            "if ! git -C \"$vcpkg_root\" cat-file -e \"${EPOCH_VCPKG_BASELINE}^{commit}\" 2>/dev/null; then\n"
-            "  echo \"[ERROR] Selected vcpkg registry does not contain locked baseline $EPOCH_VCPKG_BASELINE: $vcpkg_root\" >&2\n"
+            "vcpkg_baseline=\"$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1], encoding=\"utf-8\"))[\"builtin-baseline\"])' \"$engine_dir/vcpkg.json\")\"\n"
+            "if [[ ! \"$vcpkg_baseline\" =~ ^[0-9a-f]{40}$ ]]; then\n"
+            "  echo \"[ERROR] Engine manifest contains an invalid vcpkg baseline.\" >&2\n"
+            "  exit 5\n"
+            "fi\n"
+            "if ! git -C \"$vcpkg_root\" cat-file -e \"${vcpkg_baseline}^{commit}\" 2>/dev/null; then\n"
+            "  echo \"[ERROR] Selected vcpkg registry does not contain locked baseline $vcpkg_baseline: $vcpkg_root\" >&2\n"
             "  exit 5\n"
             "fi\n"
             "echo \"[INFO] CMake: $cmake_bin\"\n"

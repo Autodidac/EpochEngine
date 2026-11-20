@@ -139,7 +139,7 @@
                                         return;
                                     }
 
-                                    if (auto scene = make_scene_from_id(scene_id))
+                                    if (auto scene = make_scene_from_id(scene_id, /*can_return_to_editor=*/true))
                                     {
                                         auto label = std::string(scene_id);
                                         begin_scene(

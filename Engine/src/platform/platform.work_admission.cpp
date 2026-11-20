@@ -9,24 +9,27 @@ module;
 #include <bit>
 #include <chrono>
 #include <condition_variable>
+#include <compare>
 #include <cstdint>
 #include <fstream>
 #include <limits>
 #include <mutex>
+#include <optional>
+#include <span>
 #include <sstream>
 #include <string>
 #include <string_view>
 #include <thread>
+#include <tuple>
+#include <vector>
 #include "../../include/engine.config.hpp"
 
 #if defined(_WIN32)
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <Windows.h>
+#include "platform.process_observation.hpp"
+#include <dxgi.h>
+#include <pdh.h>
+#include <pdhmsg.h>
+#include <psapi.h>
 #endif
 
 #if EPOCH_ENABLE_NVIDIA_TELEMETRY && defined(_WIN32) && __has_include(<nvml.h>)
@@ -43,6 +46,611 @@ namespace epochengine::platform::work_admission
     namespace
     {
         struct CpuTimes final { std::uint64_t total{}, idle{}; bool valid{}; };
+
+        [[nodiscard]] bool add_counter(std::uint64_t& total, std::uint64_t value) noexcept
+        {
+            if (value > (std::numeric_limits<std::uint64_t>::max)() - total)
+                return false;
+            total += value;
+            return true;
+        }
+
+#if defined(_WIN32)
+        [[nodiscard]] std::uint64_t time_ticks(const FILETIME& time) noexcept
+        {
+            return (static_cast<std::uint64_t>(time.dwHighDateTime) << 32u)
+                | time.dwLowDateTime;
+        }
+
+        struct EpochCpuCounter final
+        {
+            std::uint64_t generation{}, ticks{};
+            bool valid{};
+        };
+
+        struct EpochCpuFrame final
+        {
+            std::uint64_t sampled_at_ms{};
+            DWORD logical_processors{};
+            std::array<EpochCpuCounter, 1u + process_observation::registry.targets.size()> counters{};
+        };
+
+        [[nodiscard]] EpochCpuCounter process_cpu_counter(HANDLE process,
+            std::uint64_t generation) noexcept
+        {
+            FILETIME created{}, exited{}, kernel{}, user{};
+            EpochCpuCounter counter{generation};
+            if (::GetProcessTimes(process, &created, &exited, &kernel, &user))
+            {
+                counter.ticks = time_ticks(kernel);
+                counter.valid = add_counter(counter.ticks, time_ticks(user));
+            }
+            return counter;
+        }
+
+        [[nodiscard]] EpochCpuCounter job_cpu_counter(HANDLE job, std::uint64_t generation) noexcept
+        {
+            EpochCpuCounter counter{generation};
+            JOBOBJECT_BASIC_ACCOUNTING_INFORMATION accounting{};
+            if (::QueryInformationJobObject(job, JobObjectBasicAccountingInformation,
+                    &accounting, static_cast<DWORD>(sizeof(accounting)), nullptr)
+                && accounting.TotalUserTime.QuadPart >= 0 && accounting.TotalKernelTime.QuadPart >= 0)
+            {
+                // Even a short-lived compiler that has already exited contributes
+                // CPU time while its owning job remains observable.
+                counter.ticks = static_cast<std::uint64_t>(accounting.TotalKernelTime.QuadPart);
+                counter.valid = add_counter(counter.ticks,
+                    static_cast<std::uint64_t>(accounting.TotalUserTime.QuadPart));
+            }
+            return counter;
+        }
+
+        struct ObservedProcesses final
+        {
+            struct Member final { HANDLE handle{}; DWORD id{}; };
+            static constexpr std::size_t limit = 128u;
+            std::array<Member, limit> members{};
+            std::size_t count{}, remaining_job_members{limit - 1u};
+
+            ObservedProcesses() noexcept
+            {
+                members[count++] = {::GetCurrentProcess(), ::GetCurrentProcessId()};
+            }
+            ~ObservedProcesses()
+            {
+                for (std::size_t i = 1u; i < count; ++i)
+                    (void)::CloseHandle(members[i].handle);
+            }
+
+            ObservedProcesses(const ObservedProcesses&) = delete;
+            ObservedProcesses& operator=(const ObservedProcesses&) = delete;
+
+            [[nodiscard]] bool retain(HANDLE process, DWORD id) noexcept
+            {
+                const bool known = std::any_of(members.begin(), members.begin() + count,
+                    [id](const Member& member) { return member.id == id; });
+                if (known || count == members.size())
+                {
+                    (void)::CloseHandle(process);
+                    return known;
+                }
+                members[count++] = {process, id};
+                return true;
+            }
+
+            [[nodiscard]] bool add_process(HANDLE process) noexcept
+            {
+                const DWORD liveness = ::WaitForSingleObject(process, 0u);
+                if (liveness != WAIT_TIMEOUT) return liveness == WAIT_OBJECT_0;
+                HANDLE observer{};
+                const DWORD id = ::GetProcessId(process);
+                return id != 0u && ::DuplicateHandle(::GetCurrentProcess(), process,
+                    ::GetCurrentProcess(), &observer, PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE,
+                    FALSE, 0u) && retain(observer, id);
+            }
+
+            [[nodiscard]] bool add_job(HANDLE job) noexcept
+            {
+                struct JobMembership final
+                {
+                    DWORD assigned{}, count{};
+                    std::array<ULONG_PTR, limit> ids{};
+                } membership{};
+                static_assert(offsetof(JobMembership, ids)
+                    == offsetof(JOBOBJECT_BASIC_PROCESS_ID_LIST, ProcessIdList));
+                if (!::QueryInformationJobObject(job, JobObjectBasicProcessIdList,
+                        &membership, static_cast<DWORD>(sizeof(membership)), nullptr)
+                    || membership.count != membership.assigned || membership.count > remaining_job_members)
+                    return false;
+                remaining_job_members -= membership.count;
+                bool complete{true};
+                for (DWORD i = 0u; i < membership.count; ++i)
+                {
+                    const auto raw_id = membership.ids[i];
+                    if (raw_id == 0u || raw_id > (std::numeric_limits<DWORD>::max)())
+                    {
+                        complete = false;
+                        continue;
+                    }
+                    const auto id = static_cast<DWORD>(raw_id);
+                    const auto member = ::OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE,
+                        FALSE, id);
+                    BOOL still_owned{};
+                    if (!member || !::IsProcessInJob(member, job, &still_owned) || !still_owned)
+                    {
+                        if (member) (void)::CloseHandle(member);
+                        complete = false;
+                        continue;
+                    }
+                    // The ID was resolved while holding the Job lease, and may
+                    // only contribute through this verified process handle.
+                    if (!retain(member, id)) complete = false;
+                }
+                return complete;
+            }
+        };
+
+        [[nodiscard]] bool observe_child_processes(ObservedProcesses& processes,
+            EpochCpuFrame* cpu) noexcept
+        {
+            auto& registry = process_observation::registry;
+            if (!::TryAcquireSRWLockShared(&registry.lock)) return false;
+            bool complete = registry.overflow == 0u;
+            for (std::size_t i = 0u; i < registry.targets.size(); ++i)
+            {
+                const auto& target = registry.targets[i];
+                if (!target.handle) continue;
+                const bool job = target.kind == process_observation::TargetKind::job;
+                if (cpu)
+                {
+                    auto& counter = cpu->counters[i + 1u];
+                    counter = job ? job_cpu_counter(target.handle, target.generation)
+                        : process_cpu_counter(target.handle, target.generation);
+                    if (!counter.valid) complete = false;
+                }
+                if (job)
+                {
+                    if (!processes.add_job(target.handle)) complete = false;
+                }
+                else
+                {
+                    (void)processes.add_process(target.handle);
+                    // Direct process owners give us an exact root handle. No
+                    // Job membership evidence is available for descendants.
+                    complete = false;
+                }
+            }
+            ::ReleaseSRWLockShared(&registry.lock);
+            return complete;
+        }
+
+        void measure_epoch_cpu(EpochResourceSample& sample, const EpochCpuFrame& previous,
+            const EpochCpuFrame& current) noexcept
+        {
+            if (current.sampled_at_ms <= previous.sampled_at_ms) return;
+            const auto elapsed_ms = current.sampled_at_ms - previous.sampled_at_ms;
+            if (elapsed_ms < 1'000u || elapsed_ms > 5'000u || current.logical_processors == 0u
+                || current.logical_processors != previous.logical_processors) return;
+            std::uint64_t elapsed_cpu{};
+            bool valid{};
+            for (std::size_t i = 0u; i < current.counters.size(); ++i)
+            {
+                const auto& before = previous.counters[i];
+                const auto& after = current.counters[i];
+                if (i != 0u && before.generation == 0u && after.generation == 0u) continue;
+                if (!before.valid || !after.valid || before.generation != after.generation
+                    || after.ticks < before.ticks)
+                {
+                    sample.coverage_complete = false;
+                    continue;
+                }
+                if (!add_counter(elapsed_cpu, after.ticks - before.ticks)) return;
+                valid = true;
+            }
+            if (!valid) return;
+            const auto capacity = static_cast<double>(elapsed_ms) * 10'000.0 * current.logical_processors;
+            sample.cpu_busy_fraction = (std::min)(static_cast<double>(elapsed_cpu) / capacity, 1.0);
+            sample.cpu_valid = true;
+        }
+
+        [[nodiscard]] EpochResourceSample read_epoch_resources(EpochCpuFrame& previous,
+            std::uint64_t began, ObservedProcesses& processes) noexcept
+        {
+            EpochResourceSample sample;
+            EpochCpuFrame cpu{began, ::GetActiveProcessorCount(ALL_PROCESSOR_GROUPS)};
+            cpu.counters[0u] = process_cpu_counter(::GetCurrentProcess(), 0u);
+            sample.coverage_complete = observe_child_processes(processes, &cpu) && cpu.counters[0u].valid;
+            measure_epoch_cpu(sample, previous, cpu);
+            previous = cpu;
+
+            MEMORYSTATUSEX memory{};
+            memory.dwLength = static_cast<DWORD>(sizeof(memory));
+            if (::GlobalMemoryStatusEx(&memory)) sample.total_memory_bytes = memory.ullTotalPhys;
+            bool any_working_set{};
+            for (std::size_t i = 0u; i < processes.count; ++i)
+            {
+                const auto handle = processes.members[i].handle;
+                if (i != 0u && ::WaitForSingleObject(handle, 0u) != WAIT_TIMEOUT)
+                {
+                    sample.coverage_complete = false;
+                    continue;
+                }
+                ++sample.process_count;
+                PROCESS_MEMORY_COUNTERS usage{};
+                usage.cb = static_cast<DWORD>(sizeof(usage));
+                if (::K32GetProcessMemoryInfo(handle, &usage, usage.cb)
+                    && add_counter(sample.resident_memory_bytes, usage.WorkingSetSize))
+                    any_working_set = true;
+                else
+                    sample.coverage_complete = false;
+            }
+            sample.memory_valid = any_working_set && sample.total_memory_bytes != 0u;
+            return sample;
+        }
+
+        struct GpuInstance final
+        {
+            std::uint64_t luid{};
+            std::uint32_t physical{}, engine{}, pid{};
+            [[nodiscard]] constexpr auto operator<=>(const GpuInstance&) const noexcept = default;
+        };
+
+        [[nodiscard]] bool consume_prefix(std::wstring_view& text, std::wstring_view prefix) noexcept
+        {
+            if (!text.starts_with(prefix)) return false;
+            text.remove_prefix(prefix.size());
+            return true;
+        }
+
+        [[nodiscard]] bool consume_counter_number(std::wstring_view& text, std::uint32_t& value,
+            std::uint32_t radix = 10u) noexcept
+        {
+            std::size_t consumed{};
+            value = 0u;
+            for (const auto character : text)
+            {
+                std::uint32_t digit{};
+                if (character >= L'0' && character <= L'9') digit = static_cast<std::uint32_t>(character - L'0');
+                else if (character >= L'a' && character <= L'f') digit = 10u + static_cast<std::uint32_t>(character - L'a');
+                else if (character >= L'A' && character <= L'F') digit = 10u + static_cast<std::uint32_t>(character - L'A');
+                else break;
+                if (digit >= radix) break;
+                if (value > ((std::numeric_limits<std::uint32_t>::max)() - digit) / radix) return false;
+                value = value * radix + digit;
+                ++consumed;
+            }
+            text.remove_prefix(consumed);
+            return consumed != 0u;
+        }
+
+        [[nodiscard]] bool parse_gpu_instance(std::wstring_view text, GpuInstance& result,
+            bool engine_counter) noexcept
+        {
+            std::uint32_t high{}, low{};
+            if (!consume_prefix(text, L"pid_") || !consume_counter_number(text, result.pid) || result.pid == 0u
+                || !consume_prefix(text, L"_luid_0x") || !consume_counter_number(text, high, 16u)
+                || !consume_prefix(text, L"_0x") || !consume_counter_number(text, low, 16u)
+                || !consume_prefix(text, L"_phys_") || !consume_counter_number(text, result.physical)) return false;
+            result.luid = (static_cast<std::uint64_t>(high) << 32u) | low;
+            if (result.luid == 0u) return false;
+            if (engine_counter)
+                return consume_prefix(text, L"_eng_") && consume_counter_number(text, result.engine)
+                    && consume_prefix(text, L"_engtype_") && !text.empty();
+            if (consume_prefix(text, L"#"))
+            {
+                std::uint32_t instance_index{};
+                if (!consume_counter_number(text, instance_index)) return false;
+            }
+            return text.empty();
+        }
+
+        struct GpuAdapter final
+        {
+            std::uint64_t luid{}, capacity{};
+            bool multi_node{};
+            bool attributed{}, memory_attributed{};
+        };
+
+        struct GpuCounterRow final { GpuInstance instance{}; double value{}; std::size_t adapter{}; };
+
+        // WDDM exposes one rate per PID and engine. Aliases share the same
+        // physical identity, so only identical duplicate observations can be
+        // collapsed without risking a stale or double-counted allocation.
+        void deduplicate_gpu_rows(std::vector<GpuCounterRow>& rows, bool& partial)
+        {
+            std::ranges::sort(rows, {}, &GpuCounterRow::instance);
+            std::size_t write{};
+            for (std::size_t begin = 0u; begin < rows.size();)
+            {
+                std::size_t end = begin + 1u;
+                bool consistent{true};
+                while (end < rows.size() && rows[end].instance == rows[begin].instance)
+                {
+                    consistent = consistent && rows[end].value == rows[begin].value;
+                    ++end;
+                }
+                if (consistent) rows[write++] = rows[begin];
+                else partial = true;
+                begin = end;
+            }
+            rows.resize(write);
+        }
+
+        void summarize_gpu_rows(GpuResourceSample& sample, std::vector<GpuCounterRow>& engine_rows,
+            std::vector<GpuCounterRow>& memory_rows, std::array<GpuAdapter, 32u>& adapters)
+        {
+            deduplicate_gpu_rows(engine_rows, sample.activity_partial);
+            deduplicate_gpu_rows(memory_rows, sample.memory_partial);
+            double busiest{};
+            for (std::size_t begin = 0u; begin < engine_rows.size();)
+            {
+                const auto& first = engine_rows[begin];
+                const auto& id = first.instance;
+                std::size_t next = begin;
+                double busy{};
+                do { busy += engine_rows[next++].value; }
+                while (next < engine_rows.size()
+                    && std::tie(id.luid, id.physical, id.engine) == std::tie(engine_rows[next].instance.luid,
+                        engine_rows[next].instance.physical, engine_rows[next].instance.engine));
+                busiest = (std::max)(busiest, busy);
+                adapters[first.adapter].attributed = true;
+                begin = next;
+            }
+            sample.busy_fraction = (std::min)(busiest * 0.01, 1.0);
+            sample.busy_valid = !engine_rows.empty();
+            for (const auto& row : memory_rows)
+            {
+                auto& adapter = adapters[row.adapter];
+                // DXGI reports capacity by LUID. A linked adapter exposing
+                // multiple physical nodes needs a separately proved denominator.
+                if (adapter.multi_node || !add_counter(sample.dedicated_used_bytes,
+                        static_cast<std::uint64_t>(row.value)))
+                {
+                    sample.memory_partial = true;
+                    continue;
+                }
+                adapter.memory_attributed = adapter.attributed = true;
+            }
+            for (const auto& adapter : adapters)
+            {
+                if (adapter.attributed) ++sample.adapter_count;
+                if (adapter.memory_attributed && !add_counter(sample.dedicated_total_bytes, adapter.capacity))
+                    sample.memory_partial = true;
+            }
+            sample.memory_valid = sample.dedicated_total_bytes != 0u;
+            if (sample.busy_valid || sample.memory_valid)
+                sample.source = GpuTelemetrySource::windows_pdh_process;
+        }
+
+        struct GpuProcessIdentity final
+        {
+            std::uint32_t pid{};
+            std::uint64_t created{};
+            [[nodiscard]] constexpr bool operator==(const GpuProcessIdentity&) const noexcept = default;
+        };
+
+        struct GpuProcessFamily final
+        {
+            std::array<GpuProcessIdentity, ObservedProcesses::limit> identities{};
+            std::size_t count{};
+            bool complete{};
+
+            [[nodiscard]] std::span<const GpuProcessIdentity> live() const noexcept
+            { return std::span{identities}.first(count); }
+        };
+
+        [[nodiscard]] GpuProcessFamily identify_gpu_processes(const ObservedProcesses& processes,
+            bool complete) noexcept
+        {
+            GpuProcessFamily family;
+            for (std::size_t i = 0u; i < processes.count; ++i)
+            {
+                const auto member = processes.members[i];
+                if (i != 0u && ::WaitForSingleObject(member.handle, 0u) != WAIT_TIMEOUT) continue;
+                FILETIME created{}, exited{}, user{}, kernel{};
+                if (::GetProcessTimes(member.handle, &created, &exited, &kernel, &user) && time_ticks(created) != 0u)
+                    family.identities[family.count++] = {member.id, time_ticks(created)};
+            }
+            family.complete = complete && family.count == processes.count;
+            return family;
+        }
+
+        struct NativeEpochGpu final
+        {
+            HMODULE pdh{::LoadLibraryExW(L"pdh.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32)};
+            HMODULE dxgi{::LoadLibraryExW(L"dxgi.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32)};
+            decltype(&::PdhOpenQueryW) open{};
+            decltype(&::PdhCloseQuery) close{};
+            decltype(&::PdhAddEnglishCounterW) add{};
+            decltype(&::PdhCollectQueryData) collect{};
+            decltype(&::PdhGetFormattedCounterArrayW) format{};
+            decltype(&::CreateDXGIFactory1) create_factory{};
+            PDH_HQUERY query{};
+            PDH_HCOUNTER activity{}, memory{};
+            IDXGIFactory1* factory{};
+            std::array<GpuAdapter, 32u> adapters{};
+            std::vector<PDH_FMT_COUNTERVALUE_ITEM_W> buffer{};
+            GpuProcessFamily previous{};
+            std::uint64_t previous_at_ms{};
+
+            NativeEpochGpu() noexcept
+            {
+                if (!pdh || !dxgi) return;
+                open = std::bit_cast<decltype(open)>(::GetProcAddress(pdh, "PdhOpenQueryW"));
+                close = std::bit_cast<decltype(close)>(::GetProcAddress(pdh, "PdhCloseQuery"));
+                add = std::bit_cast<decltype(add)>(::GetProcAddress(pdh, "PdhAddEnglishCounterW"));
+                collect = std::bit_cast<decltype(collect)>(::GetProcAddress(pdh, "PdhCollectQueryData"));
+                format = std::bit_cast<decltype(format)>(::GetProcAddress(pdh, "PdhGetFormattedCounterArrayW"));
+                create_factory = std::bit_cast<decltype(create_factory)>(::GetProcAddress(dxgi, "CreateDXGIFactory1"));
+                if (!open || !close || !add || !collect || !format || !create_factory
+                    || open(nullptr, 0u, &query) != ERROR_SUCCESS) return;
+                if (add(query, LR"(\GPU Engine(*)\Utilization Percentage)", 0u, &activity) != ERROR_SUCCESS)
+                    activity = nullptr;
+                if (add(query, LR"(\GPU Process Memory(*)\Dedicated Usage)", 0u, &memory) != ERROR_SUCCESS)
+                    memory = nullptr;
+            }
+
+            ~NativeEpochGpu()
+            {
+                if (factory) (void)factory->Release();
+                if (query) (void)close(query);
+                if (dxgi) (void)::FreeLibrary(dxgi);
+                if (pdh) (void)::FreeLibrary(pdh);
+            }
+            NativeEpochGpu(const NativeEpochGpu&) = delete;
+            NativeEpochGpu& operator=(const NativeEpochGpu&) = delete;
+
+            [[nodiscard]] bool describe_hardware() noexcept
+            {
+                if (factory && factory->IsCurrent()) return adapters.front().luid != 0u;
+                if (factory) (void)factory->Release();
+                factory = nullptr;
+                adapters = {};
+                previous = {};
+                previous_at_ms = 0u;
+                if (FAILED(create_factory(__uuidof(IDXGIFactory1), reinterpret_cast<void**>(&factory)))
+                    || !factory) return false;
+                std::size_t count{};
+                for (UINT i = 0u; i < adapters.size(); ++i)
+                {
+                    IDXGIAdapter1* adapter{};
+                    const auto result = factory->EnumAdapters1(i, &adapter);
+                    if (result == DXGI_ERROR_NOT_FOUND) break;
+                    if (FAILED(result) || !adapter) continue;
+                    DXGI_ADAPTER_DESC1 descriptor{};
+                    const auto described = adapter->GetDesc1(&descriptor);
+                    (void)adapter->Release();
+                    if (FAILED(described)
+                        || (descriptor.Flags & (DXGI_ADAPTER_FLAG_SOFTWARE | DXGI_ADAPTER_FLAG_REMOTE)) != 0u)
+                        continue;
+                    const auto luid = (static_cast<std::uint64_t>(static_cast<std::uint32_t>(
+                        descriptor.AdapterLuid.HighPart)) << 32u) | descriptor.AdapterLuid.LowPart;
+                    if (luid == 0u || descriptor.DedicatedVideoMemory > (1ull << 50u)) continue;
+                    if (std::ranges::find(adapters, luid, &GpuAdapter::luid) != adapters.end())
+                    {
+                        adapters = {};
+                        return false;
+                    }
+                    adapters[count++] = {luid, descriptor.DedicatedVideoMemory};
+                }
+                return count != 0u;
+            }
+
+            [[nodiscard]] bool collect_rows(PDH_HCOUNTER counter, bool engine_counter,
+                std::span<const GpuProcessIdentity> stable, std::vector<GpuCounterRow>& rows,
+                std::array<GpuAdapter, 32u>& current_adapters, bool& partial)
+            {
+                if (!counter) return false;
+                constexpr DWORD maximum_counter_bytes = 2u * 1024u * 1024u;
+                const DWORD type = PDH_FMT_NOCAP100 | PDH_FMT_NOSCALE
+                    | (engine_counter ? PDH_FMT_DOUBLE : PDH_FMT_LARGE);
+                for (unsigned attempt = 0u; attempt < 3u; ++attempt)
+                {
+                    DWORD bytes{}, count{};
+                    if (format(counter, type, &bytes, &count, nullptr) != static_cast<PDH_STATUS>(PDH_MORE_DATA)
+                        || bytes == 0u || bytes > maximum_counter_bytes) return false;
+                    buffer.resize((bytes + sizeof(buffer.front()) - 1u) / sizeof(buffer.front()));
+                    const auto allocated = bytes;
+                    const auto status = format(counter, type, &bytes, &count, buffer.data());
+                    if (status == static_cast<PDH_STATUS>(PDH_MORE_DATA)) continue;
+                    if (status != ERROR_SUCCESS || bytes > allocated || count > bytes / sizeof(buffer.front()))
+                        return false;
+                    const auto first = reinterpret_cast<std::uintptr_t>(buffer.data());
+                    const auto end = first + bytes;
+                    for (DWORD i = 0u; i < count; ++i)
+                    {
+                        const auto& item = buffer[i];
+                        const auto address = reinterpret_cast<std::uintptr_t>(item.szName);
+                        if (address < first || address >= end || address % alignof(wchar_t) != 0u)
+                        {
+                            partial = true;
+                            continue;
+                        }
+                        const auto available = (std::min)((end - address) / sizeof(wchar_t), std::size_t{160u});
+                        const auto text_end = std::find(item.szName, item.szName + available, L'\0');
+                        if (text_end == item.szName + available)
+                        {
+                            partial = true;
+                            continue;
+                        }
+                        const std::wstring_view item_name{item.szName, text_end};
+                        GpuInstance instance{};
+                        if (!parse_gpu_instance(item_name, instance, engine_counter))
+                        {
+                            if (std::ranges::find(stable, instance.pid, &GpuProcessIdentity::pid) != stable.end()) partial = true;
+                            continue;
+                        }
+                        auto adapter = std::ranges::find(current_adapters, instance.luid, &GpuAdapter::luid);
+                        if (adapter != current_adapters.end() && instance.physical != 0u) adapter->multi_node = true;
+                        if (std::ranges::find(stable, instance.pid, &GpuProcessIdentity::pid) == stable.end()) continue;
+                        if (adapter == current_adapters.end() || (item.FmtValue.CStatus != PDH_CSTATUS_VALID_DATA
+                                && item.FmtValue.CStatus != PDH_CSTATUS_NEW_DATA))
+                        {
+                            partial = true;
+                            continue;
+                        }
+                        const auto value = engine_counter ? item.FmtValue.doubleValue
+                            : static_cast<double>(item.FmtValue.largeValue);
+                        if (!std::isfinite(value) || value < 0.0
+                            || value > (engine_counter ? 100.0 : static_cast<double>(1ull << 50u)))
+                        {
+                            partial = true;
+                            continue;
+                        }
+                        rows.push_back({instance, value, static_cast<std::size_t>(adapter - current_adapters.begin())});
+                    }
+                    return true;
+                }
+                return false;
+            }
+
+            [[nodiscard]] GpuResourceSample sample(const GpuProcessFamily& before, std::uint64_t began)
+            {
+                if ((!activity && !memory) || !describe_hardware()) return {};
+                if (collect(query) != ERROR_SUCCESS)
+                {
+                    previous = {};
+                    previous_at_ms = 0u;
+                    return {};
+                }
+                // Reopen only owned processes after collection. A slow provider
+                // call must hold no process or Job handle that delays retirement.
+                GpuProcessFamily after{};
+                {
+                    ObservedProcesses processes;
+                    const bool complete = observe_child_processes(processes, nullptr);
+                    after = identify_gpu_processes(processes, complete);
+                }
+                const bool comparable = previous_at_ms != 0u && began >= previous_at_ms
+                    && began - previous_at_ms >= 1'000u && began - previous_at_ms <= 5'000u;
+                GpuProcessFamily stable{};
+                if (comparable)
+                    for (const auto& process : after.live())
+                        if (std::ranges::find(previous.live(), process) != previous.live().end()
+                            && std::ranges::find(before.live(), process) != before.live().end())
+                            stable.identities[stable.count++] = process;
+                stable.complete = before.complete && after.complete && previous.complete
+                    && stable.count == before.count && stable.count == after.count
+                    && stable.count == previous.count;
+                previous = after;
+                previous_at_ms = began;
+                if (stable.count == 0u) return {};
+
+                GpuResourceSample result;
+                result.sampling_started_at_ms = began;
+                auto current_adapters = adapters;
+                std::vector<GpuCounterRow> engine_rows{}, memory_rows{};
+                result.activity_partial = result.memory_partial = !stable.complete;
+                if (!collect_rows(activity, true, stable.live(), engine_rows, current_adapters, result.activity_partial))
+                    result.activity_partial = true;
+                if (!collect_rows(memory, false, stable.live(), memory_rows, current_adapters, result.memory_partial))
+                    result.memory_partial = true;
+                summarize_gpu_rows(result, engine_rows, memory_rows, current_adapters);
+                result.captured_at_ms = now_milliseconds();
+                return result;
+            }
+        };
+#endif
 
 #if EPOCH_HAS_NVML_TELEMETRY
         struct NvmlFunctions final
@@ -147,13 +755,19 @@ namespace epochengine::platform::work_admission
             NativeNvml(const NativeNvml&) = delete;
             NativeNvml& operator=(const NativeNvml&) = delete;
         };
+#endif
+
+#if defined(_WIN32)
         struct GpuTelemetrySampler final
         {
             std::mutex lifecycle{}, publication{}, wake{};
             std::condition_variable changed{};
             std::thread worker{};
             std::atomic_bool cancelled{true};
+            std::atomic_bool requested{};
+            std::atomic_bool epoch_requested{};
             GpuResourceSample cached{};
+            EpochResourceSample epoch_cached{};
         };
 
         // Retained deliberately: an uninterruptible driver call must not make
@@ -167,21 +781,75 @@ namespace epochengine::platform::work_admission
             if (sampler.cancelled.load(std::memory_order_acquire)) return;
             try
             {
-                NativeNvml native;
+#if EPOCH_HAS_NVML_TELEMETRY
+                std::optional<NativeNvml> native;
+#endif
+                EpochCpuFrame previous_epoch_cpu{};
+                std::optional<NativeEpochGpu> epoch_gpu;
                 while (!sampler.cancelled.load(std::memory_order_acquire))
                 {
-                    const auto began = now_milliseconds();
-                    auto sample = read_nvml_resources(native.api);
-                    const auto finished = now_milliseconds();
-                    sample.sampling_started_at_ms = began;
-                    sample.captured_at_ms = finished;
-                    if (finished < began || finished - began > 5'000u)
-                        sample = {};
+                    if (sampler.epoch_requested.exchange(false, std::memory_order_relaxed))
                     {
+                        const auto began = now_milliseconds();
+                        EpochResourceSample sample;
+                        GpuProcessFamily family;
+                        {
+                            ObservedProcesses processes;
+                            sample = read_epoch_resources(previous_epoch_cpu, began, processes);
+                            family = identify_gpu_processes(processes, sample.coverage_complete);
+                        }
+                        sample.captured_at_ms = now_milliseconds();
+                        if (sample.captured_at_ms < began || sample.captured_at_ms - began > 5'000u)
+                        {
+                            sample = {};
+                            previous_epoch_cpu = {};
+                        }
+                        {
+                            // CPU/RAM publish independently of native GPU queries.
+                            const std::lock_guard lock{sampler.publication};
+                            if (!sampler.cancelled.load(std::memory_order_acquire))
+                            {
+                                const auto& previous_gpu = sampler.epoch_cached.gpu;
+                                if (sample.captured_at_ms >= previous_gpu.captured_at_ms
+                                    && sample.captured_at_ms - previous_gpu.captured_at_ms <= 5'000u)
+                                    sample.gpu = previous_gpu;
+                                sampler.epoch_cached = sample;
+                            }
+                        }
+                        if (sampler.cancelled.load(std::memory_order_acquire)) break;
+                        GpuResourceSample attributed{};
+                        if (sample.captured_at_ms != 0u)
+                        {
+                            try
+                            {
+                                if (!epoch_gpu) epoch_gpu.emplace();
+                                attributed = epoch_gpu->sample(family, now_milliseconds());
+                            }
+                            catch (...) { attributed = {}; }
+                        }
+                        if (attributed.captured_at_ms < attributed.sampling_started_at_ms
+                            || attributed.captured_at_ms - attributed.sampling_started_at_ms > 5'000u)
+                            attributed = {};
+                        const std::lock_guard lock{sampler.publication};
+                        if (!sampler.cancelled.load(std::memory_order_acquire))
+                            sampler.epoch_cached.gpu = attributed;
+                    }
+#if EPOCH_HAS_NVML_TELEMETRY
+                    if (sampler.requested.exchange(false, std::memory_order_relaxed))
+                    {
+                        if (!native) native.emplace();
+                        const auto began = now_milliseconds();
+                        auto sample = read_nvml_resources(native->api);
+                        const auto finished = now_milliseconds();
+                        sample.sampling_started_at_ms = began;
+                        sample.captured_at_ms = finished;
+                        if (finished < began || finished - began > 5'000u)
+                            sample = {};
                         const std::lock_guard lock{sampler.publication};
                         if (!sampler.cancelled.load(std::memory_order_acquire))
                             sampler.cached = sample;
                     }
+#endif
                     // Cadence begins AFTER completion, including slow/failed
                     // queries; a stale-at-entry timestamp cannot cause a loop.
                     std::unique_lock lock{sampler.wake};
@@ -214,14 +882,6 @@ namespace epochengine::platform::work_admission
 #endif
         }
 
-        [[nodiscard]] bool add_counter(std::uint64_t& total, std::uint64_t value) noexcept
-        {
-            if (value > (std::numeric_limits<std::uint64_t>::max)() - total)
-                return false;
-            total += value;
-            return true;
-        }
-
         [[nodiscard]] CpuTimes read_resources(ResourceSample& sample)
         {
 #if defined(_WIN32)
@@ -236,13 +896,8 @@ namespace epochengine::platform::work_admission
             }
             FILETIME idle{}, kernel{}, user{};
             if (!::GetSystemTimes(&idle, &kernel, &user)) return {};
-            const auto counter = [](const FILETIME& time) noexcept
-            {
-                return (static_cast<std::uint64_t>(time.dwHighDateTime) << 32u)
-                    | time.dwLowDateTime;
-            };
-            CpuTimes result{counter(kernel), counter(idle), true};
-            if (!add_counter(result.total, counter(user)) || result.idle > result.total)
+            CpuTimes result{time_ticks(kernel), time_ticks(idle), true};
+            if (!add_counter(result.total, time_ticks(user)) || result.idle > result.total)
                 return {};
             return result;
 #elif defined(__linux__)
@@ -303,7 +958,7 @@ namespace epochengine::platform::work_admission
 
     bool start_gpu_telemetry() noexcept
     {
-#if EPOCH_HAS_NVML_TELEMETRY
+#if defined(_WIN32)
         try
         {
             GpuTelemetrySampler* sampler{};
@@ -326,7 +981,10 @@ namespace epochengine::platform::work_admission
             {
                 const std::lock_guard publication{sampler->publication};
                 sampler->cached = {};
+                sampler->epoch_cached = {};
             }
+            sampler->requested.store(false, std::memory_order_relaxed);
+            sampler->epoch_requested.store(false, std::memory_order_relaxed);
             sampler->cancelled.store(false, std::memory_order_release);
             try
             {
@@ -347,7 +1005,7 @@ namespace epochengine::platform::work_admission
 
     bool stop_gpu_telemetry(std::uint32_t wait_budget_ms) noexcept
     {
-#if EPOCH_HAS_NVML_TELEMETRY
+#if defined(_WIN32)
         auto* const sampler = gpuSampler.load(std::memory_order_acquire);
         if (!sampler) return true;
         sampler->cancelled.store(true, std::memory_order_release);
@@ -370,6 +1028,39 @@ namespace epochengine::platform::work_admission
         (void)wait_budget_ms;
         return true;
 #endif
+    }
+
+    GpuResourceSample sample_gpu_telemetry() noexcept
+    {
+#if EPOCH_HAS_NVML_TELEMETRY
+        if (auto* const sampler = gpuSampler.load(std::memory_order_acquire);
+            sampler && !sampler->cancelled.load(std::memory_order_acquire))
+            sampler->requested.store(true, std::memory_order_relaxed);
+#endif
+        return cached_gpu_resources();
+    }
+
+    EpochResourceSample sample_epoch_resources() noexcept
+    {
+#if defined(_WIN32)
+        auto* const sampler = gpuSampler.load(std::memory_order_acquire);
+        if (sampler && !sampler->cancelled.load(std::memory_order_acquire))
+        {
+            sampler->epoch_requested.store(true, std::memory_order_relaxed);
+            const std::lock_guard lock{sampler->publication};
+            const auto now = now_milliseconds();
+            if (!sampler->cancelled.load(std::memory_order_acquire)
+                && now >= sampler->epoch_cached.captured_at_ms
+                && now - sampler->epoch_cached.captured_at_ms <= 5'000u)
+            {
+                auto result = sampler->epoch_cached;
+                if (now < result.gpu.captured_at_ms || now - result.gpu.captured_at_ms > 5'000u)
+                    result.gpu = {};
+                return result;
+            }
+        }
+#endif
+        return {};
     }
 
     ResourceSample sample_host_resources() noexcept

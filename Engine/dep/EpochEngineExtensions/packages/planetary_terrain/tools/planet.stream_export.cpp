@@ -13,18 +13,17 @@
 import editor.task_scheduler;
 import planet.terrain;
 import planet.streaming;
+import planet.cut_assembly;
 import planet.coverage;
 import planet.clouds;
 import asset.cloud_volume;
 import asset.mesh_artifact;
 import asset.texture_artifact;
 import project.planetary_snapshot;
-#if defined(EPOCH_PLANET_HAS_WATER_EXTENSION)
-import water.planetary;
-#endif
 
 namespace core=epoch::extensions::planetary_terrain::core;
 namespace stream=epoch::extensions::planetary_terrain::streaming;
+namespace assembly=epoch::extensions::planetary_terrain::cut_assembly;
 namespace cache=planet_stream_cache;
 namespace coverage=epoch::extensions::planetary_terrain::coverage;
 namespace artifact=epochengine::asset::mesh;
@@ -68,8 +67,17 @@ namespace
         const auto result=std::from_chars(input.data(),input.data()+input.size(),value);
         return result.ec==std::errc{}&&result.ptr==input.data()+input.size();
     }
-    bool prepare_cache(const fs::path& directory,stream::State& state,std::uint32_t seed,tasks::Scheduler& scheduler,WorkerActivity& activity,std::size_t& reused)
+    struct CacheTelemetry
     {
+        std::chrono::steady_clock::duration index{},read_wave{},restore{},prune{},write{};
+        cache::PatchReadTiming entries{};
+        std::size_t checked{},decoded{};
+    };
+    bool prepare_cache(const fs::path& directory,stream::State& state,std::uint32_t seed,tasks::Scheduler& scheduler,
+        WorkerActivity& activity,std::size_t& reused,CacheTelemetry& telemetry)
+    {
+        using Clock=std::chrono::steady_clock;
+        const auto started=Clock::now();
         if(directory.empty()||directory.filename().empty()||!cache::plain_path(fs::absolute(directory).parent_path(),true))return false;
         if(!fs::exists(directory)&&!fs::create_directory(directory))return false;
         if(!cache::plain_path(directory,true))return false;
@@ -134,13 +142,15 @@ namespace
             state.plan=std::move(history);
             if(stream::update(state,state.request)!=stream::Status::ready)return false;
         }
+        const auto indexed=Clock::now();
+        telemetry.index=indexed-started;
         // Decode wanted patches in the same bounded jobs that validate the
         // owner directory. read_patch still checks every ancestor immediately
         // before its read. No obsolete file is removed until every entry has
         // passed and all jobs have retired. Partial restored State is private
         // to this provider request and is discarded on any later failure.
         {
-            struct CachedEntry {bool valid{};std::optional<core::Mesh> mesh;};
+            struct CachedEntry {bool valid{};std::optional<core::Mesh> mesh;cache::PatchReadTiming timing;};
             struct CacheJob {core::TileKey key;tasks::Submission<CachedEntry> task;};
             std::vector<CacheJob> jobs;jobs.reserve(state.request.maximum_in_flight);
             std::vector<stream::Resident> decoded;decoded.reserve(state.plan.needed.size());
@@ -163,10 +173,17 @@ namespace
                             [entry,wanted,cells,ocean,&activity](std::stop_token stop)->CachedEntry {
                                 WorkerActivity::Scope measured{activity};
                                 if(stop.stop_requested())return {};
-                                if(!wanted)return {!stop.stop_requested()&&cache::plain_path(entry.path,false),{}};
+                                cache::PatchReadTiming timing;
+                                if(!wanted)
+                                {
+                                    const auto checking=Clock::now();
+                                    const bool ordinary=!stop.stop_requested()&&cache::plain_path(entry.path,false);
+                                    timing.path_checks=Clock::now()-checking;
+                                    return {ordinary,{},timing};
+                                }
                                 core::Mesh mesh;
-                                if(!cache::read_patch(entry.path,entry.key,cells,mesh,ocean)||stop.stop_requested())return {};
-                                return {true,std::optional<core::Mesh>{std::move(mesh)}};
+                                if(!cache::read_patch(entry.path,entry.key,cells,mesh,ocean,&timing)||stop.stop_requested())return {};
+                                return {true,std::optional<core::Mesh>{std::move(mesh)},timing};
                             });
                         jobs.push_back({entry.key,std::move(task)});
                     }
@@ -183,14 +200,22 @@ namespace
                     }
                     auto result=ready->task.completion.get();
                     if(!result.valid){retire();return false;}
+                    ++telemetry.checked;
+                    telemetry.entries.path_checks+=result.timing.path_checks;
+                    telemetry.entries.file_read+=result.timing.file_read;
+                    telemetry.entries.decode+=result.timing.decode;
+                    telemetry.entries.bytes+=result.timing.bytes;
                     if(result.mesh)
                     {
+                        ++telemetry.decoded;
                         decoded.push_back({ready->key,std::move(*result.mesh)});
                     }
                     jobs.erase(ready);(void)scheduler.maintain();
                 }
             }
             catch(...){retire();throw;}
+            const auto drained=Clock::now();
+            telemetry.read_wave=drained-indexed;
             // Preserve the exact admitted plan order, independently of directory
             // enumeration or worker completion order. Reserved retained bounds
             // cover decoded meshes; at most four encoded patch reads coexist.
@@ -201,11 +226,14 @@ namespace
                 if(stream::restore(state,key,std::move(at->mesh))!=stream::Status::ready)return false;
                 ++reused;
             }
+            telemetry.restore=Clock::now()-drained;
         }
+        const auto pruning=Clock::now();
         const auto interrupted=directory/"plan.epoch_planet_stream.pending";
         if(fs::exists(interrupted)&&!fs::remove(interrupted))return false;
         for(const auto& entry:entries)
             if((entry.incomplete||!stream::detail::wanted(state,entry.key))&&!fs::remove(entry.path))return false;
+        telemetry.prune=Clock::now()-pruning;
         return true;
     }
     bool save_plan(const fs::path& directory,const stream::State& state)
@@ -259,25 +287,18 @@ namespace
         std::erase_if(state.resident,[&](const auto& resident){return !stream::detail::wanted(state,resident.key);});
         return true;
     }
-    int write_snapshot(const fs::path& output,const stream::State& state,std::uint64_t request_id,std::size_t built,std::size_t reused,artifact::Limits limits,std::optional<double> simulation_seconds,std::string_view patch_identity,tasks::Scheduler& scheduler,WorkerActivity& activity,bool metric_frame=false, const std::shared_ptr<const artifact::Artifact>& cloud_mesh={},const std::optional<epochengine::asset::cloud_volume::Recipe>& cloud_density={})
+    int write_snapshot(const fs::path& output,const stream::State& state,std::uint64_t request_id,std::size_t built,std::size_t reused,artifact::Limits limits,std::optional<double> simulation_seconds,std::string_view patch_identity,tasks::Scheduler& scheduler,WorkerActivity& activity,bool metric_frame,bool water_appearance,const std::shared_ptr<const artifact::Artifact>& cloud_mesh,const std::optional<epochengine::asset::cloud_volume::Recipe>& cloud_density)
     {
         const auto snapshot_started=std::chrono::steady_clock::now();
         auto assembly_done=snapshot_started,validation_done=snapshot_started,encoding_done=snapshot_started,verification_done=snapshot_started;
         const auto stats=stream::stats(state);
-        const auto cut=stream::draw_cut(state);
-        const auto origin=state.world.center(state.request.body_index,state.request.seconds);
-        // epoch.planet.stream-frame.v1: retain metre-scale fine geometry near
-        // the admitted camera; planner/cache coordinates remain body-local.
-        // epoch.planet.stream-origin.v2: shared, bounded metric origin. Near
-        // the surface it remains the exact camera; a far-orbit camera cannot
-        // push otherwise valid terrain outside the mesh codec's position range.
-        const auto camera_origin=state.request.camera-origin;
-        const auto metric_origin=patches::metric_source_origin(
-            {camera_origin.x,camera_origin.y,camera_origin.z},true);
-        if(metric_frame&&!metric_origin)return 5;
-        const auto artifact_origin=metric_frame?core::DVec3{
-            (*metric_origin)[0],(*metric_origin)[1],(*metric_origin)[2]}:core::DVec3{};
-        const double scale=metric_frame?1.0:10.0/state.world.body(state.request.body_index).radius;
+        // epoch.planet.stream-frame.v1 retains metre-scale near geometry.
+        // epoch.planet.stream-origin.v2 bounds the shared metric frame at orbit.
+        const auto coordinates=assembly::frame_for(state,metric_frame);
+        if(!coordinates)return 5;
+        const auto origin=coordinates->world_center;
+        const auto artifact_origin=coordinates->origin;
+        const auto scale=coordinates->scale;
         const auto& world=state.world.config();const bool sized=world!=core::WorldConfig{};
         std::string key;
         std::size_t nv{},ni{};
@@ -289,154 +310,75 @@ namespace
         };
         if(stats.complete_coverage)
         {
-            std::vector<artifact::Vertex> vertices;
-            std::vector<std::uint32_t> indices;
-            patches::Metadata metadata;
-            if(cloud_mesh||cloud_density)metadata.cloud=patches::CloudLayer{static_cast<std::uint32_t>(state.request.body_index),
+            assembly::Assembly snapshot{state,*coordinates,limits,!patch_identity.empty(),water_appearance};
+            if(cloud_mesh||cloud_density)snapshot.metadata.cloud=patches::CloudLayer{static_cast<std::uint32_t>(state.request.body_index),
                 {origin.x,origin.y,origin.z},state.world.body(state.request.body_index).radius,
                 cloud_density?cloud_density->wind_period_seconds:604800.0,cloud_mesh,cloud_density};
-#if defined(EPOCH_PLANET_HAS_WATER_EXTENSION)
-            epoch::extensions::planetary_terrain::water::Surface ocean;
-            if(state.request.ocean_surface&&!ocean.evaluate(state.world.seed(),state.request.seconds,limits.maximum_bytes))return fail("ocean evaluation");
-#else
-            if(state.request.ocean_surface)return fail("ocean provider unavailable");
-#endif
-            std::vector<core::TileKey> exported=cut;
             if(!patch_identity.empty())
             {
-                // Explicit new transport only. The ordinary legacy artifact is
-                // still the draw cut and can never expose hidden ancestors.
-                exported.clear();
-                for(const auto& resident:state.resident)
-                    if(std::ranges::any_of(cut,[&](const auto leaf){return core::contains(resident.key,leaf);}))exported.push_back(resident.key);
-                metadata.identity.source_hash=patch_identity.substr(0,71u);
-                metadata.identity.recipe_key=patch_identity.substr(72u);
-                metadata.identity.request_id=request_id;
-                if(state.request.ocean_surface)
-                {metadata.water_radius_meters=state.world.body(state.request.body_index).radius;metadata.water_meters_to_artifact=scale;
-                    metadata.water_origin_meters={artifact_origin.x,artifact_origin.y,artifact_origin.z};}
+                snapshot.metadata.identity.source_hash=patch_identity.substr(0,71u);
+                snapshot.metadata.identity.recipe_key=patch_identity.substr(72u);
+                snapshot.metadata.identity.request_id=request_id;
             }
-            struct PatchGeometry
-            {
-                std::vector<artifact::Vertex> vertices;
-                std::vector<std::uint32_t> indices;
-                std::vector<std::array<float,3>> deltas;
+            if(const auto failure=snapshot.begin();failure)return fail(failure.stage);
+            const auto exported=snapshot.tiles();
+            const auto cut=snapshot.draw_cut();
+            // The exporter owns its workers. The assembler stays immutable
+            // while they convert patches and receives results in patch order.
+            struct Job {assembly::Work work;tasks::Submission<std::optional<assembly::Geometry>> task;};
+            std::vector<Job> jobs;
+            jobs.reserve(state.request.maximum_in_flight);
+            std::uint64_t scratch_reserved{};
+            const auto scratch_available=snapshot.scratch_available();
+            const auto retire=[&] {
+                for(auto& job:jobs)(void)scheduler.cancel(job.task.cancellation);
+                for(auto& job:jobs)if(job.task.completion.valid())
+                    try{(void)job.task.completion.get();}catch(...){}
+                jobs.clear();
             };
-            // Each patch has independent conversion and FFT clipping. Keep the
-            // existing scheduler's four-worker bound and merge in source order.
-            // Reserve the worst clipping expansion before starting each job;
-            // worker scratch is charged alongside retained terrain residency.
-            const std::uint64_t scratch_available=state.request.maximum_bytes
-                -stream::detail::overhead-stream::resident_bytes(state);
+            try
             {
-                struct AssemblyJob {core::TileKey key;std::uint64_t scratch;tasks::Submission<std::optional<PatchGeometry>> task;};
-                std::vector<AssemblyJob> jobs;
-                jobs.reserve(state.request.maximum_in_flight);
-                std::uint64_t scratch_reserved{};
-                const auto retire=[&] {
-                    for(auto& job:jobs)(void)scheduler.cancel(job.task.cancellation);
-                    for(auto& job:jobs)if(job.task.completion.valid())
-                        try{(void)job.task.completion.get();}catch(...){}
-                    jobs.clear();
-                };
-                try
+                std::size_t next{};
+                while(next<exported.size()||!jobs.empty())
                 {
-                    std::size_t next{};
-                    while(next<exported.size()||!jobs.empty())
+                    while(next<exported.size()&&jobs.size()<state.request.maximum_in_flight)
                     {
-                      while(next<exported.size()&&jobs.size()<state.request.maximum_in_flight)
-                      {
-                        const auto tile=exported[next];
-                        const auto* resident=stream::detail::find(state,tile);
-                        if(!resident){retire();return fail("selected patch unavailable",vertices.size(),indices.size());}
-                        const auto* mesh=&resident->mesh;
-                        const bool with_deltas=!patch_identity.empty();
-                        const std::size_t maximum_vertices=mesh->vertices.size()+2u*mesh->indices.size()/3u;
-                        const std::size_t maximum_indices=2u*mesh->indices.size();
-                        const std::uint64_t side=state.request.cells_per_tile+1u;
-                        const std::uint64_t water_scratch=state.request.ocean_surface
-                            ?mesh->indices.size()*sizeof(std::uint32_t)+mesh->vertices.size()*sizeof(std::uint32_t)
-                                +side*side*(sizeof(core::DVec3)+sizeof(std::uint8_t)):0u;
-                        const std::uint64_t scratch=maximum_vertices*(sizeof(artifact::Vertex)+(with_deltas?sizeof(std::array<float,3>):0u))
-                            +maximum_indices*sizeof(std::uint32_t)+water_scratch+sizeof(artifact::Vertex);
-                        if(scratch>scratch_available-scratch_reserved)
-                        {if(jobs.empty())return fail("snapshot working budget");break;}
-                        scratch_reserved+=scratch;
-                        const auto body=state.world.body(state.request.body_index);
-                        const auto cells=state.request.cells_per_tile;
-                        auto task=scheduler.submit_cancellable("Assemble planet patch",
-                            [mesh,tile,body,cells,scale,artifact_origin,with_deltas,maximum_vertices,maximum_indices,scratch,&activity
-#if defined(EPOCH_PLANET_HAS_WATER_EXTENSION)
-                            ,&ocean,wet=state.request.ocean_surface
-#endif
-                            ](std::stop_token stop)->std::optional<PatchGeometry> {
-                                WorkerActivity::Scope measured{activity};
-                                if(stop.stop_requested())return {};
-                                PatchGeometry result;
-                                result.vertices.reserve(maximum_vertices);result.indices.reserve(maximum_indices);
-                                if(with_deltas)result.deltas.reserve(maximum_vertices);
-                                for(const auto& vertex:mesh->vertices)
-                                {
-                                    const auto relative=(mesh->anchor+core::DVec3{vertex.position}-artifact_origin)*scale;
-                                    result.vertices.push_back({{static_cast<float>(relative.x),static_cast<float>(relative.y),static_cast<float>(relative.z)},
-                                        {vertex.normal.x,vertex.normal.y,vertex.normal.z},{},{vertex.color[0],vertex.color[1],vertex.color[2]}});
-                                    if(with_deltas)result.deltas.push_back({static_cast<float>(vertex.parent_delta.x*scale),
-                                        static_cast<float>(vertex.parent_delta.y*scale),static_cast<float>(vertex.parent_delta.z*scale)});
-                                }
-                                result.indices.insert(result.indices.end(),mesh->indices.begin(),mesh->indices.end());
-#if defined(EPOCH_PLANET_HAS_WATER_EXTENSION)
-                                if(wet&&!ocean.apply_patch(result.vertices,result.indices,0u,0u,*mesh,body,tile,cells,scale,core::DVec3{}-artifact_origin,scratch,
-                                    with_deltas?&result.deltas:nullptr))return {};
-#endif
-                                if(stop.stop_requested()||result.vertices.size()>maximum_vertices||result.indices.size()>maximum_indices
-                                    ||result.vertices.capacity()*sizeof(artifact::Vertex)+result.indices.capacity()*sizeof(std::uint32_t)
-                                        +result.deltas.capacity()*sizeof(std::array<float,3>)>scratch)return {};
-                                return result;
-                            });
-                        jobs.push_back({tile,scratch,std::move(task)});++next;
-                      }
-                        auto& job=jobs.front();
-                        auto patch_geometry=job.task.completion.get();
-                        if(!patch_geometry){retire();return fail("patch assembly",vertices.size(),indices.size());}
-                        const auto& chunk=*patch_geometry;
-                        if(vertices.size()+chunk.vertices.size()>limits.maximum_vertices
-                            ||indices.size()+chunk.indices.size()>limits.maximum_indices
-                            ||48u+(vertices.size()+chunk.vertices.size())*44u+(indices.size()+chunk.indices.size())*4u>limits.maximum_bytes)
-                        {retire();(void)fail("terrain assembly limit",vertices.size()+chunk.vertices.size(),indices.size()+chunk.indices.size());return 10;}
-                        const auto base=static_cast<std::uint32_t>(vertices.size());
-                        if(!patch_identity.empty())
+                        const auto work=snapshot.work_for(exported[next]);
+                        if(!work){retire();return fail("selected patch unavailable",snapshot.vertices(),snapshot.indices());}
+                        if(work->scratch>scratch_available-scratch_reserved)
                         {
-                            patches::Patch patch;
-                            const auto convert=[](core::TileKey key){return patches::TileKey{key.x,key.y,key.body,key.face,key.level};};
-                            patch.key=convert(job.key);const auto neighbors=core::neighbors(job.key);
-                            for(unsigned i=0;i<4u;++i)patch.neighbors[i]=convert(neighbors[i]);
-                            patch.first_vertex=base;patch.vertex_count=static_cast<std::uint32_t>(chunk.vertices.size());
-                            patch.first_index=static_cast<std::uint32_t>(indices.size());patch.index_count=static_cast<std::uint32_t>(chunk.indices.size());
-                            patch.target=std::ranges::find(cut,job.key)!=cut.end();
-#if defined(EPOCH_PLANET_HAS_WATER_EXTENSION)
-                            // epoch.planet.water-recipe.v2: selected fine ocean
-                            // patches retain their typed undeformed basis.
-                            if(state.request.ocean_surface&&!epoch::extensions::planetary_terrain::water::append_recipe(
-                                metadata,patch,stream::detail::find(state,job.key)->mesh,
-                                state.world.body(state.request.body_index),job.key,state.request.cells_per_tile,scale))
-                            {retire();return fail("ocean recipe",vertices.size(),indices.size());}
-#endif
-                            metadata.patches.push_back(patch);
-                            metadata.parent_delta.insert(metadata.parent_delta.end(),chunk.deltas.begin(),chunk.deltas.end());
+                            if(jobs.empty())return fail("snapshot working budget");
+                            break;
                         }
-                        vertices.insert(vertices.end(),chunk.vertices.begin(),chunk.vertices.end());
-                        for(const auto index:chunk.indices)indices.push_back(base+index);
-                        scratch_reserved-=job.scratch;
-                        jobs.erase(jobs.begin());(void)scheduler.maintain();
+                        scratch_reserved+=work->scratch;
+                        auto task=scheduler.submit_cancellable("Assemble planet patch",
+                            [&snapshot,&activity,work=*work](std::stop_token stop){
+                                WorkerActivity::Scope measured{activity};
+                                return snapshot.prepare(work,stop);
+                            });
+                        jobs.push_back({*work,std::move(task)});
+                        ++next;
                     }
+                    auto& job=jobs.front();
+                    auto geometry=job.task.completion.get();
+                    if(!geometry){retire();return fail("patch assembly",snapshot.vertices(),snapshot.indices());}
+                    if(const auto failure=snapshot.append(job.work,*geometry);failure)
+                    {
+                        retire();
+                        const auto result=fail(failure.stage,failure.vertices,failure.indices,failure.detail);
+                        return failure.limit?10:result;
+                    }
+                    scratch_reserved-=job.work.scratch;
+                    jobs.erase(jobs.begin());
+                    (void)scheduler.maintain();
                 }
-                catch(...){retire();throw;}
             }
+            catch(...){retire();throw;}
             assembly_done=std::chrono::steady_clock::now();
-            const auto built_artifact=artifact::build_artifact(vertices,indices,limits);
-            if(!built_artifact)return fail("mesh validation",vertices.size(),indices.size(),static_cast<int>(built_artifact.code));
+            const auto built_artifact=snapshot.build();
+            if(!built_artifact)return fail("mesh validation",snapshot.vertices(),snapshot.indices(),static_cast<int>(built_artifact.code));
             validation_done=std::chrono::steady_clock::now();
-            const auto bytes=artifact::encode_artifact(*built_artifact.artifact);if(bytes.empty())return fail("mesh encoding",vertices.size(),indices.size());
+            const auto bytes=artifact::encode_artifact(*built_artifact.artifact);if(bytes.empty())return fail("mesh encoding",snapshot.vertices(),snapshot.indices());
             encoding_done=std::chrono::steady_clock::now();
             std::ofstream mesh_file{output/"terrain.epoch_mesh",std::ios::binary|std::ios::noreplace};
             mesh_file.write(reinterpret_cast<const char*>(bytes.data()),static_cast<std::streamsize>(bytes.size()));mesh_file.close();if(!mesh_file)return 7;
@@ -446,14 +388,22 @@ namespace
             check.seekg(0);
             if(!cache::matches_bytes(check,bytes))return 7;
             verification_done=std::chrono::steady_clock::now();
-            key=epochengine::asset::texture::content_hash_hex(built_artifact.artifact->key());nv=vertices.size();ni=indices.size();
+            key=epochengine::asset::texture::content_hash_hex(built_artifact.artifact->key());nv=snapshot.vertices();ni=snapshot.indices();
             if(!patch_identity.empty())
             {
-                metadata.identity.artifact_key=built_artifact.artifact->key();
-                const auto sidecar=patches::encode(metadata,*built_artifact.artifact,{limits});if(sidecar.empty())return fail("patch metadata",vertices.size(),indices.size());
+                snapshot.metadata.identity.artifact_key=built_artifact.artifact->key();
+                const auto sidecar=patches::encode(snapshot.metadata,*built_artifact.artifact,{limits});if(sidecar.empty())return fail("patch metadata",snapshot.vertices(),snapshot.indices());
                 std::ofstream patch_file{output/"terrain.epoch_planet_patch",std::ios::binary|std::ios::noreplace};
                 patch_file.write(reinterpret_cast<const char*>(sidecar.data()),static_cast<std::streamsize>(sidecar.size()));
                 patch_file.close();if(!patch_file)return 7;
+                if(water_appearance)
+                {
+                    const auto appearance=patches::encode_water_appearance(snapshot.water_ranges,snapshot.metadata.identity);
+                    if(appearance.empty())return fail("water appearance",snapshot.vertices(),snapshot.indices());
+                    std::ofstream file{output/"terrain.water_appearance",std::ios::binary|std::ios::noreplace};
+                    file.write(reinterpret_cast<const char*>(appearance.data()),static_cast<std::streamsize>(appearance.size()));
+                    file.close();if(!file)return 7;
+                }
             }
             std::ofstream recipe{output/"terrain.preview.json",std::ios::noreplace};
             recipe<<std::setprecision(17)<<"{\"schema\":\""<<(sized?"epoch.planet.mesh-preview.v2":"epoch.planet.mesh-preview.v1")<<"\",\"mode\":\"planet\",\"seed\":"<<state.world.seed()
@@ -529,9 +479,14 @@ int planet_stream_main(int argc,char** argv)
     stream::Request request;
     core::WorldConfig world;
     std::string patch_identity;
+    // epoch.planet.water-appearance.v1: opt-in sidecar for coarse and fine ocean.
+    const bool water_appearance=argc>1&&std::string_view{argv[argc-1]}=="--water-appearance-v1";
+    if(water_appearance)--argc;
     // epoch.planet.cloud-layer.v1: explicit opt-in preserves older host bytes.
     // epoch.planet.cloud-density.v1: v5 metric density; no lobe mesh is emitted.
-    const bool cloud_density_transport=argc>1&&std::string_view{argv[argc-1]}=="--cloud-density-v1";
+    // epoch.planet.cloud-density.v2: v6 also carries an inscribed solid radius.
+    const bool solid_cloud_transport=argc>1&&std::string_view{argv[argc-1]}=="--cloud-density-v2";
+    const bool cloud_density_transport=solid_cloud_transport||(argc>1&&std::string_view{argv[argc-1]}=="--cloud-density-v1");
     const bool cloud_transport=cloud_density_transport||(argc>1&&std::string_view{argv[argc-1]}=="--cloud-layer-v1");
     if(cloud_transport)--argc;
     // Additive capability: epoch.planet.view-footprint.v1 carries the camera
@@ -561,7 +516,10 @@ int planet_stream_main(int argc,char** argv)
     if(metric_frame)--argc;
     if(!planet_export_options(argc,argv,meshBytes,seconds,
         &request.lod.patch_pixels,&request.lod.hysteresis,&world,&patch_identity))return 2;
-    if((request.view||cloud_transport)&&(!metric_frame||patch_identity.empty()))return 2;
+    // Camera priority also applies to a standalone metric draw cut. Cloud and
+    // water sidecars still need the patch transport's identity and ranges.
+    if((request.view||cloud_transport||water_appearance)&&!metric_frame)return 2;
+    if((cloud_transport||water_appearance)&&patch_identity.empty())return 2;
     const auto limits=planet_export_limits(meshBytes);
     if(limits.maximum_bytes==0u|| (argc!=17&&argc!=18))return 2;
     std::uint32_t seed{},level{},maximum_new{};
@@ -573,6 +531,7 @@ int planet_stream_main(int argc,char** argv)
         if(!parse(argv[17],ocean)||ocean>1u)return 2;
         request.ocean_surface=ocean!=0u;
     }
+    if(water_appearance&&!request.ocean_surface)return 2;
     if(!parse(argv[4],seed)||!parse(argv[5],request.cells_per_tile)||!parse(argv[6],request.body_index)
         ||!parse(argv[7],request.camera.x)||!parse(argv[8],request.camera.y)||!parse(argv[9],request.camera.z)
         ||!parse(argv[10],request.viewport_height)||!parse(argv[11],request.vertical_fov)||!parse(argv[12],level)
@@ -611,9 +570,10 @@ int planet_stream_main(int argc,char** argv)
         // Refuse a repeated output before touching the reusable cache.
         if(!cache::new_output(output))return 6;
         WorkerActivity activity;
+        CacheTelemetry cache_telemetry;
         tasks::Scheduler scheduler{{.worker_count=request.maximum_in_flight,.retained_finished_nodes=32u}};
         std::size_t reused{},built{};
-        if(!prepare_cache(directory,state,seed,scheduler,activity,reused))return 9;
+        if(!prepare_cache(directory,state,seed,scheduler,activity,reused,cache_telemetry))return 9;
         std::shared_ptr<const artifact::Artifact> cloud_mesh;
         std::optional<epochengine::asset::cloud_volume::Recipe> cloud_density;
         if(cloud_density_transport)
@@ -621,6 +581,7 @@ int planet_stream_main(int argc,char** argv)
             const auto& body=state.world.body(state.request.body_index);
             cloud_density=epoch::extensions::planetary_terrain::clouds::density_recipe(body);
             if(epoch::extensions::planetary_terrain::clouds::supports(body)&&!cloud_density)return 9;
+            if(cloud_density&&!solid_cloud_transport)cloud_density->view_occluder_radius_meters=0.0;
         }
         if(cloud_transport&&!cloud_density_transport)
         {
@@ -702,10 +663,12 @@ int planet_stream_main(int argc,char** argv)
                         const auto path=directory/cache::filename(key);
                         const auto pending=fs::path{path.string()+".pending"};
                         const auto* resident=stream::detail::find(state,key);
+                        const auto writing=std::chrono::steady_clock::now();
                         if(!resident||!cache::write_patch(pending,key,resident->mesh)) {retire();return 9;}
                         // Cache publication remains on the State owner, after
                         // structural validation and current-generation admission.
                         fs::rename(pending,path);
+                        cache_telemetry.write+=std::chrono::steady_clock::now()-writing;
                         ++built;
                     }
                     (void)scheduler.maintain();
@@ -716,13 +679,13 @@ int planet_stream_main(int argc,char** argv)
         const auto meshed=std::chrono::steady_clock::now();
         if(!save_plan(directory,state))return 9;
         const auto saved=std::chrono::steady_clock::now();
-        auto result=write_snapshot(output,state,request_id,built,reused,limits,seconds,patch_identity,scheduler,activity,metric_frame,cloud_mesh,cloud_density);
+        auto result=write_snapshot(output,state,request_id,built,reused,limits,seconds,patch_identity,scheduler,activity,metric_frame,water_appearance,cloud_mesh,cloud_density);
         const auto requested_draw=stream::stats(state).draw_patches;
         std::size_t budget_reductions{};
         while(result==10&&budget_reductions<8u&&coarsen_snapshot(state))
         {
             ++budget_reductions;
-            result=write_snapshot(output,state,request_id,built,reused,limits,seconds,patch_identity,scheduler,activity,metric_frame,cloud_mesh,cloud_density);
+            result=write_snapshot(output,state,request_id,built,reused,limits,seconds,patch_identity,scheduler,activity,metric_frame,water_appearance,cloud_mesh,cloud_density);
         }
         if(result==10)return 5; // Refuse if the bounded retries cannot admit a complete cut.
         if(result==0&&budget_reductions)
@@ -738,6 +701,7 @@ int planet_stream_main(int argc,char** argv)
         if(result==0)
         {
             const auto milliseconds=[](auto from,auto to){return std::chrono::duration<double,std::milli>(to-from).count();};
+            const auto duration_ms=[](auto duration){return std::chrono::duration<double,std::milli>(duration).count();};
             const auto stats=stream::stats(state);
             std::ofstream timing{output/"terrain.performance",std::ios::binary|std::ios::noreplace};
             if(timing)timing<<std::setprecision(17)<<"epoch.planet.stream-performance.v1\nrequest_id="<<request_id
@@ -745,6 +709,17 @@ int planet_stream_main(int argc,char** argv)
                 <<"\nsimulation_seconds="<<request.seconds<<"\nplanning_ms="<<milliseconds(step_started,planned)
                 <<"\ncache_prepare_ms="<<milliseconds(planned,prepared)<<"\ncache_restore_ms="<<milliseconds(prepared,restored)
                 <<"\ncache_read_fused=1"
+                <<"\ncache_entries_checked="<<cache_telemetry.checked
+                <<"\ncache_patches_read="<<cache_telemetry.decoded
+                <<"\ncache_patch_bytes_read="<<cache_telemetry.entries.bytes
+                <<"\ncache_index_ms="<<duration_ms(cache_telemetry.index)
+                <<"\ncache_read_wave_ms="<<duration_ms(cache_telemetry.read_wave)
+                <<"\ncache_restore_owner_ms="<<duration_ms(cache_telemetry.restore)
+                <<"\ncache_prune_ms="<<duration_ms(cache_telemetry.prune)
+                <<"\ncache_path_worker_ms_sum="<<duration_ms(cache_telemetry.entries.path_checks)
+                <<"\ncache_file_read_worker_ms_sum="<<duration_ms(cache_telemetry.entries.file_read)
+                <<"\ncache_decode_worker_ms_sum="<<duration_ms(cache_telemetry.entries.decode)
+                <<"\ncache_write_owner_ms="<<duration_ms(cache_telemetry.write)
                 <<"\npatch_jobs_ms="<<milliseconds(restored,meshed)<<"\nplan_save_ms="<<milliseconds(meshed,saved)
                 <<"\nsnapshot_ms="<<milliseconds(saved,std::chrono::steady_clock::now())
                 <<"\nworker_limit="<<request.maximum_in_flight

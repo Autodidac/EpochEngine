@@ -1,16 +1,5 @@
 // Epoch feature implementation; included by editor.core application owner only.
 // SPDX-License-Identifier: LicenseRef-MIT-NoSell
-        [[nodiscard]] static previewgrid::CameraMode snapshot_camera_mode(std::uint8_t value) noexcept
-        {
-            switch (value)
-            {
-            case 1: return previewgrid::CameraMode::FPS;
-            case 2: return previewgrid::CameraMode::Canvas2D;
-            case 0:
-            default: return previewgrid::CameraMode::Editor;
-            }
-        }
-
         [[nodiscard]] static EditorMainSurface snapshot_main_surface(std::uint8_t value) noexcept
         {
             switch (value)
@@ -113,7 +102,7 @@
                 return std::filesystem::path{localAppData->c_str()}
                     / "EpochEngine" / "config";
             }
-#else
+#elif !defined(__ANDROID__)
             if (const auto xdgConfigHome = core::env::get("XDG_CONFIG_HOME");
                 xdgConfigHome && !xdgConfigHome->empty())
             {
@@ -162,7 +151,7 @@
             const EditorState& state)
         {
             std::ostringstream output{};
-            output << "EPOCH_EDITOR_LAYOUT 11\n";
+            output << "EPOCH_EDITOR_LAYOUT 15\n";
             output << "application "
                 << static_cast<unsigned int>(state.applicationKind) << '\n';
             output << "splits "
@@ -202,6 +191,9 @@
                 << static_cast<unsigned int>(state.showInspector) << ' '
                 << static_cast<unsigned int>(state.showConsoleDock) << ' '
                 << static_cast<unsigned int>(state.showAiChat) << '\n';
+            output << "telemetry " << static_cast<unsigned int>(state.showTelemetry) << '\n';
+            output << "telemetry_detail " << (state.showTelemetry ? (std::min)(state.telemetryDetail, 3u) : 4u) << '\n';
+            output << "telemetry_epoch_scope " << static_cast<unsigned int>(state.showEpochResourceUsage) << '\n';
             for (std::size_t index = 0; index < kEditorToolPaneCount; ++index)
             {
                 output << "pane " << index << ' '
@@ -272,7 +264,7 @@
             std::string token{};
             unsigned int schema{};
             if (!(input >> token >> schema)
-                || token != "EPOCH_EDITOR_LAYOUT" || schema < 1u || schema > 11u)
+                || token != "EPOCH_EDITOR_LAYOUT" || schema < 1u || schema > 15u)
             {
                 return false;
             }
@@ -378,6 +370,27 @@
                 return false;
             }
 
+            unsigned int showTelemetry{1u};
+            if (schema >= 12u && (!(input >> token >> showTelemetry)
+                || token != "telemetry" || !valid_layout_boolean(showTelemetry)))
+                return false;
+
+            unsigned int telemetryDetail = showTelemetry ? 0u : 4u;
+            if (schema >= 13u)
+            {
+                const unsigned int hiddenStage = schema == 13u ? 3u : 4u;
+                if (!(input >> token >> telemetryDetail)
+                    || token != "telemetry_detail" || telemetryDetail > hiddenStage
+                    || (telemetryDetail < hiddenStage) != (showTelemetry != 0u))
+                    return false;
+                // Schema 13 predates Resources; preserve saved Minimal/Hidden.
+                if (schema == 13u && telemetryDetail >= 2u) ++telemetryDetail;
+            }
+            unsigned int showEpochResourceUsage{};
+            if (schema >= 15u && (!(input >> token >> showEpochResourceUsage)
+                || token != "telemetry_epoch_scope" || !valid_layout_boolean(showEpochResourceUsage)))
+                return false;
+
             auto paneOpen = state.toolPaneOpen;
             auto paneRegions = state.toolPaneDockRegions;
             auto paneTabOrder = default_tool_pane_tab_order();
@@ -482,6 +495,9 @@
             state.showInspector = showInspector != 0u;
             state.showConsoleDock = showConsoleDock != 0u;
             state.showAiChat = showAiChat != 0u;
+            state.showTelemetry = showTelemetry != 0u;
+            state.telemetryDetail = telemetryDetail;
+            state.showEpochResourceUsage = showEpochResourceUsage != 0u;
             state.toolPaneOpen = paneOpen;
             state.toolPaneDockRegions = paneRegions;
             state.toolPaneTabOrder = paneTabOrder;
@@ -580,7 +596,7 @@
             }
             // Earlier schemas keep their pane/theme choices and gain the
             // default workspace set when rewritten by normal persistence.
-            state.layoutPreferencesSnapshot = encoded.starts_with("EPOCH_EDITOR_LAYOUT 11\n")
+            state.layoutPreferencesSnapshot = encoded.starts_with("EPOCH_EDITOR_LAYOUT 15\n")
                 ? encoded : serialize_editor_layout_preferences(state);
         }
 

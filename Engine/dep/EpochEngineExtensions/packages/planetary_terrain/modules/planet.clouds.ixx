@@ -39,12 +39,15 @@ export namespace epoch::extensions::planetary_terrain::clouds
         if(!supports(body))return {};
         epochengine::asset::cloud_volume::Recipe value{
             .seed=body.seed^0xc10d5u,
-            // Keep ordinary hills below the deck rather than immersing most
-            // landings in cloud. Tall authored peaks may still enter a cloud.
-            .base_altitude_meters=(std::max)(1.0,body.height_scale*0.40),
-            .thickness_meters=(std::max)(1.0,body.height_scale*0.16),
+            // Leave space above terrain and between the two density decks.
+            // Fit the provider profile inside the body's atmosphere.
+            .base_altitude_meters=(std::min)(body.atmosphere_height*0.35,
+                (std::max)(1.0,body.height_scale*0.58)),
+            .thickness_meters=(std::max)(1.0,(std::min)(body.atmosphere_height*0.35,
+                body.height_scale*0.32)),
             .horizontal_scale_meters=(std::max)(10.0,body.radius*0.002),
-            .coverage=0.60f,.extinction_per_meter=0.0012f};
+            .coverage=0.60f,.extinction_per_meter=0.0012f,
+            .view_occluder_radius_meters=(std::max)(0.0,body.radius-core::terrain_relief_bound(body))};
         // Preserve optical depth when a user authors a much smaller world.
         value.extinction_per_meter=static_cast<float>((std::min)(1.0,2.592/value.thickness_meters));
         return epochengine::asset::cloud_volume::valid(value,body.radius)?std::optional{value}:std::nullopt;

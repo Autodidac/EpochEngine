@@ -10,7 +10,7 @@ class SimulationSingleStep(unittest.TestCase):
   module=(ROOT/'Engine/dep/EpochPlatformEngine/modules/core.time.ixx').read_text(encoding='utf-8')
   source=(ROOT/'Engine/dep/EpochPlatformEngine/src/core/core.time.cpp').read_text(encoding='utf-8')
   host=(ROOT/'Engine/src/epoch/implementation/epoch.session_runtime.inl').read_text(encoding='utf-8')
-  api=(ROOT/'Engine/modules/editor.core.ixx').read_text(encoding='utf-8')
+  api=(ROOT/'Engine/modules/editor/editor.core.ixx').read_text(encoding='utf-8')
   declarations=module[module.index('export namespace'):].replace('export namespace','namespace',1)
   methods='namespace epochengine::core::time{'+''.join(definition(source,s) for s in (
    '    std::uint64_t now_ns()', '    void frame_clock::start()', '    void frame_clock::tick()',

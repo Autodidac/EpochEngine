@@ -34,7 +34,7 @@ class ForestProfileGeometry(unittest.TestCase):
             "Engine/dep/EpochPlatformEngine/src/core/core.log.cpp", "Engine/dep/EpochPlatformEngine/src/core/core.time.cpp")]
         found = {}
         for folder in roots:
-            for path in folder.glob("*.ixx"):
+            for path in folder.rglob("*.ixx"):
                 match = re.search(r"^export module\s+([\w.:]+);", path.read_text(encoding="utf-8-sig"), re.M)
                 if match:
                     found[match[1]] = path

@@ -662,6 +662,9 @@
         {
             if (editor.tileMapWorkspace)
                 return editor.tileMapWorkspace.get();
+            const auto* profile = editor_find_project_profile(editor.projectId);
+            const std::string_view mapPath = profile && !profile->tilemap_path.empty()
+                ? profile->tilemap_path : "Assets/Maps/main.epochmap";
             try
             {
                 editor.tileMapWorkspace = std::make_unique<
@@ -669,7 +672,7 @@
                         editor.projectId,
                         resolve_editor_path(
                             std::filesystem::path{editor.projectRoot}),
-                        "Assets/Maps/main.epochmap");
+                        std::string{mapPath});
             }
             catch (...)
             {

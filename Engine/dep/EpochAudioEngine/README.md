@@ -2,7 +2,7 @@
 
 MPL-2.0 permits commercial use, including proprietary larger works subject to its covered-file obligations. See [Commercial use and giving back](#commercial-use-and-giving-back) for licensing, origin links and voluntary credit requests.
 
-Version 0.1.0. Standalone C++23 audio scheduling and deterministic PCM mixing.
+Version 0.1.1. Standalone C++23 audio scheduling and deterministic PCM mixing.
 
 Canonical C++23 modules `audio.types`, `audio.manager`, `audio.mixer`,
 `audio.device` and `audio.playback_runtime`. The library preserves bounded
@@ -28,7 +28,10 @@ or `out/epoch_audio_demo example.wav` on a single-configuration build. It uses
 the real manager and mixer to write one second of stereo 440 Hz PCM audio.
 Open the WAV in an ordinary audio player. Existing files are never overwritten.
 This is offline rendering; it does not open a physical audio device.
-The same executable accepts `--self-test` for a file-free synthesis check.
+Run `epoch_audio_demo --help` to see the arguments, or `epoch_audio_demo
+--self-test` for a file-free synthesis check. A successful export prints the
+file path. If the destination already exists or cannot be created, the demo
+reports the error in the console.
 
 No other Epoch library is required. SDL device integration and Engine project
 admission remain separate consumers. The optional EpochGui_Demo audio example

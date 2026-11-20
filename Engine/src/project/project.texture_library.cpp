@@ -103,8 +103,12 @@ namespace epochengine::project_textures
             try
             {
                 std::error_code error{};
-                if (!fs::is_regular_file(path, error) || error)
+                const auto status = fs::symlink_status(path, error);
+                if (error == std::errc::no_such_file_or_directory
+                    || (!error && status.type() == fs::file_type::not_found))
                     return {LibraryCode::not_found};
+                if (error || !fs::is_regular_file(status))
+                    return {LibraryCode::read_failure};
                 const std::uintmax_t fileBytes = fs::file_size(path, error);
                 if (error || fileBytes == 0)
                     return {LibraryCode::read_failure};

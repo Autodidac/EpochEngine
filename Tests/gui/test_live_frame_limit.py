@@ -9,11 +9,11 @@ import unittest
 from Tests.build.test_opengl_sprite_stream import definition
 
 ROOT = Path(__file__).resolve().parents[2]
-CONTROL = ROOT / "Engine/modules/gui.frame_limit_control.ixx"
+CONTROL = ROOT / "Engine/modules/gui/gui.frame_limit_control.ixx"
 
 
 def gui_port():
-    api = (ROOT / "Engine/modules/gui.engine.ixx").read_text(encoding="utf-8")
+    api = (ROOT / "Engine/modules/gui/gui.engine.ixx").read_text(encoding="utf-8")
     types = "\n".join(definition(api, marker, True).replace("export ", "") for marker in (
         "    export struct Vec2", "    export struct EditBoxResult",
         "    export enum class TextInputKeyboardPolicy", "    export enum class InlineButtonAlignment",

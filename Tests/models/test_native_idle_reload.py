@@ -133,13 +133,13 @@ int main(){using namespace ai::native_runtime;
  const auto join=[](Service&s){if(s.work.joinable())s.work.join();};
  const auto wait=[](Service&s){const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds{2};while(!s.host->entered&&s.busy&&std::chrono::steady_clock::now()<deadline)std::this_thread::yield();};
  {Service s;retired(s);CHECK(!s.loaded&&s.enabled&&s.idle_resume.captured&&s.host->starts==0&&s.host->two_active);
-  {auto lease=std::make_shared<AiModelSelectionLease>(false);CHECK(aiModelSelectionUsers==1&&!idle::work_gate.protected_work());
+  {auto lease=std::make_shared<AiModelSelectionLease>(false);CHECK(aiModelSelectionUsers==1&&!idle::work_gate().protected_work());
    s.host->hold=true;CHECK(reload_idle_selected("one",1,lease->idleReloadCancellation.get_token()));wait(s);CHECK(s.host->entered);
    CHECK(reload_idle_selected("one",1,lease->idleReloadCancellation.get_token()));s.host->hold=false;join(s);
    CHECK(s.loaded&&s.enabled&&s.host->starts==1&&s.host->stops==0&&s.host->two_active&&!s.idle_resume.pending);
    CHECK(!reload_idle_selected("one",1,lease->idleReloadCancellation.get_token()));}
-  CHECK(aiModelSelectionUsers==0);AiModelSelectionLease ordinary;CHECK(idle::work_gate.protected_work());}
- CHECK(aiModelSelectionUsers==0&&!idle::work_gate.protected_work());
+  CHECK(aiModelSelectionUsers==0);AiModelSelectionLease ordinary;CHECK(idle::work_gate().protected_work());}
+ CHECK(aiModelSelectionUsers==0&&!idle::work_gate().protected_work());
  for(unsigned failure=0;failure<5;++failure){Service s;retired(s);auto lease=std::make_shared<AiModelSelectionLease>(false);
   if(failure==0)s.host->cache_valid=false;if(failure==1)s.host->profile_valid=false;
   if(failure==2)s.host->selection_valid=false;if(failure==3)memory_available=false;
@@ -177,7 +177,7 @@ int main(){using namespace ai::native_runtime;
   changed=queued;changed.selected=false;CHECK(!queue_may_offer_reload(changed,Transport::native));
   for(unsigned i=0;i<4;++i)CHECK(!request_gate(editor,chat));
   CHECK(s.host->starts==0&&chat.status.size()==1&&chat.status.back().find("one")!=std::string::npos);
-  CHECK(chat.status.back().find("Load-time estimate unavailable")!=std::string::npos&&!idle::work_gate.protected_work());
+  CHECK(chat.status.back().find("Load-time estimate unavailable")!=std::string::npos&&!idle::work_gate().protected_work());
   CHECK(!reload_idle_selected("two",1,{})&&!reload_idle_selected("one",2,{}));
   request_action(editor,chat,0);CHECK(editor.aiDeferredModelLease->idleReloadApproved&&s.host->starts==0);
   CHECK(!request_gate(editor,chat));join(s);CHECK(s.loaded&&s.host->starts==1&&s.host->two_active);

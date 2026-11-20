@@ -64,11 +64,17 @@ enum class Mode : unsigned char { automatic, off, low, high };
 // The enable_thinking extension is Qwen-template-specific; never send it to
 // arbitrary OpenAI-compatible providers where it may be unsupported.
 [[nodiscard]] inline bool uses_qwen_template_flag(std::string_view model) {
-    // The installed 9B identifies as Qwen3.5, not Qwen3.8. Its actual GGUF
-    // template also consumes enable_thinking; omitting it leaves reasoning on
-    // even when the operator selects Off/Low.
-    return is_qwen38(model)
-        || folded_model_id(model).find("qwen35") != std::string::npos;
+    // The installed 9B (3.5) and Hauhau 35B (3.6) GGUF templates also consume
+    // enable_thinking. Omitting it defaults their generation prefix to <think>
+    // even when the operator selects Off/Low. Modified branding does not change
+    // that template contract or grant any additional tool permissions.
+    const auto folded = folded_model_id(model);
+    // The admitted Edge0 skeleton retains the Qwen template. Its local ID
+    // lacks a Qwen prefix, so the ordinary family test misses it.
+    const bool edge0 = folded == "edge0145bq3k" || folded == "qwenflashedge0145bq3k";
+    return edge0 || is_qwen38(model)
+        || folded.find("qwen35") != std::string::npos
+        || folded.find("qwen36") != std::string::npos;
 }
 // Request text uses the runtime vocabulary (deep/fast/auto), while the UI
 // stores High/Low/Off. Keep the Qwen template decision identical for the

@@ -122,6 +122,13 @@ Copy-FileSet -Source $crtPayload -Destination $stage
 Copy-Item -LiteralPath (Join-Path $repo 'README.md') -Destination $stage -Force
 Copy-Item -LiteralPath (Join-Path $repo 'LICENSE') -Destination $stage -Force
 Copy-Item -LiteralPath $assets -Destination (Join-Path $stage 'assets') -Recurse -Force
+foreach ($shader in 'clouds.vert.spv', 'clouds.frag.spv') {
+    $relative = "assets\vulkan\shaders\$shader"
+    $builtShader = Join-Path $releaseOutput $relative
+    if (Test-Path -LiteralPath $builtShader -PathType Leaf) {
+        Copy-Item -LiteralPath $builtShader -Destination (Join-Path $stage $relative) -Force
+    }
+}
 & $noticeScript -RepoRoot $repo -VcpkgInstalledRoot $vcpkgInstalled -Destination $stage
 
 $versionOut = Join-Path $verifyLogs 'version_stdout.txt'
@@ -188,6 +195,7 @@ if ($contractProcess.ExitCode -ne 0 -or
 }
 
 Move-EpochPackageValidationEvidence -Stage $stage -VerifyLogs $verifyLogs -PackageRoot $packageRoot
+Assert-EpochRuntimeHasNoModelWeights -Stage $stage
 Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip -Force
 
 $verifyRoot = Join-Path $OutputRoot "verify_$stageName"

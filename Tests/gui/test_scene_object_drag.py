@@ -74,7 +74,7 @@ struct EditorState {
  CLICK_STATE
  std::optional<SceneClick> previousSceneClick{};
  ScenePointerMode scenePointerMode{ScenePointerMode::select},sceneDragMode{ScenePointerMode::select};
- bool sceneDragActive{},sceneDragMoved{},sceneLeftWasHeld{},sceneDragHasPlaneHit{},sceneMarqueeActive{},sceneMarqueeAdditive{},sceneLightingDirty{},sceneInteractionDirty{},textureBrushActive{};
+ bool sceneDragActive{},sceneDragMoved{},sceneDragFromHandle{},sceneLeftWasHeld{},sceneDragHasPlaneHit{},sceneMarqueeActive{},sceneMarqueeAdditive{},sceneLightingDirty{},sceneInteractionDirty{},textureBrushActive{};
  unsigned guiSelectedWidget{},guiContentEditorWidget{};
  gui::Vec2 sceneDragStartMouse{},sceneMarqueeStart{},sceneMarqueeCurrent{};
  std::array<float,3>sceneDragStartPosition{},sceneDragStartHit{};
@@ -99,6 +99,8 @@ unsigned rayPicks{};
 std::optional<scene::SceneObjectId>pick_editor_scene_entity(const core::Context*c,EditorState&,const gui::WidgetBounds&,const gui::Vec2&){++rayPicks;return c->picked?std::optional<scene::SceneObjectId>{c->picked}:std::nullopt;}
 struct RayPort{render_math::Float3 origin,direction;float minimumDistance=0,maximumDistance=10000;};
 bool parallelRay{};
+std::optional<ScenePointerMode> handlePick;
+std::optional<ScenePointerMode>pick_editor_translation_axis(const core::Context*,const EditorState&,const gui::WidgetBounds&,gui::Vec2){return handlePick;}
 std::optional<RayPort>screen_point_to_world_ray(const core::Context*,const gui::WidgetBounds&,const gui::Vec2&m,const std::array<double,3>&){
  return RayPort{{m.x*.01f,10-m.y*.01f,10},parallelRay?render_math::Float3{0,-1,0}:render_math::Float3{0,-1,-1}};
 }
@@ -119,6 +121,17 @@ int main(){
   c->left=true;tick(c,e);c->left=false;tick(c,e);CHECK(e.focuses==1);
   e.previousSceneClick->time-=std::chrono::seconds{1};
   c->left=true;tick(c,e);c->left=false;tick(c,e);CHECK(e.focuses==1);}
+ c=std::make_shared<core::Context>();
+ {auto e=fresh();e.selectedEntityIds={1,2};handlePick=ScenePointerMode::move_x;c->picked=0;rayPicks=0;
+  c->left=true;tick(c,e);CHECK(e.sceneDragActive&&!e.sceneMarqueeActive&&e.sceneDragMode==ScenePointerMode::move_x&&rayPicks==0);
+  c->x+=25;tick(c,e);CHECK(e.entities[0].position[0]>.24f&&e.entities[0].position[1]==0&&e.entities[0].position[2]==0);
+  CHECK(e.entities[1].position[0]>2.24f);c->left=false;tick(c,e);
+  CHECK(e.commits==1&&e.sceneDocument.history().size()==1&&e.selectedEntityIds.size()==2);
+  CHECK(e.sceneDocument.undo());CHECK(e.sceneDocument.object(*e.sceneDocument.find({1}))->descriptor.transform.position.x==0);
+  CHECK(e.sceneDocument.redo());CHECK(e.sceneDocument.object(*e.sceneDocument.find({1}))->descriptor.transform.position.x>.24f);
+  c->left=true;tick(c,e);c->left=false;tick(c,e);c->left=true;tick(c,e);c->left=false;tick(c,e);
+  CHECK(e.focuses==0&&e.commits==1);
+  handlePick.reset();}
  c=std::make_shared<core::Context>();
  {auto e=fresh();e.scenePointerMode=ScenePointerMode::move_x;e.selectedEntityIds={1,2};c->left=true;tick(c,e);c->x+=20;c->y+=4;tick(c,e);
   CHECK(e.sceneDragMode==ScenePointerMode::move_x&&e.entities[0].position[0]>.19f&&e.entities[0].position[1]==0&&e.entities[0].position[2]==0);
@@ -166,7 +179,7 @@ int main(){
   report=ROOT/'Artifacts/Reports/scene-object-drag-oct29'/str(time.time_ns());report.mkdir(parents=True)
   (report/'consumer.cpp').write_text(code,encoding='utf-8')
   module_map={}
-  for p in (ROOT/'Engine/modules').glob('*.ixx'):
+  for p in (ROOT/'Engine/modules').rglob('*.ixx'):
    match=re.search(r'^export module\s+([\w.]+);',p.read_text(encoding='utf-8-sig'),re.M)
    if match:module_map[match[1]]=p
   pending=['scene.document','scene.snapshot','render.math'];selected={}
@@ -177,6 +190,7 @@ int main(){
    pending+=re.findall(r'^(?:export )?import\s+([\w.]+);',p.read_text(encoding='utf-8-sig'),re.M)
   modules=' '.join('"'+p.as_posix()+'"' for p in selected.values())
   (report/'CMakeLists.txt').write_text(f'''cmake_minimum_required(VERSION 3.30)
+set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT Embedded)
 project(SceneObjectDrag LANGUAGES CXX)
 add_executable(drag consumer.cpp)
 target_compile_features(drag PRIVATE cxx_std_23)

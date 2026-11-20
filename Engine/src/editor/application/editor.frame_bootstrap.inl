@@ -510,7 +510,7 @@
             .min_size={(std::min)(440.0f,w), (std::min)(320.0f,h)},
             .viewport_size={w,h}, .movable=true, .resizable=true, .closable=true,
             .draw_background=true, .top_layer=true, .capture_input=false,
-            .constrain_to_viewport=true};
+            .constrain_to_viewport=true, .dim_background=true};
         if (editor.showAiModelManagerModal)
         {
             if (!editor.aiModelManagerOpenLogged) editor.aiModelManagerWindow.open = true;
@@ -891,18 +891,28 @@
             region_has_visible_pane(EditorToolDockRegion::BottomRight);
         const bool bottom_visible = bottom_left_visible || bottom_right_visible;
 
-        const auto toolbarActivity = editor.taskScheduler
-            ? editor.taskScheduler->activity() : editor_tasks::ActivitySnapshot{};
-        const bool toolbarModelQueued = chat.pending
-            && chat.pending->stage.load(std::memory_order_acquire) == ai::ModelRequestStage::queued;
-        const auto toolbarRunning = toolbarActivity.running_tasks
-            + (chat.pending && !toolbarModelQueued ? 1u : 0u)
-            ;
-        const auto toolbarQueued = toolbarActivity.queued_tasks + toolbarActivity.waiting_tasks
-            + (toolbarModelQueued ? 1u : 0u)
-            + (editor.aiDeferredRequestKind != AiDeferredRequestKind::None
-                && !editor.aiWorkLocalHttp ? 1u : 0u)
-            + (ai_work_pending(editor) ? 1u : 0u);
+        std::optional<taskgraph::GraphSnapshot> frameTaskSnapshot;
+        const auto observe_frame_tasks = [&]() -> const taskgraph::GraphSnapshot&
+        {
+            if (!frameTaskSnapshot)
+                frameTaskSnapshot = editor.taskScheduler
+                    ? editor.taskScheduler->snapshot(0u) : taskgraph::GraphSnapshot{};
+            return *frameTaskSnapshot;
+        };
+        const auto task_counts_for = [&](const editor_tasks::ActivitySnapshot& toolbarActivity)
+        {
+            const bool toolbarModelQueued = chat.pending
+                && chat.pending->stage.load(std::memory_order_acquire) == ai::ModelRequestStage::queued;
+            const auto toolbarRunning = toolbarActivity.running_tasks
+                + (chat.pending && !toolbarModelQueued ? 1u : 0u)
+                ;
+            const auto toolbarQueued = toolbarActivity.queued_tasks + toolbarActivity.waiting_tasks
+                + (toolbarModelQueued ? 1u : 0u)
+                + (editor.aiDeferredRequestKind != AiDeferredRequestKind::None
+                    && !editor.aiWorkLocalHttp ? 1u : 0u)
+                + (ai_work_pending(editor) ? 1u : 0u);
+            return std::array{toolbarRunning, toolbarQueued};
+        };
 
 #if defined(_WIN32)
         constexpr std::string_view toolbarOs = "Windows";
@@ -929,207 +939,334 @@
 #else
         constexpr std::string_view toolbarCompiler = "C++";
 #endif
-        // Resource telemetry leads the status strip and survives compression.
-        // Trailing identity fields yield before overlapping menus or tabs.
-        // The top Tasks chip is an entry point; the detailed workbench owns
-        // the task graph, diagnostics and self-iteration timeline.
-        // Compact right-aligned identity / activity / backend / distance. No
-        // labels repeated on every frame; each chip remains individually actionable.
-        // Actual active tasks are shown, never a fabricated worker count.
-        if (ctx->windowData)
+        std::optional<platform::work_admission::GpuResourceSample> frameGpuSample;
+        const auto observe_frame_gpu = [&]() -> const platform::work_admission::GpuResourceSample&
         {
-            const double chromeNow = std::chrono::duration<double>(
-                std::chrono::steady_clock::now().time_since_epoch()).count();
-            (void)editor.chromeFrameRate.observe(
-                ctx->windowData->successfulFrameGeneration.load(std::memory_order_acquire),
-                chromeNow, ctx->windowData);
-            const double sample = editor.chromeFrameRate.live_rate();
-            editor.chromeFpsSample = sample;
-            editor.chromeFpsMeasured = editor.chromeFrameRate.has_sample();
+            if (!frameGpuSample)
+                frameGpuSample = platform::work_admission::sample_gpu_telemetry();
+            return *frameGpuSample;
+        };
+        constexpr std::size_t toolbarScopeIndex = 4u;
+        constexpr std::size_t toolbarContextIndex = 5u;
+        constexpr std::size_t toolbarFpsIndex = 6u;
+        constexpr std::size_t toolbarTaskIndex = 7u;
+        constexpr std::size_t toolbarVersionIndex = 8u;
+        constexpr std::size_t toolbarBuildIndex = 9u;
+        constexpr std::size_t toolbarTierIndex = 10u;
+        std::array<gui::StatusStripItem, 11> toolbarStatusItems{};
+        // The status item views borrow these strings through the toolbar draw.
+        std::array<std::string, 11> toolbarStatus{}, toolbarCompactStatus{}, toolbarMinimalStatus{};
+        std::string toolbarCpuDetail, toolbarRamDetail, toolbarGpuDetail, toolbarVramDetail, toolbarTierDetail, toolbarTaskDetail;
+        std::string toolbarVramWidthReference;
+        const unsigned int telemetryDetail = editor.showTelemetry ? (std::min)(editor.telemetryDetail, 3u) : 4u;
+        const bool collectToolbarResources = telemetryDetail < 3u;
+        if (editor.showTelemetry)
+        {
+            const auto toolbarActivity = telemetryDetail < 2u
+                ? editor_tasks::activity_snapshot(observe_frame_tasks()) : editor_tasks::ActivitySnapshot{};
+            const auto [toolbarRunning, toolbarQueued] = task_counts_for(toolbarActivity);
+            // Resource telemetry leads the status strip and survives compression.
+            // Trailing identity fields yield before overlapping menus or tabs.
+            // The top Tasks chip is an entry point; the detailed workbench owns
+            // the task graph, diagnostics and self-iteration timeline.
+            // Compact right-aligned identity / activity / backend / support tier. No
+            // labels repeated on every frame; each chip remains individually actionable.
+            // Actual active tasks are shown, never a fabricated worker count.
+            if (ctx->windowData)
+            {
+                const double chromeNow = std::chrono::duration<double>(
+                    std::chrono::steady_clock::now().time_since_epoch()).count();
+                (void)editor.chromeFrameRate.observe(
+                    ctx->windowData->successfulFrameGeneration.load(std::memory_order_acquire),
+                    chromeNow, ctx->windowData);
+                const double sample = editor.chromeFrameRate.live_rate();
+                editor.chromeFpsSample = sample;
+                editor.chromeFpsMeasured = editor.chromeFrameRate.has_sample();
+            }
+            else
+            {
+                editor.chromeFrameRate = {};
+                editor.chromeFpsSample = 0.0;
+                editor.chromeFpsMeasured = false;
+            }
+            const double chromeThrottle = ctx->windowData
+                ? ctx->windowData->editorThrottleHz.load(std::memory_order_relaxed) : 0.0;
+            const bool chromeNativeVsync = ctx->windowData
+                && ctx->windowData->editorNativeVsyncActive.load(std::memory_order_acquire);
+            const double chromePacing = ctx->windowData
+                ? ctx->windowData->editorFramePacingHz.load(std::memory_order_relaxed) : 0.0;
+            const bool chromeCompilerActive = epochengine::editor::build_pressure::active();
+            const bool chromeWorkActive = ctx->windowData
+                && ctx->windowData->editorForegroundWorkActive.load(std::memory_order_relaxed);
+            const auto chromeActivity = ctx->frame_pacing_activity();
+            const bool chromeBackground = chromeActivity == perf::frame_activity::background;
+            const std::string_view toolbarFpsPhase = editor.projectBuildPending || chromeCompilerActive
+                ? "Build" : chromeWorkActive ? "Working" : editor.projectRuntimeProcess.valid() ? "Project host"
+                : chromeBackground ? "Unfocused" : "Editor";
+            const bool chromeThrottleLimited = chromeThrottle > 0.0
+                && (!(chromePacing > 0.0) || chromeThrottle < chromePacing);
+            const double chromeEffectiveCap = chromeThrottleLimited ? chromeThrottle : chromePacing;
+            const std::string_view chromeCapReason = chromeThrottleLimited
+                ? chromeCompilerActive || editor.projectBuildPending ? "build " : chromeWorkActive ? "work " : "CPU "
+                : chromeActivity == perf::frame_activity::minimized ? "minimized " : "pacing ";
+            const bool chromeRateMeasured = std::isfinite(editor.chromeFpsSample)
+                && editor.chromeFpsMeasured;
+            const bool chromeShowsBackgroundCap = chromeRateMeasured && chromeBackground
+                && !chromeThrottleLimited && !chromeNativeVsync && chromeEffectiveCap > 0.0;
+            const std::string toolbarFps = chromeRateMeasured
+                ? chromeShowsBackgroundCap
+                    ? std::round(editor.chromeFpsSample) == std::round(chromeEffectiveCap)
+                        ? epochengine::format_text("{:.0f} FPS unfocused", chromeEffectiveCap)
+                        : epochengine::format_text("{:.0f}/{:.0f} FPS unfocused",
+                            editor.chromeFpsSample, chromeEffectiveCap)
+                : chromeThrottleLimited
+                    ? epochengine::format_text("{:.0f} FPS / {:.0f} {}cap", editor.chromeFpsSample,
+                        chromeEffectiveCap, chromeCapReason)
+                    : chromeNativeVsync
+                        ? epochengine::format_text("{:.0f} FPS / VSync", editor.chromeFpsSample)
+                        : chromeEffectiveCap > 0.0
+                            ? epochengine::format_text("{:.0f} FPS / {:.0f} {}cap", editor.chromeFpsSample,
+                                chromeEffectiveCap, chromeCapReason)
+                            : epochengine::format_text("{:.0f} FPS / uncapped", editor.chromeFpsSample)
+                : std::string{"-- FPS"};
+            const std::string toolbarFpsFull = toolbarFpsPhase == "Editor" || (chromeShowsBackgroundCap && toolbarFpsPhase == "Unfocused")
+                ? toolbarFps : epochengine::format_text("{} {}", toolbarFpsPhase, toolbarFps);
+            // Compression must not conceal why the measured rate is limited.
+            // The strip can omit other identity fields before losing cap evidence.
+            const std::string toolbarFpsCompact = toolbarFpsFull;
+            const bool epochUsage = editor.showEpochResourceUsage;
+            const auto toolbarResources = epochUsage || !collectToolbarResources ? platform::work_admission::ResourceSample{}
+                : platform::work_admission::sample_host_resources();
+            const auto epochResources = epochUsage && collectToolbarResources ? platform::work_admission::sample_epoch_resources()
+                : platform::work_admission::EpochResourceSample{};
+            const auto toolbarGpu = epochUsage || !collectToolbarResources ? epochResources.gpu : observe_frame_gpu();
+            const double toolbarCpuFraction = epochUsage
+                ? epochResources.cpu_busy_fraction : toolbarResources.cpu_busy_fraction;
+            const bool toolbarCpuValid = (epochUsage ? epochResources.cpu_valid : toolbarResources.cpu_valid)
+                && std::isfinite(toolbarCpuFraction) && toolbarCpuFraction >= 0.0 && toolbarCpuFraction <= 1.0;
+            const std::string toolbarCpu = toolbarCpuValid
+                ? epochengine::format_text("{:.0f}%", toolbarCpuFraction * 100.0)
+                : "--";
+            const auto totalRamBytes = epochUsage
+                ? epochResources.total_memory_bytes : toolbarResources.total_memory_bytes;
+            const bool hostRamValid = toolbarResources.memory_valid
+                && toolbarResources.available_memory_bytes <= totalRamBytes;
+            const auto usedRamBytes = epochUsage ? epochResources.resident_memory_bytes
+                : hostRamValid ? totalRamBytes - toolbarResources.available_memory_bytes : 0u;
+            const bool toolbarRamValid = (epochUsage ? epochResources.memory_valid : hostRamValid)
+                && totalRamBytes > 0u && usedRamBytes <= totalRamBytes;
+            const double toolbarRamFraction = toolbarRamValid
+                ? static_cast<double>(usedRamBytes) / totalRamBytes : 0.0;
+            const std::string toolbarRamPercent = toolbarRamValid
+                ? epochengine::format_text("{:.0f}%", toolbarRamFraction * 100.0) : "--";
+            const std::string toolbarCpuLabel = std::string{"CPU "} + toolbarCpu;
+            const std::string toolbarRamLabel = "RAM " + toolbarRamPercent;
+            const std::string toolbarCpuCompact = std::string{"C "} + toolbarCpu;
+            const std::string toolbarRamCompact = "R " + toolbarRamPercent;
+            const bool toolbarGpuSourceAvailable = epochUsage
+                ? toolbarGpu.source != platform::work_admission::GpuTelemetrySource::unavailable
+                : toolbarGpu.source == platform::work_admission::GpuTelemetrySource::nvidia_nvml;
+            const bool toolbarGpuValid = toolbarGpuSourceAvailable
+                && toolbarGpu.busy_valid && std::isfinite(toolbarGpu.busy_fraction)
+                && toolbarGpu.busy_fraction >= 0.0 && toolbarGpu.busy_fraction <= 1.0;
+            const bool toolbarVramValid = toolbarGpuSourceAvailable
+                && toolbarGpu.memory_valid && toolbarGpu.dedicated_total_bytes > 0u
+                && toolbarGpu.dedicated_used_bytes <= toolbarGpu.dedicated_total_bytes;
+            const double toolbarVramFraction = toolbarVramValid
+                ? static_cast<double>(toolbarGpu.dedicated_used_bytes) / toolbarGpu.dedicated_total_bytes : 0.0;
+            const std::string toolbarGpuPercent = toolbarGpuValid
+                ? epochengine::format_text("{:.0f}%", toolbarGpu.busy_fraction * 100.0) : "--";
+            const std::string toolbarVramPercent = toolbarVramValid
+                ? epochengine::format_text("{:.0f}%", toolbarVramFraction * 100.0) : "--";
+            const std::string toolbarGpuLabel = "GPU " + toolbarGpuPercent;
+            constexpr double bytesPerGiB = 1024.0 * 1024.0 * 1024.0;
+            const std::string toolbarVramLabel = toolbarVramValid
+                ? epochengine::format_text("VRAM {:.1f}/{:.1f} GiB",
+                    static_cast<double>(toolbarGpu.dedicated_used_bytes) / bytesPerGiB,
+                    static_cast<double>(toolbarGpu.dedicated_total_bytes) / bytesPerGiB)
+                : "VRAM --";
+            const std::string toolbarGpuCompact = "G " + toolbarGpuPercent;
+            const std::string toolbarVramCompact = "V " + toolbarVramPercent;
+            // Capacity is immutable between samples; reserve its full numeric width
+            // so changing used bytes does not move menus or status fields.
+            toolbarVramWidthReference = toolbarGpuSourceAvailable && toolbarGpu.dedicated_total_bytes > 0u
+                ? epochengine::format_text("VRAM {:.1f}/{:.1f} GiB",
+                    static_cast<double>(toolbarGpu.dedicated_total_bytes) / bytesPerGiB,
+                    static_cast<double>(toolbarGpu.dedicated_total_bytes) / bytesPerGiB)
+                : "VRAM --";
+            if (epochUsage)
+            {
+                const std::string coverage = epochResources.process_count == 0u
+                    ? "Epoch process usage is unavailable."
+                    : epochengine::format_text("Epoch scope covers {} observed processes{}.",
+                        epochResources.process_count, epochResources.coverage_complete
+                            ? "" : " with partial coverage");
+                toolbarCpuDetail = (toolbarCpuValid ? "Share of host CPU time. " : "Process CPU usage unavailable. ") + coverage;
+                toolbarRamDetail = toolbarRamValid ? epochengine::format_text(
+                    "{:.1f} GiB in current working sets. {}", static_cast<double>(usedRamBytes) / bytesPerGiB, coverage)
+                    : "Process RAM usage unavailable. " + coverage;
+                toolbarGpuDetail = (toolbarGpuValid
+                    ? "Busiest attributed GPU engine across observed processes. "
+                    : "Process GPU usage unavailable. ") + coverage;
+                toolbarVramDetail = (toolbarVramValid
+                    ? toolbarVramLabel + ". Sum of observed process allocations and adapter capacities. "
+                    : "Process VRAM usage unavailable. ") + coverage;
+                if (toolbarGpuValid && toolbarGpu.activity_partial)
+                    toolbarGpuDetail += " GPU counter coverage is partial.";
+                if (toolbarVramValid && toolbarGpu.memory_partial)
+                    toolbarVramDetail += " VRAM counter coverage is partial.";
+            }
+            else
+            {
+                toolbarCpuDetail = "CPU use across the host.";
+                toolbarRamDetail = toolbarRamValid ? epochengine::format_text(
+                    "{} ({:.1f} GiB free on the host).", toolbarRamLabel,
+                    static_cast<double>(toolbarResources.available_memory_bytes) / bytesPerGiB)
+                    : "Host RAM usage unavailable.";
+                toolbarGpuDetail = toolbarGpuSourceAvailable
+                    ? epochengine::format_text("NVML adapter {} of {}: {}. Whole-adapter load across all applications and the driver.",
+                        toolbarGpu.adapter_index, toolbarGpu.adapter_count, toolbarGpu.adapter_name.data())
+                    : "Host GPU telemetry unavailable.";
+                toolbarVramDetail = toolbarVramValid
+                    ? toolbarVramLabel + ". Whole adapter, including all applications and the driver."
+                    : "Host dedicated GPU memory unavailable.";
+            }
+            const std::string_view resourceScopeAction = epochUsage
+                ? " Click any resource badge for Host totals." : " Click any resource badge for Epoch process usage.";
+            toolbarCpuDetail += resourceScopeAction;
+            toolbarRamDetail += resourceScopeAction;
+            toolbarGpuDetail += resourceScopeAction;
+            toolbarVramDetail += resourceScopeAction;
+            const auto toolbarHardwareThreads = std::thread::hardware_concurrency();
+            const double toolbarSuggestedFps = perf::target_fps_for(
+                recommended_editor_performance_tier(ctx, toolbarHardwareThreads));
+            const std::string toolbarPacingName = recommended_support_tier(ctx, toolbarHardwareThreads);
+            const std::string toolbarPacingCompact = toolbarPacingName.starts_with("Tier ")
+                ? "T" + toolbarPacingName.substr(5) : toolbarPacingName;
+            const std::string toolbarPacingTier = toolbarPacingCompact;
+            const std::string toolbarRendererName = renderer_name(ctx);
+            const auto& toolbarContextTitle = ctx->windowData && !ctx->windowData->titleNarrow.empty()
+                ? ctx->windowData->titleNarrow : toolbarRendererName;
+            const std::string toolbarContextLabel = toolbarContextTitle.starts_with(toolbarRendererName)
+                ? toolbarContextTitle
+                : epochengine::format_text("{} | {}", toolbarRendererName, toolbarContextTitle);
+            const std::string toolbarScopeLabel = epochUsage ? "Epoch" : "Host";
+            toolbarStatus = {{
+                toolbarCpuLabel, toolbarRamLabel, toolbarGpuLabel, toolbarVramLabel, toolbarScopeLabel,
+                toolbarContextLabel,
+                toolbarFpsFull,
+                epochengine::format_text("Total {} / Ready {} / Queued {}",
+                    toolbarActivity.running_tasks, toolbarActivity.idle_workers, toolbarQueued),
+                std::string("v") + epochengine::GetEngineVersionString(),
+                epochengine::format_text("{} {} {} {}", toolbarArch, toolbarCompiler,
+#if defined(_MSC_VER) && _MSC_VER >= 1930 && _MSC_VER < 1950
+                    "2022",
+#else
+                    toolbarOs,
+#endif
+                    build_configuration_label()),
+                toolbarPacingTier
+            }};
+            toolbarCompactStatus = {{
+                toolbarCpuCompact, toolbarRamCompact, toolbarGpuCompact, toolbarVramCompact, toolbarScopeLabel,
+                toolbarContextLabel,
+                toolbarFpsCompact,
+                epochengine::format_text("Total {} / Ready {} / Queued {}",
+                    toolbarActivity.running_tasks, toolbarActivity.idle_workers, toolbarQueued),
+                toolbarStatus[toolbarVersionIndex],
+                epochengine::format_text("{} {} {}", toolbarArch, toolbarCompiler,
+                    build_configuration_label()),
+                toolbarPacingCompact
+            }};
+            toolbarMinimalStatus = {{
+                toolbarCpuCompact, toolbarRamCompact, toolbarGpuCompact, toolbarVramCompact, toolbarScopeLabel,
+                toolbarContextLabel, toolbarFpsCompact, toolbarCompactStatus[toolbarTaskIndex],
+                toolbarStatus[toolbarVersionIndex], toolbarArch.data(), toolbarPacingCompact
+            }};
+            for (std::size_t i = 0u; i < toolbarStatusItems.size(); ++i)
+                toolbarStatusItems[i] = {
+                    toolbarStatus[i], toolbarCompactStatus[i], toolbarMinimalStatus[i]};
+            toolbarStatusItems[toolbarScopeIndex].tooltip = epochUsage
+                ? "Resource scope: Editor and observed child processes, not the entire PC. Click to show Host totals."
+                : "Resource scope: entire PC. Click to show Editor and observed child processes.";
+            toolbarStatusItems[0].compression_priority = 200u;
+            toolbarStatusItems[1].compression_priority = 200u;
+            toolbarStatusItems[2].compression_priority = 200u;
+            toolbarStatusItems[3].compression_priority = 200u;
+            toolbarStatusItems[toolbarBuildIndex].compression_priority = 400u;
+            toolbarStatusItems[toolbarFpsIndex].compression_priority = 40u;
+            toolbarStatusItems[toolbarTaskIndex].compression_priority = 100u;
+            toolbarStatusItems[toolbarTierIndex].compression_priority = 300u;
+            toolbarStatusItems[0].width_reference = "CPU 100%";
+            toolbarStatusItems[0].compact_width_reference = "C 100%";
+            toolbarStatusItems[0].minimal_width_reference = toolbarStatusItems[0].compact_width_reference;
+            toolbarStatusItems[1].width_reference = "RAM 100%";
+            toolbarStatusItems[1].compact_width_reference = "R 100%";
+            toolbarStatusItems[1].minimal_width_reference = "R 100%";
+            toolbarStatusItems[2].width_reference = "GPU 100%";
+            toolbarStatusItems[2].compact_width_reference = "G 100%";
+            toolbarStatusItems[2].minimal_width_reference = "G 100%";
+            toolbarStatusItems[3].width_reference = toolbarVramWidthReference;
+            toolbarStatusItems[3].compact_width_reference = "V 100%";
+            toolbarStatusItems[3].minimal_width_reference = "V 100%";
+            const auto resourceTone = [](bool valid, double busy) noexcept
+            {
+                return !valid ? gui::SemanticTone::neutral
+                    : busy >= 0.90 ? gui::SemanticTone::error
+                    : busy >= 0.75 ? gui::SemanticTone::warning
+                    : gui::SemanticTone::success;
+            };
+            toolbarStatusItems[0].tone = resourceTone(toolbarCpuValid, toolbarCpuFraction);
+            toolbarStatusItems[0].tooltip = toolbarCpuDetail;
+            toolbarStatusItems[1].tone = resourceTone(toolbarRamValid, toolbarRamFraction);
+            toolbarStatusItems[1].tooltip = toolbarRamDetail;
+            toolbarStatusItems[2].tone = resourceTone(toolbarGpuValid, toolbarGpu.busy_fraction);
+            toolbarStatusItems[3].tone = resourceTone(toolbarVramValid, toolbarVramFraction);
+            toolbarStatusItems[2].tooltip = toolbarGpuDetail;
+            toolbarStatusItems[3].tooltip = toolbarVramDetail;
+            toolbarTierDetail = epochengine::format_text(
+                "Suggested foreground Editor pacing is {:.0f} FPS for the active renderer and hardware threads. "
+                "The FPS badge shows the current cap. Click for Systems and renderer feature details.",
+                toolbarSuggestedFps);
+            toolbarStatusItems[toolbarTierIndex].tooltip = toolbarTierDetail;
+            toolbarStatusItems[toolbarTaskIndex].tone = toolbarActivity.running_tasks > 0u ? gui::SemanticTone::info
+                : toolbarQueued > 0u ? gui::SemanticTone::warning : gui::SemanticTone::muted;
+            toolbarTaskDetail = epochengine::format_text(
+                "Total counts running Editor pool workers; Ready counts available workers. Pool capacity: {}. "
+                "Queued includes waiting Editor and external Assistant work. External/Assistant active: {} "
+                "(not counted as pool workers). GPU model activity is not an Editor pool worker. Planet workers: Planet LOD.",
+                toolbarActivity.worker_count,
+                toolbarRunning > toolbarActivity.running_tasks ? toolbarRunning - toolbarActivity.running_tasks : 0u);
+            toolbarStatusItems[toolbarTaskIndex].tooltip = toolbarTaskDetail;
+            toolbarStatusItems[toolbarFpsIndex].tone = chromeThrottle > 0.0 ? gui::SemanticTone::warning
+                : editor.chromeFpsSample >= 50.0 ? gui::SemanticTone::success
+                : editor.chromeFpsSample >= 25.0 ? gui::SemanticTone::warning
+                : editor.chromeFpsMeasured ? gui::SemanticTone::error : gui::SemanticTone::neutral;
+            toolbarStatusItems[toolbarFpsIndex].tooltip =
+                "Editor window presentation rate during the named phase. The cap reflects this host's pacing, "
+                "background/minimized state or CPU/build throttle. Two unfocused numbers show rate/limit. "
+                "Pacing cap is the active limit selected by settings or launch options; "
+                "the hardware tier recommendation does not override an explicit limit. "
+                "Project host is not the child's FPS; "
+                "the project has its own frame limit in Project Run Settings.";
         }
         else
         {
+            // On reopen, measure a new visible frame interval.
             editor.chromeFrameRate = {};
             editor.chromeFpsSample = 0.0;
             editor.chromeFpsMeasured = false;
         }
-        const double chromeThrottle = ctx->windowData
-            ? ctx->windowData->editorThrottleHz.load(std::memory_order_relaxed) : 0.0;
-        const bool chromeNativeVsync = ctx->windowData
-            && ctx->windowData->editorNativeVsyncActive.load(std::memory_order_acquire);
-        const double chromePacing = ctx->windowData
-            ? ctx->windowData->editorFramePacingHz.load(std::memory_order_relaxed) : 0.0;
-        const std::string toolbarFps = std::isfinite(editor.chromeFpsSample)
-                && editor.chromeFpsMeasured
-            ? chromeThrottle > 0.0
-                ? epochengine::format_text("{:.0f} FPS / {:.0f} {} cap", editor.chromeFpsSample,
-                    chromeThrottle, chromeThrottle == 10.0 ? "build" : "CPU")
-                : chromeNativeVsync
-                    ? epochengine::format_text("{:.0f} FPS / VSync", editor.chromeFpsSample)
-                    : chromePacing > 0.0
-                        ? epochengine::format_text("{:.0f} FPS / {:.0f} cap", editor.chromeFpsSample, chromePacing)
-                        : epochengine::format_text("{:.0f} FPS / uncapped", editor.chromeFpsSample)
-            : std::string{"-- FPS"};
-        const auto toolbarResources = platform::work_admission::sample_host_resources();
-        const bool toolbarCpuValid = toolbarResources.cpu_valid
-            && std::isfinite(toolbarResources.cpu_busy_fraction);
-        const std::string toolbarCpu = toolbarCpuValid
-            ? std::to_string(static_cast<unsigned>(std::clamp(
-                toolbarResources.cpu_busy_fraction, 0.0, 1.0) * 100.0 + 0.5)) + "%"
-            : "--";
-        const bool toolbarRamValid = toolbarResources.memory_valid
-            && toolbarResources.total_memory_bytes > 0u
-            && toolbarResources.available_memory_bytes <= toolbarResources.total_memory_bytes;
-        const std::string toolbarRam = toolbarRamValid
-            ? epochengine::format_text("{:.1f}G", static_cast<double>(
-                toolbarResources.available_memory_bytes) / (1024.0 * 1024.0 * 1024.0))
-            : "--";
-        const std::string toolbarRamPercent = toolbarRamValid
-            ? epochengine::format_text("{:.0f}%", 100.0 * (1.0 - static_cast<double>(
-                toolbarResources.available_memory_bytes) / toolbarResources.total_memory_bytes))
-            : "--";
-        const std::string toolbarCpuLabel = "CPU " + toolbarCpu;
-        const std::string toolbarRamLabel = "RAM " + toolbarRamPercent;
-        const std::string toolbarCpuCompact = "C " + toolbarCpu;
-        const std::string toolbarRamCompact = "R " + toolbarRamPercent;
-        const std::string toolbarRamDetail = toolbarRamLabel + " (" + toolbarRam + " free)";
-        const auto& toolbarGpu = toolbarResources.gpu;
-        const bool toolbarGpuValid = toolbarGpu.source == platform::work_admission::GpuTelemetrySource::nvidia_nvml
-            && toolbarGpu.busy_valid && std::isfinite(toolbarGpu.busy_fraction)
-            && toolbarGpu.busy_fraction >= 0.0 && toolbarGpu.busy_fraction <= 1.0;
-        const bool toolbarVramValid = toolbarGpu.source == platform::work_admission::GpuTelemetrySource::nvidia_nvml
-            && toolbarGpu.memory_valid && toolbarGpu.dedicated_total_bytes > 0u
-            && toolbarGpu.dedicated_used_bytes <= toolbarGpu.dedicated_total_bytes;
-        const double toolbarVramFraction = toolbarVramValid
-            ? static_cast<double>(toolbarGpu.dedicated_used_bytes) / toolbarGpu.dedicated_total_bytes : 0.0;
-        const std::string toolbarGpuPercent = toolbarGpuValid
-            ? epochengine::format_text("{:.0f}%", toolbarGpu.busy_fraction * 100.0) : "--";
-        const std::string toolbarVramPercent = toolbarVramValid
-            ? epochengine::format_text("{:.0f}%", toolbarVramFraction * 100.0) : "--";
-        const std::string toolbarGpuLabel = "GPU " + toolbarGpuPercent;
-        const std::string toolbarVramLabel = toolbarVramValid
-            ? epochengine::format_text("VRAM {:.1f}/{:.1f} GiB",
-                static_cast<double>(toolbarGpu.dedicated_used_bytes) / (1024.0 * 1024.0 * 1024.0),
-                static_cast<double>(toolbarGpu.dedicated_total_bytes) / (1024.0 * 1024.0 * 1024.0))
-            : "VRAM --";
-        const std::string toolbarGpuCompact = "G " + toolbarGpuPercent;
-        const std::string toolbarVramCompact = "V " + toolbarVramPercent;
-        // Capacity is immutable between samples; reserve its full numeric width
-        // so changing used bytes does not move menus or status fields.
-        const std::string toolbarVramWidthReference = toolbarVramValid
-            ? epochengine::format_text("VRAM {:.1f}/{:.1f} GiB",
-                static_cast<double>(toolbarGpu.dedicated_total_bytes) / (1024.0 * 1024.0 * 1024.0),
-                static_cast<double>(toolbarGpu.dedicated_total_bytes) / (1024.0 * 1024.0 * 1024.0))
-            : "VRAM --";
-        const std::string toolbarGpuDetail = toolbarGpu.source == platform::work_admission::GpuTelemetrySource::nvidia_nvml
-            ? epochengine::format_text("NVML adapter {} of {}: {}. Whole-adapter load, including all applications; not this process or necessarily the selected renderer.",
-                toolbarGpu.adapter_index, toolbarGpu.adapter_count, toolbarGpu.adapter_name.data()) + " Click for kernel, memory and video counters; 3D/compute/process attribution is unavailable."
-            : "GPU telemetry unavailable. Optional NVIDIA SDK/driver or device support is absent. No process GPU usage is inferred.";
-        const std::string toolbarVramDetail = toolbarVramValid
-            ? epochengine::format_text("NVML adapter {} dedicated framebuffer memory: {:.2f} / {:.2f} GiB used. Whole adapter, including other applications and driver; not this process.",
-                toolbarGpu.adapter_index, static_cast<double>(toolbarGpu.dedicated_used_bytes) / (1024.0 * 1024.0 * 1024.0),
-                static_cast<double>(toolbarGpu.dedicated_total_bytes) / (1024.0 * 1024.0 * 1024.0))
-            : "Dedicated GPU memory unavailable; no zero-use measurement is inferred.";
-        const std::string toolbarFpsCompact = std::isfinite(editor.chromeFpsSample)
-                && editor.chromeFpsMeasured
-            ? epochengine::format_text("{:.0f} FPS", editor.chromeFpsSample)
-            : "-- FPS";
-        constexpr std::size_t toolbarFpsIndex = 6u;
-        constexpr std::size_t toolbarTaskIndex = 7u;
-        const std::array<std::string, 10> toolbarStatus{{
-            toolbarCpuLabel, toolbarRamLabel, toolbarGpuLabel, toolbarVramLabel,
-            std::string("v") + epochengine::GetEngineVersionString(),
-            epochengine::format_text("{} {} {} {}", toolbarArch, toolbarCompiler,
-#if defined(_MSC_VER) && _MSC_VER >= 1930 && _MSC_VER < 1950
-                "2022",
-#else
-                toolbarOs,
-#endif
-                build_configuration_label()),
-            "Editor " + toolbarFps,
-            epochengine::format_text("Thread {} / Queued {} / Idle {}",
-                toolbarRunning, toolbarQueued, toolbarActivity.idle_workers),
-            renderer_name(ctx),
-            epochengine::format_text("Zoom {:.0f}x", (std::max)(0.0f,
-                std::floor(previewgrid::camera_distance_for(ctx.get()))))
-        }};
-        const std::array<std::string, 10> toolbarCompactStatus{{
-            toolbarCpuCompact, toolbarRamCompact, toolbarGpuCompact, toolbarVramCompact, toolbarStatus[4],
-            epochengine::format_text("{} {} {}", toolbarArch, toolbarCompiler,
-                build_configuration_label()),
-            toolbarFpsCompact,
-            epochengine::format_text("{}T / {}Q / {}I",
-                toolbarRunning, toolbarQueued, toolbarActivity.idle_workers),
-            toolbarStatus[8],
-            epochengine::format_text("{:.0f}x", (std::max)(0.0f,
-                std::floor(previewgrid::camera_distance_for(ctx.get()))))
-        }};
-        const std::array<std::string, 10> toolbarMinimalStatus{{
-            toolbarCpuCompact, toolbarRamCompact, toolbarGpuCompact, toolbarVramCompact, toolbarStatus[4], toolbarArch.data(),
-            toolbarFpsCompact, toolbarCompactStatus[toolbarTaskIndex],
-            toolbarStatus[8], toolbarCompactStatus[9]
-        }};
-        std::array<gui::StatusStripItem, 10> toolbarStatusItems{};
-        for (std::size_t i = 0u; i < toolbarStatusItems.size(); ++i)
-            toolbarStatusItems[i] = {
-                toolbarStatus[i], toolbarCompactStatus[i], toolbarMinimalStatus[i]};
-        toolbarStatusItems[0].compression_priority = 200u;
-        toolbarStatusItems[1].compression_priority = 200u;
-        toolbarStatusItems[2].compression_priority = 200u;
-        toolbarStatusItems[3].compression_priority = 200u;
-        toolbarStatusItems[4].compression_priority = 1u;
-        toolbarStatusItems[5].compression_priority = 80u;
-        toolbarStatusItems[toolbarFpsIndex].compression_priority = 40u;
-        toolbarStatusItems[toolbarTaskIndex].compression_priority = 100u;
-        toolbarStatusItems[8].compression_priority = 20u;
-        toolbarStatusItems[9].compression_priority = 300u;
-        toolbarStatusItems[0].width_reference = "CPU 100%";
-        toolbarStatusItems[0].compact_width_reference = "C 100%";
-        toolbarStatusItems[0].minimal_width_reference = "C 100%";
-        toolbarStatusItems[1].width_reference = "RAM 100%";
-        toolbarStatusItems[1].compact_width_reference = "R 100%";
-        toolbarStatusItems[1].minimal_width_reference = "R 100%";
-        toolbarStatusItems[2].width_reference = "GPU 100%";
-        toolbarStatusItems[2].compact_width_reference = "G 100%";
-        toolbarStatusItems[2].minimal_width_reference = "G 100%";
-        toolbarStatusItems[3].width_reference = toolbarVramWidthReference;
-        toolbarStatusItems[3].compact_width_reference = "V 100%";
-        toolbarStatusItems[3].minimal_width_reference = "V 100%";
-        const auto resourceTone = [](bool valid, double busy) noexcept
-        {
-            return !valid ? gui::SemanticTone::neutral
-                : busy >= 0.90 ? gui::SemanticTone::error
-                : busy >= 0.75 ? gui::SemanticTone::warning
-                : gui::SemanticTone::success;
-        };
-        toolbarStatusItems[0].tone = resourceTone(toolbarCpuValid, toolbarResources.cpu_busy_fraction);
-        toolbarStatusItems[1].tone = resourceTone(toolbarRamValid, toolbarRamValid
-            ? 1.0 - static_cast<double>(toolbarResources.available_memory_bytes)
-                / toolbarResources.total_memory_bytes : 0.0);
-        toolbarStatusItems[1].tooltip = toolbarRamDetail;
-        toolbarStatusItems[2].tone = resourceTone(toolbarGpuValid, toolbarGpu.busy_fraction);
-        toolbarStatusItems[3].tone = resourceTone(toolbarVramValid, toolbarVramFraction);
-        toolbarStatusItems[2].tooltip = toolbarGpuDetail;
-        toolbarStatusItems[3].tooltip = toolbarVramDetail;
-        toolbarStatusItems[toolbarTaskIndex].tone = toolbarRunning > 0u ? gui::SemanticTone::info
-            : toolbarQueued > 0u ? gui::SemanticTone::warning : gui::SemanticTone::muted;
-        toolbarStatusItems[toolbarTaskIndex].tooltip =
-            "Editor/AI jobs; idle = Editor workers. Planet workers: Planet LOD.";
-        toolbarStatusItems[toolbarFpsIndex].tone = chromeThrottle > 0.0 ? gui::SemanticTone::warning
-            : editor.chromeFpsSample >= 50.0 ? gui::SemanticTone::success
-            : editor.chromeFpsSample >= 25.0 ? gui::SemanticTone::warning
-            : editor.chromeFpsMeasured ? gui::SemanticTone::error : gui::SemanticTone::neutral;
-        toolbarStatusItems[toolbarFpsIndex].tooltip =
-            "Editor window presentation rate. The project has its own frame limit in Project Run Settings.";
         // Keep status on the PRIMARY chrome row. Reserve the right-hand
         // width before laying out the menu, allowing its existing overflow
         // handling to work without pushing status onto a second row.
         // Use measured labels rather than a fixed fraction of the viewport.
         // Leave room for File and the menu overflow on narrow windows;
         // unused central chrome space should not force abbreviated task counts.
-        const auto updateToolbarState = editor_update_modal::update_toolbar_state(update_modal_flags());
+        bool suppressUpdateAvailability = false;
+        const auto updateToolbarState = editor_update_modal::update_toolbar_state(
+            update_modal_flags(), suppressUpdateAvailability);
         const float toolbarCommandReserve = updateToolbarState.visible ? 210.0f : 0.0f;
-        constexpr float toolbarStatusTop = 13.0f;
         constexpr float toolbar_h = 84.0f;
         const float splitter_w = 10.0f;
         const float splitter_h = 10.0f;

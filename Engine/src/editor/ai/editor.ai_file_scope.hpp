@@ -1,4 +1,5 @@
 #pragma once
+#include <platform.ai_source_access.hpp>
 
 #include <filesystem>
 #include <system_error>

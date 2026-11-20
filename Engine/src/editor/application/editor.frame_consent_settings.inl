@@ -430,22 +430,7 @@
                 settings_row();
                 gui::label("Project Run camera");
 
-                const auto settingsCameraSelect = gui::select_box(gui::SelectBoxOptions{
-                    .id = "settings-project-camera-select",
-                    .placeholder = "Project Run camera",
-                    .selected = project_camera_label(editor.projectCameraMode),
-                    .options = std::span<const std::string_view>{ settingsCameraLabels.data(), settingsCameraLabels.size() },
-                    .size = { settingsControlWidth, 30.0f },
-                    .row_height = 28.0f,
-                    .max_visible_options = 3
-                });
-                if (settingsCameraSelect.changed && settingsCameraSelect.selected_index && *settingsCameraSelect.selected_index < settingsCameraChoices.size())
-                {
-                    editor.projectCameraMode = settingsCameraChoices[*settingsCameraSelect.selected_index].mode;
-                    if (editor.projectCameraMode == previewgrid::CameraMode::Canvas2D)
-                        ensure_2d_canvas_entity(editor);
-                    push_editor_log(editor, std::string("[project] Camera style set to ") + std::string(settingsCameraChoices[*settingsCameraSelect.selected_index].label) + ".");
-                }
+                draw_project_run_camera(editor, "settings-project-camera-select", settingsControlWidth);
 
                 settings_row();
                 const std::array previewActions{

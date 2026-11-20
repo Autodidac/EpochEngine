@@ -24,14 +24,14 @@ class NativeWindowObservation(unittest.TestCase):
         cache = cache.replace("        const auto resolveFrameWindowState = [&]() noexcept", "        auto observe() noexcept")
         self.assertTrue(cache.rstrip().endswith("};"))
         cache = cache.rstrip()[:-2] + "}"
-        frame = read_owned_source(ROOT / "Engine/modules/render.context_frame.ixx")
+        frame = read_owned_source(ROOT / "Engine/modules/render/render.context_frame.ixx")
         frame = frame.split("export namespace epochengine::rendercontext", 1)[1]
         frame = "namespace epochengine::rendercontext" + frame
         interaction = read_owned_source(ROOT / "Engine/src/renderers/host/implementation/host.window_interaction.inl")
         invalidation = interaction.split("    [[nodiscard]] inline bool invalidates_native_window_observation", 1)[1]
         invalidation = "[[nodiscard]] inline bool invalidates_native_window_observation" + invalidation.split(
             "    inline void remember_gui_input_owner", 1)[0]
-        manager = read_owned_source(ROOT / "Engine/modules/context.multiplexer.ixx")
+        manager = read_owned_source(ROOT / "Engine/modules/context/context.multiplexer.ixx")
         invalidate = manager.split("        void invalidate_native_window_state() noexcept", 1)[1].split("\n\n", 1)[0]
         invalidate = "void invalidate_native_window_state() noexcept" + invalidate
         dispatch = read_owned_source(ROOT / "Engine/src/renderers/host/implementation/host.native_dispatch.inl")
@@ -50,6 +50,7 @@ class NativeWindowObservation(unittest.TestCase):
 #include <memory>
 #include <mutex>
 #include <thread>
+#include <unordered_map>
 using HWND=void*;
 using UINT=unsigned;
 using DWORD=std::uint32_t;
@@ -75,6 +76,9 @@ struct ClockPort {
 namespace ports {
 struct Native {
     HWND root=handle(1),foreground=handle(1);
+    HWND observedWindow{},minimizedWindow{};
+    std::unordered_map<HWND,HWND> roots;
+    std::unordered_map<HWND,UINT> rootDpis;
     bool valid=true,visible=true,minimized=false,child=false;
     DWORD cloaked{};
     UINT dpi=144;
@@ -84,7 +88,11 @@ struct Native {
 } native;
 void query() noexcept {if(TrackingMutex::depth)++native.queriesUnderLock;}
 }
-HWND GetAncestor(HWND,int){ports::query();++ports::native.ancestor;return ports::native.root;}
+HWND GetAncestor(HWND window,int){
+    ports::query();++ports::native.ancestor;ports::native.observedWindow=window;
+    const auto root=ports::native.roots.find(window);
+    return root==ports::native.roots.end()?ports::native.root:root->second;
+}
 int IsWindow(HWND){ports::query();++ports::native.validity;return ports::native.valid;}
 HWND GetForegroundWindow(){ports::query();++ports::native.foregroundQueries;return ports::native.foreground;}
 HRESULT DwmGetWindowAttribute(HWND,int,DWORD* value,unsigned){
@@ -92,10 +100,17 @@ HRESULT DwmGetWindowAttribute(HWND,int,DWORD* value,unsigned){
     if(auto* epoch=ports::native.invalidateDuringQuery){ports::native.invalidateDuringQuery=nullptr;++*epoch;}
     return ports::native.cloakResult;
 }
-UINT GetDpiForWindow(HWND){ports::query();++ports::native.dpiQueries;return ports::native.dpi;}
+UINT GetDpiForWindow(HWND window){
+    ports::query();++ports::native.dpiQueries;
+    const auto dpi=ports::native.rootDpis.find(window);
+    return dpi==ports::native.rootDpis.end()?ports::native.dpi:dpi->second;
+}
 int IsWindowVisible(HWND){ports::query();++ports::native.visibility;return ports::native.visible;}
 int IsChild(HWND,HWND){ports::query();++ports::native.children;return ports::native.child;}
-int IsIconic(HWND){ports::query();++ports::native.iconic;return ports::native.minimized;}
+int IsIconic(HWND window){
+    ports::query();++ports::native.iconic;
+    return ports::native.minimized || ports::native.minimizedWindow==window;
+}
 FRAME
 namespace epochengine::core {
 struct MultiContextManager {
@@ -108,8 +123,10 @@ MultiContextManager* GetActiveMultiContextManager() noexcept {return active;}
 INVALIDATION
 struct WindowDataPort {
     HWND host_hwnd=handle(1),hwnd=handle(2);
+    std::atomic<HWND> hwndChild{};
     int width=800,height=600;
     std::atomic_uint64_t resizeGeneration{};
+    HWND getChildHandle() const noexcept {return hwndChild.load(std::memory_order_acquire);}
 };
 struct ContextPort {int framebufferWidth=1200,framebufferHeight=900;};
 struct ObservationConsumer {
@@ -197,8 +214,49 @@ int main(){
     state=observer.observe();
     CHECK(state.logical_width==901 && state.logical_height==1802 && state.resize_generation==1);
     const auto beforeHwnd=ports::native.cloak;
-    {std::scoped_lock lock(mutex);win.host_hwnd=handle(9);}
-    state=observer.observe();CHECK(ports::native.cloak==beforeHwnd+1);
+    {std::scoped_lock lock(mutex);win.hwnd=nullptr;win.host_hwnd=handle(9);}
+    state=observer.observe();
+    CHECK(ports::native.cloak==beforeHwnd+1 && ports::native.observedWindow==handle(9));
+
+    // A first presented SDK surface replaces the parked host selection, even
+    // before another resize or native message invalidates the cached sample.
+    auto& native=ports::native;
+    const HWND grid=handle(1),liveChild=handle(4),proxyShell=handle(5);
+    native.roots[win.host_hwnd]=grid;
+    native.roots[liveChild]=grid;
+    const auto beforeTakeover=native.cloak;
+    win.hwndChild.store(liveChild,std::memory_order_release);
+    state=observer.observe();
+    CHECK(state.activity==WindowActivity::foreground && native.cloak==beforeTakeover+1);
+    CHECK(native.observedWindow==liveChild);
+
+    // A directly docked GLFW child becomes its own root when undocked. Its
+    // still-docked host must not mask the floating surface's real window state.
+    native.roots[liveChild]=liveChild;
+    native.foreground=liveChild;
+    native.rootDpis[liveChild]=192;
+    manager.invalidate_native_window_state();
+    state=observer.observe();
+    CHECK(state.activity==WindowActivity::foreground && state.dpi_milli==2000);
+    native.minimizedWindow=liveChild;
+    manager.invalidate_native_window_state();
+    state=observer.observe();
+    CHECK(state.minimized && !state.presentable && state.framebuffer_width==0);
+
+    // A detached SDL-style proxy keeps the real render child nested. Focus and
+    // DPI come from that child's current shell, then from the grid on redock.
+    native.minimizedWindow=nullptr;
+    native.roots[liveChild]=proxyShell;
+    native.foreground=proxyShell;
+    native.rootDpis[proxyShell]=120;
+    manager.invalidate_native_window_state();
+    state=observer.observe();
+    CHECK(state.activity==WindowActivity::foreground && state.presentable && state.dpi_milli==1250);
+    native.roots[liveChild]=grid;
+    native.foreground=grid;
+    manager.invalidate_native_window_state();
+    state=observer.observe();
+    CHECK(state.activity==WindowActivity::foreground && state.presentable && state.dpi_milli==1000);
     // Native changes arriving during a query cannot disappear behind its cache.
     ports::native.invalidateDuringQuery=&manager.nativeWindowStateGeneration;
     manager.invalidate_native_window_state();state=observer.observe();

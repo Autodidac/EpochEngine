@@ -39,6 +39,22 @@
             return resolve_editor_path(std::filesystem::path{ state.projectScenePath });
         }
 
+#if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
+        [[nodiscard]] bool publish_editor_tilemap(
+            EditorState& state, editor_tilemaps::TileMapWorkspaceController& tileMap)
+        {
+            const auto published = tileMap.save_and_publish();
+            state.tileMapStatus = std::string(tileMap.status());
+            if (!published)
+                return false;
+            std::string diagnostic;
+            if (editor_record_published_tilemap(state.projectRoot, tileMap.logical_path(), diagnostic))
+                return true;
+            state.tileMapStatus = "Tile map saved, but its project declaration failed: " + diagnostic;
+            return false;
+        }
+#endif
+
         [[nodiscard]] bool save_editor_scene_snapshot(EditorState& state)
         {
             const auto scenePath = active_editor_scene_path(state);
@@ -58,9 +74,7 @@
                     push_editor_log(state, "[tilemap] " + state.tileMapStatus);
                     return false;
                 }
-                const auto published = tileMap->save_and_publish();
-                state.tileMapStatus = std::string(tileMap->status());
-                if (!published)
+                if (!publish_editor_tilemap(state, *tileMap))
                 {
                     state.projectStatus = "Tile-map save blocked: "
                         + state.tileMapStatus;
@@ -72,11 +86,15 @@
 
             synchronize_editor_selection(state);
             const scene::SceneSnapshot projection = capture_editor_scene_projection(state);
+            const bool requiresGameplayReferences =
+                editor_application_profile(state.applicationKind).allow_project_run
+                && state.projectKind != editor_project_kind_name(EditorProjectKind::Tool)
+                && state.projectKind != editor_project_kind_name(EditorProjectKind::Editor);
             const auto saved = scene::persistence::save_scene_snapshot_atomic(
                 scenePath,
                 projection,
                 scene::persistence::ScenePersistenceOptions{
-                    .requirement = editor_application_profile(state.applicationKind).allow_project_run
+                    .requirement = requiresGameplayReferences
                         ? scene::SceneDocumentRequirement::runnable
                         : scene::SceneDocumentRequirement::authoring
                 });
@@ -351,7 +369,11 @@
             if (ec)
                 return normalized + "#time-error";
 
-            std::string stamp = normalized + "#" + std::to_string(writeTime.time_since_epoch().count());
+            const auto ticks = writeTime.time_since_epoch();
+            const auto seconds = std::chrono::duration_cast<std::chrono::seconds>(ticks);
+            const auto fraction = std::chrono::duration_cast<std::chrono::nanoseconds>(ticks - seconds);
+            std::string stamp = normalized + "#" + std::to_string(seconds.count())
+                + ":" + std::to_string(fraction.count());
             ec.clear();
             if (std::filesystem::is_regular_file(resolvedPath, ec) && !ec)
             {

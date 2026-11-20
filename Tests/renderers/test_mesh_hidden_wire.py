@@ -12,11 +12,12 @@ ROOT = Path(__file__).resolve().parents[2]
 
 class MeshHiddenWire(unittest.TestCase):
     def test_matched_frame_gl_consumer_ownership(self):
-        source = (ROOT / "Engine/modules/opengl.preview.ixx").read_text(encoding="utf-8")
+        source = (ROOT / "Engine/modules/opengl/opengl.preview.ixx").read_text(encoding="utf-8")
         owner = definition(source, "    inline void render_scene_preview_conventional(")
         self.assertEqual(owner.count("scene_frame_for(ctx)"), 1)
         self.assertIn("matchedScene ? matchedScene->camera", owner)
-        self.assertIn("matchedScene ? matchedScene->solids->geometry", owner)
+        self.assertIn("matchedScene ? matchedScene->solids", owner)
+        self.assertIn("const auto solidGeometry = solidFrame->geometry;", owner)
         self.assertIn("matchedScene ? matchedScene->wire", owner)
         self.assertIn("matchedScene ? matchedScene->lines", owner)
         self.assertIn("render_mesh_base_color_preview(ctx,state,mvp,matchedScene)", owner)
@@ -29,7 +30,7 @@ class MeshHiddenWire(unittest.TestCase):
         self.assertIn("sampled_render_surface_markers_for(ctx)", sampled)
 
     def test_actual_depth_wire_pass_and_state_restoration(self):
-        path = ROOT / "Engine/modules/opengl.preview.ixx"
+        path = ROOT / "Engine/modules/opengl/opengl.preview.ixx"
         source = path.read_text(encoding="utf-8")
         scope = definition(source, "        struct ScopedPreviewGLState final", True)
         draw = definition(source, "    inline void render_mesh_wire_preview(")
@@ -85,7 +86,7 @@ void glDepthMask(GLboolean v){state.depth=v;}
 void glColorMask(GLboolean a,GLboolean b,GLboolean c,GLboolean d){state.color={a,b,c,d};}
 void glPolygonOffset(float a,float b){state.offsetFactor=a;state.offsetUnits=b;}
 void glUniformMatrix4fv(GLint,GLsizei,GLboolean,const float*){}
-void glUniform1i(GLint,GLint value){wireEdges=bool(value);}
+void glUniform1i(GLint location,GLint value){if(location==5)wireEdges=bool(value);}
 void glBlendFuncSeparate(GLenum sr,GLenum dr,GLenum sa,GLenum da){state.integers[GL_BLEND_SRC_RGB]={int(sr)};
  state.integers[GL_BLEND_DST_RGB]={int(dr)};state.integers[GL_BLEND_SRC_ALPHA]={int(sa)};state.integers[GL_BLEND_DST_ALPHA]={int(da)};}
 void glBlendEquationSeparate(GLenum rgb,GLenum alpha){state.integers[GL_BLEND_EQUATION_RGB]={int(rgb)};state.integers[GL_BLEND_EQUATION_ALPHA]={int(alpha)};}
@@ -94,7 +95,7 @@ void glDrawArrays(GLenum e,GLint,GLsizei n){draws.push_back({e,n,state.color,boo
 namespace epochengine::previewgrid {
 struct Vertex{std::array<float,3>position{},color{};};
 struct MeshWireDrawFrame{std::shared_ptr<const std::vector<Vertex>>depth_triangles,helper_lines;};}
-namespace epochengine::openglstate{struct OpenGL4State{GLuint sceneShader=1,sceneMarkerVao=2,sceneMarkerVbo=3;GLint sceneMvpLoc=4,sceneWireLoc=5;std::size_t meshTrianglesSubmitted{},meshDrawCallsSubmitted{},meshUploadBytesSubmitted{};};}
+namespace epochengine::openglstate{struct OpenGL4State{GLuint sceneShader=1,sceneMarkerVao=2,sceneMarkerVbo=3;GLint sceneMvpLoc=4,sceneWireLoc=5,scenePaintRowsLoc=6;std::size_t meshTrianglesSubmitted{},meshDrawCallsSubmitted{},meshUploadBytesSubmitted{};};}
 namespace actual {namespace detail {using Mat4=std::array<float,16>;SCOPE}
 DRAW
 }

@@ -249,6 +249,12 @@ Keep these identities separate:
 
 ### Version advancement
 
+For source delivery, run `package_epoch_source.py --audit-only` against a
+clean materialization of the reviewed source tree. Record the Git tree ID
+and the printed payload SHA-256 for each edition. Supply that edition's value
+with `--expected-payload-sha256` when creating the ZIP. This verifies the
+projected file names and bytes before writing and complements the ZIP checksum.
+
 1. Record the intended source version, the existing runtime version for each
    edition and platform, and which release pointers the delivery will advance.
    Use the same source version for the matching Public and Development snapshots.
@@ -269,8 +275,11 @@ Keep these identities separate:
 4. Freeze the two reviewed commits. Match each tag or Site source entry, archive
    filename, checksum sidecar and receipt to its exact edition, version, commit
    and tree. Mark a GitHub source-only release as a prerelease so the latest
-   stable release continues to identify the packaged runtime. For a runtime
-   release, also check the embedded distribution identity,
+   stable release continues to identify the packaged runtime. Attach the
+   versioned Public source ZIP and its signed `epoch-release-integrity.json`
+   to that exact tag before advertising the source version on `main`. Verify
+   that the version module, signed source row, ZIP and archive tree agree.
+   For a runtime release, also check the embedded distribution identity,
    platform asset names, signed integrity document and updater discovery. Verify
    the source and runtime links on GitHub, the Public Site and the owner portal.
 5. Verify the live downloads against the approved bytes. Read back the matching
@@ -418,6 +427,8 @@ Before publishing a Linux/WSL2 asset:
 - Use `stage_epoch_linux_release.ps1 -SoftwareOpenGLSmoke` for the required
   offscreen graphics test. The bounded software-renderer test runs without
   separate approval and records evidence for the exact staged executable.
+  The receipt requires the Editor to log a Mesa CPU renderer (llvmpipe or
+  softpipe) before OpenGL readiness. It records the observed renderer string.
   `-SkipRuntimeSmoke` is for build-only preflight. It still verifies version,
   engine contracts, notices, dependencies, `$ORIGIN/lib`, GLIBC baseline,
   archive contents, and checksums. Release acceptance requires a graphics

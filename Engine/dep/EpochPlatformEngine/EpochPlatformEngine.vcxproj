@@ -16,6 +16,7 @@
 <Import Project="..\..\..\Tools\MSVC\EpochOutputLayout.props" Condition="Exists('$(MSBuildThisFileDirectory)..\..\..\Tools\MSVC\EpochOutputLayout.props')" />
 <ItemDefinitionGroup><ClCompile><LanguageStandard>stdcpp23</LanguageStandard><ConformanceMode>true</ConformanceMode><SDLCheck>true</SDLCheck><ScanSourceForModuleDependencies>true</ScanSourceForModuleDependencies><AdditionalIncludeDirectories>$(ProjectDir)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories><RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary><RuntimeLibrary Condition="'$(Configuration)'=='Debug'">MultiThreadedDebugDLL</RuntimeLibrary><PreprocessorDefinitions>EPOCH_PLATFORM_ENGINE_STATIC=1;WIN32_LEAN_AND_MEAN;NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions><PreprocessorDefinitions Condition="'$(Configuration)'=='Debug'">_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions><PreprocessorDefinitions Condition="'$(Configuration)'!='Debug'">NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions><AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions></ClCompile></ItemDefinitionGroup>
 <ItemGroup>
+<ClInclude Include="include\platform.ai_source_access.hpp" />
 <ClInclude Include="include\build.cpp_feature_probe.hpp" />
 <ClInclude Include="include\core.abi_types.hpp" />
 <ClInclude Include="include\core.log_compact.hpp" />

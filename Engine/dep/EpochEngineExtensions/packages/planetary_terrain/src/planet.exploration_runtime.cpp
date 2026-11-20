@@ -7,6 +7,7 @@ module;
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <span>
 #include <stop_token>
@@ -20,10 +21,14 @@ import planet.exploration;
 import planet.terrain;
 import planet.coverage;
 import planet.clouds;
+import planet.cut_assembly;
+import planet.streaming;
 import asset.cloud_volume;
 import asset.mesh_artifact;
+import project.planetary_snapshot;
 #if defined(EPOCH_PLANET_HAS_WATER_EXTENSION)
 import water.fft;
+import water.planetary;
 #endif
 
 // The existing Engine project host owns manifest, edition, package-source and
@@ -37,6 +42,9 @@ namespace epoch::extensions::planetary_terrain::exploration_runtime
     namespace core = epoch::extensions::planetary_terrain::core;
     namespace coverage = epoch::extensions::planetary_terrain::coverage;
     namespace mesh = epochengine::asset::mesh;
+    namespace patches = epochengine::project_planetary_snapshot;
+    namespace stream = epoch::extensions::planetary_terrain::streaming;
+    namespace assembly = epoch::extensions::planetary_terrain::cut_assembly;
     namespace
     {
         constexpr double fixed_step = 1.0/60.0;
@@ -117,6 +125,286 @@ namespace epoch::extensions::planetary_terrain::exploration_runtime
             if (from_depth >= 0.0) return to_depth > from_depth + 1e-8;
             return intersects && entry <= exit;
         }
+        class OriginalGroundCover final : public host::GroundCoverProvider
+        {
+        public:
+            explicit OriginalGroundCover(const host::Binding& binding)
+                : world_{binding.seed,{binding.size_reference_body,binding.reference_radius_meters}},
+                  initial_body_{binding.initial_body}, universe_{binding.universe} {}
+
+            [[nodiscard]] std::optional<host::GroundCoverDrawPatch> build_patch(std::uint32_t body_index,
+                std::array<double,3> direction,std::stop_token stop) const override
+            {
+                if(stop.stop_requested()||!admitted_body(body_index))return {};
+                const auto& body=world_.body(body_index);
+                const auto key=coverage::grass_patch_at(body,{direction[0],direction[1],direction[2]});
+                if(!key)return {};
+                return draw_patch(coverage::build_grass_patch(body,*key,stop),stop);
+            }
+
+            [[nodiscard]] std::optional<std::vector<host::GroundCoverDrawPatch>> build_neighborhood(
+                std::uint32_t body_index,std::array<double,3> direction,std::stop_token stop) const override
+            {
+                std::vector<host::GroundCoverDrawPatch> patches;
+                if(stop.stop_requested()||!admitted_body(body_index))return patches;
+                const auto& body=world_.body(body_index);
+                const auto keys=coverage::grass_patch_neighborhood(body,{direction[0],direction[1],direction[2]});
+                patches.reserve(keys.size());
+                for(const auto key:keys)
+                {
+                    auto patch=draw_patch(coverage::build_grass_patch(body,key,stop),stop);
+                    if(!patch||stop.stop_requested())return std::vector<host::GroundCoverDrawPatch>{};
+                    if(patch->mesh)patches.push_back(std::move(*patch));
+                }
+                return patches;
+            }
+            [[nodiscard]] std::optional<std::vector<host::GroundCoverDrawPatch>> build_visible_neighborhood(
+                std::uint32_t body_index,std::array<double,3> direction,double altitude,std::stop_token stop) const override
+            {
+                static_assert(coverage::maximum_grass_visible_patches==host::maximum_visible_ground_cover_patches);
+                std::vector<host::GroundCoverDrawPatch> patches;
+                if(stop.stop_requested()||!admitted_body(body_index)||!std::isfinite(altitude)||altitude>=32.0)return patches;
+                const auto& body=world_.body(body_index);
+                const core::DVec3 radial{direction[0],direction[1],direction[2]};
+                const auto keys=coverage::grass_visible_patch_keys(body,radial);
+                if(keys.empty())return patches;
+                const coverage::GrassDrawView view{core::normalized(radial)*body.radius,body.radius,altitude};
+                std::vector<CachedGrassPatch> next;
+                patches.reserve(keys.size());
+                next.reserve(keys.size());
+                std::lock_guard cache_lock{visible_cache_mutex_};
+                for(const auto key:keys)
+                {
+                    if(stop.stop_requested())return std::vector<host::GroundCoverDrawPatch>{};
+                    const auto found=std::ranges::find(visible_cache_,key,&CachedGrassPatch::key);
+                    auto grass=found==visible_cache_.end()
+                        ?std::make_shared<const coverage::GrassPatch>(coverage::build_grass_patch(body,key,stop))
+                        :found->grass;
+                    auto patch=draw_patch(*grass,stop,&view);
+                    if(!patch)return std::vector<host::GroundCoverDrawPatch>{};
+                    if(patch->mesh)patches.push_back(std::move(*patch));
+                    next.push_back({key,std::move(grass)});
+                }
+                if(stop.stop_requested())return std::vector<host::GroundCoverDrawPatch>{};
+                visible_cache_=std::move(next);
+                return patches;
+            }
+        private:
+            struct CachedGrassPatch final
+            {
+                coverage::GrassPatchKey key{};
+                std::shared_ptr<const coverage::GrassPatch> grass{};
+            };
+
+            [[nodiscard]] bool admitted_body(std::uint32_t body_index) const noexcept
+            {
+                return body_index<world_.bodies().size()&&(universe_||body_index==initial_body_);
+            }
+
+            [[nodiscard]] static std::optional<host::GroundCoverDrawPatch> draw_patch(const coverage::GrassPatch& patch,
+                std::stop_token stop,const coverage::GrassDrawView* view=nullptr)
+            {
+                const auto geometry=coverage::mesh_grass_patch(patch,stop,view);
+                if(!geometry)return {};
+                host::GroundCoverDrawPatch output{vector(geometry->anchor)};
+                if(geometry->indices.empty())return output;
+                std::vector<mesh::Vertex> vertices;
+                vertices.reserve(geometry->vertices.size());
+                for(const auto& vertex:geometry->vertices)
+                {
+                    if(stop.stop_requested())return {};
+                    vertices.push_back({{vertex.position.x,vertex.position.y,vertex.position.z},
+                        {vertex.normal.x,vertex.normal.y,vertex.normal.z},{},
+                        {vertex.color[0],vertex.color[1],vertex.color[2]}});
+                }
+                output.mesh=mesh::build_artifact(vertices,geometry->indices).artifact;
+                if(!output.mesh||stop.stop_requested())return {};
+                return output;
+            }
+            const core::Universe world_;
+            const std::uint32_t initial_body_;
+            const bool universe_;
+            mutable std::mutex visible_cache_mutex_;
+            mutable std::vector<CachedGrassPatch> visible_cache_;
+        };
+
+#if defined(EPOCH_PLANET_HAS_WATER_EXTENSION)
+        class OriginalWaterLattice final : public patches::WaterLatticeProvider
+        {
+        public:
+            explicit OriginalWaterLattice(const host::Binding& binding)
+                : world_(binding.seed,{binding.size_reference_body,binding.reference_radius_meters}),
+                  body_(binding.initial_body),universe_(binding.universe) {}
+
+            [[nodiscard]] std::optional<std::vector<patches::WaterVertex>> build_basis(patches::TileKey key,
+                double radius,std::uint32_t cells,bool skirts,std::stop_token stop) const override
+            {
+                if(stop.stop_requested()||!patches::valid_key(key)||key.body>=world_.bodies().size()
+                    ||(!universe_&&key.body!=body_))return {};
+                const auto& body=world_.body(key.body);
+                if(radius!=body.radius)return {};
+                return water::build_water_lattice_basis(body,{key.x,key.y,key.body,key.face,key.level},cells,skirts,stop);
+            }
+
+        private:
+            const core::Universe world_;
+            const std::uint32_t body_;
+            const bool universe_;
+        };
+#endif
+
+        class LinkedTerrain final : public host::TerrainProvider
+        {
+            const host::TerrainProfile profile_;
+            const std::uint32_t body_;
+            const std::string source_hash_, recipe_key_;
+            std::mutex mutex_;
+            stream::State state_;
+            std::uint64_t request_{};
+            std::vector<core::TileKey> last_cut_;
+            std::shared_ptr<const mesh::Artifact> artifact_;
+            std::array<double,3> origin_{};
+            patches::SelectedCut wet_cut_;
+            std::shared_ptr<const epochengine::water::wave::Tile> presented_sample_;
+
+        public:
+            LinkedTerrain(const host::Binding& binding,const host::TerrainProfile& profile,std::string_view recipe_key={})
+                :profile_(profile),body_(binding.initial_body),
+                 source_hash_(binding.source_hash),recipe_key_(recipe_key),
+                 state_(binding.seed,{binding.size_reference_body,binding.reference_radius_meters}) {}
+
+            [[nodiscard]] host::TerrainBatch step(const host::TerrainView& view,std::stop_token stop) override
+            {
+                using Status=host::TerrainStatus;
+                host::TerrainBatch result{.request_id=view.request_id};
+                const auto finish=[&](Status status,std::string_view failure={}) {
+                    result.status=status;result.failure=failure;return result; };
+                if(stop.stop_requested())return finish(Status::cancelled);
+                std::unique_lock lock{mutex_,std::try_to_lock};
+                if(!lock.owns_lock())return finish(Status::busy);
+                const bool wet=!recipe_key_.empty();
+                if(wet!=static_cast<bool>(view.water_sample))return finish(Status::invalid,"water sample");
+                if(view.request_id<=request_||view.viewport_height<64u||view.viewport_height>16384u
+                    ||!std::isfinite(view.vertical_fov)||view.vertical_fov<0.1||view.vertical_fov>3.0
+                    ||!std::isfinite(view.aspect_ratio)||view.aspect_ratio<0.1||view.aspect_ratio>10.0
+                    ||!std::isfinite(view.seconds)||view.seconds<0.0||view.seconds>=1.0e12
+                    ||std::ranges::any_of(view.world_camera_meters,[](double value){return !std::isfinite(value);}))
+                    return finish(Status::invalid,"terrain view");
+
+                const auto vector=[](const std::array<double,3>& v){return core::DVec3{v[0],v[1],v[2]};};
+                stream::Request request;
+                request.body_index=body_;
+                request.seconds=view.seconds;
+                request.camera=vector(view.world_camera_meters);
+                request.viewport_height=static_cast<int>(view.viewport_height);
+                request.vertical_fov=view.vertical_fov;
+                request.lod={.max_level=static_cast<std::uint8_t>(profile_.maximum_level),
+                    .max_leaves=profile_.maximum_leaves,.patch_pixels=profile_.patch_pixels,.hysteresis=profile_.lod_hysteresis};
+                request.cells_per_tile=profile_.cells_per_tile;
+                request.maximum_resident_patches=4096;
+                request.maximum_bytes=std::uint64_t{profile_.resident_megabytes}*1024u*1024u;
+                request.view=core::TerrainView{vector(view.forward),view.aspect_ratio,vector(view.up)};
+                request.ocean_surface=wet;
+
+                const auto update=stream::update(state_,request,stop);
+                if(update==stream::Status::cancelled)return finish(Status::cancelled);
+                if(update==stream::Status::capacity_exceeded)return finish(Status::capacity,"stream update");
+                if(update!=stream::Status::ready)return finish(Status::invalid,"stream update");
+                request_=view.request_id;
+                // The existing scheduler owns this bounded step. Avoid a
+                // nested pool or waiting on another task in the same pool.
+                constexpr std::size_t maximum_per_step=16u;
+                for(;result.built<maximum_per_step&&!stop.stop_requested();++result.built)
+                {
+                    const auto work=stream::next_work(state_);
+                    if(!work)break;
+                    try
+                    {
+                        const auto done=stream::complete(state_,*work,stream::build(state_,*work,stop),stop);
+                        if(done==stream::Status::cancelled)return finish(Status::cancelled);
+                        if(done==stream::Status::capacity_exceeded)return finish(Status::capacity,"patch completion");
+                        if(done!=stream::Status::ready)return finish(Status::failed,"patch completion");
+                    }
+                    catch(...)
+                    {
+                        (void)stream::abandon(state_,*work);
+                        return finish(Status::failed,"patch evaluation");
+                    }
+                }
+                if(stop.stop_requested())return finish(Status::cancelled);
+                const auto stats=stream::stats(state_);
+                result.generation=stats.generation;
+                result.pending=stats.pending_patches;
+                result.draw_patches=stats.draw_patches;
+                result.maximum_level=stats.maximum_level;
+                if(result.pending&&!result.built)return finish(Status::capacity,"patch residency");
+                if(!stats.complete_coverage)return finish(result.built?Status::pending:Status::capacity);
+                if(wet&&result.pending)return finish(Status::pending);
+
+                const auto frame=assembly::frame_for(state_,true);
+                if(!frame)return finish(Status::invalid);
+                assembly::Assembly assembly{state_,*frame,profile_.artifact,wet,wet};
+                if(const auto failure=assembly.begin(view.water_sample,stop);failure)
+                    return finish(stop.stop_requested()?Status::cancelled:Status::failed,failure.stage);
+                if(!std::ranges::equal(last_cut_,assembly.draw_cut())||view.water_sample!=presented_sample_)
+                {
+                    for(const auto tile:assembly.tiles())
+                    {
+                        if(stop.stop_requested())return finish(Status::cancelled);
+                        const auto work=assembly.work_for(tile);
+                        if(!work)return finish(Status::failed,"patch missing");
+                        if(work->scratch>assembly.scratch_available())return finish(Status::capacity,"patch scratch");
+                        const auto geometry=assembly.prepare(*work,stop);
+                        if(!geometry)return finish(stop.stop_requested()?Status::cancelled:Status::failed,"patch assembly");
+                        if(const auto failure=assembly.append(*work,*geometry);failure)
+                            return finish(failure.limit?Status::capacity:Status::failed,failure.stage);
+                    }
+                    auto built=assembly.build();
+                    if(stop.stop_requested())return finish(Status::cancelled);
+                    if(!built)return finish(Status::failed,"artifact build");
+                    const std::array origin{frame->origin.x,frame->origin.y,frame->origin.z};
+                    patches::SelectedCut wet_cut;
+                    if(wet)
+                    {
+                        auto& metadata=assembly.metadata;
+                        metadata.identity={built.artifact->key(),source_hash_,recipe_key_,view.request_id};
+                        metadata.water_appearance=patches::admit_water_appearance(
+                            assembly.water_ranges,*built.artifact,metadata,stop);
+                        if(!metadata.water_appearance)
+                            return finish(stop.stop_requested()?Status::cancelled:Status::failed,"water appearance");
+                        const double phase=view.water_sample->seconds();
+                        wet_cut.source=std::make_shared<const patches::Snapshot>(patches::Snapshot{
+                            std::move(built.artifact),std::move(metadata),origin,phase});
+                        auto limits=profile_.wet_transition_limits;
+                        limits.artifact=profile_.artifact;
+                        patches::Transition transition{limits};
+                        if(!transition.admit(wet_cut.source,stop,patches::InitialCut::selected_patches))
+                            return finish(stop.stop_requested()?Status::cancelled:Status::failed,"snapshot admission");
+                        patches::WetTransitionFailure shoreline_failure;
+                        if(patches::requires_water_edge_resample(*wet_cut.source))
+                            wet_cut.artifact=transition.materialize_wet(profile_.cells_per_tile,phase,stop,
+                                &wet_cut.water_appearance,0u,&shoreline_failure);
+                        else
+                            wet_cut.artifact=transition.materialize(stop,&wet_cut.water_appearance);
+                        if(!wet_cut.artifact||!wet_cut.water_appearance)
+                            return finish(stop.stop_requested()?Status::cancelled:Status::failed,
+                                shoreline_failure.reason.empty()?"snapshot materialization":shoreline_failure.reason);
+                    }
+                    if(stop.stop_requested())return finish(Status::cancelled);
+                    last_cut_.assign(assembly.draw_cut().begin(),assembly.draw_cut().end());
+                    artifact_=wet?wet_cut.artifact:std::move(built.artifact);
+                    origin_=origin;
+                    wet_cut_=std::move(wet_cut);
+                    presented_sample_=view.water_sample;
+                }
+                result.artifact=artifact_;
+                result.source_origin_meters=origin_;
+                result.aquatic_source=wet_cut_.source;
+                result.water_appearance=wet_cut_.water_appearance;
+                return finish(Status::ready);
+            }
+        };
+
         class OriginalController final : public host::Controller
         {
             host::Binding binding_;
@@ -126,6 +414,7 @@ namespace epoch::extensions::planetary_terrain::exploration_runtime
             bool cloud_layers_ready_{true};
             double accumulator_{},last_nonzero_scale_{1.0};
             std::shared_ptr<epochengine::water::wave::Provider> water_{};
+            std::shared_ptr<const patches::WaterLatticeProvider> water_lattice_{};
             std::vector<host::WalkBox> walk_boxes_{};
         public:
             explicit OriginalController(const host::Binding& binding):binding_(binding),simulation_(binding.seed,
@@ -137,6 +426,7 @@ namespace epoch::extensions::planetary_terrain::exploration_runtime
                 {
                     epochengine::water::fft::Settings settings;settings.seed=binding.seed;
                     water_=std::make_shared<epochengine::water::fft::Implementation>(settings);
+                    water_lattice_=std::make_shared<const OriginalWaterLattice>(binding);
                 }
 #endif
                 simulation_.orbit(binding.initial_body);
@@ -150,6 +440,41 @@ namespace epoch::extensions::planetary_terrain::exploration_runtime
             }
             [[nodiscard]] std::shared_ptr<epochengine::water::wave::Provider> water_provider() const override
             {return water_;}
+            [[nodiscard]] std::shared_ptr<const patches::WaterLatticeProvider> water_lattice_provider() const override
+            {return water_lattice_;}
+            [[nodiscard]] std::shared_ptr<const host::GroundCoverProvider> ground_cover_provider() const override
+            {return std::make_shared<const OriginalGroundCover>(binding_);}
+        private:
+            [[nodiscard]] bool valid_terrain_profile(const host::TerrainProfile& profile) const
+            {
+                if(binding_.universe||profile.cells_per_tile<2u||profile.cells_per_tile>64u
+                    ||profile.maximum_level>20u||profile.maximum_leaves<6u||profile.maximum_leaves>2048u
+                    ||profile.resident_megabytes<4u||profile.resident_megabytes>256u
+                    ||!std::isfinite(profile.patch_pixels)||profile.patch_pixels<32.0||profile.patch_pixels>4096.0
+                    ||!std::isfinite(profile.lod_hysteresis)||profile.lod_hysteresis<0.0||profile.lod_hysteresis>0.45
+                    ||profile.artifact.maximum_bytes<48u||profile.artifact.maximum_bytes>64u*1024u*1024u)return false;
+                const std::uint64_t cells=profile.cells_per_tile,side=cells+1u;
+                const std::uint64_t layers=binding_.ocean_surface?2u:1u;
+                const auto vertices=layers*profile.maximum_leaves*(side*side+4u*cells);
+                const auto indices=layers*profile.maximum_leaves*(6u*cells*cells+24u*cells);
+                return vertices<=profile.artifact.maximum_vertices&&indices<=profile.artifact.maximum_indices
+                    &&48u+vertices*44u+indices*4u<=profile.artifact.maximum_bytes;
+            }
+        public:
+            [[nodiscard]] std::shared_ptr<host::TerrainProvider> create_dry_terrain_provider(
+                const host::TerrainProfile& profile) const override
+            {
+                if(binding_.ocean_surface||!valid_terrain_profile(profile))return {};
+                return std::make_shared<LinkedTerrain>(binding_,profile);
+            }
+            [[nodiscard]] std::shared_ptr<host::TerrainProvider> create_wet_terrain_provider(
+                const host::TerrainProfile& profile,std::string_view recipe_key) const override
+            {
+                if(!water_||!water_lattice_||binding_.initial_body!=0u||!valid_terrain_profile(profile)
+                    ||recipe_key.size()!=64u||!std::ranges::all_of(recipe_key,[](char c) {
+                        return (c>='0'&&c<='9')||(c>='a'&&c<='f');}))return {};
+                return std::make_shared<LinkedTerrain>(binding_,profile,recipe_key);
+            }
             [[nodiscard]] bool set_walk_boxes(std::span<const host::WalkBox> boxes) override
             {
                 if (boxes.size() > host::maximum_walk_boxes || std::ranges::any_of(boxes, [&](const auto& box) {
@@ -162,35 +487,48 @@ namespace epoch::extensions::planetary_terrain::exploration_runtime
             }
             [[nodiscard]] host::Result capture() const override
             {
+                return capture_frame(simulation_,accumulator_);
+            }
+        private:
+            [[nodiscard]] host::Result capture_frame(const exploration::Simulation& simulation,double accumulator) const
+            {
                 if(!cloud_layers_ready_)return {host::Code::provider_failure,{}};
                 host::Frame frame;
-                const auto camera=simulation_.interpolated_camera(accumulator_/fixed_step);
-                frame.seed=binding_.seed;frame.anchor=static_cast<std::uint32_t>(simulation_.anchor());
-                frame.target=static_cast<std::uint32_t>(simulation_.target());
+                const auto camera=simulation.interpolated_camera(accumulator/fixed_step);
+                frame.seed=binding_.seed;frame.anchor=static_cast<std::uint32_t>(simulation.anchor());
+                frame.target=static_cast<std::uint32_t>(simulation.target());
                 frame.camera=vector(camera.position);frame.forward=vector(camera.forward);frame.up=vector(camera.up);
-                frame.seconds=simulation_.seconds();frame.time_scale=simulation_.time_scale();
-                frame.speed_factor=simulation_.speed_factor();frame.altitude=simulation_.altitude();frame.speed=simulation_.speed();
-                frame.gravity_enabled=simulation_.gravity_enabled();frame.level_assist=simulation_.level_assist();
-                frame.mode=static_cast<host::TravelMode>(simulation_.mode());
+                frame.seconds=simulation.seconds();frame.time_scale=simulation.time_scale();
+                frame.speed_factor=simulation.speed_factor();
+                // Report the pilot clearance above the contact surface, excluding the camera offset.
+                frame.altitude=(std::max)(0.0,simulation.altitude()-exploration::surface_clearance_meters);
+                frame.speed=simulation.speed();
+                frame.gravity_enabled=simulation.gravity_enabled();frame.level_assist=simulation.level_assist();
+                frame.mode=static_cast<host::TravelMode>(simulation.mode());
                 if(binding_.original_sunlight)
                 {
-                    const auto direction=core::DVec3{-camera.position.x,-camera.position.y,-camera.position.z};
+                    // The modeled star is at the world origin. Lighting uses
+                    // the active carrier's physical center at the scene time,
+                    // so flying around the body cannot move its terminator.
+                    const auto direction=-simulation.world().center(frame.anchor,frame.seconds);
                     const auto length=core::length(direction);
                     if(!std::isfinite(length)||length<=0.0)return {host::Code::invalid_frame,{}};
                     frame.sunlight=host::Sunlight{.direction_to_sun=vector(direction/length)};
                 }
-                for(std::uint32_t index=0;index<simulation_.world().bodies().size();++index)
+                for(std::uint32_t index=0;index<simulation.world().bodies().size();++index)
                 {
                     if(!binding_.universe&&index!=binding_.initial_body)continue;
-                    const auto& body=simulation_.world().body(index);
+                    const auto& body=simulation.world().body(index);
                     frame.bodies[frame.body_count++]={body.id,binding_.universe?body.parent:-1,std::string{body.name},
-                        vector(simulation_.world().center(index,frame.seconds)),body.radius,
-                        body.kind!=core::BodyKind::gas,meshes_[index],{},clouds::wind_degrees(frame.seconds),clouds_[index]};
+                        vector(simulation.world().center(index,frame.seconds)),body.radius,
+                        body.kind!=core::BodyKind::gas,meshes_[index],{},clouds::wind_degrees(frame.seconds),
+                        clouds_[index],body.atmosphere_height};
                 }
                 frame.valid=true;
                 return host::valid_frame(frame)?host::Result{host::Code::ready,std::move(frame)}
                     :host::Result{host::Code::invalid_frame,{}};
             }
+        public:
             [[nodiscard]] host::Result advance(const host::Input& input,std::stop_token stop) override
             {
                 if(stop.stop_requested())return {host::Code::cancelled,{}};
@@ -271,7 +609,7 @@ namespace epoch::extensions::planetary_terrain::exploration_runtime
                 auto state = simulation_.state();
                 state.anchor = state.target = start.body;
                 state.mode = exploration::TravelMode::walk;
-                state.local_position = up * (ground + 1.8);
+                state.local_position = up * (ground + exploration::surface_clearance_meters);
                 const auto radial_heading = forward.x * up.x + forward.y * up.y + forward.z * up.z;
                 state.forward = core::normalized(forward - up * radial_heading, core::tangent(up));
                 state.up = up;
@@ -289,6 +627,43 @@ namespace epoch::extensions::planetary_terrain::exploration_runtime
                     accumulator_ = previousAccumulator;
                 }
                 return result;
+            }
+            [[nodiscard]] host::Result start_in_flight(const host::FlightStart& start) override
+            {
+                const auto& world=simulation_.world();
+                if(start.body>=world.bodies().size()||(!binding_.universe&&start.body!=binding_.initial_body))
+                    return {host::Code::invalid_input,{}};
+                const core::DVec3 local{start.body_local_position_meters[0],start.body_local_position_meters[1],
+                    start.body_local_position_meters[2]};
+                const core::DVec3 forward{start.body_local_forward[0],start.body_local_forward[1],start.body_local_forward[2]};
+                const core::DVec3 up{start.body_local_up[0],start.body_local_up[1],start.body_local_up[2]};
+                const double radius=core::length(local);
+                const double alignment=forward.x*up.x+forward.y*up.y+forward.z*up.z;
+                if(!core::finite(local)||!core::finite(forward)||!core::finite(up)||!std::isfinite(radius)||radius<=0.0
+                    ||std::abs(core::length(forward)-1.0)>1e-6||std::abs(core::length(up)-1.0)>1e-6
+                    ||std::abs(alignment)>1e-6)
+                    return {host::Code::invalid_input,{}};
+                // Admit the exact requested eye only if the existing flight
+                // collision floor will accept it without a surface correction.
+                if(radius<world.ground_radius(start.body,local/radius)+exploration::surface_clearance_meters)
+                    return {host::Code::invalid_input,{}};
+                auto state=simulation_.state();
+                state.anchor=state.target=start.body;state.mode=exploration::TravelMode::flight;
+                state.local_position=local;state.forward=forward;state.up=up;state.fall_velocity={};
+                if(!exploration::valid_state(state))return {host::Code::invalid_input,{}};
+                try
+                {
+                    auto replacement=simulation_;
+                    replacement.restore(state);
+                    auto result=capture_frame(replacement,0.0);
+                    if(result.code==host::Code::ready)
+                    {
+                        simulation_=std::move(replacement);
+                        accumulator_=0.0;
+                    }
+                    return result;
+                }
+                catch(...){return {host::Code::provider_failure,{}};}
             }
             [[nodiscard]] std::string encode_session() const override
             {

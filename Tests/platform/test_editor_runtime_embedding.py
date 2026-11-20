@@ -23,7 +23,8 @@ class EditorRuntimeEmbedding(unittest.TestCase):
                               for kind,name in [('std::string','project_runtime_correlation'),
                                                 ('bool','project_runtime_launch_identity_matches'),
                                                 ('bool','project_runtime_identity_current')])
-        launch = definition(text, '        [[nodiscard]] bool launch_project_runtime(')
+        begin = text.index('        [[nodiscard]] bool launch_project_runtime(')
+        launch = definition(text[text.index('\n        {', begin) + 1:], '        {')
         binding = definition(launch, '            if (launched.owns_new_process())')
         code = r'''
 #include <cstdint>
@@ -106,7 +107,7 @@ target_compile_features(identity PRIVATE cxx_std_23)
 target_compile_options(identity PRIVATE /utf-8 /EHsc /Z7)
 target_include_directories(identity PRIVATE "{(ROOT/'Engine/include').as_posix()}")
 target_sources(identity PRIVATE FILE_SET CXX_MODULES BASE_DIRS "{(ROOT/'Engine/modules').as_posix()}" FILES
- "{(ROOT/'Engine/modules/project.lifecycle.ixx').as_posix()}" "{(ROOT/'Engine/modules/platform.child_process.ixx').as_posix()}" "{(ROOT/'Engine/modules/core.sha256.ixx').as_posix()}")
+ "{(ROOT/'Engine/modules/project/project.lifecycle.ixx').as_posix()}" "{(ROOT/'Engine/modules/platform/platform.child_process.ixx').as_posix()}" "{(ROOT/'Engine/modules/core/core.sha256.ixx').as_posix()}")
 enable_testing()
 add_test(NAME identity COMMAND identity)
 ''',encoding='utf-8')
@@ -163,6 +164,10 @@ add_test(NAME identity COMMAND identity)
             ' || context->scene_preview_mode() != epochengine::core::ScenePreviewMode::Editor)')
         self.assertNotEqual(former_visibility, code)
         (proof/'former_visibility.cpp').write_text(former_visibility, encoding='utf-8')
+        former_native_owner = code.replace('const HWND owner = context->get_hwnd();',
+                                           'const HWND owner = static_cast<HWND>(context->native_window);')
+        self.assertNotEqual(former_native_owner, code)
+        (proof/'former_native_owner.cpp').write_text(former_native_owner, encoding='utf-8')
         if os.name == 'nt':
             tools = msvc_2022_toolsets()
             sdk = Path('C:/Program Files (x86)/Windows Kits/10')
@@ -172,7 +177,8 @@ add_test(NAME identity COMMAND identity)
             tool, kit = tools[-1], kits[-1]
             results=[]
             for config in ('Debug','Release'):
-                for name, expected in (('placement',0),('negative',None),('synchronous',None),('former_visibility',None)):
+                for name, expected in (('placement',0),('negative',None),('synchronous',None),
+                                       ('former_visibility',None),('former_native_owner',None)):
                     output=proof/config/name
                     output.mkdir(parents=True,exist_ok=True)
                     command=[str(tool/'bin/Hostx64/x64/cl.exe'),'/nologo','/std:c++latest','/EHsc','/W4','/WX',
@@ -192,7 +198,7 @@ add_test(NAME identity COMMAND identity)
                 sources={str(path.relative_to(ROOT)):hashlib.sha256(path.read_bytes()).hexdigest()
                          for path in (host_path,interaction_path)},cases=results,
                 scope='Actual placement, exact-lease update and grid-exclusion owners; recorded native calls, no OS windows or renderers',
-                negative='Former grid policy, synchronous foreign z-order and parent-preview child visibility must fail; opt-in trace bounded32 records',native=False),indent=2)+'\n',encoding='utf-8')
+                negative='Historical grid, z-order, preview visibility and native owner handling must fail; trace bounded to 32 records',native=False),indent=2)+'\n',encoding='utf-8')
             return
         (proof/'CMakeLists.txt').write_text('''cmake_minimum_required(VERSION 3.30)
 project(ProjectViewportPlacement LANGUAGES CXX)
@@ -243,6 +249,29 @@ set_tests_properties(former_grid_policy PROPERTIES WILL_FAIL TRUE)
         runtime = (ROOT/'Engine/src/epoch/implementation/epoch.session_runtime.inl').read_text(encoding='utf-8')
         self.assertNotIn('targetCtx->set_scene_preview_mode(core::ScenePreviewMode::Editor)', runtime)
 
+    def test_in_editor_play_preserves_the_authoring_camera(self):
+        runtime = (ROOT/'Engine/src/epoch/implementation/epoch.session_runtime.inl').read_text(encoding='utf-8')
+        start = definition(runtime, '                        auto begin_scene =', True)
+        saved = start.index('if (return_mode == SessionMode::Editor)')
+        self.assertLess(start.index('unload_active_scene(session);'), saved)
+        self.assertLess(saved, start.index('capture_camera_rig_snapshot(ctx.get())'))
+        self.assertLess(start.index('capture_camera_rig_snapshot(ctx.get())'), start.index('session.active_scene->load();'))
+
+        scene_begin = runtime.index('                        case SessionMode::Scene:')
+        scene_end = runtime.index('                        case SessionMode::Exit:', scene_begin)
+        finish = runtime[scene_begin:scene_end]
+        self.assertLess(finish.index('std::move(session.editor_play_camera)'),
+                        finish.index('unload_active_scene(session);'))
+        exit_branch = finish.index('if (window_closed || session.return_mode == SessionMode::Exit)')
+        menu_branch = finish.index('else if (session.return_mode == SessionMode::Menu)', exit_branch)
+        restore = finish.index('restore_camera_rig_snapshot(', menu_branch)
+        self.assertLess(restore, finish.index('session.mode = SessionMode::Editor;', menu_branch))
+        self.assertEqual(finish.count('restore_camera_rig_snapshot('), 1)
+
+        owner = (ROOT/'Engine/src/epoch/epoch.engine_legacy.cpp').read_text(encoding='utf-8')
+        unload = definition(owner, '        void unload_active_scene(')
+        self.assertIn('session.editor_play_camera.reset();', unload)
+
     def test_actual_presentation_and_retirement_owners(self):
         owner = ROOT / 'Engine/src/editor/application/editor.application_project_runtime.inl'
         text = owner.read_text(encoding='utf-8')
@@ -254,7 +283,9 @@ set_tests_properties(former_grid_policy PROPERTIES WILL_FAIL TRUE)
                  ('bool', 'reconcile_project_runtime_window'),
                  ('void', 'reconcile_project_runtime'), ('bool', 'stop_project_runtime'),
                  ('void', 'reset_project_build_request')]
-        selected = '\n'.join(definition(text, ('        [[nodiscard]] ' if kind == 'bool' else '        ')
+        names.insert(names.index(('void', 'reconcile_project_runtime')),
+                     ('std::string', 'project_active_runtime_status'))
+        selected = '\n'.join(definition(text, ('        [[nodiscard]] ' if kind != 'void' else '        ')
                                         + kind + ' ' + name + '(') for kind, name in names)
         selected = definition(text, '        [[nodiscard]] unsigned scene_run_mode_index(') + '\n' + \
             definition(text, '        [[nodiscard]] std::string project_scene_run_button_label(') + '\n' + selected
@@ -262,7 +293,7 @@ set_tests_properties(former_grid_policy PROPERTIES WILL_FAIL TRUE)
                                  '        auto pane_family_enabled =', True)
         frame = (ROOT/'Engine/src/editor/application/editor.frame_project_runtime.inl').read_text(encoding='utf-8')
         state = (ROOT/'Engine/src/editor/application/editor.application_state.inl').read_text(encoding='utf-8')
-        project_stamp = definition((ROOT/'Engine/modules/project.lifecycle.ixx').read_text(encoding='utf-8'),
+        project_stamp = definition((ROOT/'Engine/modules/project/project.lifecycle.ixx').read_text(encoding='utf-8'),
                                    '    struct ProjectStamp final', True)
         launch_evidence = definition(state, '            struct ProjectRuntimeLaunchEvidence final', True)
         viewport = (ROOT/'Engine/src/editor/application/editor.frame_viewport.inl').read_text(encoding='utf-8')
@@ -282,7 +313,11 @@ set_tests_properties(former_grid_policy PROPERTIES WILL_FAIL TRUE)
         capture = next(line.strip() for line in text.splitlines() if 'editor.projectBuildRunInEditor = runInEditor;' in line)
         poll_capture = next(line.strip() for line in frame.splitlines() if 'const bool runInEditor = editor.projectBuildRunInEditor;' in line)
         branch = definition(frame, '            if(requirement.requires_project_runtime)')
-        launch_owner = definition(text, '        [[nodiscard]] bool launch_project_runtime(')
+        launch_begin = text.index('        [[nodiscard]] bool launch_project_runtime(')
+        # The signature includes a braced default model-admission argument.
+        # Start at the actual function body rather than treating that {} as it.
+        launch_body = text.index('\n        {', launch_begin) + 1
+        launch_owner = definition(text[launch_body:], '        {')
         reuse_guard = definition(launch_owner, '            if (editor.projectRuntimeProcess.valid())')
         launch_signature = frame[frame.index('auto launch_active_project_context ='):frame.index('{', frame.index('auto launch_active_project_context =') + len('auto launch_active_project_context = [&]'))]
         code = r'''
@@ -360,6 +395,7 @@ struct Lifecycle {
  const Evidence& evidence()const{return state;}bool record_runtime_started(){state.runtime_active=true;return true;}
  void record_runtime_stopped(){state.runtime_active=false;}
 };
+namespace previewgrid {enum class CameraMode{Editor};}
 enum class EditorMainSurface{Scene,Project,ForestFactory};
 enum class EditorLayoutDrag{None,Side};
 enum class EditorToolPane{Outliner,Inspector,Console,AiControls,AiChat};
@@ -369,8 +405,9 @@ bool is_console_tool_pane(EditorToolPane p){return p==EditorToolPane::Console;}
 struct EditorState {
  core::ScenePreviewMode previewMode{core::ScenePreviewMode::Editor};
  DEFAULT_MODE
- bool projectBuildRunAfterBuild{},projectBuildRunInEditor{};
- int projectBuildCancellation{},projectBuildProgressSample{},projectBuildRunCameraMode{},projectCameraMode{},
+ bool projectBuildRunAfterBuild{},projectBuildRunInEditor{},projectBuildReusesReviewedArtifact{};
+ previewgrid::CameraMode projectBuildRunCameraMode{};
+ int projectBuildCancellation{},projectBuildProgressSample{},
   projectBuildRunInputProfile{},inputProfilePreset{};
  double projectBuildRunFrameLimitFps{},projectRunFrameLimitFps{60};
  std::uint64_t projectBuildProjectKey{};

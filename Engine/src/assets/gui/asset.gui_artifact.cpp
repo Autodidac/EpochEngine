@@ -293,7 +293,7 @@ namespace epochengine::asset::gui
         }
         [[nodiscard]] constexpr bool valid_flow(LayoutFlow value) noexcept
         {
-            return value >= LayoutFlow::absolute && value <= LayoutFlow::overlay;
+            return value >= LayoutFlow::absolute && value <= LayoutFlow::responsive_columns;
         }
         [[nodiscard]] constexpr bool valid_size_rule(SizeRule value) noexcept
         {
@@ -637,7 +637,9 @@ namespace epochengine::asset::gui
                     result.code = ArtifactCode::invalid_widget;
                     return result;
                 }
-                if (!valid_layout(widget.layout, limits))
+                if (!valid_layout(widget.layout, limits)
+                    || (widget.layout.flow == LayoutFlow::responsive_columns
+                        && (index != artifact.root || widget.kind != WidgetKind::canvas)))
                 {
                     result.code = ArtifactCode::invalid_layout;
                     return result;

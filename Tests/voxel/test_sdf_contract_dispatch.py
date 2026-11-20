@@ -89,8 +89,8 @@ foreach(lane IN ITEMS actual faulty)
   target_compile_options(sdf_${{lane}} PRIVATE /W3 /WX /utf-8 /EHsc)
   target_sources(sdf_${{lane}} PRIVATE FILE_SET CXX_MODULES
     BASE_DIRS "{modules.as_posix()}" FILES
-    "{(modules/'voxel.field.ixx').as_posix()}"
-    "{(modules/'voxel.sdf.ixx').as_posix()}")
+    "{(modules/'voxel/voxel.field.ixx').as_posix()}"
+    "{(modules/'voxel/voxel.sdf.ixx').as_posix()}")
 endforeach()
 ''', encoding="utf-8")
         build = ROOT / "Artifacts/Intermediate/tests/voxel-sdf-dispatch" / identity

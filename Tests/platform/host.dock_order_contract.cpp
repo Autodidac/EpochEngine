@@ -41,17 +41,26 @@ void InvalidateRect(HWND,void*,int){++invalidates;}
 CANCEL_FUNCTION
 enum {WM_LBUTTONDOWN,WM_MOUSEMOVE,WM_LBUTTONUP,WM_NCLBUTTONDOWN,WM_NCMOUSEMOVE,WM_NCLBUTTONUP};
 constexpr unsigned HTCAPTION=2;
+constexpr int VK_MENU=18;
+int altKeyState=0;
+int GetKeyState(int key){return key==VK_MENU?altKeyState:0;}
+ALT_FUNCTION
 int guiEvents=0,dragEvents=0;bool hotspot=false;
 bool native_class_owns_gui_input(HWND hwnd) noexcept;
 bool is_dock_drag_hotspot(HWND,LPARAM){return hotspot;}
 void forward_gui_input_message(HWND,UINT,WPARAM,LPARAM){++guiEvents;}
 int DefSubclassProc(HWND,UINT,WPARAM,LPARAM){return 7;}
+int DefWindowProcW(HWND,UINT,WPARAM,LPARAM){return 8;}
 namespace epochengine::core {struct MultiContextManager {
 static int ChildProc(HWND,UINT,WPARAM,LPARAM){++dragEvents;return 9;}};}
 using LONG_PTR=std::intptr_t;constexpr int GCLP_WNDPROC=-24;
 LONG_PTR GetClassLongPtrW(HWND hwnd,int){return hwnd==77?reinterpret_cast<LONG_PTR>(epochengine::core::MultiContextManager::ChildProc):0;}
 OWNS_FUNCTION
 int route(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){switch(msg){DOCK_ARM CAPTION_ARM default:return 0;}}
+int route_native_caption(HWND hwnd,UINT msg,WPARAM wParam,LPARAM lParam,bool detachedNativeTitleHost){
+NATIVE_CAPTION_GUARD
+return 9;
+}
 bool admits_release(bool routedPane,bool hasDockTarget,bool releaseInsideParent){ RELEASE_POLICY return wantsRedock; }
 #define VERIFY(...) do{if(!(__VA_ARGS__))return __LINE__;}while(false)
 int main(){
@@ -80,8 +89,19 @@ cancel_native_context_drag(3);VERIFY(releases==1&&dragged->proxyChildNativeGener
 hotspot=true;VERIFY(route(3,WM_LBUTTONDOWN,0,0)==9&&guiEvents==0&&dragEvents==1);
 state={true,3,10,0};hotspot=false;VERIFY(route(3,WM_LBUTTONUP,0,0)==9&&guiEvents==0&&dragEvents==2);
 state={};VERIFY(route(3,WM_LBUTTONDOWN,0,0)==7&&guiEvents==1);
-VERIFY(route(3,WM_NCLBUTTONDOWN,HTCAPTION,0)==9&&guiEvents==1);
+VERIFY(route(3,WM_NCLBUTTONDOWN,HTCAPTION,0)==7&&guiEvents==1&&dragEvents==2);
+VERIFY(route_native_caption(3,WM_NCLBUTTONDOWN,HTCAPTION,0,true)==8);
+altKeyState=1;
+VERIFY(route(3,WM_NCLBUTTONDOWN,HTCAPTION,0)==7);
+altKeyState=0x8000;
+VERIFY(route(3,WM_NCLBUTTONDOWN,HTCAPTION,0)==9&&guiEvents==1&&dragEvents==3);
+VERIFY(route_native_caption(3,WM_NCLBUTTONDOWN,HTCAPTION,0,true)==9);
+VERIFY(route_native_caption(3,WM_NCLBUTTONDOWN,HTCAPTION,0,false)==8);
+VERIFY(route_native_caption(3,WM_NCLBUTTONDOWN,99,0,true)==8);
 VERIFY(route(3,WM_NCLBUTTONDOWN,99,0)==7&&guiEvents==1);
+altKeyState=0;state={true,3,10,0};
+VERIFY(route(3,WM_NCMOUSEMOVE,HTCAPTION,0)==9);
+VERIFY(route(3,WM_NCLBUTTONUP,HTCAPTION,0)==9);
 VERIFY(admits_release(false,false,true));
 VERIFY(!admits_release(false,true,false));
 VERIFY(!admits_release(true,false,true));

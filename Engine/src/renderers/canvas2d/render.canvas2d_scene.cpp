@@ -9,6 +9,7 @@ module;
 #include <bit>
 #include <cmath>
 #include <cstdint>
+#include <iterator>
 #include <memory>
 #include <mutex>
 #include <type_traits>

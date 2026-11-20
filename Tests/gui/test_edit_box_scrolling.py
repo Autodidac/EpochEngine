@@ -20,7 +20,7 @@ def fixture():
     text = (GUI / "controls/gui.text_controls.inl").read_text(encoding="utf-8")
     scroll = (GUI / "controls/gui.scroll_controls.inl").read_text(encoding="utf-8")
     buttons = (GUI / "controls/gui.buttons_images.inl").read_text(encoding="utf-8")
-    api = (ROOT / "Engine/modules/gui.engine.ixx").read_text(encoding="utf-8")
+    api = (ROOT / "Engine/modules/gui/gui.engine.ixx").read_text(encoding="utf-8")
     base = queue_fixture().split("void fast_sequences(", 1)[0]
     base = base.replace("#include <algorithm>", "#include <functional>\n#include <unordered_map>\n#include <algorithm>")
     base = base.replace("import epoch.gui.input;", '#include "gui/gui.chat_context_popup.hpp"\nimport epoch.gui.input;\nimport epoch.gui;\nimport epoch.gui.rounded_rect;')
@@ -32,6 +32,10 @@ def fixture():
     base = base.replace("struct Frame{", definition(api, "    export struct WidgetBounds", True).replace("export ", "") + "\nstruct Frame{")
     base = base.replace("bool visited_this_frame{};", "bool visited_this_frame{},open{},alignSelectedOnOpen{};")
     base = base.replace("void reset_edit_box_visits(const void*){}", "static void reset_edit_box_visits(const void*) noexcept;")
+    suppression=definition(api,"    export class ScopedInputSuppression final",True).replace("export ","")
+    base+="\nnamespace gui {\n"+suppression+frame[frame.index("    ScopedInputSuppression::ScopedInputSuppression("):frame.index("    Vec2 mouse_position()")]+"\n}\n"
+    context=(ROOT/"Engine/src/editor/application/editor.application_context_session.inl").read_text(encoding="utf-8")
+    base+='template<class Draw>\n'+definition(context,'        decltype(auto) render_automation_inspection(')
     extra_api = "\n".join(definition(api, marker, True).replace("export ", "") for marker in (
         "    export struct KeyboardInputTarget", "    export struct KeyboardInputOptions",
         "    export struct EditBoxResult", "    export enum class TextInputKeyboardPolicy",
@@ -60,6 +64,7 @@ def fixture():
     button_body = buttons.index("\n    {", button_start) + 1
     button_owner = buttons[button_start:button_body] + definition(buttons[button_body:], "    {")
     owners = "\n".join((
+        "bool point_in_tooltip_capture(Vec2 point){return point_in_modal_input_capture(point);}",
         button_owner,
         definition(buttons, "    bool button("), key_helpers,
         definition(scroll, "    [[nodiscard]] static bool update_scrollbar_drag("),
@@ -107,11 +112,13 @@ void begin_top_layer(){++g_frame.topLayerDepth;}
 void end_top_layer(){--g_frame.topLayerDepth;}
 bool draw_beveled_control(const Palette&,SpriteHandle,float,float,float,float,bool){return false;}
 bool draw_high_contrast_control(float,float,float,float,bool){return false;}
+struct AuthoredButtonStyle;
+bool draw_authored_button_face(const AuthoredButtonStyle&,Vec2,float,float,bool,bool,bool){std::abort();}
 void draw_sprite(SpriteHandle sprite,float x,float y,float width,float height){
  paints.push_back({{}, {x,y},{width,height},sprite.value});
 }
 void draw_rounded_sprite(SpriteHandle sprite,float x,float y,float width,float height,
- const gui_lib::rounded_rect::RoundedRectStyle&){draw_sprite(sprite,x,y,width,height);}
+ const gui_lib::rounded_rect::RoundedRectStyle&,bool=false){draw_sprite(sprite,x,y,width,height);}
 float base_line_height(float scale){return 12*scale;}
 float line_advance_amount(float scale){return 14*scale;}
 float space_advance(float scale){return 8*scale;}
@@ -141,7 +148,7 @@ void draw_text_line(std::string_view text,float x,float y,float scale){
 void draw_contrast_text(std::string_view text,float x,float y,float scale){draw_text_line(text,x,y,scale);}
 void draw_caret(float x,float y,float height){paints.push_back({"caret",{x,y},{1,height},0});}
 void draw_button_icon(ButtonIcon,Vec2,Vec2){}
-void draw_button_tooltip(std::string_view,Vec2){}
+void draw_button_tooltip(std::string_view,Vec2,float){}
 std::string clipboard;
 bool clipboard_write_text(std::string_view value){clipboard=value;return true;}
 std::string clipboard_read_text(){return clipboard;}
@@ -277,9 +284,26 @@ void programmatic_replace(const std::shared_ptr<core::Context>& context){
  CHECK(replace_text_in_edit_box(value,"too large",3)&&value=="too");
  next(context,{key('Z',true)});draw(value);CHECK(value=="short");close_frame();
 }
+void automation_scroll_area(const std::shared_ptr<core::Context>& context){
+ const ScrollAreaOptions options{.id="automation-live-layout",.size={760,650}};
+ const auto drawArea=[&](){
+   std::optional<ScopedInputSuppression> reserved;reserved.emplace(true,true);
+   const auto result=render_automation_inspection(reserved,true,[&](){return begin_scroll_area(options);});
+   CHECK(!mouse_press_position()&&!g_frame.mouseDown);
+   g_frame.cursor.y=223-result.scroll_y+1870;
+   end_scroll_area();return result;
+ };
+ next(context);layout({400,223},{1160,900},"automation");drawArea();close_frame();
+ next(context,{event(EventType::MouseDown,1155,330)},{1155,330},true);layout({400,223},{1160,900},"automation");
+ CHECK(drawArea().scroll_y==0);close_frame();
+ next(context,{event(EventType::MouseMove,1155,570)},{1155,570},true);layout({400,223},{1160,900},"automation");
+ CHECK(drawArea().scroll_y>600);close_frame();
+ next(context,{event(EventType::MouseUp,1155,570)},{1155,570});layout({400,223},{1160,900},"automation");
+ CHECK(drawArea().scroll_y>600);close_frame();
+}
 int main(){auto context=std::make_shared<core::Context>();fresh(context);
  stable_focus_and_history(context);overflow_and_scroll(context);nested_wheel_ownership(context);
- hidden_focus_and_ordered_dispatch(context);programmatic_replace(context);return 0;}
+ hidden_focus_and_ordered_dispatch(context);programmatic_replace(context);automation_scroll_area(context);return 0;}
 '''
 
 

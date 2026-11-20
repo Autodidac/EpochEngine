@@ -275,24 +275,43 @@
         const std::shared_ptr<core::Context>& ctx,
         std::string_view project_id)
     {
-        if (!ctx || project_id.empty()
-            || !editor_find_project_profile(project_id))
-        {
+        if (!ctx || project_id.empty())
             return false;
-        }
+        const auto* profile = editor_find_project_profile(project_id);
+        if (!profile)
+            return false;
 
         auto& editor = editor_state_for(ctx);
-        if (planetary_project_busy(editor) && editor.projectId != project_id)
+        const bool switching = editor.projectId != project_id;
+        if (planetary_project_busy(editor) && switching)
         {
             editor.projectStatus = "Cancel or finish the planetary operation before switching projects.";
             return false;
         }
+#if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
+        const bool opensTileMap = switching
+            && !editor_application_owns_dedicated_gui_workspace(editor.applicationKind)
+            && profile->kind == EditorProjectKind::Game
+            && profile->template_family == "game-2d-project"
+            && !profile->tilemap_path.empty();
+#endif
         set_project(editor, project_id, true);
+        const bool opened = editor.projectId == project_id
+            && editor.projectLifecycle.evidence().project_selected;
+#if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
+        // Save/Build can refresh the same project's shell without changing
+        // workspaces. Only a new Open can request the authored 2D default.
+        if (opened && opensTileMap
+            && editor.projectCameraMode == previewgrid::CameraMode::Canvas2D)
+        {
+            editor.game2DGuiWorkspace = false;
+            editor.requestedMainSurface = EditorMainSurface::Game2D;
+        }
+#endif
         epochengine::previewgrid::set_camera_mode(
             ctx.get(), editor.viewportCameraMode);
         epochengine::previewgrid::reset_camera(ctx.get());
-        return editor.projectId == project_id
-            && editor.projectLifecycle.evidence().project_selected;
+        return opened;
     }
 
     bool editor_close_project(

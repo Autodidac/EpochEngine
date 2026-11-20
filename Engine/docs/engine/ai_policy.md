@@ -1,5 +1,38 @@
 # OS AI, MCP, Harness, And Evidence Policy
 
+## Security acceptance priority — November 17
+
+This requirement takes precedence over historical transport descriptions below.
+All model output is untrusted input, regardless of model size, provider, alignment
+or modified/uncensored labeling. A model's behavior or a second model's favorable
+review cannot grant authority. Host admission, explicit human choices and verified
+execution boundaries remain authoritative.
+
+Local-model context and edit admission must exclude the enforcement implementation,
+its policy/configuration and security review evidence. Enforce that restriction at
+each existing source discovery, retrieval, attachment and patch boundary, including
+resolved filesystem identity; omission from a prompt alone is insufficient.
+Requests to revise an existing project script use the same host admission and
+bounded text checks before the saved source can enter model context.
+Keep model-facing explanations concise and capability-based. Do not provide
+internal enforcement maps or bypass instructions in prompts or refusal messages.
+Operator security notes are not automatically admitted model context.
+
+Current limitation: Local Testing runs candidate builds and programs with ordinary
+user permissions. Path admission, cancellation and process ownership do not provide
+OS confinement. Require Isolation currently refuses execution when no supported
+confined executor is available. Do not claim that protected source files alone
+make model-generated programs safe, or silently change the operator's security
+settings. Further model-generated execution is held during the current audit.
+
+Acceptance requires meaningful negative checks of actual host gates, preservation
+of ordinary admitted project operations, exact review-to-execution identity, and
+independent review of access/execution changes. Repeat affected checks whenever
+AI source access, tools, permissions, candidate execution or packaging changes;
+review the full boundary before release. Record implementation, test and remaining
+execution-isolation gaps separately in the active pass. No security guarantee is
+established by documentation or a successful benign model run.
+
 > **October 11, local v0.90.41:** This file retains historical published
 > models and older installed provider contracts. The intended native Qwen Next
 > Flash and other model-family adapter split, chat UI and project-independent
@@ -8,10 +41,11 @@
 > GPU offload is under observation, not a confirmed regression.
 
 
-Epoch does not train or silently activate a model. Public Windows/Linux source
-and packaged-runtime authority is immutable `v0.90.33` at `f33d3d6758ab` on
-GitHub and the Site; later AI source checkpoints are not those release bytes.
-macOS remains `v0.89.30`. The source can
+Epoch does not train or silently activate a model. The October 11 historical
+snapshot recorded Public Windows/Linux `v0.90.33` at `f33d3d6758ab` and macOS
+`v0.89.30`; these are not assertions about the current published releases.
+Use the active pass and each edition's release receipts for current authority.
+The source can
 invoke the verified Epoch-local Qwen3.8 installation or offload inference to an
 operator-managed external model machine, and it keeps model transport, MCP
 authority, execution, and evidence as separate concerns. The published
@@ -29,7 +63,7 @@ Supported inference transports are:
 
 Epoch also exposes a disabled-by-default, executable-local provider named
 `epoch_local_qwen38`. Its tracked install contract pins llama.cpp release
-`b10516` at revision `b95502ba9aa0eb73a2f4fc8878d7fbe6a847a0b9` and the
+`b12503` at revision `4577932fab595eaa8b27ad71734d5de1f3c07d8c` and the
 community `Qwen3.8-27B-UD-Q4_K_M.gguf` quantization at revision
 `4ca720788d1e01f1bff70c033e0d0028fd02e502`, with exact artifact SHA-256 and
 model byte count. `ai.model_install` now owns the same compiled authority for
@@ -49,12 +83,28 @@ New profiles also make the inference transport and provider-independent
 `epoch_mcp_v1` tool protocol explicit.
 
 Direct CLI inference is one captured child process with an argument vector,
-bounded output, timeout, termination, and offline/no-server flags. Epoch does
+bounded output, timeout, termination, and offline/no-server flags. On Windows,
+the Platform supervisor checks executable identity, disconnects stdin, uses
+an explicit request environment and retains up to 16 MiB of merged diagnostic
+output. Receive begins only after the owned process tree retires. This path
+has process supervision; model package and isolation admission remain
+separate. Epoch does
 not start `llama-server`, bind a port, silently choose a discovered model, ship
 or mutate model weights, fine-tune a model, or maintain a hidden internal
 persona. Discovery is inventory; activation is an explicit operator choice.
 Personal AI research, training, and model development remain separate from
 Epoch and are neither scanned nor admitted as engine evidence.
+
+On Windows, the local installer can verify the runtime alone with
+`-VerifyOnly -SkipModel`. It requires the pinned archive in the package
+cache and validates the installed executable and adjacent files against it.
+The Windows managed CLI launch separately checks the installed inventory
+and file hashes against an engine-owned table from the verified archive.
+Update the table with the archive pin. The Platform supervisor holds verified
+handles for the named runtime files through owned child retirement. The full
+directory inventory is checked at admission. Directory membership, complete
+loader dependency closure, supervisor shutdown and OS isolation still require
+separate validation before live use.
 
 Every inference request publishes through generation-checked shared state. Pause,
 goal edit/delete, and pane replacement invalidate the active generation without
@@ -101,9 +151,126 @@ host integration independently of text-based AI protocol types. A product that
 intentionally ships voice support owns its own visible permission and platform
 policy. `ai.voice_session` now owns the bounded permission, listening,
 transcription, review, response, speech, interruption, and cancellation state
-machine with build-safe contract proof. Current source still does not claim a
-working microphone capture adapter, STT/TTS provider adapter, or
-voice-conversation eye proof.
+machine with build-safe contract proof. The Windows SAPI adapter supplies
+editable dictation and read-aloud playback. Full-duplex conversation requires
+separate runtime validation.
+
+### Haru-4B voice evaluation
+
+Haru-4B is a local full-duplex dialogue candidate. Its published API consumes
+24 kHz microphone audio in 3,200-sample frames and generates its own speech
+and text. The API has no verbatim text-to-speech entry point. Keep the
+existing read-aloud provider for accepted Assistant Chat responses. A duplex
+integration needs a separate user-selected conversation mode under the same
+voice session policy, with native input and output, interruption testing and
+an evaluation of device memory and latency while the Editor is running.
+Generated dialogue has no project or tool authority.
+
+November 15 operator requirement: provider choice must remain explicit. Retain
+Windows SAPI as a selectable Windows fallback, mark Windows-only providers
+unavailable on Linux, and expose supported local alternatives through the same
+session lifecycle. Haru conversation and verbatim Assistant read-aloud are
+separate capabilities, not interchangeable TTS implementations. Provider switches
+must cancel and retire prior capture/playback work before admitting the next
+session. Verify barge-in, stale audio rejection and teardown in the actual adapter.
+The publisher identifies Haru as a pretrained research base model with limited
+instruction following and factual reliability; its conversation output must not
+inherit the Assistant's tool authority. Selection UI and cross-platform audio
+acceptance remain outstanding; this is the required contract, not runtime proof.
+
+The model and inference code use Apache-2.0. Keep their license and third-party
+notices with any separately authorized redistribution. Reference recordings
+require their own permission. Use a user-owned reference for evaluation and
+store it separately from the model. See the [pinned model card](https://huggingface.co/higurashi-ai/Haru-4B/blob/8d6e83bcd3701a76fc27a764965665da1df7da78/README.md)
+and [upstream notices](https://github.com/higurashi-ai/Haru/blob/main/THIRD_PARTY_NOTICES.md).
+
+### Model use and distribution
+
+Public and Development engine packages ship provider code and metadata.
+Model weights are downloaded on demand from the publisher or imported by the
+operator into local storage. Local inference, commercial use, and permission
+to redistribute the exact artifact are separate decisions. Check the exact
+revision and every model component before separately distributing weights,
+including any conversion, fine-tune, or bundled dependency.
+
+Project source packages can carry a provider or model reference. Keep its
+weights outside the package. An authored project may include generated assets
+when their inputs and outputs are cleared for distribution. If a separate
+weight distribution is proposed, record its exact revision, license, required
+notices, and applicable commercial terms before distributing it.
+
+| Epoch surface | Available paths |
+| --- | --- |
+| Assistant Chat and local coding | Epoch's native Qwen Flash Next runtime, compatible registered GGUFs such as Qwen 9B and 27B, and optional Nemotron support. The download catalog also lists specific third-party Qwen derivatives, each with its own provenance and eligibility. |
+| External local inference | LM Studio, Bionic, EngCoder and compatible loopback APIs. These providers manage their own model weights and terms. |
+| Image generation | FLUX.2 Klein 4B and the cataloged Bonsai 4B variants. Bonsai's MLX artifacts require a compatible MLX provider. [Bonsai model card](https://huggingface.co/prism-ml/bonsai-image-ternary-4B-mlx-2bit) |
+| 3D and video | TripoSR and TRELLIS.2 are separate 3D lanes. Wan2.1 VACE 1.3B is an optional video/editing package lane. Review each lane's model dependencies. [TripoSR](https://huggingface.co/stabilityai/TripoSR) · [Wan VACE](https://huggingface.co/Wan-AI/Wan2.1-VACE-1.3B) |
+| Voice and Development services | Windows SAPI provides dictation and playback. Haru and Edge0 remain evaluation candidates. Development-only self-iteration and the operator-selected Codex service are Editor tooling. |
+
+Model Manager can delete verified downloads from its Browse models section.
+Deletion keeps the profile, applies only to the exact managed snapshot, and
+requires local workers to release the shared model lease. External provider
+caches and manually registered files retain their own owners.
+
+| Component | Use and distribution notes |
+| --- | --- |
+| Qwen3.8 Flash-Next, including derivatives | Qwen Community 1.0 has attribution conditions and a separate commercial license requirement for covered model-service and AI work-assistant businesses. Internal use has an exception under the stated conditions. Keep weights operator-installed and verify any external commercial deployment under the exact license. [Qwen license](https://huggingface.co/Qwen/Qwen3.8-Flash-Next/blob/main/LICENSE) |
+| DINOv3 in native TRELLIS.2 Q4 | DINOv3 carries its own Meta terms even though the main TRELLIS.2 model is MIT. Meta grants conditional distribution under its agreement. Check the exact converted component and the terms applicable to its conversion before any redistribution. [Meta license](https://github.com/facebookresearch/dinov3/blob/main/LICENSE.md) |
+| FLUX.2 Klein image models | The admitted 4B lane is Apache-2.0. The separate 9B checkpoint is non-commercial under its downloadable license and needs separate commercial terms. Keep 9B outside the 4B lane. [Publisher comparison](https://huggingface.co/black-forest-labs/FLUX.2-klein-9B) |
+| NVIDIA Nemotron 3 Nano 4B | The NVIDIA Nemotron Open Model License permits commercial use and conditional redistribution with the required license and notices. [NVIDIA license](https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-nemotron-open-model-license/) |
+
+### Edge0-145B candidate
+
+Evaluate support in Epoch's existing native Flash Next runtime. The published
+Q3_K model uses separate latent expert and embedding files. The selected
+evaluation artifacts total 101.6 GB, including the 51.2 GB per-layer embedding
+table. The installed Flash Next decoder rejects the publisher's native pack flag.
+The [Windows decoder candidate](../../../Tools/models/edge0/build_windows.ps1)
+adds Edge0-145B Q3_K routing to the pinned Qwen4Exp graph. Its CUDA expert path
+uses the existing GGML quantized matrix kernels for the group projections,
+gate/up activation and down projection. Pack-owned GPU residency is capped at
+3 GiB, with a 1.5 GiB free-device reserve. Expert records stream through one
+bounded pinned upload buffer using the native file reader; they do not all
+accumulate in the process working set. Graph completion precedes reuse of the
+upload buffer, and a per-model mutex protects the expert stream across contexts.
+The CPU implementation remains the numerical reference and low-memory fallback.
+`EPOCH_EDGE0_EXPERT_DEVICE=cpu` selects it explicitly; `CUDA0` requires that
+device to be available. An allocation-reserve fallback is logged.
+The FP8 table stays mapped read-only without eager prefetch. Only rows required
+by the skeleton's n-gram hash are decoded and uploaded. Dense layers use the
+same native CUDA backend and ordinary GPU-layer configuration.
+The candidate uses the same native launcher under a test path. Keep Edge0 and
+Flash Next mutually exclusive using the native GPU ownership lease and verified
+worker retirement.
+
+The native expert fixture covers changing IDs, duplicate IDs, reused weights,
+multiple tokens and early/middle/final layers against the CPU oracle.
+
+
+The pinned decoder overlay also restores the memory-fitter logger on exceptions
+and configures a bounded MoE owner once across mapped shard buffer wrappers.
+The helpers write evidence locally; they neither replace the installed worker
+nor promote the candidate into an Editor or distribution automatically.
+
+The publisher reports a 29 GB peak and compares it with its estimated 70 GB for
+standard 4-bit Flash Next. The separately published CUDA results give distinct
+host RAM and VRAM figures for each residency configuration. On the target, run
+Edge0 Q3_K and the installed 2-bit Flash Next one at a time on the same prompts
+and context sizes. Record peak system RAM, dedicated VRAM, disk reads, time to
+first token, decode speed, and task correctness for each. Include a long-context
+run since moving model data to disk can change latency during sustained use.
+[Publisher memory comparison](https://edge0.ai/blog/introducing-edge0-145b-frontier-ai-capabilities-on-your-own-computer)
+· [CUDA residency measurements](https://github.com/Edge0-AI/Edge0/blob/main/docs/models/edge0-145b.md#speed)
+
+Edge0's framework is Apache-2.0 and its Strata fork is MIT. The weights
+carry the Edge0 Community Model License 1.0 and retain applicable Qwen
+Community License 1.0 terms. Local evaluation is allowed under those terms.
+Redistribution requires the applicable license and notices. Paid
+distribution, covered commercial model services and covered independent
+coding assistants require separate authorization under the applicable
+licenses. Epoch packages carry no Edge0 weights or binaries. Review the
+[publisher's model license](https://huggingface.co/Edge0/Edge0-145B-q3k/blob/4136439da122aecc9b482810f775054e998763fb/LICENSE)
+and [third-party notice](https://huggingface.co/Edge0/Edge0-145B-q3k/blob/4136439da122aecc9b482810f775054e998763fb/NOTICE).
 
 ## Tool And Authority Boundaries
 
@@ -565,6 +732,17 @@ The strict network subcheck remains failed: `WSAStartup` returns 10107 before
 socket creation, not an observed access-denied connection. No request bytes are
 sent. The probe preserves this failure alongside independent passing results;
 zero capabilities alone are not relabelled as an exercised network test.
+November 17 repeated the probe with a successful ordinary-token startup and
+socket control. The restricted child again failed before socket creation.
+Evidence records the failed stage and preserves successful file-access, token,
+DACL restoration and retirement results independently.
+The matched child's Windows capability diagnostic returned no missing
+capability under the ordinary token. Under LPAC it returned status 14 without
+a capability verdict or a socket attempt. The acceptance requirement remains a
+native denial under the production token. [Windows capability diagnostic](https://learn.microsoft.com/en-us/windows/win32/api/netfw/nf-netfw-networkisolationdiagnoseconnectfailureandgetinfo)
+The matched native probe also verified that LPAC could not obtain modify access
+to a synthetic host event the ordinary process could open. The event stayed
+unchanged. This covers one host IPC resource. [Windows event access](https://learn.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-openeventw)
 Unsupported platforms reject explicit isolation, never fall back to an ordinary
 token. Existing launches without this policy retain their previous behavior.
 
@@ -839,6 +1017,24 @@ and child-process results remain the evidence actors. Debug and Release editor
 builds plus aggregate build-safe contracts prove the source/codec path; the live
 model/GUI approval flow and approved Run/Test execution remain explicit operator
 runtime gates.
+
+## Native workspace search boundary
+
+November 17, 2026: Development native `Workspace::tree` and `search_text` reject
+enumerated symlinks and validate lexical paths through the existing `resolve`
+containment check before listing or reading. Previously search opened file
+symlinks directly, allowing outside-workspace text into results. The owner is
+`EpochSelfCoding/integration/src/ai/native/ai.backend_workspace_workspace.cpp`.
+Ordinary file operations and result limits retain their existing behavior.
+
+`python -m unittest Tests.ai.test_workspace_search_boundary -v` compiled the actual
+Windows native owner: one check passed in 4.171 seconds. Outside file/directory
+symlinks were excluded; inside search/listing, normal writes/reads, direct outside
+read rejection and unchanged outside sentinel were verified. Fixtures stay
+checkout-local; unavailable symlink privilege is an explicit skip. No model or
+Editor ran. Linux and combined Editor integration remain unverified for this
+change. These checks do not prevent hostile concurrent filesystem replacement,
+establish OS confinement, or limit an approved executable's OS permissions.
 
 ## Strict Model Source Proposals
 
@@ -1442,3 +1638,128 @@ to the selected generated project.
 > The model proposes immutable work. The operator approves exact authority.
 > The guard issues and records one execution claim. Verified evidence closes the
 > loop.
+
+
+### Adversarial model and tool qualification — November 16
+
+Requested acceptance work, not a safety certification or implemented new guard.
+Test uncensored/abliterated variants as well as ordinary models against the same
+host-enforced file, process, privilege and tool boundaries. Their loading group,
+coding scores and refusal behavior do not establish containment.
+
+An explicitly selected second model may propose adversarial prompts and review
+the tested model's proposals. Codex is optional and uses the existing exact-model,
+scope and budget approval; never silently start paid inference. Sequence local
+models through existing load ownership rather than overlap large models. Treat
+both models' output as untrusted: neither can approve execution, change guards,
+certify safety or promote a candidate. The host evaluates deterministic expected
+allow/deny outcomes and independently records observed effects.
+
+Use disposable checkout-local fixtures with fake secrets and sentinel files.
+Exercise out-of-root/traversal and alias attempts, stale approvals, unauthorized
+process/tool requests, prompt injection through files/tool output and cancellation.
+Do not use real private files, credentials, user data, destructive targets or
+external destinations. Denied operations must remain denied even when a reviewer
+agrees with the candidate. Test actual OS access denial only in a verified isolated
+executor; if unavailable, record the containment gap and limit the check to
+nonexecuting admission/recording ports. Supervised native execution, process
+retirement and private data roots are not an OS sandbox. No system-security
+changes, hidden servers, privilege escalation or training are authorized by this
+test plan. Preserve exact configuration, attempted operation, host decision,
+fixture outcome and remaining gaps in the existing evidence/comparison surfaces.
+
+### Model Manager capability reference bands (November 15)
+
+Capability bands are **Frontier, Frontier Low, High, Medium, Low, Micro**, with
+**Unclassified** outside the ladder. The operator's current anchors are QwenNext
+Flash, Edge0, and the current 30B, 27B, 9B and 4B reference models respectively.
+These are performance comparisons, not parameter-count thresholds. A 9B model
+performing at the 27B reference belongs in Medium. Unknown future models do not
+inherit a rank from their name, parameter count, weight bytes or generation speed.
+
+`ai.model_capability.hpp` owns the labels and exact reference identities. Model
+Manager presents a theme-colored ordinal staircase, purpose key, current profile
+assessments, actual assignments and observed response statistics. The same guide
+is reachable from Installed and Browse. The saved `capability_tier` profile field
+accepts the seven category keys or `reference`; old profiles retain reference
+behavior. Operator overrides round-trip through the existing model profile and
+settings path and are labelled as assessments, not benchmark certifications.
+
+Uncensored, abliterated and other labelled variants share the capability scale;
+they remain a separate loading group and retain explicit-selection admission.
+An assessed variant can be High, Medium or any other band. Unassessed variants do
+not borrow a base model's benchmark results. Specialized image/audio models are
+not automatically comparable to general coding models.
+
+Explicit resident-set defaults rank assessed, eligible models by capability;
+current Foundation wins equal-tier ties, then profile identity gives deterministic
+ordering. Unclassified or explicit-selection-only variants are not automatically
+assigned. Additional loading preserves Foundation and uses assessment for simple
+and middle role defaults. Weight size still controls resource admission/load order,
+not ability. Changing an assessment saves metadata without loading or switching
+models. Explicit role selection and existing verified task-family routing remain
+available; the chart does not replace the controller's small/middle/foundation
+response roles or grant tools, model downloads, paid review or automatic promotion.
+
+The dated Edge0/Flash five-task comparison is shown separately with configuration
+and cache/storage limitations. Coding correctness, decode speed, first-token time,
+process working set and whole-board VRAM are distinct observations. It establishes
+neither universal frontier performance nor a ranking for other variants. Broader
+and sustained-session acceptance remains required before promoting Edge0.
+
+## Future self-integration contribution program
+
+**Proposal only — November 15.** The operator is considering no-cost access
+through a defined 1.0 milestone, with users of self-integration submitting
+reviewable improvements and optionally receiving named contributor credit.
+No license, entitlement, upload, GitHub requirement or attribution behavior is
+changed by this note. The milestone, eligible edition/service and contribution
+obligation remain decisions to make before implementation.
+
+The current Development [root license](../../../LICENSE) and
+[SelfCoding license](../../dep/EpochSelfCoding/LICENSE) are
+`LicenseRef-MIT-NoSell`: commercial use needs written permission, and the text
+explicitly imposes no duty to disclose modifications. Dependency terms are
+separate. For example, [EpochGui](../../dep/EpochGui/LICENSE) and
+[EpochPlatformEngine](../../dep/EpochPlatformEngine/LICENSE) use MPL-2.0.
+Review the exact published edition and each affected file before proposing
+new terms; do not call the whole engine MPL or silently change these grants.
+
+MPL permits private use and modification without an upstream submission.
+Distribution triggers source/notice duties for covered files to recipients;
+it does not require a GitHub PR. New executable or service terms must preserve
+MPL source rights. Consequently, a possible contribution condition belongs in
+a separately reviewed, explicitly accepted optional self-integration program,
+not an added restriction on already granted MPL rights. A price change at 1.0
+must be distinguished from ending rights in copies already licensed. See
+[Mozilla's FAQ, questions 5–11](https://www.mozilla.org/en-US/MPL/2.0/FAQ/)
+and [MPL sections 2–3](https://www.mozilla.org/en-US/MPL/2.0/).
+
+Before offering such a program:
+
+1. Define whether “free through 1.0” covers commercial permission, private
+   Development access, hosted service, updates or support; specify the exact
+   cutoff and existing-user treatment. Review ownership and applicable legal
+   terms with qualified counsel before publishing or enforcing a condition.
+2. Define an admissible contribution as a focused, tested improvement, not the
+   user's entire application, prompts, models or workspace. Require human review
+   of exact destination, diff, commit identity and visibility before submission.
+   No automatic PR, upload or public branch is permitted.
+3. Keep private Development/self-coding changes on an approved private intake.
+   A public GitHub PR is possible only for an independently audited Public or
+   public-dependency patch. Strip secrets, personal paths, logs and private
+   code; retain required dependency licenses and provenance. If a change cannot
+   be separated safely, it must not be made public to satisfy the program.
+4. Establish contributor authority, employer permission where needed and the
+   exact incoming license. The existing [EpochGui declaration](../../dep/EpochGui/CONTRIBUTOR_LICENSE.md)
+   illustrates explicit, commit-scoped grants for private/commercial reuse.
+   A [DCO sign-off](https://developercertificate.org/) certifies submission
+   rights under the stated license; it does not itself supply a separate
+   relicensing grant. Choose the applicable declaration deliberately, preserve
+   authorship and third-party rights, and never infer consent from AI output.
+5. Make optional public display credit a separate informed choice: chosen name
+   or handle and display location, with no surprise real-name publication.
+   Explain that public Git/PR metadata may persist independently of a credits
+   page. Required copyright/license notices and accurate commit attribution
+   remain intact. Maintainers review every contribution before merge, and
+   submission does not promise acceptance or automatic product promotion.

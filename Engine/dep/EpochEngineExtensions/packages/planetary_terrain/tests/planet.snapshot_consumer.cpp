@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-MIT-NoSell
+#include <algorithm>
 #include <array>
 #include <charconv>
 #include <cmath>
@@ -22,7 +23,8 @@ namespace core=epoch::extensions::planetary_terrain::core;
 namespace
 {
     constexpr p::Limits limits{{65536u,196608u,4u*1024u*1024u}};
-    std::shared_ptr<p::Snapshot> fixture(unsigned depth,std::uint64_t request,std::uint8_t branch=0u)
+    std::shared_ptr<p::Snapshot> fixture(unsigned depth,std::uint64_t request,std::uint8_t branch=0u,
+        bool surface=false,std::span<const core::TileKey> selected={})
     {
         auto result=std::make_shared<p::Snapshot>();
         result->metadata.identity.source_hash="sha256:"+std::string(64u,'a');
@@ -40,13 +42,35 @@ namespace
                 result->metadata.parent_delta.push_back({0.f,0.f,key.level?-.1f:0.f});
             }
             for(const auto index:std::array<std::uint32_t,6>{0,1,2,1,3,2})indices.push_back(patch.first_vertex+index);
+            if(surface)
+            {
+                for(unsigned i=0;i<4u;++i)
+                {
+                    auto vertex=vertices[patch.first_vertex+i];vertex.position[2]+=.02f;vertices.push_back(vertex);
+                    result->metadata.parent_delta.push_back({0.f,0.f,key.level?-.1f:0.f});
+                }
+                for(const auto index:std::array<std::uint32_t,6>{4,5,6,5,7,6})indices.push_back(patch.first_vertex+index);
+                patch.vertex_count=8u;patch.index_count=12u;
+            }
             result->metadata.patches.push_back(patch);
         };
-        for(std::uint8_t face=0;face<6u;++face)add({0,0,0,face,0},!depth||(depth<3u&&face!=branch));
-        if(depth)for(std::uint8_t face=0;face<6u;++face)
-            if(depth>=3u||face==branch)
-                for(const auto child:core::children({0,0,0,face,0}))add(child,depth<2u||face!=branch||child.x||child.y);
-        if(depth>1u)for(const auto child:core::children({0,0,0,branch,1}))add(child,true);
+        if(selected.empty())
+        {
+            for(std::uint8_t face=0;face<6u;++face)add({0,0,0,face,0},!depth||(depth<3u&&face!=branch));
+            if(depth)for(std::uint8_t face=0;face<6u;++face)
+                if(depth>=3u||face==branch)
+                    for(const auto child:core::children({0,0,0,face,0}))add(child,depth<2u||face!=branch||child.x||child.y);
+            if(depth>1u)for(const auto child:core::children({0,0,0,branch,1}))add(child,true);
+        }
+        else
+            for(const auto leaf:selected)
+                for(auto key=leaf;;key=core::parent(key))
+                {
+                    const p::TileKey identity{key.x,key.y,key.body,key.face,key.level};
+                    if(std::ranges::none_of(result->metadata.patches,[&](const auto& patch){return patch.key==identity;}))
+                        add(key,key==leaf);
+                    if(!key.level)break;
+                }
         result->artifact=mesh::build_artifact(vertices,indices,limits.artifact).artifact;
         if(result->artifact)result->metadata.identity.artifact_key=result->artifact->key();
         return result;
@@ -102,6 +126,37 @@ int main(int argc,char** argv)
     if(argc!=1)return 48;
     auto fine=fixture(1,1),coarse=fixture(0,2);
     if(!fine->artifact||!coarse->artifact||!p::valid_metadata(fine->metadata,*fine->artifact,limits))return 1;
+    // Appearance includes coarse roots even without an animated-water recipe.
+    auto surface=fixture(1,9,0u,true);
+    if(!surface->artifact||!p::valid_metadata(surface->metadata,*surface->artifact,limits))return 101;
+    std::vector<mesh::SphericalWaterRange> ranges;
+    for(const auto& patch:surface->metadata.patches)
+        ranges.push_back({patch.first_vertex+4u,4u,patch.key.level?.75f:0.0f});
+    const auto appearance=p::encode_water_appearance(ranges,surface->metadata.identity);
+    surface->metadata.water_appearance=p::decode_water_appearance(appearance,*surface->artifact,surface->metadata);
+    if(!surface->metadata.water_appearance||surface->metadata.water_appearance->ranges!=ranges)return 102;
+    p::Transition selected{limits};
+    if(!selected.admit(surface,{},p::InitialCut::selected_patches))return 103;
+    std::shared_ptr<const mesh::SphericalWaterAppearance> drawn;
+    const auto selected_mesh=selected.materialize({},&drawn);
+    if(!selected_mesh||!drawn||drawn->artifact_key!=selected_mesh->key()||drawn->ranges.size()!=9u
+        ||drawn->ranges[0]!=mesh::SphericalWaterRange{4u,4u,0.0f}
+        ||drawn->ranges[5]!=mesh::SphericalWaterRange{44u,4u,.75f})return 104;
+    auto tampered=appearance;tampered[51]^=std::byte{1};
+    if(p::decode_water_appearance(tampered,*surface->artifact,surface->metadata))return 105;
+    auto wrong_request=surface->metadata;++wrong_request.identity.request_id;
+    if(p::decode_water_appearance(appearance,*surface->artifact,wrong_request)
+        ||p::decode_water_appearance(appearance,*fine->artifact,surface->metadata))return 106;
+    ranges.front()={3u,5u,0.0f}; // A genuine ground triangle crosses the claimed partition.
+    if(p::decode_water_appearance(p::encode_water_appearance(ranges,surface->metadata.identity),
+        *surface->artifact,surface->metadata))return 107;
+    std::vector<mesh::SphericalWaterRange> empty_ranges(fine->metadata.patches.size());
+    const auto no_water=p::decode_water_appearance(p::encode_water_appearance(empty_ranges,fine->metadata.identity),
+        *fine->artifact,fine->metadata);
+    if(!no_water||!no_water->ranges.empty()||no_water->artifact_key!=fine->artifact->key())return 108;
+    std::stop_source stopAppearance;stopAppearance.request_stop();
+    if(p::decode_water_appearance(appearance,*surface->artifact,surface->metadata,stopAppearance.get_token())
+        ||selected.materialize(stopAppearance.get_token(),&drawn)||!drawn)return 109;
     // Production v4 codec keeps old envelopes unchanged when clouds are absent.
     auto cloudy=fine->metadata;
     cloudy.cloud=p::CloudLayer{0u,{100.0,200.0,300.0},6371000.0,604800.0,coarse->artifact};
@@ -143,6 +198,20 @@ int main(int argc,char** argv)
     if(p::decode(volumeBytes,*fine->artifact,volume.identity,densityLimit))return 88;
     auto densityless=*volumeRead;densityless.cloud.reset();
     if(p::encode(densityless,*fine->artifact,limits)!=p::encode(fine->metadata,*fine->artifact,limits))return 89;
+    auto solidCloud=volume;
+    solidCloud.cloud->density->view_occluder_radius_meters=6'349'751.0;
+    const auto solidBytes=p::encode(solidCloud,*fine->artifact,limits);
+    if(solidBytes.size()!=volumeBytes.size()+8u||std::to_integer<unsigned>(solidBytes[4])!=6u)return 90;
+    const auto solidRead=p::decode(solidBytes,*fine->artifact,solidCloud.identity,limits);
+    if(!solidRead||volumeRead->cloud->density->view_occluder_radius_meters!=0.0
+        ||!solidRead->cloud||solidRead->cloud->density!=solidCloud.cloud->density)return 91;
+    auto tamperedSolid=solidBytes;tamperedSolid[tamperedSolid.size()-33u]^=std::byte{1};
+    if(p::decode(tamperedSolid,*fine->artifact,solidCloud.identity,limits))return 92;
+    for(const double badRadius:{-1.0,6'371'001.0,static_cast<double>(NAN)})
+    {
+        solidCloud.cloud->density->view_occluder_radius_meters=badRadius;
+        if(!p::encode(solidCloud,*fine->artifact,limits).empty())return 93;
+    }
     const auto encoded=p::encode(fine->metadata,*fine->artifact,limits);
     if(encoded.empty()||!p::decode(encoded,*fine->artifact,fine->metadata.identity,limits))return 2;
     auto bad=encoded;bad.back()^=std::byte{1};if(p::decode(bad,*fine->artifact,fine->metadata.identity,limits))return 3;
@@ -210,5 +279,47 @@ int main(int argc,char** argv)
     auto wrong_body=fixture(1,9,1);
     for(auto& patch:wrong_body->metadata.patches){patch.key.body=1u;for(auto& neighbor:patch.neighbors)neighbor.body=1u;}
     if(animation.admit(wrong_body))return 54;
+    // The far half of the neighbor may refine again. Only descendants that
+    // touch the shared edge restrict a merge, including across cube faces.
+    for(const auto coarse:{core::TileKey{1,1,0,0,2},core::TileKey{3,1,0,0,2}})
+    {
+        const auto adjacent=core::neighbors(coarse)[1];
+        const auto children=core::children(adjacent);
+        const auto touches=[&](core::TileKey child){
+            return std::ranges::any_of(core::neighbors(child),[&](auto edge){return core::contains(coarse,edge);});
+        };
+        const auto uniform=[] {
+            std::vector<core::TileKey> leaves;
+            for(std::uint8_t face=0;face<6u;++face)
+                for(std::uint32_t y=0;y<8u;++y)for(std::uint32_t x=0;x<8u;++x)
+                    leaves.push_back({x,y,0,face,3});
+            return leaves;
+        }();
+        const auto next_cut=[&](core::TileKey child){
+            auto selected=uniform;
+            std::erase_if(selected,[&](auto key){return key==child;});
+            const auto grandchildren=core::children(child);
+            selected.insert(selected.end(),grandchildren.begin(),grandchildren.end());
+            return selected;
+        };
+        const auto merge=[&](std::vector<core::TileKey> selected){
+            std::erase_if(selected,[&](auto key){return core::contains(coarse,key);});
+            selected.push_back(coarse);
+            return selected;
+        };
+        const auto far=std::ranges::find_if_not(children,touches);
+        const auto near=std::ranges::find_if(children,touches);
+        if(far==children.end()||near==children.end())return 57;
+        const auto current=next_cut(*far);
+        auto before=fixture(0,1,0,false,current);
+        auto target=fixture(0,2,0,false,merge(current));
+        auto invalid=fixture(0,3,0,false,merge(next_cut(*near)));
+        p::Transition merge_edge{limits};
+        if(p::valid_metadata(invalid->metadata,*invalid->artifact,limits)
+            ||!merge_edge.admit(before,{},p::InitialCut::selected_patches)||!merge_edge.admit(target))return 58;
+        for(unsigned i=0;i<4u&&!merge_edge.settled();++i)
+            if(!merge_edge.advance_wet(.1)||!coverage(merge_edge))return 59;
+        if(!merge_edge.settled()||merge_edge.draw().size()!=384u)return 60;
+    }
     return 0;
 }

@@ -5,6 +5,7 @@
 
 #include "ai.backend_process_process.hpp"
 #include "../ai.native_shared_inputs.hpp"
+#include "../ai.thinking_policy.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -33,8 +34,45 @@ namespace {
 constexpr std::string_view kQwenBackendCommit = "167742d9dfa01306786e7d3cfd31fcb8a8b185dc";
 constexpr std::string_view kQwenBackendShortCommit = "167742d9dfa0";
 constexpr std::string_view kQwenRuntimeRecipe = "engcoder-qwenflash-2026.10.06-q2pad1";
+constexpr std::string_view kStreamingRuntimeRecipe = "engcoder-qwenflash-2026.11.15-edge0-stream1";
+constexpr std::string_view kExpertStreamingFeature = "qwen-moe-streaming-cache-v1";
 constexpr std::string_view kLegacyQfrRecipe = "qfr-vcpkg-2026.07.29";
 constexpr std::string_view kQ2PaddingFeature = "qwen38-q2-padded-down-v1";
+
+constexpr std::size_t kDiagnosticCaptureBytes = 1024u * 1024u;
+// Retains owned diagnostic output or a refusal before launch.
+[[nodiscard]] bool retain_diagnostic_output(const std::filesystem::path& root,
+    const process::Result* result, std::string_view error) noexcept {
+    if (root.empty()) return false;
+    try {
+        std::filesystem::create_directories(root);
+        const auto admitted = epochengine::ai::native_shared_inputs::validate_path(root, true);
+        if (admitted != std::filesystem::absolute(root).lexically_normal()) return false;
+        const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
+        const auto destination = admitted / ("retired-" + std::to_string(stamp));
+        if (!std::filesystem::create_directory(destination)) return false;
+        const auto write = [&](std::string_view name, std::string_view text) {
+            std::ofstream output(destination / name, std::ios::binary);
+            const auto tail = text.substr(text.size() > kDiagnosticCaptureBytes ? text.size() - kDiagnosticCaptureBytes : 0u);
+            output.write(tail.data(), static_cast<std::streamsize>(tail.size()));
+            output.flush();
+            if (!output) throw std::runtime_error("Diagnostic output write failed");
+        };
+        write("stdout.log", result ? result->stdout_text : std::string_view{});
+        write("stderr.log", result ? result->stderr_text : std::string_view{});
+        const nlohmann::json receipt{
+            {"schema", "epoch.native_diagnostic_output.v1"},
+            {"exit_code", result ? nlohmann::json(result->exit_code) : nlohmann::json(nullptr)},
+            {"cancelled", result && result->cancelled}, {"timed_out", result && result->timed_out},
+            {"process_error", std::string(error.substr(0, 4096))},
+            {"per_stream_byte_cap", kDiagnosticCaptureBytes}, {"retention", "tail"},
+            {"stdout_limit_reached", result && result->stdout_text.size() >= kDiagnosticCaptureBytes},
+            {"stderr_limit_reached", result && result->stderr_text.size() >= kDiagnosticCaptureBytes},
+            {"truncation_note", "Limit reached means earlier bytes may be omitted; total produced bytes are not counted."}};
+        write("receipt.json", receipt.dump(2));
+        return true;
+    } catch (...) { return false; }
+}
 
 class ScopeExit {
 public:
@@ -70,6 +108,12 @@ private:
     return value;
 }
 
+[[nodiscard]] bool uses_flash_expert_streaming(const RuntimeModelProfile& profile) {
+    using epochengine::ai::thinking::is_flash_next;
+    return is_flash_next(profile.id) || is_flash_next(profile.repo)
+        || (profile.source == ModelSourceKind::local_gguf && is_flash_next(profile.local_path.filename().string()));
+}
+
 [[nodiscard]] bool model_size_is_plausible(const RuntimeModelProfile& profile, std::uint64_t bytes) {
     if (bytes == 0) return false;
     if (profile.estimated_bytes == 0) return true;
@@ -92,6 +136,10 @@ struct LocalGgufInspection {
 
 [[nodiscard]] LocalGgufInspection inspect_local_gguf(const std::filesystem::path& first_shard) {
     LocalGgufInspection result;
+    if (is_edge0_bundle_path(first_shard)) {
+        const auto bundle = inspect_edge0_bundle(first_shard);
+        return {bundle.complete, bundle.bytes, bundle.complete ? 1U : 0U, 1U, bundle.error};
+    }
     std::error_code ec;
     if (!std::filesystem::is_regular_file(first_shard, ec) || ec) {
         result.error = "Local GGUF does not exist: " + first_shard.string();
@@ -312,12 +360,12 @@ void append_unique_cache_root(
 
 [[nodiscard]] bool runtime_manifest_matches(const std::filesystem::path& runtime_root) {
     const auto recipe = runtime_manifest_recipe(runtime_root);
-    return recipe.has_value() && *recipe == kQwenRuntimeRecipe;
+    return recipe.has_value() && (*recipe == kQwenRuntimeRecipe || *recipe == kStreamingRuntimeRecipe);
 }
 
 [[nodiscard]] bool runtime_manifest_is_known_baseline(const std::filesystem::path& runtime_root) {
     const auto recipe = runtime_manifest_recipe(runtime_root);
-    return recipe.has_value() && (*recipe == kQwenRuntimeRecipe || *recipe == kLegacyQfrRecipe);
+    return recipe.has_value() && (*recipe == kQwenRuntimeRecipe || *recipe == kStreamingRuntimeRecipe || *recipe == kLegacyQfrRecipe);
 }
 
 void write_runtime_manifest(const std::filesystem::path& runtime_root, std::string_view source) {
@@ -454,10 +502,11 @@ std::string QwenFlashRuntime::last_error() const {
 }
 
 std::filesystem::path QwenFlashRuntime::discover_server() const {
-    if (config_.shared_model_inputs_bound) {
+    if (config_.qwen_flash_diagnostic_verifier || config_.shared_model_inputs_bound) {
         if (config_.shared_native_inputs_disabled) return {};
         try {
-            return installed_backend_verified(config_.qwen_flash_server)
+            // Discovery exposes diagnostic image metadata. Startup requires confined transport.
+            return (config_.qwen_flash_diagnostic_verifier || installed_backend_verified(config_.qwen_flash_server))
                 ? epochengine::ai::native_shared_inputs::validate_path(config_.qwen_flash_server, false)
                 : std::filesystem::path{};
         } catch (...) { return {}; }
@@ -509,6 +558,7 @@ std::filesystem::path QwenFlashRuntime::discover_server() const {
 }
 
 bool QwenFlashRuntime::runtime_verified() const {
+    if (config_.qwen_flash_diagnostic_verifier) return false;
     if (config_.shared_model_inputs_bound) return !discover_server().empty();
     if (!config_.qwen_flash_server.empty()) {
         std::error_code ec;
@@ -516,6 +566,24 @@ bool QwenFlashRuntime::runtime_verified() const {
     }
     const auto runtime_root = state_root_ / "runtimes" / "qwen-flash";
     return runtime_manifest_matches(runtime_root);
+}
+
+std::optional<core::Error> QwenFlashRuntime::diagnostic_admission_error() const {
+    if (!config_.qwen_flash_diagnostic_verifier) return std::nullopt;
+
+    bool image_verified = false;
+    if (!config_.shared_native_inputs_disabled) {
+        try { image_verified = config_.qwen_flash_diagnostic_verifier(config_.qwen_flash_server); }
+        catch (...) { image_verified = false; }
+    }
+    std::string reason = image_verified
+        ? "Diagnostic runtime image verified. This transport cannot confine the model worker. No worker was started or reused."
+        : "Diagnostic runtime exact-byte verification failed. No worker was started or reused.";
+    if (!config_.qwen_flash_diagnostic_output.empty()
+        && !retain_diagnostic_output(config_.qwen_flash_diagnostic_output, nullptr, reason)) {
+        reason += " The refusal receipt could not be retained.";
+    }
+    return core::Error{core::make_error_code(core::Errc::model_unavailable), std::move(reason)};
 }
 
 bool QwenFlashRuntime::installed_backend_verified(const std::filesystem::path& executable) {
@@ -541,7 +609,12 @@ bool QwenFlashRuntime::worker_retired() const {
 QwenFlashRuntime::RuntimeCapabilities QwenFlashRuntime::capabilities_for_server(
     const std::filesystem::path& server) const {
     RuntimeCapabilities result;
-    const auto runtime_root = state_root_ / "runtimes" / "qwen-flash";
+    if (config_.qwen_flash_diagnostic_verifier) {
+        result.recipe = "engcoder-edge0-stream1-phase-diagnostic-v1";
+        return result;
+    }
+    const auto runtime_root = installed_backend_verified(server)
+        ? server.parent_path().parent_path() : state_root_ / "runtimes" / "qwen-flash";
     const bool under_engcoder_runtime = path_is_within(server, runtime_root);
 
     if (!under_engcoder_runtime) {
@@ -557,15 +630,21 @@ QwenFlashRuntime::RuntimeCapabilities QwenFlashRuntime::capabilities_for_server(
     try {
         const auto manifest = nlohmann::json::parse(input);
         result.recipe = manifest.value("build_recipe", std::string{"legacy"});
+        if (manifest.value("backend_commit", std::string{}) != kQwenBackendCommit) return result;
+        bool streaming_feature = false;
         const auto features = manifest.value("features", nlohmann::json::array());
         if (features.is_array()) {
             for (const auto& item : features) {
                 if (item.is_string() && item.get<std::string>() == kQ2PaddingFeature) {
                     result.qwen38_q2_padded_down = true;
                 }
+                if (item.is_string() && item.get<std::string>() == kExpertStreamingFeature) streaming_feature = true;
             }
         }
-        result.expert_cache_candidate = result.qwen38_q2_padded_down && result.recipe == kQwenRuntimeRecipe;
+        result.expert_streaming = streaming_feature && result.qwen38_q2_padded_down
+            && result.recipe == kStreamingRuntimeRecipe;
+        result.expert_cache_candidate = result.expert_streaming
+            || (result.qwen38_q2_padded_down && result.recipe == kQwenRuntimeRecipe);
     } catch (...) {
         result.recipe = "invalid-manifest";
     }
@@ -697,6 +776,8 @@ RuntimeModelProfile QwenFlashRuntime::resolve_profile(
     const HardwareSnapshot& hardware,
     const RuntimeCapabilities& capabilities) const {
     RuntimeModelProfile resolved = profile;
+    if (is_edge0_profile(profile)) return resolved;
+    const bool streaming = uses_flash_expert_streaming(profile);
     if (profile.source == ModelSourceKind::local_gguf
         && (profile.gpu_layers.empty() || profile.gpu_layers == "auto")
         && profile.runtime_policy != "manual")
@@ -728,6 +809,9 @@ RuntimeModelProfile QwenFlashRuntime::resolve_profile(
         if (resolved.gpu_layers != "auto" && !resolved.gpu_layers.empty()
             && !resolved.multimodel_memory_saver)
             return std::to_string(requested);
+        // Flash experts remain on CPU with a separately bounded GPU cache.
+        // Full-model weight fitting describes dense models, not this placement.
+        if (streaming && !resolved.multimodel_memory_saver) return std::to_string(requested);
         const auto board_gib = static_cast<double>(hardware.vram_mib) / 1024.0;
         const auto configured_gib = std::max(0.0, config_.vram_budget_gib);
         const auto pool = epochengine::ai::native_runtime::gpu_budget::weight_budget_bytes(
@@ -745,6 +829,7 @@ RuntimeModelProfile QwenFlashRuntime::resolve_profile(
             resolved.early_router = false;
             return;
         }
+        if (streaming && capabilities.expert_streaming) return;
         if (resolved.expert_cache_mode == "auto" && q2_layout) {
             const auto qualification = expert_cache_qualification(profile, capabilities);
             // Legacy runtimes never enter the experimental cache path. A patched
@@ -761,8 +846,8 @@ RuntimeModelProfile QwenFlashRuntime::resolve_profile(
 
     if (profile.runtime_policy == "recommended") {
         // Reproduce the proven standalone QwenFlashRuntime policy. Keep model
-        // identity/context choices, but do not add new memory-policy switches
-        // that were not present in the working QFR launch.
+        // identity/context and explicit CPU-KV placement choices while retaining
+        // the standalone policy's batching and quantization defaults.
         resolved.threads = std::min(12U, std::max(1U, hardware.logical_threads));
         resolved.batch_threads = resolved.threads;
         resolved.batch_size = 1024;
@@ -774,14 +859,19 @@ RuntimeModelProfile QwenFlashRuntime::resolve_profile(
         resolved.kv_type_k = "q4_0";
         resolved.kv_type_v = "q4_0";
         resolved.kv_gpu_layers = 0;
-        resolved.kv_offload = true; // backend default; intentionally not forced on the command line
+        // A saved CPU-KV choice is a memory-placement constraint, including
+        // in Recommended mode. The copied profile already retains that choice.
         resolved.kv_cpu_pinned = true;
         resolved.phase_aware_workspace = true;
         resolved.load_mode = "mmap";
         resolved.lazy_mode = "on";
         resolved.tensor_override = "per_layer_token_embd.weight=CPU";
-        resolved.expert_cache_mib = 6144;
-        resolved.pinned_host_mib = 12288;
+        resolved.expert_cache_mib = streaming ? 3072U : 6144U;
+        resolved.pinned_host_mib = streaming ? 384U : 12288U;
+        if (streaming) {
+            resolved.kv_offload = false;
+            resolved.context_shift = false;
+        }
         resolved.early_router = false;
         qualify_expert_cache();
         if (resolved.multimodel_memory_saver) {
@@ -817,11 +907,12 @@ RuntimeModelProfile QwenFlashRuntime::resolve_profile(
         resolved.tensor_override = "per_layer_token_embd.weight=CPU";
         const auto auto_expert = static_cast<std::uint32_t>(std::clamp<std::uint64_t>(
             hardware.vram_mib * 3ULL / 8ULL, 2048ULL, 6144ULL));
-        resolved.expert_cache_mib = auto_expert;
+        resolved.expert_cache_mib = streaming ? 3072U : auto_expert;
         const auto host_target = hardware.ram_gib > 0.0
             ? static_cast<std::uint32_t>(std::clamp(hardware.ram_gib * 192.0, 4096.0, 12288.0))
             : 8192U;
-        resolved.pinned_host_mib = host_target;
+        resolved.pinned_host_mib = streaming ? 384U : host_target;
+        if (streaming) resolved.kv_offload = false;
         resolved.prompt_cache_mib = hardware.ram_gib >= 48.0 ? 1024U : 512U;
         resolved.context_shift = false;
         resolved.reasoning_preserve = false;
@@ -879,6 +970,11 @@ RuntimeModelProfile QwenFlashRuntime::conservative_profile(
 std::vector<std::string> QwenFlashRuntime::build_arguments(
     const RuntimeModelProfile& profile,
     bool minimal_compatibility) const {
+    const bool streaming = uses_flash_expert_streaming(profile);
+    const bool edge = is_edge0_profile(profile);
+    // A compatibility retry must never discard Flash expert placement.
+    if ((streaming || edge) && minimal_compatibility) return {};
+    if (edge && !edge0_launch_profile_supported(profile)) return {};
     std::vector<std::string> args;
     auto add = [&](std::string key, std::string value) {
         args.push_back(std::move(key));
@@ -913,6 +1009,30 @@ std::vector<std::string> QwenFlashRuntime::build_arguments(
     }
     add("-np", std::to_string(std::max<std::uint32_t>(1, profile.parallel_slots)));
     add("-c", std::to_string(profile.context_tokens));
+    // Keep CPU KV placement through every launch policy and compatibility
+    // retry; omitting this flag would restore the backend's GPU-KV default.
+    if (!profile.kv_offload) args.emplace_back("--no-kv-offload");
+
+    if (edge) {
+        // Keep stream1 expert placement and vary only the admitted KV profile.
+        args.emplace_back("--cpu-moe");
+        add("-fit", "off");
+        add("-t", std::to_string(profile.threads));
+        add("-tb", std::to_string(profile.batch_threads));
+        add("-b", std::to_string(profile.batch_size));
+        add("-ub", std::to_string(profile.ubatch_size));
+        add("-ngl", profile.gpu_layers);
+        add("-ctk", profile.kv_type_k);
+        add("-ctv", profile.kv_type_v);
+        add("--kv-gpu-layers", std::to_string(profile.kv_gpu_layers));
+        add("--cache-ram", std::to_string(profile.prompt_cache_mib));
+        add("--load-mode", profile.load_mode);
+        add("--lazy-mode", profile.lazy_mode);
+        args.emplace_back("--no-ui");
+        args.emplace_back("--offline");
+        args.emplace_back("--no-warmup");
+        return args;
+    }
 
     // Last-resort compatibility launch: preserve Epoch AI's requested context
     // and ownership, but otherwise stay as close as possible to the bare
@@ -928,6 +1048,10 @@ std::vector<std::string> QwenFlashRuntime::build_arguments(
         return args;
     }
 
+    if (streaming) {
+        args.emplace_back("--cpu-moe");
+        add("-fit", "off");
+    }
     add("-t", std::to_string(profile.threads));
     add("-tb", std::to_string(profile.batch_threads));
     add("-b", std::to_string(profile.batch_size));
@@ -950,10 +1074,10 @@ std::vector<std::string> QwenFlashRuntime::build_arguments(
         if (profile.early_router) args.emplace_back("--moe-early-router");
     }
 
-    // Recommended intentionally mirrors the original proven QFR command. The
-    // extra switches below are available in Automatic/Manual mode only.
-    if (profile.runtime_policy != "recommended" || profile.multimodel_memory_saver) {
-        args.emplace_back(profile.kv_offload ? "--kv-offload" : "--no-kv-offload");
+    // Recommended retains the original QFR defaults for the optional switches
+    // below. Explicit CPU-KV placement was already emitted for every policy.
+    if (streaming || profile.runtime_policy != "recommended" || profile.multimodel_memory_saver) {
+        if (profile.kv_offload) args.emplace_back("--kv-offload");
         add("--cache-ram", std::to_string(profile.prompt_cache_mib));
         args.emplace_back(profile.context_shift ? "--context-shift" : "--no-context-shift");
         args.emplace_back(profile.reasoning_preserve ? "--reasoning-preserve" : "--no-reasoning-preserve");
@@ -1066,6 +1190,7 @@ std::expected<std::string, core::Error> QwenFlashRuntime::ensure_started_impl(
             "Qwen Flash native runtime is disabled",
         });
     }
+    if (auto refused = diagnostic_admission_error()) return std::unexpected(std::move(*refused));
 
     bool waited_for_startup = false;
     while (startup_in_progress_) {
@@ -1119,7 +1244,7 @@ std::expected<std::string, core::Error> QwenFlashRuntime::ensure_started_impl(
     if (config_.shared_model_inputs_bound) {
         try {
             (void)epochengine::ai::native_shared_inputs::validate_path(config_.model_cache_root, true);
-            if (!runtime_verified()) return fail_startup(core::Error{
+            if (discover_server().empty() || !runtime_verified()) return fail_startup(core::Error{
                 core::make_error_code(core::Errc::model_unavailable),
                 "Shared native SDK is unavailable; use the parent Model Manager"});
             if (profile.source == ModelSourceKind::hugging_face && !cache_status(profile).value("installed", false))
@@ -1135,6 +1260,22 @@ std::expected<std::string, core::Error> QwenFlashRuntime::ensure_started_impl(
     // Reject mechanically-invalid speculation before touching a currently
     // healthy runtime. A bad edited profile must not turn a validation error
     // into downtime merely because the caller reached ensure_started directly.
+    std::optional<HardwareSnapshot> edgeTrialHardware;
+    if (is_edge0_profile(profile)) {
+        if (!edge0_launch_profile_supported(profile))
+            return fail_startup(core::Error{core::make_error_code(core::Errc::invalid_argument),
+                "Edge0 requires one slot, q4 KV with zero or four GPU layers, 49 model GPU layers, 128/32 batches and stream1 expert placement."});
+        if (!capabilities_for_server(discover_server()).expert_streaming)
+            return fail_startup(core::Error{core::make_error_code(core::Errc::model_unavailable),
+                "Edge0 requires the installed edge0-stream1 native backend. No dense fallback or download was started."});
+        if (profile.kv_gpu_layers != 0u) {
+            edgeTrialHardware = probe_hardware();
+            // A 16 GiB card can report less than 16,384 MiB after driver reservation.
+            if (edgeTrialHardware->gpu_name.empty() || edgeTrialHardware->vram_mib < 15u * 1024u)
+                return fail_startup(core::Error{core::make_error_code(core::Errc::model_unavailable),
+                    "Edge0's GPU KV trials need a detected CUDA card with 16 GiB-class dedicated memory. Choose zero GPU KV layers on other systems."});
+        }
+    }
     if (profile.speculative_enabled) {
         // A draft must be an independent local GGUF. Reject before stopping the
         // healthy backend; no cross-server/LM Studio MTP is supported.
@@ -1260,8 +1401,13 @@ std::expected<std::string, core::Error> QwenFlashRuntime::ensure_started_impl(
         }
     }
 
-    const auto hardware = probe_hardware();
+    const auto hardware = edgeTrialHardware ? *edgeTrialHardware : probe_hardware();
     const auto capabilities = capabilities_for_server(server);
+    if (uses_flash_expert_streaming(profile) && !capabilities.expert_streaming) {
+        return fail_startup(core::Error{core::make_error_code(core::Errc::model_unavailable),
+            "Flash Next requires the verified CPU-expert streaming backend. Update the native runtime; "
+            "the legacy dense-offload backend was not started."});
+    }
     last_hardware_ = {
         {"ram_gib", hardware.ram_gib},
         {"vram_mib", hardware.vram_mib},
@@ -1270,6 +1416,7 @@ std::expected<std::string, core::Error> QwenFlashRuntime::ensure_started_impl(
         {"runtime_recipe", capabilities.recipe},
         {"qwen38_q2_padded_down", capabilities.qwen38_q2_padded_down},
         {"expert_cache_candidate", capabilities.expert_cache_candidate},
+        {"expert_streaming", capabilities.expert_streaming},
         {"expert_cache_qualified", expert_cache_qualification(profile, capabilities).value_or(false)},
     };
 
@@ -1305,6 +1452,8 @@ std::expected<std::string, core::Error> QwenFlashRuntime::ensure_started_impl(
         last_command_ = command;
         last_effective_profile_ = to_json(candidate);
         last_effective_profile_["launch_profile"] = minimal_compatibility ? "minimal-compatibility" : "full";
+        const bool edge = is_edge0_profile(candidate);
+        if (edge) last_effective_profile_["expert_device"] = "CUDA0";
 
         ++launch_generation_;
         owned_process_id_.store(0u, std::memory_order_release);
@@ -1315,13 +1464,14 @@ std::expected<std::string, core::Error> QwenFlashRuntime::ensure_started_impl(
         captured->generation_ = launch_generation_;
         captured->minimal_ = minimal_compatibility; captured->safety_fallback_ = safety_fallback;
 
-        worker_ = std::jthread([this, server, args, command, launch_cache_root, shared_environment](std::stop_token stop) {
+        worker_ = std::jthread([this, server, args, command, launch_cache_root, shared_environment, edge](std::stop_token stop) {
             process::Request request;
             request.executable = server.string();
             request.arguments = args;
             request.working_directory = server.parent_path();
             request.environment.emplace_back("LLAMA_CACHE", launch_cache_root);
             for (const auto& variable : shared_environment) request.environment.push_back(variable);
+            if (edge) request.environment.emplace_back("EPOCH_EDGE0_EXPERT_DEVICE", "CUDA0");
             request.timeout = std::chrono::hours{24 * 365};
             request.max_output_bytes = 32 * 1024 * 1024;
             request.on_started = [this](std::uint64_t pid) {
@@ -1329,11 +1479,13 @@ std::expected<std::string, core::Error> QwenFlashRuntime::ensure_started_impl(
             };
             auto result = process::run(request, stop);
             owned_process_id_.store(0u, std::memory_order_release);
+            std::string retirement_error;
             if (!result) {
-                set_last_error(result.error().message + "\nLaunch: " + command);
+                retirement_error = result.error().message + "\nLaunch: " + command;
             } else if (!result->cancelled && result->exit_code != 0) {
-                set_last_error(process_failure_detail(*result) + "\nLaunch: " + command);
+                retirement_error = process_failure_detail(*result) + "\nLaunch: " + command;
             }
+            if (!retirement_error.empty()) set_last_error(std::move(retirement_error));
             running_.store(false, std::memory_order_release);
             worker_exited_.store(true, std::memory_order_release);
         });
@@ -1380,6 +1532,14 @@ std::expected<std::string, core::Error> QwenFlashRuntime::ensure_started_impl(
             startup_note_ = "Requested runtime policy could not initialize; Local Models recovered with its hardware-aware safety profile (" +
                 std::to_string(candidate.context_tokens) + " context / " +
                 std::to_string(candidate.parallel_slots) + " slot).";
+        } else if (edge) {
+            startup_note_ = "Edge0 stream1 GPU experts on CUDA0; q4 KV with "
+                + std::to_string(candidate.kv_gpu_layers)
+                + " GPU layers requested, 128/32 batches, one model at a time.";
+        } else if (uses_flash_expert_streaming(candidate)) {
+            startup_note_ = "Flash Next CPU-expert streaming active; GPU expert cache "
+                + std::to_string(candidate.expert_cache_mib) + " MiB, pinned staging "
+                + std::to_string(candidate.pinned_host_mib) + " MiB.";
         } else if (candidate.runtime_policy == "automatic") {
             startup_note_ = "Automatic hardware tuning active.";
         } else if (candidate.runtime_policy == "recommended") {
@@ -1419,7 +1579,7 @@ std::expected<std::string, core::Error> QwenFlashRuntime::ensure_started_impl(
     const auto first_error = first.error();
     if (first_error.code == core::make_error_code(core::Errc::cancelled) ||
         first_error.code == core::make_error_code(core::Errc::model_timeout) ||
-        profile.runtime_policy == "manual") {
+        profile.runtime_policy == "manual" || uses_flash_expert_streaming(profile) || is_edge0_profile(profile)) {
         active_model_id_.clear();
         active_context_tokens_ = 0;
         active_parallel_slots_ = 0;
@@ -1881,6 +2041,7 @@ nlohmann::json QwenFlashRuntime::describe() const {
         {"server", server.empty() ? nlohmann::json(nullptr) : nlohmann::json(server.string())},
         {"runtime_verified", runtime_verified()},
         {"selected_runtime_recipe", capabilities.recipe.empty() ? nlohmann::json(nullptr) : nlohmann::json(capabilities.recipe)},
+        {"expert_streaming", capabilities.expert_streaming},
         {"expert_cache_candidate", capabilities.expert_cache_candidate},
         {"expert_cache_qualified", last_hardware_.value("expert_cache_qualified", false)},
         {"qwen38_q2_padded_down", capabilities.qwen38_q2_padded_down},

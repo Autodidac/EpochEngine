@@ -517,7 +517,9 @@ namespace epochengine::core::path
                 complete = complete && ordinary(executableAssets / relative, true);
             for (const char* relative : {"fonts/Roboto-Regular.ttf", "fonts/OFL.txt",
                 "vulkan/texture.ppm", "vulkan/shaders/vert.spv", "vulkan/shaders/frag.spv",
-                "vulkan/shaders/gui_vert.spv", "vulkan/shaders/gui_frag.spv"})
+                "vulkan/shaders/gui_vert.spv", "vulkan/shaders/gui_frag.spv",
+                "vulkan/shaders/atmosphere.vert.spv", "vulkan/shaders/atmosphere.frag.spv",
+                "vulkan/shaders/clouds.vert.spv", "vulkan/shaders/clouds.frag.spv"})
                 complete = complete && ordinary(executableAssets / relative, false);
             if (complete)
                 return normalize(executableAssets);

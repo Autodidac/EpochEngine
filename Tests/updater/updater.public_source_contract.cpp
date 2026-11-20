@@ -9,8 +9,10 @@
 #include <iterator>
 #include <optional>
 #include <regex>
+#include <sstream>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 PRODUCTION_SHA
 PRODUCTION_DISTRIBUTION
@@ -26,6 +28,15 @@ constexpr auto PROJECT_RELEASE_INTEGRITY_SCHEMA = "test-schema";
 bool crypto_ok = true, payload_ok = true;
 int metadata_calls{}, payload_calls{}, crypto_calls{};
 std::string metadata, payload = "exact source archive bytes";
+std::string tag = "0.90.185";
+std::vector<std::string> requested_metadata;
+std::string source_module(int minor, int revision)
+{
+    return "// Version example 0.98.03\r\n#  define EPOCH_VERSION_MAJOR_VALUE 0\r\n"
+        "#  define EPOCH_VERSION_MINOR_VALUE " + std::to_string(minor)
+        + "\r\n#  define EPOCH_VERSION_REVISION_VALUE " + std::to_string(revision) + "\r\n";
+}
+std::string announcement = source_module(90, 185);
 fs::path fixture_root;
 void log_error(const std::string&) {}
 void log_info(const std::string&) {}
@@ -44,7 +55,15 @@ std::string read_text_file(const fs::path& path)
 { std::ifstream input(path, std::ios::binary); return {std::istreambuf_iterator<char>{input}, {}}; }
 fs::path make_temp_download_path(const char*) { return fixture_root / "metadata.json"; }
 bool download_file(const std::string& url, const std::string& path)
-{ ++metadata_calls; if (url != PROJECT_RELEASE_INTEGRITY_URL()) return false; write(path, metadata); return true; }
+{
+    ++metadata_calls;
+    requested_metadata.push_back(url);
+    if (url == PROJECT_SOURCE_URL()) { write(path, announcement); return true; }
+    if (url != "https://github.com/Autodidac/EpochEngine/releases/download/v" + tag + "/epoch-release-integrity.json")
+        return false;
+    write(path, metadata);
+    return true;
+}
 PRODUCTION_VERSION
 PRODUCTION_PARSER
 PRODUCTION_ADMISSION
@@ -99,12 +118,31 @@ int main(int argc, char** argv) try
     metadata = good_document;
     const auto selected = resolve_public_source_archive();
     CHECK(selected.found && selected.url == url && selected.expected_sha256 == digest);
-    CHECK(public_policy::PROJECT_SOURCE_URL() == public_policy::PROJECT_RELEASE_INTEGRITY_URL());
+    CHECK(public_policy::PROJECT_SOURCE_URL() == public_policy::PROJECT_SOURCE_VERSION_URL());
+    CHECK(requested_metadata.size() == 2 && requested_metadata[0] == PROJECT_SOURCE_URL());
+    CHECK(requested_metadata[1] == "https://github.com/Autodidac/EpochEngine/releases/download/v0.90.185/epoch-release-integrity.json");
+    CHECK(std::ranges::find(requested_metadata, PROJECT_RELEASE_INTEGRITY_URL()) == requested_metadata.end());
     CHECK(public_policy::PROJECT_SOURCE_CHECKSUM_URL().empty());
     CHECK(development_policy::PROJECT_SOURCE_URL().empty());
     CHECK(!public_policy::PROJECT_SOURCE_CHANNEL_ALLOWED("", ""));
     CHECK(!development_policy::PROJECT_SOURCE_CHANNEL_ALLOWED(public_policy::PROJECT_SOURCE_URL(), ""));
     CHECK(development_policy::PROJECT_SOURCE_CHANNEL_ALLOWED("", ""));
+    const auto default_announcement = announcement;
+    for (const auto& invalid : {std::string{}, std::string{"0.90.185"}, default_announcement
+        + "#define EPOCH_VERSION_REVISION_VALUE 186\n"})
+    {
+        announcement = invalid;
+        const auto requests_before = requested_metadata.size();
+        CHECK(!resolve_public_source_archive().found && requested_metadata.size() == requests_before + 1);
+    }
+    announcement = source_module(90, 186);
+    const auto requests_before = requested_metadata.size();
+    CHECK(!resolve_public_source_archive().found && requested_metadata.size() == requests_before + 2);
+    CHECK(requested_metadata.back().ends_with("/v0.90.186/epoch-release-integrity.json"));
+    tag = "0.90.186";
+    CHECK(!resolve_public_source_archive().found); // Signed manifest identifies a different version.
+    tag = "0.90.185";
+    announcement = default_announcement;
     for (const auto& bad_asset : {asset(url + "?redirect=1", digest), asset("https://example.com/source.zip", digest),
         asset("https://epoch.adamrushford.chatgpt.site/downloads/releases/source.zip", digest), asset(url, "bad"),
         asset(url, digest, "epoch-source-main.zip"), asset(url, digest, "epoch_source_v0.90.184.zip")})
@@ -119,10 +157,14 @@ int main(int argc, char** argv) try
     const std::string next_url = "https://github.com/Autodidac/EpochEngine/releases/download/v0.91.02/epoch_source_v0.91.02.zip";
     const auto next_asset = asset(next_url, digest, "epoch_source_v0.91.02.zip");
     metadata = document("[" + release("0.90.185", good_asset) + "," + release("0.91.02", next_asset) + "]");
+    announcement = source_module(91, 2);
+    tag = "0.91.02";
     const auto next = resolve_public_source_archive();
     CHECK(next.found && next.version == "0.91.02" && next.url == next_url);
     metadata = document("[" + release("0.91.2", next_asset) + "]");
     CHECK(!resolve_public_source_archive().found);
+    tag = "0.90.185";
+    announcement = default_announcement;
     metadata = document("[" + release("0.90.185", good_asset) + "]", "epoch.development.site.v1");
     const int before_foreign = crypto_calls;
     CHECK(!resolve_public_source_archive().found && crypto_calls == before_foreign);

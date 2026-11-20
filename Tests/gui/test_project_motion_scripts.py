@@ -1,6 +1,6 @@
 """Compiled motion owner + real inert DLLs and actual versioned host/registration code."""
 from pathlib import Path
-import hashlib,json,os,subprocess,time,unittest
+import hashlib,json,os,subprocess,tempfile,time,unittest
 from Tests.build.test_opengl_sprite_stream import definition
 from Tests.support.cpp import msvc_2022_toolsets, windows_sdk_includes
 ROOT=Path(__file__).resolve().parents[2]
@@ -8,7 +8,7 @@ ROOT=Path(__file__).resolve().parents[2]
 class ProjectMotionScripts(unittest.TestCase):
  def test_compiled_tracks_script_abi_and_project_copy_debug_release(self):
   if os.name != "nt": self.skipTest("Win32 project DLL load/unload ABI consumer")
-  loader=(ROOT/'Engine/modules/scripting.system.ixx').read_text(encoding='utf-8')
+  loader=(ROOT/'Engine/modules/scripting/scripting.system.ixx').read_text(encoding='utf-8')
   adapter=(ROOT/'Engine/src/editor/application/editor.application_scripting_renderers.inl').read_text(encoding='utf-8')
   selection=(ROOT/'Engine/src/editor/application/editor.application_scene_selection.inl').read_text(encoding='utf-8')
   workspaces=(ROOT/'Engine/src/editor/application/editor.application_code_workspaces.inl').read_text(encoding='utf-8')
@@ -166,7 +166,8 @@ int main(int argc,char**argv){
 }
 '''.replace('ENTITY_INDEX',definition(selection,'        [[nodiscard]] std::optional<std::size_t> editor_entity_index(')).replace('BINDINGS',bindings).replace('INVOKE',definition(loader,'    [[nodiscard]] inline bool invoke_script_entry(')).replace('DISPLAY_PATH',definition(workspaces,'        [[nodiscard]] std::string display_project_path(')).replace('PREPARE_TEMPLATE',definition(workspaces,'        [[nodiscard]] bool prepare_project_movement_script('))
   code=code.replace('PRELOAD_GUARD',guard).replace('MOVEMENT_ACTIONS',actions)
-  proof=ROOT/'Artifacts/Reports/project-motion-scripts-oct29'/hashlib.sha256(code.encode()).hexdigest()[:12];proof.mkdir(parents=True,exist_ok=True)
+  reports=ROOT/'Artifacts/Reports/project-motion-scripts-oct29';reports.mkdir(parents=True,exist_ok=True)
+  proof=Path(tempfile.mkdtemp(prefix=hashlib.sha256(code.encode()).hexdigest()[:12]+'-',dir=reports))
   (proof/'consumer.cpp').write_text(code,encoding='utf-8')
   (proof/'legacy.cpp').write_text('#include "scripting.epoch_api.h"\nEPOCH_SCRIPT_EXPORT void run_script(EpochScriptHost*h){if(h&&h->log)h->log(h->user_data,"legacy");}\n',encoding='utf-8')
   vc=msvc_2022_toolsets()[-1]
@@ -179,7 +180,7 @@ int main(int argc,char**argv){
     started=time.monotonic();r=subprocess.run(cmd,cwd=out,env=env,capture_output=True,text=True,timeout=timeout)
     (out/(label+'.log')).write_text(r.stdout+r.stderr,encoding='utf-8');self.assertEqual(r.returncode,0,label+': '+r.stdout+r.stderr)
     records.append({'config':config,'step':label,'exit':r.returncode,'seconds':time.monotonic()-started})
-   for name,path in [('temporal.request','Engine/modules/temporal.request.ixx'),('platform.filesystem','Engine/modules/platform.filesystem.ixx'),('project.motion_track','Engine/modules/project.motion_track.ixx')]:
+   for name,path in [('temporal.request','Engine/modules/temporal/temporal.request.ixx'),('platform.filesystem','Engine/modules/platform/platform.filesystem.ixx'),('project.motion_track','Engine/modules/project/project.motion_track.ixx')]:
     obj=out/(name+'.obj');ifc=out/(name+'.ifc');run(base+refs+['/c','/interface','/ifcOutput',str(ifc),'/Fo'+str(obj),str(ROOT/path)],name)
     refs+=['/reference',name+'='+str(ifc)];objects.append(str(obj))
    obj=out/'motion_impl.obj';run(base+refs+['/c','/Fo'+str(obj),str(ROOT/'Engine/src/project/project.motion_track.cpp')],'motion_impl');objects.append(str(obj))

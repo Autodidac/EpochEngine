@@ -100,6 +100,7 @@ struct EditorEntity {
  decltype(scene::SceneObjectSnapshot{}.mesh_asset) meshAsset{};
  bool meshLoadAttempted{};std::shared_ptr<const asset::mesh::Artifact> meshSnapshot;
  std::optional<std::array<double,3>> positionAnchor;std::optional<scene::SceneForestRegionInstance>forestRegion;
+ std::vector<scene::SceneForestPaintRegion>forestPaintRegions;
  std::optional<scene::SceneTerrainAttachment> terrainAttachment;
 };
 struct EditorState {
@@ -412,7 +413,7 @@ int main(int argc,char** argv){
         (proof / 'consumer.cpp').write_text(code, encoding='utf-8')
         module_map = {}
         for base in [ROOT / 'Engine/modules', ROOT / 'Engine/dep/EpochPlatformEngine/modules']:
-            for path in base.glob('*.ixx'):
+            for path in base.rglob('*.ixx'):
                 text = path.read_text(encoding='utf-8-sig')
                 match = re.search(r'^export module\s+([\w.:]+);', text, re.M)
                 if match:

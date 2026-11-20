@@ -3,6 +3,7 @@
 // Epoch AI: preserve model selection, candidate isolation and host verification gates.
 #include "ai.backend_runtime_runtime_host.hpp"
 #include "ai.backend_host_request.hpp"
+#include "../ai.model_capability.hpp"
 
 #include "ai.backend_core_ids.hpp"
 #include "ai.backend_addons_addon_registry.hpp"
@@ -115,6 +116,15 @@ json RuntimeHost::native_model_library() const {
 
 std::expected<json, core::Error> RuntimeHost::register_native_model(const json& spec) {
     auto result = impl_->native_models.register_model(spec);
+    if (!result) return std::unexpected(result.error());
+    impl_->models.refresh();
+    impl_->residency.sync(impl_->models);
+    return *result;
+}
+
+std::expected<json, core::Error> RuntimeHost::reconnect_native_model_file(
+    std::string_view id_or_uri, const std::filesystem::path& local_path) {
+    auto result = impl_->native_models.reconnect_model_file(id_or_uri, local_path);
     if (!result) return std::unexpected(result.error());
     impl_->models.refresh();
     impl_->residency.sync(impl_->models);
@@ -271,6 +281,16 @@ std::expected<model::ModelResponse, core::Error> RuntimeHost::complete_host_requ
                 core::make_error_code(core::Errc::model_unavailable),
                 "Benchmark target is not a resident native model"});
         chosen = impl_->model.resolve_model_hint(requested);
+    }
+    // Resolve the final selection before admission: a saved role or fallback
+    // must not bypass the same capability restriction as an explicit choice.
+    if (stage == "patch" || stage == "project_script") {
+        const auto profile = impl_->native_models.find(chosen);
+        const auto reason = epochengine::ai::model_capability::coding_restriction(
+            profile ? std::string_view{profile->id} : std::string_view{chosen});
+        if (!reason.empty())
+            return std::unexpected(core::Error{
+                core::make_error_code(core::Errc::model_unavailable), std::string{reason}});
     }
     const bool contains_images = boundedBody.contains("messages") && boundedBody.at("messages").is_array()
         && std::ranges::any_of(boundedBody.at("messages"), [](const json& message) {

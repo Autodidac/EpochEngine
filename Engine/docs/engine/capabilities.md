@@ -33,6 +33,18 @@ quality, determinism, latency, memory, power, stability, and project policy.
 No graphics API, cache layout, or physical device becomes authoritative world
 state.
 
+The compatibility target spans approximately fifteen years of hardware and
+rendering approaches. Hardware age is not feature evidence: retain usable
+software and conventional raster profiles while adding modern acceleration as
+optional providers. The same project data and operation contracts must either
+select a validated implementation, report an explicit unsupported requirement,
+or use a project-permitted fallback. Never silently reinterpret an unavailable
+offscreen pass as a draw to the current window. A calculator or 2D application
+must not inherit ray tracing, upscaling, scene or model dependencies merely
+because a high-end Editor build supports them. Vendor SDK generations, including
+requested future DLSS support, require their own implementation, redistribution
+and native acceptance evidence; naming a capability pack does not implement it.
+
 The active pass currently prioritizes C++23 Platform/GUI dependency extraction
 and isolated Engine integration. The retained local-model candidate workflow,
 complete playable2D project, editor/launcher and publication gates remain open;
@@ -132,6 +144,23 @@ risks/fallback, measurable acceptance, and owner/next action. An optimization
 without measurements is a hypothesis, not completed performance work. An
 unsupported profile is a reported limit, not silently passed coverage.
 
+November 17 experimental-method requirement: extend existing metrics at causal
+boundaries (queue/admission, preparation, computation, upload, presentation and
+retirement), with units, sample windows and exact source/configuration identity.
+Keep collection bounded and measure its overhead; do not add an independent
+telemetry/scheduling system. Separate prompt processing from output generation,
+process from whole-system use, and device power from whole-job energy. Record
+competing workloads rather than attributing them to Epoch.
+
+Run alternatives in isolated candidates or explicit experimental modes against
+the unchanged baseline and identical workloads. Compare correctness, tail
+latency/hitching, responsiveness, resource use, cancellation and recovery as well
+as throughput. Preserve failed/regressed results and rollback paths. A superior
+result may become a permanent option after review. **Replacing an established
+system requires deep cross-system analysis, regression/native evidence and
+explicit human confirmation**; benchmark success never grants automatic
+promotion or removal of the existing implementation.
+
 The minimum profile sweep is dependency-light CLI; native software window;
 GUI tool without editor; the full playable 2D game; and a selected accelerated
 graphics workload. Test impacted profiles directly, keep a coverage matrix for
@@ -203,6 +232,32 @@ Equivalent Vulkan and DirectX capabilities occupy the same numeric tier.
 Vendor-specific features are capability packs, not invented higher tiers.
 Examples include shader execution reordering, micromaps, work graphs, vendor
 upscaling, frame generation, and vendor sparse extensions.
+
+### Proposed hardware tiers for Editor and CLI
+
+Use one qualified hardware profile for Editor and CLI model admission. Preferred
+model, actual workload, and exact profile resource needs affect admission.
+Keep the renderer capability report and the current frame limit independently
+visible. The present numeric Editor badge shows a pacing suggestion. The table
+below describes the future measured admission policy.
+
+| Tier | Intended hardware or run profile | Model scope |
+| --- | --- | --- |
+| 0 | CPU fallback and the software-only profile | Micro models within measured CPU/RAM limits |
+| 1 | Mobile and other low-power graphics | Profiles qualified for the mobile target |
+| 2 | Entry-level laptops and small computers | Profiles qualified in the smallest desktop/laptop configuration |
+| 3 | Desktop graphics starting around 6 GiB of VRAM | Profiles that pass fit and execution checks on that class |
+| 4 | Stronger desktops starting around 12 GiB of VRAM | Higher profiles with measured build/run and GPU headroom |
+| 5 | High-end desktops and servers | Frontier Low and Frontier candidates with exact profile admission |
+
+VRAM anchors describe classes. Qualification also checks host RAM, CPU,
+platform, backend, model files, and measured resource use for the selected
+workload. A headless CLI on qualified hardware can run a Tier 5 profile.
+An intentionally CPU-only software profile stays at Tier 0. Server binding
+remains subject to the existing explicit operator approval. Set the observed
+hardware profile through startup capability evidence. Handle editing, compiling,
+running a project and running an accompanying model with workload policy,
+separate from a continuously changing live utilization percentage.
 
 ## Capability Evidence
 
@@ -280,6 +335,61 @@ Profiles compile and activate only what the product needs.
 Games, mobile apps, console targets, servers, and headless tools can exclude
 editor workspaces, native floating-window hosts, and heavy authoring code while
 retaining compiled artifact readers and runtime controls.
+
+### Authored world representations and visitability
+
+**Planned product contract — November 15.** Preserve the range from a 2D sky
+to a streamed universe with seamless planetfall. The operator's supplied
+Foundry screenshots illustrate detailed, non-visitable backdrop planets;
+they are visual references, not evidence of Foundry's implementation or of
+an accepted Epoch feature. A project may mix the following representations;
+these are examples, not a closed preset list:
+
+| Authored representation | Intended use and runtime scope |
+| --- | --- |
+| 2D background, billboard, sky texture or cubemap | Detailed scenery for 2D or 3D views; only the admitted image/material/pass resources are required |
+| Non-visitable distant body | A shaded mesh, impostor or procedural appearance with optional authored atmosphere/cloud appearance; visual detail does not imply a terrain or physics simulation |
+| Lightweight orbital object | A spatial body with selected orbit, orientation and interaction behavior; surface traversal, collisions and terrain generation remain separately authored capabilities |
+| Visitable streamed body or universe | Optional planetary providers stream the required local surface and selected water, vegetation, weather, physics and navigation services under budgets |
+
+Representation and visitability express the game's design. Hardware capability
+and quality settings select a supported implementation and its resource budget
+within that design; they must not silently turn a backdrop into a traversable
+planet or remove gameplay from a visitable world. A high-end scene may deliberately
+use a beautiful static sky. A lower-resource project may deliberately permit
+surface traversal with simpler visuals. Selecting a backdrop must not start
+hidden terrain LOD, surface physics or weather generation.
+
+Reuse the existing authoring document, compiled asset, project admission and
+disposable residency layers. The planned world/body record needs stable identity,
+coordinate/scale meaning, seed and generator version where procedural, source
+revision, permitted representations and explicit visitability. Representation
+artifacts derive from that identity and their recipe/dependency hashes; they
+do not become independent authoritative planets. Keep placement, edits and
+temporal state attached to the canonical body. Preauthored imagery remains
+valid source content without requiring a procedural generator behind it.
+
+A project that permits orbit-to-surface transitions must author the compatible
+representation chain and fallback. Schedule generation, I/O, upload and retirement
+through the existing job/resource owners with bounded CPU, GPU and memory costs.
+Use the relevant observer's view, projected error, motion and approach horizon
+to prioritize visible work; keep pending work cancellable and stale generations
+ineligible for publication. Retain the last complete representation while its
+replacement is prepared. Do not materialize every body or unseen surface merely
+because the universe contains it. Heavy planetary services remain optional
+Extensions; this contract does not add a parallel world renderer or scheduler.
+
+Acceptance must separately prove a backdrop-only project activates no terrain
+or surface simulation; mixed representations save/reopen with stable identity;
+and a declared visitable chain survives rapid approach, retreat, flyby and cache
+regeneration without mismatched terrain, floating placements, holes or resource
+growth. Record frame-time spikes, generation/upload latency, visible transition
+quality and residency for supported profiles. Seamless planetfall and universe
+streaming remain unaccepted until those native checks pass. Neither a screenshot,
+a descriptor nor a successful shader build establishes them. The
+[roadmap](../../../Changes/roadmap.md) owns ordering, and
+[mission cache](../../../Changes/mission_cache.md#november-15-editor-completion-and-2d-extension-direction)
+retains the unresolved product scope.
 
 ## Baseline 2D Acceptance Contract
 

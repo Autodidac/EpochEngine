@@ -35,7 +35,8 @@ public:
  std::unordered_map<std::uint64_t,std::shared_ptr<const previewgrid::MeshBaseColorBinding>> m_meshBaseColorTextures;
  float m_runtimeViewportWidth{1280},m_runtimeViewportHeight{720};
  // Publication here exercises the ordinary CPU geometry path, with no camera packet.
- bool pump_runtime_planetary_frame(const void*,previewgrid::SceneFrameRequest,bool){std::abort();}
+ double runtime_depth_fit_aspect() const { return 1280.0 / 720.0; }
+ bool pump_runtime_planetary_frame(const void*,previewgrid::SceneFrameRequest,platform::child_process::MeshDrawMode,bool*){std::abort();}
  RUNTIME_METHODS
 };
 #undef near
@@ -114,11 +115,11 @@ int main(){
  const epochengine::core::Context context;const auto* ctx=&context;
  std::vector<previewgrid::ObjectMarker> markers;std::vector<std::uint64_t> managed;
  CHECK(probe.append_planetary_attached_markers(markers,managed,true).empty());
- CHECK(probe.publish_project_play_markers(ctx,probe.m_entities,&probe.m_meshes,{},markers,3,false,{},nullptr,{},nullptr,nullptr,{},managed));
+ CHECK(probe.publish_project_play_markers(ctx,probe.m_entities,&probe.m_meshes,{},markers,3,platform::child_process::MeshDrawMode::shaded,{},nullptr,{},nullptr,nullptr,{},managed));
  auto published=previewgrid::detail::g_objectMarkers.at(ctx).markers;CHECK(published.size()==1&&published[0].mesh==mesh.artifact);
  previewgrid::MeshFrameLimits tiny;tiny.maximum_indices=3;tiny.maximum_bytes=64;
  const auto retained=previewgrid::object_marker_geometry_for(ctx);
- CHECK(!probe.publish_project_play_markers(ctx,probe.m_entities,&probe.m_meshes,tiny,markers,3,false,{},nullptr,{},nullptr,nullptr,{},managed));
+ CHECK(!probe.publish_project_play_markers(ctx,probe.m_entities,&probe.m_meshes,tiny,markers,3,platform::child_process::MeshDrawMode::shaded,{},nullptr,{},nullptr,nullptr,{},managed));
  CHECK(previewgrid::object_marker_geometry_for(ctx)==retained);
  const auto refused=[&]{markers.clear();managed.clear();const auto status=probe.append_planetary_attached_markers(markers,managed,true);
   CHECK(!status.empty()&&markers.empty()&&managed.empty());};
@@ -241,6 +242,12 @@ int main(){
   &&near(surfaceStart->body_local_position_meters[1],456,.0005)&&near(surfaceStart->body_local_position_meters[2],-789,.0005));
  CHECK(near(surfaceStart->body_local_forward[0],0,1e-7)&&near(surfaceStart->body_local_forward[1],0,1e-7)
   &&near(surfaceStart->body_local_forward[2],-1,1e-7));
+ auto camera=spawn;camera.type="Camera";camera.transform.rotation={0,0,0};
+ const auto flight=project_play_flight_start(camera,rotatedTerrain);CHECK(flight&&flight->body==5);
+ for(std::size_t axis=0;axis<3;++axis){
+  CHECK(near(flight->body_local_position_meters[axis],surfaceStart->body_local_position_meters[axis],.0005));
+  CHECK(near(flight->body_local_forward[axis],-terrainBasis->rotation[6+axis],1e-7));
+  CHECK(near(flight->body_local_up[axis],terrainBasis->rotation[3+axis],1e-7));}
  auto colliderModel=model;colliderModel.terrain_attachment=spawn.terrain_attachment;
  colliderModel.terrain_attachment->solid_walk_box=true;
  colliderModel.position_anchor=spawn.position_anchor;colliderModel.transform.position={};
@@ -253,6 +260,7 @@ int main(){
   CHECK(near(walkBox->half_extent_meters[axis],.5*(double(high[axis])-low[axis])*scale,.0005));}
  ++colliderModel.mesh_asset->artifact_key[0];CHECK(!project_play_walk_box(colliderModel,rotatedTerrain,*mesh.artifact));
  ++rotatedTerrain.mesh_asset->artifact_key[0];CHECK(!project_play_surface_start(spawn,rotatedTerrain));
+ CHECK(!project_play_flight_start(camera,rotatedTerrain));
  previewgrid::cleanup_context(ctx);return 0;
 }
 '''
@@ -277,6 +285,7 @@ class ForestRuntimeFollow(unittest.TestCase):
             "        [[nodiscard]] std::optional<previewgrid::ObjectMarker> project_play_model_marker_for_body(",
             "        [[nodiscard]] std::optional<previewgrid::PreciseMeshTransform> project_play_attached_body_transform(",
             "        [[nodiscard]] std::optional<project_planetary_runtime::SurfaceStart> project_play_surface_start(",
+            "        [[nodiscard]] std::optional<project_planetary_runtime::FlightStart> project_play_flight_start(",
             "        [[nodiscard]] std::optional<project_planetary_runtime::WalkBox> project_play_walk_box("))
         methods = "\n".join(owner(play, marker) for marker in (
             "            [[nodiscard]] const ProjectRuntimeEntity* planetary_entity(",
@@ -295,7 +304,7 @@ class ForestRuntimeFollow(unittest.TestCase):
         roots = [ROOT / "Engine/modules", ROOT / "Engine/dep/EpochPlatformEngine/modules"]
         found = {}
         for folder in roots:
-            for path in folder.glob("*.ixx"):
+            for path in folder.rglob("*.ixx"):
                 match = re.search(r"^export module\s+([\w.:]+);", path.read_text(encoding="utf-8-sig"), re.M)
                 if match:
                     found[match.group(1)] = path

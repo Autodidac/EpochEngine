@@ -16,6 +16,8 @@ import uuid
 
 ROOT = Path(__file__).resolve().parents[2]
 READY = re.compile(r"Backend (\w+) reached render-ready state for hwnd=\S+\.")
+GL_RENDERER = re.compile(r'GL_RENDERER="([^"\r\n]+)"')
+MESA_CPU_RENDERER = re.compile(r"^(?:llvmpipe|softpipe)(?:\s|\(|$)", re.IGNORECASE)
 COMPLETE = "Context session loop ended after the bounded smoke frame budget."
 UPDATER_REQUEST = re.compile(r"\bUpdater:\s+Downloading:")
 RENDERERS = ("opengl", "sdl", "sfml", "raylib", "vulkan", "software")
@@ -30,20 +32,27 @@ def sha256_file(path):
     return digest.hexdigest()
 
 
-def classify(log, returncode, timed_out, backend="opengl"):
+def classify(log, returncode, timed_out, backend="opengl", *, software_opengl=False):
     """A successful process alone is insufficient: require the selected renderer."""
     if backend not in RENDERERS:
         raise ValueError("Unsupported Linux smoke renderer")
     providers = [match.group(1).casefold() for match in READY.finditer(log)]
     ready = providers == [backend]
     complete = COMPLETE in log
-    ordered = ready and complete and log.index(COMPLETE) > READY.search(log).start()
+    ready_start = READY.search(log).start() if ready else None
+    ordered = ready and complete and log.index(COMPLETE) > ready_start
+    gl_renderers = tuple(GL_RENDERER.finditer(log)) if backend == "opengl" else ()
+    software_verified = (ready and any(renderer.start() < ready_start for renderer in gl_renderers)
+                         and all(MESA_CPU_RENDERER.match(renderer.group(1)) for renderer in gl_renderers))
     updater_requests = len(UPDATER_REQUEST.findall(log))
-    passed = returncode == 0 and not timed_out and ordered and updater_requests == 0
+    passed = (returncode == 0 and not timed_out and ordered and updater_requests == 0
+              and (not software_opengl or software_verified))
     return {
         "result": "pass" if passed else "fail",
         "requested_backend": backend,
         "observed_backends": providers,
+        "observed_gl_renderers": [renderer.group(1) for renderer in gl_renderers],
+        "software_opengl_verified": software_verified,
         "render_ready": ready,
         "bounded_frame_completion": complete,
         "ready_before_completion": bool(ordered),
@@ -131,6 +140,8 @@ def run_smoke(binary, output_root, timeout_seconds=30, software_opengl=False,
         raise ValueError("Smoke timeout must be between 1 and 120 seconds")
     if renderer not in RENDERERS:
         raise ValueError("Unsupported Linux smoke renderer")
+    if software_opengl and renderer != "opengl":
+        raise ValueError("The CPU OpenGL provider applies only to the OpenGL smoke")
     if software_vulkan and renderer != "vulkan":
         raise ValueError("The CPU Vulkan provider applies only to the Vulkan smoke")
     evidence_roots = (ROOT / "build", ROOT / "Artifacts/Reports", ROOT / "Artifacts/Packages")
@@ -185,7 +196,8 @@ def run_smoke(binary, output_root, timeout_seconds=30, software_opengl=False,
     try:
         log, code, timed_out, elapsed, samples = _run_probe(
             argv, binary.parent, evidence, timeout_seconds, environment)
-        receipt.update(classify(log.read_text(encoding="utf-8", errors="replace"), code, timed_out, renderer))
+        receipt.update(classify(log.read_text(encoding="utf-8", errors="replace"), code, timed_out,
+                                renderer, software_opengl=software_opengl))
         receipt.update(elapsed_seconds=elapsed, resource_samples=samples,
                        output_sha256=sha256_file(log))
         for sample_key, receipt_key in (("resident_bytes", "sampled_peak_resident_bytes"),

@@ -10,6 +10,13 @@ GUI=ROOT/'Engine/src/epochgui/gui.engine.cpp'
 def fixture(helper=None,state=None):
     base=queue_fixture();base=base[:base.index('void fast_sequences(')]
     source=SCROLL.read_text(encoding='utf-8')
+    frame=(ROOT/'Engine/src/epochgui/controls/gui.frame_lifecycle.inl').read_text(encoding='utf-8')
+    api=(ROOT/'Engine/modules/gui/gui.engine.ixx').read_text(encoding='utf-8')
+    declaration=definition(api,'    export class ScopedInputSuppression final',True).replace('export ','')
+    base+='\nnamespace gui {\n'+declaration+frame[frame.index('    ScopedInputSuppression::ScopedInputSuppression('):frame.index('    Vec2 mouse_position()')]+"\n}\n"
+    context=(ROOT/'Engine/src/editor/application/editor.application_context_session.inl').read_text(encoding='utf-8')
+    base+='template<class Draw>\n'+definition(context,'        decltype(auto) render_automation_inspection(')
+
     if helper is None:helper=definition(source,'    [[nodiscard]] static bool update_scrollbar_drag(')
     if state is None:state=definition(GUI.read_text(encoding='utf-8'),'        struct ScrollAreaState',True)
     return base+'\nnamespace gui {\n'+state+'\n'+helper+r'''
@@ -43,6 +50,21 @@ int main(){
   tick(ctx,{event(EventType::MouseMove,105,60)});CHECK(scroll(state)&&state.scrollY>450&&second.scrollY==0);
   tick(other,{event(EventType::MouseUp,105,40)});CHECK(scroll(second)&&second.scrollY>200&&second.scrollY<250);
   CHECK(state.scrollbarDrag.pending&&!second.scrollbarDrag.pending);
+  // A reserved automation frame exposes only the scrollbar inspection.
+  fresh(ctx);state={};
+  const auto inspect=[&](){
+    std::optional<ScopedInputSuppression> reserved;reserved.emplace(true,true);
+    CHECK(!mouse_press_position());
+    const bool changed=render_automation_inspection(reserved,true,[&](){return scroll(state);});
+    CHECK(!mouse_press_position()&&!g_frame.mouseDown); // sibling mutation remains blocked
+    return changed;
+  };
+  tick(ctx,{event(EventType::MouseDown,105,15)});CHECK(inspect()&&state.scrollbarDrag.pending);
+  tick(ctx,{event(EventType::MouseMove,105,50)});CHECK(inspect()&&state.scrollY>350&&state.scrollbarDrag.pending);
+  tick(ctx,{event(EventType::MouseUp,105,85)});CHECK(inspect()&&state.scrollY>700&&!state.scrollbarDrag.pending);
+  // A true modal owner is never removed with the automation scope.
+  fresh(ctx);state={};tick(ctx,{event(EventType::MouseDown,105,15)});
+  g_frame.modalInput.begin({{0,0},{200,200}});g_frame.modalInput.require_owner_scope();CHECK(!inspect()&&state.scrollY==0&&!state.scrollbarDrag.pending);
   return 0;
  } catch (...) {return 89;}
 }
@@ -82,3 +104,4 @@ class ScrollbarDrag(unittest.TestCase):
         self.assertNotIn('state.draggingScrollbar',source)
 
 if __name__=='__main__':unittest.main()
+

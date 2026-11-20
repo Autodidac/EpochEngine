@@ -37,6 +37,7 @@ module;
 #include <include/engine.config.hpp> // for EPOCH_USING Macros
 #include "host.log_policy.hpp"
 #include "host.frame_rate_sample.hpp"
+#include "../../editor/ai/editor.build_pressure.hpp"
 
 #if defined(__linux__)
 
@@ -92,6 +93,7 @@ import telemetry.engine;
 import systems.registry;
 import perf.tier;
 import platform.budgets;
+import platform.work_admission;
 import platform.window;
 import render.context_frame;
 
@@ -1772,6 +1774,7 @@ namespace
         };
 
         epochengine::perf::frame_limiter coreFrameLimiter{};
+        epochengine::editor::build_pressure::FrameCeiling editorFrameCeiling{};
         epochengine::perf::frame_pacing_plan activeDesiredFramePlan{};
         epochengine::perf::frame_pacing_plan activeCoreFramePlan{};
         bool hasActiveCoreFramePlan = false;
@@ -1949,6 +1952,21 @@ namespace
             }
 
             record_native_title_frame(localDisplay, xwin, win);
+            const bool editorHost = cli::editor_requested || cli::run_menu_loop;
+            const bool compiling = editorHost && (epochengine::editor::build_pressure::active()
+                || win.editorForegroundWorkActive.load(std::memory_order_relaxed));
+            const auto pressure = editorHost && !compiling
+                ? epochengine::platform::work_admission::sample_host_resources()
+                : epochengine::platform::work_admission::ResourceSample{};
+            const double allowedEditorHz = editorHost
+                ? editorFrameCeiling.update(compiling, pressure.cpu_valid, pressure.cpu_busy_fraction,
+                    pressure.captured_at_ms, epochengine::platform::work_admission::now_milliseconds())
+                : 0.0;
+            win.editorThrottleHz.store(allowedEditorHz, std::memory_order_relaxed);
+            const auto limitedPlan = epochengine::perf::with_frame_rate_ceiling(
+                activeCoreFramePlan, allowedEditorHz);
+            if (limitedPlan != coreFrameLimiter.plan())
+                coreFrameLimiter.set_plan(limitedPlan);
             // The selected limiter owns pacing, including genuinely uncapped.
             coreFrameLimiter.wait_for_next_frame();
         }

@@ -48,7 +48,8 @@ using planet_stream_cache::plain_path;
 using planet_stream_cache::parse_filename;
 using planet_stream_cache::encode_options;
 using planet_stream_cache::Options;
-template<class Key,class Mesh>bool read_patch(const fs::path& path,Key key,unsigned cells,Mesh& mesh,bool ocean){
+using planet_stream_cache::PatchReadTiming;
+template<class Key,class Mesh>bool read_patch(const fs::path& path,Key key,unsigned cells,Mesh& mesh,bool ocean,PatchReadTiming* timing){
  bool fail{};
  {
   std::unique_lock lock(gate.mutex);++gate.started;++gate.active;gate.peak=(std::max)(gate.peak,gate.active);
@@ -60,12 +61,13 @@ template<class Key,class Mesh>bool read_patch(const fs::path& path,Key key,unsig
    else if(key!=gate.second){gate.later_entered=true;gate.changed.notify_all();}
   }
  }
- const bool valid=!fail&&planet_stream_cache::read_patch(path,key,cells,mesh,ocean);
+ const bool valid=!fail&&planet_stream_cache::read_patch(path,key,cells,mesh,ocean,timing);
  {std::lock_guard lock(gate.mutex);--gate.active;gate.changed.notify_all();}
  return valid;
 }
 }
 ACTUAL_ACTIVITY
+ACTUAL_TELEMETRY
 ACTUAL_OWNER
 std::string read(const fs::path& path){std::ifstream input{path,std::ios::binary};return {std::istreambuf_iterator<char>{input},{}};}
 void write(const fs::path& path,const std::string& text){std::ofstream output{path,std::ios::binary|std::ios::trunc};output<<text;}
@@ -107,11 +109,12 @@ int main(int argc,char** argv){
   // Use the codec's exact filename grammar for an obsolete pending patch.
   const auto pending=path/(planet_stream_cache::filename(core::TileKey{0,0,0,0,1})+".pending");
   write(pending,"retained until every read retires");
-  tasks::Scheduler scheduler{{.worker_count=2,.retained_finished_nodes=32}};WorkerActivity activity;std::size_t reused{};
-  auto owner=std::async(std::launch::async,[&]{return prepare_cache(path,source,1337,scheduler,activity,reused);});
+  tasks::Scheduler scheduler{{.worker_count=2,.retained_finished_nodes=32}};WorkerActivity activity;CacheTelemetry telemetry;std::size_t reused{};
+  auto owner=std::async(std::launch::async,[&]{return prepare_cache(path,source,1337,scheduler,activity,reused,telemetry);});
   {std::unique_lock lock(gate.mutex);refilled=gate.changed.wait_for(lock,3s,[]{return gate.later_entered;});}
   const bool pending_before_retirement=fs::exists(pending);release();CHECK(owner.wait_for(3s)==std::future_status::ready);
   CHECK(owner.get()&&reused==6&&pending_before_retirement&&!fs::exists(pending));
+  CHECK(telemetry.checked==7&&telemetry.decoded==6&&telemetry.entries.bytes==6u*fs::file_size(path/planet_stream_cache::filename(order.front())));
   scheduler.graph().WaitAll();CHECK(scheduler.activity().outstanding_tasks==0);
   CHECK(source.resident.size()==source.plan.needed.size());fs::create_directories(root/"roundtrip");
   for(std::size_t i=0;i<source.resident.size();++i){const auto& resident=source.resident[i];
@@ -126,8 +129,8 @@ int main(int argc,char** argv){
  {
   auto source=state();const auto path=root/"failure";const auto order=files(path,source);reset_gate(order,true);
   const auto pending=path/(planet_stream_cache::filename(core::TileKey{0,0,0,0,1})+".pending");write(pending,"must survive refusal");
-  tasks::Scheduler scheduler{{.worker_count=2,.retained_finished_nodes=32}};WorkerActivity activity;std::size_t reused{};
-  auto owner=std::async(std::launch::async,[&]{return prepare_cache(path,source,1337,scheduler,activity,reused);});
+  tasks::Scheduler scheduler{{.worker_count=2,.retained_finished_nodes=32}};WorkerActivity activity;CacheTelemetry telemetry;std::size_t reused{};
+  auto owner=std::async(std::launch::async,[&]{return prepare_cache(path,source,1337,scheduler,activity,reused,telemetry);});
   const auto deadline=std::chrono::steady_clock::now()+3s;
   while(std::chrono::steady_clock::now()<deadline){
    if(scheduler.graph().Snapshot(0).cancellationRequestCount){cancelled_before_release=true;break;}
@@ -157,7 +160,8 @@ class PlanetaryCacheReadiness(unittest.TestCase):
         source = OWNER.read_text(encoding="utf-8-sig")
         actual = definition(source, "    bool prepare_cache(")
         activity = definition(source, "    struct WorkerActivity", True)
-        code = CODE.replace("ACTUAL_ACTIVITY", activity).replace("ACTUAL_OWNER", actual)
+        telemetry = definition(source, "    struct CacheTelemetry", True)
+        code = CODE.replace("ACTUAL_ACTIVITY", activity).replace("ACTUAL_TELEMETRY", telemetry).replace("ACTUAL_OWNER", actual)
         identity = hashlib.sha256(code.encode()).hexdigest()[:12]
         proof = ROOT / "Artifacts/Reports/planet-cache-readiness84-nov07" / identity
         proof.mkdir(parents=True, exist_ok=True)

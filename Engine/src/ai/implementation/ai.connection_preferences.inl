@@ -624,6 +624,12 @@
                 g_modelDetectionStatus =
                     "Project AI is disabled by its explicit project profile.";
                 return;
+            case project_profile::Provider::calculator_coach:
+                g_engineAi.reset();
+                g_modelUseConfirmedForSession = false;
+                g_modelDetectionStatus =
+                    "Calculator Coach awaits a verified isolated runtime.";
+                return;
             case project_profile::Provider::epoch_local_qwen38:
             {
                 const EpochLocalAiInstallStatus installed =

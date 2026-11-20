@@ -17,7 +17,7 @@ OWNERS = (
     "Engine/src/renderers/host/host.context_win.cpp",
     "Engine/src/renderers/host/implementation/host.window_interaction.inl",
     "Engine/src/renderers/host/implementation/host.native_dispatch.inl",
-    "Engine/modules/context.window.ixx",
+    "Engine/modules/context/context.window.ixx",
 )
 
 
@@ -339,10 +339,12 @@ int main(){
 
 class MulticontextLayoutReentrancy(unittest.TestCase):
     def test_actual_six_backend_layout_resize_and_proxy_owners(self):
-        host, interaction, dispatch, context = [(ROOT / path).read_text(encoding="utf-8") for path in OWNERS]
+        snapshot = {path: (ROOT / path).read_bytes() for path in OWNERS}
+        host, interaction, dispatch, context = [data.decode("utf-8").replace("\r\n", "\n")
+                                                for data in snapshot.values()]
         proof = ROOT / "Artifacts/Reports/multicontext-layout-reentrancy-oct31/repair-capture-final-cpu"
         proof.mkdir(parents=True, exist_ok=True)
-        before = {path: hashlib.sha256((ROOT / path).read_bytes()).hexdigest() for path in OWNERS}
+        before = {path: hashlib.sha256(data).hexdigest() for path, data in snapshot.items()}
         (proof / "source-before.json").write_text(json.dumps(before, indent=2) + "\n", encoding="utf-8")
         field = next(line for line in context.splitlines() if "std::atomic_uint64_t proxyChildNativeGeneration" in line)
         chunks = [PREFIX.replace("PROXY_GENERATION_FIELD", field)]

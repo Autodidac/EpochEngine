@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 class AuthoredCanvasText(unittest.TestCase):
     def test_scaled_text_container_chrome_and_clip_restore(self):
-        api = (ROOT / 'Engine/modules/gui.engine.ixx').read_text(encoding='utf-8')
+        api = (ROOT / 'Engine/modules/gui/gui.engine.ixx').read_text(encoding='utf-8')
         gui = (ROOT / 'Engine/src/epochgui/gui.engine.cpp').read_text(encoding='utf-8')
         canvas = (ROOT / 'Engine/src/editor/application/editor.application_gui_authoring.inl').read_text(encoding='utf-8')
         scopes = '\n'.join(definition(api, marker, True).replace('export ', '') for marker in (

@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 class ProjectBuildProgress(unittest.TestCase):
     def test_ticket_identity_cancel_elapsed_throttle_and_selected_owner(self):
-        graph = (ROOT / 'Engine/modules/taskgraph.dotsystem.ixx').read_text(encoding='utf-8')
+        graph = (ROOT / 'Engine/modules/taskgraph/taskgraph.dotsystem.ixx').read_text(encoding='utf-8')
         source = (ROOT / 'Engine/src/editor/application/editor.application_project_runtime.inl').read_text(encoding='utf-8')
         types = '\n'.join(definition(graph, marker, True) for marker in (
             '    enum class NodeState', '    struct NodeHandle final', '    struct NodeDiagnostic'))
@@ -40,7 +40,7 @@ struct Scheduler {taskgraph::GraphSnapshot graph;unsigned samples{};
  taskgraph::GraphSnapshot snapshot(){++samples;return graph;} };
 struct EditorState {std::unique_ptr<Scheduler> taskScheduler{std::make_unique<Scheduler>()};
  Ticket projectBuildCancellation{};std::chrono::steady_clock::time_point projectBuildProgressSample{};
- bool selected{true};std::string projectBuildStatus{"queued"};};
+ bool selected{true},projectBuildReusesReviewedArtifact{};std::string projectBuildStatus{"queued"};};
 bool project_build_targets_selected_project(const EditorState& e){return e.selected;}
 FUNCTIONS
 int main(){
@@ -107,3 +107,42 @@ int main(){
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class ProjectBuildCancellation(unittest.TestCase):
+    def test_actual_owned_cancel_without_process_launch(self):
+        from Tests.support.cpp import compile_and_run
+        owner = (ROOT / 'Engine/src/editor/application/editor.application_project_runtime.inl').read_text(encoding='utf-8')
+        function = definition(owner, '        [[nodiscard]] bool cancel_project_build(')
+        code = r"""
+#include <memory>
+#include <string>
+namespace taskgraph {enum class CancelCode {cancelled,requested,already_terminal,stale};}
+struct Ticket { bool active{true}; bool valid()const{return active;} };
+struct Scheduler {unsigned calls{}; taskgraph::CancelCode result{taskgraph::CancelCode::requested};
+ taskgraph::CancelCode cancel(const Ticket&){++calls;return result;} };
+struct EditorState {bool projectBuildPending{true},projectBuildRunAfterBuild{true},projectBuildReusesReviewedArtifact{};
+ Ticket projectBuildCancellation;std::shared_ptr<Scheduler>taskScheduler{std::make_shared<Scheduler>()};std::string projectBuildStatus;unsigned logs{};};
+void push_editor_log(EditorState&e,const std::string&){++e.logs;}
+""" + function + r"""
+int main(){
+ for(auto result:{taskgraph::CancelCode::cancelled,taskgraph::CancelCode::requested}){
+  EditorState e;e.taskScheduler->result=result;
+  if(!cancel_project_build(e)||e.projectBuildRunAfterBuild||e.taskScheduler->calls!=1||e.logs!=1)return 1;
+ }
+ for(auto result:{taskgraph::CancelCode::already_terminal,taskgraph::CancelCode::stale}){
+  EditorState e;e.taskScheduler->result=result;
+  if(cancel_project_build(e)||!e.projectBuildRunAfterBuild||e.taskScheduler->calls!=1)return 2;
+ }
+ EditorState e;e.projectBuildPending=false;
+ if(cancel_project_build(e)||e.taskScheduler->calls)return 3;
+ e.projectBuildPending=true;e.projectBuildCancellation.active=false;
+ if(cancel_project_build(e)||e.taskScheduler->calls)return 4;
+ e.projectBuildCancellation.active=true;e.taskScheduler.reset();if(cancel_project_build(e))return 5;
+ return 0;
+}
+"""
+        report=ROOT/'Artifacts/Reports/project-build-cancel-cpu'
+        report.mkdir(parents=True,exist_ok=True)
+        source=report/'cancel.cpp';source.write_text(code,encoding='utf-8')
+        compile_and_run(self,source,report)

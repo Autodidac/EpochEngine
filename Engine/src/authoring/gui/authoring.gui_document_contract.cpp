@@ -174,7 +174,7 @@ namespace epochengine::authoring::gui
         WidgetDescriptor invalidImage = widget_descriptor(
             WidgetKind::image,
             "Image",
-            ImageContent{});
+            ImageContent{"Assets/Textures/broken\npath.png"});
         WidgetDescriptor invalidSlider = widget_descriptor(
             WidgetKind::slider,
             "Slider",
@@ -186,9 +186,18 @@ namespace epochengine::authoring::gui
             || descriptors.create_widget(std::move(invalidLayout)).code
                 != ResultCode::invalid_layout
             || descriptors.create_widget(std::move(invalidImage)).code
-                != ResultCode::invalid_content
+                != ResultCode::invalid_text
             || descriptors.create_widget(std::move(invalidSlider)).code
                 != ResultCode::invalid_content)
+        {
+            return ContractFailure::descriptor_validation;
+        }
+        const WidgetHandle imageRoot = descriptors.create_widget(canvas("ImageRoot")).widget;
+        if (!imageRoot
+            || !descriptors.create_widget(widget_descriptor(
+                WidgetKind::image, "UnassignedImage", ImageContent{}), imageRoot)
+            || !descriptors.create_widget(widget_descriptor(
+                WidgetKind::image_button, "UnassignedImageButton", ImageButtonContent{}), imageRoot))
         {
             return ContractFailure::descriptor_validation;
         }

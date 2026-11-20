@@ -14,7 +14,9 @@ module;
 #include <limits>
 #include <memory>
 #include <optional>
+#include <set>
 #include <span>
+#include <stdexcept>
 #include <stop_token>
 #include <string>
 #include <string_view>
@@ -22,16 +24,22 @@ module;
 #include <type_traits>
 #include <utility>
 #include <vector>
+#include <nlohmann/json.hpp>
 #include "../../include/epoch.edition.hpp"
 
 module project.planetary;
 import core.env;
+import core.sha256;
 import package.source_install;
 import platform.child_process;
 import platform.filesystem;
 import platform.work_admission;
 import asset.mesh_artifact;
 import asset.texture_artifact;
+#if defined(__ANDROID__)
+import core.logger;
+import render.ray;
+#endif
 
 namespace epochengine::project_planetary
 {
@@ -41,6 +49,10 @@ namespace epochengine::project_planetary
         namespace process = platform::child_process;
         using Clock = std::chrono::steady_clock;
         std::atomic_uint64_t sequence{};
+#ifdef _WIN32
+        constexpr char planetary_msvc_toolset[] = "host=x64";
+        constexpr char planetary_msvc_environment[] = "windows-native-architecture";
+#endif
 
         bool admit_preview_memory(const Settings& settings, Result& result)
         {
@@ -70,6 +82,13 @@ namespace epochengine::project_planetary
             if (!input.read(result.data(), static_cast<std::streamsize>(result.size()))) return {};
             if (input.peek() != std::char_traits<char>::eof()) return {};
             return result;
+        }
+
+        std::string stream_recipe_key(std::string_view authored, const Settings& settings)
+        {
+            const auto bytes=std::string{authored}+"\n"+encode_settings(settings);
+            return asset::texture::content_hash_hex(asset::texture::deterministic_content_hash(
+                "epoch.planet.stream-recipe.v1",std::as_bytes(std::span{bytes.data(),bytes.size()})));
         }
 
         bool source_supports_lod_controls(const fs::path& source)
@@ -143,7 +162,7 @@ namespace epochengine::project_planetary
         }
 
         std::optional<GeneratedMeshFrame> admit_generated_mesh_frame(std::string_view text,
-            const Settings& settings,const asset::mesh::Artifact& artifact)
+            const Settings& settings,const asset::mesh::Artifact& artifact,double expectedSeconds=0.0)
         {
             constexpr std::string_view header="epoch.planet.mesh-frame.v1\n";
             if(text.size()>4096u||!text.starts_with(header))return {};
@@ -169,7 +188,7 @@ namespace epochengine::project_planetary
             if(!mode||*mode!=settings.mode||!integer("seed=",settings.seed)
                 ||!integer("body_index=",settings.body_index)||!integer("cells_per_tile=",settings.cells_per_tile)
                 ||!integer("tiles_per_axis=",settings.tiles_per_axis)||!real("tile_span_meters=",span)
-                ||span!=settings.tile_span_meters||!real("seconds=",seconds)||seconds!=0.0
+                ||span!=settings.tile_span_meters||!real("seconds=",seconds)||seconds!=expectedSeconds
                 ||!integer("size_reference_body=",settings.size_reference_body)
                 ||!real("reference_radius_meters=",radius)||radius!=settings.reference_radius_meters
                 ||!real("meters_to_preview_units=",scale)||scale<=0.0)return {};
@@ -193,6 +212,29 @@ namespace epochengine::project_planetary
                 ||!integer("vertices=",artifact.vertices().size())||!integer("indices=",artifact.indices().size())
                 ||!text.empty())return {};
             return result;
+        }
+
+        std::optional<GeneratedMeshFrame> admit_metric_stream_mesh_frame(std::string_view frameText,
+            const Settings& settings,const asset::mesh::Artifact& artifact,double seconds)
+        {
+            // The stream exporter requests a single tile with the default span
+            // when writing its general mesh receipt in system coordinates.
+            auto frameSettings=settings;
+            frameSettings.tiles_per_axis=1u;
+            frameSettings.tile_span_meters=128.0;
+            auto frame=admit_generated_mesh_frame(frameText,frameSettings,artifact,seconds);
+            if(!frame||frame->meters_per_unit!=1.0)return {};
+            return frame;
+        }
+
+        bool normalize_stream_cloud_frame(project_planetary_snapshot::DecodedSnapshot& snapshot,
+            std::string_view frameText,const Settings& settings,double seconds)
+        {
+            // Bind the stream and general mesh receipts before converting clouds.
+            const auto& artifact=snapshot.artifact();
+            if(!artifact)return false;
+            const auto worldFrame=admit_metric_stream_mesh_frame(frameText,settings,*artifact,seconds);
+            return worldFrame&&snapshot.normalize_cloud_center(worldFrame->source_origin_meters);
         }
 
         std::vector<GeneratedBody> admit_generated_body_inventory(std::string_view text,
@@ -441,9 +483,41 @@ namespace epochengine::project_planetary
             return true;
         }
 
+        enum class MeshGenerationReceiptVersion { exact_manifest, terrain_manifest };
+        constexpr std::array mesh_generation_receipt_versions{
+            MeshGenerationReceiptVersion::terrain_manifest, MeshGenerationReceiptVersion::exact_manifest
+        };
+
+        std::optional<std::string> mesh_generation_manifest(std::string_view manifest)
+        {
+            // Match the Editor manifest parser's duplicate-key checks. Retain
+            // every field except the top-level Run frame pacing preference.
+            using Json = nlohmann::ordered_json;
+            std::vector<std::set<std::string>> keys;
+            bool duplicate{};
+            auto document = Json::parse(manifest, [&](int, Json::parse_event_t event, Json& parsed)
+            {
+                if (event == Json::parse_event_t::object_start) keys.emplace_back();
+                if (event == Json::parse_event_t::object_end) keys.pop_back();
+                if (event == Json::parse_event_t::key)
+                    duplicate = !keys.back().insert(parsed.get<std::string>()).second || duplicate;
+                return true;
+            }, false);
+            if (!document.is_object() || duplicate) return {};
+            if (const auto limit = document.find("run_frame_limit_fps"); limit != document.end())
+            {
+                if (!limit->is_number()) return {};
+                const auto value = limit->get<double>();
+                if (!std::isfinite(value) || value < 0.0) return {};
+                document.erase(limit);
+            }
+            return document.dump();
+        }
+
         struct MeshGenerationRecord final { std::string filename, bytes; };
         std::optional<MeshGenerationRecord> mesh_generation_record(const SourceGeneration& source,
-            const Settings& settings, const MeshGenerationIdentity& mesh)
+            const Settings& settings, const MeshGenerationIdentity& mesh,
+            MeshGenerationReceiptVersion version = MeshGenerationReceiptVersion::terrain_manifest)
         {
             const auto recipe = encode_settings(settings);
             const auto limits = artifact_limits(settings);
@@ -461,8 +535,13 @@ namespace epochengine::project_planetary
                 return asset::texture::content_hash_hex(asset::texture::deterministic_content_hash(domain,
                     std::as_bytes(std::span{bytes.data(),bytes.size()})));
             };
-            std::string bytes="epoch.planet.mesh-generation.v1\nsource="+source.content_hash
-                +"\nmanifest="+digest("epoch.planet.manifest.v1",source.project_manifest)
+            const bool terrainManifest = version == MeshGenerationReceiptVersion::terrain_manifest;
+            const auto projected = terrainManifest ? mesh_generation_manifest(source.project_manifest) : std::nullopt;
+            if (terrainManifest && !projected) return {};
+            const auto receiptTag = terrainManifest ? "epoch.planet.mesh-generation.v2" : "epoch.planet.mesh-generation.v1";
+            const auto manifestTag = terrainManifest ? "epoch.planet.manifest.v2" : "epoch.planet.manifest.v1";
+            std::string bytes=std::string{receiptTag}+"\nsource="+source.content_hash
+                +"\nmanifest="+digest(manifestTag,projected ? *projected : source.project_manifest)
                 +"\nmesh="+asset::texture::content_hash_hex(asset::mesh::ContentHash{mesh.artifact_key})
                 +"\nvertices="+std::to_string(mesh.vertex_count)+"\nindices="+std::to_string(mesh.index_count)
                 +"\nmeters_per_unit="+real_text(mesh.coordinates.meters_per_unit)+"\norigin_meters=";
@@ -472,7 +551,7 @@ namespace epochengine::project_planetary
             }
             bytes+='\n';bytes+=recipe;
             if(bytes.size()>4096u)return {};
-            return MeshGenerationRecord{digest("epoch.planet.mesh-generation.v1",bytes)+".epoch_pgen",std::move(bytes)};
+            return MeshGenerationRecord{digest(receiptTag,bytes)+".epoch_pgen",std::move(bytes)};
         }
         bool write_mesh_generation_record(const fs::path& root,const SourceGeneration& source,
             const Settings& settings,const MeshGenerationIdentity& mesh)
@@ -491,16 +570,23 @@ namespace epochengine::project_planetary
             return read_small(path,4096u)==record->bytes;
         }
 
+        bool mesh_generation_record_matches(const fs::path& directory,const MeshGenerationRecord& record)
+        {
+            const auto path=directory/record.filename;
+            const auto status=fs::symlink_status(path);
+            return fs::is_regular_file(status)&&!fs::is_symlink(status)&&fs::hard_link_count(path)==1u
+                &&read_small(path,4096u)==record.bytes;
+        }
+
         bool mesh_generation_receipt_matches(const fs::path& project_root,const SourceGeneration& source,
             const Settings& settings,const MeshGenerationIdentity& mesh)
         {
-            const auto record=mesh_generation_record(source,settings,mesh);
-            const auto directory=record?project_directory(project_root,"Assets/Mesh",false):std::nullopt;
+            const auto directory=project_directory(project_root,"Assets/Mesh",false);
             if(!directory)return false;
-            const auto path=*directory/record->filename;
-            const auto status=fs::symlink_status(path);
-            return fs::is_regular_file(status)&&!fs::is_symlink(status)&&fs::hard_link_count(path)==1u
-                &&read_small(path,4096u)==record->bytes;
+            for(const auto version:mesh_generation_receipt_versions)
+                if(const auto record=mesh_generation_record(source,settings,mesh,version);
+                    record&&mesh_generation_record_matches(*directory,*record))return true;
+            return false;
         }
 
         bool write_mesh_generation_bodies(const fs::path& root,const SourceGeneration& source,
@@ -528,6 +614,10 @@ namespace epochengine::project_planetary
             const std::string expected="epoch.planet.build.v1\nproject="+project->generic_string()
                 +"\nsource="+std::string(source_hash)+"\nsdk="+sdk->generic_string()+"\nedition="
                 +(EPOCH_EDITION_PUBLIC?"epoch.public.github.v1":"epoch.development.site.v1")+"\n"
+#ifdef _WIN32
+                +"msvc_toolset="+planetary_msvc_toolset+"\n"
+                +"compiler_environment="+planetary_msvc_environment+"\n"
+#endif
                 +(water_hash.empty()?std::string{}:"water_source="+std::string{water_hash}+"\n");
             if(expected.size()>8192u)return {};
             const auto key=asset::texture::content_hash_hex(asset::texture::deterministic_content_hash(
@@ -777,7 +867,11 @@ file(RENAME "${receipt_temporary}" "${runtime}/provider.identity")
             if (!write_owned(*packages / "epoch.stage_planet.cmake", stagingScript,
                 "# EPOCH_MANAGED_GENERATED_FILE: planetary_provider_stage_v1\n")) return false;
             const std::string cmakeText = "# EPOCH_MANAGED_GENERATED_FILE: planetary_dependency_v1\n"
-                "set(EPOCH_PLANET_BUILD_MESH_EXPORT ON)\n"
+                "if(ANDROID)\n"
+                "  set(EPOCH_PLANET_BUILD_MESH_EXPORT OFF)\n"
+                "else()\n"
+                "  set(EPOCH_PLANET_BUILD_MESH_EXPORT ON)\n"
+                "endif()\n"
                 "set(EPOCH_PLANET_BUILD_RUNTIME_CONTROLLER " + runtimeOption + ")\n"
                 "set(EPOCH_ENGINE_SOURCE_ROOT \"${EPOCH_REPO_ROOT}\")\n"
                 "set(EPOCH_PLANET_BUILD_WATER " + (settings.ocean_surface?std::string{"ON"}:std::string{"OFF"}) + " CACHE BOOL \"\" FORCE)\n"
@@ -790,17 +884,26 @@ file(RENAME "${receipt_temporary}" "${runtime}/provider.identity")
                 + (exploration ? std::string{
                     "target_link_libraries(${target} PRIVATE epoch_extension_planetary_runtime)\n"
                     "target_compile_definitions(${target} PRIVATE EPOCH_PROJECT_PLANETARY_RUNTIME=1)\n"} : std::string{}) +
-                "add_dependencies(${target} epoch_planet_mesh_export)\n"
-                "add_custom_command(TARGET ${target} POST_BUILD COMMAND \"${CMAKE_COMMAND}\"\n"
-                "  \"-DEPOCH_PLANET_PROVIDER=$<TARGET_FILE:epoch_planet_mesh_export>\"\n"
-                "  \"-DEPOCH_PLANET_CONFIGURATION=$<IF:$<CONFIG:Debug>,Debug,Release>\"\n"
-                "  -P \"${CMAKE_CURRENT_LIST_DIR}/epoch.stage_planet.cmake\" VERBATIM)\n";
+                (exploration ? "if(ANDROID)\n  set_property(TARGET ${target} PROPERTY EPOCH_PLANETARY_SOURCE_HASH \""
+                    + dependency.content_hash + "\")\n"
+                    + (settings.ocean_surface ? "  set_property(TARGET ${target} PROPERTY EPOCH_FFT_SOURCE_HASH \""
+                        + water.content_hash + "\")\n" : std::string{}) + "endif()\n" : std::string{}) +
+                "if(NOT ANDROID)\n"
+                "  add_dependencies(${target} epoch_planet_mesh_export)\n"
+                "  add_custom_command(TARGET ${target} POST_BUILD COMMAND \"${CMAKE_COMMAND}\"\n"
+                "    \"-DEPOCH_PLANET_PROVIDER=$<TARGET_FILE:epoch_planet_mesh_export>\"\n"
+                "    \"-DEPOCH_PLANET_CONFIGURATION=$<IF:$<CONFIG:Debug>,Debug,Release>\"\n"
+                "    -P \"${CMAKE_CURRENT_LIST_DIR}/epoch.stage_planet.cmake\" VERBATIM)\n"
+                "endif()\n";
             if (!write_owned(*packages / "epoch.dependencies.cmake", cmakeText,
                 "# EPOCH_MANAGED_GENERATED_FILE: planetary_dependency_v1\n")) return false;
 #ifdef _WIN32
             // Project linking has its own compiler cache. A copied project's
             // first build must not create an unbound Editor-generation cache.
-            const std::string linkInputs=dependency.content_hash+"|"+water.content_hash+"|"+std::string{editionId};
+            // Generated applications get water.wave from EpochEngine.lib.
+            // The separately built provider keeps its own wave archive.
+            const std::string linkInputs=dependency.content_hash+"|"+water.content_hash+"|"+std::string{editionId}
+                +"|"+planetary_msvc_toolset+"|"+planetary_msvc_environment;
             const std::string props = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
                 "<!-- EPOCH_MANAGED_GENERATED_FILE: planetary_dependency_v1 -->\n"
                 "<Project xmlns=\"http://schemas.microsoft.com/developer/msbuild/2003\">\n"
@@ -820,15 +923,15 @@ file(RENAME "${receipt_temporary}" "${runtime}/provider.identity")
                 (exploration && settings.ocean_surface ? std::string{
                     "$(EpochPlanetBuild)\\$(EpochPlanetConfiguration)\\epoch_extension_planetary_water.lib;"
                     "$(EpochPlanetBuild)\\water-extension\\$(EpochPlanetConfiguration)\\epoch_extension_water_fft.lib;"
-                    "$(EpochPlanetBuild)\\water-extension\\$(EpochPlanetConfiguration)\\epoch_extension_fft_ocean.lib;"
-                    "$(EpochPlanetBuild)\\$(EpochPlanetConfiguration)\\epoch_water_wave.lib;"} : std::string{}) +
+                    "$(EpochPlanetBuild)\\water-extension\\$(EpochPlanetConfiguration)\\epoch_extension_fft_ocean.lib;"} : std::string{}) +
                 "$(EpochPlanetBuild)\\$(EpochPlanetConfiguration)\\epoch_extension_planetary_core.lib;%(AdditionalDependencies)</AdditionalDependencies></Link></ItemDefinitionGroup>\n"
                 "  <Target Name=\"EpochBuildPlanetaryDependency\" BeforeTargets=\"Link\">\n"
                 "    <Exec Command=\"&quot;"+xml_escape(cmake.generic_string())
                 +"&quot; -DEPOCH_PLANET_BIND_LINK_CACHE=ON -DEPOCH_PLANET_CONFIGURATION=$(EpochPlanetRuntimeConfiguration) -DEPOCH_PLANET_SDK=&quot;$(EpochRepoRoot).&quot; -DEPOCH_PLANET_BUILD=&quot;$(EpochPlanetBuild)&quot; -P &quot;$(MSBuildThisFileDirectory)epoch.stage_planet.cmake&quot;\" />\n"
                 "    <Exec Command=\"&quot;" + xml_escape(cmake.generic_string())
                 + "&quot; -S &quot;$(MSBuildThisFileDirectory)" + xml_escape(source)
-                + "&quot; -B &quot;$(EpochPlanetBuild)&quot; -G &quot;Visual Studio 17 2022&quot; -A x64 -DBUILD_TESTING=OFF -DEPOCH_PLANET_BUILD_MESH_EXPORT=ON -DEPOCH_PLANET_BUILD_RUNTIME_CONTROLLER="
+                + "&quot; -B &quot;$(EpochPlanetBuild)&quot; -G &quot;Visual Studio 17 2022&quot; -A x64 -T "
+                + planetary_msvc_toolset + " -DBUILD_TESTING=OFF -DEPOCH_PLANET_BUILD_MESH_EXPORT=ON -DEPOCH_PLANET_BUILD_RUNTIME_CONTROLLER="
                 + runtimeOption + " -DEPOCH_ENGINE_SOURCE_ROOT=&quot;$(EpochRepoRoot).&quot; -DEPOCH_PLANET_BUILD_WATER="
                 + (settings.ocean_surface?std::string{"ON"}:std::string{"OFF"})
                 + " -DEPOCH_PLANET_WATER_SOURCE_ROOT=&quot;"
@@ -862,6 +965,135 @@ file(RENAME "${receipt_temporary}" "${runtime}/provider.identity")
             const auto directory = project_directory(project_root, "Assets/Worlds", false);
             return directory ? decode_settings(read_small(*directory / "Planet.epoch_planet", 1024u)) : std::nullopt;
         } catch (...) { return {}; }
+    }
+
+    std::optional<PackagedShoreline> load_packaged_shoreline(
+        const fs::path& project_root, const fs::path& scene_path, std::string_view project_id,
+        std::string_view descriptor_sha256, std::string_view planetary_source, std::string_view fft_source)
+    {
+        try
+        {
+            using Json=nlohmann::json;
+            using core::sha256::hash;
+            using core::sha256::hex;
+            constexpr std::string_view edition=EPOCH_EDITION_PUBLIC
+                ?"epoch.public.github.v1":"epoch.development.site.v1";
+            const auto source_hash=[](std::string_view text)
+            {
+                return text.starts_with("sha256:")&&core::sha256::from_hex(text.substr(7)).has_value();
+            };
+            if(!source_hash(planetary_source)||!source_hash(fft_source)
+                ||!core::sha256::from_hex(descriptor_sha256))return {};
+            const auto root=project_directory(project_root,{},false);
+            if(!root)return {};
+            const auto folder=ordinary_directory(root->parent_path(),"assets/planetary/fixed-shoreline",false);
+            const auto worlds=ordinary_directory(*root,"Assets/Worlds",false);
+            const auto relativeScene=scene_path.lexically_relative(*root);
+            const auto sceneFolder=ordinary_directory(*root,relativeScene.parent_path(),false);
+            if(!folder||!worlds||relativeScene.empty()||scene_path!=fs::canonical(scene_path)
+                ||!sceneFolder||!fs::equivalent(*sceneFolder/relativeScene.filename(),scene_path))return {};
+            const auto descriptor=read_small(*folder/"shoreline.json",16u*1024u);
+            if(descriptor.empty()||hex(hash(descriptor))!=descriptor_sha256)return {};
+            const auto data=Json::parse(descriptor);
+            const auto text=[](const Json& object,const char* key) -> const std::string&
+                { return object.at(key).get_ref<const std::string&>(); };
+            if(!data.is_object()||text(data,"schema")!="epoch.android.fixed_shoreline_snapshot.v1"
+                ||text(data,"edition")!=edition||text(data,"project_id")!=project_id
+                ||text(data,"planetary_source")!=planetary_source||text(data,"fft_source")!=fft_source)return {};
+            const auto density_clouds=data.find("density_clouds");
+            if(density_clouds!=data.end()&&!density_clouds->is_boolean())return {};
+            const auto verified=[&data,&text](const fs::path& path, std::size_t limit, const char* key)
+            {
+                auto bytes=read_small(path,limit);
+                if(bytes.empty()||hex(hash(bytes))!=text(data,key))bytes.clear();
+                return bytes;
+            };
+            if(verified(*root/"project.epoch.json",65'536u,"manifest_sha256").empty()
+                ||verified(scene_path,16u*1024u*1024u,"scene_sha256").empty())return {};
+            const auto recipe=verified(*worlds/"Planet.epoch_planet",1024u,"recipe_sha256");
+            const auto authored=decode_settings(recipe);
+            const auto& cutSettings=text(data,"cut_settings");
+            const auto settings=decode_settings(cutSettings);
+            if(!authored||!settings||encode_settings(*settings)!=cutSettings
+                ||settings->mode!="planet"||authored->mode!=settings->mode
+                ||!authored->ocean_surface||!settings->ocean_surface||settings->seed!=authored->seed
+                ||settings->body_index!=authored->body_index||settings->size_reference_body!=authored->size_reference_body
+                ||settings->reference_radius_meters!=authored->reference_radius_meters
+                ||settings->original_sunlight!=authored->original_sunlight||settings->snapshot_megabytes>8u
+                ||!data.at("body").is_number_unsigned()||data.at("body").get<std::uint64_t>()!=settings->body_index)return {};
+            const auto recipeKey=stream_recipe_key(recipe,*settings);
+            if(text(data,"recipe_key")!=recipeKey||!data.at("request_id").is_number_unsigned())return {};
+            const auto request=data.at("request_id").get<std::uint64_t>();
+            const auto seconds=data.at("sample_seconds").get<double>();
+            const auto radius=data.at("radius_m").get<double>();
+            if(!request||!std::isfinite(seconds)||seconds<0.0||seconds>=1.0e12
+                ||!std::isfinite(radius)||radius<=0.0||radius>1.0e8
+                ||(settings->body_index==settings->size_reference_body&&radius!=settings->reference_radius_meters))return {};
+            const auto vec=[](const Json& owner,const char* key)
+            {
+                const auto& array=owner.at(key);
+                if(!array.is_array()||array.size()!=3u)throw std::invalid_argument{"Expected a three-axis shoreline vector."};
+                const auto value=array.get<std::array<double,3>>();
+                if(!std::ranges::all_of(value,[](double component){return std::isfinite(component);}))
+                    throw std::invalid_argument{"Invalid shoreline vector."};
+                return value;
+            };
+            const auto& view=data.at("view");
+            const auto position=vec(view,"position_m"),forward=vec(view,"forward"),up=vec(view,"up");
+            const auto origin=vec(data,"origin_m");
+            const auto expectedOrigin=project_planetary_snapshot::metric_source_origin(position,true);
+            if(!expectedOrigin||std::abs(std::hypot(forward[0],forward[1],forward[2])-1.0)>1e-6
+                ||std::abs(std::hypot(up[0],up[1],up[2])-1.0)>1e-6
+                ||std::abs(forward[0]*up[0]+forward[1]*up[1]+forward[2]*up[2])>1e-6)return {};
+            for(std::size_t axis=0;axis<3u;++axis)
+                if(std::abs(origin[axis]-(*expectedOrigin)[axis])>1e-8*(std::max)(1.0,std::abs(origin[axis])))return {};
+            const auto& files=data.at("files");
+            if(!files.is_array()||files.size()!=3u)return {};
+            const auto file=[&](const char* name,std::size_t limit)
+            {
+                std::string bytes;
+                unsigned seen{};
+                for(const auto& entry:files)
+                {
+                    if(text(entry,"name")!=name)continue;
+                    ++seen;
+                    if(!entry.at("bytes").is_number_unsigned())return std::string{};
+                    const auto count=entry.at("bytes").get<std::uint64_t>();
+                    if(!count||count>limit)return std::string{};
+                    bytes=read_small(*folder/name,static_cast<std::size_t>(count));
+                    if(bytes.size()!=count||hex(hash(bytes))!=text(entry,"sha256"))return std::string{};
+                }
+                return seen==1u?bytes:std::string{};
+            };
+            const auto limits=snapshot_transition_limits(*settings);
+            const auto mesh=[&]{
+                auto bytes=file("terrain.epoch_mesh",static_cast<std::size_t>(limits.artifact.maximum_bytes));
+                return asset::mesh::decode_artifact(std::as_bytes(std::span{bytes}),limits.artifact);
+            }();
+            if(!mesh||text(data,"mesh_key")!=asset::texture::content_hash_hex(mesh.artifact->key()))return {};
+            const project_planetary_snapshot::Identity identity{mesh.artifact->key(),
+                std::string(planetary_source),recipeKey,request};
+            auto cut=[&]{
+                auto bytes=file("terrain.epoch_planet_patch",static_cast<std::size_t>(limits.maximum_metadata_bytes));
+                return project_planetary_snapshot::DecodedSnapshot::read(
+                    std::as_bytes(std::span{bytes}),mesh.artifact,identity,limits,{},origin);
+            }();
+            if(!cut)return {};
+            const auto& metadata=cut->metadata();
+            if(metadata.cloud||metadata.water_radius_meters!=radius||metadata.water_meters_to_artifact!=1.0
+                ||metadata.water_origin_meters!=origin||metadata.water_vertices.empty()||metadata.water_triangles.empty()
+                ||!std::ranges::all_of(metadata.patches,[&](const auto& patch){
+                    return patch.key.body==settings->body_index;
+                }))return {};
+            const auto appearance=file("terrain.water_appearance",project_planetary_snapshot::maximum_water_appearance_bytes);
+            if(appearance.empty()||!cut->read_water_appearance(std::as_bytes(std::span{appearance})))return {};
+            auto selected=std::move(*cut).materialize_selected({},seconds);
+            if(!selected.source||!selected.artifact||!selected.water_appearance)return {};
+            return PackagedShoreline{*settings,std::move(selected),std::string(planetary_source),
+                std::string(fft_source),position,forward,up,seconds,
+                density_clouds!=data.end()&&density_clouds->get<bool>()};
+        }
+        catch (...) { return {}; }
     }
     namespace
     {
@@ -1028,6 +1260,134 @@ file(RENAME "${receipt_temporary}" "${runtime}/provider.identity")
         return result;
     }
 
+#if defined(__ANDROID__)
+    std::optional<PackagedPlanetaryPose> load_packaged_planetary_pose(
+        const fs::path& project_root, const fs::path& scene_path,
+        std::string_view pose_sha256, std::string_view recipe_sha256, std::string_view manifest_sha256,
+        std::string_view scene_sha256, std::string_view planetary_source, std::string_view fft_source,
+        std::string_view terrain_sha256, bool allow_flight)
+    {
+        try
+        {
+            const auto source_hash = [](std::string_view value) {
+                return value.starts_with("sha256:") && core::sha256::from_hex(value.substr(7)).has_value();
+            };
+            if (!source_hash(planetary_source) || (!fft_source.empty()&&!source_hash(fft_source))
+                || (allow_flight&&!terrain_sha256.empty())) return {};
+            const auto root = project_directory(project_root, {}, false);
+            if (!root) return {};
+            const auto worlds = ordinary_directory(*root, "Assets/Worlds", false);
+            const auto relative_scene = scene_path.lexically_relative(*root);
+            const auto scene_folder = ordinary_directory(*root, relative_scene.parent_path(), false);
+            if (!worlds || relative_scene.empty() || !scene_folder
+                || *scene_folder / relative_scene.filename() != scene_path) return {};
+
+            const auto matches = [](std::string_view bytes, std::string_view pin) {
+                return !bytes.empty() && core::sha256::hex(core::sha256::hash(bytes)) == pin;
+            };
+            if (!matches(read_small(*root / "project.epoch.json", 65'536u), manifest_sha256)
+                || !matches(read_small(scene_path, 16u * 1024u * 1024u), scene_sha256)) return {};
+            const auto recipe = read_small(*worlds / "Planet.epoch_planet", 1024u);
+            if (!matches(recipe, recipe_sha256)) return {};
+            auto settings = decode_settings(recipe);
+            if (!settings || settings->mode != "planet" || settings->ocean_surface!=!fft_source.empty()
+                || (!settings->ocean_surface&&(!allow_flight||!settings->stream_lod))) return {};
+            auto session = load_exploration_session(*root);
+            if (!session.ok || !session.present || !matches(session.bytes, pose_sha256)) return {};
+            auto recipe_key=stream_recipe_key(recipe,*settings);
+            return PackagedPlanetaryPose{std::move(*settings), std::string{planetary_source},
+                std::string{fft_source}, std::move(session.bytes), std::string{terrain_sha256}, allow_flight,
+                std::move(recipe_key)};
+        }
+        catch (...) { return {}; }
+    }
+
+    std::optional<PackagedPoseTerrain> load_packaged_pose_terrain(
+        const fs::path& project_root, const PackagedPlanetaryPose& pose,
+        double seconds, const std::array<double,3>& body_center, const std::array<double,3>& camera)
+    {
+        try
+        {
+            if (!core::sha256::from_hex(pose.terrain_sha256)) return {};
+            const auto worlds = project_directory(project_root, "Assets/Worlds", false);
+            if (!worlds) return {};
+            const auto bytes = read_small(*worlds / "Planet.pose.epoch_mesh", 8u * 1024u * 1024u);
+            const auto frame_text = read_small(*worlds / "Planet.pose.frame", 4096u);
+            const auto recipe = read_small(*worlds / "Planet.pose.epoch_planet", 1024u);
+            if (bytes.empty() || frame_text.empty() || recipe.empty()) return {};
+            using core::sha256::hash;
+            using core::sha256::hex;
+            const auto manifest = hex(hash(bytes)) + "\n" + hex(hash(frame_text)) + "\n" + hex(hash(recipe)) + "\n";
+            if (hex(hash(manifest)) != pose.terrain_sha256) return {};
+
+            const auto settings = decode_settings(recipe);
+            const auto& authored = pose.settings;
+            if (!settings || settings->mode != authored.mode || settings->seed != authored.seed
+                || settings->body_index != authored.body_index || settings->ocean_surface != authored.ocean_surface
+                || settings->size_reference_body != authored.size_reference_body
+                || settings->reference_radius_meters != authored.reference_radius_meters
+                || settings->original_sunlight != authored.original_sunlight
+                || settings->snapshot_megabytes > 8u) return {};
+            auto decoded = asset::mesh::decode_artifact(std::as_bytes(std::span{bytes}), artifact_limits(*settings));
+            if (!decoded) return {};
+            auto frame = admit_metric_stream_mesh_frame(frame_text, *settings, *decoded.artifact, seconds);
+            if (!frame) return {};
+
+            std::array<double,3> local_camera{};
+            for (std::size_t axis = 0; axis < local_camera.size(); ++axis)
+            {
+                local_camera[axis] = camera[axis] - body_center[axis];
+                frame->source_origin_meters[axis] -= body_center[axis];
+            }
+            const auto expected = project_planetary_snapshot::metric_source_origin(local_camera, true);
+            if (!expected) return {};
+            for (std::size_t axis = 0; axis < expected->size(); ++axis)
+            {
+                const auto tolerance = (std::max)(1e-4, std::abs((*expected)[axis]) * 1e-8);
+                if (!(std::abs(frame->source_origin_meters[axis] - (*expected)[axis]) <= tolerance)) return {};
+            }
+
+            // A settled cut can still enclose a camera placed by the controller's
+            // surface sampler. Test the actual metric triangles before replacing
+            // the controller mesh, while both camera and vertices are rebased.
+            const auto radius = std::hypot(local_camera[0], local_camera[1], local_camera[2]);
+            if (!(radius > 0.0)) return {};
+            const ray::RayDesc outward{
+                {static_cast<float>(local_camera[0] - frame->source_origin_meters[0]),
+                 static_cast<float>(local_camera[1] - frame->source_origin_meters[1]),
+                 static_cast<float>(local_camera[2] - frame->source_origin_meters[2])},
+                {static_cast<float>(local_camera[0] / radius), static_cast<float>(local_camera[1] / radius),
+                 static_cast<float>(local_camera[2] / radius)},
+                0.05f // Allow contact and floating-point error at the surface.
+            };
+            const auto& artifact = *decoded.artifact;
+            const auto minimum = artifact.minimum();
+            const auto maximum = artifact.maximum();
+            if (ray::intersect(outward, ray::Aabb{{minimum[0], minimum[1], minimum[2]},
+                                                {maximum[0], maximum[1], maximum[2]}}))
+            {
+                const auto points = artifact.vertices();
+                const auto indices = artifact.indices();
+                const auto point = [&](std::uint32_t index) -> ray::Vec3 {
+                    const auto& position = points[index].position;
+                    return {position[0], position[1], position[2]};
+                };
+                for (std::size_t i = 0; i + 2u < indices.size(); i += 3u)
+                {
+                    if (ray::intersect(outward, ray::Triangle{point(indices[i]), point(indices[i + 1u]),
+                                                             point(indices[i + 2u])}))
+                    {
+                        logger::info("Engine.Planet", "Packaged metric terrain crosses above the restored camera.");
+                        return {};
+                    }
+                }
+            }
+            return PackagedPoseTerrain{std::move(decoded.artifact), *frame};
+        }
+        catch (...) { return {}; }
+    }
+#endif
+
     SessionFile save_exploration_session(const fs::path& project_root,
         const SourceGeneration& admitted, std::string_view bytes, const SessionFile& previous)
     {
@@ -1070,19 +1430,81 @@ file(RENAME "${receipt_temporary}" "${runtime}/provider.identity")
         catch (...) { return {}; }
     }
 
+    namespace
+    {
+        std::optional<fs::path> current_source_root(const fs::path& project_root,
+            const SourceGeneration& admitted, std::stop_token cancellation)
+        {
+            if (cancellation.stop_requested() || admitted.project_manifest.empty()) return {};
+            const auto root = project_directory(project_root, {}, false);
+            if (!root || *root != admitted.project_root
+                || read_small(*root / "project.epoch.json", 65536u) != admitted.project_manifest
+                || cancellation.stop_requested()) return {};
+            return root;
+        }
+    }
+
     bool source_generation_is_current(const fs::path& project_root,
         const SourceGeneration& admitted, std::stop_token cancellation)
     {
         try
         {
-            if (cancellation.stop_requested() || admitted.project_manifest.empty()) return false;
-            const auto root = project_directory(project_root, {}, false);
-            if (!root || *root != admitted.project_root
-                || read_small(*root / "project.epoch.json", 65536u) != admitted.project_manifest) return false;
+            const auto root = current_source_root(project_root, admitted, cancellation);
+            if (!root) return false;
             const auto current = package_source::load_project_attachment(*root, "planetary_terrain", cancellation);
             return current.source_attached() && current.content_hash == admitted.content_hash;
         }
         catch (...) { return false; }
+    }
+
+    struct ShorelineSourceReview final
+    {
+        SourceGeneration generation;
+        package_source::Inspection terrain, water;
+    };
+
+    std::shared_ptr<const ShorelineSourceReview> review_shoreline_sources(const fs::path& project_root,
+        const SourceGeneration& admitted, std::string_view water_source_hash, std::stop_token cancellation)
+    {
+        try
+        {
+            const auto root = current_source_root(project_root, admitted, cancellation);
+            if (!root || water_source_hash.empty()) return {};
+            ShorelineSourceReview review{.generation = admitted};
+            const auto terrain = package_source::load_project_attachment(*root, "planetary_terrain", cancellation, &review.terrain);
+            if (!terrain.source_attached() || terrain.content_hash != admitted.content_hash) return {};
+            const auto water = package_source::load_project_attachment(*root, "fft_ocean", cancellation, &review.water);
+            if (!water.source_attached() || water.content_hash != water_source_hash || cancellation.stop_requested()) return {};
+            return std::make_shared<const ShorelineSourceReview>(std::move(review));
+        }
+        catch (...) { return {}; }
+    }
+
+    bool shoreline_sources_are_current(const fs::path& project_root, const SourceGeneration& admitted,
+        const ShorelineSourceReview& review, std::stop_token cancellation)
+    {
+        try
+        {
+            if (review.generation != admitted) return false;
+            const auto root = current_source_root(project_root, admitted, cancellation);
+            if (!root) return false;
+            // Keep the approved inventory, but recheck the current receipts and bytes.
+            return package_source::verify_project_source(review.terrain, *root, cancellation).source_attached()
+                && !cancellation.stop_requested()
+                && package_source::verify_project_source(review.water, *root, cancellation).source_attached()
+                && !cancellation.stop_requested();
+        }
+        catch (...) { return false; }
+    }
+
+    bool stream_recipe_is_current(const fs::path& project_root,std::string_view verified_recipe)
+    {
+        try
+        {
+            const auto recipe=recipe_guard(project_root);
+            return !verified_recipe.empty()&&recipe&&*recipe==verified_recipe;
+        }
+        catch(...){return false;}
     }
 
     bool mesh_generation_is_current(const fs::path& project_root,const SourceGeneration& source,
@@ -1115,7 +1537,10 @@ file(RENAME "${receipt_temporary}" "${runtime}/provider.identity")
                 const auto start=bytes.find("\nepoch.planet.recipe.");
                 if(start==std::string::npos)continue;
                 const auto settings=decode_settings(std::string_view{bytes}.substr(start+1u));
-                const auto record=settings?mesh_generation_record(source,*settings,mesh):std::nullopt;
+                if(!settings)continue;
+                const auto version=bytes.starts_with("epoch.planet.mesh-generation.v1\n")
+                    ?MeshGenerationReceiptVersion::exact_manifest:MeshGenerationReceiptVersion::terrain_manifest;
+                const auto record=mesh_generation_record(source,*settings,mesh,version);
                 const auto name=entry.path().filename().string();
                 if(record&&record->filename==name&&record->bytes==bytes&&(!selected||name<selectedName))
                 {selected=*settings;selectedName=name;}
@@ -1129,13 +1554,19 @@ file(RENAME "${receipt_temporary}" "${runtime}/provider.identity")
     {
         try {
             const auto settings=mesh_generation_settings(project_root,source,mesh);
-            const auto record=settings?mesh_generation_record(source,*settings,mesh):std::nullopt;
-            const auto directory=record?project_directory(project_root,"Assets/Mesh",false):std::nullopt;
+            const auto directory=settings?project_directory(project_root,"Assets/Mesh",false):std::nullopt;
             if(!directory)return {};
-            auto filename=record->filename;filename.replace(filename.size()-10u,10u,"epoch_pbod");
-            const auto path=*directory/filename;const auto status=fs::symlink_status(path);
-            if(!fs::is_regular_file(status)||fs::is_symlink(status)||fs::hard_link_count(path)!=1u)return {};
-            return admit_generated_body_inventory(read_small(path,16384u),*settings,mesh,artifact);
+            for(const auto version:mesh_generation_receipt_versions)
+            {
+                const auto record=mesh_generation_record(source,*settings,mesh,version);
+                if(!record||!mesh_generation_record_matches(*directory,*record))continue;
+                auto filename=record->filename;filename.replace(filename.size()-10u,10u,"epoch_pbod");
+                const auto path=*directory/filename;const auto status=fs::symlink_status(path);
+                if(!fs::is_regular_file(status)||fs::is_symlink(status)||fs::hard_link_count(path)!=1u)continue;
+                auto bodies=admit_generated_body_inventory(read_small(path,16384u),*settings,mesh,artifact);
+                if(!bodies.empty())return bodies;
+            }
+            return {};
         }catch(...){return {};}
     }
 
@@ -1219,7 +1650,7 @@ file(RENAME "${receipt_temporary}" "${runtime}/provider.identity")
                 std::string{"-DEPOCH_PLANET_BUILD_WATER="}+(settings.ocean_surface?"ON":"OFF"),
                 "-DEPOCH_PLANET_WATER_SOURCE_ROOT="+waterRoot.generic_string()};
 #ifdef _WIN32
-            configure.insert(configure.end(), {"-G", "Visual Studio 17 2022", "-A", "x64"});
+            configure.insert(configure.end(), {"-G", "Visual Studio 17 2022", "-A", "x64", "-T", planetary_msvc_toolset});
 #else
             configure.insert(configure.end(), {"-G", "Ninja", "-DCMAKE_BUILD_TYPE=Release"});
 #endif
@@ -1875,8 +2306,11 @@ file(RENAME "${receipt_temporary}" "${runtime}/provider.identity")
             const auto streamProviderSource=read_small(project_root/attached.relative_source_root/"tools/planet.stream_export.cpp",64u*1024u);
             const bool patchTransport=streamProviderSource.find("epoch.planet.stream.v6")!=std::string::npos;
             const bool metricTransport=patchTransport&&meshFrame&&streamProviderSource.find("epoch.planet.stream-frame.v1")!=std::string::npos;
+            const bool waterAppearanceTransport=metricTransport&&settings.ocean_surface
+                &&streamProviderSource.find("epoch.planet.water-appearance.v1")!=std::string::npos;
             const bool boundedMetricOrigin=metricTransport&&streamProviderSource.find("epoch.planet.stream-origin.v2")!=std::string::npos;
-            const bool densityTransport=metricTransport&&streamProviderSource.find("epoch.planet.cloud-density.v1")!=std::string::npos;
+            const bool solidCloudTransport=metricTransport&&streamProviderSource.find("epoch.planet.cloud-density.v2")!=std::string::npos;
+            const bool densityTransport=solidCloudTransport||(metricTransport&&streamProviderSource.find("epoch.planet.cloud-density.v1")!=std::string::npos);
             const bool cloudTransport=densityTransport||(metricTransport&&streamProviderSource.find("epoch.planet.cloud-layer.v1")!=std::string::npos);
             const bool viewTransport=metricTransport&&view.forward
                 &&streamProviderSource.find("epoch.planet.view-cone.v1")!=std::string::npos;
@@ -1884,9 +2318,7 @@ file(RENAME "${receipt_temporary}" "${runtime}/provider.identity")
                 &&streamProviderSource.find("epoch.planet.view-footprint.v1")!=std::string::npos;
             if(settings.maximum_level>=20u&&!metricTransport)
             {operation.message="Fine LOD20 requires the metric-coordinate Planetary update. Review and attach that source, then rebuild; current terrain was retained.";return result;}
-            const auto recipeBytes=*observedRecipe+"\n"+encode_settings(settings);
-            const auto recipeKey=asset::texture::content_hash_hex(asset::texture::deterministic_content_hash(
-                "epoch.planet.stream-recipe.v1",std::as_bytes(std::span{recipeBytes.data(),recipeBytes.size()})));
+            const auto recipeKey=stream_recipe_key(*observedRecipe,settings);
             if(customLod&&!source_supports_lod_controls(project_root / attached.relative_source_root))
             { operation.message="This attached Planetary version predates screen-detail controls. Review and explicitly attach the newer extension source, then rebuild; the current terrain was retained.";return result; }
             if(customSize&&(!source_supports_size_controls(project_root/attached.relative_source_root)
@@ -1965,7 +2397,9 @@ file(RENAME "${receipt_temporary}" "${runtime}/provider.identity")
                     orientation+=","+real((*view.up)[0])+","+real((*view.up)[1])+","+real((*view.up)[2]);
                 streamArguments.insert(streamArguments.end(),{footprintTransport?"--view-footprint-v1":"--view-cone-v1",std::move(orientation)});
             }
-            if(cloudTransport)streamArguments.push_back(densityTransport?"--cloud-density-v1":"--cloud-layer-v1");
+            if(cloudTransport)
+                streamArguments.push_back(solidCloudTransport?"--cloud-density-v2":densityTransport?"--cloud-density-v1":"--cloud-layer-v1");
+            if(waterAppearanceTransport)streamArguments.push_back("--water-appearance-v1");
             if (!execute(producer, std::move(streamArguments),
                 working, operation.build_log, cancellation, *environment, 30'000'000'000ull, operation, expectedProvider, retainedLease))
             { result.waiting_for_worker = operation.worker_busy; return result; }
@@ -2047,6 +2481,7 @@ file(RENAME "${receipt_temporary}" "${runtime}/provider.identity")
                 std::uint32_t ocean{};
                 valid = valid && integer("ocean_surface=", ocean) && ocean == (settings.ocean_surface ? 1u : 0u);
             }
+            std::optional<double> verifiedSampleSeconds;
             if (customSize || customLod || view.simulation_seconds)
             {
                 const auto secondsText = field("simulation_seconds=");
@@ -2057,6 +2492,7 @@ file(RENAME "${receipt_temporary}" "${runtime}/provider.identity")
                     const auto parsed = std::from_chars(secondsText->data(), secondsText->data() + secondsText->size(), seconds);
                     valid = valid && parsed.ec == std::errc{} && parsed.ptr == secondsText->data() + secondsText->size()
                         && std::isfinite(seconds) && seconds == view.simulation_seconds.value_or(0.0);
+                    if(valid)verifiedSampleSeconds=seconds;
                 }
             }
             if(customSize||customLod)
@@ -2128,29 +2564,40 @@ file(RENAME "${receipt_temporary}" "${runtime}/provider.identity")
                     auto encoded=read_small(run/"generated/terrain.epoch_planet_patch",
                         static_cast<std::size_t>(patchLimits.maximum_metadata_bytes));
                     const project_planetary_snapshot::Identity expected{decoded.artifact->key(),attached.content_hash,recipeKey,view.request_id};
-                    auto metadata=project_planetary_snapshot::decode(std::as_bytes(std::span{encoded.data(),encoded.size()}),
-                        *decoded.artifact,expected,patchLimits,cancellation);
-                    if(!metadata){operation.message="Terrain patch hierarchy failed identity or bounded-content admission.";result.snapshot.reset();return result;}
-                    if(metadata->cloud&&(!cloudTransport||bool(metadata->cloud->density)!=densityTransport||metadata->cloud->body!=settings.body_index
-                        ||metadata->cloud->radius_meters!=bodyRadius))
+                    auto packet=project_planetary_snapshot::DecodedSnapshot::read(
+                        std::as_bytes(std::span{encoded.data(),encoded.size()}),decoded.artifact,expected,
+                        patchLimits,cancellation,metricTransport?std::optional{sourceOrigin}:std::nullopt);
+                    if(!packet){operation.message="Terrain patch hierarchy failed identity or bounded-content admission.";result.snapshot.reset();return result;}
+                    if(waterAppearanceTransport)
+                    {
+                        const auto appearance=read_small(run/"generated/terrain.water_appearance",
+                            project_planetary_snapshot::maximum_water_appearance_bytes);
+                        if(!packet->read_water_appearance(std::as_bytes(std::span{appearance.data(),appearance.size()}),cancellation))
+                        {operation.message="Water appearance does not match the admitted terrain.";result.snapshot.reset();return result;}
+                    }
+                    const auto& metadata=packet->metadata();
+                    const bool solidCloud=metadata.cloud&&metadata.cloud->density
+                        &&metadata.cloud->density->view_occluder_radius_meters>0.0;
+                    if(metadata.cloud&&(!cloudTransport||bool(metadata.cloud->density)!=densityTransport
+                        ||solidCloud!=solidCloudTransport||metadata.cloud->body!=settings.body_index
+                        ||metadata.cloud->radius_meters!=bodyRadius))
                     {operation.message="Cloud layer does not match the admitted planet frame.";result.snapshot.reset();return result;}
-                    if(metricTransport&&settings.ocean_surface&&(metadata->water_radius_meters!=bodyRadius
-                        ||metadata->water_meters_to_artifact!=scale||metadata->water_origin_meters!=sourceOrigin))
+                    if(metadata.cloud&&!normalize_stream_cloud_frame(*packet,
+                        read_small(run/"generated/terrain.frame",4096u),settings,view.simulation_seconds.value_or(0.0)))
+                    {operation.message="Cloud layer coordinates do not match the admitted terrain.";result.snapshot.reset();return result;}
+                    if(metricTransport&&settings.ocean_surface&&(metadata.water_radius_meters!=bodyRadius
+                        ||metadata.water_meters_to_artifact!=scale||metadata.water_origin_meters!=sourceOrigin))
                     {operation.message="Terrain water coordinates do not match the admitted stream frame.";result.snapshot.reset();return result;}
                     std::string{}.swap(encoded);
                     patchDecodeMs=elapsedMs(patchStarted);
                     const auto cutStarted=Clock::now();
-                    auto admitted=std::make_shared<const project_planetary_snapshot::Snapshot>(
-                        project_planetary_snapshot::Snapshot{decoded.artifact,std::move(*metadata)});
-                    project_planetary_snapshot::Transition initial{patchLimits};
-                    // This worker returns a complete static fallback. Temporal
-                    // scene owners may retain patch_snapshot and advance their
-                    // own transition, but displaying fresh roots here would
-                    // discard every requested fine patch on every worker turn.
-                    if(!initial.admit(admitted,cancellation,project_planetary_snapshot::InitialCut::selected_patches)
-                        ||(result.snapshot=initial.materialize(cancellation))==nullptr)
+                    auto selected=std::move(*packet).materialize_selected(cancellation,
+                        providerWater&&settings.ocean_surface?verifiedSampleSeconds:std::nullopt);
+                    if(!selected.artifact)
                     {operation.message="Terrain patch hierarchy exceeds the retained snapshot budget.";result.snapshot.reset();return result;}
-                    result.patch_snapshot=std::move(admitted);
+                    result.snapshot=std::move(selected.artifact);
+                    result.patch_snapshot=std::move(selected.source);
+                    result.water_appearance=std::move(selected.water_appearance);
                     cutBuildMs=elapsedMs(cutStarted);
                 }
                 if(meshFrame)operation.mesh_frame=GeneratedMeshFrame{1.0/scale,sourceOrigin};
@@ -2179,6 +2626,15 @@ file(RENAME "${receipt_temporary}" "${runtime}/provider.identity")
                 return result;
             }
             result.verified_source = *admitted;
+            result.verified_recipe = *observedRecipe;
+            if(providerWater&&settings.ocean_surface&&verifiedSampleSeconds
+                &&result.snapshot_ready&&result.patch_snapshot&&result.water_appearance
+                &&!result.patch_snapshot->metadata.water_vertices.empty())
+            {
+                if(project_planetary_snapshot::requires_water_edge_resample(*result.patch_snapshot))
+                    result.water_edge_sample_seconds=verifiedSampleSeconds;
+                else result.water_sample_seconds=verifiedSampleSeconds;
+            }
             operation.ok = true;
             const auto finalAdmissionMs=elapsedMs(admissionStarted);
             const auto consumeMs=elapsedMs(consumeStarted);

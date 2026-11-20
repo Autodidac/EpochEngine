@@ -30,6 +30,8 @@
  ***********************************************/
 
 
+#pragma once
+
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -90,11 +92,68 @@ namespace epochengine::project
         std::string project_root{}, manifest_path{}, scene_path{}, summary{};
     };
 
-    // Startup-only generated project binding. The nearest executable ancestor
-    // manifest must pass the existing project parser, identity and edition gates.
-    // No ambient project-root override is accepted.
+    // Startup-only generated project binding. The manifest comes from the
+    // nearest executable ancestor on desktop or the fixed app-private project
+    // folder on Android. Both paths use the same identity and edition gates.
+    // Neither path accepts an ambient project-root override.
     [[nodiscard]] RuntimeProjectBinding BindRuntimeProject(
         std::string_view expected_project_id) noexcept;
+
+    enum class GuiApplicationEventKind { action, text, backspace, erase, enter };
+
+    struct GuiApplicationEvent final
+    {
+        GuiApplicationEventKind kind{};
+        std::string_view value{};
+    };
+
+    struct GuiApplicationView final
+    {
+        void* context{};
+        bool (*set_text)(void*, std::string_view widget, std::string_view text){};
+        // The returned text is borrowed until the next GUI mutation.
+        bool (*get_text)(void*, std::string_view widget, std::string_view& text){};
+    };
+
+    // A generated Software / Tool executable supplies its own behavior.
+    // The application and view are borrowed only during synchronous dispatch.
+    class GuiApplication
+    {
+    public:
+        virtual ~GuiApplication() = default;
+        [[nodiscard]] virtual bool handle(GuiApplicationEvent, GuiApplicationView) = 0;
+        // Runs on the GUI owner after input. Poll only completed work and return promptly.
+        // Like handle(), this call borrows the view only for its duration.
+        virtual void on_frame(GuiApplicationView) {}
+    };
+
+    [[nodiscard]] int RunGuiApplication(std::string_view project_id,
+        GuiApplication& application, int argc, char** argv);
+
+#if defined(__ANDROID__)
+    [[nodiscard]] int RunAndroidSceneProject(std::string_view project_id,
+        int argc, char** argv);
+    struct AndroidFixedShoreline final
+    {
+        std::string_view descriptor_sha256{}, planetary_source{}, fft_source{};
+        bool (*install)(const char*, const char*) noexcept{};
+        bool allow_flight{};
+    };
+    [[nodiscard]] int RunAndroidSceneProject(std::string_view project_id,
+        int argc, char** argv, const AndroidFixedShoreline& shoreline);
+    struct AndroidPackagedPlanetaryPose final
+    {
+        std::string_view pose_sha256{}, recipe_sha256{}, manifest_sha256{}, scene_sha256{};
+        std::string_view planetary_source{}, fft_source{};
+        bool (*install)(const char*, const char*) noexcept{};
+        std::string_view terrain_sha256{};
+        bool allow_flight{};
+    };
+    [[nodiscard]] int RunAndroidSceneProject(std::string_view project_id,
+        int argc, char** argv, const AndroidPackagedPlanetaryPose& pose);
+    [[nodiscard]] int RunAndroidEditorProject(std::string_view project_id,
+        int argc, char** argv);
+#endif
 
     enum class ArtifactKind : std::uint32_t
     {
@@ -106,6 +165,8 @@ namespace epochengine::project
         gui = 1u << 5u
     };
 
+    enum class AuthoringSceneKind { tool, editor };
+
     struct ArtifactAcceptanceRequest final
     {
         std::string_view project_id{};
@@ -116,10 +177,10 @@ namespace epochengine::project
         std::string_view sprite_animation_path{};
         std::string_view audio_profile_path{};
         std::string_view gui_path{};
-        // Tool workspaces are authoring documents, not playable game scenes.
-        // The generated project profile, not the document, selects this gate.
+        // The project profile selects the runtime or authoring validation gate.
         bool scene_requires_runtime{true};
         void (*progress_sink)(const char*) noexcept{};
+        AuthoringSceneKind authoring_scene_kind{AuthoringSceneKind::tool};
     };
 
     struct ArtifactAcceptanceReport final

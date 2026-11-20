@@ -31,7 +31,14 @@ struct Vertices : std::vector<Vertex> {
     std::size_t reportedSize{};
     std::size_t size() const { return reportedSize ? reportedSize : std::vector<Vertex>::size(); }
 };
-struct SolidDrawFrame { std::shared_ptr<const Vertices> geometry{}; };
+struct WaterDetailRange {
+    std::uint32_t first_vertex{}, vertex_count{};
+    friend bool operator==(const WaterDetailRange&, const WaterDetailRange&) = default;
+};
+struct SolidDrawFrame {
+    std::shared_ptr<const Vertices> geometry{};
+    std::vector<WaterDetailRange> water_detail_ranges{};
+};
 struct MeshWireDrawFrame { std::shared_ptr<const Vertices> depth_triangles{}, helper_lines{}; };
 struct PublishedSceneFrame {
     Camera camera{};
@@ -205,6 +212,29 @@ auto sampled=std::make_shared<PublishedSceneFrame>(*frame);
 sampled->markers.push_back({{0,0,0},{1,1,1},ObjectPreviewPrimitive::EngineArcadeScreen,true});
 CHECK(!preview_geometry_matches(*sampled,*frame));
 CHECK(build_preview_vertices(nullptr,sampled).size()==7 && build_preview_indices(nullptr,sampled).size()==9);
+// Material tags only cover opaque water triangles, with no stream reordering.
+auto mixed = std::make_shared<PublishedSceneFrame>(*sampled);
+auto mixedSolids = std::make_shared<SolidDrawFrame>();
+auto mixedGeometry = std::make_shared<Vertices>(*solids->geometry);
+mixedGeometry->insert(mixedGeometry->end(), solids->geometry->begin(), solids->geometry->end());
+mixedSolids->geometry = mixedGeometry;
+mixedSolids->water_detail_ranges = {{3u, 3u}};
+mixed->solids = mixedSolids;
+mixed->lines = std::make_shared<const Vertices>(2);
+auto mixedVertices = build_preview_vertices(nullptr, mixed);
+CHECK(mixedVertices.size() == 12 && build_preview_indices(nullptr, mixed).size() == 14);
+for (std::size_t i = 0; i < 6; ++i)
+    CHECK(mixedVertices[i].uv[0] == (i < 3 ? 0.0f : 1.0f));
+CHECK((mixedVertices[6].uv == std::array{0.0f, 1.0f}));
+CHECK((mixedVertices[7].uv == std::array{1.0f, 1.0f}));
+CHECK((mixedVertices[10].uv == std::array{0.0f, 0.0f}));
+CHECK((mixedVertices[11].uv == std::array{0.0f, 0.0f}));
+auto retagged = std::make_shared<PublishedSceneFrame>(*mixed);
+auto retaggedSolids = std::make_shared<SolidDrawFrame>(*mixedSolids);
+retaggedSolids->water_detail_ranges = {{0u, 3u}};
+retagged->solids = retaggedSolids;
+CHECK(!preview_geometry_matches(*mixed,*retagged));
+CHECK(build_preview_indices(nullptr,mixed) == build_preview_indices(nullptr,retagged));
 auto sampledMove=std::make_shared<PublishedSceneFrame>(*sampled); sampledMove->markers[0].position.x=2;
 CHECK(!preview_geometry_matches(*sampledMove,*sampled));
 sampledMove->markers=sampled->markers; sampledMove->markers[0].scale.x=2;

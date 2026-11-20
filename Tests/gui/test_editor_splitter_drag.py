@@ -19,6 +19,11 @@ def fixture():
     base=queue_fixture();base=base[:base.rindex("int main(){")]
     base=base.replace("import epoch.gui.input;","import epoch.gui.input;\nimport epoch.gui;")
     base+="\nnamespace gui {\n"+"\n".join(definition(frame,m) for m in ("    Vec2 mouse_position(","    bool is_mouse_down(","    bool was_mouse_pressed("))+"\n}\n"
+    api=(ROOT/"Engine/modules/gui/gui.engine.ixx").read_text(encoding="utf-8")
+    declaration=definition(api,"    export class ScopedInputSuppression final",True).replace("export ","")
+    base+="\nnamespace gui {\n"+declaration+frame[frame.index("    ScopedInputSuppression::ScopedInputSuppression("):frame.index("    Vec2 mouse_position()") ]+"\n}\n"
+    context=(ROOT/"Engine/src/editor/application/editor.application_context_session.inl").read_text()
+    base+='template<class Draw>\n'+definition(context,'        decltype(auto) render_automation_inspection(')
     routing=(ROOT/"Engine/src/editor/application/editor.application_pane_routing.inl").read_text(encoding="utf-8")
     base+=definition(routing,"        [[nodiscard]] static bool editor_point_in_rect(")
     widget=(ROOT/"Engine/src/epochgui/controls/gui.window_controls.inl").read_text(encoding="utf-8")
@@ -46,6 +51,10 @@ SEMANTIC
 WIDGET
 }
 '''.replace('SEMANTIC',semantic).replace('WIDGET',widget)
+    application=(ROOT/"Engine/src/editor/editor.application.cpp").read_text(encoding="utf-8")
+    start=application.index("        automationInputReserved = editor_automation_input_reserved(editor, chat);")
+    finish=application.index('#include "application/editor.frame_toolbar_dock_targets.inl"',start)
+    preamble=application[start:finish]
     return base+r'''
 namespace logger=epochengine::logger;
 enum class EditorLayoutDrag{None,Outliner,Inspector,Dock,BottomColumns};
@@ -55,9 +64,9 @@ struct EditorState{
  gui::DragSurfaceState layoutDividerDrag{};
  float bottomGridDragOffset{},layoutDividerDragOffset{};
  float outlinerSplit=.2f,inspectorSplit=.2f,dockSplit=.25f,bottomGridSplit=.5f;
- int surfaceSettleFrames{};
+ int surfaceSettleFrames{};bool paneTitleDragActive{};struct {struct {bool dragging{},resizing{};}floating;}floatingGuiWindow;
 };
-bool floating{},modal{},automationInputReserved{};bool floating_gui_visible(){return floating;}bool modal_visible_now(){return modal;}
+bool nativeActive{},floating{},modal{},automationInputReserved{};bool floating_gui_visible(){return floating;}bool modal_visible_now(){return modal;}
 struct Result{bool scene_input_captured{};};
 Result update(EditorState& editor,float width=1000,float height=800){
  const auto ctx=g_frame.ctxShared;Result result;const float w=width,h=height,toolbar_h=84,splitter_w=10,splitter_h=10;
@@ -74,6 +83,11 @@ Result update(EditorState& editor,float width=1000,float height=800){
  const auto columns=gui_lib::make_bottom_dock_column_layout(bottomColumnOptions);
  const gui::Vec2 bottomColumnsSplitPosition{columns.left_width,bottom_pos.y},bottomColumnsSplitSize{columns.splitter_width,bottom.bottom_height};
  const gui::Vec2 toolbarMouse=gui::mouse_position();
+ int chat{};std::optional<gui::ScopedInputSuppression> aiModelManagerBackgroundInput,editorSettingsBackgroundInput;
+ const auto editor_automation_input_reserved=[](const auto&,int){return automationInputReserved;};
+ const struct {bool active{};}nativeDockProjection{nativeActive};
+ const bool pointerGrabActive=editor.layoutDrag!=EditorLayoutDrag::None;
+ PREAMBLE
  BLOCK
  HOVER
  gui::draws.clear();
@@ -110,11 +124,18 @@ void divider_contract(){
   fresh(ctx);e={};input(ctx,{event(EventType::MouseDown,205,120)},true);
   CHECK(update(e).scene_input_captured);grip_colors(true);const auto heldFraction=e.outlinerSplit;
   automationInputReserved=true;input(ctx,{event(EventType::MouseMove,405,120)},true);
-  CHECK(!update(e).scene_input_captured&&e.layoutDrag==EditorLayoutDrag::None&&!e.layoutDividerDrag.pending);
-  CHECK(e.outlinerSplit==heldFraction);grip_colors(false);
+  CHECK(update(e).scene_input_captured&&e.layoutDrag==EditorLayoutDrag::Outliner);
+  CHECK(e.outlinerSplit>heldFraction);grip_colors(true);
   automationInputReserved=false;input(ctx,{event(EventType::MouseMove,505,120)},true);
-  CHECK(!update(e).scene_input_captured&&e.layoutDrag==EditorLayoutDrag::None&&e.outlinerSplit==heldFraction);grip_colors(true);
+  CHECK(update(e).scene_input_captured&&e.outlinerSplit>heldFraction);grip_colors(true);
   input(ctx,{event(EventType::MouseUp,505,120)});(void)update(e);
+  automationInputReserved=true;fresh(ctx);e={};
+  input(ctx,{event(EventType::MouseDown,100,605)},true);CHECK(update(e).scene_input_captured);
+  input(ctx,{event(EventType::MouseMove,100,505)},true);CHECK(update(e).scene_input_captured&&e.dockSplit>.41f);
+  input(ctx,{event(EventType::MouseMove,100,455)},true);CHECK(update(e).scene_input_captured&&e.dockSplit>.48f);
+  input(ctx,{event(EventType::MouseUp,100,455)});CHECK(update(e).scene_input_captured&&!e.layoutDividerDrag.pending);
+  automationInputReserved=false;
+  fresh(ctx);e={};
   input(ctx,{event(EventType::MouseDown,205,120),event(EventType::MouseMove,305,120)},true);
   CHECK(update(e).scene_input_captured&&std::abs(e.outlinerSplit-.3f)<.00001);grip_colors(true);
   for(unsigned gate=0;gate<3;++gate){
@@ -124,6 +145,29 @@ void divider_contract(){
   }
  }
  lightPalette=false;palette.buttonActive={2};palette.textFieldActive={3};fresh(ctx);e={};
+ // Other pointer owners block initial capture and cancel an existing divider,
+ // independently of automation inspection's temporary input suppression.
+ for(bool automated:{false,true})for(unsigned owner=0;owner<4;++owner){
+  fresh(ctx);e={};automationInputReserved=automated;
+  const auto setOwner=[&](bool active){
+   nativeActive=owner==0&&active;e.paneTitleDragActive=owner==1&&active;
+   e.floatingGuiWindow.floating.dragging=owner==2&&active;
+   e.floatingGuiWindow.floating.resizing=owner==3&&active;
+  };
+  setOwner(true);
+  input(ctx,{event(EventType::MouseDown,205,120),event(EventType::MouseMove,305,120)},true);
+  (void)update(e);CHECK(e.layoutDrag==EditorLayoutDrag::None&&e.outlinerSplit==.2f);
+  setOwner(false);fresh(ctx);e={};
+  input(ctx,{event(EventType::MouseDown,205,120)},true);
+  (void)update(e);CHECK(e.layoutDrag==EditorLayoutDrag::Outliner);
+  input(ctx,{event(EventType::MouseMove,305,120)},true);
+  (void)update(e);CHECK(std::abs(e.outlinerSplit-.3f)<.00001);
+  setOwner(true);input(ctx,{event(EventType::MouseMove,405,120)},true);
+  (void)update(e);CHECK(e.layoutDrag==EditorLayoutDrag::None&&!e.layoutDividerDrag.pending);
+  CHECK(std::abs(e.outlinerSplit-.3f)<.00001);
+  setOwner(false);
+ }
+ automationInputReserved=false;fresh(ctx);e={};
  // Down is on the 10px divider; final sampled pointer is already outside it.
  input(ctx,{event(EventType::MouseDown,205,120),event(EventType::MouseMove,305,120)},true);
  CHECK(update(e).scene_input_captured);CHECK(e.layoutDrag==EditorLayoutDrag::Outliner);
@@ -210,7 +254,7 @@ void divider_contract(){
  e.layoutDrag=EditorLayoutDrag::None;input(ctx,{},true,{405,120});CHECK(!update(e).scene_input_captured&&!e.layoutDividerDrag.pending);
 }
 int main(){divider_contract();}
-'''.replace("BLOCK",block).replace('HOVER',hover).replace('DRAW',bottom)
+'''.replace("PREAMBLE",preamble).replace("BLOCK",block).replace('HOVER',hover).replace('DRAW',bottom)
 
 class EditorSplitterDrag(unittest.TestCase):
  def test_actual_queued_divider_capture(self):
@@ -245,3 +289,4 @@ endif()
    (report/"result.json").write_text(json.dumps({"passed":r.returncode==0 and i==len(commands)-1,"runs":runs,"owner_sha256":hashlib.sha256(OWNER.read_bytes()).hexdigest()},indent=2),encoding="utf-8")
    self.assertEqual(r.returncode,0,r.stdout[-6000:]+r.stderr[-2000:])
 if __name__=="__main__":unittest.main()
+

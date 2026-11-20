@@ -7,13 +7,13 @@
       "repository": "Autodidac/EpochGui",
       "tree": "c7c0ddd948cf42b9b646b17473be3d0f51c00e34",
       "mode": "engine_owned_gui_fork",
-      "upstream_revision": "fd926cb7494df456eaf14a24d68d621030f09bb9",
-      "upstream_tree": "b39e2002fad48253281732285662b385e6da0b78",
-      "note": "Portable source matches the audited standalone candidate branch at the pinned commit after CRLF/LF normalization only. Windows/Linux Debug/Release standalone CPU checks pass; engine integration metadata remains owned here. No full-tree mirror, native visual acceptance or new release publication is implied.",
+      "upstream_revision": "7761f146b55fa4f78d15c53db5c33385f80f58f9",
+      "upstream_tree": "e1832124982513b61011b5b009919f9afd2a460a",
+      "note": "Published standalone source. Windows Debug and Release focused command menu, tab/text, rounded raster and translucency contracts passed. Native visual acceptance pending. Engine integration metadata remains locally owned.",
       "portable_source_manifest": "Engine/dep/EpochGui/portable_source_manifest.json",
-      "published_upstream_revision": "7d5d5514a1443c0ef340a626fa163569858ca362",
-      "publication_status": "audited_candidate_branch",
-      "version": "0.90.2"
+      "published_upstream_revision": "7761f146b55fa4f78d15c53db5c33385f80f58f9",
+      "publication_status": "published_source",
+      "version": "0.90.4"
     },
     {
       "name": "EpochEngineExtensions",
@@ -36,8 +36,8 @@
       "name": "EpochPlatformEngine",
       "path": "Engine/dep/EpochPlatformEngine",
       "mode": "engine_owned_platform",
-      "note": "Portable source matches the audited standalone candidate branch at the pinned commit after CRLF/LF normalization only. Windows/Linux Debug/Release standalone CPU checks pass; engine integration metadata remains owned here. No full-tree mirror, native visual acceptance or new release publication is implied.",
-      "publication_status": "audited_candidate_branch",
+      "note": "Pinned audited candidate and published baseline remain unchanged. Portable manifest records local horizontal-edge window changes; CPU geometry checks pass, full integration/native acceptance and standalone synchronization remain pending. No publication claimed.",
+      "publication_status": "local_unpublished_changes",
       "repository": "Autodidac/EpochPlatformEngine",
       "upstream_revision": "575810b1884f6b906e7652b93dc3f9b68b2d1230",
       "upstream_tree": "75dfddfdb1727a30c96a1935a9cea9f36e684499",
@@ -50,20 +50,26 @@
       "path": "Engine/dep/EpochAudioEngine",
       "mode": "engine_owned_audio",
       "repository": "Autodidac/EpochAudioEngine",
-      "note": "Published standalone C++23 source; portable implementation, module, consumer and build-support scopes are SHA-256 verified against the pinned revision. Engine integration metadata is not a full-tree mirror. No complete native renderer adoption or physical playback/decoder claim.",
-      "upstream_revision": "980ebd3304f7e5cfc97e48c1e093ea1fc2107760",
-      "upstream_tree": "eeb7fcac57edf0e7cff8c7de02fee9d98dd71555",
-      "portable_source_manifest": "Engine/dep/EpochAudioEngine/portable_source_manifest.json"
+      "note": "Published standalone source. Windows MSVC and Linux Clang Debug/Release contracts and WAV output passed. Physical playback was outside this check. Engine integration metadata remains locally owned.",
+      "upstream_revision": "1f94bdb8728ea428308c00db6f8c681ce99c04cf",
+      "upstream_tree": "fb11a3f0bfd504508bcf9c001f921ffe3262065a",
+      "portable_source_manifest": "Engine/dep/EpochAudioEngine/portable_source_manifest.json",
+      "published_upstream_revision": "1f94bdb8728ea428308c00db6f8c681ce99c04cf",
+      "publication_status": "published_source",
+      "version": "0.1.1"
     },
     {
       "name": "EpochMediaEngine",
       "path": "Engine/dep/EpochMediaEngine",
       "mode": "engine_owned_media",
       "repository": "Autodidac/EpochMediaEngine",
-      "note": "Published standalone C++23 source; portable implementation, module, consumer and build-support scopes are SHA-256 verified against the pinned revision. Engine integration metadata is not a full-tree mirror. No complete native renderer adoption or physical playback/decoder claim.",
-      "upstream_revision": "47ae75acf1e2ff04af9852f7c80a28d26ef145f0",
-      "upstream_tree": "76d15ec4add289f6e98c48cf454fec46f7d1db51",
-      "portable_source_manifest": "Engine/dep/EpochMediaEngine/portable_source_manifest.json"
+      "note": "Published baseline plus a local Clang contract include repair. Linux Release core contract passed. Native interaction and movie decoding remain open.",
+      "upstream_revision": "71ee101bb778eb28947d557f5f8fd3c5c655b375",
+      "upstream_tree": "7dee00788bd49b67e1764606967c4e516ab7f649",
+      "portable_source_manifest": "Engine/dep/EpochMediaEngine/portable_source_manifest.json",
+      "published_upstream_revision": "71ee101bb778eb28947d557f5f8fd3c5c655b375",
+      "publication_status": "local_unpublished_changes",
+      "version": "0.1.1"
     }
   ]
 }

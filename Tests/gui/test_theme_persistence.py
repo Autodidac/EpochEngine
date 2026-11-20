@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def contract_source(root=ROOT):
-    api = (root/'Engine/modules/gui.engine.ixx').read_text(encoding='utf-8')
+    api = (root/'Engine/modules/gui/gui.engine.ixx').read_text(encoding='utf-8')
     gui = (root/'Engine/src/epochgui/gui.engine.cpp').read_text(encoding='utf-8')
     state = (root/'Engine/src/editor/application/editor.application_state.inl').read_text(encoding='utf-8')
     routing = (root/'Engine/src/editor/application/editor.application_pane_routing.inl').read_text(encoding='utf-8')
@@ -27,6 +27,8 @@ def contract_source(root=ROOT):
         '        static void reveal_editor_workspace_surface(',
         '        [[nodiscard]] static const EditorWorkspaceSpec* editor_workspace_fallback('))
     default_theme = re.search(r'gui::ThemePreference themePreference\{[^;]+;', state).group(0)
+    default_telemetry = re.search(r'bool showTelemetry\{[^;]+;', state).group(0) + '\n' + re.search(r'unsigned int telemetryDetail\{[^;]+;', state).group(0)
+    default_telemetry += '\n' + re.search(r'bool showEpochResourceUsage\{[^;]+;', state).group(0)
     codec = (root/'Engine/src/editor/application/editor.application_layout_persistence.inl').read_text(encoding='utf-8')
     # Only the Public codec is needed. Its theme bytes/branches are unchanged;
     # unrelated private project-iteration settings are not part of this fixture.
@@ -109,6 +111,7 @@ struct EditorState {
  std::array<std::uint32_t,4> toolPaneTabOrder{0,1,2,3};
  std::string activeLeftPaneRoute="pane.world_outliner",activeRightPaneRoute="pane.properties",activeBottomLeftPaneRoute="pane.output",activeBottomRightPaneRoute="pane.ai_chat";
  DEFAULT_THEME
+ DEFAULT_TELEMETRY
  std::uint32_t themeCycleIntervalSeconds=30;
 };
 WORKSPACE_HELPERS
@@ -167,7 +170,7 @@ int main() {
  gui::os_dark=true;CHECK(gui::resolve_theme_preference(ThemePreference::FollowSystemDark)==ThemeVariant::DefaultDark);
  CHECK(gui::g_themeCycle.deactivated);
 }
-'''.replace('ENUMS', enums).replace('CHOICES', choices).replace('FUNCTIONS', functions).replace('CODEC', codec_functions).replace('DEFAULT_THEME', default_theme).replace('WORKSPACE_INVENTORY',inventory).replace('WORKSPACE_HELPERS',workspace_helpers)
+'''.replace('ENUMS', enums).replace('CHOICES', choices).replace('FUNCTIONS', functions).replace('CODEC', codec_functions).replace('DEFAULT_THEME', default_theme).replace('DEFAULT_TELEMETRY', default_telemetry).replace('WORKSPACE_INVENTORY',inventory).replace('WORKSPACE_HELPERS',workspace_helpers)
 
 
 class ThemePersistence(unittest.TestCase):

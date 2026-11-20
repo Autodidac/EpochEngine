@@ -6,6 +6,7 @@
 #include <limits>
 #include <memory>
 #include <optional>
+#include <span>
 #include <stdexcept>
 #include <stop_token>
 #include <string>
@@ -15,9 +16,11 @@ import planet.exploration_runtime;
 import planet.exploration;
 import planet.terrain;
 import asset.mesh_artifact;
+import project.planetary_snapshot;
 namespace host=epochengine::project_planetary_runtime;
 namespace adapter=epoch::extensions::planetary_terrain::exploration_runtime;
 namespace core=epoch::extensions::planetary_terrain::core;
+namespace snapshots=epochengine::project_planetary_snapshot;
 // Standalone fixture port only. Actual host admission is a separate Engine
 // integration gate; this consumer exercises the optional bridge after binding.
 extern "C" bool epoch_bind_admitted_planetary_runtime(const char* root,const char* id) noexcept
@@ -42,6 +45,102 @@ namespace
     {
         return std::hypot(a[0]-b[0],a[1]-b[1],a[2]-b[2]);
     }
+#if defined(EPOCH_PLANET_WATER_CONTRACT)
+    void check_linked_wet_cuts(host::Binding binding,const core::Universe& world)
+    {
+        using Status=host::TerrainStatus;
+        binding.universe=false;
+        auto controller=adapter::make_controller(binding);
+        require(bool(controller),"wet single-body controller unavailable");
+        const host::TerrainProfile profile{4u,17u,180u,64u,210.0,0.15,{}};
+        const std::string recipe_key(64,'d');
+        auto terrain=controller->create_wet_terrain_provider(profile,recipe_key);
+        auto waves=controller->water_provider();
+        require(terrain&&waves,"linked wet terrain or its FFT provider unavailable");
+        constexpr double wave_seconds=32.06666666666613;
+        constexpr std::uint64_t tile_bytes=4u*1024u*1024u;
+        const auto sample=waves->evaluate(wave_seconds,tile_bytes);
+        require(sample&&sample.tile&&sample.tile->seconds()==wave_seconds,"linked wet test did not obtain its exact FFT sample");
+
+        // Use the established Verdant shoreline fixture at two flight heights.
+        const auto coast=core::tile_direction({4096u,131041u,0u,0u,17u},0.5,0.5);
+        const auto up=core::tangent(coast);
+        const auto center=world.center(0,0.0);
+        const auto surface=world.ground_radius(0,coast);
+        const auto camera_at=[&](double height) {
+            const auto camera=center+coast*((std::max)(world.body(0).radius,surface)+height);
+            return std::array{camera.x,camera.y,camera.z};
+        };
+        host::TerrainView view{1u,camera_at(130.0),{-coast.x,-coast.y,-coast.z},
+            {up.x,up.y,up.z},0.0,1.0471975511965976,1080.0/2211.0,2211u};
+        const auto unpublished=[](const host::TerrainBatch& batch) {
+            return !batch.artifact&&!batch.aquatic_source&&!batch.water_appearance;
+        };
+        const auto missing=terrain->step(view,{});
+        require(missing.status==Status::invalid&&unpublished(missing),"wet terrain accepted a missing FFT sample");
+        view.water_sample=sample.tile;
+        const auto settled=[&] {
+            for(unsigned step=0;step<24u;++step)
+            {
+                ++view.request_id;
+                const auto batch=terrain->step(view,{});
+                require(batch.request_id==view.request_id&&batch.built<=16u,"linked wet work exceeded its batch");
+                if(batch.status==Status::ready)
+                {
+                    require(!batch.pending&&batch.artifact&&batch.aquatic_source&&batch.water_appearance
+                        &&batch.draw_patches>=6u,"linked wet terrain published an incomplete cut");
+                    const auto& source=*batch.aquatic_source;
+                    require(source.artifact&&source.metadata.identity.artifact_key==source.artifact->key()
+                        &&source.metadata.identity.request_id==batch.request_id
+                        &&source.metadata.identity.source_hash==binding.source_hash
+                        &&source.metadata.identity.recipe_key==recipe_key
+                        &&source.metric_origin_meters==batch.source_origin_meters
+                        &&snapshots::valid_metadata(source.metadata,*source.artifact,{.artifact=profile.artifact}),
+                        "linked wet source did not preserve complete coverage or exact identity");
+                    require(source.water_sample_seconds==view.water_sample->seconds()
+                        &&source.water_sample_seconds!=view.seconds&&source.metadata.water_radius_meters>0.0
+                        &&!source.metadata.water_vertices.empty()&&source.metadata.water_appearance
+                        &&source.metadata.water_appearance->artifact_key==source.artifact->key()
+                        &&batch.water_appearance->artifact_key==batch.artifact->key()
+                        &&!batch.water_appearance->ranges.empty(),"linked wet cut lost its independent phase or water appearance");
+                    return batch;
+                }
+                if(batch.status!=Status::pending||!unpublished(batch))
+                    throw std::runtime_error("wet footprint stopped with status "
+                        +std::to_string(static_cast<unsigned>(batch.status))+" at "+std::string{batch.failure});
+            }
+            throw std::runtime_error("linked wet terrain did not settle inside the step bound");
+        };
+        const auto near=settled();
+        const auto stale=terrain->step(view,{});
+        require(stale.status==Status::invalid&&unpublished(stale),"stale wet request attempted publication");
+        ++view.request_id;
+        std::stop_source stopped;
+        stopped.request_stop();
+        const auto cancelled=terrain->step(view,stopped.get_token());
+        require(cancelled.status==Status::cancelled&&unpublished(cancelled),"cancelled wet request attempted publication");
+        const auto retained=terrain->step(view,{});
+        require(retained.status==Status::ready&&retained.artifact==near.artifact
+            &&retained.aquatic_source==near.aquatic_source&&retained.water_appearance==near.water_appearance,
+            "cancelled wet request discarded the complete displayed cut");
+
+        view.world_camera_meters=camera_at(6500.0);
+        const auto raised=settled();
+        require(raised.artifact->key()!=near.artifact->key()&&raised.generation>near.generation
+            &&raised.aquatic_source->water_sample_seconds==near.aquatic_source->water_sample_seconds,
+            "wet topology replacement did not keep the exact displayed phase");
+
+        const auto next=waves->evaluate(wave_seconds+0.25,tile_bytes);
+        require(next&&next.tile&&next.tile->seconds()==wave_seconds+0.25,"FFT provider did not advance the sample");
+        view.water_sample=next.tile;
+        const auto advanced=settled();
+        require(!advanced.built&&advanced.artifact->key()!=raised.artifact->key()
+            &&advanced.source_origin_meters==raised.source_origin_meters
+            &&advanced.aquatic_source->water_sample_seconds==wave_seconds+0.25
+            &&raised.aquatic_source->water_sample_seconds==wave_seconds,
+            "new FFT phase rebuilt terrain or mutated the previously presented cut");
+    }
+#endif
 }
 int main()
 {
@@ -72,6 +171,75 @@ int main()
         }
         auto first=host::create_controller(binding),second=host::create_controller(binding);
         require(first&&second&&first.get()!=second.get(),"per-scene controllers share mutable instance");
+        require(!first->create_dry_terrain_provider({}),"wet or universe controller granted dry single-body terrain");
+        auto ground_cover=second->ground_cover_provider();
+        second.reset();
+        require(bool(ground_cover),"admitted runtime has no ground cover provider");
+        const core::Universe cover_world{binding.seed};
+        std::optional<host::GroundCoverDrawPatch> grass;
+        std::array<double,3> grass_direction{};
+        for(unsigned index=0;index<64u&&!grass;++index)
+        {
+            const double y=-0.8+1.6*(index+0.5)/64.0;
+            const double angle=index*2.399963229728653;
+            const double planar=std::sqrt(1.0-y*y);
+            const core::DVec3 direction{planar*std::cos(angle),y,planar*std::sin(angle)};
+            const auto terrain=core::sample_surface(cover_world.body(0),direction);
+            if(terrain.height<20.0||terrain.moisture<0.45||terrain.temperature<0.30)continue;
+            grass_direction={direction.x,direction.y,direction.z};
+            auto candidate=ground_cover->build_patch(0,grass_direction,{});
+            if(candidate&&candidate->mesh)grass=std::move(candidate);
+        }
+        require(grass&&grass->mesh->vertices().size()<=3456u,"ground cover did not yield bounded drawable geometry");
+        const auto repeated_grass=ground_cover->build_patch(0,grass_direction,{});
+        require(repeated_grass&&repeated_grass->mesh&&repeated_grass->mesh->key()==grass->mesh->key()
+            &&repeated_grass->body_local_anchor_meters==grass->body_local_anchor_meters,"ground cover patch is unstable");
+        std::stop_source grass_stop;
+        grass_stop.request_stop();
+        require(!ground_cover->build_patch(0,grass_direction,grass_stop.get_token())
+            &&!ground_cover->build_patch(99,grass_direction,{}),"ground cover bypassed body or cancellation gate");
+        const std::array verdant_capture{3755514.6242091493,3753616.1154924748,3520829.416996601};
+        const auto capture_patch=ground_cover->build_patch(0,verdant_capture,{});
+        const auto neighborhood=ground_cover->build_neighborhood(0,verdant_capture,{});
+        require(capture_patch&&capture_patch->mesh&&neighborhood&&neighborhood->size()==9u
+            &&neighborhood->front().mesh&&neighborhood->front().mesh->key()==capture_patch->mesh->key()
+            &&neighborhood->front().body_local_anchor_meters==capture_patch->body_local_anchor_meters,
+            "ground cover neighborhood lost the exact Verdant home patch");
+        for(const auto& patch:*neighborhood)
+            require(patch.mesh&&patch.mesh->vertices().size()<=3456u
+                &&std::ranges::count_if(*neighborhood,[&patch](const auto& other) {
+                    return patch.body_local_anchor_meters==other.body_local_anchor_meters;
+                })==1,"ground cover neighborhood repeated a patch or exceeded its mesh budget");
+        const auto cancelled_neighborhood=ground_cover->build_neighborhood(0,verdant_capture,grass_stop.get_token());
+        const auto unadmitted_neighborhood=ground_cover->build_neighborhood(99,verdant_capture,{});
+        const auto non_temperate_neighborhood=ground_cover->build_neighborhood(1,verdant_capture,{});
+        require(cancelled_neighborhood&&cancelled_neighborhood->empty()
+            &&unadmitted_neighborhood&&unadmitted_neighborhood->empty()
+            &&non_temperate_neighborhood&&non_temperate_neighborhood->empty(),
+            "an admitted provider returned partial or unhandled grass neighborhood results");
+        const auto visible=ground_cover->build_visible_neighborhood(0,verdant_capture,2.8,{});
+        require(visible&&visible->size()>9u&&visible->size()<=host::maximum_visible_ground_cover_patches,
+            "ground cover view did not extend beyond the original square");
+        const auto original_direction=core::normalized(core::DVec3{verdant_capture[0],verdant_capture[1],verdant_capture[2]});
+        const auto nearby=original_direction+core::tangent(original_direction)
+            *(host::ground_cover_view_update_meters/cover_world.body(0).radius);
+        const auto moved_cover=ground_cover->build_visible_neighborhood(0,{nearby.x,nearby.y,nearby.z},2.8,{});
+        require(moved_cover&&moved_cover->size()>9u,"moving the view retired visible grass");
+        const auto recovered=ground_cover->build_visible_neighborhood(0,verdant_capture,2.8,{});
+        require(recovered&&recovered->size()==visible->size(),"return to a grass pose lost retained patches");
+        for(std::size_t i=0u;i<visible->size();++i)
+        {
+            const auto& before=(*visible)[i];
+            const auto& after=(*recovered)[i];
+            require(before.mesh&&after.mesh&&before.mesh->key()==after.mesh->key()
+                &&before.body_local_anchor_meters==after.body_local_anchor_meters,"moving the view reseeded grass");
+        }
+        const auto above=ground_cover->build_visible_neighborhood(0,verdant_capture,32.0,{});
+        const auto stopped_cover=ground_cover->build_visible_neighborhood(0,verdant_capture,2.8,grass_stop.get_token());
+        require(above&&above->empty()&&stopped_cover&&stopped_cover->empty(),
+            "grass view published faded or cancelled geometry");
+        second=host::create_controller(binding);
+        require(bool(second),"second controller could not be reopened");
 #if defined(EPOCH_PLANET_WATER_CONTRACT)
         auto waves=first->water_provider();require(bool(waves),"admitted runtime has no real Water provider");
         const auto sample=waves->evaluate(3.25,4u*1024u*1024u);
@@ -80,6 +248,7 @@ int main()
         std::stop_source waterStop;waterStop.request_stop();
         require(waves->evaluate(4.0,4u*1024u*1024u,waterStop.get_token()).code==epochengine::water::wave::Code::cancelled,
             "runtime Water cancellation lost");
+        check_linked_wet_cuts(binding,cover_world);
 #endif
         // Explicit banking uses the same original camera and persistent session.
         auto banking=host::create_controller(binding);require(bool(banking),"banking controller unavailable");
@@ -137,6 +306,71 @@ int main()
         auto restoredStart=host::create_controller(binding);
         require(restoredStart->restore_session(savedStart)
             &&distance(restoredStart->capture().frame.camera,surfaceStart.frame.camera)<.001,"walking start did not restore");
+
+        auto flight=host::create_controller(binding);
+        require(bool(flight),"flight-start controller unavailable");
+        const auto flightBefore=flight->capture().frame;
+        const auto flightLocal=*wet*(spawnWorld.body(0).radius+132.125);
+        const host::FlightStart authoredFlight{.body=0,
+            .body_local_position_meters={flightLocal.x,flightLocal.y,flightLocal.z},
+            .body_local_forward={0,-.6,-.8},.body_local_up={.6,.64,-.48}};
+        const auto flightStart=flight->start_in_flight(authoredFlight);
+        require(flightStart.code==host::Code::ready&&host::valid_frame(flightStart.frame)
+            &&flightStart.frame.mode==host::TravelMode::flight&&flightStart.frame.anchor==0u
+            &&flightStart.frame.target==0u,"valid authored flight pose refused");
+        const auto flightEye=spawnWorld.center(0,flightStart.frame.seconds)+flightLocal;
+        require(distance(flightStart.frame.camera,{flightEye.x,flightEye.y,flightEye.z})<1e-6
+            &&distance(flightStart.frame.forward,authoredFlight.body_local_forward)<1e-12
+            &&distance(flightStart.frame.up,authoredFlight.body_local_up)<1e-12
+            &&flightStart.frame.seconds==flightBefore.seconds&&flightStart.frame.time_scale==flightBefore.time_scale
+            &&flightStart.frame.gravity_enabled==flightBefore.gravity_enabled
+            &&flightStart.frame.level_assist==flightBefore.level_assist,"authored flight eye or rolled basis changed");
+        const auto sampledFlight=advance(*flight).frame;
+        require(distance(sampledFlight.camera,flightStart.frame.camera)<1e-6
+            &&distance(sampledFlight.forward,flightStart.frame.forward)<1e-12
+            &&distance(sampledFlight.up,flightStart.frame.up)<1e-12,"fresh flight interpolation sampled the old orbit");
+        const auto flightSession=flight->encode_session();
+        require(!flightSession.empty(),"authored flight was not serializable");
+
+        auto waterContact=host::create_controller(binding);
+        require(bool(waterContact),"water contact controller unavailable");
+        const double seaRadius=spawnWorld.body(0).radius;
+        const auto nearWater=*wet*(seaRadius+2.0);
+        const auto waterHeading=core::tangent(*wet);
+        const auto aboveWater=waterContact->start_in_flight({.body=0,
+            .body_local_position_meters={nearWater.x,nearWater.y,nearWater.z},
+            .body_local_forward={waterHeading.x,waterHeading.y,waterHeading.z},
+            .body_local_up={wet->x,wet->y,wet->z}});
+        require(aboveWater.code==host::Code::ready&&std::abs(aboveWater.frame.altitude-0.2)<1e-6,
+            "water clearance above the surface is incorrect");
+        const auto atWater=advance(*waterContact,{.elapsed_seconds=0.05,.rise=-1.0,.time_scale=0.0}).frame;
+        const auto waterEye=spawnWorld.center(0,atWater.seconds)+*wet*(seaRadius+1.8);
+        require(atWater.mode==host::TravelMode::flight&&std::abs(atWater.altitude)<1e-6
+            &&distance(atWater.camera,{waterEye.x,waterEye.y,waterEye.z})<1e-6,
+            "water contact should read zero while preserving camera clearance");
+
+        for(unsigned invalid=0;invalid<6u;++invalid)
+        {
+            auto bad=authoredFlight;
+            if(invalid==0u)bad.body=99u;
+            else if(invalid==1u)bad.body_local_position_meters[0]=std::numeric_limits<double>::infinity();
+            else if(invalid==2u)bad.body_local_forward={};
+            else if(invalid==3u)bad.body_local_up=bad.body_local_forward;
+            else if(invalid==4u)bad.body_local_up[1]=std::numeric_limits<double>::quiet_NaN();
+            else
+            {
+                const auto inside=*wet*(spawnWorld.body(0).radius+.75);
+                bad.body_local_position_meters={inside.x,inside.y,inside.z};
+            }
+            require(flight->start_in_flight(bad).code==host::Code::invalid_input
+                &&flight->encode_session()==flightSession,"invalid flight pose replaced the active session");
+        }
+        auto restoredFlight=host::create_controller(binding);
+        require(restoredFlight&&restoredFlight->restore_session(flightSession),"saved flight pose did not restore");
+        const auto restoredFlightFrame=restoredFlight->capture().frame;
+        require(distance(restoredFlightFrame.camera,flightStart.frame.camera)<1e-6
+            &&distance(restoredFlightFrame.forward,flightStart.frame.forward)<1e-12
+            &&distance(restoredFlightFrame.up,flightStart.frame.up)<1e-12,"flight restore changed the authored pose");
         for(unsigned tick=0;tick<3;++tick)(void)advance(*surface,{.elapsed_seconds=1.0/60.0,.forward=1});
         require(distance(surface->capture().frame.camera,surfaceStart.frame.camera)>.1,"authored start could not walk");
 
@@ -172,7 +406,17 @@ int main()
         require(earthProjection->bodies[0].cloud_density&&earthProjection->bodies[2].cloud_density
             &&!earthProjection->bodies[5].cloud_density&&!earthProjection->bodies[0].cloud_mesh,
             "cloud density did not follow atmosphere-bearing body scope or duplicated mesh lobes");
+        require(!earthProjection->bodies[1].cloud_density
+            &&earthProjection->bodies[1].atmosphere_height==55'000.0*earthProjection->meters_to_preview
+            &&earthProjection->bodies[5].atmosphere_height==0.0,
+            "clear Ember atmosphere or airless Selene was lost during projection");
+        auto invalidAtmosphere=projectionFrame;
+        invalidAtmosphere.bodies[0].atmosphere_height_meters=std::numeric_limits<double>::infinity();
+        require(!host::preview_frame(invalidAtmosphere),"non-finite atmosphere height entered the host");
         const auto retainedClouds=projectionFrame.bodies[0].cloud_density;
+        require(retainedClouds&&retainedClouds->view_occluder_radius_meters==6'349'751.0
+            &&earthProjection->bodies[0].cloud_density==retainedClouds,
+            "metric solid radius changed in exploration preview");
         auto cloudClock=host::create_controller(binding);
         for(unsigned tick=0;tick<4u;++tick)(void)advance(*cloudClock,{.elapsed_seconds=0.25});
         const auto cloudSample=cloudClock->capture().frame;
@@ -274,7 +518,7 @@ int main()
         auto landInput=host::Input{};landInput.selected_body=4;landInput.command=host::Command::land;
         require(first->advance(landInput).code==host::Code::invalid_input&&first->encode_session()==before,"gas landing changed prior session");
         landInput.selected_body=0;frame=advance(*first,landInput).frame;
-        require(frame.mode==host::TravelMode::walk&&std::abs(frame.altitude-1.8)<1e-5,"original landing absent");
+        require(frame.mode==host::TravelMode::walk&&std::abs(frame.altitude)<1e-5,"landing altitude is not at the surface");
         require(copied->restore_session(first->encode_session())&&copied->capture().frame.mode==host::TravelMode::walk,
             "landed session lost walking mode");
         host::Input cruise;cruise.selected_body=1;cruise.command=host::Command::toggle_cruise;
@@ -302,7 +546,8 @@ int main()
         require(customFrame.bodies[0].coarse_mesh&&customFrame.bodies[5].coarse_mesh,"custom coarse worlds missing");
         host::Input customLand;customLand.command=host::Command::land;customLand.selected_body=0;
         customFrame=advance(*custom,customLand).frame;
-        require(customFrame.mode==host::TravelMode::walk&&std::abs(customFrame.altitude-1.8)<1e-7,"custom landing changed player height");
+        require(customFrame.mode==host::TravelMode::walk&&std::abs(customFrame.altitude)<1e-7,
+            "custom landing altitude is not at the surface");
         const auto sizedSession=custom->encode_session();
         require(sizedSession.starts_with("epoch.planet.exploration.v2\n")
             &&sizedSession.find("size_reference_body=0\nreference_radius_meters=25000\n")!=std::string::npos,
@@ -325,22 +570,49 @@ int main()
         auto solarBinding=customBinding;solarBinding.original_sunlight=true;
         auto solar=adapter::make_controller(solarBinding),solarCopy=adapter::make_controller(solarBinding);
         require(solar&&solarCopy,"solar controller refused exact binding");
+        const auto checkSunDirection=[](const host::Frame& frame) {
+            require(frame.sunlight&&host::valid_sunlight(*frame.sunlight),"enabled sun frame missing");
+            const auto bodies=std::span{frame.bodies}.first(frame.body_count);
+            const auto carrier=std::ranges::find_if(bodies,[&](const auto& body){return body.id==frame.anchor;});
+            require(carrier!=bodies.end(),"solar frame missing active body");
+            const auto& center=carrier->center;
+            const auto length=std::hypot(center[0],center[1],center[2]);
+            for(unsigned axis=0;axis<3;++axis)
+                require(std::abs(frame.sunlight->direction_to_sun[axis]+center[axis]/length)<1e-15,
+                    "solar direction did not use the active body's center");
+        };
         for(std::uint32_t body:std::array{0u,5u,3u})
         {
             host::Input choose;choose.command=host::Command::orbit;choose.selected_body=body;
             auto illuminated=advance(*solar,choose).frame;
+            checkSunDirection(illuminated);
+            const auto orbitFrame=illuminated;
+            illuminated=advance(*solar,{.command=host::Command::land}).frame;
+            checkSunDirection(illuminated);
+            require(illuminated.seconds==orbitFrame.seconds&&illuminated.anchor==orbitFrame.anchor
+                &&distance(illuminated.camera,orbitFrame.camera)>100.0
+                &&illuminated.sunlight->direction_to_sun==orbitFrame.sunlight->direction_to_sun,
+                "moving the camera at a fixed scene time moved the sunlight");
             for(unsigned instant=0;instant<3;++instant)
             {
-                require(illuminated.sunlight&&host::valid_sunlight(*illuminated.sunlight),"enabled sun frame missing");
-                const auto length=std::hypot(illuminated.camera[0],illuminated.camera[1],illuminated.camera[2]);
-                for(unsigned axis=0;axis<3;++axis)
-                    require(std::abs(illuminated.sunlight->direction_to_sun[axis]+illuminated.camera[axis]/length)<1e-15,
-                        "solar direction differs from original interpolated-camera shader");
+                checkSunDirection(illuminated);
                 require(illuminated.sunlight->color==std::array<float,3>{1,1,1}&&illuminated.sunlight->intensity==1.12f,
                     "original solar diffuse radiance changed");
-                illuminated=advance(*solar,{.elapsed_seconds=.25,.time_scale=1000}).frame;
+                const auto later=advance(*solar,{.elapsed_seconds=.25,.time_scale=1000}).frame;
+                checkSunDirection(later);
+                require(later.seconds>illuminated.seconds
+                    &&distance(later.sunlight->direction_to_sun,illuminated.sunlight->direction_to_sun)>1e-7,
+                    "orbital time did not advance sunlight");
+                illuminated=later;
             }
         }
+        auto singleSolarBinding=solarBinding;singleSolarBinding.universe=false;singleSolarBinding.initial_body=5;
+        const auto singleSolar=adapter::make_controller(singleSolarBinding);
+        require(bool(singleSolar),"scoped Moon solar controller unavailable");
+        const auto singleSolarFrame=singleSolar->capture().frame;
+        checkSunDirection(singleSolarFrame);
+        require(singleSolarFrame.body_count==1u&&singleSolarFrame.bodies[0].id==5,
+            "scoped solar frame published hidden bodies");
         const auto solarSession=solar->encode_session();
         require(solarSession.starts_with("epoch.planet.exploration.v3\n")&&solarSession.find("original_sunlight=1\n")!=std::string::npos,
             "solar opt-in absent from session");
@@ -361,6 +633,59 @@ int main()
             planetBinding.initial_body=selected;planetBinding.ocean_surface=false;planetBinding.water_source_hash.clear();
             auto planet=adapter::make_controller(planetBinding),planetCopy=adapter::make_controller(planetBinding);
             require(planet&&planetCopy,"selected Planet controller unavailable");
+            if(selected==0u)
+            {
+                const host::TerrainProfile profile{8u,9u,48u,64u,210.0,0.15,{}};
+                auto rejected=profile;
+                rejected.maximum_level=21u;
+                require(!planet->create_dry_terrain_provider(rejected),"linked terrain accepted an unsupported level");
+                auto terrain=planet->create_dry_terrain_provider(profile);
+                require(bool(terrain),"dry single-body controller refused the linked provider");
+                require(planet->create_dry_terrain_provider(profile)!=terrain,"separate terrain sessions share mutable residence");
+                const auto center=cover_world.center(0,0.0);
+                const auto radius=cover_world.body(0).radius;
+                host::TerrainView view{0u,{center.x+radius*1.0004,center.y,center.z},
+                    {-1.0,0.0,0.0},{0.0,1.0,0.0},0.0,1.0471975511965976,1080.0/2211.0,2211u};
+                require(terrain->step(view,{}).status==host::TerrainStatus::invalid,"unidentified terrain work accepted");
+                const auto settled=[&] {
+                    for(unsigned step=0;step<24;++step)
+                    {
+                        ++view.request_id;
+                        const auto batch=terrain->step(view,{});
+                        require(batch.request_id==view.request_id&&batch.built<=16u,"terrain work exceeded its batch");
+                        if(batch.status==host::TerrainStatus::ready)
+                        {
+                            require(batch.artifact&&batch.draw_patches>=6u&&batch.source_origin_meters!=std::array<double,3>{},
+                                "linked terrain offered a partial or nonmetric cut");
+                            if(!batch.pending)return batch;
+                        }
+                        else require(batch.status==host::TerrainStatus::pending&&!batch.artifact,
+                            "linked terrain failed while building admitted footprint");
+                    }
+                    throw std::runtime_error("linked terrain did not settle inside the step bound");
+                };
+                const auto near=settled();
+                require(near.maximum_level>0,"near linked terrain has only coarse roots");
+                require(terrain->step(view,{}).status==host::TerrainStatus::invalid,"old terrain request replayed");
+                ++view.request_id;
+                const auto reused=terrain->step(view,{});
+                require(reused.status==host::TerrainStatus::ready&&!reused.built&&reused.artifact==near.artifact,
+                    "unchanged footprint rebuilt its selected cut");
+                ++view.request_id;
+                std::stop_source stopped;
+                stopped.request_stop();
+                const auto cancelled=terrain->step(view,stopped.get_token());
+                require(cancelled.status==host::TerrainStatus::cancelled&&!cancelled.artifact,
+                    "cancelled terrain request attempted publication");
+                const auto retained=terrain->step(view,{});
+                require(retained.artifact==near.artifact,"cancellation discarded the admitted cut");
+                view.world_camera_meters={center.x,center.y,center.z+radius*3.0};
+                view.forward={0.0,0.0,-1.0};
+                const auto far=settled();
+                require(far.artifact->key()!=near.artifact->key()&&far.generation>near.generation
+                    &&far.maximum_level<near.maximum_level&&far.source_origin_meters!=near.source_origin_meters,
+                    "new flight footprint did not move terrain detail");
+            }
             const auto selectedFrame=planet->capture().frame;
             require(host::valid_frame(selectedFrame)&&selectedFrame.body_count==1u
                 &&selectedFrame.anchor==selected&&selectedFrame.target==selected
@@ -390,6 +715,17 @@ int main()
             const auto onSurface=advance(*planet,land).frame;
             require(onSurface.body_count==1u&&onSurface.anchor==selected&&onSurface.mode==host::TravelMode::walk,
                 "selected Planet landing changed coverage");
+            host::FlightStart scopedFlight{.body=selected,
+                .body_local_position_meters={spawnWorld.body(selected).radius+123456.25,0,0},
+                .body_local_forward={0,0,-1},.body_local_up={0,1,0}};
+            const auto scopedStart=planet->start_in_flight(scopedFlight);
+            require(scopedStart.code==host::Code::ready&&scopedStart.frame.body_count==1u
+                &&scopedStart.frame.anchor==selected&&scopedStart.frame.target==selected,
+                "selected Planet flight lost its bound body");
+            const auto scopedFlightSession=planet->encode_session();
+            scopedFlight.body=selected==0u?5u:0u;
+            require(planet->start_in_flight(scopedFlight).code==host::Code::invalid_input
+                &&planet->encode_session()==scopedFlightSession,"Planet flight accepted a foreign body");
         }
         namespace simulation=epoch::extensions::planetary_terrain::exploration;
         simulation::Simulation scoped{binding.seed,{},std::optional<std::size_t>{0u}},unscoped{binding.seed};
@@ -405,7 +741,11 @@ int main()
         bool rejected{};try{scoped.select(5u);}catch(const std::out_of_range&){rejected=true;}
         require(rejected&&scoped.target()==0u,"scoped simulation selected an absent body");
         std::ofstream result{"controller-result.json"};result<<"{\"pass\":true,\"assertions\":"<<assertions
-            <<",\"six_real_body_meshes\":true,\"moon_orbits\":true,\"session_codec\":true,\"native_host\":false}\n";
+            <<",\"six_real_body_meshes\":true,\"moon_orbits\":true,\"session_codec\":true,\"native_host\":false";
+#if defined(EPOCH_PLANET_WATER_CONTRACT)
+        result<<",\"linked_wet_cut_phases\":true";
+#endif
+        result<<"}\n";
         return result?0:2;
     }
     catch(const std::exception& error){std::ofstream file{"controller-failure.txt"};file<<error.what();return 1;}

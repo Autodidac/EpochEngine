@@ -151,6 +151,7 @@
 
         const ScopedWindowsTimerResolution coreFrameTimerResolution{};
         epochengine::perf::frame_limiter coreFrameLimiter{};
+        epochengine::editor::build_pressure::FrameCeiling editorFrameCeiling{};
         epochengine::perf::frame_pacing_plan activeDesiredFramePlan{};
         epochengine::perf::frame_pacing_plan activeCoreFramePlan{};
         bool hasActiveCoreFramePlan = false;
@@ -219,7 +220,12 @@
                 // HandleResize publishes this pair and its generation under the
                 // same registry lock. No native calls may occur in this scope.
                 std::scoped_lock lock(windowsMutex);
-                geometry={win.host_hwnd ? win.host_hwnd : win.hwnd,win.width,win.height,
+                // The live render child determines the native root after
+                // undock. The original host can remain parked in the grid.
+                HWND surface = win.getChildHandle();
+                if (!surface)
+                    surface = win.hwnd ? win.hwnd : win.host_hwnd;
+                geometry={surface,win.width,win.height,
                     win.resizeGeneration.load(std::memory_order_acquire)};
             }
             const auto generation=nativeWindowStateGeneration.load(std::memory_order_acquire);
@@ -457,25 +463,15 @@
             // The resource sampler caches OS counters across calls.
             const bool editorHost = epochengine::core::cli::editor_requested
                 || epochengine::core::cli::run_menu_loop;
-            double allowedEditorHz = 0.0;
-            if (editorHost)
-            {
-                // Compiler activity is a stronger signal than sampled host load:
-                // keep the editor responsive but never render over 10 FPS during
-                // a guarded AI candidate build, even if CPU pressure reads low.
-                if (epochengine::editor::build_pressure::active())
-                    allowedEditorHz = 10.0;
-                else
-                {
-                    const auto pressure = epochengine::platform::work_admission::sample_host_resources();
-                    const bool cpuMeasured = pressure.cpu_valid
-                        && std::isfinite(pressure.cpu_busy_fraction);
-                    if (cpuMeasured && pressure.cpu_busy_fraction >= 0.90)
-                        allowedEditorHz = 20.0;
-                    else if (cpuMeasured && pressure.cpu_busy_fraction >= 0.75)
-                        allowedEditorHz = 30.0;
-                }
-            }
+            const bool compiling = editorHost && (epochengine::editor::build_pressure::active()
+                || win.editorForegroundWorkActive.load(std::memory_order_relaxed));
+            const auto pressure = editorHost && !compiling
+                ? epochengine::platform::work_admission::sample_host_resources()
+                : epochengine::platform::work_admission::ResourceSample{};
+            const double allowedEditorHz = editorHost
+                ? editorFrameCeiling.update(compiling, pressure.cpu_valid, pressure.cpu_busy_fraction,
+                    pressure.captured_at_ms, epochengine::platform::work_admission::now_milliseconds())
+                : 0.0;
             win.editorThrottleHz.store(allowedEditorHz, std::memory_order_relaxed);
             const auto limitedPlan = epochengine::perf::with_frame_rate_ceiling(
                 activeCoreFramePlan, allowedEditorHz);

@@ -19,6 +19,7 @@ def actual_owner_fixture():
     scene = (ROOT / "Engine/src/editor/application/editor.application_scene_selection.inl").read_text(encoding="utf-8")
     snapshot = (ROOT / "Engine/src/editor/application/editor.application_context_snapshot.inl").read_text(encoding="utf-8")
     inspector = (ROOT / "Engine/src/editor/application/editor.frame_inspector.inl").read_text(encoding="utf-8")
+    texture = (ROOT / "Engine/src/editor/application/editor.application_texture_authoring.inl").read_text(encoding="utf-8")
     properties = inspector[inspector.index("                auto* document = synchronize_gui_document(editor);"):
         inspector.index("                if (document && widget)")]
     identity = definition(state, "            struct GuiWidgetIdentity final", True)
@@ -49,6 +50,7 @@ void select_editor_entity(EditorState& state,std::size_t index){
         "        bool select_gui_widget(",
         "        [[nodiscard]] bool select_gui_hierarchy_widget(",
         "        void apply_detached_gui_hierarchy_selections(",
+        "        [[nodiscard]] bool create_gui_widget_projection(",
         "        void remember_gui_projection_tombstone(",
         "        void reconcile_gui_document_projections(",
         "        [[nodiscard]] bool remove_selected_gui_widget(",
@@ -57,6 +59,23 @@ void select_editor_entity(EditorState& state,std::size_t index){
         "        [[nodiscard]] bool redo_gui_document(",
         "        void hydrate_gui_content_editor(",
         "        [[nodiscard]] bool apply_gui_content_editor("))
+    functions = next(line for line in docs.splitlines()
+        if "inline constexpr std::string_view kLegacyUnassignedGuiImage" in line) + "\n" + functions
+    functions += "\n" + "\n".join(definition(docs, marker) for marker in (
+        "        [[nodiscard]] bool is_gui_authoring_entity(",
+        "        [[nodiscard]] std::string_view gui_widget_asset_path(",
+        "        [[nodiscard]] bool update_gui_widget_image_path(",
+        "        void seed_legacy_gui_widget_image(",
+        "        [[nodiscard]] authoring::gui::WidgetDescriptor\n        gui_widget_descriptor_from_entity(",
+        "        [[nodiscard]] bool gui_layout_matches_scene_projection(",
+        "        [[nodiscard]] authoring::gui::MutationResult create_authored_gui_widget("))
+    # Keep the hierarchy tests' narrow state stub and run the real synchronizer
+    # where the image ownership test needs the scene-to-GUI boundary.
+    functions += "\nauthoring::gui::GuiDocument*\n" + definition(
+        docs, "        synchronize_gui_document(EditorState& state)").replace(
+            "synchronize_gui_document(", "synchronize_image_fixture_document(")
+    functions += "\n" + definition(texture, "        [[nodiscard]] std::optional<bool> edit_selected_gui_image_path(").replace(
+        "synchronize_gui_document(", "synchronize_image_fixture_document(")
     snapshot_reset = snapshot[snapshot.index("        editor.guiSelectedWidget = {};"):
         snapshot.index("        editor.guiCanvasWidgetDrag = {};")]
     return r'''
@@ -70,7 +89,8 @@ namespace gui {struct ChatMessageRunInfo{};}
 enum class EditorApplicationKind{Standard};
 enum class OutlinerToolTab{World,Gui};enum class InspectorToolTab{Properties};
 struct Material{int filter{},address_u{},address_v{},alpha{},color_space{};float alpha_cutoff{};std::string logical_path;};
-struct EditorEntity{std::uint64_t sceneObjectId{};std::optional<Material> textureMaterial{};};
+struct EditorEntity{std::uint64_t sceneObjectId{};std::optional<Material> textureMaterial{};std::string name{},type{};
+ std::array<float,3> position{},scale{1.0f,1.0f,1.0f};};
 struct FakeTextures{struct Texture{std::filesystem::path source_path;};bool select(std::string_view){return false;}const Texture* selected(){return nullptr;}};
 struct GuiProjectionTombstone{authoring::gui::WidgetHandle widget{};EditorEntity entity{};};
 struct EditorState {
@@ -90,9 +110,13 @@ struct EditorState {
  std::unique_ptr<FakeTextures> projectTextures;
  OutlinerToolTab outlinerToolTab{};InspectorToolTab inspectorToolTab{};std::size_t guiAuthoringSection{2};
  std::vector<GuiProjectionTombstone> guiProjectionTombstones;
- std::string guiContentPrimary,guiContentSecondary,guiActionEditor,guiTooltipEditor;
+ std::string guiNameEditor,guiContentPrimary,guiContentSecondary,guiActionEditor,guiTooltipEditor;
+ std::uint64_t guiDocumentSavedRevision{};
+ bool guiDocumentReplaceArmed{},guiDocumentLoadAttempted{};
+ struct {} guiCanvasView{};
  std::shared_ptr<const editor_hierarchy::GuiHierarchyProjection> guiHierarchyProjection;
  std::string guiHierarchyProjectId,guiHierarchyProjectRoot,guiHierarchySourcePath;
+ bool refuseProjectionCreation{};
 };
 TYPES
 inline unsigned locks{},selections{};
@@ -116,13 +140,25 @@ bool project_gui_document_layout(EditorState&){return true;}
 std::optional<bool> try_grouped_gui_world_history(EditorState&,
  editor_authoring_history::BranchId,editor_authoring_history::Direction){return std::nullopt;}
 authoring::gui::GuiDocument* synchronize_gui_document(EditorState& state){return state.guiDocument.get();}
+bool load_project_gui_document(EditorState&){return false;}
+authoring::gui::TemplatePreset project_gui_starter_template(const EditorState&){return authoring::gui::TemplatePreset::desktop_app;}
+std::filesystem::path project_gui_document_path(const EditorState& state){return state.guiDocumentSourcePath;}
+std::string display_project_path(const std::filesystem::path& path){return path.generic_string();}
 bool destroy_editor_scene_entity(EditorState& state,std::uint64_t id,std::string_view){
  std::erase_if(state.entities,[&](const auto& entity){return entity.sceneObjectId==id;});
  if(state.selectedEntityId==id)clear_editor_selection(state);return true;
 }
+std::uint64_t allocate_editor_scene_object_id(const EditorState& state,std::string_view){
+ std::uint64_t id=1001;
+ while(editor_entity_index(state,id))++id;
+ return id;
+}
 bool create_editor_scene_entity(EditorState& state,EditorEntity entity,std::string_view){
- entity.sceneObjectId=state.entities.size()+1001;state.entities.push_back(entity);
- select_editor_entity(state,state.entities.size()-1);return true;
+ if(state.refuseProjectionCreation)return false;
+ REQUIRE(entity.sceneObjectId!=0&&!editor_entity_index(state,entity.sceneObjectId));
+ state.entities.push_back(std::move(entity));
+ clear_editor_selection(state); // Document restoration must not depend on focus.
+ return true;
 }
 FUNCTIONS
 void reset_snapshot_gui(EditorState& editor){SNAPSHOT_RESET}
@@ -137,8 +173,97 @@ DetachedPaneProjection show(const core::Context* owner,EditorState& state){
  projection.guiHierarchy=gui_hierarchy_projection(state);
  editor_storage().detachedPaneProjection=projection;return projection;
 }
+void verify_projection_creation_with_no_selection(){
+ using namespace authoring::gui;
+ EditorState state;
+ state.guiDocument=std::make_unique<GuiDocument>(DocumentHandle{6,1},BranchIdentity{8,1});
+ auto& document=*state.guiDocument;
+ state.guiDocumentRoot=document.create_widget(canvas("Root")).widget;
+ const auto first=document.create_widget(panel("First"),state.guiDocumentRoot).widget;
+ const auto second=document.create_widget(panel("Second"),state.guiDocumentRoot).widget;
+ const auto rejected=document.create_widget(panel("Rejected"),state.guiDocumentRoot).widget;
+ const auto savedRevision=document.revision();
+ REQUIRE(create_gui_widget_projection(state,{.name="First"},first,"Restore saved widget"));
+ REQUIRE(create_gui_widget_projection(state,{.name="Second"},second,"Restore saved widget"));
+ REQUIRE(state.selectedEntityId==0&&state.entities.size()==2&&state.guiDocumentWidgets.size()==2);
+ REQUIRE(!state.guiDocumentWidgets.contains(0));
+ REQUIRE(state.guiDocumentWidgets.at(state.entities[0].sceneObjectId)==first);
+ REQUIRE(state.guiDocumentWidgets.at(state.entities[1].sceneObjectId)==second);
+ state.refuseProjectionCreation=true;
+ REQUIRE(!create_gui_widget_projection(state,{.name="Rejected"},rejected,"Restore saved widget"));
+ REQUIRE(state.entities.size()==2&&state.guiDocumentWidgets.size()==2);
+ REQUIRE(document.revision()==savedRevision);
+}
+void verify_scene_selection_reconciliation(){
+ EditorState state;
+ state.entities={{101},{102},{103}};
+ state.selectedEntityId=102;
+ synchronize_editor_selection(state);
+ REQUIRE(state.selectedEntityId==102&&state.selectedEntity==1);
+ REQUIRE(state.selectedEntityIds==std::vector<std::uint64_t>{102});
+
+ state.selectedEntityIds={103,101,999,103};
+ synchronize_editor_selection(state);
+ REQUIRE(state.selectedEntityId==102&&state.selectedEntity==1);
+ const std::vector<std::uint64_t> expected{101,102,103};
+ REQUIRE(std::ranges::is_permutation(state.selectedEntityIds,expected));
+ synchronize_editor_selection(state);
+ REQUIRE(state.selectedEntityId==102&&state.selectedEntityIds==expected);
+}
+void verify_legacy_gui_image_ownership(){
+ using namespace authoring::gui;
+ constexpr std::string_view oldPath="Assets/Textures/legacy.epoch_texture";
+ constexpr std::string_view newPath="Assets/Textures/selected.epoch_texture";
+ for(const auto type:{"GuiImage","GuiImageButton"}){
+  EditorState state;
+  state.projectId="image-owner";state.projectRoot="/project/image-owner";
+  state.guiDocumentSourcePath="/project/image-owner/Assets/Gui/main.epochgui";
+  state.guiDocument=std::make_unique<GuiDocument>(DocumentHandle{12,1},BranchIdentity{13,1});
+  auto& document=*state.guiDocument;
+  state.guiDocumentRoot=document.create_widget(canvas("Root")).widget;
+  const EditorEntity oldImage{.sceneObjectId=401,.textureMaterial=Material{.logical_path=std::string{oldPath}},
+   .name="Legacy",.type=type,.position={-3.2f,1.8f,0.0f}};
+  state.entities={oldImage,oldImage};
+  state.entities[1].sceneObjectId=402;state.entities[1].name="Scene only";
+  auto placeholder=gui_widget_descriptor_from_entity(oldImage);
+  placeholder.interaction.action="retained.action";
+  std::visit([](auto& content){
+   if constexpr(requires {content.asset_path;}) content.asset_path=kLegacyUnassignedGuiImage;
+  },placeholder.content);
+  const auto widget=document.create_widget(placeholder,state.guiDocumentRoot).widget;
+  state.guiDocumentWidgets.emplace(oldImage.sceneObjectId,widget);
+  seed_legacy_gui_widget_image(document,*document.widget(widget),oldImage);
+  REQUIRE(gui_widget_asset_path(*document.widget(widget))==oldPath);
+  REQUIRE(synchronize_image_fixture_document(state));
+  REQUIRE(gui_widget_asset_path(*document.widget(state.guiDocumentWidgets.at(402)))==oldPath);
+
+  hydrate_gui_content_editor(state,*document.widget(widget));
+  state.guiContentPrimary=newPath;
+  REQUIRE(apply_gui_content_editor(state,document,*document.widget(widget)));
+  REQUIRE(synchronize_image_fixture_document(state));
+  REQUIRE(gui_widget_asset_path(*document.widget(widget))==newPath);
+  seed_legacy_gui_widget_image(document,*document.widget(widget),oldImage);
+  REQUIRE(gui_widget_asset_path(*document.widget(widget))==newPath);
+
+  state.selectedEntityId=oldImage.sceneObjectId;
+  REQUIRE(edit_selected_gui_image_path(state,{}).value_or(false));
+  REQUIRE(synchronize_image_fixture_document(state));
+  REQUIRE(gui_widget_asset_path(*document.widget(widget)).empty());
+  REQUIRE(document.widget(widget)->descriptor.interaction.action=="retained.action");
+  GuiDocument reopened(document.snapshot());
+  seed_legacy_gui_widget_image(reopened,*reopened.widget(widget),oldImage);
+  REQUIRE(gui_widget_asset_path(*reopened.widget(widget)).empty());
+  REQUIRE(document.undo());
+  REQUIRE(synchronize_image_fixture_document(state));
+  REQUIRE(gui_widget_asset_path(*document.widget(widget))==newPath);
+  REQUIRE(state.entities[0].textureMaterial->logical_path==oldPath);
+ }
+}
 void run(){
  using namespace authoring::gui;
+ verify_projection_creation_with_no_selection();
+ verify_scene_selection_reconciliation();
+ verify_legacy_gui_image_ownership();
  core::Context a,b;auto& storage=editor_storage();auto& state=storage.states[&a];
  auto& other=storage.states[&b];
  state.projectId="A";state.projectRoot="/project/A";state.guiDocumentSourcePath="/project/A/Assets/gui.epoch_gui";
@@ -215,7 +340,8 @@ void run(){
  REQUIRE(other.guiAuthoringSection==2&&other.outlinerToolTab==OutlinerToolTab::Gui);
  const auto selectedRevision=other.guiDocument->revision();
  auto widget=other.guiDocument->widget(only);REQUIRE(widget);
- hydrate_gui_content_editor(other,*widget);other.guiContentPrimary="Edited scratch panel";
+ hydrate_gui_content_editor(other,*widget);REQUIRE(other.guiNameEditor==widget->descriptor.name);
+ other.guiContentPrimary="Edited scratch panel";
  REQUIRE(apply_gui_content_editor(other,*other.guiDocument,*widget));
  REQUIRE(other.guiDocument->revision()!=selectedRevision&&other.entities.empty());
  widget=other.guiDocument->widget(only);REQUIRE(std::get<PanelContent>(widget->descriptor.content).title=="Edited scratch panel");
@@ -274,21 +400,25 @@ class GuiHierarchyProjection(unittest.TestCase):
         consumer = ROOT / "Tests/gui/editor.gui_hierarchy_projection_contract.cpp"
         (proof / "gui_owner_contract.hpp").write_text(actual_owner_fixture(), encoding="utf-8")
         owners = [
-            ROOT / "Engine/modules/authoring.document.ixx",
-            ROOT / "Engine/modules/authoring.gui_document.ixx",
-            ROOT / "Engine/modules/editor.hierarchy_adapter.ixx",
+            ROOT / "Engine/modules/authoring/authoring.document.ixx",
+            ROOT / "Engine/modules/authoring/authoring.gui_document.ixx",
+            ROOT / "Engine/modules/editor/editor.hierarchy_adapter.ixx",
+            ROOT / "Engine/src/authoring/gui/authoring.gui_document_codec.cpp",
+            ROOT / "Engine/src/authoring/gui/authoring.gui_templates.cpp",
             ROOT / "Engine/src/editor/editor.hierarchy_adapter.cpp",
             ROOT / "Engine/dep/EpochGui/src/epochgui/hierarchy_tree.cpp",
             consumer,
         ]
         modules = "\n".join(f'"{path.as_posix()}"' for path in owners[:3])
-        modules += '\n"' + (ROOT / "Engine/modules/editor.authoring_history.ixx").as_posix() + '"'
+        modules += '\n"' + (ROOT / "Engine/modules/editor/editor.authoring_history.ixx").as_posix() + '"'
+        modules += '\n"' + (ROOT / "Engine/modules/core/core.sha256.ixx").as_posix() + '"'
         sources = "\n".join(f'"{path.as_posix()}"' for path in owners[3:])
         (proof / "CMakeLists.txt").write_text(f'''cmake_minimum_required(VERSION 3.30)
 project(GuiHierarchyProjection LANGUAGES CXX)
 add_executable(gui_hierarchy_projection {sources})
 target_compile_features(gui_hierarchy_projection PRIVATE cxx_std_23)
 target_compile_options(gui_hierarchy_projection PRIVATE /W3 /WX /utf-8)
+set_property(TARGET gui_hierarchy_projection PROPERTY MSVC_DEBUG_INFORMATION_FORMAT "$<$<CONFIG:Debug>:Embedded>")
 target_include_directories(gui_hierarchy_projection PRIVATE "{(ROOT / 'Engine/dep/EpochGui/include').as_posix()}")
 target_include_directories(gui_hierarchy_projection PRIVATE "{proof.as_posix()}")
 target_sources(gui_hierarchy_projection PRIVATE FILE_SET CXX_MODULES
@@ -323,6 +453,7 @@ set_tests_properties(actual_gui_hierarchy_projection PROPERTIES TIMEOUT 15)
             "owners": {str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()
                 for path in owners + [
                     ROOT / "Engine/src/editor/application/editor.application_pane_routing.inl",
+                    ROOT / "Engine/src/editor/application/editor.application_scene_selection.inl",
                     ROOT / "Engine/src/editor/application/editor.application_project_documents.inl"]},
             "commands": results,
             "cases": ["nested preorder and sibling order", "true hierarchy depths",
@@ -333,8 +464,12 @@ set_tests_properties(actual_gui_hierarchy_projection PROPERTIES TIMEOUT 15)
                 "canonical selection runs outside storage mutex", "latest click supersedes older click",
                 "stale owner/project/root/source/branch/revision/generation refused",
                 "redock and retired owner refuse commands", "scratch selection/edit/duplicate leaves entities unchanged",
-                "mapped selection synchronizes actual scene helper", "content hydration follows document/handle and preserves drafts",
-                "real document undo/redo invalidates form and removed selection", "replacement branch and snapshot reject stale handles"],
+                "mapped selection synchronizes actual scene helper", "saved widget projections retain distinct bindings without selection",
+                "an existing primary is retained with empty or incomplete scene selection membership",
+                "scene selection reconciliation preserves valid members and removes stale and duplicate entries",
+                "refused scene creation leaves bindings and revision unchanged", "content hydration follows document/handle and preserves drafts",
+                "real document undo/redo invalidates form and removed selection", "replacement branch and snapshot reject stale handles",
+                "legacy scene image seeds once and authored replacement/clear survives sync, snapshot and Undo"],
         }, indent=2) + "\n", encoding="utf-8")
 
 

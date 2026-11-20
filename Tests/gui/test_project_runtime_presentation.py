@@ -23,8 +23,8 @@ class ProjectRuntimePresentation(unittest.TestCase):
         paths = [APPLICATION / name for name in ("editor.application_scripting_renderers.inl",
             "editor.application_project_runtime.inl", "editor.frame_viewport.inl")]
         renderer, runtime, viewport = [p.read_text(encoding="utf-8") for p in paths]
-        capability = (ROOT / "Engine/modules/capability.profile.ixx").read_text(encoding="utf-8")
-        api = (ROOT / "Engine/modules/gui.engine.ixx").read_text(encoding="utf-8")
+        capability = (ROOT / "Engine/modules/capability/capability.profile.ixx").read_text(encoding="utf-8")
+        api = (ROOT / "Engine/modules/gui/gui.engine.ixx").read_text(encoding="utf-8")
         types = "\n".join(definition(capability, marker, True) for marker in (
             "    enum class BackendFamily", "    enum class Tier", "    enum class Feature",
             "    enum class MatchFailure", "    enum class AdmissionStatus"))
@@ -89,7 +89,7 @@ SUMMARY
 struct Handle{bool live{};bool valid()const{return live;}};
 enum class EditorLayoutDrag{None};
 enum class EditorWorkspaceTab{Output,Project};
-struct EditorState{bool projectBuildPending{},projectRuntimeInEditor{},sceneRunFullscreenInEditor{},sceneRunMaximizedInEditor{},projectRuntimeViewportMaximized{};
+struct EditorState{bool projectBuildPending{},projectBuildReusesReviewedArtifact{},projectRuntimeInEditor{},sceneRunFullscreenInEditor{},sceneRunMaximizedInEditor{},projectRuntimeViewportMaximized{};
 std::optional<bool> projectRunAfterTerrainPreview;
 bool projectRuntimeForceStopAvailable{},outputGeneralOnly{},outputShowDetails{},outputFollowTail{};
 std::uint64_t outputScrollToEndGeneration{};
@@ -122,39 +122,48 @@ float line_height(){return 18.f;}
 void panel_rect(Vec2 p,Vec2 s){panel_position=p;panel_size=s;}
 float measure_wrapped_label_height(std::string_view s,float width){return 18.f*std::ceil(float(s.size())*7.f/width);}
 void wrapped_label(std::string_view s,float){labels.emplace_back(s);}
-bool click_output{};
+bool click_output{},click_cancel{};float rowHeight{};
 bool button(std::string_view s,Vec2){buttons.emplace_back(s);return s=="Show Output"?click_output:true;}
 std::optional<std::size_t> inline_button_row(std::span<const InlineButtonSpec> items,float,float,const InlineButtonRowOptions&){
-for(const auto&i:items){buttons.emplace_back(i.label);enabled.push_back(i.enabled);}return 0u;}
+for(const auto&i:items){buttons.emplace_back(i.label);enabled.push_back(i.enabled);if(items.size()>1&&!i.enabled)labels.emplace_back(i.label);}
+if(items.size()>1){if(click_cancel&&items.size()==3)return 2u;if(click_output)return 1u;return {};}return 0u;}
+float inline_button_row_height(std::span<const InlineButtonSpec> items,float h,float gap,const InlineButtonRowOptions& options){float width=0;unsigned rows=1;for(auto item:items){if(width&&width+item.width+gap>options.available_width){++rows;width=0;}width+=item.width+gap;}rowHeight=rows*h+(rows-1)*gap;return rowHeight;}
 Selection select_box(const SelectBoxOptions&){return {};}
 void fresh(){buttons.clear();labels.clear();enabled.clear();panel_size={};}
 }
 namespace platform::child_process {enum class StopMode{graceful};}
-unsigned runs{},plays{},stops{},output_requests_at_launch{};
+unsigned runs{},plays{},stops{},cancels{},output_requests_at_launch{};
+bool cancel_project_build(EditorState&){++cancels;return true;}
+template<class Scope,class Draw>auto render_automation_inspection(Scope&,bool,Draw draw){return draw();}
+float observedViewportY{},observedViewportHeight{};
 bool queue_on_run{};EditorState* run_editor{};
 bool stop_project_runtime(EditorState&,platform::child_process::StopMode){++stops;return true;}
 void play_active_context(bool=false){++plays;output_requests_at_launch=output_requests;}
 void launch_active_project_context(bool=false,std::uint64_t=0,bool=false){
  ++runs;output_requests_at_launch=output_requests;
  if(queue_on_run&&run_editor)run_editor->projectBuildPending=true;}
-void world_controls(EditorState& editor,float width,float height,bool modal=false){
+void world_controls(EditorState& editor,float width,float height,bool modal=false,bool projectChildActionsAvailable=true){
 run_editor=&editor;
 const auto projectBuildActivity=project_build_activity_label(editor);
 const gui::Vec2 scene_pos{20,40},scene_size{width,height};
 const float runModeWidth=120.f;const bool showSceneRun=true;
-const float sceneNoticeTop=26.f;
-const bool compiledProjectRunning=editor.projectRuntimeInEditor&&editor.projectRuntimeProcess.valid();
+const float headerControlHeight=32.f;const float sceneNoticeTop=26.f;
+const bool compiledProjectRunning=projectChildActionsAvailable&&editor.projectRuntimeInEditor&&editor.projectRuntimeProcess.valid();
 const bool projectViewportMaximized=editor.projectRuntimeViewportMaximized;
 const auto sceneRunButtonLabel=project_scene_run_button_label(editor,compiledProjectRunning);
 RUN_WIDTH
 const float runControlOffset=projectViewportMaximized?8.f:96.f;
 const bool menusBlockedByModal=modal,toolbarControlsBlockedByMenu=false;
 const bool automationInputReserved=false;
-std::optional<int> automationBackgroundInput;
+struct Suppression{Suppression(bool,bool){}};
+std::optional<Suppression> automationBackgroundInput;
+const auto canInspectAutomation=[](){return true;};
 const std::array<std::string_view,3> kSceneRunModes{"Separate Window","In Editor","In-Editor Full Screen"};
-struct{bool scene_input_captured{};}result;
+struct{bool scene_input_captured{};struct{gui::Vec2 position,size;}scene_viewport;}result;
+result.scene_viewport={{scene_pos.x,scene_pos.y+26.f},{width,std::max(0.f,height-26.f)}};
 SHOW_RUN_OUTPUT
 WORLD
+observedViewportY=result.scene_viewport.position.y;observedViewportHeight=result.scene_viewport.size.y;
 }
 void project_controls(EditorState& editor,float centerWidth){
 const auto projectBuildActivity=project_build_activity_label(editor);
@@ -185,17 +194,19 @@ e.projectBuildRequestedConfiguration.clear();e.projectBuildStatus="Building proj
 for(const float width:{260.f,900.f})for(const float height:{30.f,400.f}){
 gui::fresh();world_controls(e,width,height);
 CHECK(runs==0&&plays==0&&stops==0);
-CHECK(gui::buttons.size()==2&&gui::buttons.front()=="Building..."&&!gui::enabled.front());
-CHECK(gui::labels.size()==1&&gui::labels.front()=="Building Debug...");
-CHECK(std::count(gui::buttons.begin(),gui::buttons.end(),"Building Debug...")==0);
+CHECK(gui::buttons.size()==4&&gui::buttons.front()=="Building..."&&!gui::enabled.front());
+CHECK(std::count(gui::buttons.begin(),gui::buttons.end(),"Building Debug...")==1);
 CHECK(std::count(gui::buttons.begin(),gui::buttons.end(),"Show Output")==1);
+CHECK(std::count(gui::buttons.begin(),gui::buttons.end(),"Cancel Build")==1);
 CHECK(!run_details.empty()&&run_details.back().find(e.projectBuildStatus)!=std::string::npos);
-CHECK(gui::panel_position.x>=20&&gui::panel_position.y>=40&&gui::panel_position.x+gui::panel_size.x<=20+width);
-CHECK(gui::panel_position.y+gui::panel_size.y<=40+height);
-if(width==900.f)CHECK(gui::panel_size.x<400.f&&gui::panel_size.y<=24.f);
+CHECK(observedViewportY>=66&&observedViewportY<=40+height&&observedViewportHeight>=0);
+if(height==400)CHECK(observedViewportY>=66+gui::rowHeight);
 gui::fresh();project_controls(e,width);CHECK(plays==0&&gui::buttons.front()=="Building Debug..."&&!gui::enabled.front());
 }
 CHECK(output_requests==0);
+gui::click_cancel=true;world_controls(e,900,400,true);CHECK(cancels==0);
+world_controls(e,900,400);CHECK(cancels==1);gui::click_cancel=false;
+
 e.projectBuildPending=false;e.outputSearch="old query";e.outputShowDetails=true;e.outputGeneralOnly=true;
 gui::fresh();world_controls(e,900,400);CHECK(runs==1&&gui::buttons.front()=="Run");
 CHECK(output_requests==1&&output_requests_at_launch==1&&e.dockStatusTab==EditorWorkspaceTab::Output);
@@ -242,6 +253,16 @@ CHECK(gui::buttons.front()=="Stop"&&gui::buttons.back()=="Exit (Esc)");
 CHECK(e.projectBuildConfiguration=="Release"&&e.projectRuntimeBuildConfiguration=="Debug");
 CHECK(output_requests==3);
 gui::fresh();project_controls(e,900);CHECK(plays==1&&output_requests==4&&output_requests_at_launch==4);
+// Android's game Run uses the in-process path regardless of the stored desktop
+// presentation mode. It has no native-child actions at narrow or wide widths.
+e.sceneRunFullscreenInEditor=false;e.projectRuntimeInEditor=false;e.projectRuntimeProcess.live=false;
+const auto launchesBeforeMobile=runs;
+for(const float width:{260.f,900.f}){
+ const auto previewsBefore=plays;
+ gui::fresh();world_controls(e,width,400,false,false);
+ CHECK(plays==previewsBefore+1&&runs==launchesBeforeMobile);
+ CHECK(gui::buttons.size()==1&&gui::buttons.front()=="Run");
+}
 return 0;
 }
 '''

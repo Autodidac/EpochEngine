@@ -1,5 +1,6 @@
 """Retained real output: producer GLB image view normalization, actual C++ decoder."""
 from pathlib import Path
+from Tests.support.cpp import engine_module_source
 import hashlib
 import importlib.util
 import json
@@ -26,7 +27,7 @@ class GeneratedPngView(unittest.TestCase):
         proof=ROOT/'Artifacts/Reports/triposr-png-view-oct28'/str(time.time_ns());proof.mkdir(parents=True)
         output=proof/'model.glb';output.write_bytes(repaired)
         build=ROOT/'Artifacts/Intermediate/tests/generated-png-view'/proof.name
-        modules=[ROOT/'Engine/modules'/f'{name}.ixx' for name in ('asset.model_import','asset.mesh_artifact','asset.texture_artifact','asset.texture_import')]
+        modules=[engine_module_source(ROOT / 'Engine/modules', f'{name}.ixx') for name in ('asset.model_import','asset.mesh_artifact','asset.texture_artifact','asset.texture_import')]
         sources=[ROOT/p for p in ('Tests/scene/asset.generated_png_contract.cpp','Engine/src/assets/mesh/asset.model_import.cpp','Engine/src/assets/texture/asset.texture_artifact.cpp','Engine/src/assets/texture/asset.texture_import.cpp','Engine/src/assets/image.stb.cpp')]
         includes=ROOT/'Artifacts/Dependencies/vcpkg_installed/x64-windows/include'
         (proof/'CMakeLists.txt').write_text(f'''cmake_minimum_required(VERSION 3.30)

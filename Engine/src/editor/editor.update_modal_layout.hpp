@@ -55,14 +55,16 @@ namespace epochengine::editor_update_modal
         std::string_view label{};
     };
 
-    // A discovered update remains a stable toolbar item while its operation
-    // runs. Transient Checking/worker phases must not remove the item and move
-    // Run underneath the pointer. Restart is exclusively verified handoff state.
-    [[nodiscard]] constexpr ToolbarState update_toolbar_state(const UpdateFlags flags) noexcept
+    // Availability may yield the toolbar to another workflow. Keep the update
+    // controls available for its own work, approvals and verified handoff.
+    [[nodiscard]] constexpr ToolbarState update_toolbar_state(
+        const UpdateFlags flags, const bool suppressAvailability = false) noexcept
     {
-        const bool visible = flags.installableUpdate || flags.restartReady || flags.updateRunning;
         const bool busy = flags.updateRunning || flags.sourceWorkerRunning
             || flags.sourceAuthorizationRunning;
+        if (suppressAvailability && !busy && !flags.restartReady && !flags.sourceApprovalPending)
+            return {};
+        const bool visible = flags.installableUpdate || flags.restartReady || flags.updateRunning;
         return {visible, visible && !busy,
             flags.restartReady ? "Restart"
                 : flags.updateRunning && !flags.sourceWorkerRunning ? "Checking for updates..."
@@ -76,6 +78,12 @@ namespace epochengine::editor_update_modal
     static_assert(!update_toolbar_state({}).visible);
     static_assert(update_toolbar_state({.restartReady = true}).label == "Restart");
     static_assert(update_toolbar_state({.checkFailed = true, .installableUpdate = true}).visible);
+    static_assert(!update_toolbar_state({.installableUpdate = true}, true).visible);
+    static_assert(update_toolbar_state({.installableUpdate = true}, false).enabled);
+    static_assert(update_toolbar_state({.installableUpdate = true, .sourceApprovalPending = true}, true).visible);
+    static_assert(update_toolbar_state({.sourceWorkerRunning = true, .updateRunning = true}, true).label == "Updating...");
+    static_assert(update_toolbar_state({.updateRunning = true}, true).visible);
+    static_assert(update_toolbar_state({.restartReady = true}, true).label == "Restart");
 
     struct ActionStrip
     {

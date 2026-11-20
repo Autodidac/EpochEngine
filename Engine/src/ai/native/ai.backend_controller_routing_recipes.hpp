@@ -4,6 +4,7 @@
 #pragma once
 
 #include "ai.backend_controller_task_intent.hpp"
+#include "../ai.model_capability.hpp"
 
 #include <algorithm>
 #include <array>
@@ -168,8 +169,11 @@ public:
         auto tier = cheapest_eligible_tier(text, small_ready, middle_ready, automatic);
         if (!automatic) return tier;
         const auto category = recipe_category(text);
-        const bool small_eligible = small_ready && !excluded(category, small);
-        const bool middle_eligible = middle_ready && !excluded(category, middle);
+        const bool coding = classify_task(text) == TaskIntent::coding || lightweight_code_request(text);
+        const bool small_eligible = small_ready && !excluded(category, small)
+            && (!coding || epochengine::ai::model_capability::coding_restriction(small).empty());
+        const bool middle_eligible = middle_ready && !excluded(category, middle)
+            && (!coding || epochengine::ai::model_capability::coding_restriction(middle).empty());
         if (tier == ResponseTier::foundation && middle_eligible
             && classify_task(text) == TaskIntent::coding
             && !requires_foundation_reasoning(text)

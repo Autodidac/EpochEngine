@@ -48,9 +48,70 @@ scene::SceneForestRegionInstance region(unsigned index) {
  r.provider_content_hash=std::string(64,'a');r.recipe="epoch.planet.recipe.v7\nseed=1337\n";
  r.plant_source="Assets/Forest/default.epoch_forest";return r;
 }
+void lasso_persistence_contract(const fs::path& root) {
+ auto source=legacy_source();source.objects.back().category="Planetary Terrain";
+ auto canonical=document::SceneDocument::from_snapshot(source);CHECK(canonical);
+ source=canonical.value.project_snapshot().snapshot;
+ auto built=document::SceneDocument::from_snapshot(source);CHECK(built);
+ auto doc=std::move(built.value);const auto terrain=doc.find({3});CHECK(terrain);
+ const auto original=doc.revision().content;
+ scene::SceneForestPaintRegion footprint{
+  .region_id=99,.seed=20,.body_index=1,.candidate_count=16,.density_per_square_meter=.125,
+  .body_seed=1337,.body_radius_meters=6371000,.reference_center_meters={1000,2000,3000},
+  .plant_source="Assets/Forest/default.epoch_forest",
+  .outline={{0,0,1},{.6,0,.8},{0,.6,.8}}};
+ CHECK(footprint.valid());
+ CHECK(footprint.matches_body(1,1337,6371000,{1000,2000,3000}));
+ CHECK(!footprint.matches_body(0,1337,6371000,{1000,2000,3000}));
+ CHECK(!footprint.matches_body(1,1338,6371000,{1000,2000,3000}));
+ CHECK(!footprint.matches_body(1,1337,6371001,{1000,2000,3000}));
+ CHECK(!footprint.matches_body(1,1337,6371000,{999,2000,3000}));
+ const std::array<document::SceneOperation,1> paint{
+  document::ForestPaintRegionsChangedOperation{*terrain,{footprint}}};
+ CHECK(doc.apply_transaction(paint,"Paint forest footprint"));
+ CHECK(doc.objects().size()==source.objects.size()); // A region survives without trees.
+ const auto painted=doc.revision().content;CHECK(original!=painted);
+ CHECK(doc.undo()&&doc.revision().content==original&&doc.object(*terrain)->descriptor.forest_paint_regions.empty());
+ CHECK(doc.redo()&&doc.revision().content==painted&&doc.object(*terrain)->descriptor.forest_paint_regions==std::vector{footprint});
+ const auto projected=doc.project_snapshot();CHECK(projected);
+ const auto encoded=scene::serialize_snapshot_text(projected.snapshot);CHECK(encoded.starts_with("epoch_snapshot 12\n"));
+ const auto parsed=scene::parse_snapshot_text(encoded);
+ CHECK(parsed&&scene::serialize_snapshot_text(parsed.snapshot)==encoded);
+ CHECK(scene::persistence::save_scene_snapshot_atomic(root/"forest-lasso.epoch",projected.snapshot));
+ const auto disk=scene::persistence::load_scene_snapshot(root/"forest-lasso.epoch");
+ CHECK(disk.result&&scene::persistence::scene_snapshot_semantically_equal(projected.snapshot,disk.snapshot));
+ const auto restored=document::SceneDocument::from_snapshot(disk.snapshot);CHECK(restored&&restored.value.revision().content==painted);
+ const auto restoredTerrain=restored.value.find({3});CHECK(restoredTerrain);
+ CHECK(restored.value.object(*restoredTerrain)->descriptor.forest_paint_regions==std::vector{footprint});
+ const std::array<document::SceneOperation,1> erase{document::ForestPaintRegionsChangedOperation{*terrain,{}}};
+ CHECK(doc.apply_transaction(erase,"Erase forest footprint")&&doc.revision().content==original);
+ CHECK(doc.undo()&&doc.revision().content==painted);
+ CHECK(doc.redo()&&doc.revision().content==original);
+ auto changed=parsed.snapshot;changed.objects.back().forest_paint_regions[0].seed++;
+ auto changedDoc=document::SceneDocument::from_snapshot(changed);CHECK(changedDoc&&changedDoc.value.revision().content!=painted);
+ CHECK(!scene::persistence::scene_snapshot_semantically_equal(changed,parsed.snapshot));
+ for(unsigned kind=0;kind<8;++kind) {
+  auto bad=footprint;
+  if(kind==0)bad.outline.pop_back();if(kind==1)bad.outline.push_back(bad.outline.front());
+  if(kind==2)bad.outline[0]={0,0,0};if(kind==3)bad.outline.resize(scene::kMaximumForestPaintOutlinePoints+1);
+  if(kind==4)bad.candidate_count=65;if(kind==5)bad.reference_center_meters[0]=std::numeric_limits<double>::quiet_NaN();
+  if(kind==6)bad.plant_source="../outside";if(kind==7)bad.body_radius_meters=0;
+  const std::array<document::SceneOperation,1> invalid{document::ForestPaintRegionsChangedOperation{*terrain,{bad}}};
+  CHECK(!doc.apply_transaction(invalid,"Invalid forest footprint")&&doc.revision().content==original);
+ }
+ const auto camera=doc.find({1});CHECK(camera);
+ const std::array<document::SceneOperation,1> wrongOwner{document::ForestPaintRegionsChangedOperation{*camera,{footprint}}};
+ CHECK(!doc.apply_transaction(wrongOwner,"Invalid forest owner")&&doc.revision().content==original);
+ const std::array<document::SceneOperation,1> duplicate{document::ForestPaintRegionsChangedOperation{*terrain,{footprint,footprint}}};
+ CHECK(!doc.apply_transaction(duplicate,"Duplicate forest footprint")&&doc.revision().content==original);
+ CHECK(!scene::parse_snapshot_text(replace_once(encoded," forest_paint_regions 1 "," forest_paint_regions 65 ")));
+ CHECK(!scene::parse_snapshot_text(replace_once(encoded,"epoch_snapshot 12\n","epoch_snapshot 11\n")));
+ CHECK(!scene::parse_snapshot_text(replace_once(encoded,"\"Assets/Forest/default.epoch_forest\" 3 ","\"Assets/Forest/default.epoch_forest\" 129 ")));
+}
 int main(int argc,char** argv) {
  CHECK(argc==2);legacy_contract();distribution_contract();
  const fs::path root{argv[1]};fs::create_directories(root);
+ lasso_persistence_contract(root);
  auto snapshot=legacy_source();auto canonical=document::SceneDocument::from_snapshot(snapshot);CHECK(canonical);
  snapshot=canonical.value.project_snapshot().snapshot;
  auto built=document::SceneDocument::from_snapshot(snapshot);CHECK(built);
@@ -115,6 +176,9 @@ def run_forest_cpu_contract(test, code, lane, project, filename):
         test.skipTest("Installed MSVC CPU module lane")
     proof = ROOT / 'Artifacts/Reports' / f'{lane}-nov01'
     proof.mkdir(parents=True, exist_ok=True)
+    temporary = proof / 'tmp'
+    temporary.mkdir(exist_ok=True)
+    environment = dict(os.environ, TEMP=str(temporary), TMP=str(temporary), TMPDIR=str(temporary))
     receipt = proof / 'result.json'
     receipt.write_text(json.dumps({'pass': False, 'status': 'running'}) + '\n')
     build = ROOT / 'Artifacts/Intermediate/tests' / lane
@@ -132,7 +196,7 @@ def run_forest_cpu_contract(test, code, lane, project, filename):
     )]
     found = {}
     for folder in roots:
-        for path in folder.glob('*.ixx'):
+        for path in folder.rglob('*.ixx'):
             match = re.search(r'^export module\s+([\w.:]+);', path.read_text(encoding='utf-8-sig'), re.M)
             if match:
                 found[match.group(1)] = path
@@ -153,6 +217,7 @@ def run_forest_cpu_contract(test, code, lane, project, filename):
         return ' '.join(f'"{path.as_posix()}"' for path in values)
 
     (proof / 'CMakeLists.txt').write_text(f'''cmake_minimum_required(VERSION 3.30)
+set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT Embedded)
 project({project} LANGUAGES CXX)
 add_executable(anchor "{source.as_posix()}" {paths(implementations)})
 target_link_libraries(anchor PRIVATE shell32)
@@ -169,7 +234,7 @@ add_test(NAME actual_scene_anchor COMMAND anchor "{(proof/'fixture').as_posix()}
                          ['ctest', '--test-dir', str(build), '-C', config, '--output-on-failure']))
     results = []
     for index, command in enumerate(commands):
-        completed = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, timeout=180)
+        completed = subprocess.run(command, cwd=ROOT, env=environment, capture_output=True, text=True, timeout=180)
         (proof / f'lane-{index}.log').write_text(completed.stdout + completed.stderr, encoding='utf-8')
         results.append({'command': command, 'exit_code': completed.returncode})
         receipt.write_text(json.dumps({'pass': False, 'status': 'failed' if completed.returncode else 'running',

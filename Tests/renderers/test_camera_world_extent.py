@@ -479,7 +479,7 @@ class CameraWorldExtent(unittest.TestCase):
         build = ROOT / "Artifacts/Intermediate/tests/camera-world-extent"
         proof.mkdir(parents=True, exist_ok=True)
         source = proof / "camera.world_extent_contract.cpp"
-        owner=(ROOT/"Engine/modules/input.engine.ixx").read_text(encoding="utf-8")
+        owner=(ROOT/"Engine/modules/input/input.engine.ixx").read_text(encoding="utf-8")
         types=("    export enum Key", "    export enum MouseButton", "    export enum class Action", "    export struct ActionBinding", "    export struct InputProfile", "    export enum class ProfilePreset")
         functions=("    export inline constexpr std::size_t action_index", "    export inline constexpr ActionBinding key_binding", "    export inline constexpr ActionBinding mouse_binding", "    export inline constexpr InputProfile make_default_profile", "    export inline constexpr InputProfile make_profile", "    export inline bool validate_profile")
         profile="namespace epochengine::input {\n"+"\n".join(definition(owner,m,True).replace("export ","") for m in types)+"\n"+"\n".join(definition(owner,m).replace("export ","") for m in functions)+"\n}"
@@ -495,7 +495,7 @@ class CameraWorldExtent(unittest.TestCase):
         roots = [ROOT / "Engine/modules", ROOT / "Engine/dep/EpochPlatformEngine/modules"]
         available = {}
         for directory in roots:
-            for path in directory.glob("*.ixx"):
+            for path in directory.rglob("*.ixx"):
                 match = re.search(r"^export module\s+([\w.:]+);", path.read_text(encoding="utf-8-sig"), re.M)
                 if match:
                     available[match.group(1)] = path

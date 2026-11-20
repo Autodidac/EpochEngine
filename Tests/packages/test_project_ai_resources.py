@@ -16,11 +16,12 @@ from Tests.build.test_opengl_sprite_stream import definition
 ROOT = Path(__file__).resolve().parents[2]
 WRITER = ROOT / "Engine/src/editor/application/editor.application_packages_creation.inl"
 VIEW = ROOT / "Engine/src/editor/application/editor.frame_packages_about.inl"
+RUNTIME = ROOT / "Engine/src/ai/implementation/ai.connection_preferences.inl"
 
 
 def fixture():
     writer = WRITER.read_text(encoding="utf-8")
-    filesystem = (ROOT / "Engine/modules/platform.filesystem.ixx").read_text(encoding="utf-8")
+    filesystem = (ROOT / "Engine/modules/platform/platform.filesystem.ixx").read_text(encoding="utf-8")
     backend = "\n".join(definition(filesystem, marker) for marker in (
         "    [[nodiscard]] inline bool exclusive_create_and_write(",
         "    [[nodiscard]] inline bool atomic_replace_same_filesystem("))
@@ -32,6 +33,10 @@ def fixture():
     branch = definition(view, "            if (projectAiResources)\n            {\n                namespace native")
     emitter = definition((ROOT / "Engine/src/editor/implementation/editor.project_shell_generation.inl").read_text(
         encoding="utf-8"), "    [[nodiscard]] static bool write_text_file_if_allowed(")
+    runtime = RUNTIME.read_text(encoding="utf-8")
+    profile_runtime = "\n".join(definition(runtime, marker) for marker in (
+        "        [[nodiscard]] static std::filesystem::path project_ai_profile_identity(",
+        "        static void apply_project_ai_profile_if_present()"))
     return r'''
 #include <algorithm>
 #include <array>
@@ -43,6 +48,7 @@ def fixture():
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <memory>
 #include <optional>
 #include <span>
 #include <string>
@@ -81,6 +87,21 @@ WRITER
 bool write_text_file(const fs::path&,std::string_view){std::abort();}
 EMITTER
 namespace epochengine::ai {
+ std::string activeModelProfile;
+ std::string g_modelDetectionStatus,g_loadedProjectAiProfile,g_directExecutable,g_directModel,g_selectedModel;
+ bool g_modelUseConfirmedForSession{},g_projectAiAllowsLocalFallback{};
+ unsigned retiredModels{};
+ struct ExistingModel {~ExistingModel(){++retiredModels;}};
+ std::shared_ptr<ExistingModel> g_engineAi;
+ enum class LocalInferenceTransport {LlamaCppCli,OpenAiCompatible};
+ LocalInferenceTransport g_localTransport{};
+ struct EpochLocalAiInstallStatus {std::string message,runtime_executable,model_file;bool ready()const{return false;}};
+ EpochLocalAiInstallStatus epoch_local_ai_install_status(){std::abort();}
+ constexpr std::string_view kEpochLocalQwen38ModelFile="recording-only";
+ std::string read_env_var(std::string_view key){if(key!="EPOCH_PROJECT_AI_PROFILE")std::abort();return activeModelProfile;}
+ std::string trim_env_value(std::string value){return value;}
+ std::string read_small_text_file(const fs::path& path,std::size_t limit){return read_bounded_package_file(path,limit);}
+ PROFILE_RUNTIME
  std::string active_model_name(){return "";}
  namespace native_runtime {
   struct Model {std::string id,label,uri;bool active{},installed{};};
@@ -127,6 +148,7 @@ void check(bool ok,int line){if(!ok){std::fprintf(stderr,"Project AI choice cont
 std::string read(const fs::path&p){std::ifstream in(p,std::ios::binary);return {std::istreambuf_iterator<char>{in},{}};}
 void write(const fs::path&p,std::string_view bytes){std::ofstream out(p,std::ios::binary|std::ios::trunc);out<<bytes;}
 int main(int argc,char**argv) {
+ CHECK(epochengine::ai::project_profile::run_contract());
  CHECK(argc==2);const fs::path root=fs::absolute(argv[1]);CHECK(!fs::exists(root));fs::create_directories(root/"assets");
  write(root/"project.epoch.json","{\"project_id\":\"fixture\"}\n");
  EditorState editor;editor.projectId="fixture";editor.projectRoot=root.string();
@@ -163,10 +185,37 @@ int main(int argc,char**argv) {
  native::current.busy=false;render_project_ai(editor);CHECK(native::refreshCalls==1&&!editor.aiModelManagerAutoRescanPending);render_project_ai(editor);CHECK(native::refreshCalls==1);
  EditorState absent;gui::requestedAction="Enable Project AI";render_project_ai(absent);CHECK(gui::requestedAction=="Enable Project AI");
  gui::requestedAction="Open Project Workspace";render_project_ai(absent);CHECK(projectWorkspaceOpens==1&&!absent.showPackageManagerModal);
+ namespace ai_profile=epochengine::ai::project_profile;
+ CHECK(!write_project_ai_profile(editor,ProjectAiProviderMode::calculator_coach)&&read(profile)==enabled);
+ editor.projectId=std::string{ai_profile::calculator_project_id};
+ CHECK(!write_project_ai_profile(editor,ProjectAiProviderMode::engine_selected)&&read(profile)==enabled);
+ CHECK(!write_project_ai_profile(editor,ProjectAiProviderMode::epoch_local)&&read(profile)==enabled);
+ CHECK(!write_project_ai_profile(editor,ProjectAiProviderMode::external_mcp)&&read(profile)==enabled);
+ gui::requestedAction="Allow Calculator Coach";render_project_ai(editor);CHECK(gui::requestedAction.empty());
+ const auto coach=ai_profile::parse_profile(read(profile));
+ CHECK(coach&&coach.profile==ai_profile::make_profile(ai_profile::Provider::calculator_coach));
+ CHECK(editor.packageInstallStatus.find("verified isolated runtime")!=std::string::npos);
+ {
+  using namespace epochengine::ai;
+  activeModelProfile=profile.string();
+  g_engineAi=std::make_shared<ExistingModel>();
+  g_modelUseConfirmedForSession=true;
+  g_projectAiAllowsLocalFallback=true;
+  g_modelDetectionStatus="Previous session chat model ready.";
+  g_selectedModel="Previous session model preference";
+  apply_project_ai_profile_if_present();
+  CHECK(!g_engineAi&&retiredModels==1&&!g_modelUseConfirmedForSession&&!g_projectAiAllowsLocalFallback);
+  CHECK(g_modelDetectionStatus=="Calculator Coach awaits a verified isolated runtime.");
+  CHECK(g_selectedModel=="Previous session model preference");
+  apply_project_ai_profile_if_present();
+  CHECK(!g_engineAi&&retiredModels==1&&!g_modelUseConfirmedForSession&&!g_projectAiAllowsLocalFallback);
+ }
+ gui::requestedAction="Disable Project AI";render_project_ai(editor);
+ CHECK(ai_profile::parse_profile(read(profile)).profile.provider==ai_profile::Provider::disabled);
  CHECK(identityCalls>0&&logCalls>0);return 0;
 }
 '''.replace("FILESYSTEM", backend).replace("WRITER", profile_writer).replace(
-        "EMITTER", emitter).replace("VIEW", branch)
+        "EMITTER", emitter).replace("PROFILE_RUNTIME", profile_runtime).replace("VIEW", branch)
 
 
 class ProjectAiResourceChoice(unittest.TestCase):
@@ -179,10 +228,12 @@ class ProjectAiResourceChoice(unittest.TestCase):
         source.write_text(fixture(), encoding="utf-8")
         (proof / "CMakeLists.txt").write_text(f'''cmake_minimum_required(VERSION 3.30)
 project(ProjectAiResourceChoice LANGUAGES CXX)
-add_executable(project_ai "{source.as_posix()}" "{(ROOT/'Engine/src/ai/ai.project_profile.cpp').as_posix()}")
+add_executable(project_ai "{source.as_posix()}" "{(ROOT/'Engine/src/ai/ai.project_profile.cpp').as_posix()}"
+    "{(ROOT/'Engine/src/ai/ai.project_profile_contract.cpp').as_posix()}")
 target_compile_features(project_ai PRIVATE cxx_std_23)
+set_property(TARGET project_ai PROPERTY MSVC_DEBUG_INFORMATION_FORMAT Embedded)
 target_compile_options(project_ai PRIVATE /W3 /WX /utf-8)
-target_sources(project_ai PRIVATE FILE_SET CXX_MODULES BASE_DIRS "{(ROOT/'Engine/modules').as_posix()}" FILES "{(ROOT/'Engine/modules/ai.project_profile.ixx').as_posix()}" "{(ROOT/'Engine/modules/core.sha256.ixx').as_posix()}")
+target_sources(project_ai PRIVATE FILE_SET CXX_MODULES BASE_DIRS "{(ROOT/'Engine/modules').as_posix()}" FILES "{(ROOT/'Engine/modules/ai/ai.project_profile.ixx').as_posix()}" "{(ROOT/'Engine/modules/core/core.sha256.ixx').as_posix()}")
 enable_testing()
 add_test(NAME actual_project_ai_choice COMMAND project_ai "${{CMAKE_CURRENT_BINARY_DIR}}/project-fixture")
 ''', encoding="utf-8")
@@ -199,9 +250,9 @@ add_test(NAME actual_project_ai_choice COMMAND project_ai "${{CMAKE_CURRENT_BINA
             records.append({"command":command,"exit":completed.returncode,"log":str(log)})
             self.assertEqual(completed.returncode, 0, completed.stdout[-8000:]+completed.stderr)
         (proof/"result.json").write_text(json.dumps({"state":"ACTUAL_PROFILE_AND_UI_ACTION_CPU_PASS",
-            "scope":"Real canonical codec, profile writer, atomic filesystem functions and actual AI UI branch; model inventory/drawing/identity parser are recording ports",
+            "scope":"Real canonical codec, profile writer, runtime profile application, atomic filesystem functions and actual AI UI branch; model inventory/drawing/retirement/identity parser are recording ports",
             "commands":records,"native":False,"inference":False,"autoload":False,
-            "owners":{str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest()for p in (WRITER,VIEW)}},indent=2)+"\n")
+            "owners":{str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest()for p in (WRITER,VIEW,RUNTIME)}},indent=2)+"\n")
 
 
 if __name__ == "__main__":

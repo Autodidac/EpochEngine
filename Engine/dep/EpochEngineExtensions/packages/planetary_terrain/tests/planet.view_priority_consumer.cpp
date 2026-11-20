@@ -204,6 +204,95 @@ static int run(int argc,char**argv) {
             <<",\"planning_ms\":"<<milliseconds<<",\"leaves\":"<<footprint.leaves.size()<<'}';
     }
     require(lowerImproved>=12u,"footprint did not improve 45-degree detail across faces/roll");
+    out<<"],\"ground_surround_cases\":[";first=true;
+    for(const auto face:std::array<std::uint8_t,3>{0,2,4})for(const double altitude:{1.8,130.0,1000.0}) {
+        // Include a cube-face seam and an interior location. Look nearly
+        // horizontally so the rear and side ground are outside the view cone.
+        const auto radial=p::cube_direction(face,face==4?.999999:.13,.09);
+        const auto axis=p::tangent(radial),side=p::normalized(p::cross(radial,axis));
+        const auto reference=world.center(0,0);
+        const auto eye=reference+radial*(body.radius+std::max(0.,p::sample_height(body,radial))+altitude);
+        constexpr double fov=1.0471975511965976;
+        const p::LodSettings settings{20u,384u,210.,.15};
+        const auto forward=p::normalized(axis-radial*.03);
+        const auto reverse=p::normalized(-axis-radial*.03);
+        const auto legacy=p::plan_body_terrain(world,0,eye,0,1080,fov,settings,nullptr,true,{forward,16./9.});
+        const auto surround=p::plan_body_terrain(world,0,eye,0,1080,fov,settings,nullptr,true,{forward,16./9.,radial});
+        const auto turned=p::plan_body_terrain(world,0,eye,0,1080,fov,settings,&surround,true,{reverse,16./9.,radial});
+        coverage(surround);coverage(turned);
+        for(const double fraction:{.35,.65,.9}) {
+            unsigned minimumBefore=20u,minimumAfter=20u,minimumTurned=20u,levelTotal{};
+            const double distance=std::max(body.radius*.0001,altitude*4.0)*fraction;
+            for(unsigned quadrant=0;quadrant<8u;++quadrant) {
+                const double angle=double(quadrant)*p::pi*.25;
+                const auto offset=axis*std::cos(angle)+side*std::sin(angle);
+                const auto hit=p::normalized(radial+offset*(distance/body.radius));
+                const auto level=unsigned(nearest(surround,hit).level);
+                minimumBefore=std::min(minimumBefore,unsigned(nearest(legacy,hit).level));
+                minimumAfter=std::min(minimumAfter,level);
+                minimumTurned=std::min(minimumTurned,unsigned(nearest(turned,hit).level));
+                levelTotal+=level;
+            }
+            if(altitude<10.0&&face!=4u&&fraction<=.65) {
+                const unsigned floor=fraction<.5?17u:16u;
+                require(std::min(minimumAfter,minimumTurned)>=floor,
+                    "walking-height ground detail did not survive heading reversal");
+            }
+            if(altitude<200.0)
+                require(std::min(minimumAfter,minimumTurned)>=14u,"near ground coarse coverage regressed");
+            if(!first)out<<',';first=false;
+            out<<"{\"face\":"<<unsigned(face)<<",\"altitude_meters\":"<<altitude
+                <<",\"ring_meters\":"<<distance<<",\"legacy_minimum_level\":"<<minimumBefore
+                <<",\"ground_minimum_level\":"<<minimumAfter<<",\"turned_minimum_level\":"<<minimumTurned
+                <<",\"sum_levels\":"<<levelTotal<<",\"leaves\":"<<surround.leaves.size()<<'}';
+        }
+        const auto fallback=p::plan_body_terrain(world,0,eye,0,1080,fov,{20u,6u,210.,.15},nullptr,true,{forward,16./9.,radial});
+        coverage(fallback);
+        require(fallback.leaves.size()==6u,"ground footprint bypassed the available leaf budget");
+    }
+    out<<"],\"flight_corridor_cases\":[";first=true;
+    for(const double altitude:{1000.0,5000.0})for(bool ocean:{false,true})for(const double aspect:{16./9.,21./9.}) {
+        const auto start=p::cube_direction(0,.13,.09);
+        const auto heading=-p::tangent(start);
+        constexpr double fov=1.0471975511965976;
+        const p::LodSettings settings{20u,384u,210.,.15};
+        std::optional<p::TerrainPlan> previous;
+        unsigned forward_floor=20u,nadir_floor=20u;
+        std::size_t maximum_replacements{};
+        for(unsigned frame=0;frame<3u;++frame) {
+            const auto radial=p::normalized(start+heading*(frame*.40*altitude/body.radius));
+            const auto horizontal=p::normalized(heading-radial*p::dot(heading,radial));
+            const auto side=p::normalized(p::cross(radial,horizontal));
+            const double height=p::sample_height(body,radial);
+            const double clearance_surface=ocean?std::max(0.0,height):height;
+            const auto eye=world.center(0,0)+radial*(body.radius+clearance_surface+altitude);
+            const p::TerrainView view{p::normalized(horizontal-radial*.13),aspect,radial};
+            auto cut=p::plan_body_terrain(world,0,eye,0,1080,fov,settings,previous?&*previous:nullptr,ocean,view);
+            coverage(cut);
+            if(previous) {
+                const auto removed=std::count_if(previous->leaves.begin(),previous->leaves.end(),[&](const auto key){
+                    return std::find(cut.leaves.begin(),cut.leaves.end(),key)==cut.leaves.end();
+                });
+                maximum_replacements=std::max(maximum_replacements,static_cast<std::size_t>(removed));
+            }
+            const auto from_ground=[&](double ahead,double across) {
+                return p::normalized(radial+(horizontal*ahead+side*across)*(altitude/body.radius));
+            };
+            // Off-axis ground in front of the aircraft, outside the radial
+            // disk and distinct from the three original sight-line hits.
+            if(frame==0u)for(const double ahead:{4.0,6.0})
+                forward_floor=std::min(forward_floor,unsigned(nearest(cut,from_ground(ahead,1.0)).level));
+            nadir_floor=std::min(nadir_floor,unsigned(nearest(cut,radial).level));
+            previous=std::move(cut);
+        }
+        require(forward_floor>=(altitude==1000.0?13u:11u),"off-axis flight corridor lost its refinement");
+        require(nadir_floor>=(altitude==1000.0?14u:11u),"forward corridor displaced the near ground");
+        require(maximum_replacements<=96u,"short flight step replaced more than one quarter of the cut");
+        if(!first)out<<',';first=false;
+        out<<"{\"altitude_meters\":"<<altitude<<",\"ocean\":"<<ocean<<",\"aspect_ratio\":"<<aspect
+            <<",\"forward_floor\":"<<forward_floor<<",\"nadir_floor\":"<<nadir_floor
+            <<",\"maximum_replacements\":"<<maximum_replacements<<'}';
+    }
     out<<"],\"center_miss_lower_hit_cases\":[";first=true;
     for(unsigned face=0;face<6u;++face) {
         const auto radial=p::cube_direction(static_cast<std::uint8_t>(face),.13,.09);

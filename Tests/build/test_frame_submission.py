@@ -31,6 +31,8 @@ class FrameSubmissionPolicy(unittest.TestCase):
             source = read_owned_source(ROOT / ('Engine/src/renderers/host/host.context_' + host + '.cpp'), encoding='utf-8')
             self.assertIn('coreFrameLimiter.wait_for_next_frame();', source)
             self.assertIn('startup, win.editorFramePacingOverride', source)
+            self.assertIn('editorFrameCeiling.update(compiling, pressure.cpu_valid', source)
+            self.assertIn('activeCoreFramePlan, allowedEditorHz', source)
             self.assertNotIn('epochengine::platform::cooperative_pause();', source)
         source = read_owned_source(ROOT / 'Engine/src/epoch/epoch.engine_legacy.cpp', encoding='utf-8')
         wait = source.split('void wait_for_session_frame(', 1)[1].split('template <typename PumpFunc>', 1)[0]
@@ -77,7 +79,7 @@ void set_target_fps(int value) { target=value; ++configurations; }
             fps_for_tier = module[module.index('    double target_fps_for(tier t) noexcept\n'):
                 module.index('    double target_fps_for(frame_limit_preset preset) noexcept\n')]
             session = read_owned_source(ROOT / 'Engine/src/editor/application/editor.application_context_session.inl')
-            startup_selection = session[session.index('                if (core::cli::frame_limit_explicit)'):
+            startup_selection = session[session.index('                it->second.editorFrameLimitFps = perf::target_fps_for('):
                 session.index('                it->second.automationCommand =')].replace(
                     'std::thread::hardware_concurrency()', 'hardwareThreadCount')
             startup_publish = session[session.index('                if (ctx && ctx->windowData)'):
@@ -101,13 +103,13 @@ namespace perf=epochengine::perf;
 SANITIZE
 struct Window {perf::frame_pacing_override editorFramePacingOverride;};
 namespace core {
-enum class ContextType {OpenGL,Vulkan,RayLib,SFML,SDL,Software};
+enum class ContextType {OpenGL,Vulkan,RayLib,SFML,SDL,DirectX,Software};
 struct Context {std::shared_ptr<Window> windowData=std::make_shared<Window>();ContextType type{ContextType::OpenGL};};
 namespace cli {bool frame_limit_explicit{},frame_vsync_requested{};double frame_limit_fps{};}
 }
 using core::Context;
 RECOMMEND_TIER
-struct Editor {double editorFrameLimitFps=120.0;bool editorFrameVsyncRequested=false;};
+struct Editor {double editorFrameLimitFps=0.0;bool editorFrameVsyncRequested=false;};
 Editor start(const std::shared_ptr<Context>& ctx,unsigned hardwareThreadCount){
 struct Slot {Editor second;};Slot slot;auto* it=&slot;
 STARTUP_SELECTION
@@ -150,6 +152,22 @@ void yield(){++yields;}
             main = r'''
 int main() {
     using namespace epochengine::perf;
+    epochengine::editor::build_pressure::FrameCeiling cpuCeiling;
+    if (cpuCeiling.update(false,true,.91,1000,1000)!=20) return __LINE__;
+    if (cpuCeiling.update(false,true,.88,2000,2000)!=20) return __LINE__;
+    if (cpuCeiling.update(false,true,.82,3000,3000)!=20) return __LINE__;
+    if (cpuCeiling.update(false,true,.82,3000,4900)!=20) return __LINE__;
+    if (cpuCeiling.update(false,true,.84,4000,4900)!=20) return __LINE__;
+    if (cpuCeiling.update(false,true,.82,5000,5000)!=30) return __LINE__;
+    if (cpuCeiling.update(false,true,.69,6000,6000)!=30) return __LINE__;
+    if (cpuCeiling.update(false,true,.74,7000,7000)!=30) return __LINE__;
+    if (cpuCeiling.update(false,true,.69,8000,8000)!=30) return __LINE__;
+    if (cpuCeiling.update(false,true,.68,9000,9000)!=30) return __LINE__;
+    if (cpuCeiling.update(false,true,.69,10000,10000)!=0) return __LINE__;
+    if (cpuCeiling.update(true,false,0,0,10001)!=10) return __LINE__;
+    if (cpuCeiling.update(false,true,.94,11000,11000)!=20) return __LINE__;
+    if (cpuCeiling.update(false,false,0,0,15000)!=20) return __LINE__;
+    if (cpuCeiling.update(false,false,0,0,16001)!=0) return __LINE__;
     constexpr auto foreground=frame_activity::foreground;
     constexpr auto uncapped=frame_pacing_mode::uncapped;
     const auto unrestrictedPolicy=select_frame_pacing_policy(uncapped,0.0,true,false);
@@ -198,11 +216,19 @@ int main() {
     auto editorContext=std::make_shared<pacing_fixture::Context>();
     assert(pacing_fixture::start(editorContext,12u).editorFrameLimitFps==120.0);
     const auto autoPolicy=with_frame_pacing_override(target_hz_policy(30),editorContext->windowData->editorFramePacingOverride);
-    assert(resolve_frame_pacing(autoPolicy,foreground,false).effective_hz==120.0);
+    const auto idlePlan=resolve_frame_pacing(autoPolicy,foreground,false);
+    assert(idlePlan.effective_hz==120.0);
+    const auto workingPlan=with_frame_rate_ceiling(idlePlan,cpuCeiling.update(true,false,0,0,17000));
+    assert(workingPlan.effective_hz==10.0&&workingPlan.cpu_deadline_wait);
+    assert(with_frame_rate_ceiling(idlePlan,cpuCeiling.update(false,false,0,0,17001))==idlePlan);
     assert(resolve_frame_pacing(autoPolicy,frame_activity::background,false).effective_hz==30.0);
     assert(pacing_fixture::start(editorContext,6u).editorFrameLimitFps==60.0);
     assert(pacing_fixture::start(editorContext,0u).editorFrameLimitFps==30.0);
     assert(pacing_fixture::start({},16u).editorFrameLimitFps==30.0);
+    editorContext->type=pacing_fixture::core::ContextType::DirectX;
+    assert(pacing_fixture::start(editorContext,5u).editorFrameLimitFps==30.0);
+    assert(pacing_fixture::start(editorContext,6u).editorFrameLimitFps==60.0);
+    assert(pacing_fixture::start(editorContext,16u).editorFrameLimitFps==60.0);
     editorContext->type=pacing_fixture::core::ContextType::Software;
     assert(pacing_fixture::start(editorContext,16u).editorFrameLimitFps==30.0);
     pacing_fixture::core::cli::frame_limit_explicit=true;
@@ -344,7 +370,9 @@ int main() {
                 include.mkdir()
                 self.write_edition_marker(include, value)
                 source = include / 'contract.cpp'
-                source.write_text('#include "epoch.edition.hpp"\n#include <cstdint>\n#include <cmath>\n'
+                pressure_header = ROOT / 'Engine/src/editor/ai/editor.build_pressure.hpp'
+                source.write_text(f'#include "{pressure_header.as_posix()}"\n'
+                    '#include "epoch.edition.hpp"\n#include <cstdint>\n#include <cmath>\n'
                     '#include <charconv>\n#include <system_error>\n#include <cassert>\n#include <initializer_list>\n#include <limits>\n'
                     '#include <algorithm>\n#include <atomic>\n#include <array>\n#include <memory>\n#include <optional>\n#include <thread>\n'
                     '#include <string>\n#include <string_view>\n' + clock + api + '\nnamespace epochengine::perf {\n' + wait
@@ -679,7 +707,7 @@ bool owner_frame(bool uncappedSubmission, frame_admission::State& state, OwnerCo
         self.assertNotIn('desktop safety', app)
         self.assertNotIn('120 FPS safety', app)
         self.assertIn('import gui.frame_limit_control;', app)
-        control = read_owned_source(ROOT / 'Engine/modules/gui.frame_limit_control.ixx', encoding='utf-8')
+        control = read_owned_source(ROOT / 'Engine/modules/gui/gui.frame_limit_control.ixx', encoding='utf-8')
         self.assertIn('.selected = edit.manual ? "Manual" : vsync ? "VSync"', control)
         settings = read_owned_source(ROOT / 'Engine/src/editor/application/editor.frame_consent_settings.inl')
         self.assertNotIn('core::cli::frame_limit_explicit =', settings)

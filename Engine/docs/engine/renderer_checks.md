@@ -52,6 +52,172 @@ Run the cheapest faithful layer first:
 Headless CI is a canary, not renderer presentation proof. GUI/GPU runs remain
 operator-approved and launch only from an asset-bearing output directory.
 
+### OpenGL terrain washout capture
+
+Launch the exact test Editor with a private showcase data root and set
+`EPOCH_OPENGL_PREVIEW_SAMPLE_RADIUS=1.000841` in that process. This is the
+camera distance from the planet center divided by nominal planet radius. The
+recovered orbital pose uses `1.275792` in a separate launch. Select the intended
+draw mode, hold the target pose and wait for terrain streaming to settle. The
+probe needs an admitted density layer with an inner terrain radius. It takes
+one frame per process within 0.0002 of the target ratio after a 750 ms dwell in
+the same context and viewport. The camera must stay within 2 m and 0.25° of
+the starting pose. Small field-of-view changes, clip-plane refits and geometry
+republication do not restart the dwell. A gap of more than 250 ms between
+observations restarts it.
+
+Keep the executable hash, data-root receipt, terrain stream request and
+`OpenGL.PreviewPass` log together. The log confirms flag parsing, reports the
+first missing-layer or out-of-band observation, and records entry into the
+target band. The captured frame has its own revision and measured ratio.
+Compare the five points by their OpenGL
+pixel coordinates. Each point records RGBA and depth after clear, plain opaque
+meshes, textured meshes and sampled surfaces, cloud composition, and scene
+helpers. Compare each sample to its clear value. A change at the cloud
+checkpoint isolates cloud composition. A pale color or missing depth before
+that checkpoint leads back to opaque scene data or drawing. Terrain and water
+can share one mesh, so the opaque checkpoint cannot identify either one on its
+own. The probe requires a single-sample depth target and records pixels without
+altering pass order or presentation.
+
+### Verdant cloud passage
+
+Keep one admitted project, body and frozen weather time. Record one verified
+Play window while the provider moves the camera from below the first deck to
+above the full cloud shell. Keep the original recording and the saved
+body-local camera checkpoints. Re-evaluate the shared density field at those
+checkpoints and along the travelled axis. Confirm that the route crosses a
+dense body and that the clear points are outside it in three dimensions.
+Use fixed crops from the recording to compare perceived detail. State the
+video-clock uncertainty when matching a frame to a saved checkpoint. A
+stationary pass probe can identify the field and the composite, while motion
+and coverage come from the continuous take and the camera receipts.
+
+For a lighting-only change, replay both shader versions at the same density
+inputs and compare accumulated alpha. Match native crops by body-local
+altitude and camera direction. Record mean luminance, interior contrast, and
+ground and orbit frames. Measure actual frame cost separately from shader
+sample counts.
+
+For a lateral shape change, record after the first density pass. Reuse the
+same body, weather, starting direction and flight input. Align captures by
+distance along the actual saved route and report altitude drift. Include
+clear air at both ends and at least one dense, contiguous interval. Compare
+the approach and exit silhouettes as well as the interior.
+
+A lower-deck profile change needs separate coastal, ground, in-cloud and
+orbital checks. A reduction in coastal bands is insufficient if the same
+cloud loses opacity during passage. Apply the same screen region and
+luminance filter to replay and native output. A synthetic skyline and
+analytic occlusion can still reverse the result. If they do, capture
+the scene-specific shader parameters, opaque color and depth, and resolve
+output at the saved camera before using the replay to select a variant.
+
+### SDL preview colors
+
+The shared frustum clip interpolates optional per-vertex RGB at each clipped
+edge. SDL submits those colors through its existing indexed fan. Software
+keeps its position-only depth and wire paths. The focused SDL fixture checks
+clipped and unclipped input, winding, flat colors and complete rejection.
+On Android, check the baked shoreline on SDL OpenGL ES. The SDL triangle
+color varies in screen space. A baked shoreline verifies gradients separately
+from animated water and terrain streaming. The runtime control reports live
+water availability. A disabled control can accompany a visible baked shore.
+
+### Verdant shoreline draw evidence
+
+For a close saved start, stream from the saved camera while the viewport
+shows preparation. Do not draw the provisional cut with that camera.
+The first visible close frame must contain the detailed terrain and its
+fitted camera from one scene commit. Check the HUD, ordinary orbital and
+LOD-disabled starts, and the pause, failure and timeout exits. Use the
+same coastal pose and crop on both native backends for the horizon-strip
+comparison. Verify an actual detailed commit so a blank frame cannot pass.
+
+A retained patch can have an older wave clock and a different metric origin.
+Replay the saved old and incoming hierarchies, including intermediate parents
+and dry neighbors. The worker must use the incoming wave sample and an exact
+provider lattice wherever the old packet lacks one. Check both endpoint
+identities, refusal on stale source or budget and the settled cut before
+counting any intermediate draw in the native test.
+
+For a merge, enforce 2:1 on each positive-length shared edge, including
+reversed cube-face charts. Finer leaves on the far side of an adjacent
+tile and corner-only contacts do not restrict the merge. Measure within
+each prepared batch and at its boundary separately. The next batch may
+start after the last intermediate commits. Its first frame still waits
+for the previous phase's display hold.
+
+Rolling wet batches retain the approved Planetary Terrain and FFT Ocean file
+inventories. Before and after preparing a batch, verify the exact saved project
+and recipe, both local package receipts, the current inventory, and the SHA-256
+of each approved file. Check a same-size edit with its timestamp restored, and
+stop during the final verification. Either must discard the prepared batch and
+preserve the previous terrain.
+
+Set `EPOCH_TRACE_WATER_FRAMES=1` for the isolated project process when
+running the retained shoreline route. OpenGL and Vulkan record the immutable
+water packet at their solid draw commands. The log includes the terrain
+request, mesh key, water appearance and shader range signatures, CPU sample,
+live ripple phase, camera eye, and clip interval. A delayed geometry commit
+keeps its own terrain request and sample while accepting the latest view.
+The trace is off by default and records at most 2,048 draw packets per process.
+
+For a staged shoreline transition, pair the `Engine.Planet` log's request,
+frame count and wave sample with each intermediate draw packet. A native run
+can settle successfully without taking this path. With the same trace
+enabled, the `Shoreline input` and `Shoreline preparation` rows also show
+whether a cut had verified wave input and how the worker disposed of it.
+Check that the transition admitted intermediate cuts before using the
+capture to judge them.
+
+A long shoreline move can span several worker batches. Check each request's
+preparation outcomes and the sequence of distinct backend draw artifacts at
+its fixed wave time. Play holds each geometry for 50 ms after its shared
+scene commit. The draw trace shows which phases the backend actually draws.
+Confirm the final cut commits before the request advances and verify that
+cancelled intermediate geometry does not publish after rollback.
+
+Run both backends with the same verified source, saved pose, clock and frame
+cap. The retained controller route caps rendering at 60 FPS and records the
+window at 30 FPS. Compare changes in the packet with the visible shoreline.
+The trace time records when the CPU issues or encodes the draw. Screen
+recordings can corroborate continuity. Precise frame attribution requires a
+capture tied to the same draw packet. Retain the linked executable, route and
+capture receipts for that comparison.
+
+### Retained native lifecycle acceptance details
+
+November 17 reconciliation preserves these narrower historical gates; the
+following are acceptance requirements, not new test or runtime pass claims.
+
+- Vulkan: retain the v177 30-second native Release flicker scenario. Unchanged
+  framebuffer size and transient `SUBOPTIMAL` must not recreate the swapchain or
+  flash; real resize and `OUT_OF_DATE` must recover. Inspect recreation logs.
+  See `Changes/v177-vulkan-swapchain-flicker.md` and the source-path fixture
+  `Tests/ai/test_epoch_90177_vulkan_swapchain_flicker.py`; that fixture alone does
+  not accept native presentation.
+- Windows Vulkan Release `D952D2D80E9C` passed the ordinary Editor Play guide
+  transition with the first-person starter and with a two-object scene whose
+  camera mode stayed Editor. The grid returned after each Controls Return.
+  [Same-camera captures](../../../Artifacts/Reports/windows-release-play-guides-1119/fixture-10eaeefd/play-result.json).
+- OpenGL: make the retiring context current for its context-bound resource
+  cleanup and verify that sibling-context resources survive. The scoped binding
+  in `Engine/src/renderers/opengl/opengl.context_cleanup.cpp` is implementation
+  evidence, not an approved native multi-context teardown result.
+- Raylib: exercise off-owner and wrong-current deferred deletion, drain on the
+  owning context/thread, and verify that cleanup never restores a deleted native
+  context. `Engine/modules/raylib/raylib.context.ixx` guards restoration after
+  native context destruction; that source guard does not prove the deferred
+  deletion error paths or native repeated-switch acceptance.
+
+Vulkan repeated native retirement/reopen is a separate open soak gate from the
+30-second flicker scenario: record the exact Release image, cycle workload and
+initial/per-cycle/final native memory and handle observations; repeatedly retire
+and reopen/replace the context, verify resources retire without accumulating
+across cycles, and confirm normal owned shutdown. Passing unchanged-size or
+resize presentation alone does not close this lifecycle gate.
+
 ## Canonical Scene
 
 Every backend consumes the same saved acceptance scene and immutable Canvas2D

@@ -327,7 +327,7 @@
                 else if (!spawn && !collision && !refresh && !clear && !objective.radius)
                     editor.aiToolStatus = "Use a reach radius from 0.25 to 1000 m, for example: Set the selected model as the reach objective within 5 m.";
                 else if (!clear && !target)
-                    editor.aiToolStatus = "Select one visible model object in 3D Objects before reviewing a reach objective.";
+                    editor.aiToolStatus = "Select one visible model object in Scene Hierarchy before reviewing a reach objective.";
                 else if (refresh)
                 {
                     editor.aiToolPlacementTarget = target->sceneObjectId;
@@ -1113,6 +1113,8 @@
         };
         const auto classify_ai_intent = [&](std::string_view request) noexcept
         {
+            if (editor_ai_source_intent::requests_chat_only(request))
+                return AiChatIntent::ProjectChat;
             const std::string lower = ai_affirmative_intent_text(request);
             if (lower.empty())
                 return AiChatIntent::ProjectChat;
@@ -1320,6 +1322,8 @@
                 chat.append_status("The submitted request has no message body. Nothing was dispatched; your draft remains available.");
                 return false;
             }
+            if (editor_ai_source_intent::requests_chat_only(input))
+                intent = AiChatIntent::ProjectChat;
 #if EPOCH_EDITION_PUBLIC
             if (editor_ai_source_intent::requires_engine_source(input))
                 return start_engine_source_iteration(input);

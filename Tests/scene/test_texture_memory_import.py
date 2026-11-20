@@ -1,5 +1,6 @@
 """Actual shared memory/file image decoder/compiler modules; no GPU or model."""
 from pathlib import Path
+from Tests.support.cpp import engine_module_source
 import hashlib
 import json
 import os
@@ -17,7 +18,7 @@ class TextureMemoryImport(unittest.TestCase):
         lane.mkdir(parents=True)
         temp = lane/"tmp"; temp.mkdir()
         env = dict(os.environ, TEMP=str(temp), TMP=str(temp), TMPDIR=str(temp))
-        module_paths = [ROOT/f"Engine/modules/{name}.ixx" for name in ("asset.texture_artifact", "asset.texture_import")]
+        module_paths = [engine_module_source(ROOT / "Engine/modules", name + ".ixx") for name in ("asset.texture_artifact", "asset.texture_import")]
         source_paths = [ROOT/path for path in ("Tests/scene/asset.texture_memory_contract.cpp", "Engine/src/assets/texture/asset.texture_artifact.cpp", "Engine/src/assets/texture/asset.texture_import.cpp", "Engine/src/assets/image.stb.cpp")]
         cmake = f'''cmake_minimum_required(VERSION 3.30)
 project(TextureMemoryImport LANGUAGES CXX)

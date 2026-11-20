@@ -8,6 +8,35 @@ The canonical plan and tier definitions are in
 
 ## Evidence Policy
 
+Automatic Tier 4 startup tries one Vulkan context on Windows and native Linux.
+An ordinary unsuccessful startup retires that attempt before trying OpenGL.
+On Windows, an interrupted automatic Vulkan attempt before first present
+makes future automatic launches of the same executable use OpenGL. A new
+executable gets a fresh attempt. Explicit renderer choices and WSL's
+single-context OpenGL startup retain their paths.
+The November 17 Windows Release rendered the ordinary launcher on Vulkan and
+completed an OpenGL-to-Vulkan Editor replacement in the same parent window.
+Native fallback and Linux startup remain unverified. See the exact build and
+switch receipts in the [active pass](../../../Changes/active_pass.md).
+
+OpenGL and Android SDL GLES 3 consume the shared density shader. The Android
+path draws the shared OpenGL atmosphere behind opaque geometry, then resolves
+clouds before SDL overlays. Android 12 matched orbital captures show the
+atmospheric limb, black space and unchanged opaque controls. SDL concentrates
+its bounded orbital trace inside the projected cloud shell while resolving
+against full-frame opaque depth. Stable ground and landscape recovery passed.
+Vulkan draws the same density field with a full-resolution trace capped at
+16 primary steps. Long rays viewed from inside the shell concentrate those
+steps near the eye. CPU replay and shader staging verify the sampling change.
+The existing second subpass reads the opaque depth and
+composites clouds before Canvas2D and GUI. The D32 depth format, staged
+shader pair and frame-owned constants must be available before the context
+advertises density clouds. Windows Release Play has coastal motion and
+shutdown evidence. Cloud appearance, standalone resize and Linux remain
+separate acceptance checks. The project presentation check reports
+Vulkan-in-OpenGL as unavailable. Project window embedding remains Windows-only.
+[Android atmosphere evidence](../platform/android/android.md#package-a-saved-planetary-view).
+
 November7 depth repair: planetary depth fitting now receives viewport aspect.
 Offscreen triangles crossing the eye plane are clipped against the view sides
 before contributing depth bounds. True visible eye-plane crossings retain the
@@ -30,29 +59,131 @@ changed camera/water times; median provider time0.757 to0.611s. Cache/path safet
 four-worker scheduling, detail and budgets are unchanged. Native flight latency
 and repeated whole-mesh GPU staging still need acceptance.
 
-Initial bounded procedural clouds now exist in the optional compiled Planet Run
-path. Seeded closed cloud geometry is immutable; wind follows simulation time and
+The initial bounded procedural clouds in the optional compiled Planet Run
+path use seeded immutable closed geometry; wind follows simulation time and
 body transforms. CPU D/R tests cover geometry, budgets, cancellation, time/session
 restoration and host placement. Precise matrix meshes now transform lighting
 normals with inverse-transpose scale/rotation, retaining the legacy Euler path.
-Full Engine/native appearance is pending; static Editor cloud previews,
-volumetric rendering and conservative cloud occlusion remain unfinished.
+That geometric path remains compatibility behavior; the density integration
+below supersedes it for admitted density recipes. Native appearance and
+conservative cloud occlusion remain unaccepted.
 
 November 7 cloud integration: `asset.cloud_volume` owns a bounded, nonnegative
 light-extinction recipe and CPU sampling contract. Optional `planet.clouds`
 produces that recipe through the v5 project snapshot; older snapshots retain
-their exact geometric-cloud compatibility. Existing projects need an explicitly
-reviewed package-source update and regeneration to obtain v5 density data.
-The host does not invent missing recipes from old cloud meshes.
+their exact geometric-cloud compatibility. Projects with older package source
+need an explicitly reviewed update and regeneration to obtain density data.
+The Editor consumes density metadata from its accepted streaming snapshot;
+it does not invent missing recipes from old cloud meshes.
 
 `opengl.cloud_volume` implements an analytic density raymarch with scene-depth
 clipping, bounded samples, half-resolution accumulation and depth-aware
 composition before helpers/GUI. GPU resources remain context-owned; cloud time
 can advance or reverse without rebuilding opaque geometry. Focused module,
-shader and Debug/Release CPU checks pass. Complete Engine builds and native
-appearance, occlusion, resize and GPU timing remain pending. Other native
-density backends are not implemented. This is not a general 3D texture API or a
-completed cross-renderer shader graph.
+shader and Debug/Release CPU checks pass. The November15 full Development
+Release Editor build and pure contracts pass for SHA-256
+`DABC93B0B018965EF54924848E5221CC570EB57DDE2CF5506E429F3B8A74B5BC`;
+`Artifacts/Reports/editor-reviewed-run-20261115/` owns that receipt. This binary
+contains the broader weather-front/shear shader, and the showcase project's
+47 attached Planet source files match the current Extensions owner and package
+receipt. Native orbit/surface appearance, occlusion, resize and GPU timing remain
+pending. Other native density backends are not implemented; wireframe deliberately
+omits clouds. This is not a general 3D texture API or a completed cross-renderer
+shader graph. `Artifacts/Reports/cloud-showcase-20261115/cloud-diagnosis.md`
+records the copy's source, provider and display-admission evidence.
+
+The shared preview renderer owns CloudVolume admission and publication.
+`cloud_volume_view` also supplies the camera-relative sphere, body rotation,
+wind phase, metric density inputs and precision checks for native consumers.
+Project Play supplies the accepted recipe, transform and simulation time.
+OpenGL owns shader compilation, scene-depth sampling, render targets and
+compositing. Editor Preview and Project Play use the native preview capability
+registered by the backend and copied by Context cloning. OpenGL registers
+density support. Its live depth-target and precision checks still decide
+whether a specific pass can draw. Other backends need native passes that
+consume the same scene packet, with native composition checks.
+
+The analytic lower deck uses the spherical weather contour for its footprint,
+an independent body-relative field for the hanging base and finer billows at
+the top. Dry regions leave clear sky and broken clusters. Wet regions bend
+fronts through a bounded body-relative displacement. The lower boundary
+narrows as the ray footprint resolves the cloud, and coarse samples retain
+the broad profile. Strong lower cores gain extinction gradually with density. Thin
+edges and the upper deck keep the recipe coefficient. The CPU transport and
+both OpenGL fragment paths use this response for absorption. OpenGL also uses
+it for each sunlight probe. Existing package recipes and snapshot envelopes
+retain their formats.
+
+Keep cloud weather in body coordinates. Observer altitude changes the ray
+and its sample footprint. Fixed body position, time and footprints yield the
+same density in either deck at all camera altitudes. Each deck uses one
+coverage contour on the reference sphere to define cloud bodies and clear
+gaps. Filtered regional moisture, wind-stretched clusters and smaller lobes
+shape that contour. The lower deck thickens around each connected core and
+narrows toward the rim from both above and below. Volumetric billows shift
+the column and erode the contour without perforating dense cores. The thinner
+upper deck has its own weather pattern, altitude band and shear.
+
+November 17 cloud depth fallback: a reviewed Planetary provider can deliver a
+conservative inner terrain radius through density v2 and snapshot v6. OpenGL
+clips the cloud view ray at the nearer of that sphere and sampled opaque depth.
+The eclipse still uses the nominal planet radius. The provider keeps the v5
+density and geometric compatibility routes. Standalone producer/consumer and
+renderer checks, transport admission, and all three GLSL stages passed. Native
+OpenGL regenerated the showcase from the reviewed provider. The settled
+below-cloud washout still reproduces in Solid and Shaded. Wireframe changes
+both geometry presentation and cloud composition.
+See `Artifacts/Reports/cloud-inner-occluder-20261117/` and the combined build
+receipt in the active pass.
+
+Cloud stream admission now checks the system-space mesh receipt against the
+body-local stream origin and normalizes the cloud center to the body-local
+terrain frame. Native OpenGL shows aligned orbital terrain and clouds. At the
+fixed close pose all five colors and depths matched from opaque terrain through
+cloud composition. That camera faces a nearly level, snow-dominant plateau.
+The six-metre body-local vertex detail raised sampled pre-light luminance range
+from 0.000103 to 0.05737 on the resolved close tile. Debug and Release agreed on
+positions, normals and shared face/LOD colors. The isolated showcase still needs
+the reviewed provider update and matched Shaded captures to verify appearance
+and distant filtering. Evaluate shoreline and water LOD with their own coastal
+pose. The active pass links the native and CPU receipts.
+
+November17 native showcase follow-up: GameProject01 Release runtime SHA-256
+`B1D9F717F3C47B274E9297E743F5E5CE732CF4955BE7124D613499EC272AE949`
+loaded terrain and ocean. The initial distant dot was a restored exploration
+camera about 75 million metres from the body centre, not evidence of missing
+planet admission. Operator review reported better cloud shape but excessive
+overcast and inconsistent surface/orbit coverage. This is partial visual feedback,
+not cloud acceptance. Preserve orbit-to-ground weather continuity, thick layered
+interiors, stable depth/LOD and resize, coherent sun/day-night/atmosphere, and
+climate/axis/season-aware polar placement as open gates. Ground material detail,
+water transitions and terrain refinement require their own proof; clouds must
+not hide unresolved geometry defects. Evidence is under
+`Artifacts/Reports/cloud-showcase-20261115/data/Projects/GameProject01/Artifacts/Reports/`
+and the current acceptance record in `Changes/active_pass.md`.
+
+**Planetary atmosphere.** The planetary body supplies atmosphere height in metres. The preview scales
+it with the body radius and carries it independently of cloud coverage.
+Explicit zero describes an airless body. An older provider that omits height
+retains the cloud-derived fallback.
+
+The shared preview resolves the visible body, normalizes the rebased camera
+to that body and carries the same sun direction to OpenGL and Vulkan. OpenGL
+and Vulkan both draw the analytic background before opaque geometry. Windows
+Vulkan has native daylight, sunset, orbit and resize proof in the active pass.
+Cloud volume, stars and haze over opaque geometry need separate backend proof.
+
+For the sunset check, hold a coastal camera fixed and move the sun
+from daylight through the horizon into night. Check for a legible sun disk,
+gold near the sun, a pink-red horizon and a cooler upper sky. Then verify
+the opposite horizon, the orbital limb, a clear atmospheric world and an
+airless moon. Surface haze needs its own coastal check across textured
+terrain and water. For direct daylight, use a low sun still above the horizon.
+Look for a pale blue sky grading into warm glare around the sun, warm direct
+light, and cool, readable shadows. Haze should soften distant terrain while
+nearby materials retain contrast. Check with the sun in view and again with it
+occluded by foreground geometry so glare follows visibility. Keep this capture
+separate from the sunset and orbital checks.
 
 The analytic recipe does not allocate an editable voxel weather grid. Future
 voxel-backed clouds must reuse `voxel.field`/`voxel.storage` with an explicit
@@ -70,10 +201,12 @@ Actual-owner Debug/Release contracts and dependency validation pass. Native pixe
 acceptance remains open; no WGL fallback, frame cap or GPU setting change is used
 as a claimed fix. Both owned processes retired normally in that run.
 
-Run opens a Vulkan project in a separate window when the Editor uses OpenGL.
-The same fallback applies when the current Editor window lacks native docking
-support. Run keeps the project's selected backend and frame limit. Compatible
-In Editor requests use the existing child-window attachment path.
+Run validates the requested presentation before building and before launch.
+An unsupported In Editor request explains the missing host or unaccepted backend
+pair instead of silently launching outside. Separate Window remains an explicit
+choice. The standalone Editor lacks a docking parent; the parented Editor uses
+the existing child-window attachment path for supported backend pairs. Vulkan
+inside an OpenGL host retains its stability gate pending native acceptance.
 
 November1 LOD allocation accepts optional body-local forward/up and aspect ratio.
 From orbit it favors a broad central region. Near the surface it smoothly blends
@@ -142,9 +275,14 @@ OpenGL solid, textured and wireframe passes enable back-face culling. With GLSL
 pass shades edges at the exact visible depth and fades subpixel triangles to
 avoid solid-looking patches. The legacy shader uses a polygon-line pass. The
 preview restores winding, cull mode, polygon mode and blend state before GUI
-replay. DirectX, Software, Raylib, SDL, SFML and
-Vulkan reuse the shared camera-facing triangle-edge visitor; helper gizmos remain
-separate overlays. Non-OpenGL hidden-surface wire occlusion is still unverified.
+replay. Software uses its clipped opaque raster for a depth pass and shades
+original mesh edges at the same pixel depth. Its CPU check covers overlapping
+wire surfaces in both submission orders, occlusion by solid faces and clipping
+without invented edges. The Linux Software runtime switched a saved Platformer
+scene from filled faces to wire edges in the offscreen native test. Exact
+grazing-angle Editor and cross-backend timing checks remain open.
+DirectX, Raylib, SDL, SFML and Vulkan still use the shared camera-facing
+triangle-edge visitor. Helper gizmos remain separate overlays.
 The wire packet owns one combined line stream, helper lines and depth triangles;
 there is no unused second full mesh-line stream. Admission counts shared source
 artifacts once and still counts separately retained geometry. The128MiB ceiling
@@ -163,13 +301,33 @@ Actual module tests cover all six planetary mesh faces, CW imports, reflection,
 UVs and source identity; recording tests verify both OpenGL passes and restoration.
 Combined build and native acceptance belong to the active pass.
 
-Optional planetary Water clips wave edges against the terrain triangles actually
-drawn, rather than projecting shoreline crossings back onto an analytic sphere.
-This keeps coarse water/ground boundaries on their source faces. CPU checks cover
-coarse shoreline positions, skirts and parent interpolation. Native refined-mesh
-acceptance remains open; invalid generated faces are refused, not admitted by
-relaxing the shared mesh validator. Provider failures retain their stage, exit and
-exact local request in the existing build log, excluding environment values.
+Optional planetary terrain/water are composed by Extensions, not mandatory
+world services for GUI-only projects. Current owners are
+`Engine/dep/EpochEngineExtensions/packages/planetary_terrain/modules/planet.streaming.ixx`,
+`water.planetary.ixx` and `tools/planet.stream_export.cpp`; reusable sparse voxel
+contracts remain under `Engine/modules/voxel`. Heavy FFT ocean is separately
+owned by `packages/fft_ocean/modules/water.fft.ixx`.
+
+`water.planetary` clips waves against the drawn terrain triangles and preserves
+skirts/parent interpolation instead of projecting shoreline crossings onto an
+analytic sphere. Existing CPU checks cover these contracts; native refined-mesh
+acceptance remains open. Invalid faces are refused by the shared mesh validator.
+Both initial water generation and animated reconstruction use the same
+shallow-breaker rule. Sampled crests brighten in shallow water. The extra
+foam fades between 1.75 and 2.75 m vertex spacing, and clipping interpolates
+the sampled edge color. At a fine-to-coarse join, the fine patch blends its
+foam weight to the neighbor over three rows. This has its own weight because
+both sides can still resolve sun glints. Generation and resampling use the
+same fade at their admitted spacing.
+The provider and host resampler use one wet polygon rule. A zero-depth
+sample is outside the wet polygon, and each edge crossing interpolates
+from its wet endpoint. A parent-to-child transition must interpolate the
+parent triangle's signed depth and water attributes before clipping the
+child lattice. Moving previously clipped child vertices keeps the child's
+wet topology and can expose a different coastline at the parent endpoint.
+Provider logs retain stage, exit and exact local request, excluding environment
+values. Authoring/edit durability and package extraction are separate gates;
+see [voxel/world ownership](voxels.md#source-of-truth-and-representations).
 
 Bounded OpenGL submission evidence counts actual mesh draw calls, submitted
 triangles and upload bytes per frame (wire depth and line passes count separately).
@@ -308,9 +466,9 @@ remain open. Evidence: `Artifacts/Reports/planet-size-integration-oct28/`.
 | CPU/software | T0 reference, headless, safe fallback | Deterministic raster/contracts plus framebuffer Canvas2D composition build | Live output, resize, and repeated-switch proof remain `Partial` |
 | OpenGL | First `T1-GL` desktop presentation and portable technique proof | Context, editor scene, GUI composition, sampled RTT preview, and basic resources exist | Complete Canvas2D/resource/material/settings proof |
 | OpenGL ES | T1-GLES mobile target contract | Profile/limits are represented | No production GLES runtime/presentation proof yet |
-| SDL3 | OpenGL-derived context/tool adapter | Accepted Windows launcher/loading/editor, high-DPI input/resize, and clean close plus native Canvas2D texture/presentation source builds | Sampled-RTT/Canvas2D reference pixels and repeated-switch/native-memory soak remain `Partial` |
-| SFML3 | OpenGL-derived context/tool adapter | Existing window/GUI/RTT evidence plus native Canvas2D texture/presentation and capture-only `copyToImage` evidence source builds | Pixel parity, resize, and repeated-switch proof remain `Partial` |
-| Raylib3 | Specialized OpenGL-derived context | Existing scene/ownership repairs plus exact native-context Canvas2D texture/presentation and capture-only screen-image evidence source builds | Pixel parity and single/multicontext lifecycle proof remain `Partial` |
+| SDL3 | SDL window and renderer adapter | Accepted Windows launcher/loading/editor, high-DPI input/resize, and clean close plus native Canvas2D texture/presentation source builds | Sampled-RTT/Canvas2D reference pixels and repeated-switch/native-memory soak remain `Partial` |
+| SFML3 | SFML window and OpenGL context adapter | Existing window/GUI/RTT evidence plus native Canvas2D texture/presentation and capture-only `copyToImage` evidence source builds | Pixel parity, resize, and repeated-switch proof remain `Partial` |
+| raylib | raylib window and OpenGL context adapter | Existing scene/ownership repairs plus exact native-context Canvas2D texture/presentation and capture-only screen-image evidence source builds | Pixel parity and single/multicontext lifecycle proof remain `Partial` |
 | Vulkan | Explicit backend and future `T2-VK` provider | Existing swapchain/scene/GUI evidence plus Canvas2D upload, compose pipeline, sampling, and transactional residency source builds | Pixel parity, asynchronous animated residency, and repeated-switch proof remain `Partial` |
 | DirectX | Active Windows-native D3D11 lane | Existing context/scene/GUI evidence plus native Canvas2D texture, premultiplied blend, sampling, and compose source builds | Pixel parity and repeated-switch proof remain `Partial`; this does not prove D3D12 |
 | DirectX 12 | Future `T2-DX` family | Capability vocabulary only | Device, queues, resources, pipelines, and runtime proof are missing |
@@ -336,20 +494,28 @@ order.
 
 ## Current Capability Matrix
 
+For a sustained CPU Software profile, launch a verified project with
+`--backend software --frame-limit unlimited` and set
+`EPOCH_SOFTWARE_FRAME_TIMING=1` in that process. The Software log records
+five-second foreground samples at a fixed framebuffer size, up to 12 per
+context. Each reports throughput and mean time for refresh/clear, scene,
+GUI/queue, capture and presentation. Samples restart when focus or framebuffer
+size changes. Windows reports only fully transferred framebuffer rows.
+
 | Feature family | Status | Evidence and boundary |
 | --- | --- | --- |
 | Backend-neutral capability selection | Partial | `capability.profile` defines tiers, evidence, subsystem profiles, project requirements, deterministic selection, and contract checks. Integration through runtime settings/reporting still needs build proof. |
-| Window/context bootstrap | Present | OpenGL, SDL3, SFML3, Raylib3, Vulkan, DirectX/D3D11, software, and noop/headless paths exist. SDL3 has accepted 150%-DPI Windows bootstrap and one clean native close; runtime evidence remains backend-specific. |
-| Frame pacing/present policy | Partial | `perf.tier` resolves explicit target-Hz, VSync, and uncapped requests plus foreground/background/minimized policy into one configured/effective plan. Both managed host loops apply that plan before the unchanged backend frame body and retain the shared deadline limiter when native pacing is unavailable or cannot honor a CPU-paced target. OpenGL, DirectX/D3D11, and SDL3 own native VSync enable/disable; SFML3 owns native VSync and target-Hz; Raylib3 owns native target-Hz/uncapped; Vulkan requests FIFO for VSync and Immediate then Mailbox then FIFO for non-VSync, applies changes only through pre-acquire swapchain recreation, and reports native pacing active only after the selected mode is accepted; Software truthfully remains shared-CPU-only. Deterministic 60/120, uncapped, 30-Hz background, 10-Hz minimized, native-success/fallback, present-mode selection, and pending/accepted lifecycle contracts plus MSVC Debug/Release builds pass. Linux background focus classification remains unclaimed, and no native timing/pixel evidence is added. |
-| Frame clear/present | Partial | `render.context_frame` resolves one overflow-safe clipped editor viewport, top-left and bottom-left coordinates, normalized viewport, projection aspect, protected overlay/capture order, and deterministic semantic signature. OpenGL, SDL3, SFML3, Raylib3, Vulkan, DirectX/D3D11, and Software consume the shared plan through their existing viewport/scissor/projection paths without changing queue, overlay, capture, or present boundaries. SDL3's registered and standalone paths now share one native capture-before-present result, release failed capture reservations for a bounded retry, and publish first-present evidence before the managed host marks the backend ready; MSVC Debug/Release builds and `context.sdl_first_present_readiness` pass. SDL3 launcher, replay-backed loading, editor, resize, and clean close remain accepted; native all-context resize/GUI/modal/replacement pixels remain regression-sensitive and unproved by this build-only parity slice. |
+| Window/context bootstrap | Present | OpenGL, SDL3, SFML3, raylib, Vulkan, DirectX/D3D11, software, and noop/headless paths exist. SDL3 has accepted 150%-DPI Windows bootstrap and one clean native close; runtime evidence remains backend-specific. |
+| Frame pacing/present policy | Partial | `perf.tier` resolves explicit target-Hz, VSync, and uncapped requests plus foreground/background/minimized policy into one configured/effective plan. Both managed host loops apply that plan before the unchanged backend frame body and retain the shared deadline limiter when native pacing is unavailable or cannot honor a CPU-paced target. OpenGL, DirectX/D3D11, and SDL3 own native VSync enable/disable; SFML3 owns native VSync and target-Hz; raylib owns native target-Hz/uncapped; Vulkan requests FIFO for VSync and Immediate then Mailbox then FIFO for non-VSync, applies changes only through pre-acquire swapchain recreation, and reports native pacing active only after the selected mode is accepted; Software truthfully remains shared-CPU-only. Deterministic 60/120, uncapped, 30-Hz background, 10-Hz minimized, native-success/fallback, present-mode selection, and pending/accepted lifecycle contracts plus MSVC Debug/Release builds pass. Linux background focus classification remains unclaimed, and no native timing/pixel evidence is added. |
+| Frame clear/present | Partial | `render.context_frame` resolves one overflow-safe clipped editor viewport, top-left and bottom-left coordinates, normalized viewport, projection aspect, protected overlay/capture order, and deterministic semantic signature. OpenGL, SDL3, SFML3, raylib, Vulkan, DirectX/D3D11, and Software consume the shared plan through their existing viewport/scissor/projection paths without changing queue, overlay, capture, or present boundaries. SDL3's registered and standalone paths now share one native capture-before-present result, release failed capture reservations for a bounded retry, and publish first-present evidence before the managed host marks the backend ready; MSVC Debug/Release builds and `context.sdl_first_present_readiness` pass. SDL3 launcher, replay-backed loading, editor, resize, and clean close remain accepted; native all-context resize/GUI/modal/replacement pixels remain regression-sensitive and unproved by this build-only parity slice. |
 | Editor scene lines/helpers | Present | Grid, markers, camera, and helper geometry exist across active editor lanes. |
 | Cached/partial scene rendering | Removed; build/contract proof | October30 operator direction selects the existing OpenGL conventional path and removes software whole-frame skip/reuse. Scene framebuffer caches, exclusive pending-damage queues, cache diagnostics, overlays and the SELECTIVE/FULL benchmark are removed. Protected queue/GUI/scene/presentation order remains. Focused CPU checks and combined Debug/Release builds/full pure contracts pass. The combined actual 120 retry still lagged; native image/responsiveness acceptance remains open. Ordinary resources, immutable GUI snapshots and Canvas2D derived raster/texture preparation remain; see [full-frame policy](event_render.md). |
-| Editor scene solids | Partial | OpenGL, SDL3, SFML3, DirectX, and Software have accepted current orientation. Raylib and Vulkan have correction candidates awaiting operator eye proof. |
-| Procedural forest preview | Partial | `ForestAssetDocument` compiles one deterministic morphology sample, renderer-neutral preview geometry, voxel LOD plan, and bounded occupancy. Plant Lab edits, publishes, and reopens one project-owned source/immutable Library pair; Forest Factory places that exact revision and package staging records matching source/compiler evidence. Authored branch count and node spacing affect morphology. Production projection admits finite nonzero segments from their actual length and endpoint radii, then renders oriented tapered eight-sided trunks/branches with a root-only trunk start cap and terminal-only branch end caps; leaf clusters retain deterministic orientation. A separate indexed `forest.preview_mesh` contract proves topology, taper, cap orientation, bounds, logical materials, leaf cards, determinism, budgets, and invalid-segment refusal. Editor and runtime publish through the common solid/selection stream consumed by OpenGL, SDL3, SFML3, Raylib3, Vulkan, DirectX/D3D11, and Software. Native pixels, resize, teardown, repeated-switch proof, sparse voxel materialization, and production indexed mesh/impostor consumption remain open. |
-| Canvas2D planning/runtime | Partial | `render.canvas2d` proves project settings, camera/viewport mapping, logical sprite materials, deterministic quad batching, tile descriptors, immutable submissions, offscreen/final-compose plans, diagnostics, and editor policy persistence. `render.canvas2d_cpu` proves deterministic RGBA8 reference output. `render.canvas2d_runtime` now owns immutable scene/frame/raster reuse for OpenGL and the other active backend adapters; a revision-only publication advances generation and frame evidence while deterministically retaining identical content and Canvas2D hashes. `render.canvas2d_presentation` proves full-frame identity, byte-derived artifact keys, bounded residency, explicit image/surface packets, and staged native dispatch. `project.texture_library`, `project.texture_pipeline`, snapshot format 3, and the Assets controller prove serialized Library persistence, authenticated reopen, semantic material restoration, and owned editor resource closure. Earlier approved OpenGL capture matches T0-CPU across 1,178,872 pixels with zero error; this session-parity repair adds no new native-pixel claim. SDL3, SFML3, Raylib3, Vulkan, DirectX/D3D11, and Software adapters build in Debug/Release; their live pixels/switch cycles and the Assets interaction automation remain unproved. |
+| Editor scene solids | Partial | OpenGL, SDL3, SFML3, DirectX, and Software have accepted current orientation. Raylib and Vulkan have correction candidates awaiting operator eye proof. Android SDL submits the shared opaque scene batch to GLES when the window has a usable depth attachment. It falls back to SDL geometry if that path is unavailable. The Android 12 emulator fixed-shoreline capture verified the depth result and UI after surface recovery. |
+| Procedural forest preview | Partial | `ForestAssetDocument` compiles one deterministic morphology sample, renderer-neutral preview geometry, voxel LOD plan, and bounded occupancy. Plant Lab edits, publishes, and reopens one project-owned source/immutable Library pair; Forest Factory places that exact revision and package staging records matching source/compiler evidence. Authored branch count and node spacing affect morphology. Production projection admits finite nonzero segments from their actual length and endpoint radii, then renders oriented tapered eight-sided trunks/branches with a root-only trunk start cap and terminal-only branch end caps; leaf clusters retain deterministic orientation. A separate indexed `forest.preview_mesh` contract proves topology, taper, cap orientation, bounds, logical materials, leaf cards, determinism, budgets, and invalid-segment refusal. Editor and runtime publish through the common solid/selection stream consumed by OpenGL, SDL3, SFML3, raylib, Vulkan, DirectX/D3D11, and Software. Native pixels, resize, teardown, repeated-switch proof, sparse voxel materialization, and production indexed mesh/impostor consumption remain open. |
+| Canvas2D planning/runtime | Partial | `render.canvas2d` proves project settings, camera/viewport mapping, logical sprite materials, deterministic quad batching, tile descriptors, immutable submissions, offscreen/final-compose plans, diagnostics, and editor policy persistence. `render.canvas2d_cpu` proves deterministic RGBA8 reference output. `render.canvas2d_runtime` now owns immutable scene/frame/raster reuse for OpenGL and the other active backend adapters; a revision-only publication advances generation and frame evidence while deterministically retaining identical content and Canvas2D hashes. `render.canvas2d_presentation` proves full-frame identity, byte-derived artifact keys, bounded residency, explicit image/surface packets, and staged native dispatch. `project.texture_library`, `project.texture_pipeline`, snapshot format 3, and the Assets controller prove serialized Library persistence, authenticated reopen, semantic material restoration, and owned editor resource closure. Earlier approved OpenGL capture matches T0-CPU across 1,178,872 pixels with zero error; this session-parity repair adds no new native-pixel claim. SDL3, SFML3, raylib, Vulkan, DirectX/D3D11, and Software adapters build in Debug/Release; their live pixels/switch cycles and the Assets interaction automation remain unproved. |
 | Tilemap authoring/runtime | Partial | `authoring.tilemap` proves stable source identity, sparse chunks, semantic operations, bounded history, and deterministic compilation. `asset.tilemap_artifact` owns the runtime schema, integrity, collision/object payloads, and bounded serialization. `project.tilemap_library`/`project.tilemap_pipeline` prove exact atomic Library publication/restore and project registry identity. `render.canvas2d_tilemap` proves visible culling, animation selection, transforms, stable sprite ordering, collision, and object output. The EpochGui workspace, canonical source persistence, scene binding, exact Library publication/reopen, and generated-runtime preparation are build-proven; approved live editing/pixel evidence and cache-loss external-run proof remain incomplete. |
 | Renderer resource spine | Partial | `render.device`/`render.graph` describe logical buffers, textures, validated upload regions, samplers, shaders, pipelines, materials, meshes/models, render targets, bindings, commands, passes, and graph dependencies. `render.texture.residency` proves bounded generation-checked logical-artifact reuse, eviction, pinning, upload budgets, stale-handle refusal, backend epochs, recreation, and metrics. Native parity is incomplete. |
-| Sampled render-to-texture | Partial | Engine Arcade uses one shared content contract with backend-owned scene surfaces in OpenGL, SDL3, SFML3, Raylib3, Vulkan, DirectX, and Software. Build contracts pass; visual presentation and generic device-spine parity remain incomplete. |
+| Sampled render-to-texture | Partial | Engine Arcade uses one shared content contract with backend-owned scene surfaces in OpenGL, SDL3, SFML3, raylib, Vulkan, DirectX, and Software. Build contracts pass; visual presentation and generic device-spine parity remain incomplete. |
 | Texture mapping and residency | Partial | `authoring.texture` produces validated dense RGBA8 artifacts through the runtime-owned `asset.texture_artifact` schema/serializer/validator. `asset.texture_import` adds bounded uncompressed BMP, TGA, and P6 PPM decoding. `project.texture_admission`, `project.asset_registry`, `project.texture_library`, `project.texture_pipeline`, and `project.texture_resources` authenticate identity, atomically persist/reopen compiled bytes, publish bounded T0-CPU bindings, restore exact revisions, and optionally acquire disposable residency. Cache recreation, eviction, pinning, backend epochs, upload accounting, stale-handle rejection, portable path collision refusal, semantic snapshot save/reopen, and exact immutable scene closure are build-proven. Persistent rename/move migration, interactive UI proof, sRGB/compressed/mip-chain execution, atlas, bindless, sparse, and streaming remain incomplete. |
 | Material semantics | Partial | Material handles and named logical texture slots flow through graph/device contracts. Portable sprite material, sampler, alpha, cutout, and color-space declarations exist; backend shader/blend consumption and broader PBR/normal/ORM semantics remain incomplete. |
 | Camera and transforms | Present | One renderer-neutral stable view descriptor carries scene, purpose, projection, orientation, clipping, and revision state. The editor owns perspective, free orthographic, six locked axis views, independent framing, LMB selection, Alt+LMB orbit, MMB pan, Alt+RMB dolly, RMB fly with WASD/QE and speed modifiers, Focus, and Reset. Authored project-camera persistence, oriented axis grids, mobile/console bindings, and live all-context eye proof remain follow-up. |
@@ -361,16 +527,23 @@ order.
 | Audio | Partial | Logical clips/sources/buses/listener/scheduling, deterministic stereo mixing, a physical-device boundary, and generation-checked project playback sessions are contract-proven. The optional SDL3 device remains renderer-independent across context replacement; decoded project assets, authored cue bindings, editor controls, and approved live physical-output proof remain incomplete. |
 | Sparse voxel/water | Partial | Deterministic sparse voxel storage and explicit-time analytic water queries/projection exist. Generation/residency, mesh/render resources, buoyancy, and native presentation are Missing. |
 | Text and GUI | Partial | Engine GUI rendering and expanded EpochGui portable control primitives exist. Engine-wide integration, professional docking, complete text behavior, and portable profile exclusion remain work. |
-| Debug/evidence surfaces | Partial | Logging, Systems/System Info, FPS, screenshot capture, build-safe contracts, and deterministic Canvas2D CPU/native pixel comparison exist. One bounded caller-buffer coordinator normalizes origin, channel order, padded native row pitch, and destination stride while refusing absent contexts, excessive capacity, or native readback failure. OpenGL, SDL3, SFML3, Raylib3, DirectX/D3D11, and Vulkan invoke it only for explicit capture evidence; normal frames do not pay that readback cost. D3D11 stages and maps the composed scene viewport before GUI/top-layer/present. Vulkan stages and fence-synchronizes the native Canvas2D upload before frame command recording because its Canvas2D and GUI draws share one protected render pass; final Vulkan composed-surface comparison therefore remains open. Approved live capture, capability-driven settings, GPU markers, and complete cost visibility remain work. |
+| Debug/evidence surfaces | Partial | Logging, Systems/System Info, FPS, screenshot capture, build-safe contracts, and deterministic Canvas2D CPU/native pixel comparison exist. One bounded caller-buffer coordinator normalizes origin, channel order, padded native row pitch, and destination stride while refusing absent contexts, excessive capacity, or native readback failure. OpenGL, SDL3, SFML3, raylib, DirectX/D3D11, and Vulkan invoke it only for explicit capture evidence; normal frames do not pay that readback cost. D3D11 stages and maps the composed scene viewport before GUI/top-layer/present. Vulkan stages and fence-synchronizes the native Canvas2D upload before frame command recording because its Canvas2D and GUI draws share one protected render pass; final Vulkan composed-surface comparison therefore remains open. Approved live capture, capability-driven settings, GPU markers, and complete cost visibility remain work. |
 
 Canvas2D native composition now has one deterministic admission policy for
 top-left RGBA8, linear color, premultiplied alpha, clamp-to-edge sampling, and
-explicit nearest/linear selection. OpenGL, SDL3, SFML3, Raylib3, Vulkan, and
+explicit nearest/linear selection. OpenGL, SDL3, SFML3, raylib, Vulkan, and
 DirectX/D3D11 consume that policy before their backend-owned filter/sampler
 selection; native blend, UV, resource calls, and draw order remain backend-owned.
 Software consumes the already-composed deterministic CPU presentation surface
 and retains its premultiplied clipped-blit contract. This is source/build
 evidence only and adds no pixel claim.
+
+Windows Software startup skips the hidden WGL bootstrap. The host creates
+one shared WGL context when it first needs a native OpenGL window, including
+late OpenGL attachment and replacement. Debug and Release recording fixtures
+exercise the host branches and failed-bootstrap cleanup. Native Windows
+docking and real driver behavior still need proof. The Windows desktop can
+use its GPU to composite the CPU-rendered Software window.
 
 ## Sampled RTT Evidence
 
@@ -398,7 +571,7 @@ device-local graph handles.
 | OpenGL | Present | Present | Present | Partial | Partial | Partial | Partial |
 | SDL3 | Present | Present | Present | Partial | Partial | Partial | Partial |
 | SFML3 | Present | Present | Partial | Partial | Missing | Partial | Partial |
-| Raylib3 | Present | Present | Partial | Partial | Missing | Partial | Partial |
+| raylib | Present | Present | Partial | Partial | Missing | Partial | Partial |
 | Vulkan | Partial | Partial | Missing | Missing | Missing | Partial | Partial |
 | DirectX/D3D11 | Partial | Partial | Missing | Missing | Missing | Partial | Partial |
 | CPU/software | Deferred | Deferred | Deferred | Deferred | Deferred | Partial | Deferred |
@@ -411,7 +584,7 @@ refusal. Immutable semantic editor content now routes through the protected live
 scene slot. The origin/stride-aware pixel comparator and shared caller-buffer
 readback coordinator are compiled and bounded. OpenGL preserves its scoped GL
 readback state; SDL3 converts `SDL_RenderReadPixels` to tight top-left RGBA8;
-SFML3 crops `copyToImage`; Raylib3 crops its RGBA8 screen image. Each adapter runs
+SFML3 crops `copyToImage`; raylib crops its RGBA8 screen image. Each adapter runs
 only on an explicit capture request before GUI/top-layer/present, and Raylib's
 legacy diagnostic probe is likewise capture-gated. D3D11 copies the exact
 composed scene viewport into a staging texture, normalizes mapped `RowPitch`, and
@@ -441,9 +614,23 @@ present order. DirectX changes only its internal editor-preview subpass order.
   scene geometry uses a solid pass plus an outline only while selected; it does
   not receive a permanent diagnostic wire pass. Editor-only camera and light
   objects use compact, purpose-specific wire gizmos rather than cube stand-ins.
+  Project Play suppresses the shared authoring grid, axes and camera focus mark
+  for its context independently of camera mode. Returning restores the guides
+  with the Editor camera. Visibility changes also invalidate buffered preview
+  geometry, including Vulkan's combined scene and guide buffers.
+- SDL and Software clip opaque preview triangles against the homogeneous
+  view frustum before perspective division. SDL submits the surviving polygon
+  as a triangle fan. Software retains its per-pixel depth and original-edge
+  masks for Wireframe.
 - Raylib filters camera-facing back sides before projected fill.
 - DirectX orders its editor-preview geometry as background grid, solids, sampled
   surfaces, then foreground helpers so grid lines cannot composite over terrain.
+- Software depth-tests scene-preview triangles in a viewport-sized CPU buffer.
+  Perspective interpolates reciprocal camera depth to retain depth precision
+  at planetary distances. Orthographic uses normalized clip depth.
+  The grid, sampled Arcade screen, helpers, Wireframe, Canvas2D and GUI retain
+  their existing draw order. Debug and Release pixel fixtures verify crossing
+  surfaces in both orders and triangles straddling the near plane.
 - Vulkan uses corrected front-face/back-face culling only in its depth-tested
   scene-solid pipeline; line and GUI pipelines remain unculled.
 - Vulkan retirement transfers registry ownership before teardown, retains
@@ -481,8 +668,8 @@ This gate targets `T0-CPU` plus `T1-GL` and shapes contracts for later
 | Tier-derived Canvas2D admission | One renderer-neutral mapper derives compile, CPU-raster, native-upload, and residency ceilings from the selected capability profile; all seven baseline paths consume it, presenter lanes use a bounded two-slot transaction, Vulkan has no desktop-size upload constant, stricter limits invalidate raster reuse, and over-budget output fails before native hooks | Build-safe on MSVC Debug/Release and managed Clang 22 with all 32 CTest contracts; measured native allocation, resize, memory stability, and switch-soak evidence remain `Partial` |
 | Texture identity, import, assignment, and reopen | Authenticated artifacts, Project Library persistence, semantic snapshot restoration, immutable resource closure, and all seven presentation adapters build in Debug/Release | Partial: interactive assignment and six non-OpenGL pixel lanes still need approved proof |
 | Tile palette, layers, chunks, collision, and map compilation | Temporal document, EpochGui workspace state, deterministic artifact, exact Library reopen, runtime preparation, culling, collision, and object output are contract-proven | Partial: live editing and generated-runtime pixels remain unproved |
-| Orientation | Shared top-left Canvas2D contract and accepted scene-solid orientation for OpenGL, SDL3, SFML3, DirectX, and Software | Partial: Raylib3 and Vulkan require current-candidate eye/pixel proof |
-| Alpha, cutout, and nearest/linear sampling | T0-CPU raster contracts and native adapter semantics exist; OpenGL matches the reference image exactly | Partial: equivalent SDL3, SFML3, Raylib3, Vulkan, DirectX, and Software presentation evidence is missing |
+| Orientation | Shared top-left Canvas2D contract and accepted scene-solid orientation for OpenGL, SDL3, SFML3, DirectX, and Software | Partial: raylib and Vulkan require current-candidate eye/pixel proof |
+| Alpha, cutout, and nearest/linear sampling | T0-CPU raster contracts and native adapter semantics exist; OpenGL matches the reference image exactly | Partial: equivalent SDL3, SFML3, raylib, Vulkan, DirectX, and Software presentation evidence is missing |
 | Resize, letterbox, and scaling | Shared viewport mapping, deterministic software clipping, and runtime-session resize invalidation followed by stable reuse are contract-proven; SDL3 150%-DPI GUI resize and input remapping are accepted | Partial: SDL3 minimized/restore and every other native-context resize/minimized-restore lane still need live evidence |
 | Resource teardown and repeated switching | Every adapter exposes retirement/reset ownership and current source builds in Debug/Release; the shared presenter owns one current lease and passes 64 content revisions plus 64 backend replacements with bounded fake-device state and balanced retirement; one Windows SDL3 native close is accepted | Partial: each native context still needs approved repeated switch/resize/cache-loss soak with stable native memory and handles; OpenGL context-bound hooks and Raylib deferred-delete error paths remain explicit repair gates |
 | Save/reopen, Build, and external Run | Six generated project profiles pass materialize, atomic save/reopen, build, and child self-test; GUI Editor passes the exact external-Run argument path | Partial: the same acceptance project has not yet been exercised through all seven selected backend outputs |
@@ -522,6 +709,170 @@ or unsupported capability labels. Preserve required MIT notice for derived code.
 PBR, sky, shadows, terrain, water, foliage, particles, cloth, and advanced post
 processing follow the playable 2D loop.
 
+## Shader and material ownership — November 17 audit
+
+The requested rock/grass detail, relief, fine water waves, reflections, depth
+and shoreline foam are visual acceptance targets, not evidence of implemented
+material parity. Extend existing material/resource owners before adding another
+shader system.
+
+| Lane | Current source/build owner | Limit |
+| --- | --- | --- |
+| OpenGL | `Engine/modules/opengl/opengl.preview.ixx`, `opengl.quad.ixx`: backend-owned GLSL compiled with `glShaderSource`; legacy and modern variants coexist. `opengl.cloud_volume.ixx` owns the density-cloud pass. | Preserve older-context fallbacks; cloud/native material appearance requires its own eye-test. |
+| Vulkan | `Engine/assets/vulkan/shaders/*.glsl`; CMake stages eight scene, GUI, atmosphere and cloud SPIR-V files. The cloud pair uses the shared density shader and has checked-in Vulkan 1.0 fallbacks. | The Windows Release route verifies native cloud composition on D32. Quality and Linux parity remain open. |
+| DirectX | `Engine/src/renderers/directx/directx.device.cpp` compiles embedded HLSL through D3DCompile for the current D3D11 adapter. | D3D12 and its pipeline/root-signature integration remain future work. |
+| Software | Existing CPU scene/Canvas2D raster owners implement explicit supported semantics. | No native shader compiler or automatic GPU-shader translation is established. |
+
+`Engine/modules/render/render.device.ixx` already owns ShaderDesc, PipelineDesc,
+MaterialDesc and named base-color/normal/roughness/metallic/emissive/opacity slots.
+Declared slots and `normal_mapping_ready` are not proof that every backend
+consumes them. Keep authoring/asset/project identity renderer-neutral; native
+shader binaries and residency remain disposable backend resources.
+
+A future shared HLSL lane can be evaluated through
+[DXC](https://github.com/microsoft/DirectXShaderCompiler) and
+[Vulkan HLSL support](https://docs.vulkan.org/guide/latest/hlsl.html), which requires
+compilation to SPIR-V. This is an option, not a selected migration: preserve
+current GLSL, D3D11, legacy OpenGL and software compatibility until equivalent
+resource bindings, builds and pixels are proven. No new compiler is required by
+this documentation change.
+
+**Next bounded material gate after clouds:** trace one normal-textured rock or
+grass material through existing logical slots, asset/project admission and the
+actual preview consumer. Identify the first dropped binding/tangent/light input
+before changing it; prove a small lit normal-map sample and fallback in the same
+scene. Relief/displacement is separate from normal mapping. Extend equivalent
+native consumers only after that causal owner is known. Water's existing
+`water.planetary` wave normals and shoreline geometry do not establish fine-wave
+shading, reflections, depth absorption or foam: retain those as separate
+material/pass acceptance gates, with camera-distance stability and shoreline
+continuity. Existing cloud/water CPU contracts remain useful geometry/data proof;
+no tests or new native visual verification were run for this source audit.
+
+November17 source inspection narrowed the OpenGL mesh path:
+`opengl.preview.ixx::world_texture_shader_sources(mesh=true)` samples one
+`uTexture` and multiplies by `vColor`; its mesh setup binds position, UV and
+color attributes only. There is no normal-map sampler or tangent/normal input
+in this path. This establishes a missing material consumer, not that every
+terrain/water draw uses it. Trace the selected showcase draw before extending
+the shared contract; keep native appearance and backend parity unaccepted.
+The upstream `render.preview_grid.ixx` indexed-mesh path computes
+`shade_surface` per vertex, then stores position/color/UV in `TexturedVertex`;
+it does not pass the transformed normal to this shader. Adding a sampler alone
+therefore cannot supply per-pixel normal-mapped lighting. Preserve the existing
+CPU-lit fallback while extending the owned material/vertex path deliberately.
+
+The shared planetary preview bakes a low-cost sky reflection on all water and
+uses the existing per-vertex resolution fade for rough sun glints. The
+November 18 Windows Debug and Release contract verified unchanged land
+vertices and water positions, coarse glint suppression, and the same broad
+reflection across fine and coarse ranges. A matched Verdant sunset capture
+verified the change in desktop OpenGL. Animated fine ripples, close-shore
+foam, reflected scene objects, and higher-tier performance remain open.
+Use the same Verdant shoreline route to qualify water from T0 through T5.
+Shoreline placement, water level and depth-driven color are shared across
+tiers. Extra surface detail fades as its screen footprint becomes unresolved.
+In OpenGL and Vulkan, short ripples also fade between 40 and 135 metres of
+eye-to-surface distance. Longer swells fade between 75 and 210 metres.
+Shared shoreline shading confines depth-limited whitewater to the breaking
+front and fades it behind the crest. A matched Windows OpenGL approach
+confirmed a smaller bright area in the shallows at the same water level and
+time. Mobile and moving-camera qualification remain open.
+
+| Tier | Water acceptance target |
+| --- | --- |
+| T0 | Deterministic CPU geometry, shoreline clipping and broad water color. |
+| T1 | Portable animated surface with stable shoreline shape and transitions. Include GLES on a phone. |
+| T2 | Resolved wave normals and glints. Keep the broad water color through mid-altitude LOD changes. |
+| T3 | Add capability-qualified shallows, breaking-wave foam and raster reflections within the measured frame budget. |
+| T4 | Add scene reflections where inline ray queries meet the budget. Keep the validated raster fallback. |
+| T5 | Evaluate full ray-traced reflections against the same raster reference. |
+
+Select optional effects by reported backend capability, project policy and
+measured cost. An application's FPS preset is independent of this ladder.
+Compare matching passes at orbit, approach, shoreline and the shallows.
+Check for LOD seams, stable color, continuous highlights and frame-time
+spikes during motion. Record native timing before accepting a quality level.
+The tier rows are acceptance targets. The shared raster water path is the
+fallback for T4 and T5 until a native scene-reflection path passes the same
+route and its frame-time budget. Keep the same authored waterline and depth
+color when switching renderers or tiers.
+The T1 phone check depends on the [Android host and packaging path](../platform/android/android.md).
+Reuse the existing project water worker and shoreline geometry when that path
+can build, install and report a native graphics context.
+A resolved water range in a terrain log only establishes glint eligibility.
+The OpenGL 3.3 preview consumes bounded water-only ranges in the existing
+opaque stream. The depth surface and CPU fallback remain available. A
+body-anchored phase keeps detail fixed across origin changes, and the pixel
+footprint filters unresolved waves. The latest shared detail packet samples
+twelve directional crests in three wavelength bands. The OpenGL and Vulkan
+shaders use the three longer phases to vary crest groups and shade visible
+swell. Their water-only reflection adds sky color by reflection angle and
+narrows sun glints while suppressing direct highlights below the horizon.
+Vulkan consumes the same packet and marks water in its existing opaque stream.
+Debug and Release shared
+renderer checks, Vulkan geometry checks, and exact shader compilation passed.
+Native Windows OpenGL and Vulkan both rendered the same fixed shallows pose
+at 0 and 1.25 seconds. OpenGL reproduced both paused frames byte for byte.
+Vulkan rendered animated water before the atmospheric background was added.
+The later Vulkan captures include daylight and sunset. Matched controller
+flights on Windows OpenGL and Vulkan showed a shared late ripple transition
+near 4 m, with stepped shoreline edges. The follow-up build retained ripples
+through the largest measured settling-frame changes on both backends. The
+coast and reflective highlights still shift as detail changes. Physical
+travel, shorter flicker and measured frame cost remain open. Foam and
+reflected scene objects require
+their own validated inputs. The [active pass](../../../Changes/active_pass.md)
+links the captures and receipts.
+The ordinary Project Play packet currently enables ripple detail by surface
+identity, scale and distance. Before assigning T2 or T3 quality, connect the
+existing project admission and backend capability report to that packet,
+including a measured frame budget. Keep the portable animated surface
+available when advanced detail is outside the budget.
+
+The shoreline footprint regression found that Vulkan differentiated the
+warped position inside a water-only branch. Vulkan and OpenGL now take the
+position derivatives before branching on per-primitive coverage or distance. The
+analytic warp gradient filters the same body-relative waves on each backend,
+and unresolved waves skip the crest calculation. Both exact fragment shaders
+passed the offline SPIR-V check. Compare the same moving shore and grazing
+views on the rebuilt runtime before accepting the visual result.
+
+The shared view packet carries the current ripple phase during Project Play.
+The CPU mesh keeps the time at which its shoreline was reconstructed. Camera
+updates and delayed geometry commits use the latest view time without
+rescheduling geometry. A validated water mesh can carry ripple detail while
+its CPU resample is pending. The renderer contract checks forward and reversed
+phase updates against the same retained geometry and checks that a delayed
+commit uses the latest time.
+
+For supported terrain refinements, the existing project worker prepares up
+to four intermediate wet cuts at one retained provider sample. It projects
+the parent triangle's signed depths and appearance onto the child grid before
+clipping the shoreline. Play displays the complete sequence on the terrain
+cadence and restores the previous cut if the view or clock becomes invalid.
+When staged meshes fill the retained-output budget, the next batch retries
+the prepared phase after their retirement. The budget and source checks still
+apply, and only materialized phases count against the playback steps.
+It can publish the next admitted cut directly when the source clocks,
+neighbor topology or memory budget prevent a staged transition. The retained
+CPU fixture checks the footprint and shoreline lighting. Use the matched
+OpenGL and Vulkan route to qualify the result on screen.
+
+When staged shoreline playback retires during ordinary playback, Play
+advances the CPU shoreline sample toward the current timeline in steps of
+at most 0.75 seconds per published mesh at normal speed. Each step evaluates
+the provider at its selected time. A pause or seek still requests the
+absolute sample, and the shader keeps the current view phase throughout.
+
+The November 17 orbital reference adds a second view to planet acceptance.
+Use the same seed, time and sun for an orbital still, a short descent and
+a shoreline still. Compare atmospheric limb and night-side falloff, cloud
+organization and clear regions, ocean/land separation, surface material
+detail and shoreline highlights. For worlds with optional rings, check the
+planet's occlusion of the far ring and the near ring's coverage of the planet.
+Repeat with the same camera path to spot LOD seams and temporal flicker.
+
 ## Cross-API Mapping
 
 | Engine contract | OpenGL/GLES | Vulkan | DirectX |
@@ -557,16 +908,12 @@ retains at most one in-flight display request. The frame owner only commits a
 complete packet and keeps the last complete terrain navigable while work runs.
 Body, water/cloud visibility and wireframe changes invalidate stale work;
 project shutdown cancels and joins it before releasing its source snapshots.
-The renderer can read a packet while the scene owner is still updating it.
-A delayed geometry commit therefore carries the latest camera and cloud view
-inside that same atomic publication. It does not expose the worker's old camera
-and then wait for a second update to catch up. Camera-only progress made after source
-capture is preserved by the existing two-argument commit as well. The shared
-rebase math keeps the live view in the new packet's coordinate origin; unchanged
-poses retain their fitted depth range. Moving views use conservative clipping
-until their own fit arrives. Actual-module Debug tests reproduce the old backward
-camera jump and pass with the repair; matching main builds and native movement
-acceptance remain in the active pass.
+A delayed atomic geometry commit carries the latest camera/cloud view, including
+camera-only changes after capture via the existing two-argument commit. Shared
+rebase math preserves the live pose in the new origin; unchanged poses retain
+fitted depth, moving views use conservative clipping until refitted. Actual-module
+Debug checks reproduce and repair the backward-camera jump. Matching main builds
+and native movement acceptance remain in the active pass.
 Metric terrain export subtracts a body-local origin before narrowing positions
 to floats. Near the planet this remains the camera position. A sufficiently
 distant camera uses the shared bounded-origin policy in `project.planetary_snapshot`,

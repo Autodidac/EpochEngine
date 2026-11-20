@@ -89,7 +89,22 @@ void check_forest_shadow(const std::shared_ptr<preview::MeshBaseColorBinding>& b
  for(std::size_t i=0;i<6;++i)CHECK(std::abs((*transparent)[i].color.x-.8f)<1e-4f);
  preview::cleanup_context(&context);
 }
+void check_neutral_primitives(){
+ int context{};
+ for(const auto primitive:{preview::ObjectPreviewPrimitive::Cube,preview::ObjectPreviewPrimitive::ForestTrunk,
+     preview::ObjectPreviewPrimitive::ForestBranch,preview::ObjectPreviewPrimitive::ForestLeafCluster}){
+  preview::ObjectMarker marker;marker.primitive=primitive;marker.color={.9f,.2f,.1f};
+  marker.neutralSurface=true;marker.selected=primitive!=preview::ObjectPreviewPrimitive::Cube;
+  CHECK(preview::set_object_markers(&context,std::span{&marker,1u}));
+  const auto neutral=preview::object_solid_geometry_for(&context);CHECK(!neutral->empty());
+  for(const auto& v:*neutral){CHECK(std::abs(v.color.x-v.color.y)<1e-5f);CHECK(std::abs(v.color.y-v.color.z)<1e-5f);}
+  marker.editorOnly=true;CHECK(preview::set_object_markers(&context,std::span{&marker,1u}));
+  const auto helper=preview::object_solid_geometry_for(&context);CHECK(helper!=neutral);
+ }
+ preview::cleanup_context(&context);
+}
 int main(){
+ check_neutral_primitives();
  CHECK(transfer::texture_artifact_transfer_runtime_contract_failure()==transfer::TransferContractFailure::none);
  auto compiled=artifact();const auto original=compiled.mips[0].texels;
  auto sealed=transfer::seal_compiled_texture(compiled);CHECK(sealed);
@@ -148,6 +163,20 @@ int main(){
  marker.baseColorTexture=std::make_shared<preview::MeshBaseColorBinding>(*unmodulated);
  CHECK(preview::set_object_markers(&context,std::span{&marker,1u}));
  CHECK(preview::object_solid_frame_for(&context)==unmodulatedFrame);
+ // Solid inspection invalidates the cached material frame but preserves alpha/UV binding.
+ marker.neutralSurface=true;
+ CHECK(preview::set_object_markers(&context,std::span{&marker,1u}));
+ const auto neutral=preview::object_solid_frame_for(&context);CHECK(neutral!=unmodulatedFrame);
+ CHECK(neutral->markers[0].marker.baseColorTexture==marker.baseColorTexture);
+ const auto neutralVertices=neutral->markers[0].textured;CHECK(neutralVertices&&neutralVertices->size()==imported->size());
+ for(std::size_t i=0;i<neutralVertices->size();++i){
+  CHECK((*neutralVertices)[i].uv==(*imported)[i].uv);
+  CHECK(std::abs((*neutralVertices)[i].color.x-(*neutralVertices)[i].color.y)<1e-5f);
+  CHECK(std::abs((*neutralVertices)[i].color.y-(*neutralVertices)[i].color.z)<1e-5f);
+ }
+ CHECK(preview::set_object_markers(&context,std::span{&marker,1u}));CHECK(preview::object_solid_frame_for(&context)==neutral);
+ marker.neutralSurface=false;CHECK(preview::set_object_markers(&context,std::span{&marker,1u}));
+ CHECK(preview::object_solid_frame_for(&context)!=neutral);
  auto changed=std::make_shared<preview::MeshBaseColorBinding>(*binding);changed->sampler.address_u=epochengine::AddressMode::clamp_to_edge;
  marker.baseColorTexture=changed;CHECK(preview::set_object_markers(&context,std::span{&marker,1u}));
  auto next=preview::object_solid_frame_for(&context);CHECK(next!=frame);CHECK(next->markers[0].marker.baseColorTexture==changed);
@@ -202,6 +231,56 @@ int main(){
  markers[0].wireframe=false;CHECK(preview::set_object_markers(&context,markers));const auto solid=preview::object_solid_geometry_for(&context);CHECK(solid->size()>=36);
  for(unsigned i=0;i<36;++i) {const auto a=(*solid)[i].position,b=(*moved->depth_triangles)[i].position;CHECK(a.x==b.x&&a.y==b.y&&a.z==b.z);}
  preview::cleanup_context(&context);CHECK(!preview::object_mesh_wire_frame_for(&context)->depth_triangles);
+ // The Software scene preview consumes these front-facing triangle edges.
+ // A rotated authored primitive must leave the fill batch in Wireframe.
+ preview::ObjectMarker primitive{.position={2,3,4},.scale={1,2,3},.rotationDegrees={17,28,42}};
+ const auto camera=preview::camera_for(&context);
+ CHECK(preview::publish_scene_frame(&context,std::span{&primitive,1u},camera,{}));
+ const auto shadedPrimitive=preview::scene_frame_for(&context)->solids->geometry;
+ CHECK(shadedPrimitive->size()==36u);
+ primitive.wireframe=true;
+ CHECK(preview::publish_scene_frame(&context,std::span{&primitive,1u},camera,{}));
+ const auto wirePrimitive=preview::scene_frame_for(&context);
+ CHECK(wirePrimitive->solids->geometry->empty()&&wirePrimitive->wire->depth_triangles->size()==36u);
+ CHECK(!preview::wireframe_frame_admitted(std::span{&primitive,1u},preview::maximum_wireframe_working_bytes));
+ for(std::size_t i=0;i<36u;++i){
+  const auto a=(*shadedPrimitive)[i].position,b=(*wirePrimitive->wire->depth_triangles)[i].position;
+  CHECK(a.x==b.x&&a.y==b.y&&a.z==b.z);
+ }
+ unsigned edges{};
+ preview::for_each_visible_marker_line(*wirePrimitive->wire,*wirePrimitive->lines,{8,6,10},
+  [&](const auto&,const auto&){++edges;});
+ CHECK(edges>0u&&edges<36u);
+ primitive.primitive=preview::ObjectPreviewPrimitive::Level;
+ CHECK(preview::publish_scene_frame(&context,std::span{&primitive,1u},camera,{}));
+ const auto level=preview::scene_frame_for(&context);
+ CHECK(level->solids->geometry->empty()&&level->wire->depth_triangles!=wirePrimitive->wire->depth_triangles);
+ primitive.editorOnly=true;
+ CHECK(preview::publish_scene_frame(&context,std::span{&primitive,1u},camera,{}));
+ const auto guide=preview::scene_frame_for(&context);
+ CHECK(guide->solids->geometry->size()==36u&&guide->wire->depth_triangles->empty());
+ // A thin selected slab must outline the corners the preview actually draws.
+ primitive.editorOnly=false;
+ primitive.selected=true;
+ for(const auto kind : {preview::ObjectPreviewPrimitive::Level,preview::ObjectPreviewPrimitive::Canvas2D}) {
+  primitive.primitive=kind;
+  for(const bool wireframe : {false,true}) {
+   primitive.wireframe=wireframe;
+   CHECK(preview::publish_scene_frame(&context,std::span{&primitive,1u},camera,{}));
+   const auto frame=preview::scene_frame_for(&context);
+   const auto& triangles=wireframe ? *frame->wire->depth_triangles : *frame->solids->geometry;
+   CHECK(triangles.size()==36u&&frame->lines->size()==24u);
+   for(const auto& endpoint : *frame->lines) {
+    bool matchesCorner=false;
+    for(const auto& corner : triangles) {
+     const auto a=endpoint.position,b=corner.position;
+     matchesCorner|=a.x==b.x&&a.y==b.y&&a.z==b.z;
+    }
+    CHECK(matchesCorner);
+   }
+  }
+ }
+ preview::cleanup_context(&context);
  // Already-clockwise imports remain clockwise; reflected and precise transforms
  // preserve exterior visibility. Missing/opposing normals retain source CW order.
  preview::ObjectMarker orientation;orientation.primitive=preview::ObjectPreviewPrimitive::IndexedMesh;
@@ -295,7 +374,7 @@ class MeshBaseColorTests(unittest.TestCase):
         owners = (ROOT / "Engine/modules", ROOT / "Engine/dep/EpochPlatformEngine/modules")
         modules = {}
         for owner in owners:
-            for path in owner.glob("*.ixx"):
+            for path in owner.rglob("*.ixx"):
                 match = re.search(r"^export module\s+([\w.:]+);", path.read_text(encoding="utf-8-sig"), re.M)
                 if match:
                     self.assertNotIn(match[1], modules)

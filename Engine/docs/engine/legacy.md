@@ -9,32 +9,32 @@ important behavior while cleaning up the repo.
 - Allocator utilities:
   `Engine/modules/autility.allocator.ixx`
 - Application module registry:
-  `Engine/modules/application.registry.ixx`
+  `Engine/modules/application/application.registry.ixx`
 - Code inspection helpers:
-  `Engine/modules/utility.codeinspector.ixx`
+  `Engine/modules/utility/utility.codeinspector.ixx`
 - Script compiler and reload flow:
-  `Engine/modules/scripting.compiler.ixx`,
+  `Engine/modules/scripting/scripting.compiler.ixx`,
   `Engine/src/scripts/scripting.compiler_engine.cpp`,
-  `Engine/modules/scripting.system.ixx`
+  `Engine/modules/scripting/scripting.system.ixx`
 - File watching:
-  `Engine/modules/utility.filewatch.ixx`,
+  `Engine/modules/utility/utility.filewatch.ixx`,
   `Engine/src/platform/utility.filewatch.cpp`
 - Image writing:
-  `Engine/modules/image.writer.ixx`,
-  `Engine/modules/image.atlas_writer.ixx`
+  `Engine/modules/image/image.writer.ixx`,
+  `Engine/modules/image/image.atlas_writer.ixx`
 - Mipmap atlas support:
-  `Engine/modules/atlas.mipmap.ixx`
+  `Engine/modules/atlas/atlas.mipmap.ixx`
 - Movement events:
-  `Engine/modules/event.movement.ixx`
+  `Engine/modules/event/event.movement.ixx`
 - String conversion:
-  `Engine/modules/utility.string_converter.ixx`
+  `Engine/modules/utility/utility.string_converter.ixx`
 - Retry-once utilities:
-  `Engine/modules/core.utilities.ixx`
+  `Engine/modules/core/core.utilities.ixx`
 - Task graph with DOT output:
-  `Engine/modules/taskgraph.dotsystem.ixx`
+  `Engine/modules/taskgraph/taskgraph.dotsystem.ixx`
 - Linux OpenGL / multiplexer ownership:
   `Engine/src/renderers/host/host.context_linux.cpp`,
-  `Engine/modules/opengl.context.ixx`
+  `Engine/modules/opengl/opengl.context.ixx`
 
 ## Explicitly deferred
 

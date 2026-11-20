@@ -12,15 +12,43 @@
     <OutDir>$(EpochResolvedBuildRoot)Runtime\windows\$(EpochOutputEdition)\$(Platform)\$(Configuration)\</OutDir>
     <IntDir>$(EpochResolvedBuildRoot)Intermediate\msvc\$(EpochOutputEdition)\$(Platform)\$(Configuration)\$(ProjectName)\</IntDir>
   </PropertyGroup>
-  <Target Name="EpochStageSharedRuntimeAssets" AfterTargets="Build" Condition="'$(ConfigurationType)'=='Application'">
+  <Target Name="EpochResolveVulkanCloudShaderTools" Condition="'$(ConfigurationType)'=='Application'">
+    <PropertyGroup>
+      <_EpochVulkanCloudSources>$(EpochRepositoryRoot)Engine\assets\vulkan\shaders\</_EpochVulkanCloudSources>
+      <_EpochVulkanCloudHeader>$(EpochRepositoryRoot)Engine\src\render\render.cloud_shader.hpp</_EpochVulkanCloudHeader>
+      <_EpochVulkanCloudGenerator>$(EpochRepositoryRoot)Tools\build\generate_vulkan_cloud_shader.py</_EpochVulkanCloudGenerator>
+      <_EpochVulkanCloudIntermediate>$(IntDir)vulkan-cloud\</_EpochVulkanCloudIntermediate>
+      <EpochVulkanCloudGlslc Condition="'$(MSBuildProjectName)'=='EpochEditor' And '$(EpochVulkanCloudGlslc)'=='' And '$(EpochVcpkgInstallRoot)'!='' And Exists('$(EpochVcpkgInstallRoot)tools\shaderc\glslc.exe')">$(EpochVcpkgInstallRoot)tools\shaderc\glslc.exe</EpochVulkanCloudGlslc>
+      <EpochVulkanCloudGlslc Condition="'$(MSBuildProjectName)'=='EpochEditor' And '$(EpochVulkanCloudGlslc)'=='' And '$(VULKAN_SDK)'!='' And Exists('$(VULKAN_SDK)\Bin\glslc.exe')">$(VULKAN_SDK)\Bin\glslc.exe</EpochVulkanCloudGlslc>
+      <EpochVulkanCloudPython Condition="'$(EpochVulkanCloudPython)'==''">python</EpochVulkanCloudPython>
+      <_EpochVulkanCloudPythonExit>1</_EpochVulkanCloudPythonExit>
+    </PropertyGroup>
+    <Exec Command="&quot;$(EpochVulkanCloudPython)&quot; --version" Condition="'$(EpochVulkanCloudGlslc)'!=''" IgnoreExitCode="true" StandardOutputImportance="Low" StandardErrorImportance="Low">
+      <Output TaskParameter="ExitCode" PropertyName="_EpochVulkanCloudPythonExit" />
+    </Exec>
+    <PropertyGroup>
+      <_EpochVulkanCloudStageRoot>$(_EpochVulkanCloudSources)</_EpochVulkanCloudStageRoot>
+      <_EpochVulkanCloudStageRoot Condition="'$(EpochVulkanCloudGlslc)'!='' And '$(_EpochVulkanCloudPythonExit)'=='0'">$(_EpochVulkanCloudIntermediate)</_EpochVulkanCloudStageRoot>
+    </PropertyGroup>
+    <Message Condition="'$(_EpochVulkanCloudStageRoot)'=='$(_EpochVulkanCloudSources)'" Importance="Low" Text="Using checked-in Vulkan cloud SPIR-V shaders because glslc or Python is unavailable." />
+  </Target>
+  <Target Name="EpochCompileVulkanCloudShaders" DependsOnTargets="EpochResolveVulkanCloudShaderTools" Condition="'$(ConfigurationType)'=='Application'" Inputs="$(_EpochVulkanCloudHeader);$(_EpochVulkanCloudGenerator);$(_EpochVulkanCloudSources)clouds.vert.glsl;$(_EpochVulkanCloudSources)clouds.frag.glsl;$(EpochVulkanCloudGlslc)" Outputs="$(_EpochVulkanCloudIntermediate)cloud_trace.generated.glsl;$(_EpochVulkanCloudIntermediate)clouds.vert.spv;$(_EpochVulkanCloudIntermediate)clouds.frag.spv">
+    <MakeDir Condition="'$(_EpochVulkanCloudStageRoot)'=='$(_EpochVulkanCloudIntermediate)'" Directories="$(_EpochVulkanCloudIntermediate)" />
+    <Exec Condition="'$(_EpochVulkanCloudStageRoot)'=='$(_EpochVulkanCloudIntermediate)'" Command="&quot;$(EpochVulkanCloudPython)&quot; &quot;$(_EpochVulkanCloudGenerator)&quot; --input &quot;$(_EpochVulkanCloudHeader)&quot; --output &quot;$(_EpochVulkanCloudIntermediate)cloud_trace.generated.glsl&quot;" />
+    <Exec Condition="'$(_EpochVulkanCloudStageRoot)'=='$(_EpochVulkanCloudIntermediate)'" Command="&quot;$(EpochVulkanCloudGlslc)&quot; --target-env=vulkan1.0 -fshader-stage=vert &quot;$(_EpochVulkanCloudSources)clouds.vert.glsl&quot; -o &quot;$(_EpochVulkanCloudIntermediate)clouds.vert.spv&quot;" />
+    <Exec Condition="'$(_EpochVulkanCloudStageRoot)'=='$(_EpochVulkanCloudIntermediate)'" Command="&quot;$(EpochVulkanCloudGlslc)&quot; --target-env=vulkan1.0 -fshader-stage=frag -I&quot;$(_EpochVulkanCloudIntermediate).&quot; &quot;$(_EpochVulkanCloudSources)clouds.frag.glsl&quot; -o &quot;$(_EpochVulkanCloudIntermediate)clouds.frag.spv&quot;" />
+  </Target>
+  <Target Name="EpochStageSharedRuntimeAssets" AfterTargets="Build" DependsOnTargets="EpochCompileVulkanCloudShaders" Condition="'$(ConfigurationType)'=='Application'">
     <ItemGroup>
       <EpochSharedRuntimeAssets Include="$(EpochRepositoryRoot)Engine\assets\fonts\**\*">
         <AssetDirectory>fonts\</AssetDirectory>
       </EpochSharedRuntimeAssets>
-      <EpochSharedRuntimeAssets Include="$(EpochRepositoryRoot)Engine\assets\vulkan\**\*">
+      <EpochSharedRuntimeAssets Include="$(EpochRepositoryRoot)Engine\assets\vulkan\**\*" Exclude="$(_EpochVulkanCloudSources)clouds.vert.spv;$(_EpochVulkanCloudSources)clouds.frag.spv">
         <AssetDirectory>vulkan\</AssetDirectory>
       </EpochSharedRuntimeAssets>
+      <EpochVulkanCloudRuntimeAssets Include="$(_EpochVulkanCloudStageRoot)clouds.vert.spv;$(_EpochVulkanCloudStageRoot)clouds.frag.spv" />
       </ItemGroup>
     <Copy SourceFiles="@(EpochSharedRuntimeAssets)" DestinationFiles="@(EpochSharedRuntimeAssets-&gt;'$(OutDir)assets\%(AssetDirectory)%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(EpochVulkanCloudRuntimeAssets)" DestinationFolder="$(OutDir)assets\vulkan\shaders" SkipUnchangedFiles="true" />
   </Target>
 </Project>

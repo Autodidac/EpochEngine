@@ -73,7 +73,7 @@ int main(){
 
     def test_assistant_run_uses_selected_gui_target(self):
         owner = APP / 'editor.frame_project_runtime.inl'
-        protocol_owner = ROOT / 'Engine/modules/ai.mcp.ixx'
+        protocol_owner = ROOT / 'Engine/modules/ai/ai.mcp.ixx'
         source = owner.read_text(encoding='utf-8')
         branch = definition(source, '            else if (call.tool == "project.run")')
         branch = branch.replace('else if', 'if', 1)

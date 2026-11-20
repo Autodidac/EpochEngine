@@ -40,6 +40,8 @@ public:
     [[nodiscard]] json architecture() const;
     [[nodiscard]] json native_model_library() const;
     [[nodiscard]] std::expected<json, core::Error> register_native_model(const json& spec);
+    [[nodiscard]] std::expected<json, core::Error> reconnect_native_model_file(
+        std::string_view id_or_uri, const std::filesystem::path& local_path);
     [[nodiscard]] std::expected<json, core::Error> set_native_gpu_offload(
         std::string_view id_or_uri, std::uint32_t percent);
     [[nodiscard]] std::expected<json, core::Error> set_native_model_tuning(

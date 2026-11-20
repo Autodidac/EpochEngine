@@ -10,7 +10,8 @@ from Tests.build.test_opengl_sprite_stream import definition
 from Tests.gui.test_gui_queued_drag import fixture as queue_fixture
 
 ROOT = Path(__file__).resolve().parents[2]
-API = ROOT / "Engine/modules/gui.engine.ixx"
+API = ROOT / "Engine/modules/gui/gui.engine.ixx"
+ENGINE_GUI = ROOT / "Engine/src/epochgui/gui.engine.cpp"
 CHROME = ROOT / "Engine/src/epochgui/controls/gui.navigation_chrome.inl"
 DOCK = ROOT / "Engine/src/editor/application/editor.frame_toolbar_dock_targets.inl"
 VIEW = ROOT / "Engine/src/editor/application/editor.frame_viewport.inl"
@@ -40,7 +41,7 @@ float base_line_height(float){return 12;}
 std::string fit_text_to_width(std::string_view text,float,float){return std::string{text};}
 gui_lib::Vec2 to_lib(Vec2 p){return {p.x,p.y};}Vec2 from_lib(gui_lib::Vec2 p){return {p.x,p.y};}
 void draw_sprite(int,float,float,float,float){}
-void draw_rounded_sprite(int,float,float,float,float,const gui_lib::rounded_rect::RoundedRectStyle&){}
+void draw_rounded_sprite(int,float,float,float,float,const gui_lib::rounded_rect::RoundedRectStyle&,bool=false){}
 void draw_text_line(std::string_view,float,float,float){}
 // Painting is neutral in this pointer-owner fixture. The real Classic/contrast
 // paint and font owners run in test_gui_classic_controls.
@@ -58,7 +59,10 @@ void set_cursor(Vec2 p){g_frame.cursor=p;}void advance_cursor(Vec2 p){g_frame.cu
 float content_available_width(float x){return g_frame.contentMax.x-x;}
 std::optional<std::size_t> navigate_tab_keys(std::span<const TabButtonSpec>,Vec2,Vec2,Vec2,bool){return {};}
 '''
-    engine_gui = (ROOT / "Engine/src/epochgui/gui.engine.cpp").read_text(encoding="utf-8")
+    engine_gui = ENGINE_GUI.read_text(encoding="utf-8")
+    if "centered_text_top(" in tab:
+        ports += "\nfloat baseline_offset(float scale){return 9.0f*scale;}\n"
+        ports += definition(engine_gui, "        [[nodiscard]] static float centered_text_top(")
     ports += definition(engine_gui, "        [[nodiscard]] static std::size_t widget_press_key(")
     ports += definition(engine_gui, "        static void consume_left_press()")
     frame = (ROOT / "Engine/src/epochgui/controls/gui.frame_lifecycle.inl").read_text(encoding="utf-8")
@@ -96,6 +100,10 @@ struct EditorFrameResult{bool scene_input_captured{};};
 void pane_contract(){
  auto ctx=std::make_shared<core::Context>();fresh(ctx);EditorState editor;EditorFrameResult result;
  unsigned opened{},docked{};std::string openedRoute,activeRoute;
+ constexpr bool automationInputReserved=false;
+ const auto canInspectAutomation=[](){return false;};
+ const auto show_project_run_output=[](){};
+ const auto push_editor_log=[](EditorState&,std::string_view){};
  const auto set_active_pane=[&](EditorToolDockRegion,std::string_view route){activeRoute=route;};
  const auto request_pane_external_window=[&](std::string_view route,std::string_view){++opened;openedRoute=route;};
  const auto request_pane_region=[&](std::string_view,std::string_view,EditorToolDockRegion){++docked;};
@@ -178,7 +186,8 @@ void pane_contract(){
 }
 void compressed_tabs_contract(){
  auto ctx=std::make_shared<core::Context>();fresh(ctx);EditorState editor;
- constexpr float toolGroupTabHeight=38;const bool paneDragAllowed=true,ownsPaneDrag=true;
+ constexpr float toolGroupTabHeight=38;
+ constexpr bool paneDragAllowed=true,ownsPaneDrag=true,automationInputReserved=false;
  for(float width:{160.0f,320.0f,760.0f}){
   std::array tabs{TabButtonSpec{.id="world",.label="World Outliner",.closable=true},
    TabButtonSpec{.id="assets",.label="Asset Browser",.closable=true},
@@ -242,7 +251,7 @@ set_tests_properties(actual_pane_drag PROPERTIES TIMEOUT 15)
         (proof / "result.json").write_text(json.dumps({
             "scope": "Actual tab-bar geometry/input + Editor capture/activation/threshold/drop decision, real queue/frame and portable module; no native window",
             "passed": True, "nativeAcceptance": False,
-            "owners": {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest() for p in [API, CHROME, DOCK, VIEW]},
+            "owners": {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest() for p in [API, ENGINE_GUI, CHROME, DOCK, VIEW]},
             "commands": results,
             "cases": ["fast completed pane drag", "stationary/default tab selection", "close-icon press excluded",
                 "drag release over close does not close", "normal held drag threshold11/12px", "phantom content-header negative",

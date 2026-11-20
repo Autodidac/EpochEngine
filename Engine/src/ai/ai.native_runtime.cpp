@@ -13,6 +13,7 @@
 #include "native/ai.backend_model_native_model_manager.hpp"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -44,7 +45,66 @@ extern "C" void core_log_write(std::uint32_t, const char*, const char*);
 #include <Windows.h>
 #endif
 
+import ai.model_install;
+import platform.filesystem;
+import core.sha256;
+
 namespace epochengine::ai::native_runtime {
+namespace {
+[[nodiscard]] std::string diagnostic_file_digest(const std::filesystem::path& path) {
+    const auto admitted = native_shared_inputs::validate_path(path, false);
+    const auto size = std::filesystem::file_size(admitted);
+    if (size > 512ULL * 1024ULL * 1024ULL) throw std::runtime_error("Diagnostic input exceeds bound");
+    std::ifstream input(admitted, std::ios::binary);
+    if (!input) throw std::runtime_error("Diagnostic input unavailable");
+    core::sha256::Hasher hash;
+    std::array<char, 65536> bytes{};
+    std::uintmax_t read{};
+    while (input) {
+        input.read(bytes.data(), bytes.size());
+        const auto count = input.gcount();
+        read += static_cast<std::uintmax_t>(count);
+        if (read > size) throw std::runtime_error("Diagnostic input changed");
+        hash.update(std::string_view(bytes.data(), static_cast<std::size_t>(count)));
+    }
+    if (!input.eof() || read != size) throw std::runtime_error("Diagnostic input read failed");
+    return core::sha256::hex(hash.finish());
+}
+[[nodiscard]] bool verify_diagnostic_runtime(const std::filesystem::path& server,
+                                             const std::string& expected_manifest) {
+    if (expected_manifest.size() != 64u || server.filename() != "llama-server.exe") return false;
+    const auto bin = native_shared_inputs::validate_path(server.parent_path(), true);
+    const auto manifest_path = bin.parent_path() / "runtime.json";
+    if (std::filesystem::file_size(manifest_path) > 65536u
+        || diagnostic_file_digest(manifest_path) != expected_manifest) return false;
+    std::ifstream input(manifest_path);
+    const auto manifest = nlohmann::json::parse(input);
+    if (manifest.value("schema", std::string{}) != "epoch.edge0.diagnostic_sdk.v1"
+        || manifest.value("build_recipe", std::string{}) != "engcoder-edge0-stream1-phase-diagnostic-v1"
+        || manifest.value("baseline_algorithm", std::string{}) != "engcoder-qwenflash-2026.11.15-edge0-stream1"
+        || manifest.value("backend_commit", std::string{}) != "167742d9dfa01306786e7d3cfd31fcb8a8b185dc") return false;
+    const std::array<std::string_view, 9> names{"ggml-base.dll", "ggml-cpu.dll", "ggml-cuda.dll", "ggml.dll",
+        "llama-common.dll", "llama-server-impl.dll", "llama-server.exe", "llama.dll", "mtmd.dll"};
+    const auto entries = manifest.at("files");
+    if (!entries.is_array() || entries.size() != names.size()) return false;
+    for (const auto name : names) {
+        const auto found = std::ranges::find_if(entries, [&](const auto& entry) {
+            return entry.value("file", std::string{}) == name;
+        });
+        if (found == entries.end()) return false;
+        const auto binary = native_shared_inputs::validate_path(bin / name, false);
+        if (binary.parent_path() != bin || std::filesystem::file_size(binary) != found->at("bytes").get<std::uintmax_t>()
+            || diagnostic_file_digest(binary) != found->at("sha256").get<std::string>()) return false;
+    }
+    for (const auto& entry : std::filesystem::directory_iterator(bin)) {
+        auto extension = entry.path().extension().string();
+        std::ranges::transform(extension, extension.begin(), [](unsigned char value) { return static_cast<char>(std::tolower(value)); });
+        if ((extension == ".dll" || extension == ".exe")
+            && std::ranges::find(names, entry.path().filename().string()) == names.end()) return false;
+    }
+    return true;
+}
+} // namespace
 SharedRuntimeEnvironment capture_shared_runtime_environment(
     const std::filesystem::path& installed_server,
     std::span<const std::filesystem::path> dependency_directories) {
@@ -232,6 +292,9 @@ struct Service final {
     std::deque<ActivityBlock> activities{};
     std::uint64_t activity_sequence{};
     Snapshot metadata{};
+    std::filesystem::path discovery_root{};
+    std::vector<native_discovery::ModelFileCandidate> discovered_models{};
+    std::string discovery_status{};
     ModelBenchmark benchmark{};
     std::atomic<epoch_ai::runtime::RuntimeHost*> published_host{nullptr};
     std::jthread monitor{};
@@ -300,6 +363,7 @@ ModelTuning model_tuning_from_json(const epoch_ai::runtime::json& item) {
     if (!item.is_object()) return tuning;
     tuning.idle_timeout_minutes = item.value("idle_timeout_minutes", tuning.idle_timeout_minutes);
     tuning.runtime_policy = item.value("runtime_policy", tuning.runtime_policy);
+    tuning.capability_tier = item.value("capability_tier", tuning.capability_tier);
     tuning.gpu_layers = item.value("gpu_layers", tuning.gpu_layers);
     tuning.gpu_layer_count_hint = item.value("gpu_layer_count_hint", tuning.gpu_layer_count_hint);
     tuning.context_tokens = item.value("context_tokens", tuning.context_tokens);
@@ -330,6 +394,7 @@ ModelTuning model_tuning_from_json(const epoch_ai::runtime::json& item) {
 epoch_ai::runtime::json model_tuning_json(const ModelTuning& tuning) {
     return {{"idle_timeout_minutes", tuning.idle_timeout_minutes},
         {"runtime_policy", tuning.runtime_policy},
+        {"capability_tier", tuning.capability_tier},
         {"gpu_layers", tuning.gpu_layers},
         {"gpu_layer_count_hint", tuning.gpu_layer_count_hint},
         {"context_tokens", tuning.context_tokens}, {"parallel_slots", tuning.parallel_slots},
@@ -356,7 +421,8 @@ TrainingState training_state(const epoch_ai::runtime::json& value) {
 }
 // A Model Manager rescan is discovery, not an instruction to instantiate the
 // entire agent/runtime, adopt backends, start workers or load model weights.
-// Read only the small persisted profile manifests. The host performs the
+// Read the small persisted profile manifests and stat an explicit local file.
+// No weight contents are read here. The host performs the
 // authoritative cache/runtime checks once the operator explicitly loads a model.
 [[nodiscard]] Snapshot discover_offline_native_inventory(
     const std::filesystem::path& data_root, std::stop_token stop) {
@@ -405,10 +471,31 @@ TrainingState training_state(const epoch_ai::runtime::json& value) {
                 }
                 const auto runtime = manifest.value("runtime", std::string{"qwen-flash"});
                 if (runtime != "qwen-flash") continue;
-                auto label = manifest.value("display_name", id);
+                auto label = epoch_ai::model::normalized_model_display_name(
+                    id, manifest.value("display_name", id));
                 if (label.empty()) label = id;
                 if (label.size() > 256u) label.resize(256u);
                 const auto estimated = manifest.value("estimated_bytes", std::uint64_t{});
+                std::string weights_status{"Cache not checked"};
+                std::uint64_t cached_bytes{};
+                const auto local_path = string_field(manifest, "local_path");
+                if (!local_path.empty()) {
+                    const auto weights_path = native_shared_inputs::path_from_utf8(local_path);
+                    std::error_code weights_error;
+                    // file_size follows ordinary cache symlinks; their directory
+                    // entry length is not the weight size. Existence alone never
+                    // proves an intact split model or an admitted GGUF.
+                    const auto bytes = std::filesystem::file_size(weights_path, weights_error);
+                    if (!weights_error) {
+                        cached_bytes = bytes;
+                        weights_status = bytes ? "Local file present; verification required"
+                                               : "Local file is empty";
+                    } else if (weights_error == std::errc::no_such_file_or_directory) {
+                        weights_status = "Local weights missing";
+                    } else {
+                        weights_status = "Local weights unavailable: " + weights_error.message();
+                    }
+                }
                 auto gpu_target = manifest.value("gpu_offload_percent", 60u);
                 // This view cannot mutate profiles: preview the revision-11
                 // migration until the real model manager opens them.
@@ -431,7 +518,10 @@ TrainingState training_state(const epoch_ai::runtime::json& value) {
                 result.models.push_back(ModelEntry{
                     .id = id, .label = std::move(label),
                     .uri = "qwenflash://" + id, .runtime = runtime,
-                    .role = "foundation", .expected_bytes = estimated,
+                    .role = "foundation", .weights_status = std::move(weights_status),
+                    .local_weights_filename = native_shared_inputs::utf8(
+                        native_shared_inputs::path_from_utf8(local_path).filename()),
+                    .cached_bytes = cached_bytes, .expected_bytes = estimated,
                     .gpu_offload_percent = gpu_target,
                     .tuning = model_tuning_from_json(manifest),
                     .behavior = epoch_ai::model::behavior_for(manifest)});
@@ -523,8 +613,18 @@ void update_metadata(Service& s) {
         .value("models", epoch_ai::runtime::json::object());
     for (const auto& item:library.value("models",epoch_ai::runtime::json::array())) {
         const auto cache=item.value("cache",epoch_ai::runtime::json::object());
+        // Preserve the cache owner's current evidence after a native host has
+        // started. A stale imported profile is not a downloadable installation.
+        std::string live_weights_status = string_field(cache, "integrity_error");
+        if (cache.value("installed", false)) live_weights_status = "Installed files present";
+        else if (!live_weights_status.empty()) live_weights_status = "Weights unavailable: " + live_weights_status;
+        else live_weights_status = string_field(item, "local_path").empty()
+            ? "Cached weights missing or incomplete" : "Local weights missing or incomplete";
         ModelEntry entry{.id=string_field(item,"id"),.label=string_field(item,"display_name"),
             .uri=string_field(item,"uri"),.runtime=string_field(item,"runtime"),.role="foundation",
+            .weights_status=std::move(live_weights_status),
+            .local_weights_filename=native_shared_inputs::utf8(
+                native_shared_inputs::path_from_utf8(string_field(item,"local_path")).filename()),
             .installed=cache.value("installed",false),.active=item.value("active",false),
             .cached_bytes=cache.value("cached_bytes",std::uint64_t{}),.expected_bytes=cache.value("expected_bytes",std::uint64_t{}),
             .gpu_offload_percent=item.value("gpu_offload_percent",70u),
@@ -724,6 +824,18 @@ epoch_ai::runtime::RuntimeHost& ensure_host(Service& s) {
         config.model_root = paths.model_root;
         config.learning_root = paths.learning_root;
         config.web_root = paths.web_root;
+        if (const auto digest = native_shared_inputs::environment("EPOCH_AI_DIAGNOSTIC_RUNTIME_SHA256"); digest) {
+            if (config.qwen_flash_server.empty()) throw std::runtime_error("Diagnostic runtime requires explicit server selection");
+            const auto candidate_root = native_shared_inputs::validate_path(config.qwen_flash_server, false).parent_path().parent_path();
+            const auto reports = candidate_root.parent_path();
+            if (reports.filename() != "Reports" || reports.parent_path().filename() != "Artifacts"
+                || !std::filesystem::is_regular_file(reports.parent_path().parent_path() / "AGENTS.md"))
+                throw std::runtime_error("Diagnostic runtime must be a checkout-local Artifacts/Reports candidate");
+            config.qwen_flash_diagnostic_output = candidate_root / "observations";
+            config.qwen_flash_diagnostic_verifier = [expected = *digest](const auto& server) {
+                return verify_diagnostic_runtime(server, expected);
+            };
+        }
         trace_load_stage("Native RuntimeHost construction started");
         s.host = std::make_unique<epoch_ai::runtime::RuntimeHost>(std::move(config));
         trace_load_stage("Native RuntimeHost constructed");
@@ -733,7 +845,8 @@ epoch_ai::runtime::RuntimeHost& ensure_host(Service& s) {
 }
 AssetStageOutcome execute_asset_stage(Service& s, const AssetStageCallback& callback,
     const std::shared_ptr<idle::RetirementClaim>& claim,
-    std::stop_token caller_stop, std::stop_token queue_stop) {
+    std::stop_token caller_stop, std::stop_token queue_stop,
+    AssetStageRestoration restoration) {
     AssetStageOutcome out; out.workers_retired = true;
     std::stop_source stage_stop;
     std::stop_callback caller_cancel(caller_stop, [&] { stage_stop.request_stop(); });
@@ -778,6 +891,8 @@ AssetStageOutcome execute_asset_stage(Service& s, const AssetStageCallback& call
                 return out;
             }
             s.enabled.store(false); s.loaded.store(false); flags_suspended = true;
+            if (restoration == AssetStageRestoration::leave_unloaded)
+                s.idle_resume = {}; // No stale idle-reload consent across project handoff.
         }
         bool retired = true;
         if (saved) {
@@ -818,6 +933,17 @@ AssetStageOutcome execute_asset_stage(Service& s, const AssetStageCallback& call
             { std::scoped_lock lock{s.state_mutex}; s.asset_quarantine_claim = claim; }
             out.code = AssetStageCode::workers_unretired;
             out.diagnostic = "Asset worker retirement is unverified; coding restoration is quarantined";
+        } else if (restoration == AssetStageRestoration::leave_unloaded) {
+            // Project builds hand memory to the compiler and then the child.
+            // Retain preferences, but never reload over the upcoming runtime.
+            if (out.code == AssetStageCode::retirement_failed) {
+                std::scoped_lock lock{s.state_mutex};
+                s.asset_quarantine_claim = claim;
+            } else {
+                out.recovery_ids.clear();
+                out.admission_claim = claim;
+                out.diagnostic = "Editor models remain unloaded for project work; saved model settings are preserved";
+            }
         } else if (!current()) {
             out.code = AssetStageCode::superseded;
             out.diagnostic = "Operator selection/settings or shutdown changed; stale coding restoration was skipped";
@@ -884,9 +1010,12 @@ void start_admitted_work(Service& s, std::string label, F action,
                 } else fn(current, stop);
             } catch(const std::exception& e) { phase(std::string{"Native backend error: "}+e.what()); }
             catch(...) { phase("Native backend: unknown error"); }
+            // Settlement still belongs to this operation. Publishing idle first
+            // lets a successor replace this worker and join it on the caller.
+            try { if (settled) settled(); }
+            catch (...) { phase("Native operation completion callback failed"); }
             on_native_operation_thread = false;
             current.busy.store(false,std::memory_order_release);
-            if (settled) settled();
         })) throw std::runtime_error("Native service is shutting down");
     } catch (...) { s.busy.store(false,std::memory_order_release); throw; }
 }
@@ -910,8 +1039,9 @@ template<typename F> bool queue(std::string label,F action) {
     }
 }
 } // namespace
+
 AssetStageOutcome run_asset_stage(AssetStageCallback callback, std::stop_token cancellation,
-    std::chrono::seconds queue_timeout) {
+    std::chrono::seconds queue_timeout, AssetStageRestoration restoration) {
     if (!callback || queue_timeout <= std::chrono::seconds::zero()
         || queue_timeout > std::chrono::hours{1})
         return {.diagnostic = "A bounded asset callback and queue timeout are required"};
@@ -940,9 +1070,9 @@ AssetStageOutcome run_asset_stage(AssetStageCallback callback, std::stop_token c
                 auto claim = std::make_shared<idle::RetirementClaim>();
                 if (*claim) {
                     start_admitted_work<false>(s, "Waiting for the owned asset handoff",
-                        [completion, claim, callback = std::move(callback), cancellation](Service& current, std::stop_token stop) mutable {
+                        [completion, claim, callback = std::move(callback), cancellation, restoration](Service& current, std::stop_token stop) mutable {
                             AssetStageOutcome outcome;
-                            try { outcome = execute_asset_stage(current, callback, claim, cancellation, stop); }
+                            try { outcome = execute_asset_stage(current, callback, claim, cancellation, stop, restoration); }
                             catch (...) {
                                 // Conservative fallback still retains the gate; never forget a possibly live worker.
                                 { std::scoped_lock lock{current.state_mutex}; current.asset_quarantine_claim = claim; }
@@ -977,6 +1107,11 @@ AssetStageOutcome run_asset_stage(AssetStageCallback callback, std::stop_token c
 Snapshot snapshot(bool include_inventory) {
     auto& s=service(); std::scoped_lock lock{s.state_mutex};
     auto value=include_inventory?s.metadata:Snapshot{};value.busy=s.busy.load();value.loaded=s.loaded.load();value.selected=s.enabled.load();
+    if (include_inventory) {
+        value.discovered_models = s.discovered_models;
+        value.discovery_root = s.discovery_root;
+        value.discovery_status = s.discovery_status;
+    }
     value.model=s.model;value.last_response_model=s.last_response_model;
     value.idle_reload_available = s.idle_resume.captured && !s.idle_resume.pending
         && s.idle_resume.generation == s.preference_generation.load() && s.model == s.idle_resume.model;
@@ -1038,6 +1173,29 @@ bool select_for_epoch_requests(bool enabled) {
     return true;
 }
 
+void refresh_discovered_model_files(Service& current, std::stop_token stop) {
+    std::filesystem::path chosen;
+    { std::scoped_lock lock{current.state_mutex}; chosen = current.discovery_root; }
+    const auto paths = native_storage::defaults();
+    if (chosen.empty()) {
+        chosen = native_discovery::read_library_root(paths.data_root / "model_library.txt");
+        if (!chosen.empty()) {
+            std::scoped_lock lock{current.state_mutex};
+            current.discovery_root = chosen;
+        }
+    }
+    const std::array roots{paths.model_cache, chosen};
+    auto discovered = native_discovery::scan(roots, stop);
+    std::string status = discovered.cancelled ? "GGUF discovery cancelled"
+        : discovered.limited ? "GGUF discovery reached its limit; select a narrower folder"
+        : "GGUF discovery complete";
+    status += ": " + std::to_string(discovered.models.size()) + " model file groups. "
+        + discovered.diagnostic;
+    std::scoped_lock lock{current.state_mutex};
+    current.discovered_models = std::move(discovered.models);
+    current.discovery_status = std::move(status);
+}
+
 bool refresh() {
     auto& s = service();
     if (s.stopping.load(std::memory_order_acquire)) return false;
@@ -1051,6 +1209,7 @@ bool refresh() {
                 // inventory discovery never instantiates a RuntimeHost.
                 if (current.published_host.load(std::memory_order_acquire)) {
                     update_metadata(current);
+                    refresh_discovered_model_files(current, stop);
                     phase("Native model inventory refreshed; loaded models unchanged.");
                     return;
                 }
@@ -1061,6 +1220,7 @@ bool refresh() {
                     std::scoped_lock lock{current.state_mutex};
                     current.metadata = std::move(scanned);
                 }
+                refresh_discovered_model_files(current, stop);
                 phase("Found " + std::to_string(count) +
                     " registered native models. Cache and residency are checked when loaded.");
             });
@@ -1069,6 +1229,46 @@ bool refresh() {
         phase("Native model inventory scan could not start");
         return false;
     }
+}
+bool discover_model_files(std::filesystem::path root) {
+    if (root.empty() || !root.is_absolute()) return false;
+    auto& s = service();
+    if (s.stopping.load(std::memory_order_acquire)) return false;
+    if (s.busy.exchange(true, std::memory_order_acq_rel)) return false;
+    try {
+        start_admitted_work<false>(s, "Finding existing GGUF files (read-only)",
+            [root=std::move(root)](Service& current, std::stop_token stop) {
+                if (stop.stop_requested()) return;
+                std::error_code error;
+                auto resolved = std::filesystem::weakly_canonical(root, error);
+                if (error || !std::filesystem::is_directory(resolved, error)) {
+                    phase("Selected model folder is unavailable; previous selection preserved.");
+                    return;
+                }
+                if (stop.stop_requested()) return;
+                const bool saved = native_discovery::save_library_root(
+                    native_storage::defaults().data_root / "model_library.txt", resolved,
+                    platform::filesystem::atomic_replace_same_filesystem);
+                { std::scoped_lock lock{current.state_mutex}; current.discovery_root = std::move(resolved); }
+                refresh_discovered_model_files(current, stop);
+                phase(saved ? "Existing model files scanned; folder saved. No model was registered or loaded."
+                    : "Existing model files scanned; folder could not be saved and remains session-only. No model was registered or loaded.");
+            });
+        return true;
+    } catch (...) {
+        phase("GGUF discovery could not start");
+        return false;
+    }
+}
+bool reconnect_model_file(std::string id, std::string path) {
+    if (id.empty() || path.empty()) return false;
+    return queue("Reconnecting missing model weights (metadata only)",
+        [id=std::move(id), path=std::move(path)](auto& host, std::stop_token stop) {
+            if (stop.stop_requested()) return;
+            const auto repaired = host.reconnect_native_model_file(id, native_shared_inputs::path_from_utf8(path));
+            phase(repaired ? "Model file reconnected; saved settings preserved. No model loaded."
+                : "Model file not reconnected: " + repaired.error().message);
+        });
 }
 bool set_gpu_offload(std::string id, std::uint32_t percent) {
     if (id.empty() || percent > 100u) return false;
@@ -1220,6 +1420,24 @@ bool unregister_model(std::string id) {
                 ? "Model unregistered: " + id + ". Model weight files were not deleted."
                 : "This built-in profile cannot be unregistered.");
     });
+}
+bool delete_model_offer_download(std::string package_id) {
+    const auto cache = model_install_cache_root();
+    const auto plan = model_install::plan_for(package_id);
+    if (cache.empty() || !plan) return false;
+    return queue("Checking the installed model before deleting its download",
+        [cache, plan = *plan](auto&, std::stop_token stop) {
+            if (stop.stop_requested()) return;
+            auto lease = platform::filesystem::ExclusiveFileLease::acquire(
+                cache.parent_path() / "native-gpu.lock");
+            if (!lease) {
+                phase("Could not reserve the shared model store. Unload local models and retry.");
+                return;
+            }
+            const auto result = model_install::delete_verified_snapshot(cache, plan);
+            phase(result.code == model_install::Code::removed ? result.diagnostic
+                : "Model download removal stopped: " + result.diagnostic);
+        });
 }
 bool assign_role(std::string role,std::string uri) {
     return queue("Assigning model role",[role=std::move(role),uri=std::move(uri)](auto& host,std::stop_token){
@@ -1497,15 +1715,7 @@ bool install(std::string id) {
 // parameter-size hints. Do not guess from GGUF quantization file sizes or
 // automatically replace an operator-assigned simple responder.
 [[nodiscard]] static std::optional<unsigned> named_parameter_billions(std::string_view id) {
-    static const std::regex count{R"((?:^|[^0-9])([0-9]{1,3})[bB](?:[^a-zA-Z0-9]|$))"};
-    std::string text{id};
-    std::sregex_iterator it{text.begin(), text.end(), count}, end;
-    std::optional<unsigned> result;
-    for (; it != end; ++it) {
-        const auto count = static_cast<unsigned>(std::stoul((*it)[1].str()));
-        if (count > 0 && count < 400) result = count;
-    }
-    return result;
+    return detail::named_parameter_billions(id);
 }
 bool load(std::string id, bool select_for_requests) {
     if(id.empty())return false;
@@ -1554,7 +1764,16 @@ bool load(std::string id, bool select_for_requests) {
             if (!establishFoundation && !requires_explicit_selection) {
                 const auto role_models = host.architecture().value(
                     "role_models", epoch_ai::runtime::json::object());
-                const auto params = named_parameter_billions(id);
+                const auto assessed_tier = [&](std::string_view uri) {
+                    if (uri.starts_with("qwenflash://")) uri.remove_prefix(12);
+                    for (const auto& entry : library.value("models", epoch_ai::runtime::json::array()))
+                        if (string_field(entry, "id") == uri)
+                            return model_capability::assess(uri,
+                                entry.value("capability_tier", std::string{"reference"}),
+                                epoch_ai::model::behavior_for(entry).flagged()).tier;
+                    return model_capability::Tier::unclassified;
+                };
+                const auto tier = assessed_tier(id);
                 const auto role_is_native_or_free = [&](std::string_view role) {
                     const auto it = role_models.find(std::string{role});
                     return it == role_models.end() || !it->is_string() ||
@@ -1566,19 +1785,20 @@ bool load(std::string id, bool select_for_requests) {
                     return it != role_models.end() && it->is_string()
                         ? it->template get<std::string>() : std::string{};
                 };
-                if (params && *params <= 12u && role_is_native_or_free("simple")) {
+                if ((tier == model_capability::Tier::micro || tier == model_capability::Tier::low)
+                    && role_is_native_or_free("simple")) {
                     const auto prev = current_role_model("simple");
-                    const auto previous_params = named_parameter_billions(prev);
-                    if (prev.empty() || !previous_params || *params < *previous_params)
+                    const auto previous_tier = assessed_tier(prev);
+                    if (prev.empty() || previous_tier == model_capability::Tier::unclassified || tier < previous_tier)
                         if (host.assign_model_role("simple", "qwenflash://" + id))
                             assigned_role = "simple";
-                } else if (params && *params >= 20u &&
+                } else if (tier >= model_capability::Tier::medium &&
                            role_is_native_or_free("reviewer")) {
                     // 27B isn't forced into the foundation slot. The auto
                     // router can use it for coding even when Flash loaded first.
                     const auto prev = current_role_model("reviewer");
-                    const auto previous_params = named_parameter_billions(prev);
-                    if (prev.empty() || !previous_params || *params >= *previous_params)
+                    const auto previous_tier = assessed_tier(prev);
+                    if (prev.empty() || previous_tier == model_capability::Tier::unclassified || tier > previous_tier)
                         if (host.assign_model_role("reviewer", "qwenflash://" + id))
                             assigned_role = "middle";
                 }
@@ -1752,30 +1972,23 @@ bool load_set(std::vector<std::string> ids) {
         // An explicit resident set establishes capability roles. Do not demote
         // the strongest resident to escalation merely because it uses more RAM;
         // easy work can use smaller responders without making them the coder.
-        auto response_order = ids;
-        std::erase_if(response_order, [&](const auto& id) {
+        std::vector<detail::RoleCandidate> role_candidates;
+        for (const auto& id : ids) {
             const auto* entry = find_entry(id);
-            return model_behavior::classify_text(id).flagged()
+            const bool modified = model_behavior::classify_text(id).flagged()
                 || (entry && epoch_ai::model::behavior_for(*entry).flagged());
-        });
-        if (response_order.empty()) {
-            phase("Model group loaded. Labelled variants remain unassigned; select one explicitly with Load & Use.");
+            role_candidates.push_back({id, model_capability::assess(id,
+                entry ? entry->value("capability_tier", std::string{"reference"}) : "reference", modified).tier,
+                !modified});
+        }
+        std::string current_foundation;
+        { std::scoped_lock lock{s.state_mutex}; current_foundation = s.model; }
+        const auto defaults = detail::resident_defaults(role_candidates, current_foundation);
+        if (defaults.foundation.empty()) {
+            phase("Model group loaded. Unclassified or labelled variants need explicit selection; current roles remain unchanged.");
             return;
         }
-        std::stable_sort(response_order.begin(), response_order.end(),
-            [&](const auto& a, const auto& b) {
-                const auto small = named_parameter_billions(a);
-                const auto large = named_parameter_billions(b);
-                if (small && large && *small != *large) return *small < *large;
-                return rank(a) < rank(b);
-            });
-        const auto is_flash = [](const std::string& id) {
-            return id.find("flash-next") != std::string::npos ||
-                id.find("flash_next") != std::string::npos;
-        };
-        auto normal_foundation = response_order.back();
-        const auto flash = std::find_if(response_order.rbegin(), response_order.rend(), is_flash);
-        if (flash != response_order.rend()) normal_foundation = *flash;
+        const auto& normal_foundation = defaults.foundation;
         const std::string escalation{};
         const auto& chosen = normal_foundation;
         trace_load_stage("Resident set: selecting normal foundation " + chosen +
@@ -1813,15 +2026,11 @@ bool load_set(std::vector<std::string> ids) {
             }
             return true;
         };
-        const std::string simple = response_order.size() > 1u &&
-            response_order.front() != chosen ? response_order.front() : std::string{};
-        const auto middleModel = std::find_if(response_order.rbegin(), response_order.rend(),
-            [&](const auto& id) { return id != chosen && id != simple; });
-        const std::string middle = middleModel != response_order.rend()
-            ? *middleModel : std::string{};
+        const auto& simple = defaults.simple;
+        const auto& middle = defaults.middle;
         if (!synchronize_role("simple", simple) ||
             !synchronize_role("reviewer", middle) ||
-            !synchronize_role("implementation", chosen) ||
+            !synchronize_role("implementation", defaults.implementation) ||
             !synchronize_role("escalation", escalation)) return;
         trace_load_stage("Resident set: foundation=" + chosen +
             ", simple=" + (simple.empty() ? "none" : simple) +
@@ -1939,7 +2148,8 @@ bool unload(std::string id) {
     });
 }
 Result complete_host_request(std::string_view request_json,
-    std::uint32_t timeout_seconds, std::stop_token cancellation, const StreamObserver& observer) {
+    std::uint32_t timeout_seconds, std::stop_token cancellation, const StreamObserver& observer,
+    const std::function<void()>& before_dispatch) {
     auto& s=service();
     WorkLease protected_request;
     if (!protected_request.admitted()) return {false,"Idle unload is in progress; no request was dispatched"};
@@ -1989,6 +2199,7 @@ Result complete_host_request(std::string_view request_json,
         activity("Tools", "Raw output audit: " + auditPath.string());
         if (raw_stream_capture_enabled()) append_output(OutputKind::boundary);
         phase("Epoch host model request; approvals and tools remain with Epoch");
+        if (before_dispatch) before_dispatch();
         auto response=host.complete_host_request(request,
             cancellation,deadline,
             [&](const epoch_ai::model::StreamEvent& event) {

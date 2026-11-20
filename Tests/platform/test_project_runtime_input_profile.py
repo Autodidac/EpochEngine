@@ -12,17 +12,18 @@ from Tools.source.owned_source_text import definition
 
 ROOT = Path(__file__).resolve().parents[2]
 OWNERS = (
-    "Engine/modules/project.asset_registry.ixx",
-    "Engine/modules/project.input_profile.ixx",
+    "Engine/modules/project/project.asset_registry.ixx",
+    "Engine/modules/project/project.input_profile.ixx",
     "Engine/src/project/project.input_profile.cpp",
-    "Engine/modules/input.engine.ixx",
-    "Engine/modules/core.context.ixx",
-    "Engine/modules/input.controller.ixx",
+    "Engine/modules/input/input.engine.ixx",
+    "Engine/modules/core/core.context.ixx",
+    "Engine/modules/input/input.controller.ixx",
     "Engine/src/input/input.controller.cpp",
-    "Engine/modules/project.input_controller.ixx",
+    "Engine/modules/project/project.input_controller.ixx",
     "Engine/src/project/project.input_controller.cpp",
-    "Engine/modules/platform.filesystem.ixx",
-    "Engine/modules/render.preview_grid.ixx",
+    "Engine/modules/platform/platform.filesystem.ixx",
+    "Engine/modules/render/render.preview_grid.ixx",
+    "Engine/modules/editor/editor.core.ixx",
     "Engine/src/epoch/epoch.engine_legacy.cpp",
     "Engine/src/epoch/implementation/epoch.project_play_scene.inl",
     "Engine/src/project/project.gameplay2d_runtime.cpp",
@@ -36,7 +37,7 @@ def neutral(source):
 
 
 def consumer(s):
-    registry, profile, implementation, inp, context, controller, controller_cpp, sampler, sampler_cpp, fs, preview, legacy, play, gameplay, profile_contract = s
+    registry, profile, implementation, inp, context, controller, controller_cpp, sampler, sampler_cpp, fs, preview, editor, legacy, play, gameplay, profile_contract = s
     input_api = inp[inp.index("namespace epochengine::input"):inp.index("    // State storage")].replace("export ", "") + "}\n"
     active = "\n".join(definition(inp, sig) for sig in (
         "    export inline void set_active_profile(const InputProfile&",
@@ -44,16 +45,30 @@ def consumer(s):
         "    export inline InputProfile active_profile_snapshot(",
         "    export inline ActionBinding binding_for(const InputProfile&",
         "    export inline ActionBinding binding_for(Action" )).replace("export ", "")
-    actions = "\n".join(definition(context, sig) for sig in (
+    key_types = "\n".join(definition(context, "        struct " + name + " final") + ";"
+                           for name in ("KeyPressModifiers", "WindowKeyPresses"))
+    actions = key_types + "\n" + "\n".join(definition(context, sig) for sig in (
+        "        void record_window_key_press(",
+        "        void clear_window_key_presses(",
+        "        [[nodiscard]] std::optional<WindowKeyPresses> take_window_key_presses(",
         "        [[nodiscard]] bool action_modifiers_satisfied_safe(",
         "        [[nodiscard]] bool action_held_safe(input::Action action,",
         "        [[nodiscard]] bool action_pressed_safe(input::Action action,"))
+    native_keys = definition(inp, "    export inline constexpr int map_key_to_vk(").replace("export ", "")
     # Use the real platform file publication function. This invokes disk APIs,
     # never a window, input, graphics or physical controller provider.
     atomic_replace = definition(fs, "    [[nodiscard]] inline bool atomic_replace_same_filesystem(")
-    launch = definition(legacy, "        struct ProjectSceneLaunchOptions") + ";\n"
+    project_kind = definition(editor, "    export enum class EditorProjectKind : unsigned char")
+    # Spell the equivalent empty default without braces for the body extractor.
+    camera_owner = editor.replace("launch_override = {}", "launch_override = std::nullopt")
+    camera = "\n".join(definition(camera_owner, signature).replace("export ", "", 1) for signature in (
+        "    export [[nodiscard]] constexpr std::optional<previewgrid::CameraMode>\n"
+        "        editor_project_camera_from_token(",
+        "    export [[nodiscard]] constexpr previewgrid::CameraMode editor_resolve_project_run_camera(",
+    ))
+    launch = project_kind.replace("export ", "", 1) + ";\n" + camera + "\n"
+    launch += definition(legacy, "        struct ProjectSceneLaunchOptions") + ";\n"
     launch += "\n".join(definition(legacy, sig) for sig in (
-        "        [[nodiscard]] epochengine::previewgrid::CameraMode camera_mode_from_argument(",
         "        [[nodiscard]] ProjectSceneLaunchOptions parse_project_scene_launch(",
         "        [[nodiscard]] std::optional<input::Key> engine_key(",
         "        [[nodiscard]] epochengine::project_input::ModifierMask",
@@ -68,6 +83,15 @@ def consumer(s):
         "            void advance_gameplay("))
     init_start = play.index("                const auto launch =")
     init = play[init_start:play.index("                const auto* profile =", init_start)]
+    camera_start = play.index("                m_cameraMode = editor_resolve_project_run_camera(", init_start)
+    camera_end = play.index(";", camera_start) + 1
+    init += """
+                struct ProjectPorts { EditorProjectKind kind{EditorProjectKind::Game}; };
+                const ProjectPorts project{};
+                const auto* profile = &project;
+                const std::string m_tileMapPath{};
+                const std::optional<CameraSettingsPort> runSettings{};
+""" + play[camera_start:camera_end]
     axes_start = play.index("                const bool altHeld =")
     axes = play[axes_start:play.index("                if ((flying", axes_start)]
     planet_start = play.index("                const bool panel=", play.index("void advance_planetary_exploration("))
@@ -84,7 +108,7 @@ def consumer(s):
     # policy refuses roots outside that checkout, including external OS Temp.
     contract = '\n#line 1 "' + (ROOT/OWNERS[-1]).as_posix() + '"\n' + neutral(profile_contract)
     contract += '\n#line 1 "runtime-input.cpp"\n'
-    return PREFIX + neutral(registry) + neutral(profile) + "\nnamespace epochengine::platform::filesystem {\n" + atomic_replace + "\n}\n" + neutral(implementation) + contract + input_api + "\nnamespace epochengine::input {std::mutex g_profileMutex;InputProfile g_activeProfile=make_default_profile();\n" + active + "\n}\n" + CONTEXT.replace("ACTUAL_ACTIONS", actions) + neutral(controller) + neutral(controller_cpp) + neutral(sampler) + neutral(sampler_cpp) + PREVIEW.replace("ACTUAL_GESTURES", gestures) + launch + PORTS + "\nstruct Owner {\n" + FIELDS.replace("LOCAL_FIELD", local_field) + methods + "\nvoid initialize(std::string_view project_payload){\n" + init + "\n}\nstd::array<float,3> navigation(const core::Context*ctx,bool mouse_right_down,bool captured){bool mouse_left_down=false,mouse_middle_down=false;bool navigationPointerCaptured=captured,projectGuiCapturesKeyboard=captured;\n" + axes + "\nreturn {rightInput,upInput,forwardInput};}\nControls planetary(core::Context*context,float dt,bool pointerCaptured,bool keyboardCaptured){gui::Vec2 mouse{};\n" + planet + "\nreturn controls;}\nvoid frame_input(std::shared_ptr<core::Context>ctx,bool projectGuiCapturesKeyboard,float dt){gui::Vec2 mouse_pos{};\n" + frame + "\n}\n};\n" + MAIN
+    return PREFIX + neutral(registry) + neutral(profile) + "\nnamespace epochengine::platform::filesystem {\n" + atomic_replace + "\n}\n" + neutral(implementation) + contract + input_api + "\nnamespace epochengine::input {std::mutex g_profileMutex;InputProfile g_activeProfile=make_default_profile();\n" + active + "\n#if defined(_WIN32)\n" + native_keys + "\n#endif\n}\n" + CONTEXT.replace("ACTUAL_ACTIONS", actions) + neutral(controller) + neutral(controller_cpp) + neutral(sampler) + neutral(sampler_cpp) + PREVIEW.replace("ACTUAL_GESTURES", gestures) + launch + PORTS + "\nstruct Owner {\n" + FIELDS.replace("LOCAL_FIELD", local_field) + methods + "\nvoid initialize(std::string_view project_payload){\n" + init + "\n}\nstd::array<float,3> navigation(const core::Context*ctx,bool mouse_right_down,bool captured){bool mouse_left_down=false,mouse_middle_down=false;bool navigationPointerCaptured=captured,projectGuiCapturesKeyboard=captured;\n" + axes + "\nreturn {rightInput,upInput,forwardInput};}\nControls planetary(core::Context*context,float dt,bool pointerCaptured,bool keyboardCaptured){gui::Vec2 mouse{};\n" + planet + "\nreturn controls;}\nvoid frame_input(std::shared_ptr<core::Context>ctx,bool projectGuiCapturesKeyboard,float dt){gui::Vec2 mouse_pos{};\n" + frame + "\n}\n};\n" + MAIN
 
 
 PREFIX = r'''
@@ -144,6 +168,9 @@ struct Context {
  bool is_mouse_button_held_safe(input::MouseButton)const noexcept{return false;}
  bool is_mouse_button_down_safe(input::MouseButton)const noexcept{return false;}
  ACTUAL_ACTIONS
+ mutable std::mutex windowKeyPressMutex{};
+ mutable WindowKeyPresses windowKeyPresses{};
+ bool windowKeyMessagesObserved{};
 };}
 namespace core=epochengine::core;
 namespace project_input=epochengine::project_input;
@@ -169,12 +196,17 @@ std::string_view playback_runtime_code_name(PlaybackRuntimeCode){return "success
 namespace epochengine::project_gameplay2d {std::string_view session_code_name(int){return "ready";}}
 struct GameplayPort {
  project_input::CompiledInputProfile profile;unsigned deliveries{};std::uint64_t deliveredIndex{};
+ project_input::ActionFrame deliveredFrame;std::size_t deliveredImpulses{};
  const auto*input_profile()const{return &profile;}bool active()const{return true;}
  void close(){}std::string_view diagnostic()const{return "test delivery port";}
  struct Result{int code{};epochengine::audio::PlaybackRuntimeCode audio_code{};};
- Result advance(const project_input::InputSnapshot&s,std::span<const project_input::ActionImpulse>,double){++deliveries;deliveredIndex=s.frame_index;return {};}
+ Result advance(const project_input::InputSnapshot&s,std::span<const project_input::ActionImpulse>impulses,double){++deliveries;deliveredIndex=s.frame_index;deliveredImpulses=impulses.size();
+  deliveredFrame=project_input::evaluate_action_frame(profile,s);CHECK(deliveredFrame);
+  CHECK(project_input::inject_action_impulses(profile,deliveredFrame,impulses)==project_input::InjectionCode::ready);return {};}
 };
-struct Controls{double elapsed_seconds{},forward{},right{},rise{},yaw{},pitch{},roll{};};
+namespace project_planetary_runtime{enum class Command{none,toggle_time_pause};}
+struct Controls{double elapsed_seconds{},forward{},right{},rise{},yaw{},pitch{},roll{};project_planetary_runtime::Command command{};};
+struct CameraSettingsPort { std::optional<previewgrid::CameraMode> camera; };
 '''
 FIELDS = r'''
  std::string m_projectId="fixture",m_projectRoot,m_inputProfilePath,m_projectInputStatus,m_actorStatus,m_audioStatus;
@@ -288,6 +320,20 @@ int main(int argc,char**argv){
  ctx->keys.reset();a.frame_input(ctx,false,.016f);CHECK(a.runtime_planar_axis(p::ActionSemantic::move_y,0)==1);
  CHECK(p::find_action(a.m_projectActionFrame,p::ActionSemantic::jump,*a.m_projectInput)->pressed);
  a.frame_input(ctx,false,.016f);CHECK(!p::find_action(a.m_projectActionFrame,p::ActionSemantic::jump,*a.m_projectInput)->pressed);
+ // GUI impulses reach the common non-2D project frame even while GUI focus
+ // suppresses physical input. They are consumed once, not replayed on idle.
+ CHECK(!a.m_gameplayRuntime);
+ a.m_pendingGuiActions[1]=p::ActionImpulse{p::ActionSemantic::move_y,16384,false};
+ a.m_pendingGuiActions[2]=p::ActionImpulse{p::ActionSemantic::jump,p::normalized_unit,true};
+ a.m_pendingGuiActions[4]=p::ActionImpulse{p::ActionSemantic::pause,p::normalized_unit,true};
+ a.frame_input(ctx,true,.016f);CHECK(p::find_action(a.m_projectActionFrame,p::ActionSemantic::jump,*a.m_projectInput)->pressed);
+ CHECK(std::abs(a.navigation(ctx.get(),false,true)[2]-16384.f/32767.f)<.0001f);
+ const auto guiPlanet=a.planetary(ctx.get(),.016f,true,true);
+ CHECK(std::abs(guiPlanet.forward-16384.0/32767.0)<.0001&&guiPlanet.command==project_planetary_runtime::Command::toggle_time_pause);
+ for(const auto& pending:a.m_pendingGuiActions)CHECK(!pending);
+ a.frame_input(ctx,true,.016f);CHECK(a.runtime_planar_axis(p::ActionSemantic::move_y,0)==0);
+ CHECK(!p::find_action(a.m_projectActionFrame,p::ActionSemantic::jump,*a.m_projectInput)->pressed);
+ CHECK(!p::find_action(a.m_projectActionFrame,p::ActionSemantic::pause,*a.m_projectInput)->pressed);
  hardware.devices[0].buttons[std::size_t(controller_input::Button::south)]=false;CHECK(controller_input::publish_provider_frame(hardware));
  hardware.devices[0].buttons[std::size_t(controller_input::Button::south)]=true;CHECK(controller_input::publish_provider_frame(hardware));
  a.frame_input(ctx,true,.016f);CHECK(!p::find_action(a.m_projectActionFrame,p::ActionSemantic::jump,*a.m_projectInput)->pressed);
@@ -295,6 +341,39 @@ int main(int argc,char**argv){
  // The2D path receives that same sample; it does not poll or re-sequence input.
  a.m_gameplayRuntime=std::make_unique<GameplayPort>();a.m_gameplayRuntime->profile=*a.m_projectInput;
  a.prepare_runtime_input();a.frame_input(ctx,false,.016f);CHECK(a.m_gameplayRuntime->deliveries==1&&a.m_gameplayRuntime->deliveredIndex==a.m_inputFrameIndex);
+ a.m_pendingGuiActions[1]=p::ActionImpulse{p::ActionSemantic::move_y,16384,false};
+ a.m_pendingGuiActions[2]=p::ActionImpulse{p::ActionSemantic::jump,p::normalized_unit,true};
+ a.frame_input(ctx,true,.016f);CHECK(a.m_gameplayRuntime->deliveredImpulses==2);
+ CHECK(p::find_action(a.m_gameplayRuntime->deliveredFrame,p::ActionSemantic::move_y,*a.m_projectInput)->value_q15==16384);
+ CHECK(p::find_action(a.m_projectActionFrame,p::ActionSemantic::move_y,*a.m_projectInput)->value_q15==16384);
+ a.frame_input(ctx,true,.016f);CHECK(a.m_gameplayRuntime->deliveredImpulses==0);
+ CHECK(!p::find_action(a.m_gameplayRuntime->deliveredFrame,p::ActionSemantic::jump,*a.m_projectInput)->pressed);
+#if defined(_WIN32)
+ hardware.devices[0].buttons[std::size_t(controller_input::Button::south)]=false;
+ CHECK(controller_input::publish_provider_frame(hardware));
+ const auto jumpAction=[&] {return p::find_action(a.m_gameplayRuntime->deliveredFrame,
+  p::ActionSemantic::jump,*a.m_projectInput);};
+ ctx->record_window_key_press(VK_SPACE,{});
+ auto sibling=std::make_shared<core::Context>();
+ a.frame_input(sibling,false,.016f);CHECK(!jumpAction()->pressed);
+ a.frame_input(ctx,false,.016f);
+ const auto shortPress=std::ranges::find(a.m_projectInputSnapshot.keyboard,p::KeyCode::space,&p::KeyboardSample::key);
+ CHECK(shortPress!=a.m_projectInputSnapshot.keyboard.end());
+ CHECK(shortPress->pressed&&!shortPress->held&&shortPress->press_modifiers==0u);
+ CHECK(jumpAction()->pressed);CHECK(jumpAction()->value_q15==0);
+ a.frame_input(ctx,false,.016f);CHECK(!jumpAction()->pressed);
+ ctx->record_window_key_press(VK_SPACE,{});
+ a.frame_input(ctx,true,.016f);CHECK(!jumpAction()->pressed);
+ a.frame_input(ctx,false,.016f);CHECK(!jumpAction()->pressed);
+ ctx->record_window_key_press(VK_SPACE,{});
+ ctx->clear_window_key_presses();
+ a.frame_input(ctx,false,.016f);CHECK(!jumpAction()->pressed);
+ ctx->keys.set(input::Key::Space);
+ ctx->record_window_key_press(VK_SPACE,{});
+ a.frame_input(ctx,false,.016f);CHECK(jumpAction()->pressed&&jumpAction()->value_q15==p::normalized_unit);
+ a.frame_input(ctx,false,.016f);CHECK(!jumpAction()->pressed&&jumpAction()->value_q15==p::normalized_unit);
+ ctx->keys.reset();
+#endif
  const auto oldIndex=a.m_inputFrameIndex;a.navigation(ctx.get(),false,false);a.planetary(ctx.get(),.016f,false,false);CHECK(a.m_inputFrameIndex==oldIndex);
  // Stop/reopen clears owned profiles/samples, never the unrelated Editor preset.
  a.shutdown_gameplay();CHECK(!a.m_projectInput&&!a.m_projectActionFrame&&a.m_inputFrameIndex==0);

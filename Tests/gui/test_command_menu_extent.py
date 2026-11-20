@@ -29,11 +29,13 @@ class CommandMenuExtent(unittest.TestCase):
 #include <cstddef>
 #include <optional>
 enum class TopMenu {None,File,Edit,Asset};
-struct Editor {TopMenu openMenu{},suppressedMenuHover{};}editor;
+struct Editor {TopMenu openMenu{},suppressedMenuHover{};bool showCommandMenu=true;}editor;
 struct TopMenuButton {TopMenu menu;};
 const std::array topMenus{TopMenuButton{TopMenu::File},TopMenuButton{TopMenu::Edit},TopMenuButton{TopMenu::Asset}};
-void frame(std::optional<std::size_t> hover,std::optional<std::size_t> press={},bool menusBlockedByModal=false){
+void frame(std::optional<std::size_t> hover,std::optional<std::size_t> press={},bool menusBlockedByModal=false,
+           std::optional<std::size_t> toggle={}){
  struct {std::optional<std::size_t> hovered_left,selected_left;}chromeResult{hover,press};
+ struct {std::optional<std::size_t> selected_index;}commandToggle{toggle};
  OWNER
 }
 int main(){
@@ -55,6 +57,8 @@ int main(){
  frame(3);assert(editor.openMenu==TopMenu::Asset&&editor.suppressedMenuHover==TopMenu::None);
  editor={};frame(1,1,true);assert(editor.openMenu==TopMenu::None);
  frame(0,0);assert(editor.openMenu==TopMenu::None);
+ editor.showCommandMenu=false;frame(1,1);assert(editor.openMenu==TopMenu::None);
+ editor.showCommandMenu=true;frame(1,1,false,0);assert(editor.openMenu==TopMenu::None);
 }
 '''.replace("OWNER", owner)
         forest_fixture.ForestPreviewActions()._compile_and_run(code)
@@ -93,7 +97,7 @@ int main(){
         if not tools or not kits:
             self.skipTest("Installed MSVC/SDK unavailable")
         commands = (ROOT / "Engine/src/editor/application/editor.frame_command_menus.inl").read_text(encoding="utf-8")
-        api = (ROOT / "Engine/modules/gui.engine.ixx").read_text(encoding="utf-8")
+        api = (ROOT / "Engine/modules/gui/gui.engine.ixx").read_text(encoding="utf-8")
         asset = definition(commands, '        open_dropdown("Asset", TopMenu::Asset, [&]()') + ");"
         collector = definition(commands,"        enum class CommandMenuGroup",True)
         collector += '\nCommandMenuGroup commandMenuGroup{CommandMenuGroup::root};\n'
@@ -115,7 +119,9 @@ int main(){
         scratch.mkdir(parents=True, exist_ok=True)
         proof.mkdir(parents=True, exist_ok=True)
         configured = subprocess.run(["cmake", "-S", str(GUI), "-B", str(portable_build),
-            "-G", "Visual Studio 17 2022", "-A", "x64", "-DEPOCHGUI_BUILD_TESTS=ON"],
+            "-G", "Visual Studio 17 2022", "-A", "x64", "-DEPOCHGUI_BUILD_TESTS=ON",
+            "-DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded",
+            "-DCMAKE_EXE_LINKER_FLAGS_DEBUG=/INCREMENTAL:NO"],
             cwd=ROOT, capture_output=True, text=True, timeout=90)
         (proof / "portable-configure.log").write_text(configured.stdout+configured.stderr, encoding="utf-8")
         self.assertEqual(configured.returncode, 0, configured.stdout+configured.stderr)
@@ -125,6 +131,7 @@ int main(){
 #include <cassert>
 #include <cmath>
 #include <cstdint>
+#include <crtdbg.h>
 #include <functional>
 #include <optional>
 #include <span>
@@ -162,11 +169,15 @@ void add_entity(Editor&,std::string_view kind){assert(kind=="cube"&&editor.openM
 void push_editor_log(Editor&,std::string){}
 bool modal_visible_now(){return false;}
 int main(){
+#ifdef _DEBUG
+ _CrtSetReportMode(_CRT_ASSERT,_CRTDBG_MODE_FILE);
+ _CrtSetReportFile(_CRT_ASSERT,_CRTDBG_FILE_STDERR);
+#endif
  for(float rowHeight:{24.f,42.f,64.f})for(bool package:{false,true})for(bool authoring:{false,true}){
   editor={};editor.openMenu=TopMenu::Asset;application={package,authoring};added=surfaceCalls=0;
   COLLECTOR
   ASSET
-  assert(commandMenuActions.size()==1u+(package?1u:0u)+(authoring?7u:0u));
+  assert(commandMenuActions.size()==1u+(package?1u:0u)+(authoring?8u:0u));
   std::vector<gui_lib::CommandMenuItemSpec> specs;
   for(const auto& command:commandMenuActions){auto o=command.options;o.label=command.label;o.shortcut=command.shortcut;
    assert(o.command_id!=0);specs.push_back({.id=o.command_id,.label=o.label,.shortcut=o.shortcut,

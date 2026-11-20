@@ -42,6 +42,7 @@ module;
 #include "engine.config.hpp"
 #include "epoch.edition.hpp"
 #include "epoch.build_layout.hpp"
+#include <platform.ai_source_access.hpp>
 #if EPOCH_EDITION_PUBLIC
 #include "ai/editor.ai_file_scope.hpp"
 #endif
@@ -102,6 +103,9 @@ module;
 #include "ai/editor.ai_project_model_recovery.hpp"
 #include "ai/editor.build_pressure.hpp"
 #include "../render/context.passive_scoring.hpp"
+#if defined(__ANDROID__) && defined(EPOCH_USING_SDL) && EPOCH_USING_SDL == 1
+#include "../platform/android/platform.project_transfer.hpp"
+#endif
 
 module editor.core;
 
@@ -160,6 +164,7 @@ import editor.authoring_history;
 import voxel.field;
 import forest.factory;
 import forest.preview_mesh;
+import project.lightning;
 import media.timeline_preview;
 import package.catalog;
 import package.registry;
@@ -171,6 +176,7 @@ import render.arcade;
 import editor.canvas2d_scene;
 import editor.project_textures;
 #if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
+import asset.tilemap_artifact;
 import editor.tilemap_workspace;
 #endif
 import render.canvas2d;
@@ -199,6 +205,45 @@ import updater.config;
 import updater.source_access;
 import updater.system;
 
+#if defined(__ANDROID__) && defined(EPOCH_USING_SDL) && EPOCH_USING_SDL == 1
+extern "C" JNIEXPORT jboolean JNICALL
+Java_org_epochengine_runtime_EpochActivity_publishProjectArchive(
+    JNIEnv* env, jclass, const jstring stageToken, const jstring idToken)
+{
+    using namespace epochengine::platform;
+    try
+    {
+        constexpr std::string_view stagePrefix = ".project-import-";
+        const auto stage = android::read_project_transfer_token(*env, stageToken);
+        const auto id = android::read_project_transfer_token(*env, idToken);
+        if (!stage.starts_with(stagePrefix) || stage.size() <= stagePrefix.size()
+            || stage.find_first_not_of("0123456789", stagePrefix.size()) != std::string::npos
+            || !android::valid_archive_project_id(id)) return JNI_FALSE;
+
+        namespace fs = std::filesystem;
+        const char* storage = SDL_GetAndroidInternalStoragePath();
+        const fs::path privateRoot{storage ? storage : ""};
+        if (!privateRoot.is_absolute()) return JNI_FALSE;
+        const auto runtime = fs::canonical(privateRoot) / "epoch";
+        const auto staged = runtime / stage;
+        const auto source = staged / "project";
+        const auto projects = runtime / "Projects";
+        if (!fs::is_directory(fs::symlink_status(runtime))
+            || !fs::is_directory(fs::symlink_status(staged))
+            || !fs::is_directory(fs::symlink_status(source))
+            || !fs::is_directory(fs::symlink_status(projects))) return JNI_FALSE;
+
+        std::error_code error;
+        return filesystem::atomic_publish_new_same_filesystem(source, projects / id, error)
+            ? JNI_TRUE : JNI_FALSE;
+    }
+    catch (...)
+    {
+        return JNI_FALSE;
+    }
+}
+#endif
+
 namespace epochengine
 {
     namespace
@@ -211,6 +256,7 @@ namespace epochengine
 #include "application/editor.application_work_admission.inl"
 #include "application/editor.application_scene_selection.inl"
         [[nodiscard]] bool editor_automation_input_reserved(const EditorState&, const AiChat&);
+        [[nodiscard]] bool editor_assistant_work_active(const EditorState&, const AiChat&);
 #include "application/editor.application_pane_routing.inl"
 #include "application/editor.application_scene_transactions.inl"
 #include "application/editor.application_layout_persistence.inl"
@@ -341,22 +387,33 @@ namespace epochengine
         {
             result.scene_input_captured = true;
             editor.openMenu = TopMenu::None;
-            editor.layoutDrag = EditorLayoutDrag::None;
-            editor.layoutDividerDrag = {};
+            // Layout inspection stays interactive across automation frames.
+            // The divider owner cancels capture for modal/floating input gates.
             // End older floating-owner gates before this narrower frame scope;
             // their RAII input state must retire in the original nesting order.
             aiModelManagerBackgroundInput.reset();
             editorSettingsBackgroundInput.reset();
         }
         std::optional<gui::ScopedInputSuppression> automationBackgroundInput;
-        if (automationInputReserved) automationBackgroundInput.emplace();
+        const auto canInspectAutomation = [&](bool continueLayoutDrag = false) noexcept
+        {
+            const bool ownLayoutGrab = continueLayoutDrag
+                && editor.layoutDrag != EditorLayoutDrag::None
+                && !nativeDockProjection.active && !editor.paneTitleDragActive
+                && !editor.floatingGuiWindow.floating.dragging
+                && !editor.floatingGuiWindow.floating.resizing;
+            return !modal_visible_now() && !floating_gui_visible()
+                && (!pointerGrabActive || ownLayoutGrab);
+        };
+        if (automationInputReserved)
+            automationBackgroundInput.emplace(true, canInspectAutomation());
 #include "application/editor.frame_toolbar_dock_targets.inl"
 #include "application/editor.frame_outliner.inl"
 #include "application/editor.frame_inspector.inl"
 #include "application/editor.frame_viewport.inl"
 #include "application/editor.frame_bottom_docks.inl"
-        // Assistant Stop and human approval are never hidden behind the
-        // background editor reservation. Native Close stays backend-owned.
+        // Assistant shows a draft and Stop while work owns project input.
+        // Native Close stays backend-owned.
         automationBackgroundInput.reset();
 #include "application/editor.frame_assistant_chat.inl"
         automationInputReserved = editor_automation_input_reserved(editor, chat);
@@ -365,7 +422,7 @@ namespace epochengine
             result.scene_input_captured = true;
             aiModelManagerBackgroundInput.reset();
             editorSettingsBackgroundInput.reset();
-            automationBackgroundInput.emplace();
+            automationBackgroundInput.emplace(true, canInspectAutomation());
         }
 #include "application/editor.frame_command_menus.inl"
 #include "application/editor.frame_consent_settings.inl"

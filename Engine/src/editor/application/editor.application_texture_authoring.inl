@@ -943,6 +943,28 @@
                 && entity.type != "Spawn";
         }
 
+        [[nodiscard]] std::optional<bool> edit_selected_gui_image_path(
+            EditorState& editor, std::string_view path)
+        {
+            const auto sceneId = editor.selectedEntityId;
+            const auto index = editor_entity_index(editor, sceneId);
+            if (!index)
+                return std::nullopt;
+            const auto& type = editor.entities[*index].type;
+            if (type != "GuiImage" && type != "GuiImageButton")
+                return std::nullopt;
+
+            auto* document = synchronize_gui_document(editor);
+            const auto mapped = editor.guiDocumentWidgets.find(sceneId);
+            if (!document || mapped == editor.guiDocumentWidgets.end())
+                return false;
+            const auto widget = document->widget(mapped->second);
+            if (!widget || !update_gui_widget_image_path(*document, *widget, path))
+                return false;
+            editor.guiContentEditorWidget = {};
+            return true;
+        }
+
         void assign_selected_project_texture(
             EditorState& editor)
         {
@@ -956,6 +978,16 @@
                 return;
             }
             auto material = controller->selected_material();
+            if (material)
+            {
+                if (const auto edited = edit_selected_gui_image_path(editor, material->logical_path))
+                {
+                    editor.projectTextureStatus = *edited
+                        ? "Selected texture assigned to the GUI widget."
+                        : "The GUI document rejected the image assignment.";
+                    return;
+                }
+            }
             const auto handle = editor.sceneDocument.find(
                 authoring::scene::ObjectId{editor.selectedEntityId});
             if (!material || !handle)
@@ -993,6 +1025,13 @@
 
         void clear_selected_project_texture(EditorState& editor)
         {
+            if (const auto edited = edit_selected_gui_image_path(editor, {}))
+            {
+                editor.projectTextureStatus = *edited
+                    ? "Image cleared from the GUI widget."
+                    : "The GUI document rejected clearing the image.";
+                return;
+            }
             const auto handle = editor.sceneDocument.find(
                 authoring::scene::ObjectId{editor.selectedEntityId});
             if (!handle)

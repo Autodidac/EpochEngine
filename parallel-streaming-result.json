@@ -1,0 +1,1 @@
+{"actual_module":true,"scheduler_workers":4,"distinct_claims":4,"real_build_overlap":true,"reverse_completions":true,"serial_determinism":true,"cancel_running_and_queued":true,"stale_generation":true,"invalid_mesh_release":true,"aggregate_byte_budget":true,"legacy_single_api":true,"gpu":false}

@@ -71,7 +71,7 @@
             return true;
         };
 
-        for (auto& command : consume_detached_ai_chat_commands(ctx.get()))
+        for (auto& command : consume_detached_ai_chat_commands(ctx.get(), automationInputReserved))
         {
             switch (command.kind)
             {

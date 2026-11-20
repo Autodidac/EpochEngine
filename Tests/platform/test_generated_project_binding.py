@@ -108,6 +108,9 @@ class GeneratedProjectBinding(unittest.TestCase):
 #include <array>
 #include <algorithm>
 #include <cassert>
+#include <cstdio>
+#include <cstdlib>
+#include <exception>
 #include <cctype>
 #include <cstdint>
 #include <filesystem>
@@ -118,6 +121,8 @@ class GeneratedProjectBinding(unittest.TestCase):
 #include <string>
 #include <string_view>
 #include <utility>
+#undef assert
+#define assert(condition) do { if (!(condition)) { std::fprintf(stderr,"Generated binding fixture line %d: %s\n",__LINE__,#condition); std::exit(1); } } while(false)
 namespace fs=std::filesystem;
 enum class EditorProjectKind {Game,Tool,Editor,EngineDevelopment};
 struct CapabilityPolicy {};
@@ -162,7 +167,18 @@ fs::path resolve_repo_relative_path(const fs::path&p,const fs::path&r){return p.
 '''
         public = "#define EPOCH_SOURCE_EDITION_PUBLIC 1" in (ROOT / "Engine/include/epoch.edition.hpp").read_text()
         prefix = prefix.replace("PUBLIC_MARKER", str(public).lower())
-        body = prefix + selected + "\nnamespace epochengine {\n" + inspected + "\nnamespace project {\n" + binding_type + bound + "\n}}\n"
+        android = r'''
+std::string androidStoragePath;
+const char* SDL_GetAndroidInternalStoragePath(){return androidStoragePath.empty()?nullptr:androidStoragePath.c_str();}
+#define __ANDROID__ 1
+#define EPOCH_USING_SDL 1
+#define BindRuntimeProject BindAndroidRuntimeProject
+''' + bound + r'''
+#undef BindRuntimeProject
+#undef EPOCH_USING_SDL
+#undef __ANDROID__
+'''
+        body = prefix + selected + "\nnamespace epochengine {\n" + inspected + "\nnamespace project {\n" + binding_type + bound + android + "\n}}\n"
         expression = shell.split("        const std::string entrySourceText =", 1)[1].split(
             "        const std::string sourceAdmissionCmake =", 1)[0]
         body += definition(registry, "    [[nodiscard]] static std::string cxx_escape(")
@@ -173,17 +189,18 @@ fs::path resolve_repo_relative_path(const fs::path&p,const fs::path&r){return p.
         body += definition(owned_shell, "    [[nodiscard]] static std::string generated_child_project_link_dependencies(")
         body += definition(owned_shell, "    static void repair_generated_project_link_dependencies(")
         body += '''
-std::string generated_entry(){
+std::string generated_entry(bool softwareTool=false){
 struct Spec{std::string project_id="copied",project_name="Copied",tilemap_path,
 input_profile_path="Assets/Config/input_profile.epochinput",sprite_animation_path,
 audio_profile_path,gui_path;EditorProjectKind kind=EditorProjectKind::Game;}spec;
+if(softwareTool){spec.kind=EditorProjectKind::Tool;spec.input_profile_path.clear();}
 const std::string selfTestTitle="Copied",versionTitle="Copied: ",integrationMode="static runtime";
 const std::string entrySourceText=''' + expression + "\nreturn entrySourceText;}\n"
         body += r'''
 std::string manifest(const fs::path& oldRoot,std::string_view edition="epoch.development.site.v1",std::string_view id="copied"){
 return "{\"project_format\":\"epoch-project-v1\",\"build_profile\":\"epoch-runtime-static\",\"id\":\""+std::string(id)+"\",\"display_name\":\"Copied\",\"kind\":\"game\",\"engine_edition\":\""+std::string(edition)+"\",\"scene\":\""+(oldRoot/"worlds/main.epoch").generic_string()+"\",\"entry_source\":\""+(oldRoot/"source/epoch.main.cpp").generic_string()+"\"}";
 }
-int main(){
+int main() try {
 for (const bool debug : {false, true}) {
     const auto complete=generated_child_project_link_dependencies(debug);
     for (const auto* name : {"EpochPlatformEngine.lib;", "EpochAudioEngine.lib;", "EpochMediaEngine.lib;"})
@@ -203,15 +220,25 @@ auto& executable=epochengine::core::path::executableDirectory;
 executable=copied/"build/bin/windows/Debug/x64";fs::create_directories(executable);
 auto& environment=epochengine::core::env::values;
 environment["EPOCH_EDITOR_PROJECT_ROOT"]=old.generic_string();
+const auto stagedProfile=executable/"Assets/AI/project_ai.epochai";
+const auto ownedProfile=copied/"Assets/AI/project_ai.epochai";
+write(stagedProfile,"stale staged profile\n");
+environment["EPOCH_PROJECT_AI_PROFILE"]=stagedProfile.generic_string();
 auto binding=epochengine::project::BindRuntimeProject("copied");
 assert(binding.succeeded&&fs::path(binding.project_root)==fs::canonical(copied));
 assert(fs::path(binding.scene_path)==fs::canonical(copied/"worlds/main.epoch"));
 assert(environment["EPOCH_EDITOR_PROJECT_ROOT"]==copied.generic_string());
+assert(!fs::exists(ownedProfile)&&fs::exists(stagedProfile));
+assert(fs::path(environment.at("EPOCH_PROJECT_AI_PROFILE"))==ownedProfile);
 // Wrong identity/edition cannot bind, and failed startup leaves ambient state unchanged.
 const auto validEnvironment=environment;
-assert(!epochengine::project::BindRuntimeProject("wrong").succeeded);assert(environment==validEnvironment);
+const auto wrongIdentity=epochengine::project::BindRuntimeProject("wrong");
+assert(!wrongIdentity.succeeded&&wrongIdentity.summary=="Generated project identity does not match this executable.");
+assert(environment==validEnvironment);
 write(copied/"project.epoch.json",manifest(old,"epoch.public.github.v1"));
-assert(!epochengine::project::BindRuntimeProject("copied").succeeded);assert(environment==validEnvironment);
+const auto wrongEdition=epochengine::project::BindRuntimeProject("copied");
+assert(!wrongEdition.succeeded&&wrongEdition.summary=="Generated project source edition does not match this executable.");
+assert(environment==validEnvironment);
 // Legacy Windows metadata also rebases after transfer to another host path.
 write(copied/"project.epoch.json",manifest(fs::path{"C:/old-windows-project"}));
 assert(epochengine::project::BindRuntimeProject("copied").succeeded);
@@ -224,9 +251,13 @@ assert(!epochengine::project::BindRuntimeProject("copied").succeeded);
 write(copied/"project.epoch.json",manifest(old));
 environment["EPOCH_EDITOR_PROJECT_ID"]="previous-id";
 environment["EPOCH_EDITOR_PROJECT_ROOT"]="previous-root";
+environment["EPOCH_PROJECT_AI_PROFILE"]=stagedProfile.generic_string();
 const auto beforeFailedSet=environment;
-epochengine::core::env::failName="EPOCH_EDITOR_PROJECT_MANIFEST";
-assert(!epochengine::project::BindRuntimeProject("copied").succeeded);assert(environment==beforeFailedSet);
+for (const auto* key : {"EPOCH_EDITOR_PROJECT_MANIFEST","EPOCH_PROJECT_AI_PROFILE"}) {
+    epochengine::core::env::failName=key;
+    assert(!epochengine::project::BindRuntimeProject("copied").succeeded);
+    assert(environment==beforeFailedSet);
+}
 epochengine::core::env::failName.clear();
 // A closer foreign project is rejected; binding never skips it for an outer match.
 write(executable/"project.epoch.json",manifest(old,"epoch.development.site.v1","foreign"));
@@ -234,7 +265,66 @@ assert(!epochengine::project::BindRuntimeProject("copied").succeeded);
 fs::remove(executable/"project.epoch.json");
 fs::create_symlink(copied/"project.epoch.json",executable/"project.epoch.json");
 assert(!epochengine::project::BindRuntimeProject("copied").succeeded);
+// An Android package binds the exact Activity-owned leaf. A manifest beside
+// it or an inherited project root may never substitute for packaged assets.
+const auto appFiles=base/"android-files";
+const auto package=appFiles/"epoch/project";
+const auto assets=appFiles/"epoch/assets";
+write(appFiles/"epoch/project.epoch.json",manifest(old));
+write(appFiles/"epoch/worlds/main.epoch","scene \"Parent\"\n");
+auto& storage=epochengine::project::androidStoragePath;
+environment["EPOCH_RUNTIME_ROOT"]="inherited-runtime-root";
+environment["EPOCH_ASSET_ROOT"]="inherited-asset-root";
+environment["EPOCH_LOG_DIR"]="inherited-log-dir";
+const auto beforeAndroidBinding=environment;
+assert(!epochengine::project::BindAndroidRuntimeProject("copied").succeeded);
+storage="relative-android-directory";
+assert(!epochengine::project::BindAndroidRuntimeProject("copied").succeeded);
+storage=appFiles.generic_string();
+fs::create_directory(package);
+assert(!epochengine::project::BindAndroidRuntimeProject("copied").succeeded);
+assert(environment==beforeAndroidBinding);
+write(package/"project.epoch.json",manifest(old));
+write(package/"worlds/main.epoch","scene \"Packaged\"\n");
+assert(!epochengine::project::BindAndroidRuntimeProject("copied").succeeded);
+assert(environment==beforeAndroidBinding);
+fs::create_directories(assets/"fonts");
+write(package/"project.epoch.json","");
+const auto emptyManifest=epochengine::project::BindAndroidRuntimeProject("copied");
+assert(!emptyManifest.succeeded&&emptyManifest.summary=="The selected project manifest is empty or unreadable.");
+assert(environment==beforeAndroidBinding);
+write(package/"project.epoch.json",manifest(old));
+for (const auto* key : {"EPOCH_RUNTIME_ROOT","EPOCH_ASSET_ROOT","EPOCH_LOG_DIR"}) {
+    epochengine::core::env::failName=key;
+    assert(!epochengine::project::BindAndroidRuntimeProject("copied").succeeded);
+    assert(environment==beforeAndroidBinding);
+}
+epochengine::core::env::failName.clear();
+const auto packagedBinding=epochengine::project::BindAndroidRuntimeProject("copied");
+assert(packagedBinding.succeeded&&fs::path(packagedBinding.project_root)==fs::canonical(package));
+assert(fs::path(packagedBinding.scene_path)==fs::canonical(package/"worlds/main.epoch"));
+assert(environment["EPOCH_EDITOR_PROJECT_ROOT"]==package.generic_string());
+assert(environment["EPOCH_RUNTIME_ROOT"]==package.parent_path().generic_string());
+assert(environment["EPOCH_ASSET_ROOT"]==assets.generic_string());
+assert(environment["EPOCH_LOG_DIR"]==(package.parent_path()/"logs").generic_string());
+const auto boundAndroidEnvironment=environment;
+assert(!epochengine::project::BindAndroidRuntimeProject("wrong").succeeded);
+assert(environment==boundAndroidEnvironment);
+const auto displaced=appFiles/"elsewhere";
+fs::rename(package,displaced);
+fs::create_directory_symlink(displaced,package);
+assert(!epochengine::project::BindAndroidRuntimeProject("copied").succeeded);
+assert(environment==boundAndroidEnvironment);
+fs::remove(package);
+fs::rename(displaced,package);
+fs::rename(assets,displaced);
+fs::create_directory_symlink(displaced,assets);
+assert(!epochengine::project::BindAndroidRuntimeProject("copied").succeeded);
+assert(environment==boundAndroidEnvironment);
+fs::remove(assets);
+fs::rename(displaced,assets);
 write(fs::current_path()/"generated.cpp",generated_entry());
+write(fs::current_path()/"calculator.cpp",generated_entry(true));
 for (const auto edition : {"development", "public"}) {
     const auto defaultPath=std::string{"$(EpochRepoRoot)build\\bin\\windows\\"}+edition+"\\$(Platform)\\$(Configuration)\\";
     write(fs::current_path()/(std::string{"library-"}+edition+".xml"),
@@ -242,6 +332,9 @@ for (const auto edition : {"development", "public"}) {
 }
 write(fs::current_path()/"library-legacy.xml",
     generated_child_project_library_properties("$(EpochRepoRoot)x64\\$(Configuration)\\","development",false));
+} catch (const std::exception& error) {
+    std::fprintf(stderr,"Generated binding fixture error: %s\n",error.what());
+    return 2;
 }
 '''
         parent = ROOT / "build/contract-tests"
@@ -261,12 +354,41 @@ write(fs::current_path()/"library-legacy.xml",
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             generated = scratch / "generated.cpp"
             self.assertIn('BindRuntimeProject("copied")', generated.read_text())
-            result = subprocess.run([str(tool / "bin/Hostx64/x64/cl.exe"), "/nologo", "/std:c++latest", "/EHsc", "/c",
+            entry_compile = [str(tool / "bin/Hostx64/x64/cl.exe"), "/nologo", "/std:c++latest", "/EHsc",
                 "/I" + str(tool / "include"), "/I" + str(kit / "ucrt"), "/I" + str(kit / "um"),
-                "/I" + str(kit / "shared"), "/I" + str(ROOT / "Engine/include"),
-                "/Fo" + str(scratch / "generated.obj"), str(generated)],
+                "/I" + str(kit / "shared"), "/I" + str(ROOT / "Engine/include")]
+            result = subprocess.run([*entry_compile, "/c", "/Fo" + str(scratch / "generated.obj"), str(generated)],
                 cwd=scratch, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stdout[-5000:] + result.stderr)
+            calculator = scratch / "calculator.cpp"
+            port = scratch / "calculator-port.cpp"
+            port.write_text(r'''
+#include <epoch.engine.hpp>
+#include <cstdio>
+extern "C" void core_log_write(unsigned int,const char*,const char*){}
+void epochengine::core::ParseCommandLine(int argc,char** argv){
+ for(int index=1;index!=argc;++index)std::puts(argv[index]);
+}
+void epochengine::core::RunEngine(){}
+namespace epochengine::project {
+RuntimeProjectBinding BindRuntimeProject(std::string_view id) noexcept {return {.succeeded=id=="copied"};}
+ArtifactAcceptanceReport VerifyArtifacts(const ArtifactAcceptanceRequest&) noexcept {return {};}
+ArtifactRegenerationReport VerifyLibraryRegeneration(const ArtifactAcceptanceRequest&) noexcept {return {};}
+GameplayAcceptanceReport VerifyPlayable2D(const ArtifactAcceptanceRequest&) noexcept {return {};}
+}
+''', encoding="utf-8")
+            calculator_binary = scratch / "calculator-args.exe"
+            result = subprocess.run([*entry_compile, "/Fe" + str(calculator_binary), str(calculator), str(port), "/link",
+                "/LIBPATH:" + str(tool / "lib/x64"), "/LIBPATH:" + str(sdk / "Lib" / kit.name / "um/x64"),
+                "/LIBPATH:" + str(sdk / "Lib" / kit.name / "ucrt/x64")],
+                cwd=scratch, capture_output=True, text=True, timeout=60)
+            self.assertEqual(result.returncode, 0, result.stdout[-5000:] + result.stderr)
+            # The project profile owns its default backend; this entry forwards user overrides.
+            for supplied, expected in (([], []), (["--backend", "sdl"], ["--backend", "sdl"]),
+                                       (["--renderer=opengl"], ["--renderer=opengl"])):
+                result = subprocess.run([str(calculator_binary), *supplied], cwd=scratch, capture_output=True, text=True, timeout=10)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertEqual(result.stdout.splitlines(), expected)
             for edition in ("development", "public", "legacy"):
                 properties = (scratch / f"library-{edition}.xml").read_text()
                 project = scratch / f"library-{edition}.proj"

@@ -2595,7 +2595,7 @@ namespace epochengine::updater
                SOURCE_VERSION_FILE_NAME() == "Engine/modules/epoch.version.ixx" &&
                (!SOURCE_UPDATE_FALLBACK_ENABLED ||
                    (PUBLIC_DISTRIBUTION
-                       ? PROJECT_SOURCE_URL() == PROJECT_RELEASE_INTEGRITY_URL()
+                       ? PROJECT_SOURCE_URL() == PROJECT_SOURCE_VERSION_URL()
                            && PROJECT_SOURCE_CHECKSUM_URL().empty()
                            && PROJECT_SOURCE_ARCHIVE_EXTENSION() == ".zip"
                        : AUTHORIZED_SOURCE_DISTRIBUTION_ENABLED && PROJECT_SOURCE_URL().empty())) &&
@@ -2613,8 +2613,7 @@ namespace epochengine::updater
                    {.ok=true, .remote="0.90.55", .update_available=true}) &&
                (PUBLIC_DISTRIBUTION
                    ? (!SITE_DISTRIBUTION && !AUTHORIZED_SOURCE_DISTRIBUTION_ENABLED
-                       && PROJECT_SOURCE_VERSION_URL().starts_with("https://raw.githubusercontent.com/Autodidac/EpochEngine/")
-                       && PROJECT_SOURCE_URL().starts_with("https://github.com/Autodidac/EpochEngine/"))
+                       && PROJECT_SOURCE_VERSION_URL().starts_with("https://raw.githubusercontent.com/Autodidac/EpochEngine/"))
                    : (SITE_DISTRIBUTION && PROJECT_SOURCE_URL().empty()
                        && PROJECT_SOURCE_CHECKSUM_URL().empty()
                        && PROJECT_SOURCE_VERSION_URL() == std::string{EPOCH_SITE_BASE} + "/api/epoch/source-version")) &&

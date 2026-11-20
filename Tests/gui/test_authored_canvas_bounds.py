@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[2]
 OWNER = ROOT / "Engine/src/editor/application/editor.application_gui_authoring.inl"
 GUI = ROOT / "Engine/src/epochgui/gui.engine.cpp"
 FRAME = ROOT / "Engine/src/epochgui/controls/gui.frame_lifecycle.inl"
-API = ROOT / "Engine/modules/gui.engine.ixx"
+API = ROOT / "Engine/modules/gui/gui.engine.ixx"
 
 
 def actual_fixture(owner_text=None):
@@ -106,6 +106,7 @@ void consume_left_release(){}
 CLIP
 POINTER
 void panel_rect(Vec2,Vec2){}
+void selection_outline(Vec2,Vec2,float){}
 void set_cursor(Vec2 p){g_frame.cursor=p;}
 float content_available_width(float x){return (std::max)(1.0f,g_frame.contentMax.x-x);}
 float space_advance(float scale){return 8*scale;}
@@ -122,11 +123,14 @@ std::optional<std::size_t> inline_button_row(std::span<const InlineButtonSpec> i
 }
 }
 using namespace authoring::gui;
+enum class EditorProjectKind{Tool};
+constexpr std::string_view editor_project_kind_name(EditorProjectKind){return "Software / Tool";}
 struct EditorState {
  GuiDocument* document{};VIEW_STATE GuiCanvasViewState guiCanvasView{};gui::DragSurfaceState guiCanvasWidgetDrag;
  WidgetHandle guiCanvasWidgetDragHandle{};
  float guiCanvasWidgetDragOriginX{},guiCanvasWidgetDragOriginY{},guiCanvasWidgetDragPreviewX{},guiCanvasWidgetDragPreviewY{};
  std::string guiDocumentStatus;std::vector<WidgetHandle> selected;
+ std::string projectKind;
 };
 GuiDocument* synchronize_gui_document(EditorState& state){return state.document;}
 std::string gui_widget_display_text(const WidgetView& widget){return widget.descriptor.name;}
@@ -355,12 +359,13 @@ class AuthoredCanvasBounds(unittest.TestCase):
         proof.mkdir(parents=True, exist_ok=True)
         source = proof / "editor.canvas_bounds_contract.cpp"
         source.write_text(actual_fixture(), encoding="utf-8")
-        modules = [ROOT / "Engine/modules/authoring.document.ixx", ROOT / "Engine/modules/authoring.gui_document.ixx"]
+        modules = [ROOT / "Engine/modules/authoring/authoring.document.ixx", ROOT / "Engine/modules/authoring/authoring.gui_document.ixx"]
         portable = ROOT / "Engine/dep/EpochGui"
         modules += [portable / "modules/epoch.gui.ixx", portable / "modules/epoch.gui.input.ixx"]
         (proof / "CMakeLists.txt").write_text(f'''cmake_minimum_required(VERSION 3.30)
 project(AuthoredCanvasBounds LANGUAGES CXX)
 add_executable(canvas_bounds "{source.as_posix()}" "{(portable/'src/epochgui/input.cpp').as_posix()}")
+set_property(TARGET canvas_bounds PROPERTY MSVC_DEBUG_INFORMATION_FORMAT Embedded)
 target_compile_features(canvas_bounds PRIVATE cxx_std_23)
 target_compile_options(canvas_bounds PRIVATE /W3 /WX /utf-8)
 target_sources(canvas_bounds PRIVATE FILE_SET CXX_MODULES

@@ -13,14 +13,17 @@ module;
 #include <numbers>
 #include <memory>
 #include <string_view>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
 
 module editor.canvas2d_scene;
 
-import visuals.engine;
 import render.canvas2d_cpu;
+import render.canvas2d_tilemap;
+import render.device;
+import visuals.engine;
 
 namespace epochengine::editor_canvas2d
 {
@@ -185,8 +188,10 @@ namespace epochengine::editor_canvas2d
         {
             return result;
         }
-        if (request.entities.size() > request.project.maximum_sprites_per_batch
-            * static_cast<std::uint64_t>(request.project.maximum_batches))
+        const std::uint64_t maximumSprites = request.project.maximum_sprites_per_batch
+            * static_cast<std::uint64_t>(request.project.maximum_batches);
+        if (request.entities.size() > maximumSprites
+            || request.tile_sprites.size() > maximumSprites)
         {
             result.code = BuildCode::capacity_exceeded;
             return result;
@@ -288,6 +293,40 @@ namespace epochengine::editor_canvas2d
                 sprite.order = order_for(entity);
                 sprite.stable_sequence = entity.stable_id;
                 content.sprites.push_back(sprite);
+            }
+
+            if (request.tile_sprites.size() > maximumSprites - content.sprites.size())
+            {
+                result.code = BuildCode::capacity_exceeded;
+                return result;
+            }
+            if (!request.tile_sprites.empty())
+            {
+                std::unordered_map<canvas2d::LogicalTextureReference,
+                    const canvas2d::cpu::TextureView*,
+                    canvas2d::scene_content::LogicalTextureReferenceHash> tileTextures{};
+                tileTextures.reserve(content.resources.bindings.textures.size());
+                for (const auto& texture : content.resources.bindings.textures)
+                    tileTextures.emplace(texture.logical, &texture);
+
+                content.sprites.reserve(content.sprites.size() + request.tile_sprites.size());
+                for (auto sprite : request.tile_sprites)
+                {
+                    if (sprite.material.source == canvas2d::SpriteSourceKind::texture)
+                    {
+                        const auto found = tileTextures.find(sprite.material.logical_texture);
+                        if (found == tileTextures.end())
+                        {
+                            result.code = BuildCode::invalid_resources;
+                            return result;
+                        }
+                        const auto& texture = *found->second;
+                        canvas2d::tilemap_runtime::apply_texture_encoding(
+                            sprite.material, texture.color_space,
+                            texture.alpha_encoding == canvas2d::cpu::AlphaEncoding::premultiplied);
+                    }
+                    content.sprites.push_back(std::move(sprite));
+                }
             }
         }
         catch (...)
@@ -425,9 +464,45 @@ namespace epochengine::editor_canvas2d
         if (build_scene(missingResources).code != BuildCode::invalid_resources)
             return ContractFailure::resource_closure;
 
+        auto tile = built.content.sprites[1];
+        tile.sprite = {99u, 1u};
+        tile.stable_sequence = 99u;
+        tile.transform.position = {-5.0f, 2.0f};
+        tile.material.stable_key = 77u;
+        tile.material.alpha = canvas2d::SpriteAlphaMode::premultiplied;
+        tile.material.color_space = canvas2d::SpriteColorSpace::srgb;
+        tile.material.sampler.min_filter = FilterMode::nearest;
+        BuildRequest tileRequest{
+            .project = project,
+            .resources = resources,
+            .source_revision = 9,
+            .tile_sprites = {&tile, 1u}};
+        const auto tileOnly = build_scene(tileRequest);
+        if (!tileOnly || tileOnly.content.sprites.size() != 1
+            || tileOnly.content.sprites[0].material.alpha != canvas2d::SpriteAlphaMode::straight
+            || tileOnly.content.sprites[0].material.color_space != canvas2d::SpriteColorSpace::linear
+            || tileOnly.content.sprites[0].material.sampler.min_filter != FilterMode::nearest)
+        {
+            return ContractFailure::textured_material;
+        }
+        auto wrongTile = tile;
+        ++wrongTile.material.logical_texture.artifact_revision;
+        BuildRequest wrongRevision = tileRequest;
+        wrongRevision.tile_sprites = {&wrongTile, 1u};
+        if (build_scene(wrongRevision).code != BuildCode::invalid_resources)
+            return ContractFailure::resource_closure;
+
+        tileRequest.entities = entities;
+        auto mixed = build_scene(tileRequest);
+        if (!mixed || mixed.content.sprites.size() != 3
+            || mixed.content.sprites[1].material.alpha != canvas2d::SpriteAlphaMode::opaque
+            || mixed.content.sprites[1].material.color_space != canvas2d::SpriteColorSpace::linear)
+        {
+            return ContractFailure::textured_material;
+        }
         const int owner = 0;
         const auto published = canvas2d::scene_content::publish(
-            &owner, std::move(built.content));
+            &owner, std::move(mixed.content));
         const auto acquired = canvas2d::scene_content::acquire(&owner);
         const auto frame = canvas2d::scene_content::compile(acquired, {128, 72});
         const auto raster = canvas2d::cpu::rasterize(

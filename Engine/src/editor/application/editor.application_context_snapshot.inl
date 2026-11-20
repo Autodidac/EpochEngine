@@ -43,7 +43,8 @@
         snapshot.script_editor_status = editor.scriptEditorStatus;
         snapshot.script_editor_dirty = editor.scriptEditorDirty;
         snapshot.project_run_backend = editor.projectRunBackend;
-        snapshot.project_run_frame_limit_fps = snapshot_frame_limit(editor.projectRunFrameLimitFps, 30.0);
+        snapshot.project_run_frame_limit_fps = snapshot_frame_limit(editor.projectRunFrameLimitFps, 0.0);
+        snapshot.project_screen_space_gui_enabled = editor.projectScreenSpaceGuiEnabled;
         snapshot.canvas2d_project = sanitize_canvas2d_project(editor.canvas2dProject);
 #if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
         snapshot.tile_map_tile_extent = editor.tileMapTileExtent;
@@ -67,12 +68,12 @@
             snapshot.tile_map_pan_y = tileMapView.pan.y;
         }
 #endif
-        snapshot.project_camera_mode = static_cast<std::uint8_t>(editor.projectCameraMode);
+        snapshot.project_camera_mode = editor.projectCameraMode;
         snapshot.input_profile_preset = static_cast<std::uint8_t>(editor.inputProfilePreset);
         snapshot.theme_preference = snapshot_theme_preference(editor.themePreference);
         snapshot.theme_cycle_interval_seconds = editor.themeCycleIntervalSeconds;
         snapshot.rounded_rectangles = editor.roundedRectangles;
-        snapshot.editor_frame_limit_fps = snapshot_frame_limit(editor.editorFrameLimitFps, 30.0);
+        snapshot.editor_frame_limit_fps = snapshot_frame_limit(editor.editorFrameLimitFps, 0.0);
         snapshot.editor_frame_vsync_requested = editor.editorFrameVsyncRequested;
         snapshot.selected_project_file = editor.selectedProjectFile;
         snapshot.selected_asset_path = editor.selectedAssetPath;
@@ -115,6 +116,10 @@
         snapshot.show_inspector = editor.showInspector;
         snapshot.show_console_dock = editor.showConsoleDock;
         snapshot.show_ai_chat = editor.showAiChat;
+        snapshot.show_command_menu = editor.showCommandMenu;
+        snapshot.show_telemetry = editor.showTelemetry;
+        snapshot.telemetry_detail = editor.showTelemetry ? (std::min)(editor.telemetryDetail, 3u) : 4u;
+        snapshot.show_epoch_resource_usage = editor.showEpochResourceUsage;
         constexpr auto toolPaneRoutes = editor_tool_pane_routes();
         snapshot.tool_panes.reserve(toolPaneRoutes.size());
         for (std::size_t index = 0; index < toolPaneRoutes.size(); ++index)
@@ -207,21 +212,22 @@
         editor.projectBuildOutputPath.clear();
         editor.projectBuildRunBackend.clear();
         editor.projectRunBackend = snapshot.project_run_backend.empty() ? std::string{ "opengl" } : snapshot.project_run_backend;
-        editor.projectRunFrameLimitFps = snapshot_frame_limit(snapshot.project_run_frame_limit_fps, 30.0);
+        editor.projectRunFrameLimitFps = snapshot_frame_limit(snapshot.project_run_frame_limit_fps, 0.0);
+        editor.projectScreenSpaceGuiEnabled = snapshot.project_screen_space_gui_enabled;
         editor.canvas2dProject = sanitize_canvas2d_project(snapshot.canvas2d_project);
-        editor.projectCameraMode = snapshot_camera_mode(snapshot.project_camera_mode);
+        editor.projectCameraMode = snapshot.project_camera_mode;
         editor.viewportCameraMode = snapshot.camera.valid
             ? snapshot.camera.mode
             : application_camera_mode(
                 editor_application_profile(snapshot.application_kind).camera_policy);
-        editor.projectBuildRunCameraMode = editor.projectCameraMode;
+        editor.projectBuildRunCameraMode = previewgrid::CameraMode::Editor;
         editor.inputProfilePreset = snapshot_input_profile(snapshot.input_profile_preset);
         editor.projectBuildRunInputProfile = editor.inputProfilePreset;
         editor.themePreference = snapshot_theme_preference(snapshot.theme_preference);
         editor.themeCycleIntervalSeconds = gui::normalize_theme_cycle_interval(
             snapshot.theme_cycle_interval_seconds);
         editor.roundedRectangles = snapshot.rounded_rectangles;
-        editor.editorFrameLimitFps = snapshot_frame_limit(snapshot.editor_frame_limit_fps, 30.0);
+        editor.editorFrameLimitFps = snapshot_frame_limit(snapshot.editor_frame_limit_fps, 0.0);
         editor.editorFrameVsyncRequested = snapshot.editor_frame_vsync_requested;
         if (ctx->windowData)
             ctx->windowData->editorFramePacingOverride.publish(
@@ -377,6 +383,10 @@
         editor.showInspector = snapshot.show_inspector && application.panes.inspector;
         editor.showConsoleDock = snapshot.show_console_dock && application.panes.console;
         editor.showAiChat = snapshot.show_ai_chat && application.panes.ai_chat;
+        editor.showCommandMenu = snapshot.show_command_menu;
+        editor.showTelemetry = snapshot.show_telemetry && snapshot.telemetry_detail < 4u;
+        editor.telemetryDetail = editor.showTelemetry ? snapshot.telemetry_detail : 4u;
+        editor.showEpochResourceUsage = snapshot.show_epoch_resource_usage;
         editor.toolPaneOpen = default_tool_pane_open_state();
         editor.toolPaneDockRegions = default_tool_pane_regions();
         editor.toolPaneTabOrder = default_tool_pane_tab_order();

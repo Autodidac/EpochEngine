@@ -16,7 +16,7 @@
         enum class OutlinerCommand : std::uint64_t
         {
             deselect=1u, cube, ground, light, water, four_cubes, eight_cubes,
-            spawn, camera, open_world, undo, redo, duplicate, erase, ambient, detach_model
+            spawn, camera, open_world, undo, redo, duplicate, erase, ambient, detach_model, lightning
         };
         const auto route_selected_hierarchy_action =
             [&](editor_hierarchy::Action action) -> bool
@@ -692,23 +692,17 @@
             {
                 return is_gui_authoring_entity(entity);
             };
-            auto* guiDocument = synchronize_gui_document(editor);
-            const auto guiMetrics = guiDocument
-                ? guiDocument->metrics()
-                : authoring::gui::DocumentMetrics{};
-            const std::size_t widgetCount = guiMetrics.active_widgets > 0u
-                ? guiMetrics.active_widgets - 1u
-                : 0u;
+            std::size_t widgetCount{};
+            if (const auto* document = synchronize_gui_document(editor))
+            {
+                const auto activeWidgets = document->metrics().active_widgets;
+                if (activeWidgets > 0u)
+                    widgetCount = activeWidgets - 1u;
+            }
 
             const bool fullGuiAuthoring =
                 editor.applicationKind
                     == EditorApplicationKind::GuiEditor;
-            if (!fullGuiAuthoring
-                && editor.guiAuthoringSection != 1u
-                && editor.guiAuthoringSection != 2u)
-            {
-                editor.guiAuthoringSection = 1u;
-            }
 
             gui::section_heading(fullGuiAuthoring ? "GUI Document" : "GUI Overlay");
             gui::property_row(
@@ -930,11 +924,25 @@
                 }
             }
 
+            // Project and document actions above can destroy or replace the
+            // GUI document before the rest of this pane is drawn.
+            auto* const guiDocument = editor.guiDocument.get();
+            const bool toolGuiAuthoring = guiDocument && has_open_project(editor)
+                && editor.projectKind == editor_project_kind_name(EditorProjectKind::Tool);
+            const bool widgetAuthoring = fullGuiAuthoring || toolGuiAuthoring;
+            if (!fullGuiAuthoring
+                && editor.guiAuthoringSection != 1u
+                && editor.guiAuthoringSection != 2u
+                && !(toolGuiAuthoring && editor.guiAuthoringSection == 0u))
+            {
+                editor.guiAuthoringSection = 1u;
+            }
+
             gui::wrapped_label(
                 editor.guiDocumentStatus,
                 outlinerWidth);
 
-            if (fullGuiAuthoring)
+            if (widgetAuthoring)
             {
                 const std::array sections{
                     gui::TabButtonSpec{ .id = "gui.widgets", .label = "Widgets", .width = 0.0f, .active = editor.guiAuthoringSection == 0u },
@@ -944,7 +952,8 @@
                 };
                 if (const auto tabs = gui::responsive_tab_bar_buttons({
                             .overflow_id = "outliner.gui_sections",
-                            .tabs = sections,
+                            .tabs = std::span{sections}.first(
+                                fullGuiAuthoring ? sections.size() : sections.size() - 1u),
                             .available_width = outlinerWidth,
                             .overflow_width = 84.0f,
                             .height = 29.0f});
@@ -1008,7 +1017,7 @@
                 push_editor_log(editor, "[edit] GUI widget deselected.");
             }
 
-            if (fullGuiAuthoring && editor.guiAuthoringSection == 0u)
+            if (widgetAuthoring && editor.guiAuthoringSection == 0u)
             {
                 gui::section_heading("Add Widgets");
                 const std::array primaryActions{
@@ -1021,7 +1030,7 @@
                 {
                     constexpr std::array<std::string_view, 3> archetypes{
                         "gui_panel", "gui_button", "gui_text"};
-                    add_entity(editor, archetypes[*action]);
+                    (void)add_gui_palette_widget(editor, archetypes[*action]);
                 }
                 const std::array visualActions{
                     gui::InlineButtonSpec{ .label = "+ Image", .width = 0.0f},
@@ -1033,7 +1042,7 @@
                 {
                     constexpr std::array<std::string_view, 3> archetypes{
                         "gui_image", "gui_image_button", "gui_tabs"};
-                    add_entity(editor, archetypes[*action]);
+                    (void)add_gui_palette_widget(editor, archetypes[*action]);
                 }
                 const std::array inputActions{
                     gui::InlineButtonSpec{ .label = "+ Input", .width = 0.0f},
@@ -1045,11 +1054,48 @@
                 {
                     constexpr std::array<std::string_view, 3> archetypes{
                         "gui_input", "gui_slider", "gui_scroll"};
-                    add_entity(editor, archetypes[*action]);
+                    (void)add_gui_palette_widget(editor, archetypes[*action]);
                 }
             }
             else if (editor.guiAuthoringSection == 1u)
             {
+                if (guiDocument)
+                {
+                    const auto canvas = guiDocument->widget(editor.guiDocumentRoot);
+                    if (canvas && canvas->descriptor.kind == authoring::gui::WidgetKind::canvas)
+                    {
+                        gui::section_heading("Canvas Layout");
+                        auto layout = canvas->descriptor.layout;
+                        bool responsive = layout.flow
+                            == authoring::gui::LayoutFlow::responsive_columns;
+                        if (gui::toggle_switch(
+                                "Stack on narrow screens", responsive,
+                                {outlinerWidth, 27.0f}))
+                        {
+                            layout.flow = responsive
+                                ? authoring::gui::LayoutFlow::responsive_columns
+                                : authoring::gui::LayoutFlow::absolute;
+                        }
+                        if (responsive)
+                        {
+                            gui::property_row(
+                                "Stack gap", epochengine::format_text("{:.1f}", layout.spacing),
+                                paneLabelWidth);
+                            constexpr std::array<float, 4> gaps{0.0f, 8.0f, 12.0f, 24.0f};
+                            const std::array gapOptions{
+                                gui::SegmentedButtonSpec{"0", 34.0f, layout.spacing == gaps[0]},
+                                gui::SegmentedButtonSpec{"8", 34.0f, layout.spacing == gaps[1]},
+                                gui::SegmentedButtonSpec{"12", 34.0f, layout.spacing == gaps[2]},
+                                gui::SegmentedButtonSpec{"24", 34.0f, layout.spacing == gaps[3]}
+                            };
+                            if (const auto gap = gui::segmented_button_row(gapOptions, 25.0f, 3.0f))
+                                layout.spacing = gaps[*gap];
+                        }
+                        if (layout != canvas->descriptor.layout)
+                            (void)commit_gui_layout_edit(editor, canvas->handle, std::move(layout));
+                    }
+                }
+
                 const auto selected = editor_entity_index(
                     editor, editor.selectedEntityId);
                 if (!selected
@@ -2380,7 +2426,7 @@
                             "{} nodes | {} edges | revision {}",
                             graphNodes.size(),
                             graphEdges.size(),
-                            guiMetrics.revision_sequence), paneLabelWidth);
+                            guiDocument->revision().sequence), paneLabelWidth);
                     bool fitGraph = false;
                     bool resetGraph = false;
                     const std::array graphViewActions{
@@ -2610,8 +2656,7 @@
                 {
                     if (*action == 0u)
                     {
-                        const auto saved = tileMap->save_and_publish();
-                        editor.tileMapStatus = std::string(tileMap->status());
+                        const bool saved = publish_editor_tilemap(editor, *tileMap);
                         push_editor_log(
                             editor,
                             saved
@@ -2884,11 +2929,12 @@
                 gui::MenuItemOptions{.label="Ground",.enabled=canAuthor,.command_id=id(OutlinerCommand::ground)},
                 gui::MenuItemOptions{.label="Point Light",.enabled=canAuthor,.command_id=id(OutlinerCommand::light)},
                 gui::MenuItemOptions{.label="Water",.enabled=canAuthor,.command_id=id(OutlinerCommand::water)},
+                gui::MenuItemOptions{.label="Lightning",.enabled=canAuthor,.command_id=id(OutlinerCommand::lightning)},
                 gui::MenuItemOptions{.label="4 Cubes",.enabled=canAuthor,.separator_before=true,.command_id=id(OutlinerCommand::four_cubes)},
                 gui::MenuItemOptions{.label="8 Cubes",.enabled=canAuthor,.command_id=id(OutlinerCommand::eight_cubes)},
                 gui::MenuItemOptions{.label="Spawn",.enabled=canAuthor,.separator_before=true,.command_id=id(OutlinerCommand::spawn)},
                 gui::MenuItemOptions{.label="Camera",.enabled=canAuthor,.command_id=id(OutlinerCommand::camera)},
-                gui::MenuItemOptions{.label="Open 3D Preview",.enabled=!worldSurfaceActive,.separator_before=true,.command_id=id(OutlinerCommand::open_world)}};
+                gui::MenuItemOptions{.label="Open Main Scene",.enabled=!worldSurfaceActive,.separator_before=true,.command_id=id(OutlinerCommand::open_world)}};
             const std::array actionCommands{
                 gui::MenuItemOptions{.label="Deselect",.enabled=hasSelection,.command_id=id(OutlinerCommand::deselect)},
                 gui::MenuItemOptions{.label="Undo",.enabled=canAuthor&&editor.sceneDocument.can_undo(),.separator_before=true,.command_id=id(OutlinerCommand::undo)},
@@ -2922,11 +2968,12 @@
                 case OutlinerCommand::ground:add_entity(editor,"ground");break;
                 case OutlinerCommand::light:add_entity(editor,"light");break;
                 case OutlinerCommand::water:add_entity(editor,"water");break;
+                case OutlinerCommand::lightning:add_entity(editor,"lightning");break;
                 case OutlinerCommand::four_cubes:(void)add_cube_batch(editor,4u);break;
                 case OutlinerCommand::eight_cubes:(void)add_cube_batch(editor,8u);break;
                 case OutlinerCommand::spawn:add_entity(editor,"spawn");break;
                 case OutlinerCommand::camera:add_entity(editor,"camera");break;
-                case OutlinerCommand::open_world:open_editor_surface(EditorMainSurface::Scene,"3D Objects");break;
+                case OutlinerCommand::open_world:open_editor_surface(EditorMainSurface::Scene,"Scene Hierarchy");break;
                 case OutlinerCommand::undo:(void)execute_surface_edit(editor,ctx.get(),SurfaceEditAction::undo);break;
                 case OutlinerCommand::redo:(void)execute_surface_edit(editor,ctx.get(),SurfaceEditAction::redo);break;
                 case OutlinerCommand::duplicate:
@@ -2945,7 +2992,7 @@
                     }
                     break;
                 case OutlinerCommand::detach_model:
-                    if (canDetachModel && detach_editor_model_from_terrain(editor,editor.entities[*selected]))
+                    if (canDetachModel && detach_editor_object_from_terrain(editor,editor.entities[*selected]))
                         push_editor_log(editor,"[edit] Model detached from terrain at its current world position.");
                     break;
                 case OutlinerCommand::ambient:

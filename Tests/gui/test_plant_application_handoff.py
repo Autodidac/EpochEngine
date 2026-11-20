@@ -28,7 +28,9 @@ class PlantApplicationHandoff(unittest.TestCase):
         clear_begin = runtime.index('if (pendingRestoreStatus == PendingEditorRestoreStatus::restored\n')
         clear_end = runtime.index('win->guiRoute.clear();', clear_begin)+len('win->guiRoute.clear();')
         clear_route = runtime[clear_begin:clear_end]
-        proof = ROOT/'build/validation/plant-application-handoff'
+        proof = ROOT / 'Artifacts/Reports/plant-application-handoff'
+        # Keep the MSVC build path short for nested Windows checkouts.
+        build = ROOT / 'Artifacts/Intermediate/tests/plant-handoff'
         proof.mkdir(parents=True, exist_ok=True)
         source = r'''
 #include <array>
@@ -116,8 +118,15 @@ int main() {
 '''.replace('PAYLOAD', payload).replace('HANDOFF', handoff).replace('CAPTURE', capture).replace('CLEAR_ROUTE', clear_route).replace('ROUTE', route)
         (proof/'consumer.cpp').write_text(source,encoding='utf-8')
         engine=(ROOT/'Engine').as_posix()
-        modules=['editor.application','forest.factory','authoring.morphology','authoring.document','voxel.field','package.registry']
-        module_sources='\n'.join(f'"{engine}/modules/{name}.ixx"' for name in modules)
+        modules = [
+            'editor/editor.application.ixx',
+            'forest/forest.factory.ixx',
+            'authoring/authoring.morphology.ixx',
+            'authoring/authoring.document.ixx',
+            'voxel/voxel.field.ixx',
+            'package/package.registry.ixx',
+        ]
+        module_sources = '\n'.join(f'"{engine}/modules/{path}"' for path in modules)
         (proof/'CMakeLists.txt').write_text(f'''cmake_minimum_required(VERSION 3.30)
 project(EpochPlantHandoffProof LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 23)
@@ -133,9 +142,11 @@ target_compile_options(plant_handoff PRIVATE /W3 /WX /utf-8)
 enable_testing()
 add_test(NAME actual_plant_application_handoff COMMAND plant_handoff)
 ''',encoding='utf-8')
-        commands=[['cmake','-S',str(proof),'-B',str(proof/'msvc'),'-G','Visual Studio 17 2022','-A','x64'],
-                  ['cmake','--build',str(proof/'msvc'),'--config','Debug','--parallel','1'],
-                  ['ctest','--test-dir',str(proof/'msvc'),'-C','Debug','--output-on-failure']]
+        commands = [
+            ['cmake', '-S', str(proof), '-B', str(build), '-G', 'Visual Studio 17 2022', '-A', 'x64'],
+            ['cmake', '--build', str(build), '--config', 'Debug', '--parallel', '1'],
+            ['ctest', '--test-dir', str(build), '-C', 'Debug', '--output-on-failure'],
+        ]
         for index,command in enumerate(commands):
             completed=subprocess.run(command,cwd=proof,capture_output=True,text=True,timeout=120)
             (proof/f'lane-{index}.log').write_text(completed.stdout+completed.stderr,encoding='utf-8')

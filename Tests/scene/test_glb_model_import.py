@@ -1,5 +1,6 @@
 """Real C++23 GLB reader and mesh-artifact validation; no renderer or model."""
 from pathlib import Path
+from Tests.support.cpp import engine_module_source
 import hashlib
 import json
 import os
@@ -164,7 +165,7 @@ class GlbModelImport(unittest.TestCase):
         proof.mkdir(parents=True)
         source = proof / "asset.model_import_contract.cpp"
         source.write_text(consumer(), encoding="utf-8")
-        modules = [ROOT / "Engine/modules" / name for name in (
+        modules = [engine_module_source(ROOT / "Engine/modules", name) for name in (
             "asset.texture_artifact.ixx", "asset.texture_import.ixx", "asset.mesh_artifact.ixx", "asset.model_import.ixx")]
         sources = [source, ROOT / "Engine/src/assets/texture/asset.texture_artifact.cpp",
                    ROOT / "Engine/src/assets/mesh/asset.model_import.cpp",

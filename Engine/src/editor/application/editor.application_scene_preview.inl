@@ -85,7 +85,6 @@
             state.activeRuntimeScene = std::string(epochengine::package_registry::engine_arcade_default_scene_id());
             state.projectStatus =
                 "Engine Arcade active: default scene selected and render-to-texture screen staged in 3D Scene.";
-            state.projectCameraMode = previewgrid::CameraMode::Editor;
             state.viewportCameraMode = previewgrid::CameraMode::Editor;
             state.previewMode = core::ScenePreviewMode::Editor;
             state.mainSurface = EditorMainSurface::Scene;
@@ -1027,13 +1026,24 @@
             return batch;
         }
 
+        [[nodiscard]] std::uint32_t forest_placement_body_id(const EditorState& state,
+            const EditorEntity& terrain,std::uint32_t defaultBody) noexcept
+        {
+            const auto& selected=state.planetaryBodySelection;
+            if(selected&&terrain.meshAsset&&selected->entity==terrain.sceneObjectId
+                &&selected->mesh_key==terrain.meshAsset->artifact_key)
+                return selected->body;
+            return defaultBody;
+        }
+
         // Query exact procedural ground through the existing owned provider.
         // A scene transform/recipe/plant edit invalidates the queued intent.
         [[nodiscard]] bool begin_forest_surface_placement(EditorState& state,const EditorEntity& planet,
             std::size_t ordinal, std::optional<forest::ForestAreaDistribution> area = {},
             std::optional<std::array<double,3>> brushDirection = {}, bool findOceanShoreline = false,
             const scene::SceneForestRegionInstance* existingForest = nullptr,
-            std::span<const std::array<double,3>> stroke = {})
+            std::span<const std::array<double,3>> stroke = {},
+            const forest::ForestLassoFootprint* lasso = nullptr)
         {
             if(state.forestSurfacePending)
             {state.plantLabStatus="A plant surface placement is already running.";return false;}
@@ -1044,7 +1054,7 @@
             {state.plantLabStatus="The selected terrain has no current generated surface evidence.";return false;}
             refresh_editor_planetary_body_inventory(state,planet);
             const auto& policy=*state.planetaryMeshPolicy;
-            auto bodyId=policy.settings.body_index;
+            auto bodyId=forest_placement_body_id(state,planet,policy.settings.body_index);
             if(existingForest)
             {
                 // The existing footprint is expressed in the unchanged body frame.
@@ -1053,8 +1063,6 @@
                 {state.plantLabStatus="Refresh Forest Placement before adding trees to this area.";return false;}
                 bodyId=existingForest->body_index;
             }
-            else if(state.planetaryBodySelection&&state.planetaryBodySelection->entity==planet.sceneObjectId)
-                bodyId=state.planetaryBodySelection->body;
             const auto body=std::find_if(policy.generated_bodies.begin(),policy.generated_bodies.end(),
                 [&](const auto& value){return value.id==bodyId;});
             if(body==policy.generated_bodies.end())
@@ -1088,6 +1096,7 @@
                 heading={forward.x,forward.y,forward.z};
             }
             if(brushDirection)direction=*brushDirection;
+            if(lasso)direction=lasso->center_direction();
             double square{};for(const auto value:direction)square+=value*value;
             if(!std::isfinite(square)||square<1e-12)
             {state.plantLabStatus="Move the project camera away from the planet center before placing a plant.";return false;}
@@ -1110,7 +1119,19 @@
             intent.findOceanShoreline=findOceanShoreline;
             intent.existingRegion=existingForest?existingForest->region_id:0u;
             intent.sceneRevision=state.sceneDocumentRevision;
-            if (area && !stroke.empty())
+            if (lasso && area)
+            {
+                if (planet.forestPaintRegions.size() >= scene::kMaximumForestPaintRegions)
+                {
+                    state.plantLabStatus = "This terrain has reached its saved lasso limit.";
+                    return false;
+                }
+                const auto outline = lasso->vertex_directions();
+                intent.lassoOutline.assign(outline.begin(), outline.end());
+                intent.directions = lasso->candidate_directions(area->densityPerSquareMeter,
+                    area->seed, body->radius_meters);
+            }
+            else if (area && !stroke.empty())
             {
                 // Four surrounding samples per candidate fit in one admitted
                 // surface batch for the shoreline setback.
@@ -1133,7 +1154,7 @@
             {state.plantLabStatus="The forest area radius or density is invalid; no trees were placed.";return false;}
             auto submitted=schedule_editor_cancellable_task(state,area?"Paint forest area on planetary ground":"Place plant on generated planetary ground",
                 [root,query=intent.query,directions=intent.directions,area,findOceanShoreline,terrainPath,terrainLimits,
-                    brush=!stroke.empty(),
+                    brush=lasso||!stroke.empty(),
                     plant=state.plantLabCompiled,profile=state.plantLabDocument.profile,
                     ordinal,projectId=intent.projectId](std::stop_token stop) mutable {
                     EditorState::ForestSurfacePrepared prepared;
@@ -1266,11 +1287,79 @@
             const auto index = editor_entity_index(state, state.selectedEntityId);
             if (!index) return nullptr;
             const auto& entity = state.entities[*index];
-            return entity.category == "Planetary Terrain" || entity.terrainAttachment ? &entity : nullptr;
+            return entity.category == "Planetary Terrain" || (entity.terrainAttachment && entity.type != "Camera")
+                ? &entity : nullptr;
         }
 
-        [[nodiscard]] bool begin_forest_surface_refresh(EditorState& state, bool attachments = false)
+        [[nodiscard]] bool capture_terrain_project_camera(EditorState& state, const EditorEntity& terrain,
+            const previewgrid::Camera& view)
         {
+            namespace document = authoring::scene;
+            const auto fail = [&](std::string message) {
+                state.projectStatus = std::move(message);
+                push_editor_log(state, "[scene] " + state.projectStatus);
+                return false;
+            };
+            if (!has_open_project(state) || !state.sceneDocument.initialized()
+                || !editor_planetary_stream_identity_matches(state, terrain))
+                return fail("Select saved generated planetary terrain before setting the camera.");
+            if (view.projection != render_camera::ProjectionKind::perspective)
+                return fail("Switch 3D Preview to Perspective before setting the camera.");
+            const auto cameraId = state.sceneDocument.project_settings().primary_camera;
+            const auto selected = editor_entity_index(state, cameraId.value);
+            const auto camera = state.sceneDocument.find(cameraId);
+            if (!selected || !camera || state.entities[*selected].type != "Camera")
+                return fail("The scene needs a project camera before capturing this view.");
+
+            refresh_editor_planetary_body_inventory(state, terrain);
+            const auto& policy = *state.planetaryMeshPolicy;
+            if (!policy.body_inventory_checked || !policy.generated_mesh)
+                return fail("The generated body inventory is unavailable.");
+            const auto bodyId = forest_placement_body_id(state, terrain, policy.settings.body_index);
+            const auto body = std::ranges::find(policy.generated_bodies, bodyId, &project_planetary::GeneratedBody::id);
+            if (body == policy.generated_bodies.end()) return fail("Select a generated planet body for the camera.");
+
+            const auto eye = previewgrid::camera_world_eye(view);
+            const auto forward = previewgrid::camera_forward(view);
+            const auto rotation = document::camera_rotation_from_view({forward.x, forward.y, forward.z},
+                {view.up.x, view.up.y, view.up.z});
+            if (!rotation || !scene::world_position({}, eye)) return fail("The current view has an invalid camera pose.");
+
+            const auto& entity = state.entities[*selected];
+            const auto cameraName = entity.name;
+            const auto& mesh = *policy.generated_mesh;
+            scene::SceneTerrainAttachment attachment{.terrain_object_id = terrain.sceneObjectId,
+                .body_index = bodyId, .terrain_artifact_key = mesh.artifact_key,
+                .terrain_coordinates = {mesh.coordinates.meters_per_unit, mesh.coordinates.source_origin_meters}};
+            for (std::size_t axis = 0; axis < eye.size(); ++axis)
+                attachment.reference_center_meters[axis] = body->center_meters[axis] - mesh.coordinates.source_origin_meters[axis];
+            const std::array<document::SceneOperation, 2> operations{
+                document::ObjectTransformChangedOperation{*camera, {{}, *rotation,
+                    {entity.scale[0], entity.scale[1], entity.scale[2]}}},
+                document::GeometryComponentChangedOperation{.object = *camera, .mesh_asset = entity.meshAsset,
+                    .position_anchor = eye, .terrain_attachment = attachment}};
+            if (!apply_editor_scene_transaction(state, operations, "Set project camera from view", cameraId.value)) return false;
+            const auto saved = save_editor_scene_snapshot(state);
+            state.projectStatus = cameraName + (saved ? " attached to the selected body and saved."
+                : " attached to the selected body. Scene save failed; retry Save before closing.");
+            push_editor_log(state, "[scene] " + state.projectStatus);
+            return saved;
+        }
+
+        [[nodiscard]] bool view_from_terrain_camera(const core::Context* context, const EditorEntity& entity)
+        {
+            if (!entity.terrainAttachment || entity.type != "Camera") return false;
+            const auto eye = scene::world_position(entity.position, entity.positionAnchor);
+            const previewgrid::Vec3 rotation{entity.rotation[0], entity.rotation[1], entity.rotation[2]};
+            return eye && previewgrid::set_editor_camera_pose(context, *eye,
+                previewgrid::rotate_euler_degrees({0.0f, 0.0f, -1.0f}, rotation),
+                previewgrid::rotate_euler_degrees({0.0f, 1.0f, 0.0f}, rotation));
+        }
+
+        [[nodiscard]] bool begin_forest_surface_refresh(EditorState& state, bool attachments = false,
+            const previewgrid::Camera* playerStartView = nullptr)
+        {
+            attachments = attachments || playerStartView;
             const auto fail=[&](std::string message) {
                 auto& status = attachments ? state.projectStatus : state.plantLabStatus;
                 status = std::move(message);
@@ -1300,11 +1389,14 @@
             refresh_editor_planetary_body_inventory(state,*terrain);
             const auto& policy=*state.planetaryMeshPolicy;
             if(!policy.body_inventory_checked||!policy.generated_mesh)return fail("The generated terrain body inventory is unavailable; placement is unchanged.");
+            if (playerStartView && !project_planetary::supports_exploration(policy.settings))
+                return fail("PlayerStart needs an explorable planet body.");
             EditorState::ForestSurfacePlacement intent;
             intent.projectId=state.projectId;intent.projectRoot=state.projectRoot;
             intent.projectGeneration=state.projectLifecycle.evidence().generations.selected_project.generation;
             intent.sceneRevision=state.sceneDocument.revision().sequence;
             intent.refreshAttachments=attachments;
+            intent.placePlayerStart=playerStartView!=nullptr;
             intent.entity=terrain->sceneObjectId;intent.position=terrain->position;intent.rotation=terrain->rotation;
             intent.scale=terrain->scale;intent.anchor=terrain->positionAnchor;
             const auto pivot=scene::world_position(terrain->position,terrain->positionAnchor);
@@ -1312,13 +1404,39 @@
                 {terrain->scale[0],terrain->scale[1],terrain->scale[2]},
                 {terrain->rotation[0],terrain->rotation[1],terrain->rotation[2]}):std::nullopt;
             if(!transform)return fail("The terrain transform is invalid.");
-            for(const auto& object:state.entities)
+            if (playerStartView)
+            {
+                const auto spawnId = state.sceneDocument.project_settings().primary_spawn;
+                const auto spawn = editor_entity_index(state, spawnId.value);
+                if (!spawn || !state.sceneDocument.find(spawnId) || state.entities[*spawn].type != "Spawn"
+                    || !state.entities[*spawn].visible || state.entities[*spawn].editorOnly)
+                    return fail("Choose a visible primary PlayerStart before placing it.");
+                const auto bodyId = forest_placement_body_id(state, *terrain, policy.settings.body_index);
+                const auto body = std::find_if(policy.generated_bodies.begin(), policy.generated_bodies.end(),
+                    [&](const auto& value) { return value.id == bodyId; });
+                if (body == policy.generated_bodies.end()) return fail("Select a generated planet body for PlayerStart.");
+                auto direction = transform->inverse_apply(previewgrid::camera_world_eye(*playerStartView));
+                for (std::size_t axis = 0; axis < direction.size(); ++axis)
+                    direction[axis] += policy.generated_mesh->coordinates.source_origin_meters[axis] - body->center_meters[axis];
+                const auto radius = std::hypot(direction[0], direction[1], direction[2]);
+                if (!std::isfinite(radius) || radius <= 0.0)
+                    return fail("Move Scene Preview away from the body center before placing PlayerStart.");
+                for (auto& value : direction) value /= radius;
+                const auto forward = previewgrid::camera_forward(*playerStartView);
+                // The surface basis aligns +Z. Gameplay looks along local -Z.
+                intent.heading = {-forward.x, -forward.y, -forward.z};
+                intent.refreshObjects.push_back(editor_entity_snapshot(state.entities[*spawn]));
+                intent.refreshBodies.push_back(*body);
+                intent.directions.push_back(direction);
+            }
+            else for(const auto& object:state.entities)
             {
                 std::uint32_t bodyId{};
                 std::array<double,3> direction{};
                 if (attachments)
                 {
-                    if (!object.terrainAttachment || object.terrainAttachment->terrain_object_id != intent.entity) continue;
+                    if (object.type == "Camera" || !object.terrainAttachment
+                        || object.terrainAttachment->terrain_object_id != intent.entity) continue;
                     const auto& attachment = *object.terrainAttachment;
                     const auto point = scene::world_position(object.position, object.positionAnchor);
                     if (!point || !attachment.valid() || (object.type != "Spawn" && !object.meshAsset))
@@ -1358,7 +1476,8 @@
                 intent.directions.front(),++state.forestSurfaceSequence};
             const auto terrainPath=terrain->meshAsset->logical_path;
             const auto terrainLimits=editor_planetary_mesh_budget(state).artifact;
-            auto submitted=schedule_editor_cancellable_task(state,attachments ? "Refresh models and spawns on generated terrain"
+            auto submitted=schedule_editor_cancellable_task(state,playerStartView ? "Place PlayerStart on generated terrain"
+                : attachments ? "Refresh models and spawns on generated terrain"
                 : "Refresh forest placement on generated terrain",
                 [root,query=intent.query,bodies=intent.refreshBodies,directions=intent.directions,
                     objects=attachments ? intent.refreshObjects : std::vector<scene::SceneObjectSnapshot>{},
@@ -1453,7 +1572,8 @@
             state.forestSurfaceCancellation=submitted.cancellation;
             state.forestSurfacePending.emplace(std::move(submitted.completion));
             auto& status=attachments ? state.projectStatus : state.plantLabStatus;
-            status=epochengine::format_text(attachments ? "Sampling current ground for {} attached model part(s) or spawns..."
+            status=playerStartView ? std::string{"Sampling ground below Scene Preview for PlayerStart..."}
+                : epochengine::format_text(attachments ? "Sampling current ground for {} attached model part(s) or spawns..."
                 : "Refreshing {} tree root(s) against current terrain; tree designs and area layout are retained...",count);
             push_editor_log(state,(attachments ? "[scene] " : "[forest] ")+status);return true;
         }
@@ -1462,10 +1582,12 @@
             const project_planetary::SurfaceBatchResult& result, std::span<const double> supports)
         {
             const bool attachments = intent.refreshAttachments;
+            const bool placePlayerStart = intent.placePlayerStart;
             auto& status = attachments ? state.projectStatus : state.plantLabStatus;
             const std::string_view log = attachments ? "[scene] " : "[forest] ";
             const auto fail=[&](std::string message) {
-                status=(attachments ? "Model and spawn placement unchanged: " : "Forest placement unchanged: ")+std::move(message);
+                status=(placePlayerStart ? "PlayerStart placement unchanged: " : attachments
+                    ? "Model and spawn placement unchanged: " : "Forest placement unchanged: ")+std::move(message);
                 push_editor_log(state,std::string{log}+status);
             };
             const auto index=editor_entity_index(state,intent.entity);
@@ -1486,6 +1608,8 @@
             {fail("the approved terrain source, settings, geometry or transform changed.");return;}
             const auto& objects = intent.refreshObjects;
             if(objects.empty()||(!attachments&&objects.size()>project_planetary::kMaximumSurfaceBatchSamples)
+                ||(placePlayerStart && (!attachments || objects.size()!=1u || objects.front().type!="Spawn"
+                    || objects.front().id!=state.sceneDocument.project_settings().primary_spawn.value))
                 ||objects.size()!=intent.refreshBodies.size()||objects.size()!=intent.directions.size()
                 ||(attachments && supports.size()!=objects.size())
                 ||result.code!=project_planetary::SurfaceCode::ready||result.request_id!=intent.query.request_id
@@ -1501,7 +1625,7 @@
             {
                 const auto& before=objects[sampleIndex];const auto object=editor_entity_index(state,before.id);
                 const auto& body=intent.refreshBodies[sampleIndex];const auto& sample=result.samples[sampleIndex];
-                if(!object||!(attachments ? before.terrain_attachment.has_value() : before.forest_region.has_value())
+                if(!object||!(attachments ? placePlayerStart || before.terrain_attachment.has_value() : before.forest_region.has_value())
                     ||std::find(policy.generated_bodies.begin(),policy.generated_bodies.end(),body)==policy.generated_bodies.end())
                 {fail("an object or its generated body changed.");return;}
                 const auto current=editor_entity_snapshot(state.entities[*object]);
@@ -1517,7 +1641,7 @@
                 {fail("one terrain sample was invalid.");return;}
                 if((attachments && body.id==0u && sample.height_meters<=0.0)
                     ||(!attachments && intent.query.settings.ocean_surface&&sample.height_meters<0.0))
-                {fail("a saved placement is now underwater.");return;}
+                {fail(placePlayerStart ? "the ground below the view is underwater." : "a saved placement is now underwater.");return;}
                 for(std::size_t axis=0;axis<sample.radial_up.size();++axis)
                     if(!std::isfinite(sample.radial_up[axis])||std::abs(sample.radial_up[axis]-intent.directions[sampleIndex][axis])>1e-6)
                     {fail("the provider returned ground for a different direction.");return;}
@@ -1530,11 +1654,12 @@
                         double grade{};
                         for (std::size_t axis = 0; axis < 3; ++axis) grade += sample.normal[axis] * sample.radial_up[axis];
                         if (!std::isfinite(grade) || grade < 0.85)
-                        {fail("the saved spawn is now on a steep slope.");return;}
+                        {fail(placePlayerStart ? "the ground below the view is too steep." : "the saved spawn is now on a steep slope.");return;}
                     }
-                    const auto& old = *before.terrain_attachment;
                     const auto support = supports[sampleIndex];
-                    auto link = old;
+                    auto link = placePlayerStart ? scene::SceneTerrainAttachment{} : *before.terrain_attachment;
+                    link.terrain_object_id = intent.entity;
+                    link.body_index = body.id;
                     link.terrain_artifact_key = intent.query.mesh.artifact_key;
                     link.terrain_coordinates = {intent.query.mesh.coordinates.meters_per_unit, intent.query.mesh.coordinates.source_origin_meters};
                     std::array<double, 3> local{};
@@ -1549,9 +1674,21 @@
                         anchor[axis] += up[axis] * support - before.position[axis];
                     if (!link.valid() || !scene::world_position(before.position, anchor))
                     {fail("a refreshed model or spawn position is invalid.");return;}
-                    if (before.position_anchor == std::optional{anchor} && old == link) continue;
-                    operations.emplace_back(authoring::scene::GeometryComponentChangedOperation{
-                        .object=*handle, .mesh_asset=before.mesh_asset, .position_anchor=anchor, .terrain_attachment=link});
+                    if (before.position_anchor != std::optional{anchor} || before.terrain_attachment != std::optional{link})
+                        operations.emplace_back(authoring::scene::GeometryComponentChangedOperation{
+                            .object=*handle, .mesh_asset=before.mesh_asset, .position_anchor=anchor, .terrain_attachment=link});
+                    if (placePlayerStart)
+                    {
+                        const auto rotation = forest::preview_mesh::surface_rotation(up, intent.heading);
+                        const auto node = state.sceneDocument.object(*handle);
+                        if (!rotation || !node) { fail("the view heading is invalid."); return; }
+                        if (*rotation != before.rotation)
+                        {
+                            auto pose = node->descriptor.transform;
+                            pose.rotation_degrees = {(*rotation)[0], (*rotation)[1], (*rotation)[2]};
+                            operations.emplace_back(authoring::scene::ObjectTransformChangedOperation{*handle, pose});
+                        }
+                    }
                     continue;
                 }
                 auto region=*before.forest_region;region.body_local_root_meters=sample.point_meters;region.radial_up=sample.radial_up;
@@ -1578,10 +1715,13 @@
                 status="Placement is already current.";
                 push_editor_log(state,std::string{log}+status);return;
             }
-            if(!apply_editor_scene_transaction(state,operations,attachments ? "Refresh model and spawn placement" : "Refresh forest placement"))
+            if(!apply_editor_scene_transaction(state,operations,placePlayerStart ? "Place PlayerStart on terrain"
+                : attachments ? "Refresh model and spawn placement" : "Refresh forest placement"))
             {fail("the scene rejected the complete refresh transaction.");return;}
             const auto saved=save_editor_scene_snapshot(state);
-            status=epochengine::format_text(attachments ? "{} model part(s) or spawns refreshed{}. Undo restores the previous placement."
+            status=placePlayerStart ? (saved ? "PlayerStart placed and saved on the selected body. Fresh Play uses this start."
+                    : "PlayerStart placed. Scene save failed; retry Save before closing.")
+                : epochengine::format_text(attachments ? "{} model part(s) or spawns refreshed{}. Undo restores the previous placement."
                 : "{} tree root(s) refreshed{}; designs, materials and area layout retained. Scene Undo restores the previous placement.",
                 operations.size(),saved?" and saved":"; scene save failed, retry Save before closing");
             push_editor_log(state,std::string{log}+status);
@@ -1610,7 +1750,8 @@
                 const auto index=editor_entity_index(state,intent->entity);
                 if(state.projectId!=intent->projectId||state.projectRoot!=intent->projectRoot
                     ||state.projectLifecycle.evidence().generations.selected_project.generation!=intent->projectGeneration
-                    ||(intent->existingRegion && state.sceneDocumentRevision!=intent->sceneRevision)
+                    ||((intent->existingRegion || !intent->lassoOutline.empty())
+                        && state.sceneDocumentRevision!=intent->sceneRevision)
                     ||!index||!state.planetaryMeshPolicy||state.projectRuntimeProcess.valid()||state.projectBuildPending
                     ||!ensure_plant_lab_compiled_asset(state)
                     ||state.plantLabCompiled.sourceRevision!=intent->plantRevision||state.plantLabCompiled.sourceContentHash!=intent->plantHash)
@@ -1672,7 +1813,9 @@
                     available(16ull*1024u*1024u,ordinaryBytes,perInstance),
                     available(196'608u,ordinaryIndices,geometry.indices().size()),
                     available(budget.cache_bytes,sceneBytes,perInstance)});
-                if(!sceneCapacity)
+                const bool lasso = !intent->lassoOutline.empty();
+                const bool regionalSpacing = lasso || !intent->brushCenters.empty();
+                if(!sceneCapacity && !lasso)
                 {fail("The scene mesh budget is full. No trees were added.");return;}
                 std::vector<EditorEntity> placed;placed.reserve(result.samples.size());
                 auto regionId=intent->existingRegion;
@@ -1702,12 +1845,18 @@
                 }
                 else
                 {
+                    if(lasso)
+                        plantSource=epochengine::format_text("Assets/Forest/species_{}_{}_{}.epoch_forest",
+                            state.plantLabCompiled.genome.stableHash,intent->plantHash,intent->plantRevision);
                     regionId=scene::stable_scene_object_id(editor_scene_identity(state),
                         "ForestArea_"+std::to_string(intent->query.request_id)+"_"+std::to_string(intent->ordinal));
                     while(std::any_of(state.entities.begin(),state.entities.end(),[&](const auto& entity){
-                        return entity.forestRegion&&entity.forestRegion->region_id==regionId;}))
+                        return (entity.forestRegion && entity.forestRegion->region_id==regionId)
+                            || std::ranges::any_of(entity.forestPaintRegions,[&](const auto& region){
+                                return region.region_id==regionId;
+                            });}))
                         regionId=forest::mix_seed(regionId,1u);
-                    if(!intent->brushCenters.empty())
+                    if(regionalSpacing)
                         for(const auto& entity:state.entities)
                             if(const auto& region=entity.forestRegion;region&&region->valid()
                                 &&region->terrain_object_id==intent->entity&&region->body_index==intent->query.body.id)
@@ -1724,13 +1873,13 @@
                     if(!prepared.brushInland.empty()&&(!prepared.brushInland[sampleIndex]||sample.height_meters<2.0))continue;
                     drySamples.push_back(sampleIndex);
                 }
-                const auto plantBudget = intent->brushCenters.empty() ? drySamples.size()
+                const auto plantBudget = !regionalSpacing ? drySamples.size()
                     : (std::min)(drySamples.size(), sceneCapacity);
                 for (std::size_t candidate = 0; candidate < plantBudget; ++candidate)
                 {
                     const auto sampleIndex = drySamples[candidate * drySamples.size() / plantBudget];
                     const auto& sample = result.samples[sampleIndex];
-                    if(intent->existingRegion||!intent->brushCenters.empty())
+                    if(intent->existingRegion||regionalSpacing)
                     {
                         if((intent->existingRegion&&occupiedRoots.size()==forest::kMaximumForestAreaInstances)
                             ||placed.size()==sceneCapacity)break;
@@ -1783,21 +1932,48 @@
                     placed.push_back(std::move(entity));
                 }
                 const auto plantedCount=placed.size();
-                if(!plantedCount)
+                if(!plantedCount && !lasso)
                 {fail(intent->existingRegion?"No dry, unoccupied ground was found in the selected forest."
                     :!intent->brushCenters.empty()?"No painted roots passed the shoreline and spacing checks."
                     :"The sampled area is underwater; no trees were placed.");return;}
                 if(plantedCount>sceneCapacity)
                 {fail("The forest area exceeds the existing scene mesh budget. No trees were added.");return;}
+                std::vector<authoring::scene::SceneOperation> operations;
+                if(lasso)
+                {
+                    const auto handle = state.sceneDocument.find({intent->entity});
+                    if(!handle || planet.forestPaintRegions.size() >= scene::kMaximumForestPaintRegions)
+                    {fail("The terrain can no longer accept this lasso.");return;}
+                    auto regions = planet.forestPaintRegions;
+                    regions.push_back({
+                        .region_id = regionId,
+                        .seed = intent->area->seed,
+                        .body_index = intent->query.body.id,
+                        .candidate_count = static_cast<std::uint32_t>(intent->directions.size()),
+                        .density_per_square_meter = intent->area->densityPerSquareMeter,
+                        .body_seed = intent->query.settings.seed,
+                        .body_radius_meters = intent->query.body.radius_meters,
+                        .reference_center_meters = intent->query.body.center_meters,
+                        .plant_source = plantSource,
+                        .outline = std::move(intent->lassoOutline)
+                    });
+                    if(!regions.back().valid())
+                    {fail("The lasso footprint could not be admitted.");return;}
+                    operations.emplace_back(authoring::scene::ForestPaintRegionsChangedOperation{
+                        .object = *handle, .regions = std::move(regions)});
+                }
                 if(!create_editor_scene_entities(state,std::move(placed),intent->existingRegion?"Add tree species to forest"
-                    :intent->area?"Paint forest area":"Place plant on planetary ground",
-                    [&]{return publish_plant_lab_project_asset(state,nullptr,plantSource);}))
+                    :lasso?"Paint forest lasso":intent->area?"Paint forest area":"Place plant on planetary ground",
+                    [&]{return publish_plant_lab_project_asset(state,nullptr,plantSource);},std::move(operations)))
                 {fail("Plant placement could not be committed; the scene is unchanged.");return;}
                 const bool saved=save_editor_scene_snapshot(state);
                 state.aiGoalForestReceipt = saved;
                 state.forestPlacementSaved=saved;
                 state.plantLabStatus=epochengine::format_text("{} rooted tree(s) added{}.",plantedCount,
                     saved?" and saved":"; scene save failed, retry Save");
+                if(lasso)
+                    state.plantLabStatus=epochengine::format_text("Lasso {} with {} rooted tree(s).",
+                        saved?"saved":"committed; retry Save",plantedCount);
                 if(intent->existingRegion)
                     state.plantLabStatus+=" The original forest trees were preserved.";
                 if (intent->findOceanShoreline)
@@ -1830,7 +2006,7 @@
             if(!has_open_project(state)||!ensure_plant_lab_compiled_asset(state))return false;
             const auto selected=editor_entity_index(state,state.selectedEntityId);
             if(!selected||state.entities[*selected].category!="Planetary Terrain")
-            {state.plantLabStatus="Select the generated planet in 3D Objects, then Paint Area beneath the project camera.";return false;}
+            {state.plantLabStatus="Select the generated planet in Scene Hierarchy, then Paint Area beneath the project camera.";return false;}
             const auto ordinal=static_cast<std::size_t>(std::count_if(state.entities.begin(),state.entities.end(),
                 [](const auto& entity){return entity.category=="ForestFactory"&&entity.type=="ForestTrunk";}));
             return begin_forest_surface_placement(state,state.entities[*selected],ordinal,state.forestArea,{},findOceanShoreline);
@@ -1853,8 +2029,7 @@
             }
             auto area=state.forestArea;
             const auto& policy=*state.planetaryMeshPolicy;
-            const auto body=state.planetaryBodySelection&&state.planetaryBodySelection->entity==terrain->sceneObjectId
-                ?state.planetaryBodySelection->body:policy.settings.body_index;
+            const auto body=forest_placement_body_id(state,*terrain,policy.settings.body_index);
             std::vector<std::array<double,3>> centers;
             for(const auto& entity:state.entities)
             {
@@ -1862,13 +2037,15 @@
                 const auto& region=*entity.forestRegion;
                 if(!region.valid()||region.terrain_object_id!=terrain->sceneObjectId||region.body_index!=body
                     ||region.terrain_artifact_key!=terrain->meshAsset->artifact_key)continue;
+                if (std::ranges::any_of(terrain->forestPaintRegions,
+                    [&](const auto& lasso) { return lasso.region_id == region.region_id; })) continue;
                 area.radiusMeters=(std::min)(area.radiusMeters,region.radius_meters);
                 if(std::find(centers.begin(),centers.end(),region.center_direction)==centers.end())
                     centers.push_back(region.center_direction);
             }
             if(centers.empty()||centers.size()>project_planetary::kMaximumSurfaceBatchSamples/4u)
             {
-                state.plantLabStatus=centers.empty()?"There are no verified painted areas on the selected body."
+                state.plantLabStatus=centers.empty()?"There are no verified brush strokes on the selected body."
                     :"The selected body has more than 16 painted areas. Paint a smaller region per stroke.";
                 return false;
             }
@@ -1938,6 +2115,9 @@
             const auto terrain=editor_entity_index(state,region.terrain_object_id);
             if(!terrain)
             {state.plantLabStatus="The selected forest has no generated terrain.";return false;}
+            if (std::ranges::any_of(state.entities[*terrain].forestPaintRegions,
+                [&](const auto& lasso) { return lasso.region_id == region.region_id; }))
+            {state.plantLabStatus="Additional species for lasso areas are not available yet.";return false;}
             std::size_t regionSize{};
             for(const auto& entity:state.entities)
             {
@@ -1953,21 +2133,85 @@
             return begin_forest_surface_placement(state,state.entities[*terrain],state.entities.size(),area,{},false,&region);
         }
 
+        [[nodiscard]] const EditorEntity* forest_lasso_list_terrain(const EditorState& state)
+        {
+            const auto selected = editor_entity_index(state,state.selectedEntityId);
+            if (selected)
+            {
+                const auto& entity = state.entities[*selected];
+                if (entity.category == "Planetary Terrain") return &entity;
+                if (entity.forestRegion)
+                    if (const auto terrain = editor_entity_index(state,entity.forestRegion->terrain_object_id);
+                        terrain && state.entities[*terrain].category == "Planetary Terrain")
+                        return &state.entities[*terrain];
+            }
+            const EditorEntity* terrain{};
+            for (const auto& entity : state.entities)
+                if (entity.visible && entity.category == "Planetary Terrain")
+                {
+                    if (terrain) return nullptr;
+                    terrain = &entity;
+                }
+            return terrain;
+        }
+
+        [[nodiscard]] bool forest_area_tree_matches(const scene::SceneForestRegionInstance& tree,
+            const EditorState::ForestAreaSelection& area) noexcept
+        {
+            return tree.terrain_object_id == area.terrain && tree.body_index == area.body && tree.region_id == area.region;
+        }
+
+        [[nodiscard]] std::optional<EditorState::ForestAreaSelection> selected_forest_area(const EditorState& state)
+        {
+            const auto generation = state.projectLifecycle.evidence().generations.selected_project.generation;
+            if (const auto& explicitLasso = state.selectedForestLasso; explicitLasso)
+            {
+                if (explicitLasso->projectGeneration != generation) return {};
+                const auto* terrain = forest_lasso_list_terrain(state);
+                if (!terrain || terrain->sceneObjectId != explicitLasso->terrain) return {};
+                const auto& regions = terrain->forestPaintRegions;
+                if (std::ranges::none_of(regions,[&](const auto& lasso) {
+                    return lasso.region_id == explicitLasso->region && lasso.body_index == explicitLasso->body;
+                })) return {};
+                return explicitLasso;
+            }
+            const auto selected = editor_entity_index(state,state.selectedEntityId);
+            if (!selected || !state.entities[*selected].forestRegion) return {};
+            const auto& tree = *state.entities[*selected].forestRegion;
+            return EditorState::ForestAreaSelection{tree.terrain_object_id,tree.body_index,tree.region_id,generation};
+        }
+
         [[nodiscard]] bool erase_selected_forest_area(EditorState& state)
         {
             if(state.forestSurfacePending||state.projectBuildPending||state.projectRuntimeProcess.valid())return false;
-            const auto selected=editor_entity_index(state,state.selectedEntityId);
-            if(!selected||!state.entities[*selected].forestRegion)
-            {state.plantLabStatus="Select a tree from a painted forest area before Erase Selected Area.";return false;}
+            const auto area = selected_forest_area(state);
+            if (!area)
+            {state.plantLabStatus="Select a saved lasso or a tree from a painted forest area.";return false;}
             if(!state.sceneDocument.initialized()&&!rebuild_editor_scene_document(state,"Initialize scene before forest erase"))return false;
-            const auto region=state.entities[*selected].forestRegion->region_id;
             std::vector<authoring::scene::SceneOperation> operations;
             for(const auto& object:state.sceneDocument.objects())
-                if(object.descriptor.forest_region&&object.descriptor.forest_region->region_id==region)
+                if(object.descriptor.forest_region&&forest_area_tree_matches(*object.descriptor.forest_region,*area))
                     operations.emplace_back(authoring::scene::ObjectDestroyedOperation{.object=object.handle});
-            if(operations.empty()||operations.size()>forest::kMaximumForestAreaInstances
-                ||!apply_editor_scene_transaction(state,operations,"Erase forest area"))return false;
-            state.plantLabStatus=save_editor_scene_snapshot(state)?"Forest area erased and saved. Scene Undo restores every tree."
+            if(operations.size()>forest::kMaximumForestAreaInstances) return false;
+            bool erasedFootprint{};
+            if (const auto handle = state.sceneDocument.find({area->terrain}))
+            {
+                const auto terrain = state.sceneDocument.object(*handle);
+                if (!terrain) return false;
+                auto regions = terrain->descriptor.forest_paint_regions;
+                erasedFootprint = std::erase_if(regions,[&](const auto& lasso) {
+                    return lasso.region_id == area->region && lasso.body_index == area->body;
+                }) != 0u;
+                if (erasedFootprint)
+                {
+                    operations.emplace_back(authoring::scene::ForestPaintRegionsChangedOperation{
+                        .object=*handle,.regions=std::move(regions)});
+                }
+            }
+            if (state.selectedForestLasso && !erasedFootprint) return false;
+            if(operations.empty()||!apply_editor_scene_transaction(state,operations,"Erase forest area"))return false;
+            state.selectedForestLasso.reset();
+            state.plantLabStatus=save_editor_scene_snapshot(state)?"Forest area erased and saved. Scene Undo restores the area."
                 :"Forest area erased; scene save failed, retry Save.";
             return true;
         }
@@ -2468,31 +2712,74 @@
                     synchronize_gui_document(state);
                 std::vector<scene::SceneTextureMaterialSnapshot>
                     sourceMaterials{};
-                for (const EditorEntity& entity : state.entities)
+                std::vector<std::optional<std::size_t>> materialIndices(state.entities.size());
+                std::span<const canvas2d::SpriteSubmission> tileSprites{};
+                std::uint64_t sourceRevision = (std::max)(
+                    std::uint64_t{1}, state.sceneDocumentRevision);
+                if (guiDocument)
+                    sourceRevision = (std::max)(sourceRevision, guiDocument->revision().sequence);
+                for (std::size_t index = 0; index < state.entities.size(); ++index)
                 {
-                    if (entity.textureMaterial)
-                        sourceMaterials.push_back(*entity.textureMaterial);
+                    const auto& entity = state.entities[index];
+                    const auto* material = entity.textureMaterial ? &*entity.textureMaterial : nullptr;
+                    std::optional<scene::SceneTextureMaterialSnapshot> imageMaterial;
+                    if (guiDocument && (entity.type == "GuiImage" || entity.type == "GuiImageButton"))
+                    {
+                        const auto mapped = state.guiDocumentWidgets.find(entity.sceneObjectId);
+                        if (const auto widget = mapped != state.guiDocumentWidgets.end()
+                                ? guiDocument->widget(mapped->second) : std::nullopt)
+                        {
+                            const auto path = gui_widget_asset_path(*widget);
+                            const auto* controller = path.empty() ? nullptr : project_texture_controller(state);
+                            if (controller)
+                                imageMaterial = controller->material_for(path);
+                            material = imageMaterial ? &*imageMaterial : nullptr;
+                        }
+                    }
+                    if (material)
+                    {
+                        materialIndices[index] = sourceMaterials.size();
+                        sourceMaterials.push_back(*material);
+                    }
                 }
 #if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
+                std::vector<const asset::tilemap::TextureDependency*> tileDependencies{};
                 if (tileMapPreview)
                 {
-                    sourceMaterials.reserve(
-                        sourceMaterials.size()
-                        + tileMapPreview.artifact->dependencies.size());
+                    tileSprites = tileMapPreview.visible.sprites;
+                    sourceRevision = (std::max)(sourceRevision,
+                        tileMapPreview.artifact->identity.source_revision.sequence);
+                    std::unordered_set<canvas2d::LogicalTextureReference,
+                        canvas2d::scene_content::LogicalTextureReferenceHash> visibleTextures{};
+                    for (const auto& sprite : tileSprites)
+                    {
+                        if (sprite.material.source == canvas2d::SpriteSourceKind::texture)
+                            visibleTextures.insert(sprite.material.logical_texture);
+                    }
+                    sourceMaterials.reserve(sourceMaterials.size() + visibleTextures.size());
+                    tileDependencies.reserve(visibleTextures.size());
                     for (const auto& dependency :
                          tileMapPreview.artifact->dependencies)
                     {
+                        if (visibleTextures.erase({dependency.asset_key,
+                                dependency.artifact_revision}) == 0)
+                        {
+                            continue;
+                        }
+                        tileDependencies.push_back(&dependency);
+                        // This descriptor requests the exact artifact. Tile blend
+                        // and sampler settings stay on the map's sprites.
                         sourceMaterials.push_back(
                             scene::SceneTextureMaterialSnapshot{
                                 .logical_path = dependency.logical_path,
                                 .artifact_key = dependency.artifact_key,
-                                .stable_key = dependency.stable_material_key,
-                                .filter = scene::SceneTextureFilter::nearest,
-                                .address_u = scene::SceneTextureAddress::clamp_to_edge,
-                                .address_v = scene::SceneTextureAddress::clamp_to_edge,
-                                .alpha = scene::SceneTextureAlphaMode::premultiplied,
-                                .color_space = scene::SceneTextureColorSpace::srgb,
-                                .alpha_cutoff = dependency.alpha_cutoff});
+                                .stable_key = dependency.stable_material_key});
+                    }
+                    if (!visibleTextures.empty())
+                    {
+                        state.tileMapStatus = "Visible tile references an undeclared texture identity.";
+                        (void)canvas2d::scene_content::retire(ctx);
+                        return;
                     }
                 }
 #endif
@@ -2508,6 +2795,18 @@
                         (void)canvas2d::scene_content::retire(ctx);
                         return;
                     }
+#if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
+                    const auto projectKey = controller->pipeline().project_key();
+                    if (std::ranges::any_of(tileDependencies, [projectKey](const auto* dependency)
+                        {
+                            return dependency->project_key != projectKey;
+                        }))
+                    {
+                        state.tileMapStatus = "Visible tile references a foreign project texture.";
+                        (void)canvas2d::scene_content::retire(ctx);
+                        return;
+                    }
+#endif
                     textureLease =
                         controller->bind_scene_materials(sourceMaterials);
                     if (!textureLease)
@@ -2524,6 +2823,24 @@
                         (void)canvas2d::scene_content::retire(ctx);
                         return;
                     }
+#if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
+                    for (const auto* dependency : tileDependencies)
+                    {
+                        const canvas2d::LogicalTextureReference expected{
+                            dependency->asset_key, dependency->artifact_revision};
+                        if (std::ranges::none_of(textureLease.materials, [&](const auto& resolved)
+                            {
+                                return resolved.logical == expected
+                                    && resolved.material.logical_path == dependency->logical_path
+                                    && resolved.material.artifact_key == dependency->artifact_key;
+                            }))
+                        {
+                            state.tileMapStatus = "Tile texture binding did not match the map's exact identity.";
+                            (void)canvas2d::scene_content::retire(ctx);
+                            return;
+                        }
+                    }
+#endif
                 }
 
 
@@ -2593,9 +2910,9 @@
                                 || guiPresentation.visible),
                         .editor_only = entity.editorOnly,
                         .selected = editor_entity_selected(state, entity.sceneObjectId),
-                        .material = entity.textureMaterial
+                        .material = materialIndices[index]
                             ? canvas2d_material_view(
-                                *entity.textureMaterial,
+                                sourceMaterials[*materialIndices[index]],
                                 textureLease.materials)
                             : editor_canvas2d::MaterialView{},
                         .gui = guiPresentation});
@@ -2606,51 +2923,22 @@
                         .project = canvas2d_runtime_settings(state.canvas2dProject),
                         .entities = entities,
                         .resources = textureLease.lease,
-                        .source_revision = (std::max)(
-                            std::uint64_t{1},
-                            state.sceneDocumentRevision),
-                        .include_helpers = state.helpersVisible});
+                        .source_revision = sourceRevision,
+                        .include_helpers = state.helpersVisible,
+                        .tile_sprites = tileSprites});
                 if (!built)
                 {
+#if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
+                    if (tileMapPreview)
+                    {
+                        state.tileMapStatus = epochengine::format_text(
+                            "Tile-map Canvas2D preview failed: {}.",
+                            editor_canvas2d::build_code_name(built.code));
+                    }
+#endif
                     (void)canvas2d::scene_content::retire(ctx);
                     return;
                 }
-#if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
-                if (tileMapPreview)
-                {
-                    const std::uint64_t maximumSprites =
-                        static_cast<std::uint64_t>(
-                            built.content.project.maximum_sprites_per_batch)
-                        * built.content.project.maximum_batches;
-                    if (tileMapPreview.visible.sprites.size()
-                        > maximumSprites - built.content.sprites.size())
-                    {
-                        state.tileMapStatus =
-                            "Tile-map preview exceeded the Canvas2D sprite budget.";
-                        (void)canvas2d::scene_content::retire(ctx);
-                        return;
-                    }
-                    built.content.sprites.reserve(
-                        built.content.sprites.size()
-                        + tileMapPreview.visible.sprites.size());
-                    built.content.sprites.insert(
-                        built.content.sprites.end(),
-                        std::make_move_iterator(
-                            tileMapPreview.visible.sprites.begin()),
-                        std::make_move_iterator(
-                            tileMapPreview.visible.sprites.end()));
-                    built.content.source_revision = (std::max)(
-                        built.content.source_revision,
-                        tileMapPreview.artifact->identity.source_revision.sequence);
-                    if (!built.content.valid())
-                    {
-                        state.tileMapStatus =
-                            "Tile-map preview failed Canvas2D resource validation.";
-                        (void)canvas2d::scene_content::retire(ctx);
-                        return;
-                    }
-                }
-#endif
                 (void)canvas2d::scene_content::publish(
                     ctx,
                     std::move(built.content));
@@ -2659,6 +2947,15 @@
             {
                 (void)canvas2d::scene_content::retire(ctx);
             }
+        }
+
+        [[nodiscard]] constexpr bool editor_mesh_mode_uses_base_color(
+            platform::child_process::MeshDrawMode mode, bool opaque) noexcept
+        {
+            using MeshDrawMode = platform::child_process::MeshDrawMode;
+            // Wireframe inspects complete topology. Solid still needs a cutout
+            // texture for its silhouette, while opaque geometry needs no map.
+            return mode != MeshDrawMode::wireframe && (mode != MeshDrawMode::solid || !opaque);
         }
 
         [[nodiscard]] bool restore_editor_mesh_base_color(
@@ -2745,19 +3042,74 @@
             else if(terrain.meshAsset&&terrain.meshAsset->coordinates) {
                 view->origin=terrain.meshAsset->coordinates->source_origin_meters;
                 view->meters_per_unit=terrain.meshAsset->coordinates->meters_per_unit; }
-            std::vector<std::pair<std::uint64_t, std::array<double,3>>> admitted;
+            const auto explicitLasso = state.selectedForestLasso ? selected_forest_area(state) : std::nullopt;
+            const auto selectedRegion = [&](std::uint64_t region,std::uint32_t body) {
+                if (state.selectedForestLasso)
+                    return explicitLasso && explicitLasso->terrain == terrain.sceneObjectId
+                        && explicitLasso->body == body && explicitLasso->region == region;
+                return std::ranges::any_of(state.entities,[&](const auto& instance) {
+                    return instance.forestRegion && instance.forestRegion->region_id == region
+                        && instance.forestRegion->terrain_object_id == terrain.sceneObjectId
+                        && instance.forestRegion->body_index == body
+                        && editor_entity_selected(state,instance.sceneObjectId);
+                });
+            };
+            std::size_t highlightedCount{};
+            const auto publishLasso = [&](const auto& center,double radius,
+                const auto& outline,bool highlighted,bool drafting) {
+                const auto footprint = forest::ForestLassoFootprint::from_directions(outline);
+                if (!footprint) return;
+                const auto points = footprint->vertex_directions();
+                previewgrid::MeshPaintLasso region{
+                    .center = center, .direction = footprint->center_direction(), .radius = radius,
+                    .outline {points.begin(),points.end()},
+                    .fill = highlighted ? std::array{1.0f,.69f,.21f,drafting ? .21f : .30f}
+                        : std::array{.22f,.77f,.42f,.26f},
+                    .edge = highlighted ? std::array{1.0f,.78f,.34f,.94f}
+                        : std::array{.35f,.95f,.59f,.85f}};
+                if (highlighted)
+                {
+                    view->lassos.insert(view->lassos.begin()+highlightedCount,std::move(region));
+                    ++highlightedCount;
+                }
+                else view->lassos.push_back(std::move(region));
+            };
+            if ((state.forestLassoGesture || !terrain.forestPaintRegions.empty())
+                && state.planetaryMeshPolicy && editor_planetary_stream_identity_matches(state,terrain))
+            {
+                const auto& policy = *state.planetaryMeshPolicy;
+                const auto& bodies = policy.generated_bodies;
+                if (state.forestLassoMode && state.forestLassoGesture)
+                {
+                    const auto& gesture = *state.forestLassoGesture;
+                    if (gesture.terrain == terrain.sceneObjectId && gesture.bodySeed == policy.settings.seed
+                        && std::ranges::any_of(bodies,[&](const auto& body) {
+                            return body.id == gesture.bodyIndex && body.radius_meters == gesture.bodyRadiusMeters
+                                && body.center_meters == gesture.bodyCenterMeters;
+                        }))
+                        publishLasso(gesture.bodyCenterMeters,gesture.bodyRadiusMeters,gesture.outline,true,true);
+                }
+                for (const auto& region : terrain.forestPaintRegions)
+                    if (region.valid() && std::ranges::any_of(bodies,[&](const auto& body) {
+                        return region.matches_body(body.id,policy.settings.seed,body.radius_meters,body.center_meters);
+                    }))
+                        publishLasso(region.reference_center_meters,region.body_radius_meters,region.outline,
+                            selectedRegion(region.region_id,region.body_index),false);
+            }
+            std::vector<std::pair<std::pair<std::uint32_t,std::uint64_t>,std::array<double,3>>> admitted;
             for(const auto& tree:state.entities)
             {
                 if(!tree.forestRegion||!tree.forestRegion->valid())continue;
                 const auto& region=*tree.forestRegion;
-                const auto cap = std::pair{region.region_id, region.center_direction};
+                if (std::ranges::any_of(terrain.forestPaintRegions,[&](const auto& lasso) {
+                    return lasso.region_id == region.region_id && lasso.body_index == region.body_index;
+                })) continue; // Use the saved polygon for this region.
+                const auto cap = std::pair{std::pair{region.body_index,region.region_id},region.center_direction};
                 if(region.terrain_object_id!=terrain.sceneObjectId||!terrain.meshAsset
                     ||region.terrain_artifact_key!=terrain.meshAsset->artifact_key
                     ||std::find(admitted.begin(),admitted.end(),cap)!=admitted.end())continue;
                 admitted.push_back(cap);
-                const bool selected=std::any_of(state.entities.begin(),state.entities.end(),[&](const auto& instance){
-                    return instance.forestRegion&&instance.forestRegion->region_id==region.region_id
-                        &&editor_entity_selected(state,instance.sceneObjectId);});
+                const bool selected=selectedRegion(region.region_id,region.body_index);
                 previewgrid::MeshPaintRegion tint{
                     .center=region.admitted_body_center_meters,.direction=region.center_direction,
                     .radius=region.body_radius_meters,
@@ -2773,7 +3125,7 @@
         // The existing Scheduler prepares immutable CPU buffers. Context state
         // and visible publication remain exclusively on the Editor owner.
         [[nodiscard]] bool pump_editor_planetary_preview(const void* ctx,EditorState& state,
-            previewgrid::SceneFrameRequest request,bool meshWireframe)
+            previewgrid::SceneFrameRequest request,platform::child_process::MeshDrawMode meshMode)
         {
             const auto generation=state.projectLifecycle.evidence().generations.selected_project.generation;
             const auto current=[&]{return state.projectRoot==state.planetaryPreviewProjectRoot
@@ -2781,15 +3133,15 @@
                 &&state.sceneDocumentRevision==state.planetaryPreviewSceneRevision
                 &&state.selectedEntityId==state.planetaryPreviewSelection
                 &&state.selectedEntityIds==state.planetaryPreviewSelections
-                &&meshWireframe==state.planetaryPreviewWireframe&&state.planetaryPreviewRequest
+                &&meshMode==state.planetaryPreviewDrawMode&&state.planetaryPreviewRequest
                 &&state.planetaryPreviewRequest->depth_fit_aspect==request.depth_fit_aspect;};
             bool refused{};
             const auto failed=[&](std::string_view message){
                 refused=true;
                 if(state.projectStatus!=message)push_editor_log(state,"[asset] "+std::string{message});
                 state.projectStatus=message;
-                if(state.viewportMeshWireframeRequest==meshWireframe)
-                    state.viewportMeshWireframeRequest.reset();
+                if(state.viewportMeshDrawModeRequest==meshMode)
+                    state.viewportMeshDrawModeRequest.reset();
             };
             if(state.planetaryPreviewPending&&!current()&&state.taskScheduler
                 &&state.planetaryPreviewCancellation.valid())
@@ -2811,9 +3163,9 @@
                         published=previewgrid::commit_scene_frame(ctx,std::move(*prepared),&request);
                         if(published)
                         {
-                            state.viewportMeshWireframe=state.planetaryPreviewWireframe;
-                            if(state.viewportMeshWireframeRequest==state.viewportMeshWireframe)
-                                state.viewportMeshWireframeRequest.reset();
+                            state.viewportMeshDrawMode=state.planetaryPreviewDrawMode;
+                            if(state.viewportMeshDrawModeRequest==state.viewportMeshDrawMode)
+                                state.viewportMeshDrawModeRequest.reset();
                         }
                         else state.planetaryPreviewRequest.reset();
                     }
@@ -2854,7 +3206,7 @@
                         state.planetaryPreviewSceneRevision=state.sceneDocumentRevision;
                         state.planetaryPreviewSelection=state.selectedEntityId;
                         state.planetaryPreviewSelections=state.selectedEntityIds;
-                        state.planetaryPreviewWireframe=meshWireframe;
+                        state.planetaryPreviewDrawMode=meshMode;
                     }
                     catch(...)
                     {
@@ -3012,7 +3364,16 @@
                     midpoint[axis] = (double(low[axis]) + high[axis]) * 0.5;
                     half[axis] = (double(high[axis]) - low[axis]) * std::abs(transform->scale[axis]) * 0.5;
                 }
-                center = transform->apply(midpoint);
+                // A translation handle follows the model's placement pivot,
+                // not its visual center. Lightning grows down from its authored
+                // origin; ordinary meshes rest on their local bottom center.
+                auto pivot = midpoint;
+                if (entity.type == project_lightning::scene_type) pivot = {};
+                else pivot[1] = low[1];
+                center = transform->apply(pivot);
+                for (std::size_t axis = 0; axis < half.size(); ++axis)
+                    half[axis] = (std::max)(std::abs(double(low[axis])-pivot[axis]),
+                        std::abs(double(high[axis])-pivot[axis])) * std::abs(transform->scale[axis]);
                 radius = std::hypot(half[0],half[1],half[2]);
             }
             const double extent = (std::max)(radius * 1.25, 0.5);
@@ -3031,7 +3392,8 @@
                 markers.push_back({.position={float(center[0]),float(center[1]),float(center[2])},
                     .color=previewgrid::scale(colors[axis],locked && mode != axisModes[axis] ? 0.32f : 1.0f),
                     .scale={float(extent),1,1},.rotationDegrees=rotations[axis],
-                    .primitive=previewgrid::ObjectPreviewPrimitive::TranslationArrow,.editorOnly=true});
+                    .primitive=previewgrid::ObjectPreviewPrimitive::TranslationArrow,.editorOnly=true,
+                    .interactionOwner=entity.sceneObjectId});
         }
 
         void publish_editor_preview_markers(const core::Context* ctx, EditorState& state)
@@ -3041,7 +3403,8 @@
             if (editor_project_viewport_input_reserved(state)) return;
             // A mode change is committed with the geometry, never with a
             // dropdown click whose wire working set may be refused.
-            const bool meshWireframe = state.viewportMeshWireframeRequest.value_or(state.viewportMeshWireframe);
+            const auto meshMode = state.viewportMeshDrawModeRequest.value_or(state.viewportMeshDrawMode);
+            const bool meshWireframe = meshMode == platform::child_process::MeshDrawMode::wireframe;
             if (!ctx || state.previewMode != core::ScenePreviewMode::Editor)
             {
                 epochengine::previewgrid::clear_object_markers(ctx);
@@ -3130,6 +3493,11 @@
 
                 const bool selected = !forestPreview && editor_entity_selected(
                     state, entity.sceneObjectId);
+                const bool lightning = entity.type == project_lightning::scene_type;
+                const auto strike = lightning ? state.lightningPreview.sample(entity.sceneObjectId, sampleTime)
+                    : project_lightning::Projection{};
+                if (lightning && !strike && !(selected && state.helpersVisible)) continue;
+                const auto tint = strike.color();
                 auto snapshotAsset=entity.meshAsset;
                 if(snapshotAsset&&entity.meshSnapshotFrame)
                     snapshotAsset->coordinates=scene::SceneMeshCoordinates{entity.meshSnapshotFrame->meters_per_unit,entity.meshSnapshotFrame->source_origin_meters};
@@ -3172,14 +3540,17 @@
                         continue;
                     }
                 }
-                if (!forestPainting && !restore_editor_mesh_base_color(ctx,state,entity)) continue;
+                const bool useBaseColor = !forestPainting && editor_mesh_mode_uses_base_color(meshMode,
+                    entity.textureMaterial && entity.textureMaterial->alpha == scene::SceneTextureAlphaMode::opaque);
+                if (useBaseColor && !restore_editor_mesh_base_color(ctx,state,entity)) continue;
                 markers.push_back(epochengine::previewgrid::ObjectMarker{
                     .position{
                         previewPosition[0],
                         previewPosition[1],
                         previewPosition[2]
                     },
-                    .color = selection_color_for_entity(entity, selected),
+                    .color = strike ? previewgrid::Vec3{tint[0], tint[1], tint[2]}
+                        : selection_color_for_entity(entity, selected),
                     .scale{
                         (*meshScale)[0],
                         (*meshScale)[1],
@@ -3191,18 +3562,20 @@
                         entity.rotation[2]
                     },
                     .radius = marker_radius_for_entity(entity),
-                    .primitive = entity.meshAsset || entity.meshSnapshot
-                        ? previewgrid::ObjectPreviewPrimitive::IndexedMesh : preview_primitive_for_entity(entity),
+                    .primitive = strike || entity.meshAsset || entity.meshSnapshot
+                        ? previewgrid::ObjectPreviewPrimitive::IndexedMesh
+                        : lightning ? previewgrid::ObjectPreviewPrimitive::Light : preview_primitive_for_entity(entity),
                     .selected = !forestPainting && marker_selected_for_entity(entity, selected),
                     .editorOnly = entity.editorOnly || entity.category == "Editor" || is_plant_lab_preview_entity(entity),
                     .sampledRenderSurface = entity.category == "EngineArcade" && entity.name == epochengine::render_arcade::kScreenSceneNode.name,
-                    .mesh = entity.meshSnapshot,
+                    .mesh = lightning ? strike.mesh : entity.meshSnapshot,
                     .wireframe = forestPainting ? false : meshWireframe,
-                    .baseColorTexture = forestPainting ? nullptr : entity.meshBaseColorTexture,
-                    .forestLighting = entity.type == "ForestTrunk" && bool(entity.meshSnapshot)
+                    .baseColorTexture = useBaseColor ? entity.meshBaseColorTexture : nullptr,
+                    .forestLighting = entity.type == "ForestTrunk" && bool(entity.meshSnapshot),
+                    .unlit = static_cast<bool>(strike)
                 });
                 if(forestPainting)markers.back().paintView=forest_paint_view(state,entity);
-                if(entity.positionAnchor)
+                if(entity.positionAnchor || forestPainting)
                 {
                     markers.back().preciseTransform=previewgrid::make_precise_mesh_transform(*worldPivot,
                         {(*meshScale)[0],(*meshScale)[1],(*meshScale)[2]},markers.back().rotationDegrees);
@@ -3220,6 +3593,10 @@
                         {(*meshScale)[0],(*meshScale)[1],(*meshScale)[2]},markers.back().rotationDegrees);
                     if(!markers.back().preciseTransform)return;
                 }
+                if(entity.sceneObjectId==state.planetaryStreamEntity&&markers.back().mesh
+                    &&state.planetaryStreamAppearance
+                    &&markers.back().mesh->key()==state.planetaryStreamAppearance->artifact_key)
+                    markers.back().sphericalWater=state.planetaryStreamAppearance;
                 if (selected && entity.sceneObjectId == state.selectedEntityId && state.helpersVisible
                     && state.mainSurface == EditorMainSurface::Scene)
                 {
@@ -3252,9 +3629,9 @@
                         const double scale=terrain->scale[0];
                         if(scale<=0.0||std::abs(terrain->scale[1]-scale)>scale*1e-6
                             ||std::abs(terrain->scale[2]-scale)>scale*1e-6)return;
-                        if(ctx->type!=core::ContextType::OpenGL)
+                        if(!ctx->preview_density_clouds)
                         {
-                            state.projectTextureStatus="Volumetric clouds currently require OpenGL; this backend has no density pass.";
+                            state.projectTextureStatus="Volumetric clouds are unavailable in this renderer.";
                         }
                         else cloudVolumes.push_back({.center=center,.radius=layer.radius_meters*scale,
                             .meters_per_world_unit=1.0/scale,
@@ -3284,6 +3661,9 @@
                     }
                 }
             }
+            for (auto& marker : markers)
+                marker.neutralSurface = !forestPainting && !marker.unlit
+                    && meshMode == platform::child_process::MeshDrawMode::solid;
             const bool planetaryFrame=!forestPreview
                 &&(std::any_of(previewEntities.begin(),previewEntities.end(),[](const auto& entity){
                     return entity.visible&&entity.positionAnchor.has_value();})
@@ -3346,7 +3726,7 @@
                     const auto viewport=ctx->scene_viewport();
                     if(viewport.width>0&&viewport.height>0)
                         request.depth_fit_aspect=double(viewport.width)/double(viewport.height);
-                    published=pump_editor_planetary_preview(ctx,state,std::move(request),meshWireframe);
+                    published=pump_editor_planetary_preview(ctx,state,std::move(request),meshMode);
                     if(!published)
                         return;
                 }
@@ -3367,11 +3747,11 @@
                 const std::string failure = "Mesh preview exceeds the frame geometry budget; the previous scene was retained.";
                 if (state.projectStatus != failure) push_editor_log(state, "[asset] " + failure);
                 state.projectStatus = failure;
-                state.viewportMeshWireframeRequest.reset();
+                state.viewportMeshDrawModeRequest.reset();
                 return;
             }
-            state.viewportMeshWireframe = meshWireframe;
-            state.viewportMeshWireframeRequest.reset();
+            state.viewportMeshDrawMode = meshMode;
+            state.viewportMeshDrawModeRequest.reset();
             if (state.planetaryInitialFramePending && !state.lodInspectionReturnCamera
                 && state.mainSurface == EditorMainSurface::Scene)
             {
@@ -3386,8 +3766,13 @@
                 {
                     if(entity.visible&&entity.category=="Planetary Terrain"&&entity.meshAsset)
                     {++planets;planet=&entity;}
-                    if(entity.type=="Camera")cameras.push_back({entity.name,entity.type,entity.category,
-                        entity.position,entity.rotation,entity.scale,entity.visible,entity.editorOnly});
+                    if(entity.type=="Camera")
+                    {
+                        if (entity.positionAnchor || entity.terrainAttachment)
+                        {state.planetaryInitialFramePending = false; return;}
+                        cameras.push_back({entity.name,entity.type,entity.category,
+                            entity.position,entity.rotation,entity.scale,entity.visible,entity.editorOnly});
+                    }
                 }
                 if(planets!=1u){state.planetaryInitialFramePending=false;return;}
                 if(!planet->meshSnapshot)return; // Wait for the normal validated asset load.

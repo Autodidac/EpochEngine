@@ -16,7 +16,7 @@ TABS = ROOT / "Engine/src/epochgui/controls/gui.navigation_chrome.inl"
 
 def fixture(before_buttons=None, before_tabs=None):
     base = pane_fixture()
-    api = (ROOT / "Engine/modules/gui.engine.ixx").read_text(encoding="utf-8")
+    api = (ROOT / "Engine/modules/gui/gui.engine.ixx").read_text(encoding="utf-8")
     bounds = definition(api, "    export struct WidgetBounds", True).replace("export ", "")
     base = base.replace("struct Frame{", bounds + "\nstruct Frame{std::optional<WidgetBounds> lastButtonBounds;")
     base = base.replace("textFieldActive=5;", "textFieldActive=5,textField=6;")
@@ -31,7 +31,8 @@ struct SemanticPair{int accent=7,background=8;};SemanticPair active_semantic_pai
 float space_advance(float scale){return 4*scale;}constexpr float kButtonTextClipInset=2;
 // Neutral painting ports; pointer ownership is the tested production contract.
 void draw_button_icon(ButtonIcon,Vec2,Vec2){}
-void draw_button_tooltip(std::string_view,Vec2){}
+void draw_button_tooltip(std::string_view,Vec2,float=0){}
+bool point_in_tooltip_capture(Vec2 point){return point_in_modal_input_capture(point);}
 '''
     base = base.replace("}\nusing namespace gui;", icon + ports + button + "\n}\nusing namespace gui;", 1)
     if before_tabs:

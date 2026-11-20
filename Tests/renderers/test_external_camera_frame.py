@@ -14,9 +14,11 @@ def fixture():
     editor = ROOT / 'Engine/src/editor/application'
     documents = (editor / 'editor.application_project_documents.inl').read_text(encoding='utf-8')
     scene = (editor / 'editor.application_scene_preview.inl').read_text(encoding='utf-8')
+    interaction = (editor / 'editor.application_document_editing.inl').read_text(encoding='utf-8')
     owners = '\n'.join((definition(documents, '        [[nodiscard]] bool begin_editor_lod_inspection('),
                        definition(documents, '        void end_editor_lod_inspection('),
-                       definition(scene, '        void append_editor_translation_gizmo(')))
+                       definition(scene, '        void append_editor_translation_gizmo('),
+                       definition(interaction, '        [[nodiscard]] std::optional<ScenePointerMode> pick_editor_translation_axis(')))
     return r'''
 #include <algorithm>
 #include <array>
@@ -25,6 +27,8 @@ def fixture():
 #include <limits>
 #include <optional>
 #include <span>
+#include <string>
+#include <string_view>
 #include <tuple>
 #include <vector>
 import render.preview_grid;
@@ -33,14 +37,20 @@ namespace preview=epochengine::previewgrid;
 namespace previewgrid=preview;
 namespace camera=epochengine::render_camera;
 enum class ScenePointerMode{select,move_free,move_x,move_y,move_z};
+enum class EditorMainSurface{Scene,Other};
+namespace core{struct Context{};}
+namespace gui{struct Vec2{float x{},y{};};struct WidgetBounds{Vec2 position{},size{800,600};};}
 struct EditorState{
  std::optional<preview::CameraRigSnapshot> lodInspectionReturnCamera;
  preview::CameraMode viewportCameraMode{preview::CameraMode::Editor};
  bool planetaryStreamContinue{},sceneDragActive{};std::uint64_t planetaryStreamNextTick{999};
  ScenePointerMode scenePointerMode{ScenePointerMode::select},sceneDragMode{ScenePointerMode::select};
+ bool helpersVisible{true};EditorMainSurface mainSurface{EditorMainSurface::Scene};std::uint64_t selectedEntityId{1};
 };
+std::optional<std::size_t> editor_entity_index(const EditorState&,std::uint64_t id){return id?std::optional<std::size_t>{0}:std::nullopt;}
 struct Body{preview::Vec3 target;float radius;};
-struct EditorEntity{std::optional<std::array<double,3>> positionAnchor;std::optional<Body> body;};
+namespace project_lightning{constexpr std::string_view scene_type="Lightning";}
+struct EditorEntity{std::string type;std::optional<std::array<double,3>> positionAnchor;std::optional<Body> body;std::uint64_t sceneObjectId{1};};
 std::optional<Body> editor_planetary_body_focus(const EditorState&,const EditorEntity& entity){return entity.body;}
 EDITOR_OWNERS
 #define CHECK(value) do {if(!(value))return __LINE__;}while(false)
@@ -52,6 +62,67 @@ bool same(const preview::Camera&a,const preview::Camera&b) {
   &&a.orthographicVerticalSize==b.orthographicVerticalSize;
 }
 int main() {
+ int editorGuides{},playGuides{};
+ preview::set_camera_mode(&editorGuides,preview::CameraMode::Editor);
+ preview::set_camera_mode(&playGuides,preview::CameraMode::Editor);
+ const auto visibleGrid=preview::grid_geometry_for(&playGuides);
+ CHECK(!visibleGrid->indices.empty()&&preview::look_marker_vertex_count_for(&playGuides)>0);
+ const auto editorGuideRevision=preview::preview_geometry_revision_for(&editorGuides);
+ const auto visibleGuideRevision=preview::preview_geometry_revision_for(&playGuides);
+ preview::set_authoring_guides_visible(&playGuides,true);
+ CHECK(preview::preview_geometry_revision_for(&playGuides)==visibleGuideRevision);
+ preview::set_authoring_guides_visible(&playGuides,false);
+ const auto hiddenGuideRevision=preview::preview_geometry_revision_for(&playGuides);
+ CHECK(hiddenGuideRevision!=visibleGuideRevision);
+ preview::set_authoring_guides_visible(&playGuides,false);
+ CHECK(preview::preview_geometry_revision_for(&playGuides)==hiddenGuideRevision);
+ CHECK(preview::grid_geometry_for(&playGuides)->indices.empty());
+ CHECK(preview::look_marker_vertex_count_for(&playGuides)==0);
+ CHECK(!preview::grid_geometry_for(&editorGuides)->indices.empty());
+ CHECK(preview::look_marker_vertex_count_for(&editorGuides)>0);
+ preview::set_camera_mode(&playGuides,preview::CameraMode::FPS);
+ preview::reset_camera(&playGuides);
+ CHECK(!preview::authoring_guides_visible(&playGuides));
+ preview::set_camera_mode(&playGuides,preview::CameraMode::Editor);
+ const auto beforeGuideRestore=preview::preview_geometry_revision_for(&playGuides);
+ preview::set_authoring_guides_visible(&playGuides,true);
+ const auto restoredGuideRevision=preview::preview_geometry_revision_for(&playGuides);
+ CHECK(restoredGuideRevision!=beforeGuideRestore);
+ preview::set_authoring_guides_visible(&playGuides,true);
+ CHECK(preview::preview_geometry_revision_for(&playGuides)==restoredGuideRevision);
+ CHECK(preview::preview_geometry_revision_for(&editorGuides)==editorGuideRevision);
+ CHECK(!preview::grid_geometry_for(&playGuides)->indices.empty());
+ CHECK(preview::look_marker_vertex_count_for(&playGuides)>0);
+ preview::set_authoring_guides_visible(&playGuides,false);
+ preview::cleanup_context(&playGuides);
+ CHECK(preview::authoring_guides_visible(&playGuides));
+ preview::cleanup_context(&editorGuides);
+
+ // Opening a saved planet camera keeps a precise eye, look direction and roll
+ // in the ordinary navigable rig, even after a large-distance orbit.
+ int authored{};
+ preview::set_camera_mode(&authored,preview::CameraMode::Editor);
+ CHECK(preview::focus_camera(&authored,{6371000,0,0},6371000));
+ const auto identity=preview::capture_camera_rig_snapshot(&authored).logical_view_id;
+ const std::array<double,3> authoredEye{1e9+.125,-2e9+.5,3e9-.25};
+ const preview::Vec3 authoredForward{.8f,.6f,0.0f},authoredUp{-.36f,.48f,.8f};
+ CHECK(preview::set_editor_camera_pose(&authored,authoredEye,authoredForward,authoredUp));
+ auto authoredView=preview::camera_for(&authored);
+ CHECK(preview::camera_world_eye(authoredView)==authoredEye);
+ CHECK(preview::dot(preview::camera_forward(authoredView),authoredForward)>1.f-1e-6f);
+ CHECK(preview::dot(preview::normalize(authoredView.up),authoredUp)>1.f-1e-6f);
+ CHECK(preview::capture_camera_rig_snapshot(&authored).logical_view_id==identity);
+ CHECK(authoredView.nearPlane==.05f);
+ CHECK(preview::set_editor_camera_pose(&authored,authoredEye,{0,1,0},{0,0,1}));
+ authoredView=preview::camera_for(&authored);
+ CHECK(preview::camera_world_eye(authoredView)==authoredEye);
+ CHECK(preview::camera_forward(authoredView).y>1.f-1e-6f&&authoredView.up.z>1.f-1e-6f);
+ const auto authoredRevision=preview::camera_revision_for(&authored);
+ CHECK(!preview::set_editor_camera_pose(&authored,authoredEye,{0,1,0},{0,1,0}));
+ CHECK(preview::camera_revision_for(&authored)==authoredRevision);
+ preview::zoom_camera(&authored,1.f);
+ CHECK(preview::camera_world_eye(preview::camera_for(&authored))!=authoredEye);
+ preview::cleanup_context(&authored);
  int inspection{};EditorState editor;
  preview::set_camera_mode(&inspection,preview::CameraMode::Editor);
  CHECK(preview::set_editor_view(&inspection,preview::EditorView::Front));
@@ -86,10 +157,71 @@ int main() {
   const auto error=preview::subtract((*lines)[axis*10+1].position,tip);
   CHECK(preview::dot(error,error)<1e-10f);
  }
+ // Asymmetric model pivot follows local bottom under rotation/scale; lightning
+ // retains its authored emitter origin. No saved transform is rewritten.
+ const std::array<epochengine::asset::mesh::Vertex,3> pivotVertices{{
+  {.position={-2,-3,-1}}, {.position={4,-3,5}}, {.position={1,7,2}}}};
+ const std::array<std::uint32_t,3> pivotIndices{0,1,2};
+ const auto pivotMesh=epochengine::asset::mesh::build_artifact(pivotVertices,pivotIndices);CHECK(pivotMesh);
+ preview::ObjectMarker pivotMarker{.position={10,20,30},.scale={2,3,4},.rotationDegrees={0,0,90},.mesh=pivotMesh.artifact};
+ const auto pivotTransform=preview::make_precise_mesh_transform({10,20,30},{2,3,4},{0,0,90});CHECK(pivotTransform);
+ const auto expectedPivot=pivotTransform->apply({1,-3,2});
+ arrows.clear();append_editor_translation_gizmo(arrows,editor,entity,pivotMarker,{});
+ CHECK(arrows.size()==3&&std::abs(arrows[0].position.x-expectedPivot[0])<1e-4&&std::abs(arrows[0].position.y-expectedPivot[1])<1e-4);
+ entity.type="Lightning";arrows.clear();append_editor_translation_gizmo(arrows,editor,entity,pivotMarker,{});
+ CHECK(arrows.size()==3&&same_vec(arrows[0].position,pivotMarker.position));entity.type.clear();
  arrows.clear();entity.positionAnchor=std::array<double,3>{1e12,2e12,3e12};entity.body=Body{{10,20,30},6371000};
  append_editor_translation_gizmo(arrows,editor,entity,object,{1e12+9,2e12+19,3e12+29});
  CHECK(arrows.size()==3&&same_vec(arrows[0].position,{1,1,1})&&arrows[0].scale.x>6371000);
  preview::cleanup_context(&gizmo);
+ // Actual published shafts, not arrowhead buttons or object ray hits. Test a
+ // viewport offset, all axes, stale selection, helper visibility and contexts.
+ core::Context handles{},otherHandles{};gui::WidgetBounds vp{{30,40},{800,600}};
+ preview::Camera handleCamera{.eye={6,5,8},.target={},.up={0,1,0},.nearPlane=.05f,.farPlane=100};
+ CHECK(preview::set_external_camera_frame(&handles,handleCamera));
+ EditorEntity handleEntity;editor.scenePointerMode=ScenePointerMode::select;
+ std::vector<preview::ObjectMarker> handleArrows;
+ append_editor_translation_gizmo(handleArrows,editor,handleEntity,preview::ObjectMarker{.scale={2,2,2}},{});
+ CHECK(preview::set_object_markers(&handles,handleArrows));
+ auto pointAt=[&](preview::Vec3 point){const auto current=preview::translation_handles_for(&handles).camera;
+  const auto m=preview::multiply(preview::projection_for(&handles,vp.size.x/vp.size.y,current),preview::look_at(current.eye,current.target,current.up));
+  const auto p=preview::transform_point(m,point);return gui::Vec2{vp.position.x+(p.x/p.w*.5f+.5f)*vp.size.x,vp.position.y+(.5f-p.y/p.w*.5f)*vp.size.y};};
+ constexpr std::array modes{ScenePointerMode::move_x,ScenePointerMode::move_y,ScenePointerMode::move_z};
+ for(unsigned axis=0;axis<3;++axis){preview::Vec3 p{};(axis==0?p.x:axis==1?p.y:p.z)=handleArrows[axis].scale.x*.45f;
+  CHECK(pick_editor_translation_axis(&handles,editor,vp,pointAt(p))==modes[axis]);}
+ const auto shaft=pointAt({handleArrows[0].scale.x*.6f,0,0});
+ CHECK(!pick_editor_translation_axis(&otherHandles,editor,vp,shaft));
+ editor.selectedEntityId=2;CHECK(!pick_editor_translation_axis(&handles,editor,vp,shaft));editor.selectedEntityId=1;
+ editor.helpersVisible=false;CHECK(!pick_editor_translation_axis(&handles,editor,vp,shaft));editor.helpersVisible=true;
+ editor.mainSurface=EditorMainSurface::Other;CHECK(!pick_editor_translation_axis(&handles,editor,vp,shaft));editor.mainSurface=EditorMainSurface::Scene;
+ CHECK(!pick_editor_translation_axis(&handles,editor,vp,{0,0}));
+ CHECK(!pick_editor_translation_axis(&handles,editor,vp,pointAt({}))); // Shared pivot is not an arbitrary axis.
+ // A front view keeps its X/Y shafts; the end-on Z shaft cannot be grabbed.
+ handleCamera.eye={0,0,8};CHECK(preview::set_external_camera_frame(&handles,handleCamera));
+ CHECK(pick_editor_translation_axis(&handles,editor,vp,pointAt({1,0,0}))==ScenePointerMode::move_x);
+ CHECK(pick_editor_translation_axis(&handles,editor,vp,pointAt({0,1,0}))==ScenePointerMode::move_y);
+ CHECK(!pick_editor_translation_axis(&handles,editor,vp,pointAt({0,0,1})));
+ // Planetary helpers use the accepted packet camera, not an unrelated current
+ // navigation pose or a second addition of its enormous render origin.
+ CHECK(preview::publish_scene_frame(&handles,handleArrows,handleCamera,{}, {},{1e12,2e12,3e12}));
+ preview::Camera unrelated=handleCamera;unrelated.eye={400,500,600};
+ CHECK(preview::set_external_camera_frame(&handles,unrelated));
+ CHECK(pick_editor_translation_axis(&handles,editor,vp,pointAt({1,0,0}))==ScenePointerMode::move_x);
+ // Owner-only metadata changes must invalidate the accepted marker cache.
+ for(auto& arrow:handleArrows)arrow.interactionOwner=2;
+ CHECK(preview::set_object_markers(&handles,handleArrows));
+ CHECK(preview::set_external_camera_frame(&handles,handleCamera));
+ CHECK(!pick_editor_translation_axis(&handles,editor,vp,pointAt({1,0,0})));
+ editor.selectedEntityId=2;CHECK(pick_editor_translation_axis(&handles,editor,vp,pointAt({1,0,0}))==ScenePointerMode::move_x);
+ editor.selectedEntityId=1;
+ // Only Z crosses the near plane; its visible shaft remains pickable.
+ handleCamera.eye={};handleCamera.target={0,0,1};
+ CHECK(preview::set_external_camera_frame(&handles,handleCamera));
+ for(auto& arrow:handleArrows){arrow.interactionOwner=1;arrow.position={.2f,.1f,.02f};arrow.scale.x=2;}
+ CHECK(preview::set_object_markers(&handles,handleArrows));
+ CHECK(pick_editor_translation_axis(&handles,editor,vp,pointAt({.2f,.1f,1}))==ScenePointerMode::move_z);
+ preview::clear_object_markers(&handles);CHECK(!pick_editor_translation_axis(&handles,editor,vp,shaft));
+ preview::cleanup_context(&handles);preview::cleanup_context(&otherHandles);
  // Switching navigation styles must not teleport a planetary editor view
  // to the world origin. A large FPS eye still needs a representable target.
  int switching{};
@@ -334,7 +466,7 @@ class ExternalCameraFrame(unittest.TestCase):
         source.write_text(fixture(), encoding="utf-8")
         module_map = {}
         for owner in (ROOT / "Engine/modules", ROOT / "Engine/dep/EpochPlatformEngine/modules"):
-            for path in owner.glob("*.ixx"):
+            for path in owner.rglob("*.ixx"):
                 match = re.search(r"^export module\s+([\w.:]+);", path.read_text(encoding="utf-8-sig"), re.M)
                 if match:
                     self.assertNotIn(match.group(1), module_map, "Duplicate module owner")

@@ -146,7 +146,7 @@
             editor_tool_pane_labels() noexcept
         {
             return {
-                "3D Objects",
+                "Scene Hierarchy",
                 "Asset Browser",
                 "GUI Hierarchy",
                 "Script Browser",
@@ -1451,7 +1451,7 @@
                             "Received {} bytes | {} stream events | text {} bytes | tool arguments {} bytes | reasoning {} bytes | last response {}s ago. Counts are bytes/events, not tokens; a partial reply is not an applied change.",
                             progress.response_bytes, progress.response_events,
                             progress.content_bytes, progress.tool_argument_bytes,
-                            progress.reasoning_bytes, (std::max)(std::int64_t{0}, silence));
+                            progress.reasoning_bytes, (std::max)(std::chrono::seconds::rep{0}, silence));
                     }
                 }
                 switch (stage)
@@ -2029,6 +2029,18 @@
             return {};
         }
 
+        struct ForestTerrainRayCache
+        {
+            struct Chunk
+            {
+                std::size_t firstIndex{}, indexCount{};
+                std::array<float,3> minimum{}, maximum{};
+            };
+            // Weak identity cannot retain obsolete terrain LOD artifacts.
+            std::weak_ptr<const asset::mesh::Artifact> artifact{};
+            std::vector<Chunk> chunks{};
+        };
+
         struct EditorEntity
         {
             scene::SceneObjectId sceneObjectId{ scene::kInvalidSceneObjectId };
@@ -2050,6 +2062,7 @@
             std::shared_ptr<const previewgrid::MeshBaseColorBinding> meshBaseColorTexture{};
             std::optional<std::array<double,3>> positionAnchor{};
             std::optional<scene::SceneForestRegionInstance> forestRegion{};
+            std::vector<scene::SceneForestPaintRegion> forestPaintRegions{};
             std::optional<scene::SceneTerrainAttachment> terrainAttachment{};
         };
 
@@ -2257,7 +2270,7 @@
 
         // One inventory owns tab identity, Window commands and saved visibility.
         inline constexpr std::array<EditorWorkspaceSpec, 11> kEditorWorkspaceSpecs{{
-            {EditorMainSurface::Scene,"document.world","3D Preview",112.0f,{},true},
+            {EditorMainSurface::Scene,"document.world","Main Scene",112.0f,{},true},
             {EditorMainSurface::Game2D,"document.game2d","2D",64.0f,false,false},
             {EditorMainSurface::Game2D,"document.gui","UI",64.0f,true,false},
             {EditorMainSurface::ForestFactory,"document.forest","Forest Factory",126.0f,{},false},
@@ -2296,6 +2309,10 @@
             std::string projectPickerId{};
             std::string projectManifestPathDraft{};
             bool projectPathAdvancedOpen{};
+#if defined(__ANDROID__) && defined(EPOCH_USING_SDL) && EPOCH_USING_SDL == 1
+            bool pollProjectTransfer{true};
+            std::string projectTransferStatus{};
+#endif
             std::string projectName{};
             std::string projectRoot{};
             std::string projectScenePath{};
@@ -2308,6 +2325,7 @@
             std::string projectStatus{};
             std::string projectBuildStatus{};
             std::string projectBuildDiagnosticTail{};
+            std::uint64_t projectBuildDiagnosticGeneration{};
             std::string scriptBuildStatus{};
             std::optional<std::future<EditorScriptBuildResult>> scriptBuildPending{};
             editor_tasks::CancellationTicket scriptBuildCancellation{};
@@ -2355,6 +2373,7 @@
             std::string projectRuntimeAttachmentError{};
             std::string projectRuntimeOutputLog{};
             std::uint64_t projectBuildLifecycleGeneration{};
+            bool projectBuildReusesReviewedArtifact{};
             std::uint64_t projectBuildProjectKey{};
             std::string projectBuildProjectId{};
             std::string projectBuildProjectRoot{};
@@ -2371,24 +2390,25 @@
                 std::string configuration{}, path{};
             } projectBuildTranscript{};
             std::string projectBuildRunBackend{};
-            double projectBuildRunFrameLimitFps{ 30.0 };
+            double projectBuildRunFrameLimitFps{};
             previewgrid::CameraMode projectBuildRunCameraMode{ previewgrid::CameraMode::Editor };
             input::ProfilePreset projectBuildRunInputProfile{ input::ProfilePreset::EditorDefault };
             std::string projectRunBackend{ "opengl" };
             EditorCanvas2DProjectSnapshot canvas2dProject{};
-            double projectRunFrameLimitFps{ 30.0 };
+            double projectRunFrameLimitFps{};
+            bool projectScreenSpaceGuiEnabled{ true };
             using FrameLimitEditState = gui::FrameLimitEditState;
             FrameLimitEditState projectFrameLimitEdit{};
-            previewgrid::CameraMode projectCameraMode{ previewgrid::CameraMode::Editor };
+            std::optional<previewgrid::CameraMode> projectCameraMode{};
             previewgrid::CameraMode viewportCameraMode{ previewgrid::CameraMode::Editor };
             std::optional<previewgrid::CameraRigSnapshot> lodInspectionReturnCamera{};
-            bool viewportMeshWireframe{};
-            std::optional<bool> viewportMeshWireframeRequest{};
+            platform::child_process::MeshDrawMode viewportMeshDrawMode{platform::child_process::MeshDrawMode::shaded};
+            std::optional<platform::child_process::MeshDrawMode> viewportMeshDrawModeRequest{};
             input::ProfilePreset inputProfilePreset{ input::ProfilePreset::EditorDefault };
             gui::ThemePreference themePreference{ gui::ThemePreference::FollowSystemDark };
             std::uint32_t themeCycleIntervalSeconds{30u};
             bool roundedRectangles{ true };
-            double editorFrameLimitFps{ 30.0 };
+            double editorFrameLimitFps{};
             FrameLimitEditState editorFrameLimitEdit{};
             bool editorFrameVsyncRequested{ false };
             std::string selectedProjectFile{};
@@ -2449,6 +2469,9 @@
             std::size_t projectWorkspaceSection{};
             bool projectCreationOpen{};
             std::size_t projectCreationKind{};
+#if defined(__ANDROID__)
+            std::string projectCreationStatus{};
+#endif
             float assetGridScroll{};
             std::vector<std::uint64_t> assetGridVisibleIds{};
             std::uint64_t selectedProjectAudioCueId{};
@@ -2496,6 +2519,7 @@
             std::string guiDocumentSourcePath{};
             std::uint64_t guiDocumentSavedRevision{};
             bool guiDocumentLoadAttempted{};
+            std::string guiNameEditor{};
             std::string guiContentPrimary{};
             std::string guiContentSecondary{};
             std::string guiActionEditor{};
@@ -2570,6 +2594,31 @@
             bool forestBrushHeld{};
             scene::SceneObjectId forestBrushTerrain{scene::kInvalidSceneObjectId};
             std::vector<std::array<double,3>> forestBrushDirections{};
+            bool forestLassoMode{};
+            struct ForestAreaSelection final
+            {
+                scene::SceneObjectId terrain{};
+                std::uint32_t body{};
+                std::uint64_t region{}, projectGeneration{};
+                friend bool operator==(const ForestAreaSelection&, const ForestAreaSelection&) = default;
+            };
+            std::optional<ForestAreaSelection> selectedForestLasso{};
+            struct ForestLassoGesture final
+            {
+                scene::SceneObjectId terrain{}, selection{};
+                std::uint64_t projectGeneration{}, sceneRevision{};
+                const core::Context* context{};
+                std::uint32_t bodyIndex{}, bodySeed{};
+                double bodyRadiusMeters{};
+                std::array<double,3> bodyCenterMeters{};
+                project_planetary::SourceGeneration source{};
+                project_planetary::MeshGenerationIdentity mesh{};
+                gui::WidgetBounds viewport{};
+                gui::Vec2 lastPointer{}, lastTestedPointer{};
+                std::vector<std::array<double,3>> outline{};
+            };
+            std::optional<ForestLassoGesture> forestLassoGesture{};
+            ForestTerrainRayCache forestTerrainRayCache{};
             std::optional<previewgrid::Camera> forestPlacementCamera{};
             std::string plantLabStatus{
                 "Plant Lab document is ready to initialize."};
@@ -2603,7 +2652,7 @@
             std::uint64_t planetaryPreviewProjectGeneration{},planetaryPreviewSceneRevision{};
             scene::SceneObjectId planetaryPreviewSelection{};
             std::vector<scene::SceneObjectId> planetaryPreviewSelections{};
-            bool planetaryPreviewWireframe{};
+            platform::child_process::MeshDrawMode planetaryPreviewDrawMode{platform::child_process::MeshDrawMode::shaded};
             std::array<double,3> sceneInteractionOrigin{};
             std::size_t selectedEntity{ 0 };
             scene::SceneObjectId selectedEntityId{ scene::kInvalidSceneObjectId };
@@ -2640,6 +2689,7 @@
             ScenePointerMode scenePointerMode{ScenePointerMode::select};
             bool sceneDragActive{ false };
             bool sceneDragMoved{};
+            bool sceneDragFromHandle{};
             ScenePointerMode sceneDragMode{ScenePointerMode::select};
             bool sceneLeftWasHeld{ false };
             std::size_t sceneDragEntity{ 0 };
@@ -2668,6 +2718,7 @@
             epochengine::saveload::StreamingSaveStatus streamingSaveStatus{};
             epochengine::saveload::StreamingCheckpointRecord lastCheckpointRecord{};
             epochengine::timeline::TimelineState timelineState{};
+            project_lightning::PreviewCache lightningPreview{};
             std::vector<epochengine::timeline::TimelineTrack> timelineTracks{};
             std::vector<epochengine::timeline::TimelineEvent> timelineEvents{};
             epochengine::media::timeline_preview::PreviewState
@@ -2720,6 +2771,10 @@
             bool showInspector{ true };
             bool showConsoleDock{ true };
             bool showAiChat{ true };
+            bool showCommandMenu{ true };
+            bool showTelemetry{ true };
+            unsigned int telemetryDetail{}; // 0 Full, 1 Compact, 2 Resources, 3 Minimal, 4 Hidden.
+            bool showEpochResourceUsage{};
             std::string detachedAiChatInput{};
             std::array<bool, kEditorToolPaneCount> toolPaneOpen{
                 default_tool_pane_open_state() };
@@ -2781,14 +2836,21 @@
             // start GGUF inference or restore a saved set without an operator action.
             unsigned aiNativeAutoScanDelayFrames{ 4u };
             bool aiNativeAutoScanAttempted{};
-            int aiModelManagerTab{}; // Installed / Local API / Direct GGUF / Browse
+            int aiModelManagerTab{}; // Installed / Local API / Direct GGUF / Browse / Tiers
+            int aiModelGuidePage{}; // Tier key / Directory / Comparison
+            int aiModelGuideCategory{}; // Registered / Downloads / Packages / External
+            int aiModelComparisonGroup{}; // Flash/Edge0 / 9B/27B / Modified variants
+            bool aiModelGuideEvidenceOpen{};
+            std::string aiModelGuideExpanded{};
             int aiModelManagerSection{}; // Runtime / System 1 / Routing / Training / Tools
             std::string aiModelPendingUnregister{}; // Inline confirmation; no weight deletion
+            std::string aiModelPendingDownloadDeletion{};
             std::string aiDirectExecutableDraft{};
             std::string aiDirectModelDraft{};
             std::string aiModelManagerFeedback{};
             bool aiModelCatalogDetailsOpen{};
             std::string aiModelCatalogSelection{};
+            std::string aiModelSearchRoot{};
             std::string aiModelCatalogApproval{}; // Exact offer/revision/hash; never a tool permission.
             std::unordered_map<std::string, unsigned> aiNativeOffloadDraft{};
             std::unordered_map<std::string, epochengine::ai::native_runtime::ModelTuning> aiNativeTuningDraft{};
@@ -2863,11 +2925,13 @@
                 std::optional<forest::ForestAreaDistribution> area{};
                 std::vector<std::array<double,3>> directions{};
                 std::vector<std::array<double,3>> brushCenters{};
+                std::vector<std::array<double,3>> lassoOutline{};
                 bool findOceanShoreline{};
                 std::uint64_t existingRegion{};
                 // Keep the exact authored objects while new ground is sampled.
                 std::uint64_t sceneRevision{};
                 bool refreshAttachments{};
+                bool placePlayerStart{};
                 std::vector<scene::SceneObjectSnapshot> refreshObjects{};
                 std::vector<project_planetary::GeneratedBody> refreshBodies{};
             };
@@ -2912,6 +2976,7 @@
             project_planetary::MeshGenerationIdentity planetaryStreamMesh{};
             std::uint64_t planetaryStreamSequence{}, planetaryStreamEntity{};
             std::shared_ptr<const asset::mesh::Artifact> planetaryStreamSnapshot{};
+            std::shared_ptr<const asset::mesh::SphericalWaterAppearance> planetaryStreamAppearance{};
             std::optional<project_planetary_snapshot::CloudLayer> planetaryStreamCloud{};
             std::optional<project_planetary::GeneratedMeshFrame> planetaryStreamFrame{};
             std::array<std::uint64_t, 4> planetaryStreamFallbackKey{};
@@ -2922,7 +2987,10 @@
             bool planetaryStreamContinue{true}, planetaryStreamFailed{};
             std::string planetaryStreamStatus{};
 
-            bool packageCatalogModelsOnly{};
+            enum class PackageManagerPage { packages, ai_resources, examples };
+            PackageManagerPage packageManagerPage{PackageManagerPage::packages};
+            std::size_t selectedProjectExample{};
+            std::string packageExampleStatus;
             bool packageTechnicalDetailsOpen{};
             std::string packageCatalogSearch{};
             std::string packageInstallStatus{ "The Site package catalog has not loaded." };

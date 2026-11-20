@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.28)
-project(EpochMediaEngine VERSION 0.1.0 LANGUAGES CXX)
+project(EpochMediaEngine VERSION 0.1.1 LANGUAGES CXX)
 add_library(epoch_media_engine STATIC
 )
 add_library(Epoch::MediaEngine ALIAS epoch_media_engine)
@@ -29,5 +29,6 @@ if(EPOCHMEDIA_BUILD_GUI_DEMO)
     set(EPOCHGUI_DEMO_COMPOSITION media)
     set(EPOCHGUI_DEMO_LIBRARY_PAGE ON)
     set(EPOCHGUI_DEMO_APP_NAME EpochMediaDemo)
+    set(EPOCH_MEDIA_ROOT "${CMAKE_CURRENT_SOURCE_DIR}")
     add_subdirectory("${EPOCHGUI_DEMO_ROOT}" "${CMAKE_CURRENT_BINARY_DIR}/demonstration")
 endif()

@@ -5,6 +5,8 @@
 #include "ai.asset_stage_fwd.hpp"
 #include "ai.native_idle_policy.hpp"
 #include "ai.model_behavior.hpp"
+#include "ai.model_capability.hpp"
+#include "ai.native_model_discovery.hpp"
 #include "native/ai.backend_models_candidate_catalog.hpp"
 // Epoch-owned, native C++23 Epoch AI service. The public boundary deliberately
 // does not leak nlohmann/json or backend headers into Epoch C++ module BMIs.
@@ -70,6 +72,9 @@ namespace epochengine::ai::native_runtime {
         bool stage_started{}, stage_succeeded{}, workers_retired{}, restored{};
         std::vector<std::string> suspended_ids{}, restored_ids{}, recovery_ids{};
         std::vector<std::uint64_t> suspended_process_ids{}, restored_process_ids{};
+        // Project build results transfer this existing gate to their owned child.
+        // Releasing it allows manual loading; it never restores weights.
+        std::shared_ptr<idle::RetirementClaim> admission_claim{};
         std::string diagnostic{};
         [[nodiscard]] explicit operator bool() const noexcept {
             return code == AssetStageCode::completed;
@@ -77,11 +82,13 @@ namespace epochengine::ai::native_runtime {
     };
     using AssetStageCallback = std::function<AssetStageCompletion(
         std::stop_token, const AssetStagePermit&)>;
+    enum class AssetStageRestoration : std::uint8_t { restore_previous, leave_unloaded };
     // Blocking boundary for an existing cancellable task/headless command, never
     // a UI frame or the native queue worker. No source/model preferences are saved.
     [[nodiscard]] AssetStageOutcome run_asset_stage(AssetStageCallback callback,
         std::stop_token cancellation = {},
-        std::chrono::seconds queue_timeout = std::chrono::seconds{600});
+        std::chrono::seconds queue_timeout = std::chrono::seconds{600},
+        AssetStageRestoration restoration = AssetStageRestoration::restore_previous);
     struct Result final {
         bool ok{};
         std::string message{};
@@ -94,6 +101,7 @@ namespace epochengine::ai::native_runtime {
     struct ModelTuning final {
         std::uint32_t idle_timeout_minutes{20}; // 0 explicitly keeps residency.
         std::string runtime_policy{"recommended"};
+        std::string capability_tier{"reference"};
         std::string gpu_layers{"auto"};
         std::uint32_t gpu_layer_count_hint{48};
         std::uint32_t context_tokens{81'920}, parallel_slots{1};
@@ -128,6 +136,9 @@ namespace epochengine::ai::native_runtime {
         bool loaded_tuning_known{};
         std::string loaded_gpu_layers{};
         std::string id{}, label{}, uri{}, runtime{}, role{};
+        // Read-only filesystem observation, never hash/runtime admission.
+        std::string weights_status{};
+        std::string local_weights_filename{}; // Original imported filename; reconnect identity only.
         bool installed{}, active{}, trainable{};
         std::uint64_t cached_bytes{}, expected_bytes{};
         std::uint32_t gpu_offload_percent{100};
@@ -170,6 +181,9 @@ namespace epochengine::ai::native_runtime {
         std::string recent_events{};
         std::string storage_root{};
         std::vector<ModelEntry> models{}, roles{};
+        std::vector<native_discovery::ModelFileCandidate> discovered_models{};
+        std::filesystem::path discovery_root{};
+        std::string discovery_status{};
         ModelBenchmark benchmark{};
         TrainingState training{};
         std::string routing{};
@@ -209,6 +223,11 @@ namespace epochengine::ai::native_runtime {
     [[nodiscard]] bool unload();
     [[nodiscard]] bool unload(std::string model_id);
     [[nodiscard]] bool refresh();
+    // Explicit folder selection; discovers metadata only and remembers the root
+    // for later Rescan in this session. Never registers, downloads or loads.
+    [[nodiscard]] bool discover_model_files(std::filesystem::path root);
+    // Explicit stale-profile repair; preserves tuning and never starts a model.
+    [[nodiscard]] bool reconnect_model_file(std::string id, std::string path);
     // Selecting a method/model starts one owned readiness flow: reuse cache,
     // provision/install if required, load, select and report actual failures.
     [[nodiscard]] bool prepare(std::string model_id = {});
@@ -231,11 +250,13 @@ namespace epochengine::ai::native_runtime {
     [[nodiscard]] bool benchmark_model(std::string model_id, std::string prompt);
     // Removes only the Epoch model profile; never deletes GGUF weights.
     [[nodiscard]] bool unregister_model(std::string model_id);
+    [[nodiscard]] bool delete_model_offer_download(std::string package_id);
     [[nodiscard]] bool assign_role(std::string role,std::string model_uri);
     [[nodiscard]] bool select_for_epoch_requests(bool enabled);
     [[nodiscard]] bool selected() noexcept;
     using StreamObserver = std::function<void(OutputKind, std::string_view)>;
     [[nodiscard]] Result complete_host_request(std::string_view request_json,
         std::uint32_t timeout_seconds, std::stop_token cancellation,
-        const StreamObserver& observer = {});
+        const StreamObserver& observer = {},
+        const std::function<void()>& before_dispatch = {});
 }

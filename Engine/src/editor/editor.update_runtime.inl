@@ -639,6 +639,11 @@
 
         void start_editor_update_check(EditorState& editor, const bool passive = false)
         {
+#if defined(__ANDROID__)
+            if (!passive)
+                push_editor_log(editor, "[update] Install updates through the Android package.");
+            return;
+#endif
             // An explicit request may join a startup check already in flight.
             // Preserve that operator intent until the same result is consumed.
             if (!passive)

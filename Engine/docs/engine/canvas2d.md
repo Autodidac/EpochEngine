@@ -331,6 +331,20 @@ documents. Save, reopen, Play, Run, and Build resolve the same revisions and
 project profile. Schema migration is explicit, deterministic, and rejects data
 it cannot preserve.
 
+The Tile Map workspace publishes both authored and compiled data before it
+records a first `tilemap` declaration for an ordinary Game. The admitted project
+profile refreshes immediately. A failed publish leaves the manifest unchanged,
+and existing manual map paths and Software projects are preserved. The saved
+Run camera resolves the same way for Play, Run and direct launch. Auto selects
+Canvas2D for a Game with a declared map. An explicit launch camera takes
+precedence. This leaves the independent authoring camera free for inspection.
+
+The 2D Platformer Example is authored under its final project identity and
+imports from Project Examples. Source-only playback can regenerate a missing
+compiled tile texture if its hash, project identity and revision match the map.
+Corrupt cache and changed-source cases remain refused. Native cacheless Play,
+external presentation and input remain open after the scoped build tests.
+
 Generated sprite batches, tile chunks, decoded images, render targets, backend
 variants, and preview captures live in `Library/` or `Cache/`. Deleting them
 must trigger bounded regeneration from source documents and compiled inputs.

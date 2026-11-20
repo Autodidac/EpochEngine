@@ -754,4 +754,30 @@ namespace epochengine::ai::model_install
                 "Only an exact compiled model install plan may be admitted.");
         return detail::verify_snapshot_for_plan(models_cache_root, plan);
     }
+
+    PublishResult delete_verified_snapshot(
+        const std::filesystem::path& models_cache_root, const InstallPlan& plan)
+    {
+        auto verified = verify_snapshot(models_cache_root, plan);
+        if (!verified.accepted()) return verified;
+        const auto source = verified.installed_root;
+        const auto retired = source.parent_path() / (".removing-" + plan.revision);
+        std::error_code error;
+        if (std::filesystem::exists(retired, error) || error)
+            return failure(Code::final_conflict, retired, "A previous removal needs attention.");
+        std::filesystem::rename(source, retired, error);
+        if (error)
+            return failure(Code::filesystem_error, source, "Could not detach the verified model snapshot.");
+        for (const auto& artifact : plan.artifacts)
+        {
+            if (!std::filesystem::remove(retired / artifact.file, error) || error)
+                return failure(Code::filesystem_error, retired, "Some files remain in " + retired.string());
+        }
+        if (!std::filesystem::remove(retired / receipt_filename, error) || error
+            || !std::filesystem::remove(retired, error) || error)
+            return failure(Code::filesystem_error, retired, "Model files were removed. Cleanup remains at " + retired.string());
+        verified.code = Code::removed;
+        verified.diagnostic = "Download deleted. The model profile is available for another download.";
+        return verified;
+    }
 }

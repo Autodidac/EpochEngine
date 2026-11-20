@@ -33,6 +33,8 @@
 // Epoch Core: preserve engine-defined primitives, APIs and module contracts.
 module;
 
+#include <exception>
+
 #include "../../include/core.stl_types.hpp"
 
 #if defined(_WIN32)

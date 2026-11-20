@@ -7,7 +7,7 @@
   "model_selection": "explicit-operator-selection",
   "download_policy": "on-demand-cache-only",
   "model_cache_root": "cache/models",
-  "project_inclusion": "explicit-package-opt-in",
+  "project_inclusion": "references-only; install model weights separately",
   "engine_iteration_weight_policy": "do-not-clone-or-bundle-weights",
   "repo_safe_manifest": true,
   "local_weights_only": false,
@@ -56,7 +56,7 @@
       "project_bundle_default": false
     }
   ],
-  "notes": "Epoch does not ship or automatically download model weights. Qwen3.8-Flash-Next runs in an installed/operator-owned EngCoder 0.7.1+ backend on :14321; Epoch uses /v1/chat/completions and does not overwrite model or GPU settings. Qwen3.8 27B remains a standalone local fallback. Historical Nemotron stays optional for compatibility. Creative model downloads and project bundling remain explicitly opt-in and license-checked.",
+  "notes": "Epoch manages explicit local model downloads separately from project packages. Project packages can reference a model or provider. Generated assets may be included subject to the rights in their inputs and outputs. Model weight redistribution requires a separate audit of the exact artifacts and their terms.",
   "legacy_optional_coding_model_lanes": [
     {
       "id": "nvidia/NVIDIA-Nemotron-3-Nano-4B-BF16",

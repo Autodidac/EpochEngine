@@ -5,23 +5,21 @@
     {
       "repository": "Autodidac/EpochGui",
       "root_argument": "EPOCHGUI_ROOT",
-      "base_revision": "c52e91293749a7a34959bfc042c582c3ac182504",
-      "selection": "local unpublished Gui input-ownership checkpoint; use explicit local EPOCHGUI_ROOT",
-      "revision": "28d81396a4b1e782264712d97bbe7c8aefc05748"
+      "selection": "Published source; native visual acceptance pending",
+      "revision": "7761f146b55fa4f78d15c53db5c33385f80f58f9"
     },
     {
       "repository": "Autodidac/EpochGui_Demo",
       "root_argument": "EPOCHGUI_DEMO_ROOT",
-      "base_revision": "eaf26a37b8bed4756294c17b141c7b35be69653b",
-      "selection": "published Demo 0.7.0 source; the Media-owned optional composition and native runtime acceptance are separate checks",
-      "revision": "4ae2233a5da36d636a4f6a4af4dc6df852ca9430"
+      "selection": "Published source; native visual acceptance pending",
+      "revision": "0bb44dc85de873f6d5d39948b80f6f4cf6eba74d"
     }
   ],
   "release_ready": false,
   "source_revisions": {
-    "Gui": "28d81396a4b1e782264712d97bbe7c8aefc05748",
-    "Gui_Demo": "4ae2233a5da36d636a4f6a4af4dc6df852ca9430"
+    "Gui": "7761f146b55fa4f78d15c53db5c33385f80f58f9",
+    "Gui_Demo": "0bb44dc85de873f6d5d39948b80f6f4cf6eba74d"
   },
-  "dependency_status": "local_unpublished_checkpoint",
-  "published_gui_revision": "7d5d5514a1443c0ef340a626fa163569858ca362"
+  "dependency_status": "published_source",
+  "published_gui_revision": "7761f146b55fa4f78d15c53db5c33385f80f58f9"
 }

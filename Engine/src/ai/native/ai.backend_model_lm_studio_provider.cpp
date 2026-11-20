@@ -330,41 +330,38 @@ void consume_chat_data(ChatStreamState& state, std::string_view payload) {
 
 template <class State, class Consume>
 void consume_sse_lines(State& state, bool flush, Consume&& consume) {
-    for (;;) {
-        const auto newline = state.pending.find('\n');
-        if (newline == std::string::npos) {
-            break;
-        }
-
-        auto line = state.pending.substr(0, newline);
-        state.pending.erase(0, newline + 1);
-        if (!line.empty() && line.back() == '\r') {
-            line.pop_back();
-        }
-        if (!line.starts_with("data:")) {
-            continue;
-        }
-
-        auto data = std::string_view(line).substr(5);
-        while (!data.empty() && data.front() == ' ') {
-            data.remove_prefix(1);
-        }
-        consume(state, data);
-    }
-
-    if (flush && !state.pending.empty()) {
-        auto line = std::exchange(state.pending, {});
-        if (!line.empty() && line.back() == '\r') {
-            line.pop_back();
-        }
+    const std::string_view pending = state.pending;
+    std::size_t consumed = 0;
+    // Consumers copy payloads and do not mutate pending. Compact once per batch,
+    // retaining the original consumed-before-callback behavior on exceptions.
+    const auto dispatch = [&](std::string_view line) {
+        if (!line.empty() && line.back() == '\r') line.remove_suffix(1);
         if (line.starts_with("data:")) {
-            auto data = std::string_view(line).substr(5);
+            auto data = line.substr(5);
             while (!data.empty() && data.front() == ' ') {
                 data.remove_prefix(1);
             }
             consume(state, data);
         }
+    };
+    try {
+        for (;;) {
+            const auto newline = pending.find('\n', consumed);
+            if (newline == std::string_view::npos) break;
+            const auto line = pending.substr(consumed, newline - consumed);
+            consumed = newline + 1;
+            dispatch(line);
+        }
+        if (flush && consumed < pending.size()) {
+            const auto line = pending.substr(consumed);
+            consumed = pending.size();
+            dispatch(line);
+        }
+    } catch (...) {
+        state.pending.erase(0, consumed);
+        throw;
     }
+    if (consumed != 0) state.pending.erase(0, consumed);
 }
 
 size_t chat_stream_cb(char* ptr, size_t size, size_t nmemb, void* userdata) noexcept {

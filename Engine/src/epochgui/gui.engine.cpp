@@ -211,14 +211,20 @@ namespace epochengine::gui
             }
         };
 
+        constexpr std::uint32_t kWindowShadowFade = 12u;
+        constexpr std::uint32_t kWindowShadowInset = 5u;
+        constexpr std::uint32_t kWindowShadowSliceSize = kWindowShadowFade + kWindowShadowInset;
+
         struct GuiResources
         {
             struct PaletteSprites
             {
                 SpriteHandle windowBackground{};
+                SpriteHandle overlayBackground{};
                 SpriteHandle buttonNormal{};
                 SpriteHandle buttonHover{};
                 SpriteHandle buttonActive{};
+                Color buttonColor{};
                 SpriteHandle textField{};
                 SpriteHandle textFieldActive{};
                 SpriteHandle panelBackground{};
@@ -281,7 +287,7 @@ namespace epochengine::gui
             GuiFontCache statusWarningLightFont{.fontName = kStatusWarningLightFontName};
             GuiFontCache statusErrorFont{.fontName = kStatusErrorFontName};
             GuiFontCache statusErrorLightFont{.fontName = kStatusErrorLightFontName};
-            SpriteHandle windowShadow{};
+            std::array<std::array<SpriteHandle, 3>, 3> windowShadow{};
             SpriteHandle contrastBlack{}, contrastWhite{};
             font::FontRenderer fontRenderer{};
             std::array<const TextureAtlas*, font::kFontAtlasMaximumPages> fontAtlasPages{};
@@ -331,6 +337,7 @@ namespace epochengine::gui
             std::shared_ptr<std::vector<QueuedSpriteDraw>> draws{};
             std::uint64_t generation = 0;
             std::uint64_t replayedGeneration = 0;
+            bool tracePopupReplay = false;
         };
 
         static std::unordered_map<const void*, UploadState, PtrHash> g_uploadedContexts{};
@@ -505,6 +512,7 @@ namespace epochengine::gui
         struct PendingSelectPopup
         {
             std::string scrollKey{};
+            bool traceOpen = false;
             Vec2 position{};
             float width = 0.0f;
             float height = 0.0f;
@@ -635,6 +643,7 @@ namespace epochengine::gui
             std::shared_ptr<core::Context> ctxShared{};
             core::Context* ctx = nullptr;
             const void* visitedActiveWidget{};
+            std::optional<core::Context::NativeTextInputArea> nativeTextInput{};
 
             Vec2 cursor{};
             Vec2 origin{};
@@ -687,6 +696,7 @@ namespace epochengine::gui
             std::vector<QueuedSpriteDraw> queuedDraws{};
             std::vector<QueuedSpriteDraw> topLayerDraws{};
             std::vector<PendingSelectPopup> pendingSelectPopups{};
+            bool tracePopupPublication = false;
             std::vector<ThemeVariant> themeStack{};
             std::vector<gui_lib::rounded_rect::RoundedRectStyle> roundedRectStyleStack{};
             int topLayerDepth = 0;
@@ -735,6 +745,7 @@ namespace epochengine::gui
             const GuiResources::PaletteSprites& palette) noexcept
         {
             return palette.windowBackground.is_valid()
+                && palette.overlayBackground.is_valid()
                 && palette.buttonNormal.is_valid()
                 && palette.buttonHover.is_valid()
                 && palette.buttonActive.is_valid()
@@ -1191,6 +1202,44 @@ namespace epochengine::gui
                 entry->region.v2 - entry->region.v1);
             return handle;
         }
+        static void register_window_shadow(TextureAtlas& atlas)
+        {
+            const auto distanceToCore = [](std::size_t slice, std::uint32_t pixel) {
+                if (slice == 1)
+                    return 0.0f;
+                const float fromOuter = static_cast<float>(slice == 0
+                    ? pixel : kWindowShadowSliceSize - 1u - pixel) + 0.5f;
+                return static_cast<float>(kWindowShadowSliceSize) - fromOuter;
+            };
+
+            for (std::size_t row = 0; row < 3; ++row)
+            {
+                for (std::size_t col = 0; col < 3; ++col)
+                {
+                    if (row == 1 && col == 1)
+                        continue;
+                    const std::uint32_t width = col == 1 ? 1u : kWindowShadowSliceSize;
+                    const std::uint32_t height = row == 1 ? 1u : kWindowShadowSliceSize;
+                    std::vector<std::uint8_t> pixels(static_cast<std::size_t>(width) * height * 4u);
+                    for (std::uint32_t y = 0; y < height; ++y)
+                    {
+                        for (std::uint32_t x = 0; x < width; ++x)
+                        {
+                            const float distance = std::hypot(distanceToCore(col, x), distanceToCore(row, y))
+                                - static_cast<float>(kWindowShadowInset);
+                            const float coverage = std::clamp(1.0f - distance
+                                / (static_cast<float>(kWindowShadowFade) - 0.5f), 0.0f, 1.0f);
+                            pixels[(static_cast<std::size_t>(y) * width + x) * 4u + 3u] =
+                                static_cast<std::uint8_t>(std::lround(108.0f * coverage * coverage
+                                    * (3.0f - 2.0f * coverage)));
+                        }
+                    }
+                    g_resources.windowShadow[row][col] = add_sprite(atlas,
+                        "__agui/window_shadow/" + std::to_string(row * 3 + col), pixels, width, height);
+                }
+            }
+        }
+
         static void register_rounded_control(
             TextureAtlas& atlas,
             SpriteHandle fill,
@@ -1617,8 +1666,7 @@ namespace epochengine::gui
                     make_solid_pixels(0xFF, 0xA1, 0x38, 0x78, 8, 8), 8, 8);
                 g_resources.dockContextHover = add_sprite(atlas, "__agui/dock_context_hover",
                     make_solid_pixels(0xFF, 0xB4, 0x55, 0xD0, 8, 8), 8, 8);
-                g_resources.windowShadow = add_sprite(atlas, "__agui/window_shadow",
-                    make_solid_pixels(0x00, 0x00, 0x00, 0x58, 8, 8), 8, 8);
+                register_window_shadow(atlas);
                 g_resources.contrastBlack = add_sprite(atlas, "__agui/contrast_black",
                     make_solid_pixels(0, 0, 0, 255, 8, 8), 8, 8);
                 g_resources.contrastWhite = add_sprite(atlas, "__agui/contrast_white",
@@ -1642,9 +1690,16 @@ namespace epochengine::gui
                             make_solid_pixels(rgba.r, rgba.g, rgba.b, rgba.a, 8, 8), 8, 8);
                     };
                     target.windowBackground = surface("window_bg", spec.window);
+                    const gui_lib::Rgba8 ink = spec.isLight
+                        ? gui_lib::Rgba8{25, 39, 58, 255} : gui_lib::Rgba8{255, 255, 255, 255};
+                    const auto overlay = gui_lib::translucent_surface(
+                        {spec.window.r, spec.window.g, spec.window.b, spec.window.a}, ink, 184);
+                    const theme_detail::Rgb overlayTint{overlay.r, overlay.g, overlay.b, overlay.a};
+                    target.overlayBackground = surface("overlay_bg", overlayTint);
                     target.buttonNormal = surface("button_normal", spec.button);
                     target.buttonHover = surface("button_hover", spec.hover);
                     target.buttonActive = surface("button_active", spec.active);
+                    target.buttonColor = {spec.button.r, spec.button.g, spec.button.b, spec.button.a};
                     target.textField = surface("text_field", spec.input);
                     target.textFieldActive = surface("text_field_active", spec.inputActive);
                     target.panelBackground = surface("panel_bg", spec.panel);
@@ -1679,6 +1734,7 @@ namespace epochengine::gui
                     // Expanded Activity cards and context-menu surfaces must
                     // have registered corner sprites, or requested radii render square.
                     rounded(target.windowBackground, "window_bg", spec.window);
+                    rounded(target.overlayBackground, "overlay_bg", overlayTint);
                     rounded(target.panelBackground, "panel_bg", spec.panel);
                     rounded(target.consoleBackground, "console_bg", spec.console);
                 };
@@ -1857,7 +1913,8 @@ namespace epochengine::gui
             perform_backend_upload(ctx);
         }
 
-        static void draw_sprite_raw(const SpriteHandle& handle, float x, float y, float w, float h)
+        static void draw_sprite_raw(const SpriteHandle& handle, float x, float y, float w, float h,
+            bool clipToContent = true)
         {
             if (!handle.is_valid())
                 return;
@@ -1873,7 +1930,7 @@ namespace epochengine::gui
             if (!ctx)
                 return;
 
-            if (has_content_clip())
+            if (clipToContent && has_content_clip())
             {
                 const float left = (std::max)(x, g_frame.contentMin.x);
                 const float top = (std::max)(y, g_frame.contentMin.y);
@@ -1913,7 +1970,34 @@ namespace epochengine::gui
 
             auto atlases = epochengine::atlasmanager::get_atlas_vector_snapshot();
             std::span<const TextureAtlas* const> span(atlases.data(), atlases.size());
-            ctx->draw_sprite_safe(handle, span, x, y, w, h);
+            ctx->draw_sprite_safe(handle, span, x, y, w, h, true);
+        }
+
+        static void draw_window_shadow(Vec2 position, Vec2 size, bool clipToContent = false)
+        {
+            constexpr float fade = static_cast<float>(kWindowShadowFade);
+            constexpr float inset = static_cast<float>(kWindowShadowInset);
+            constexpr float drop = 3.0f;
+            const float left = std::round(position.x);
+            const float top = std::round(position.y) + drop;
+            const float right = std::round(position.x + size.x);
+            const float bottom = std::round(position.y + size.y) + drop;
+            if (!(right - left >= 2.0f * inset && bottom - top >= 2.0f * inset))
+                return;
+
+            const std::array x{left - fade, left + inset, right - inset, right + fade};
+            const std::array y{top - fade, top + inset, bottom - inset, bottom + fade};
+            // A floating window crosses its own content clip. A tooltip in a
+            // docked pane keeps that pane's clip. Both use the same perimeter.
+            for (std::size_t row = 0; row < 3; ++row)
+            {
+                for (std::size_t col = 0; col < 3; ++col)
+                {
+                    if (row != 1 || col != 1)
+                        draw_sprite_raw(g_resources.windowShadow[row][col], x[col], y[row],
+                            x[col + 1] - x[col], y[row + 1] - y[row], clipToContent);
+                }
+            }
         }
 
         // The existing sprite path clips every edge, queues it on the current
@@ -1952,12 +2036,14 @@ namespace epochengine::gui
             float y,
             float w,
             float h,
-            const gui_lib::rounded_rect::RoundedRectStyle& requestedStyle)
+            const gui_lib::rounded_rect::RoundedRectStyle& requestedStyle,
+            bool explicitCircle = false,
+            const RoundedCorners* authoredCorners = nullptr)
         {
             auto style = gui_lib::rounded_rect::normalize_rounded_rect_style(requestedStyle);
-            // A per-widget radius must never override the editor-level
-            // square-controls preference. Geometry/hit testing are unchanged.
-            style.enabled = style.enabled && rounded_rectangles_enabled();
+            // An explicit circle has a matching round hitbox. Other custom
+            // radii follow the editor's square-controls preference.
+            style.enabled = style.enabled && (explicitCircle || authoredCorners || rounded_rectangles_enabled());
             // A circular square control uses an independent high-resolution
             // silhouette; the nine-slice path is reserved for rounded rectangles.
             if (style.enabled && w >= 8.0f && h >= 8.0f
@@ -1972,16 +2058,17 @@ namespace epochengine::gui
                 }
             }
             const auto cornersIt = g_resources.roundedControls.find(handle);
+            const auto* spriteCorners = authoredCorners ? authoredCorners
+                : cornersIt == g_resources.roundedControls.end() ? nullptr : &cornersIt->second;
             if (!style.enabled
-                || cornersIt == g_resources.roundedControls.end()
-                || !cornersIt->second.valid()
+                || !spriteCorners || !spriteCorners->valid()
                 || (std::min)(w, h) < 8.0f)
             {
                 draw_sprite_raw(handle, x, y, w, h);
                 return;
             }
 
-            const RoundedCorners& corners = cornersIt->second;
+            const RoundedCorners& corners = *spriteCorners;
             const float radius = (std::min)({
                 style.control_radius,
                 w * 0.5f,
@@ -2024,6 +2111,98 @@ namespace epochengine::gui
                 bottom - cornerRadius, cornerRadius, cornerRadius);
             draw_sprite_raw(corners.bottomLeft, left, bottom - cornerRadius,
                 cornerRadius, cornerRadius);
+        }
+
+        struct AuthoredButtonSurface final { SpriteHandle fill{}; RoundedCorners corners{}; };
+
+        [[nodiscard]] static AuthoredButtonSurface authored_button_surface(Color color) noexcept
+        {
+            constexpr std::size_t maximumColors = 64u;
+            static constexpr char atlasName[] = "__agui_authored_buttons";
+            static std::unordered_map<std::uint32_t, AuthoredButtonSurface> surfaces;
+            const auto key = static_cast<std::uint32_t>(color.r) << 24u
+                | static_cast<std::uint32_t>(color.g) << 16u
+                | static_cast<std::uint32_t>(color.b) << 8u | color.a;
+            try
+            {
+                std::scoped_lock lock{g_resourceMutex};
+                if (const auto found = surfaces.find(key); found != surfaces.end())
+                    return found->second;
+                if (surfaces.size() >= maximumColors) return {};
+                auto& surface = surfaces.try_emplace(key).first->second;
+                auto atlas = epochengine::atlasmanager::atlas_map.find(atlasName);
+                if (atlas == epochengine::atlasmanager::atlas_map.end())
+                {
+                    (void)epochengine::atlasmanager::create_atlas({
+                        .name = atlasName, .width = 256u, .height = 256u, .generate_mipmaps = false});
+                    atlas = epochengine::atlasmanager::atlas_map.find(atlasName);
+                }
+                if (atlas == epochengine::atlasmanager::atlas_map.end()) return {};
+                auto& texture = *atlas->second;
+                const std::string name = std::string{atlasName} + "/" + std::to_string(key);
+                constexpr std::uint32_t radius = 8u;
+                using Corner = gui_lib::rounded_corner_raster::Corner;
+                const auto corner = [&](std::string_view suffix, Corner shape) {
+                    return add_sprite(texture, name + std::string{suffix},
+                        gui_lib::rounded_corner_raster::rgba(radius, shape, color.r, color.g, color.b, color.a),
+                        radius, radius);
+                };
+                surface = {add_sprite(texture, name,
+                    make_solid_pixels(color.r, color.g, color.b, color.a, 2u, 2u), 2u, 2u),
+                    {corner("/tl", Corner::top_left), corner("/tr", Corner::top_right),
+                        corner("/br", Corner::bottom_right), corner("/bl", Corner::bottom_left),
+                        static_cast<float>(radius)}};
+                epochengine::atlasmanager::ensure_uploaded(texture);
+                return surface;
+            }
+            catch (...) { return {}; }
+        }
+
+        [[nodiscard]] static bool draw_authored_button_face(const AuthoredButtonStyle& style,
+            Vec2 pos, float width, float height, bool hovered, bool pressed, bool enabled) noexcept
+        {
+            // Keep the painted outline inside the authored fractional clip.
+            // The rounded-sprite helper otherwise snaps an outer edge past it.
+            const float right = std::floor(pos.x + width);
+            const float bottom = std::floor(pos.y + height);
+            pos = {std::ceil(pos.x), std::ceil(pos.y)};
+            width = right - pos.x;
+            height = bottom - pos.y;
+            if (width <= 0.0f || height <= 0.0f) return false;
+            Color tint = style.face;
+            const auto shade = [hovered, pressed, enabled](std::uint8_t value) {
+                if (!enabled) return static_cast<std::uint8_t>(value * 3u / 4u);
+                if (pressed) return static_cast<std::uint8_t>(value * 7u / 8u);
+                if (hovered) return static_cast<std::uint8_t>(value + (255u - value) / 12u);
+                return value;
+            };
+            tint.r = shade(tint.r);
+            tint.g = shade(tint.g);
+            tint.b = shade(tint.b);
+            const auto face = authored_button_surface(tint);
+            const float edge = (std::clamp)(std::round(style.border_width), 0.0f,
+                std::floor((std::min)(width, height) * .5f));
+            const auto border = edge > 0.0f ? authored_button_surface(style.border) : AuthoredButtonSurface{};
+            if (!face.fill.is_valid() || (edge > 0.0f && !border.fill.is_valid())) return false;
+            const float radius = (std::max)(0.0f, style.corner_radius);
+            const auto draw = [&](const AuthoredButtonSurface& surface, float inset, float cornerRadius) {
+                const auto bounds = gui_lib::rounded_rect::RoundedRectStyle{.enabled = true, .control_radius = cornerRadius};
+                draw_rounded_sprite(surface.fill, pos.x + inset, pos.y + inset,
+                    width - 2.0f * inset, height - 2.0f * inset, bounds, false, &surface.corners);
+            };
+            if (edge > 0.0f && tint.a < 255u)
+            {
+                // A translucent face should composite directly over the parent.
+                // Keep its border disjoint from the face's interior.
+                draw_sprite_raw(border.fill, pos.x, pos.y, width, edge);
+                draw_sprite_raw(border.fill, pos.x, pos.y + height - edge, width, edge);
+                draw_sprite_raw(border.fill, pos.x, pos.y + edge, edge, height - 2.0f * edge);
+                draw_sprite_raw(border.fill, pos.x + width - edge, pos.y + edge, edge, height - 2.0f * edge);
+            }
+            else if (edge > 0.0f) draw(border, 0.0f, radius);
+            if (width > 2.0f * edge && height > 2.0f * edge)
+                draw(face, edge, (std::max)(0.0f, radius - edge));
+            return true;
         }
 
         [[nodiscard]] static bool draw_high_contrast_control(
@@ -2217,6 +2396,13 @@ namespace epochengine::gui
             if (metrics.ascent > 0.0f)
                 return metrics.ascent * scale;
             return 8.0f * scale;
+        }
+
+        [[nodiscard]] static float centered_text_top(float rowTop, float rowHeight, float scale) noexcept
+        {
+            const float ascent = baseline_offset(scale);
+            const float inset = (std::max)(0.0f, (rowHeight - base_line_height(scale)) * 0.5f);
+            return std::round(rowTop + inset + ascent) - ascent;
         }
 
         [[nodiscard]] static float space_advance(float scale) noexcept
@@ -2912,8 +3098,8 @@ namespace epochengine::gui
         };
 
         // Scan source bytes, independently of wrapping, clipping and frame count.
-        // A partial stream may finish its last token later; completed tokens keep
-        // their meaning. This is display classification, never source validation.
+        // The transcript supplies only complete code ranges while streaming.
+        // This is display classification, never source validation.
         [[nodiscard]] static CodeLexeme code_lexeme_at(std::string_view text,
             std::size_t begin) noexcept
         {
@@ -3039,7 +3225,8 @@ namespace epochengine::gui
 
         static float draw_wrapped_text(std::string_view text, float x, float y,
             float width, float scale, bool emphasizeStatus = false,
-            bool emphasizeCode = false)
+            bool emphasizeCode = false,
+            const std::vector<std::pair<std::size_t, std::size_t>>* codeRanges = nullptr)
         {
             ensure_resources();
             if (!g_frame.ctx || !active_font_cache().asset)
@@ -3058,6 +3245,7 @@ namespace epochengine::gui
             float baseline = y + ascent;
             std::size_t lines = 1;
             std::size_t keywordEnd{};
+            std::size_t codeRange{};
             const GuiFontCache* keywordFont{};
 
             for (std::size_t i = 0; i < text.size(); ++i)
@@ -3072,7 +3260,23 @@ namespace epochengine::gui
                 // Keep token state in source coordinates, not visual line positions.
                 if (emphasizeCode && byteIndex >= keywordEnd)
                 {
-                    const auto token = code_lexeme_at(text, byteIndex);
+                    auto codeEnd = text.size();
+                    if (codeRanges)
+                    {
+                        while (codeRange < codeRanges->size()
+                            && byteIndex >= (*codeRanges)[codeRange].first + (*codeRanges)[codeRange].second)
+                            ++codeRange;
+                        codeEnd = codeRange < codeRanges->size()
+                            && byteIndex >= (*codeRanges)[codeRange].first
+                            ? (*codeRanges)[codeRange].first + (*codeRanges)[codeRange].second : 0u;
+                    }
+                    auto token = code_lexeme_at(text.substr(0u, codeEnd), byteIndex);
+                    if (codeEnd <= byteIndex)
+                    {
+                        token.end = codeRanges && codeRange < codeRanges->size()
+                            ? (*codeRanges)[codeRange].first : text.size();
+                        token.ink = CodeInk::plain;
+                    }
                     keywordEnd = token.end;
                     const bool light = active_palette_is_light();
                     const auto* info = light ? &g_resources.statusInfoLightFont : &g_resources.statusInfoFont;
@@ -3208,11 +3412,59 @@ namespace epochengine::gui
             return baseHeight + static_cast<float>(lines - 1) * lineAdvance;
         }
 
+        // Mark completed fenced code without changing a byte or its layout.
+        // A closing line still arriving over the transport is provisional until
+        // its newline or response completion; prose and open blocks stay plain.
+        [[nodiscard]] static std::vector<std::pair<std::size_t, std::size_t>>
+            completed_chat_code_ranges(std::string_view text, bool streaming)
+        {
+            std::vector<std::pair<std::size_t, std::size_t>> ranges;
+            char fence{};
+            std::size_t fenceSize{}, codeBegin{};
+            for (std::size_t begin{}; begin < text.size();)
+            {
+                const auto newline = text.find('\n', begin);
+                const auto end = newline == text.npos ? text.size() : newline;
+                auto line = text.substr(begin, end - begin);
+                if (!line.empty() && line.back() == '\r') line.remove_suffix(1u);
+                std::size_t indent{};
+                while (indent < line.size() && line[indent] == ' ' && indent < 4u) ++indent;
+                if (indent <= 3u && indent < line.size()
+                    && (line[indent] == '`' || line[indent] == '~'))
+                {
+                    const auto mark = line[indent];
+                    auto count = std::size_t{1u};
+                    while (indent + count < line.size() && line[indent + count] == mark) ++count;
+                    const auto tail = line.substr(indent + count);
+                    if (!fence && count >= 3u
+                        && (mark != '`' || tail.find('`') == tail.npos))
+                    {
+                        fence = mark;
+                        fenceSize = count;
+                        codeBegin = newline == text.npos ? text.size() : newline + 1u;
+                    }
+                    else if (mark == fence && count >= fenceSize
+                        && tail.find_first_not_of(" \t") == tail.npos
+                        && (newline != text.npos || !streaming))
+                    {
+                        if (ranges.size() == 256u) return ranges;
+                        ranges.emplace_back(codeBegin, begin - codeBegin);
+                        fence = 0;
+                    }
+                }
+                if (newline == text.npos) break;
+                begin = newline + 1u;
+            }
+            if (fence && !streaming && ranges.size() < 256u)
+                ranges.emplace_back(codeBegin, text.size() - codeBegin);
+            return ranges;
+        }
+
         // One measured/drawn surface for structured tool code and its prose.
         // Ranges point into the derived string; they never interpret model markup.
         static float chat_activity_detail_surface(const ChatActivityEvent& item,
             std::string_view text, bool raw, float x, float y, float width,
-            float scale, bool draw)
+            float scale, bool draw, bool streaming = false)
         {
             width = (std::max)(1.0f, width);
             const float unit = (std::max)(0.5f, scale);
@@ -3221,7 +3473,8 @@ namespace epochengine::gui
             const float padX = (std::min)(10.0f * unit, (width - 2.0f * border) * 0.2f);
             const float padY = 10.0f * unit;
             float offset{};
-            const auto piece = [&](std::string_view part, bool code)
+            const auto piece = [&](std::string_view part, bool code,
+                const std::vector<std::pair<std::size_t, std::size_t>>* codeRanges = nullptr)
             {
                 if (!code)
                 {
@@ -3249,7 +3502,7 @@ namespace epochengine::gui
                         const ContentClipScope clip{{x + inset, y + offset + border + padY},
                             {x + width - inset, y + offset + height - border - padY}};
                         draw_wrapped_text(part, x + inset, y + offset + border + padY,
-                            innerWidth, scale, false, true);
+                            innerWidth, scale, false, true, codeRanges);
                     }
                     else draw_wrapped_text(part, x, y + offset, innerWidth, scale);
                 }
@@ -3276,8 +3529,16 @@ namespace epochengine::gui
                 }
                 piece(text.substr(begin), false);
             }
-            else piece(text, raw || item.tool || item.summary == "Tool arguments"
-                || (item.summary == "Response tokens" && text.find("```") != text.npos));
+            else
+            {
+                const bool fencedResponse = item.summary == "Response tokens"
+                    && (text.find("```") != text.npos || text.find("~~~") != text.npos);
+                const bool code = raw || item.tool || item.summary == "Tool arguments" || fencedResponse;
+                const auto ranges = draw && fencedResponse
+                    ? completed_chat_code_ranges(text, streaming)
+                    : std::vector<std::pair<std::size_t, std::size_t>>{};
+                piece(text, code, fencedResponse || streaming ? &ranges : nullptr);
+            }
             return (std::max)(0.0f, offset - gap);
         }
 
@@ -3362,12 +3623,29 @@ namespace epochengine::gui
             }
         }
 
+        [[nodiscard]] static const GuiFontCache* caption_text_font() noexcept
+        {
+            return active_palette().captionUsesLightText && g_resources.font.asset
+                ? &g_resources.font : g_temporaryTextFont;
+        }
+
         static void draw_caption_text(std::string_view text, float x, float y, float scale)
         {
             const auto* previous = g_temporaryTextFont;
             if (active_palette().captionUsesLightText && g_resources.font.asset)
                 g_temporaryTextFont = &g_resources.font;
             draw_text_line(text, x, y, scale);
+            g_temporaryTextFont = previous;
+        }
+
+        static void draw_window_caption(std::string_view title, float x, float rowTop,
+            float rowHeight, float width, float scale)
+        {
+            const auto* previous = g_temporaryTextFont;
+            g_temporaryTextFont = caption_text_font();
+            const auto fitted = fit_text_to_width(title, width, scale);
+            draw_text_line(fitted.empty() ? title : std::string_view{fitted},
+                x, centered_text_top(rowTop, rowHeight, scale), scale);
             g_temporaryTextFont = previous;
         }
 
@@ -3522,11 +3800,18 @@ namespace epochengine::gui
             if (!ctx)
             {
                 g_frame.topLayerDraws.clear();
+                g_frame.tracePopupPublication = false;
                 return;
             }
 
             publish_deferred_draw_batch(
                 ctx, g_frame.topLayerDraws, g_topLayerDrawBatches, 256u);
+            if (core::cli::trace_menu_button0_rect && g_frame.tracePopupPublication)
+            {
+                std::scoped_lock lock(g_deferredBatchMutex);
+                g_topLayerDrawBatches[ctx].tracePopupReplay = true;
+            }
+            g_frame.tracePopupPublication = false;
         }
 
         static void flush_queued_draws() noexcept
@@ -3537,6 +3822,7 @@ namespace epochengine::gui
             {
                 g_frame.queuedDraws.clear();
                 g_frame.topLayerDraws.clear();
+                g_frame.tracePopupPublication = false;
                 return;
             }
 
@@ -3557,7 +3843,7 @@ namespace epochengine::gui
                 auto atlases = epochengine::atlasmanager::get_atlas_vector_snapshot();
                 std::span<const TextureAtlas* const> span(atlases.data(), atlases.size());
                 for (const auto& draw : g_frame.queuedDraws)
-                    ctxShared->draw_sprite_safe(draw.handle, span, draw.x, draw.y, draw.w, draw.h);
+                    ctxShared->draw_sprite_safe(draw.handle, span, draw.x, draw.y, draw.w, draw.h, true);
                 g_frame.queuedDraws.clear();
                 return;
             }
@@ -3576,7 +3862,7 @@ namespace epochengine::gui
                     auto atlases = epochengine::atlasmanager::get_atlas_vector_snapshot();
                     std::span<const TextureAtlas* const> span(atlases.data(), atlases.size());
                     for (const auto& draw : *draws)
-                        ctxShared->draw_sprite_safe(draw.handle, span, draw.x, draw.y, draw.w, draw.h);
+                        ctxShared->draw_sprite_safe(draw.handle, span, draw.x, draw.y, draw.w, draw.h, true);
                 }, renderPath);
         }
     } // namespace

@@ -6,7 +6,9 @@ not an independent dependency checkout. `dependencies.json` records the roles.
 
 | Directory | Authority | Sync rule |
 | --- | --- | --- |
-| EpochGui | Standalone `Autodidac/EpochGui`; exact bundled mirror | Publish/test portable library changes in the standalone repository, verify identical tree bytes, then update the revision/tree receipt together |
+| EpochGui | Standalone `Autodidac/EpochGui` | Test and publish portable GUI changes, verify the portable file scope, and update the revision and tree receipt together. |
+| EpochAudioEngine | Standalone `Autodidac/EpochAudioEngine` | Verify mixer, device lifecycle, and the console WAV example before advancing the Engine pin. |
+| EpochMediaEngine | Standalone `Autodidac/EpochMediaEngine` | Verify media transport and atlas presentation separately from general video decoding. Admit optional project use through Extensions. |
 | EpochEngineExtensions | External `Autodidac/EpochEngineExtensions` owns optional package source; bundled catalog/terrain files are engine-owned compatibility fixtures | Do not replace the standalone package tree with this small fixture or copy all optional packages into core. Check package/API compatibility and update each owner intentionally |
 | EpochPackageDescriptors | Engine-owned model/package metadata | Review source/identity/license/admission changes in Engine; never bundle weights or infer execution permission |
 
@@ -15,7 +17,7 @@ library code. A change there alone does not require rewriting the standalone GUI
 repository. EngCoder currently remains an explicitly selected external endpoint;
 there is no silently bundled dependency or full-agent source authority.
 
-Run `Tools/ai/validate_dependency_sync.ps1` for the offline clean-mirror gate.
+Run `Tools/source/validate_dependency_sync.ps1` for offline source verification.
 Add `-Remote` to check the recorded GitHub authority. This never pushes, downloads
 packages, updates refs or starts a service. Upstream drift requires review, not
 automatic replacement. A dirty mirror requires standalone verification and an

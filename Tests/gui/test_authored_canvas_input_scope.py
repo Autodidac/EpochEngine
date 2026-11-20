@@ -10,7 +10,7 @@ from Tests.build.test_opengl_sprite_stream import definition
 
 ROOT = Path(__file__).resolve().parents[2]
 APP = ROOT / "Engine/src/editor/application/editor.application_gui_authoring.inl"
-API = ROOT / "Engine/modules/gui.engine.ixx"
+API = ROOT / "Engine/modules/gui/gui.engine.ixx"
 FRAME = ROOT / "Engine/src/epochgui/controls/gui.frame_lifecycle.inl"
 
 
@@ -69,7 +69,8 @@ struct Frame{
  std::vector<InputEvent> events;
 } g_frame;
 SCOPE
-struct ScopedTextScale{explicit ScopedTextScale(float){}};
+inline float lastTextScale{};
+struct ScopedTextScale{explicit ScopedTextScale(float scale){lastTextScale=scale;}};
 struct ContentClipScope{ContentClipScope(Vec2,Vec2){}};
 struct Paint{std::string kind;bool selected{},enabled=true;std::size_t count{};friend bool operator==(const Paint&,const Paint&)=default;};
 std::vector<Paint> paints;
@@ -114,7 +115,10 @@ TabBarResult tab_bar_buttons(std::span<const TabButtonSpec> tabs,float,float){
 }
 namespace editor_project_textures{struct TextureCatalogEntry{std::string logical_path;};}
 struct Textures{std::vector<editor_project_textures::TextureCatalogEntry> catalog(){return {{"image"}};}};
+enum class EditorProjectKind{Tool};
+constexpr std::string_view editor_project_kind_name(EditorProjectKind){return "Software / Tool";}
 struct EditorState{
+ std::string projectKind;
  gui::DragSurfaceState guiCanvasWidgetDrag{};authoring::gui::WidgetHandle guiCanvasWidgetDragHandle{},selected{};
  float guiCanvasWidgetDragOriginX{},guiCanvasWidgetDragOriginY{},guiCanvasWidgetDragPreviewX{},guiCanvasWidgetDragPreviewY{};
  std::string guiDocumentStatus,guiContentPrimary{"Text"};
@@ -200,6 +204,12 @@ void paint_contract(){using namespace authoring::gui;
   const auto* events=gui::g_frame.events.data();
   CHECK(!render_gui_document_widget(state,document,*widget,position,{180,36},{1000,1000},LayoutFlow::absolute,1,false));
   CHECK(gui::paints==normal&&document.revision()==revision&&state.selected==selected&&state.guiContentPrimary==text);
+  (void)render_gui_document_widget(state,document,*widget,position,{180,36},{1000,1000},LayoutFlow::absolute,2,false);
+  CHECK(gui::lastTextScale==2.0f);
+  state.projectKind="Software / Tool";
+  (void)render_gui_document_widget(state,document,*widget,position,{180,36},{1000,1000},LayoutFlow::absolute,2,false);
+  CHECK(gui::lastTextScale==1.0f);
+  state.projectKind.clear();
   CHECK(gui::g_frame.events.data()==events&&gui::g_frame.events.size()==2&&gui::g_frame.mouseDown&&gui::g_frame.justPressed&&gui::g_frame.justReleased);
  }
 }
@@ -216,11 +226,12 @@ class AuthoredCanvasInputScope(unittest.TestCase):
         source = proof / "editor.canvas_input_contract.cpp"
         source.write_text(fixture(), encoding="utf-8")
         portable = ROOT / "Engine/dep/EpochGui"
-        modules = [ROOT / "Engine/modules/authoring.document.ixx", ROOT / "Engine/modules/authoring.gui_document.ixx",
+        modules = [ROOT / "Engine/modules/authoring/authoring.document.ixx", ROOT / "Engine/modules/authoring/authoring.gui_document.ixx",
             portable / "modules/epoch.gui.ixx", portable / "modules/epoch.gui.input.ixx"]
         (proof / "CMakeLists.txt").write_text(f'''cmake_minimum_required(VERSION 3.30)
 project(AuthoredCanvasInput LANGUAGES CXX)
 add_executable(canvas_input "{source.as_posix()}" "{(portable/'src/epochgui/input.cpp').as_posix()}")
+set_property(TARGET canvas_input PROPERTY MSVC_DEBUG_INFORMATION_FORMAT Embedded)
 target_compile_features(canvas_input PRIVATE cxx_std_23)
 target_compile_options(canvas_input PRIVATE /W3 /WX /utf-8)
 target_sources(canvas_input PRIVATE FILE_SET CXX_MODULES BASE_DIRS "{(ROOT/'Engine').as_posix()}" FILES {" ".join('"'+p.as_posix()+'"' for p in modules)})

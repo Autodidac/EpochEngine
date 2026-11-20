@@ -9,6 +9,9 @@
                 {reinterpret_cast<std::uintptr_t>(hwnd)});
         }
         if (route_context_close_shortcut(hwnd, msg, wParam, lParam)) return 0;
+        if (msg == WM_NCLBUTTONDBLCLK && (wParam == HTLEFT || wParam == HTRIGHT)
+            && epochengine::platform::window_adapter::extend_native_horizontal_edge(
+                {reinterpret_cast<std::uintptr_t>(hwnd)}, wParam == HTLEFT)) return 0;
         if (msg == WM_NCCREATE)
         {
             auto* cs = reinterpret_cast<CREATESTRUCTW*>(lParam);
@@ -192,6 +195,9 @@
         trace_native_close_dispatch("ChildProc",hwnd,msg,wParam);
         const NativeWindowObservationInvalidation nativeObservation{s_activeInstance,msg};
         if (route_context_close_shortcut(hwnd, msg, wParam, lParam)) return 0;
+        if (msg == WM_NCLBUTTONDBLCLK && (wParam == HTLEFT || wParam == HTRIGHT)
+            && epochengine::platform::window_adapter::extend_native_horizontal_edge(
+                {reinterpret_cast<std::uintptr_t>(hwnd)}, wParam == HTLEFT)) return 0;
         static DragState& drag = Drag();
         const auto resolveGuiContext = [hwnd]() -> std::shared_ptr<epochengine::core::Context>
         {
@@ -298,7 +304,9 @@
 
             if (msg == WM_NCLBUTTONDOWN)
             {
-                if (!detachedNativeTitleHost || static_cast<UINT>(wParam) != HTCAPTION)
+                // Plain caption drags belong to the native move loop and Snap.
+                if (!detachedNativeTitleHost || static_cast<UINT>(wParam) != HTCAPTION
+                    || !dock_drag_modifier_down())
                     return ::DefWindowProcW(hwnd, msg, wParam, lParam);
             }
             else
@@ -714,6 +722,7 @@
                         ::SetWindowLongPtrW(hwnd, GWL_STYLE, style);
                         ::SetParent(hwnd, nullptr);
                         ::SetWindowLongPtrW(hwnd, GWLP_HWNDPARENT, 0);
+                        apply_epoch_window_icon(hwnd);
                         RECT adjusted{ 0, 0, clientW, clientH };
                         const DWORD exStyle = static_cast<DWORD>(::GetWindowLongPtrW(hwnd, GWL_EXSTYLE));
                         if (::AdjustWindowRectEx(&adjusted, static_cast<DWORD>(style), FALSE, exStyle))
@@ -1214,7 +1223,7 @@
                 return ::DefWindowProcW(hwnd, msg, wParam, lParam);
 
             const auto ctx = resolveGuiContext();
-            push_gui_key_event(ctx.get(), static_cast<int>(wParam));
+            push_gui_key_event(ctx.get(), static_cast<int>(wParam), lParam);
             return ::DefWindowProcW(hwnd, msg, wParam, lParam);
         }
 

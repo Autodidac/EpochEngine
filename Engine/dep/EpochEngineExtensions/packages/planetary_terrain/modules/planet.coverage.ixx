@@ -2,10 +2,13 @@
 // Optional terrain coverage; uses the reviewed planetary sampler and mesh owner.
 module;
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <numbers>
+#include <optional>
 #include <stop_token>
 #include <utility>
 #include <vector>
@@ -53,8 +56,84 @@ export namespace epoch::extensions::planetary_terrain::coverage
         [[nodiscard]] explicit operator bool() const noexcept { return status == Status::ready; }
     };
 
+    struct GrassPatchKey final
+    {
+        std::uint32_t body{}, x{}, y{};
+        std::uint8_t face{};
+        friend bool operator==(GrassPatchKey, GrassPatchKey) noexcept = default;
+    };
+
+    struct GrassClump final
+    {
+        std::uint16_t cell{};
+        core::FVec3 root_offset{}, normal{}, color{};
+        float height_meters{}, width_meters{}, rotation_radians{};
+        friend bool operator==(const GrassClump&, const GrassClump&) noexcept = default;
+    };
+
+    struct GrassPatch final
+    {
+        Status status{Status::invalid_request};
+        core::DVec3 body_local_anchor{};
+        std::vector<GrassClump> clumps{};
+    };
+
+    inline constexpr double grass_patch_span_meters = 16.0;
+    inline constexpr std::uint32_t grass_cells_per_side = 24u;
+    inline constexpr double grass_visibility_radius_meters = 22.0;
+    inline constexpr std::size_t maximum_grass_visible_patches = 64u;
+
+    struct GrassDrawView final
+    {
+        core::DVec3 surface_center_meters{};
+        double body_radius_meters{}, altitude_meters{};
+    };
+
     namespace detail
     {
+        [[nodiscard]] std::uint32_t grass_face_span(const core::Body& body) noexcept
+        {
+            if (body.kind != core::BodyKind::temperate || body.id > 255u
+                || !std::isfinite(body.radius) || body.radius < 1.0 || body.radius > 1.0e9
+                || !std::isfinite(body.height_scale) || body.height_scale < 0.0
+                || !std::isfinite(body.geography_scale) || body.geography_scale <= 0.0)
+                return 0u;
+            return static_cast<std::uint32_t>(std::ceil(2.0 * body.radius / grass_patch_span_meters));
+        }
+
+        [[nodiscard]] double grass_unit(std::uint32_t seed) noexcept
+        {
+            return static_cast<double>(core::hash32(seed) >> 8u) / 16777216.0;
+        }
+
+        [[nodiscard]] core::DVec3 grass_direction(GrassPatchKey key, std::uint32_t face_span, double u, double v)
+        {
+            const auto scale = 2.0 / face_span;
+            return core::cube_direction(key.face, (key.x + u) * scale - 1.0, (key.y + v) * scale - 1.0);
+        }
+
+        [[nodiscard]] std::uint32_t grass_grid_index(double coordinate, std::uint32_t face_span) noexcept
+        {
+            const auto grid = std::clamp(coordinate * 0.5 + 0.5, 0.0, 1.0) * face_span;
+            return (std::min)(static_cast<std::uint32_t>(grid), face_span - 1u);
+        }
+
+        [[nodiscard]] std::array<core::DVec3,3> grass_face_axes(std::uint8_t face)
+        {
+            const auto depth = core::cube_direction(face, 0.0, 0.0);
+            const auto across = core::cube_direction(face, 1.0, 0.0);
+            const auto up = core::cube_direction(face, 0.0, 1.0);
+            return {depth,
+                core::normalized(across - depth * core::dot(across, depth)),
+                core::normalized(up - depth * core::dot(up, depth))};
+        }
+
+        [[nodiscard]] double grass_fade(double distance, double full, double cutoff) noexcept
+        {
+            const auto t = std::clamp((cutoff - distance) / (cutoff - full), 0.0, 1.0);
+            return t * t * (3.0 - 2.0 * t);
+        }
+
         [[nodiscard]] core::DVec3 unit(core::DVec3 value) noexcept
         {
             return value / core::length(value);
@@ -111,8 +190,215 @@ export namespace epoch::extensions::planetary_terrain::coverage
         }
     }
 
+    // This grid is fixed in physical body coordinates. Selecting a terrain LOD
+    // or moving the camera across a patch never reseeds its clumps.
+    [[nodiscard]] std::optional<GrassPatchKey> grass_patch_at(const core::Body& body, core::DVec3 direction)
+    {
+        const auto face_span = detail::grass_face_span(body);
+        const double length = core::length(direction);
+        if (face_span == 0u || !core::finite(direction) || !std::isfinite(length) || length < 1e-12) return {};
+        const auto face = core::locate_tile(static_cast<std::uint8_t>(body.id), direction, 0).face;
+        const auto [axis, u_axis, v_axis] = detail::grass_face_axes(face);
+        const auto depth = core::dot(direction, axis);
+        return GrassPatchKey{body.id, detail::grass_grid_index(core::dot(direction, u_axis) / depth, face_span),
+            detail::grass_grid_index(core::dot(direction, v_axis) / depth, face_span), face};
+    }
+
+    [[nodiscard]] std::vector<GrassPatchKey> grass_patch_neighborhood(const core::Body& body, core::DVec3 direction)
+    {
+        const auto home = grass_patch_at(body, direction);
+        if (!home) return {};
+
+        const auto span = detail::grass_face_span(body);
+        // Project just beyond a face edge, as the terrain grid does for its
+        // neighbors. A full cell beyond the edge can skew the adjacent row.
+        const auto edge_probe = [span](std::int64_t index) {
+            constexpr double epsilon = 1e-5;
+            return std::clamp(static_cast<double>(index) + 0.5, -epsilon, span + epsilon);
+        };
+        std::vector<GrassPatchKey> keys;
+        keys.reserve(9u);
+        keys.push_back(*home);
+        for (int y = -1; y <= 1; ++y)
+            for (int x = -1; x <= 1; ++x)
+            {
+                if (x == 0 && y == 0) continue;
+                const auto column = static_cast<std::int64_t>(home->x) + x;
+                const auto row = static_cast<std::int64_t>(home->y) + y;
+                if (column >= 0 && column < span && row >= 0 && row < span)
+                {
+                    keys.push_back({home->body, static_cast<std::uint32_t>(column),
+                        static_cast<std::uint32_t>(row), home->face});
+                    continue;
+                }
+                const auto projected = detail::grass_direction(*home, span,
+                    edge_probe(column) - home->x, edge_probe(row) - home->y);
+                const auto neighbor = grass_patch_at(body, projected);
+                if (neighbor && std::ranges::find(keys, *neighbor) == keys.end())
+                    keys.push_back(*neighbor);
+            }
+        return keys;
+    }
+
+    [[nodiscard]] std::vector<GrassPatchKey> grass_visible_patch_keys(const core::Body& body, core::DVec3 direction)
+    {
+        const auto span = detail::grass_face_span(body);
+        const auto length = core::length(direction);
+        if (span == 0u || !std::isfinite(length) || length < 1e-12) return {};
+
+        const auto eye = direction / length;
+        const auto chord = grass_visibility_radius_meters / body.radius + 1e-12;
+        const auto half_cell = 1.0 / span;
+        const auto cell_diagonal = std::sqrt(2.0) * half_cell;
+        constexpr double minimum_face_depth = 0.5773502691896257; // 1/sqrt(3)
+        std::vector<std::pair<double,GrassPatchKey>> candidates;
+        candidates.reserve(maximum_grass_visible_patches);
+        for (std::uint8_t face = 0; face < 6u; ++face)
+        {
+            const auto [axis, u_axis, v_axis] = detail::grass_face_axes(face);
+            const auto depth = core::dot(eye, axis);
+            const auto near = (std::max)(minimum_face_depth, depth - chord);
+            const auto far = (std::min)(1.0, depth + chord);
+            if (near > far) continue;
+
+            // On the face, the projected coordinate is the tangent component
+            // divided by depth. Bound both across the angular footprint.
+            const auto limits = [&](double component) -> std::optional<std::pair<std::uint32_t,std::uint32_t>> {
+                const auto low = component - chord, high = component + chord;
+                const auto lower = low / (low < 0.0 ? near : far);
+                const auto upper = high / (high > 0.0 ? near : far);
+                if (lower > 1.0 || upper < -1.0) return {};
+                return {{detail::grass_grid_index(lower, span), detail::grass_grid_index(upper, span)}};
+            };
+            const auto columns = limits(core::dot(eye, u_axis));
+            const auto rows = limits(core::dot(eye, v_axis));
+            if (!columns || !rows) continue;
+            for (auto y = rows->first; y <= rows->second; ++y)
+                for (auto x = columns->first; x <= columns->second; ++x)
+                {
+                    const auto u = (2.0 * x + 1.0) * half_cell - 1.0;
+                    const auto v = (2.0 * y + 1.0) * half_cell - 1.0;
+                    const auto distance = core::length(core::cube_direction(face, u, v) - eye);
+                    // Differentiating normalization bounds angular change by
+                    // the inverse shortest unnormalized vector in this cell.
+                    const auto patch_radius = cell_diagonal / std::hypot(1.0,
+                        (std::max)(0.0, std::abs(u) - half_cell), (std::max)(0.0, std::abs(v) - half_cell));
+                    if (distance <= chord + patch_radius)
+                        candidates.push_back({distance, {body.id, x, y, face}});
+                }
+        }
+        std::ranges::stable_sort(candidates, {}, &std::pair<double,GrassPatchKey>::first);
+        std::vector<GrassPatchKey> keys;
+        keys.reserve((std::min)(candidates.size(), maximum_grass_visible_patches));
+        for (const auto& candidate : candidates)
+        {
+            if (keys.size() == maximum_grass_visible_patches) break;
+            keys.push_back(candidate.second);
+        }
+        return keys;
+    }
+
+    // The caller owns scheduling and residency. Keep render blades separate
+    // from the terrain mesh so they do not change collision or water clipping.
+    [[nodiscard]] GrassPatch build_grass_patch(const core::Body& body, GrassPatchKey key, std::stop_token stop = {})
+    {
+        if (stop.stop_requested()) return {.status = Status::cancelled};
+        const auto face_span = detail::grass_face_span(body);
+        if (key.body != body.id || key.face > 5u || key.x >= face_span || key.y >= face_span) return {};
+        const auto center = detail::grass_direction(key, face_span, 0.5, 0.5);
+        GrassPatch patch{.status = Status::ready,
+            .body_local_anchor = center * (body.radius + core::sample_height(body, center))};
+        const auto patch_seed = core::hash32(body.seed ^ core::hash32(key.x * 1013904223u)
+            ^ core::hash32(key.y * 1664525u) ^ core::hash32(key.face * 48271u + key.body));
+        constexpr auto count = grass_cells_per_side * grass_cells_per_side;
+        patch.clumps.reserve(count);
+        for (std::uint32_t cell = 0; cell < count; ++cell)
+        {
+            if (stop.stop_requested()) return {.status = Status::cancelled};
+            const auto seed = core::hash32(patch_seed + cell * 1013u);
+            const auto u = (cell % grass_cells_per_side + 0.10 + 0.80 * detail::grass_unit(seed)) / grass_cells_per_side;
+            const auto v = (cell / grass_cells_per_side + 0.10 + 0.80 * detail::grass_unit(seed ^ 0x27d4eb2du)) / grass_cells_per_side;
+            const auto direction = detail::grass_direction(key, face_span, u, v);
+            const auto surface = core::sample_surface(body, direction);
+            if ((body.ocean && surface.height <= 0.65) || surface.temperature < 0.23 || surface.moisture < 0.34) continue;
+            const auto root = direction * (body.radius + surface.height);
+            const auto density = std::clamp(0.67 + 0.30 * core::noise3(root / 4.5, body.seed ^ 0x9e3779b9u)
+                + 0.45 * (surface.moisture - 0.5), 0.0, 1.0);
+            if (detail::grass_unit(seed ^ 0x85ebca6bu) >= density) continue;
+            const auto normal = core::surface_normal(body, direction, 0.55);
+            if (core::dot(normal, direction) < 0.82) continue;
+            const auto tint = static_cast<float>(detail::grass_unit(seed ^ 0x165667b1u));
+            patch.clumps.push_back({static_cast<std::uint16_t>(cell), core::FVec3{root - patch.body_local_anchor},
+                core::FVec3{normal}, {0.12f + 0.10f * tint, 0.21f + 0.14f * tint, 0.045f + 0.035f * tint},
+                0.14f + 0.17f * static_cast<float>(detail::grass_unit(seed ^ 0xc2b2ae35u)),
+                0.025f + 0.035f * static_cast<float>(detail::grass_unit(seed ^ 0x94d049bbu)),
+                static_cast<float>(2.0 * std::numbers::pi * detail::grass_unit(seed ^ 0x7feb352du))});
+        }
+        if (stop.stop_requested()) return {.status = Status::cancelled};
+        return patch;
+    }
+
     // Bounded synchronous work for an existing caller-owned job. No new scheduler,
     // worker pool, model service, renderer or permanent residency is introduced.
+    // Ground cover is its own draw mesh. Keep it outside collision, terrain
+    // skirts, and the water lattice so terrain LOD cannot erase its roots.
+    [[nodiscard]] inline std::optional<core::Mesh> mesh_grass_patch(
+        const GrassPatch& patch, std::stop_token stop = {}, const GrassDrawView* view = nullptr)
+    {
+        if(stop.stop_requested()||patch.status!=Status::ready||!core::finite(patch.body_local_anchor)
+            ||patch.clumps.size()>grass_cells_per_side*grass_cells_per_side)return {};
+        if(view&&(!core::finite(view->surface_center_meters)||!std::isfinite(view->body_radius_meters)
+            ||view->body_radius_meters<=0.0||!std::isfinite(view->altitude_meters)))return {};
+        core::Mesh mesh;
+        mesh.anchor=patch.body_local_anchor;
+        const auto altitude_fade=view?detail::grass_fade(view->altitude_meters,9.0,32.0):1.0;
+        if(altitude_fade<=0.0)return mesh;
+        mesh.vertices.reserve(patch.clumps.size()*6u);
+        mesh.indices.reserve(patch.clumps.size()*12u);
+        for(const auto& clump:patch.clumps)
+        {
+            if(stop.stop_requested())return {};
+            const core::DVec3 root{clump.root_offset},normal{clump.normal};
+            if(!core::finite(root)||!core::finite(normal)||!core::finite(clump.color)
+                ||std::abs(core::dot(normal,normal)-1.0)>1e-4
+                ||!std::isfinite(clump.rotation_radians)
+                ||!std::isfinite(clump.height_meters)||clump.height_meters<=0.0f
+                ||!std::isfinite(clump.width_meters)||clump.width_meters<=0.0f)return {};
+            auto gain=altitude_fade;
+            if(view)
+            {
+                const auto surface=core::normalized(patch.body_local_anchor+root)*view->body_radius_meters;
+                const auto distance=core::length(surface-view->surface_center_meters);
+                gain*=detail::grass_fade(distance,9.0,grass_visibility_radius_meters);
+                // At this size blades are sub-pixel, and float vertices
+                // otherwise risk collapsing to a degenerate triangle.
+                if(gain<0.015)continue;
+            }
+            const auto tangent=core::tangent(normal),bitangent=core::cross(normal,tangent);
+            const auto sine=std::sin(clump.rotation_radians),cosine=std::cos(clump.rotation_radians);
+            const auto side=tangent*cosine+bitangent*sine;
+            const auto facing=core::cross(normal,side);
+            const auto append=[&](core::DVec3 point,float shade){
+                mesh.vertices.push_back({core::FVec3{point},clump.normal,
+                    {clump.color.x*shade,clump.color.y*shade,clump.color.z*shade,1.0f},{}});
+                mesh.bound_radius=(std::max)(mesh.bound_radius,core::length(point));
+            };
+            for(const auto axis:{side,facing})
+            {
+                const auto first=static_cast<std::uint32_t>(mesh.vertices.size());
+                const auto width=axis*(clump.width_meters*0.5*gain);
+                const auto lean=axis*0.22+core::cross(normal,axis)*0.12;
+                const auto tip=root+(normal+lean)*(clump.height_meters*gain);
+                append(root-width,0.68f);
+                append(root+width,0.68f);
+                append(tip,1.0f);
+                mesh.indices.insert(mesh.indices.end(),{first,first+1u,first+2u,first+2u,first+1u,first});
+            }
+        }
+        if(stop.stop_requested())return {};
+        return mesh;
+    }
+
     [[nodiscard]] Result build(const Request& request, std::stop_token stop = {})
     {
         if (stop.stop_requested()) return {.status = Status::cancelled};

@@ -546,6 +546,17 @@ namespace epochengine::project_input
             return ContractFailure::modifier_evaluation;
         }
 
+        // The entire Ctrl+R chord can arrive between frame samples.
+        // Only the press uses the modifier state at the window message.
+        modifierInput.modifiers = 0u;
+        modifierInput.keyboard.front() = {KeyCode::r, false, true, modifier_mask(Modifier::control)};
+        modifierFrame = evaluate_action_frame(modifiedArtifact.artifact, modifierInput, limits);
+        resetValue = find_action(modifierFrame, ActionSemantic::reset, modifiedArtifact.artifact);
+        if (!modifierFrame || !resetValue || resetValue->value_q15 != 0 || !resetValue->pressed)
+        {
+            return ContractFailure::modifier_evaluation;
+        }
+
         std::vector<InputSnapshot> replay{
             InputSnapshot{20u, 0u, {{KeyCode::a, true, false}}, {}, {}},
             InputSnapshot{21u, 0u, {{KeyCode::space, true, true}}, {}, {}},

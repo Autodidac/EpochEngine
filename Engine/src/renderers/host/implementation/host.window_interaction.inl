@@ -359,17 +359,35 @@ namespace
         });
     }
 
-    inline void push_gui_key_event(const epochengine::core::Context* ctx, int key) noexcept
+    inline void push_gui_key_event(epochengine::core::Context* ctx, int key, LPARAM flags) noexcept
     {
         if (!ctx)
             return;
 
+        const epochengine::core::Context::KeyPressModifiers modifiers{
+            .shift = (::GetKeyState(VK_SHIFT) & 0x8000) != 0,
+            .control = (::GetKeyState(VK_CONTROL) & 0x8000) != 0,
+            .alt = (::GetKeyState(VK_MENU) & 0x8000) != 0,
+            .super = ((::GetKeyState(VK_LWIN) | ::GetKeyState(VK_RWIN)) & 0x8000) != 0
+        };
+        // GUI controls keep repeat events. Project actions receive the first down edge.
+        if ((HIWORD(flags) & KF_REPEAT) == 0u)
+        {
+            unsigned virtualKey = static_cast<unsigned>(key);
+            if (key == VK_SHIFT)
+                virtualKey = ::MapVirtualKeyW(LOBYTE(HIWORD(flags)), MAPVK_VSC_TO_VK_EX);
+            else if (key == VK_CONTROL)
+                virtualKey = (HIWORD(flags) & KF_EXTENDED) ? VK_RCONTROL : VK_LCONTROL;
+            else if (key == VK_MENU)
+                virtualKey = (HIWORD(flags) & KF_EXTENDED) ? VK_RMENU : VK_LMENU;
+            ctx->record_window_key_press(virtualKey, modifiers);
+        }
         epochengine::gui::push_input_for_context(ctx, epochengine::gui::InputEvent{
             .type = epochengine::gui::EventType::KeyDown,
             .key = key,
-            .ctrl_down = (::GetKeyState(VK_CONTROL) & 0x8000) != 0,
-            .shift_down = (::GetKeyState(VK_SHIFT) & 0x8000) != 0,
-            .alt_down = (::GetKeyState(VK_MENU) & 0x8000) != 0
+            .ctrl_down = modifiers.control,
+            .shift_down = modifiers.shift,
+            .alt_down = modifiers.alt
         });
     }
 
@@ -503,6 +521,8 @@ namespace
             Clock::time_point last{};
             std::array<double, 5> milliseconds{};
             std::size_t stage{};
+            int slot_width{}, slot_height{};
+            bool child_visible{}, child_top_sibling{};
             void mark() noexcept
             {
                 if (!enabled || stage >= milliseconds.size()) return;
@@ -519,6 +539,9 @@ namespace
                     epochengine::logger::info("Context.ExternalViewport",
                         "record=" + std::to_string(record) + " stages=" + std::to_string(stage)
                         + " outcome=" + outcome
+                        + " slot=" + std::to_string(slot_width) + "x" + std::to_string(slot_height)
+                        + " child_visible=" + std::to_string(child_visible)
+                        + " child_top_sibling=" + std::to_string(child_top_sibling)
                         + " identity_ms=" + std::to_string(milliseconds[0])
                         + " layout_ms=" + std::to_string(milliseconds[1])
                         + " placement_ms=" + std::to_string(milliseconds[2])
@@ -552,7 +575,7 @@ namespace
         // The presentation lease, overlay and actual viewport own visibility.
         if (!context || !presentation.visible || context->gui_overlay_priority())
             return hide();
-        const HWND owner = static_cast<HWND>(context->native_window);
+        const HWND owner = context->get_hwnd();
         RECT ownerClient{}, parentClient{};
         POINT origin{};
         trace.outcome = "hidden_owner_geometry";
@@ -594,6 +617,13 @@ namespace
         trace.mark();
         const bool current = attachment->placement_current();
         trace.outcome = current ? "placed" : "placement_verification_refused";
+        if (trace.enabled)
+        {
+            trace.slot_width = right - left;
+            trace.slot_height = bottom - top;
+            trace.child_visible = ::IsWindowVisible(child) != 0;
+            trace.child_top_sibling = ::GetWindow(parent, GW_CHILD) == child;
+        }
         return current;
     }
 
@@ -672,6 +702,54 @@ namespace
         // synchronous whole-window redraws from the host thread.
         (void)::SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
             SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+    }
+
+    inline void apply_epoch_window_icon(HWND hwnd) noexcept
+    {
+        DWORD process{};
+        const DWORD owner = hwnd ? ::GetWindowThreadProcessId(hwnd, &process) : 0u;
+        if (owner != ::GetCurrentThreadId() || process != ::GetCurrentProcessId()
+            || (::GetWindowLongPtrW(hwnd, GWL_STYLE) & WS_CHILD) != 0
+            || ::GetAncestor(hwnd, GA_ROOT) != hwnd)
+            return;
+
+        // The caption and task switcher can query different sizes. Borrow the
+        // existing resource's shared large icon, and keep a single loaded small
+        // icon alive for every promoted shell until process shutdown.
+        struct EpochWindowIcons final
+        {
+            HICON large{};
+            HICON captionIcon{};
+
+            EpochWindowIcons() noexcept
+            {
+                const HINSTANCE executable = ::GetModuleHandleW(nullptr);
+                if (!executable)
+                    return;
+                const auto resource = MAKEINTRESOURCEW(IDI_EPOCH_EDITOR);
+                large = ::LoadIconW(executable, resource);
+                if (large)
+                {
+                    captionIcon = static_cast<HICON>(::LoadImageW(executable, resource, IMAGE_ICON,
+                        ::GetSystemMetrics(SM_CXSMICON), ::GetSystemMetrics(SM_CYSMICON), 0));
+                }
+            }
+
+            ~EpochWindowIcons() noexcept
+            {
+                if (captionIcon)
+                    (void)::DestroyIcon(captionIcon);
+            }
+        };
+        static const EpochWindowIcons icons;
+        if (!icons.large)
+            return;
+
+        (void)::SendMessageW(hwnd, WM_SETICON, ICON_BIG, reinterpret_cast<LPARAM>(icons.large));
+        const HICON caption = icons.captionIcon ? icons.captionIcon : icons.large;
+        (void)::SendMessageW(hwnd, WM_SETICON, ICON_SMALL, reinterpret_cast<LPARAM>(caption));
+        try { epochengine::core::backend::log_native_window_icon_identity(hwnd, "promoted"); }
+        catch (...) { /* Diagnostics cannot interrupt docking. */ }
     }
 
     inline void apply_native_drag_opacity(
@@ -805,6 +883,12 @@ namespace
         return ::GetClassLongPtrW(hwnd, GCLP_WNDPROC)
             == reinterpret_cast<LONG_PTR>(epochengine::core::MultiContextManager::ChildProc);
     }
+
+    [[nodiscard]] inline bool dock_drag_modifier_down() noexcept
+    {
+        return (::GetKeyState(VK_MENU) & 0x8000) != 0;
+    }
+
 #if EPOCH_SINGLE_PARENT
     struct SubCtx { HWND originalParent{}; };
     constexpr wchar_t kEpochDockParentProp[] = L"EpochDockParent";
@@ -829,8 +913,7 @@ namespace
         // The backend child can host real GUI controls in this same top strip.
         // Never steal ordinary left-clicks from those controls. Native context
         // dragging is an explicit Alt+drag gesture instead.
-        const bool dragModifier = (::GetKeyState(VK_MENU) & 0x8000) != 0;
-        return dragModifier
+        return dock_drag_modifier_down()
             && x >= 0 && x < width
             && y >= 0 && y < hotspotHeight;
     }
@@ -1565,8 +1648,11 @@ namespace
         const auto ctx = resolve_gui_context_for_hwnd(hwnd);
         const auto next = resolve_gui_context_for_hwnd(successor);
         if (ctx && ctx != next)
+        {
+            ctx->clear_window_key_presses();
             epochengine::gui::push_input_for_context(ctx.get(), {
                 .type = epochengine::gui::EventType::FocusLost });
+        }
     }
 
     [[nodiscard]] inline bool same_gui_input_surface(HWND lhs, HWND rhs) noexcept
@@ -1891,6 +1977,7 @@ namespace
             ::SetParent(hwnd, nullptr);
         }
         ::SetWindowLongPtrW(hwnd, GWLP_HWNDPARENT, 0);
+        apply_epoch_window_icon(hwnd);
 
         const DWORD adjustedExStyle = static_cast<DWORD>(::GetWindowLongPtrW(hwnd, GWL_EXSTYLE));
         RECT adjusted{ 0, 0, clientW, clientH };
@@ -2327,7 +2414,7 @@ namespace
         case WM_SYSKEYDOWN:
             if (!accepts_gui_keyboard_input(hwnd))
                 break;
-            push_gui_key_event(ctx.get(), static_cast<int>(wParam));
+            push_gui_key_event(ctx.get(), static_cast<int>(wParam), lParam);
             break;
         case WM_CHAR:
         case WM_SYSCHAR:
@@ -2406,6 +2493,9 @@ namespace
         const NativeWindowObservationInvalidation nativeObservation{
             epochengine::core::GetActiveMultiContextManager(),msg};
         if (route_context_close_shortcut(hwnd, msg, wp, lp)) return 0;
+        if (msg == WM_NCLBUTTONDBLCLK && (wp == HTLEFT || wp == HTRIGHT)
+            && epochengine::platform::window_adapter::extend_native_horizontal_edge(
+                {reinterpret_cast<std::uintptr_t>(hwnd)}, wp == HTLEFT)) return 0;
         auto* ctx = reinterpret_cast<SubCtx*>(dw);
 
         switch (msg)
@@ -2491,8 +2581,9 @@ namespace
         case WM_NCLBUTTONUP:
         {
             const auto& drag = epochengine::core::Drag();
-            if ((msg == WM_NCLBUTTONDOWN && static_cast<UINT>(wp) == HTCAPTION)
-                || (drag.dragging && drag.draggedWindow == hwnd))
+            const bool startDockDrag = msg == WM_NCLBUTTONDOWN
+                && static_cast<UINT>(wp) == HTCAPTION && dock_drag_modifier_down();
+            if (startDockDrag || (drag.dragging && drag.draggedWindow == hwnd))
                 return epochengine::core::MultiContextManager::ChildProc(hwnd, msg, wp, lp);
             return DefSubclassProc(hwnd, msg, wp, lp);
         }

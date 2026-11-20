@@ -467,6 +467,11 @@
                         "Name",
                         widget->descriptor.name,
                         84.0f);
+                    (void)gui::edit_box(editor.guiNameEditor,
+                        {inspectorWidth, 28.0f}, document->limits().maximum_name_bytes, false);
+                    if (gui::button("Rename Widget", {inspectorWidth, 29.0f})
+                        && editor.guiNameEditor != widget->descriptor.name)
+                        (void)commit_gui_widget_rename(editor, widget->handle, editor.guiNameEditor);
                     gui::property_row(
                         "Kind",
                         std::string{widget_kind_name(
@@ -759,24 +764,68 @@
                             push_editor_log(editor, "[scene] Verify the selected terrain attachment before changing walking collision.");
                     }
                 }
-                if (entity.category == "Planetary Terrain" || entity.terrainAttachment)
+                if (entity.type == "Camera" && entity.terrainAttachment && editor.mainSurface == EditorMainSurface::Scene)
                 {
+                    const auto& attachment = *entity.terrainAttachment;
+                    const auto owner = editor_entity_index(editor, attachment.terrain_object_id);
+                    const bool current = owner && editor.entities[*owner].meshAsset
+                        && attachment.matches(attachment.terrain_object_id, *editor.entities[*owner].meshAsset);
+                    gui::property_row("Terrain attachment", current ? editor.entities[*owner].name : "Rebind required", 136.0f);
+                    const bool cameraIdle = editor.selectedEntityIds.size() <= 1u && movementMutationAllowed;
+                    const std::array actions{
+                        gui::InlineButtonSpec{.label = "View from Camera", .width = 0.0f, .enabled = cameraIdle},
+                        gui::InlineButtonSpec{.label = "Detach from Terrain", .width = 0.0f, .enabled = cameraIdle}};
+                    if (const auto action = gui::inline_button_row(actions, 27.0f, 4.0f,
+                            {.sizing = gui::InlineButtonSizing::FitContent, .wrap = true,
+                                .available_width = (std::max)(1.0f, pane_size.x - 24.0f)}))
+                    {
+                        if (*action == 0u)
+                        {
+                            if (view_from_terrain_camera(ctx.get(), entity)) editor.viewportCameraMode = previewgrid::CameraMode::Editor;
+                            else push_editor_log(editor, "[scene] The saved camera pose could not be opened in 3D Preview.");
+                        }
+                        if (*action == 1u && detach_editor_object_from_terrain(editor, entity))
+                        {
+                            editor.projectStatus = save_editor_scene_snapshot(editor) ? "Camera detached and saved."
+                                : "Camera detached. Scene save failed; retry Save before closing.";
+                            push_editor_log(editor, "[scene] " + editor.projectStatus);
+                        }
+                    }
+                }
+                else if (entity.category == "Planetary Terrain" || (entity.terrainAttachment && entity.type != "Camera"))
+                {
+                    const bool placementIdle = editor.selectedEntityIds.size() <= 1u && movementMutationAllowed
+                        && !model_import_scene_busy(editor) && !planetary_project_busy(editor)
+                        && !editor.modelShorelinePending && !editor.assetGenerationPending && !editor.forestSurfacePending;
                     const std::array refreshActions{gui::InlineButtonSpec{
                         .label = "Refresh Model and Spawn Placement", .width = 0.0f,
-                        .enabled = editor.selectedEntityIds.size() <= 1u && movementMutationAllowed
-                            && !model_import_scene_busy(editor) && !planetary_project_busy(editor)
-                            && !editor.modelShorelinePending && !editor.assetGenerationPending}};
+                        .enabled = placementIdle}};
                     if (gui::inline_button_row(refreshActions, 27.0f, 4.0f,
                             {.sizing = gui::InlineButtonSizing::FitContent, .wrap = true,
                                 .available_width = (std::max)(1.0f, pane_size.x - 24.0f)}))
                         (void)begin_forest_surface_refresh(editor, true);
+                    if (entity.category == "Planetary Terrain" && editor.mainSurface == EditorMainSurface::Scene)
+                    {
+                        const bool current = placementIdle && editor_planetary_stream_identity_matches(editor, entity);
+                        const std::array placementActions{
+                            gui::InlineButtonSpec{.label = "Place Player Start Below View", .width = 0.0f, .enabled = current},
+                            gui::InlineButtonSpec{.label = "Set Project Camera from View", .width = 0.0f, .enabled = current}};
+                        if (const auto action = gui::inline_button_row(placementActions, 27.0f, 4.0f,
+                                {.sizing = gui::InlineButtonSizing::FitContent, .wrap = true,
+                                    .available_width = (std::max)(1.0f, pane_size.x - 24.0f)}))
+                        {
+                            const auto view = previewgrid::camera_for(ctx.get());
+                            if (*action == 0u) (void)begin_forest_surface_refresh(editor, true, &view);
+                            if (*action == 1u) (void)capture_terrain_project_camera(editor, entity, view);
+                        }
+                    }
                 }
             }
             else if (!specializedProperties)
             {
                 gui::label("No Object Selected");
                 gui::wrapped_label(
-                    "Select an object in the viewport or 3D Objects to inspect it.",
+                    "Select an object in the viewport or Scene Hierarchy to inspect it.",
                     (std::max)(160.0f, pane_size.x - 24.0f));
             }
             if (!specializedProperties)
@@ -791,7 +840,7 @@
                 gui::property_row(
                     "Camera", preview_camera_name(ctx), 92.0f);
                 gui::property_row(
-                    "Zoom", preview_zoom_text(ctx), 92.0f);
+                    "Camera", preview_zoom_text(ctx), 92.0f);
                 gui::property_row(
                     "Objects", std::to_string(visible_entity_count(editor)), 92.0f);
                 gui::label("Project Runtime");
@@ -886,10 +935,13 @@
         const auto timeline_compact_controls_height = [&](float width)
         {
             prepare_timeline_time_controls();
+            // A normal viewport fits transport, seek and time in one row.
+            // Narrow docks retain measured wrapping instead of clipping input.
+            if (width >= 520.0f) return (std::max)(24.0f, gui::line_height());
             const float actionsWidth=width>=304.0f?width-112.0f:width;
             return gui::inline_button_row_height(timeline_compact_playback_buttons(),24.0f,
                 4.0f,timeline_action_layout(actionsWidth))+2.0f
-                +(width>=304.0f?0.0f:gui::line_height()+2.0f)+gui::line_height()+8.0f+2.0f;
+                +(width>=304.0f?0.0f:gui::line_height()+2.0f)+24.0f+2.0f;
         };
         auto render_timeline_time_controls = [&](float availableWidth, bool compact)
         {
@@ -901,7 +953,8 @@
             {
                 const auto origin=gui::cursor_position();
                 const auto icons=timeline_compact_playback_buttons();
-                const float actionsWidth=width>=304.0f?width-112.0f:width;
+                const bool singleRow = width >= 520.0f;
+                const float actionsWidth=singleRow?192.0f:width>=304.0f?width-112.0f:width;
                 const auto options=timeline_action_layout(actionsWidth);
                 const float actionsHeight=gui::inline_button_row_height(icons,24.0f,4.0f,options);
                 if(const auto action=gui::inline_button_row(icons,24.0f,4.0f,options))timeline_apply_playback(*action);
@@ -912,13 +965,15 @@
                 gui::label(epochengine::format_text("{:.2f}s {}{:.0f}x",editor.timelineState.playhead_seconds,
                     editor.timelineState.direction==epochengine::timeline::PlaybackDirection::reverse?"-":"",
                     editor.timelineState.playback_rate));
-                gui::set_cursor({origin.x,origin.y+actionsHeight+2.0f+readoutHeight});
+                gui::set_cursor(singleRow
+                    ? gui::Vec2{origin.x + actionsWidth + 8.0f, origin.y + ((std::max)(24.0f, gui::line_height()) - 24.0f) * .5f}
+                    : gui::Vec2{origin.x,origin.y+actionsHeight+2.0f+readoutHeight});
                 const auto scrubber=gui::slider(gui::SliderOptions{
                     .id="scene-timeline-playhead",.minimum=0.0f,
                     .maximum=static_cast<float>(editor.timelineState.duration_seconds),
                     .value=static_cast<float>(editor.timelineState.playhead_seconds),
                     .step=static_cast<float>(editor.timelineState.fixed_dt_seconds),
-                    .size={width,gui::line_height()+8.0f}});
+                    .size={singleRow ? width-actionsWidth-120.0f : width,24.0f}});
                 if(scrubber.changed)timeline_apply_scrub(scrubber.value);
                 gui::set_cursor({origin.x,origin.y+timeline_compact_controls_height(width)});
                 return;

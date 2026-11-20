@@ -3,6 +3,7 @@
 module;
 
 #include <algorithm>
+#include <atomic>
 #include <array>
 #include <chrono>
 #include <cmath>
@@ -34,6 +35,7 @@ module;
 #endif
 #include <Windows.h>
 #include "platform.child_isolation.hpp"
+#include "platform.process_observation.hpp"
 #else
 #include <cerrno>
 #include <csignal>
@@ -98,9 +100,10 @@ namespace epochengine::platform::child_process
         }
 
 #if defined(_WIN32)
-        // The image and each directory component stay non-inheritable and
-        // deny replacement until CreateProcess/ResumeThread have completed.
-        // These short-lived file locks are not a candidate execution sandbox.
+        // The file and each directory component stay non-inheritable and
+        // deny replacement while this owner is retained. Launch keeps it through
+        // CreateProcess/ResumeThread; named-file leases may retain it longer.
+        // File locks are not a candidate execution sandbox.
         struct ExecutableReadLock final
         {
             HANDLE image{INVALID_HANDLE_VALUE};
@@ -139,9 +142,10 @@ namespace epochengine::platform::child_process
                     && (information.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) == 0u;
             }
 
-            [[nodiscard]] bool open(const std::filesystem::path& path)
+            [[nodiscard]] bool open(const std::filesystem::path& path,
+                std::stop_token cancellation = {})
             {
-                if (!valid_executable_path(path))
+                if (cancellation.stop_requested() || !valid_executable_path(path))
                     return false;
                 std::error_code error{};
                 const auto absolute = std::filesystem::absolute(path, error).lexically_normal();
@@ -155,6 +159,7 @@ namespace epochengine::platform::child_process
                     return false;
                 for (const auto& component : absolute.parent_path().relative_path())
                 {
+                    if (cancellation.stop_requested()) return false;
                     directory /= component;
                     if (!lock_directory(directory))
                         return false;
@@ -208,6 +213,7 @@ namespace epochengine::platform::child_process
                 std::uint64_t consumed{};
                 while (consumed < size)
                 {
+                    if (cancellation.stop_requested()) return false;
                     const DWORD wanted = static_cast<DWORD>((std::min)(
                         size - consumed, static_cast<std::uint64_t>(buffer.size())));
                     DWORD received{};
@@ -221,7 +227,7 @@ namespace epochengine::platform::child_process
                 if (::ReadFile(image, buffer.data(), 1u, &extra, nullptr) == FALSE || extra != 0u)
                     return false;
                 identity = ExecutableIdentity{size, core::sha256::hex(hasher.finish())};
-                return identity->valid();
+                return !cancellation.stop_requested() && identity->valid();
             }
         };
 #else
@@ -307,7 +313,7 @@ namespace epochengine::platform::child_process
         struct ControlPacket final
         {
             std::uint32_t magic{0x48435045u};
-            std::uint8_t version{2}, kind{}, mode{}, result{};
+            std::uint8_t version{3}, kind{}, mode{}, result{};
             std::uint64_t token{}, sequence{}, generation{};
             double seconds{},duration_seconds{},rate{};
         };
@@ -398,7 +404,7 @@ namespace epochengine::platform::child_process
             const bool time=kind==3u||kind==4u;
             const RuntimePresentation sample{packet.seconds,packet.duration_seconds,packet.rate,
                 (packet.mode&1u)!=0u,(packet.mode&2u)!=0u};
-            return packet.magic==0x48435045u&&packet.version==2&&packet.kind==kind&&packet.mode<=(time?3u:1u)
+            return packet.magic==0x48435045u&&packet.version==3&&packet.kind==kind&&packet.mode<=(time?3u:2u)
                 &&packet.token==control.token&&packet.generation==control.lease.project_generation&&packet.sequence!=0u
                 &&(time?valid_runtime_presentation(sample):packet.seconds==0.0&&packet.duration_seconds==0.0&&packet.rate==0.0);
         }
@@ -479,6 +485,83 @@ namespace epochengine::platform::child_process
                 +std::to_string(control.token)+","+std::to_string(control.lease.project_generation)+","
                 +std::to_string(control_binding(control.lease.project_id,control.lease.scene_id));
         }
+#if defined(_WIN32)
+        struct BoundedOutputCapture final
+        {
+            HANDLE read{INVALID_HANDLE_VALUE};
+            HANDLE file{INVALID_HANDLE_VALUE};
+            std::size_t remaining{};
+            std::atomic<DWORD> error{ERROR_SUCCESS};
+            std::jthread worker{};
+
+            void drain(std::stop_token stop) noexcept
+            {
+                std::array<char, 8192u> bytes{};
+                for (;;)
+                {
+                    // Normal sweeps stay bounded. After retirement, consume the
+                    // finite remaining pipe snapshot, including large writes;
+                    // never wait for EOF from a surviving inherited writer.
+                    const bool finalSweep = stop.stop_requested();
+                    std::size_t budget = 65'536u;
+                    if (finalSweep)
+                    {
+                        DWORD available{};
+                        if (!::PeekNamedPipe(read, nullptr, 0u, nullptr, &available, nullptr))
+                        {
+                            const DWORD failure = ::GetLastError();
+                            if (failure != ERROR_BROKEN_PIPE) error.store(failure);
+                            return;
+                        }
+                        budget = available;
+                    }
+                    while (budget != 0u)
+                    {
+                        DWORD available{};
+                        if (!::PeekNamedPipe(read, nullptr, 0u, nullptr, &available, nullptr))
+                        {
+                            const DWORD failure = ::GetLastError();
+                            if (failure != ERROR_BROKEN_PIPE) error.store(failure);
+                            return;
+                        }
+                        if (!available) break;
+                        DWORD received{};
+                        const DWORD wanted = static_cast<DWORD>((std::min)({
+                            bytes.size(), budget, static_cast<std::size_t>(available)}));
+                        if (!::ReadFile(read, bytes.data(), wanted, &received, nullptr) || !received)
+                        {
+                            const DWORD failure = ::GetLastError();
+                            error.store(failure == ERROR_SUCCESS ? ERROR_READ_FAULT : failure);
+                            return;
+                        }
+                        budget -= received;
+                        const DWORD retain = static_cast<DWORD>((std::min)(remaining,
+                            static_cast<std::size_t>(received)));
+                        if (retain && error.load() == ERROR_SUCCESS)
+                        {
+                            DWORD written{};
+                            if (!::WriteFile(file, bytes.data(), retain, &written, nullptr)
+                                || written != retain)
+                            {
+                                const DWORD failure = ::GetLastError();
+                                error.store(failure == ERROR_SUCCESS ? ERROR_WRITE_FAULT : failure);
+                            }
+                            remaining -= retain;
+                        }
+                    }
+                    if (finalSweep) return;
+                    std::this_thread::sleep_for(std::chrono::milliseconds{1});
+                }
+            }
+            void finish() noexcept
+            {
+                if (worker.joinable()) { worker.request_stop(); worker.join(); }
+                if (read != INVALID_HANDLE_VALUE) { (void)::CloseHandle(read); read = INVALID_HANDLE_VALUE; }
+                if (file != INVALID_HANDLE_VALUE) { (void)::CloseHandle(file); file = INVALID_HANDLE_VALUE; }
+            }
+            ~BoundedOutputCapture() noexcept { finish(); }
+        };
+#endif
         struct ProcessSlot final
         {
             bool occupied{};
@@ -498,6 +581,8 @@ namespace epochengine::platform::child_process
             std::filesystem::path requested_working_directory{};
             std::filesystem::path requested_output_path{};
             bool append_output{};
+            std::size_t merged_output_limit_bytes{};
+            bool below_normal_priority{};
             bool restricted_token_verified{};
             bool isolation_retired{};
             std::string correlation_key{};
@@ -516,7 +601,9 @@ namespace epochengine::platform::child_process
             mutable unsigned window_diagnostic_records{};
 #if defined(_WIN32)
             HANDLE process{};
+            std::unique_ptr<BoundedOutputCapture> output_capture{};
             HANDLE job{};
+            process_observation::Lease job_observation{};
             DWORD process_id{};
             bool job_assigned{};
             bool job_retirement_requested{};
@@ -548,6 +635,7 @@ namespace epochengine::platform::child_process
 #if defined(_WIN32)
                 for (ProcessSlot& slot : slots)
                 {
+                    slot.job_observation.reset();
                     if (slot.process != nullptr)
                     {
                         ::CloseHandle(slot.process);
@@ -631,6 +719,19 @@ namespace epochengine::platform::child_process
             bool exitCodeValid,
             std::string message)
         {
+#if defined(_WIN32)
+            if (slot.output_capture)
+            {
+                slot.output_capture->finish();
+                const DWORD captureError = slot.output_capture->error.load();
+                if (captureError != ERROR_SUCCESS)
+                {
+                    terminal = ProcessState::failed;
+                    message += " Bounded output capture failed: Win32 " + std::to_string(captureError) + ".";
+                }
+                slot.output_capture.reset();
+            }
+#endif
             if (slot.active_counted && value.metrics.active_processes > 0u)
                 --value.metrics.active_processes;
             slot.active_counted = false;
@@ -644,6 +745,7 @@ namespace epochengine::platform::child_process
             if (terminal == ProcessState::exited)
                 ++value.metrics.exits;
 #if defined(_WIN32)
+            slot.job_observation.reset();
             slot.retirement_members.clear();
             if (slot.process != nullptr)
             {
@@ -1209,6 +1311,32 @@ namespace epochengine::platform::child_process
                         return false;
                     }
                 }
+                if (request.merged_output_limit_bytes)
+                {
+                    auto capture = std::make_unique<BoundedOutputCapture>();
+                    LARGE_INTEGER existing{};
+                    if (!::GetFileSizeEx(captured.output, &existing) || existing.QuadPart < 0
+                        || static_cast<unsigned long long>(existing.QuadPart) > request.merged_output_limit_bytes)
+                    {
+                        error = "Existing output exceeds bounded capture limit or cannot be measured.";
+                        return false;
+                    }
+                    capture->remaining = request.merged_output_limit_bytes
+                        - static_cast<std::size_t>(existing.QuadPart);
+                    if (!::SetHandleInformation(captured.output, HANDLE_FLAG_INHERIT, 0u))
+                    { error = "Bounded output file inheritance could not be disabled."; return false; }
+                    HANDLE writer{};
+                    if (!::CreatePipe(&capture->read, &writer, &security, 65'536u))
+                    { error = "Bounded output pipe could not be created."; return false; }
+                    capture->file = captured.output;
+                    captured.output = writer;
+                    if (!::SetHandleInformation(capture->read, HANDLE_FLAG_INHERIT, 0u))
+                    { error = "Bounded output pipe inheritance could not be disabled."; return false; }
+                    slot.output_capture = std::move(capture);
+                    slot.output_capture->worker = std::jthread([owned = slot.output_capture.get()](std::stop_token stop) {
+                        owned->drain(stop);
+                    });
+                }
                 const HANDLE parentInput = ::GetStdHandle(STD_INPUT_HANDLE);
                 if (request.disconnect_standard_input
                     || parentInput == nullptr || parentInput == INVALID_HANDLE_VALUE)
@@ -1300,6 +1428,7 @@ namespace epochengine::platform::child_process
             }
             PROCESS_INFORMATION process{};
             DWORD flags = CREATE_SUSPENDED;
+            if (request.below_normal_priority) flags |= BELOW_NORMAL_PRIORITY_CLASS;
             if (request.environment) flags |= CREATE_UNICODE_ENVIRONMENT;
             if (request.window_mode != WindowMode::normal || request.suppress_console)
                 flags |= CREATE_NO_WINDOW;
@@ -1351,6 +1480,7 @@ namespace epochengine::platform::child_process
                     + std::to_string(static_cast<unsigned long>(failure)) + ".";
                 return false;
             }
+            slot.job_observation.attach(slot.job, process_observation::TargetKind::job);
             if (request.window_mode == WindowMode::normal)
             {
                 (void)::AllowSetForegroundWindow(process.dwProcessId);
@@ -1657,6 +1787,9 @@ namespace epochengine::platform::child_process
 #endif
             if (!active(slot.state))
             {
+#if defined(_WIN32)
+                if (slot.output_capture) { slot.output_capture->finish(); slot.output_capture.reset(); }
+#endif
                 if (slot.active_counted && value.metrics.active_processes > 0u)
                     --value.metrics.active_processes;
                 slot.active_counted = false;
@@ -1699,6 +1832,8 @@ namespace epochengine::platform::child_process
                 if (!slot.occupied || !active(slot.state))
                     continue;
 #if defined(_WIN32)
+                if (slot.output_capture && slot.output_capture->error.load() != ERROR_SUCCESS)
+                    slot.failed_launch = true;
                 const auto retainOwnership = [&](std::string message)
                 {
                     const bool changed = slot.state != ProcessState::stop_requested
@@ -1990,6 +2125,12 @@ namespace epochengine::platform::child_process
                 return "Merged output path exceeds the byte bound.";
             if (request.disconnect_standard_input && request.merged_output_path.empty())
                 return "Disconnected standard input requires explicit captured output.";
+            if (request.merged_output_limit_bytes && request.merged_output_path.empty())
+                return "Bounded output requires an explicit capture path.";
+#if !defined(_WIN32)
+            if (request.merged_output_limit_bytes || request.below_normal_priority)
+                return "Bounded output and below-normal process priority are unsupported on this platform.";
+#endif
             if (request.isolation)
             {
 #if !defined(_WIN32)
@@ -2104,7 +2245,7 @@ namespace epochengine::platform::child_process
             auto* slot=resolve_slot(owner,handle);
             if(!slot||slot->state!=ProcessState::running||!slot->runtime_control
                 ||slot->runtime_control->lease!=lease||slot->verified_executable!=executable
-                ||slot->correlation_key!=correlation||static_cast<unsigned>(mode)>1u)return false;
+                ||slot->correlation_key!=correlation||static_cast<unsigned>(mode)>2u)return false;
             auto& control=*slot->runtime_control;
             if(control.snapshot.status==RuntimeControlStatus::pending
                 ||control.snapshot.status==RuntimeControlStatus::disconnected
@@ -2222,7 +2363,8 @@ namespace epochengine::platform::child_process
         std::scoped_lock lock(inheritedControlMutex);
         if(!inheritedControl||!inheritedControl->claimed||inheritedControl->outstanding_kind!=1u
             ||command.sequence!=inheritedControl->outstanding
-            ||command.mode!=inheritedControl->snapshot.requested_mode)return;
+            ||command.mode!=inheritedControl->snapshot.requested_mode
+            ||static_cast<unsigned>(actual_mode)>2u)return;
         auto& control=*inheritedControl;
         const ControlPacket ack{.kind=2,.mode=static_cast<std::uint8_t>(actual_mode),.result=static_cast<std::uint8_t>(published),
             .token=control.token,.sequence=command.sequence,.generation=control.lease.project_generation};
@@ -2318,6 +2460,34 @@ namespace epochengine::platform::child_process
         return "Unknown";
     }
 
+    std::optional<int> compare_file_names(
+        const std::filesystem::path& left, const std::filesystem::path& right) noexcept
+    {
+        try
+        {
+            const auto valid = [](const std::filesystem::path& name)
+            {
+                return !name.empty() && !name.has_parent_path()
+                    && name != "." && name != ".."
+                    && name.native().size() <= 32767u
+                    && name.native().find(std::filesystem::path::value_type{})
+                        == std::filesystem::path::string_type::npos;
+            };
+            if (!valid(left) || !valid(right)) return std::nullopt;
+#if defined(_WIN32)
+            const int compared = ::CompareStringOrdinal(left.c_str(),
+                static_cast<int>(left.native().size()), right.c_str(),
+                static_cast<int>(right.native().size()), TRUE);
+            if (compared == 0) return std::nullopt;
+            return compared - CSTR_EQUAL;
+#else
+            const int compared = left.native().compare(right.native());
+            return compared < 0 ? -1 : compared > 0 ? 1 : 0;
+#endif
+        }
+        catch (...) { return std::nullopt; }
+    }
+
     std::optional<ExecutableIdentity> inspect_executable(
         const std::filesystem::path& executable) noexcept
     {
@@ -2338,6 +2508,28 @@ namespace epochengine::platform::child_process
         {
             return std::nullopt;
         }
+    }
+
+    std::shared_ptr<void> lock_verified_file_for_read(
+        const std::filesystem::path& file, const ExecutableIdentity& expected,
+        std::stop_token cancellation) noexcept
+    {
+#if defined(_WIN32)
+        try
+        {
+            if (cancellation.stop_requested() || !expected.valid()) return {};
+            auto locked = std::make_shared<ExecutableReadLock>();
+            if (!locked->open(file, cancellation) || locked->identity != expected
+                || cancellation.stop_requested()) return {};
+            return locked;
+        }
+        catch (...) { return {}; }
+#else
+        (void)file;
+        (void)expected;
+        (void)cancellation;
+        return {};
+#endif
     }
 
     std::optional<std::vector<EnvironmentVariable>> prepare_workspace_environment(
@@ -2403,6 +2595,17 @@ namespace epochengine::platform::child_process
             variables.push_back({"PATH", utf8(system)});
             variables.push_back({"HOMEDRIVE", utf8(profile.root_name())});
             variables.push_back({"HOMEPATH", utf8(profile.root_directory() / profile.relative_path())});
+            // The VC toolset downgrades an explicit x64 host if the worker
+            // omits the processor architecture. Read it from Windows.
+            SYSTEM_INFO host{};
+            ::GetNativeSystemInfo(&host);
+            switch (host.wProcessorArchitecture)
+            {
+            case PROCESSOR_ARCHITECTURE_AMD64: variables.push_back({"PROCESSOR_ARCHITECTURE", "AMD64"}); break;
+            case PROCESSOR_ARCHITECTURE_ARM64: variables.push_back({"PROCESSOR_ARCHITECTURE", "ARM64"}); break;
+            case PROCESSOR_ARCHITECTURE_INTEL: variables.push_back({"PROCESSOR_ARCHITECTURE", "x86"}); break;
+            default: break;
+            }
             // These three OS install-root variables are the only inherited
             // entries. No PATH, proxy, model token, user profile or tool option
             // is copied. They allow MSBuild's installed SDK discovery.
@@ -2524,6 +2727,8 @@ namespace epochengine::platform::child_process
                         || slot.verified_executable != request.expected_executable
                         || slot.environment != request.environment
                         || slot.disconnect_standard_input != request.disconnect_standard_input
+                        || slot.merged_output_limit_bytes != request.merged_output_limit_bytes
+                        || slot.below_normal_priority != request.below_normal_priority
                         || slot.suppress_console != request.suppress_console
                         || static_cast<bool>(slot.runtime_control)!=request.runtime_control.has_value()
                         || (slot.runtime_control&&slot.runtime_control->lease!=*request.runtime_control)
@@ -2634,6 +2839,8 @@ namespace epochengine::platform::child_process
             }
             slot->requested_working_directory = request.working_directory;
             slot->requested_output_path = request.merged_output_path;
+            slot->merged_output_limit_bytes = request.merged_output_limit_bytes;
+            slot->below_normal_priority = request.below_normal_priority;
             slot->append_output = request.append_output;
 
             slot->executable = std::move(resolvedExecutable);

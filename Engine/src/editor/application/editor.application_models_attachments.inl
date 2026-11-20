@@ -292,6 +292,391 @@
         // Reusable role editor: role assignments do not select/replace the
         // active request transport. This remains available under Local API,
         // Direct GGUF, MCP and Codex without changing their connections.
+        gui::SemanticTone model_capability_tone(ai::model_capability::Tier tier)
+        {
+            using T = ai::model_capability::Tier;
+            switch (tier) {
+            case T::frontier: return gui::SemanticTone::engine;
+            case T::frontier_low: return gui::SemanticTone::assistant;
+            case T::high: return gui::SemanticTone::info;
+            case T::medium: return gui::SemanticTone::success;
+            case T::low: return gui::SemanticTone::warning;
+            case T::micro: return gui::SemanticTone::neutral;
+            default: return gui::SemanticTone::muted;
+            }
+        }
+
+        void render_native_model_discovery(EditorState& editor, float width,
+            const ai::native_runtime::Snapshot& state)
+        {
+            namespace native = ai::native_runtime;
+            const gui::InlineButtonRowOptions layout{.sizing=gui::InlineButtonSizing::FitContent,
+                .alignment=gui::InlineButtonAlignment::Start, .wrap=true, .available_width=width};
+            gui::section_heading("Find existing model files");
+            gui::wrapped_label("Search a model folder or drive without downloading or loading anything. "
+                "Split GGUF shards are grouped; incomplete sets cannot be registered here.", width);
+            if (!state.discovery_root.empty())
+                gui::wrapped_label("Current library folder: " + state.discovery_root.generic_string(), width);
+            gui::label("Search folder / drive");
+            (void)gui::edit_box(editor.aiModelSearchRoot, {width, 30.0f}, 2048u, false);
+            if (const auto action = gui::inline_button_row(std::array{
+                    gui::InlineButtonSpec{.label="Choose a GGUF in the folder", .enabled=!state.busy},
+                    gui::InlineButtonSpec{.label="Scan folder", .enabled=!state.busy && !editor.aiModelSearchRoot.empty()}},
+                    28.0f, 6.0f, layout)) {
+                if (*action == 0u) {
+                    const auto selected = platform::filesystem::open_file_dialog(
+                        L"Select a GGUF in the folder to search", L"GGUF model", L"*.gguf", {});
+                    if (selected.accepted) editor.aiModelSearchRoot = selected.path.parent_path().generic_string();
+                } else (void)native::discover_model_files(std::filesystem::path{
+                    std::u8string{editor.aiModelSearchRoot.begin(), editor.aiModelSearchRoot.end()}});
+            }
+            if (!state.discovery_status.empty()) gui::wrapped_label(state.discovery_status, width);
+            for (const auto& file : state.discovered_models) {
+                gui::semantic_block(file.path.filename().string(), file.complete
+                    ? gui::SemanticTone::info : gui::SemanticTone::warning, width);
+                gui::wrapped_label(file.path.generic_string(), width);
+                gui::wrapped_label(epochengine::format_text("{:.2f} GiB | {} shard(s) | {}",
+                    static_cast<double>(file.bytes) / (1024.0 * 1024.0 * 1024.0), file.shard_count, file.status), width);
+                const auto selected = std::ranges::find_if(state.models,
+                    [&](const auto& model) { return model.id == nativeModelId; });
+                const std::string use = "Review registration — " + file.id;
+                const std::string reconnect = "Reconnect " + nativeModelId + " to this file";
+                const bool reconnectMatches = selected != state.models.end()
+                    && !selected->local_weights_filename.empty()
+                    && file.path.filename().generic_string() == selected->local_weights_filename;
+                const std::array actions{
+                        gui::InlineButtonSpec{.label=use, .enabled=file.complete && !state.busy},
+                        gui::InlineButtonSpec{.label=reconnect, .enabled=file.complete && !state.busy
+                            && reconnectMatches && !selected->active}};
+                if (const auto action = gui::inline_button_row(
+                        std::span{actions}.first(reconnectMatches ? 2u : 1u), 28.0f, 6.0f, layout)) {
+                    if (*action == 0u) {
+                        editor.aiRegisteredModelId = file.id;
+                        editor.aiRegisteredModelPath = file.path.generic_string();
+                        editor.aiModelManagerSection = 0; editor.aiModelManagerTab = 0;
+                    } else (void)native::reconnect_model_file(nativeModelId, file.path.generic_string());
+                }
+            }
+        }
+
+        void render_model_plan_controls(EditorState& editor, float width,
+            const ai::model_install::InstallPlan& plan, const ai::native_runtime::Snapshot& state)
+        {
+            const auto cache = ai::native_runtime::model_install_cache_root();
+            const bool present = !cache.empty() && model_snapshot_installed(plan, cache);
+            const bool idle = !state.busy && !editor.packageModelInstall && !cache.empty()
+                && std::ranges::none_of(state.models, [](const auto& model) { return model.active; });
+            std::uint64_t bytes{};
+            for (const auto& artifact : plan.artifacts) bytes += artifact.bytes;
+            gui::wrapped_label(epochengine::format_text("{:.2f} GiB | {}",
+                static_cast<double>(bytes) / (1024.0 * 1024.0 * 1024.0),
+                present ? "Downloaded (receipt and file sizes match)" : "Not present in Epoch's download store"), width);
+            gui::wrapped_label("Download folder: " + ai::model_install::version_root(cache, plan).generic_string(), width);
+            gui::wrapped_label("Source: " + plan.official_source, width);
+            const std::string key = plan.package_id + "\n" + plan.revision + "\n" + cache.generic_string();
+            const std::string label = (present ? "Remove download — " : "Download — ") + plan.display_name;
+            const gui::InlineButtonRowOptions layout{.sizing=gui::InlineButtonSizing::FitContent,
+                .alignment=gui::InlineButtonAlignment::Start, .wrap=true, .available_width=width};
+            if (editor.aiModelPendingDownloadDeletion == key) {
+                gui::wrapped_label("Remove only this exact verified Epoch download? External model files and backups are preserved.", width);
+                if (const auto action = gui::inline_button_row(std::array{
+                        gui::InlineButtonSpec{.label="Confirm removal", .enabled=idle},
+                        gui::InlineButtonSpec{.label="Keep download"}}, 28.0f, 6.0f, layout)) {
+                    if (*action == 0u) (void)ai::native_runtime::delete_model_offer_download(plan.package_id);
+                    editor.aiModelPendingDownloadDeletion.clear();
+                }
+            } else if (gui::inline_button_row(std::array{gui::InlineButtonSpec{.label=label, .enabled=idle}},
+                    28.0f, 6.0f, layout)) {
+                if (present) editor.aiModelPendingDownloadDeletion = key;
+                else {
+                    const package_registry::PackageDescriptor package{.id=plan.package_id,
+                        .displayName=plan.display_name, .kind=package_registry::PackageKind::ModelAsset};
+                    (void)start_model_package_install(editor, package, false, cache);
+                }
+            }
+        }
+
+        void render_model_routing_guide(float width, const ai::native_runtime::Snapshot& state)
+        {
+            gui::section_heading("How automatic routing works");
+            gui::wrapped_label("When automatic routing is enabled, simple requests use the assigned simple responder, "
+                "bounded explanations use the middle/reviewer responder, and ambiguous, complex or tool-dependent "
+                "work uses Foundation. Missing eligible responders fall back to Foundation. "
+                "Bounded coding may use Middle after two host-verified wins in that task family, with more wins "
+                "than failures. Three failures without a win exclude that model for the task family. "
+                "Measured latency can break eligible choices. Tier alone never proves a task is safe or correct.", width);
+            gui::wrapped_label("Default role suggestions use assessed capability, not B counts or file size. "
+                "Within the same tier the current Foundation is preferred; explicit role selection stays available. "
+                "Saving a tier does not load, switch or send to any model. Unclassified models require explicit "
+                "selection. Use Roles to change assignments; applying a resident set uses its assessed defaults.", width);
+            gui::property_row("Foundation", state.model.empty() ? "None selected" : state.model);
+            for (const auto& role : state.roles) if (role.role == "assignment")
+                gui::property_row(role.id, role.uri.empty() ? "Foundation fallback" : role.uri);
+            gui::property_row("Last actual model", state.last_response_model.empty() ? "No response recorded" : state.last_response_model);
+            gui::property_row("Last response role", state.last_response_role);
+        }
+
+        void render_model_capability_guide(EditorState& editor, float availableWidth,
+            const ai::native_runtime::Snapshot& state)
+        {
+            namespace capability = ai::model_capability;
+            namespace offers = epoch_ai::model::catalog;
+            // A readable measure inside the existing scrolling tool window.
+            const auto origin = gui::cursor_position();
+            const float width = (std::min)(availableWidth, 940.0f);
+            const float left = origin.x + (availableWidth - width) * 0.5f;
+            gui::set_cursor({left, origin.y});
+            const gui::InlineButtonRowOptions actions{.sizing=gui::InlineButtonSizing::FitContent,
+                .alignment=gui::InlineButtonAlignment::Start, .wrap=true, .available_width=width};
+            gui::label("MODEL CAPABILITIES");
+            gui::advance_cursor({0.0f, 6.0f});
+            gui::wrapped_label("Choose by ability, then compare memory, speed and availability.", width);
+            gui::advance_cursor({0.0f, 12.0f});
+            const auto navigation = [&](std::span<const std::string_view> labels, int& selected) {
+                std::vector<gui::SegmentedButtonSpec> tabs;
+                for (std::size_t i{}; i < labels.size(); ++i)
+                    tabs.push_back({labels[i], 0.0f, selected == static_cast<int>(i)});
+                for (std::size_t first{}; first < tabs.size();) {
+                    std::size_t count = 1u;
+                    while (first + count < tabs.size()
+                        && gui::segmented_button_row_width(std::span{tabs}.subspan(first, count + 1u), 8.0f) <= width)
+                        ++count;
+                    gui::set_cursor({left, gui::cursor_position().y});
+                    if (const auto choice = gui::segmented_button_row(std::span{tabs}.subspan(first, count), 30.0f, 8.0f))
+                        selected = static_cast<int>(first + *choice);
+                    first += count;
+                }
+                gui::set_cursor({left, gui::cursor_position().y});
+            };
+            constexpr std::array<std::string_view, 3> pages{"Tier key", "Model directory", "Flash / Edge0 comparison"};
+            navigation(pages, editor.aiModelGuidePage);
+            gui::advance_cursor({0.0f, 16.0f});
+            if (editor.aiModelGuidePage == 0) {
+                gui::wrapped_label("TIER KEY  /  November 2026 references", width);
+                gui::advance_cursor({0.0f, 12.0f});
+                const int columns = width >= 680.0f ? 2 : 1;
+                const float gap = 20.0f;
+                const float cardWidth = (width - gap * static_cast<float>(columns - 1)) / static_cast<float>(columns);
+                float rowY = gui::cursor_position().y;
+                float rowBottom = rowY;
+                for (std::size_t i{}; i < capability::bands.size(); ++i) {
+                    const auto& band = capability::bands[i];
+                    const int column = static_cast<int>(i) % columns;
+                    const float x = left + static_cast<float>(column) * (cardWidth + gap);
+                    const float inner = cardWidth - 24.0f;
+                    const float bodyHeight = gui::measure_wrapped_label_height(band.reference, inner)
+                        + gui::measure_wrapped_label_height(band.purpose, inner);
+                    const float cardHeight = bodyHeight + gui::line_height() + 68.0f;
+                    gui::panel_rect({x, rowY}, {cardWidth, cardHeight});
+                    gui::set_cursor({x, rowY});
+                    gui::semantic_block(band.label, model_capability_tone(band.tier), cardWidth);
+                    gui::set_cursor({x + 12.0f, gui::cursor_position().y + 3.0f});
+                    gui::wrapped_label(band.reference, inner);
+                    gui::advance_cursor({0.0f, 8.0f});
+                    gui::wrapped_label(band.purpose, inner);
+                    rowBottom = (std::max)(rowBottom, (std::max)(rowY + cardHeight, gui::cursor_position().y + 12.0f));
+                    if (column == columns - 1 || i + 1 == capability::bands.size()) {
+                        rowY = rowBottom + gap;
+                        gui::set_cursor({left, rowY});
+                    }
+                }
+                gui::wrapped_label("Colors identify tiers, not measured scores. Performance determines the tier, not parameter count.", width);
+                gui::advance_cursor({0.0f, 8.0f});
+                gui::wrapped_label("Modified / uncensored models use the same tiers after assessment and a separate loading list. Changing a tier never loads a model.", width);
+                return;
+            }
+            if (editor.aiModelGuidePage == 2) {
+                constexpr std::array<std::string_view, 3> comparisonGroups{
+                    "Flash / Edge0", "9B / 27B", "Modified variants"};
+                navigation(comparisonGroups, editor.aiModelComparisonGroup);
+                gui::advance_cursor({0.0f, 12.0f});
+                gui::wrapped_label("MEASURED C++ RESULTS  /  15 November 2026", width);
+                gui::advance_cursor({0.0f, 12.0f});
+                gui::wrapped_label(editor.aiModelComparisonGroup == 0
+                    ? "Flash remains the primary coder; Edge0 is the lower-RAM alternative. Five tasks, repeated twice."
+                    : editor.aiModelComparisonGroup == 1
+                    ? "Ordinary models: baseline and tuned configurations shown separately, using the same five fixed tasks."
+                    : "Modified / uncensored variants: the same five tasks, one pass per quantization. Explicit loading only; results do not enable automatic fallback.", width);
+                gui::advance_cursor({0.0f, 16.0f});
+                const int columns = width >= 680.0f ? 2 : 1;
+                const float cardWidth = (width - (columns == 2 ? 20.0f : 0.0f)) / static_cast<float>(columns);
+                float top = gui::cursor_position().y;
+                float bottom = top;
+                int i{};
+                for (const auto& measured : capability::coding_measurements) {
+                    if (measured.group != editor.aiModelComparisonGroup) continue;
+                    if (i % columns == 0) top = bottom;
+                    gui::set_cursor({left + static_cast<float>(i % columns) * (cardWidth + 20.0f), top});
+                    const auto rating = capability::assess(measured.id);
+                    gui::semantic_block(std::string{measured.label} + " / " + std::string{measured.quantization},
+                        measured.modified ? gui::SemanticTone::warning : model_capability_tone(rating.tier), cardWidth);
+                    const auto metric = [&](std::string_view name, std::string_view value) {
+                        gui::wrapped_label(std::string{name} + "  " + std::string{value}, cardWidth);
+                        gui::advance_cursor({0.0f, 8.0f});
+                    };
+                    metric("Checks passed", epochengine::format_text("{} / {}", measured.passed, measured.attempts));
+                    metric("Context / CPU threads", epochengine::format_text("{} tokens / {} threads", measured.context_tokens, measured.cpu_threads));
+                    metric("Peak process RAM", epochengine::format_text("{:.2f} GiB", measured.ram_gib));
+                    metric("Median decode speed", epochengine::format_text("{:.2f} tokens/s", measured.decode_median));
+                    metric("Observed decode range", epochengine::format_text("{:.2f}–{:.2f} tokens/s", measured.decode_min, measured.decode_max));
+                    metric("First token, median", epochengine::format_text("{:.2f} s", measured.first_token_seconds));
+                    metric("Model load, median", epochengine::format_text("{:.2f} s", measured.load_seconds));
+                    metric("Peak board VRAM", epochengine::format_text("{:.2f} GiB", measured.vram_gib));
+                    metric("Peak private commit", epochengine::format_text("{:.2f} GiB", measured.commit_gib));
+                    metric("GPU offload request", epochengine::format_text("{} layers; {}", measured.gpu_layers,
+                        measured.dense ? "dense layer offload" : "CPU experts / 3 GiB expert cache requested"));
+                    gui::wrapped_label(measured.finding, cardWidth);
+                    bottom = (std::max)(bottom, gui::cursor_position().y + 16.0f);
+                    ++i;
+                }
+                gui::set_cursor({left, bottom});
+                gui::semantic_block("Observed desktop run — background activity was allowed and measured. This was not an idle-system benchmark.",
+                    gui::SemanticTone::warning, width);
+                gui::wrapped_label("RAM is process working set, including mapped weights; private commit is separate. Board VRAM includes the desktop. First-token time excludes model loading. These five tasks do not certify a general capability tier or other quantizations.", width);
+                gui::advance_cursor({0.0f, 12.0f});
+                if (gui::inline_button_row(std::array{gui::InlineButtonSpec{.label=editor.aiModelGuideEvidenceOpen
+                        ? "Hide test conditions" : "Show test conditions"}}, 28.0f, 6.0f, actions))
+                    editor.aiModelGuideEvidenceOpen = !editor.aiModelGuideEvidenceOpen;
+                if (editor.aiModelGuideEvidenceOpen) {
+                    gui::wrapped_label("One model at a time; 1,536 output tokens; temperature zero; thinking off. Context and CPU threads are shown on each card. Original comparisons use fresh workers per task; tuned 27B sets reuse one worker for five tasks. Generated answers are reviewed before host-owned compilation and fixed tests. Placement differs; this compares usable configurations, not equal GPU residency.", width);
+                    gui::advance_cursor({0.0f, 8.0f});
+                    gui::wrapped_label("RTX 5080 16 GB / Ryzen 9 9900X / 64 GB RAM. Flash weights on C:, other tested weights on D:; OS file cache was not normalized. Desktop activity is permitted and measured. Downloads and builds do not run during inference. Five small tasks do not establish broad coding competence, tool safety or a higher tier.", width);
+                    gui::advance_cursor({0.0f, 8.0f});
+                    gui::wrapped_label("Flash's earlier continuous session reached the RAM reserve. Sustained-session acceptance remains open. Edge0 remains a candidate; this guide does not install or promote it.", width);
+                }
+                return;
+            }
+            gui::wrapped_label("MODEL DIRECTORY", width);
+            constexpr std::array<std::string_view, 4> categories{
+                "Registered", "Downloads", "Packages / generation", "External API"};
+            navigation(categories, editor.aiModelGuideCategory);
+            gui::advance_cursor({0.0f, 12.0f});
+            const auto details = [&](const std::string& key) {
+                const bool open = editor.aiModelGuideExpanded == key;
+                if (gui::inline_button_row(std::array{gui::InlineButtonSpec{.label=open ? "Hide details" : "Details & actions"}},
+                        26.0f, 6.0f, actions)) editor.aiModelGuideExpanded = open ? std::string{} : key;
+                return editor.aiModelGuideExpanded == key;
+            };
+            if (editor.aiModelGuideCategory == 0) {
+            gui::wrapped_label("Saved profiles. Missing files keep their settings; they are not installed models.", width);
+            if (gui::inline_button_row(std::array{gui::InlineButtonSpec{.label="Refresh file status", .enabled=!state.busy}},
+                    28.0f, 6.0f, actions)) (void)ai::native_runtime::refresh();
+            for (const auto& model : state.models) {
+                const auto rating = capability::assess(model.id, model.tuning.capability_tier, model.behavior.flagged());
+                gui::semantic_block((model.label.empty() ? model.id : model.label) + " — "
+                    + std::string{capability::band(rating.tier).label}
+                    + (model.active ? " | Resident" : " | Not loaded"), model_capability_tone(rating.tier), width);
+
+                gui::wrapped_label(model.active ? "Loaded in memory" : model.installed ? "Installed; not loaded"
+                    : model.weights_status.empty() ? "File status not checked; refresh inventory" : model.weights_status, width);
+                gui::wrapped_label(model.cached_bytes ? epochengine::format_text("Local weights: {:.2f} GiB",
+                    static_cast<double>(model.cached_bytes) / (1024.0 * 1024.0 * 1024.0))
+                    : model.expected_bytes ? epochengine::format_text("Expected download: {:.2f} GiB",
+                        static_cast<double>(model.expected_bytes) / (1024.0 * 1024.0 * 1024.0))
+                    : std::string{"Size not recorded for this imported profile"}, width);
+                if (model.behavior.flagged()) gui::wrapped_label(ai::model_behavior::summary(model.behavior)
+                    + "; explicit loading selection remains required.", width);
+                if (details("profile:" + model.id)) {
+                gui::wrapped_label(rating.basis, width);
+                gui::wrapped_label("Observed responses: " + std::to_string(model.inference_ok)
+                    + "; completed agent tasks: " + std::to_string(model.agent_completed)
+                    + "; failed goals: " + std::to_string(model.agent_failed), width);
+                gui::wrapped_label(model.tps_known
+                    ? epochengine::format_text("Reported decode: {:.2f} tokens/s (this profile's observed workload)", model.reported_tps)
+                    : std::string{"Speed: no measured response yet"}, width);
+                const auto* offer = offers::find(model.id);
+                const std::string manage = "Settings / load";
+                const std::string files = "Download options";
+                if (const auto action = gui::inline_button_row(std::array{
+                        gui::InlineButtonSpec{.label=manage},
+                        gui::InlineButtonSpec{.label=files, .enabled=offer != nullptr}}, 28.0f, 6.0f, actions)) {
+                    editor.aiModelManagerSection = 0;
+                    if (*action == 0u) { nativeModelId = model.id; editor.aiModelManagerTab = 0; }
+                    else { editor.aiModelCatalogSelection = model.id; editor.aiModelManagerTab = 3; }
+                }
+                if (!offer) gui::wrapped_label("Imported/provider weights: use the model's existing Install controls or "
+                    "Direct GGUF to locate a replacement. External files are not deleted by this catalog.", width);
+                }
+                gui::advance_cursor({0.0f, 20.0f});
+            }
+            }
+            if (editor.aiModelGuideCategory == 1) {
+            gui::wrapped_label("Catalog offers that are not registered. File discovery also finds external copies.", width);
+            for (const auto& offer : offers::offers()) {
+                if (std::ranges::any_of(state.models, [&](const auto& model) { return model.id == offer.id; })) continue;
+                const std::array<std::string_view, 3> identity{offer.repo, offer.label, offer.filename};
+                const auto behavior = ai::model_behavior::classify(identity);
+                const auto rating = capability::assess(offer.id, "reference", behavior.flagged());
+                gui::semantic_block(std::string{offer.label} + " — " + std::string{capability::band(rating.tier).label},
+                    model_capability_tone(rating.tier), width);
+                gui::wrapped_label(epochengine::format_text("{:.2f} GiB weights | Not registered | {}",
+                    static_cast<double>(offer.bytes) / (1024.0 * 1024.0 * 1024.0), offer.license), width);
+                const auto plan = ai::model_install::plan_for(offer.package_id);
+                const auto cache = ai::native_runtime::model_install_cache_root();
+                gui::wrapped_label(plan && !cache.empty() && model_snapshot_installed(*plan, cache)
+                    ? "Downloaded in Epoch's store; registration is separate"
+                    : "Not present in Epoch's download store; use file discovery for external copies", width);
+                if (details("offer:" + std::string{offer.id})) {
+                gui::wrapped_label(offer.notes, width);
+                if (behavior.flagged()) gui::wrapped_label("Separate modified-model loading group; capability assessment remains available.", width);
+                if (!offer.blocked_reason.empty()) gui::wrapped_label(offer.blocked_reason, width);
+                const std::string manage = "Download options";
+                if (gui::inline_button_row(std::array{gui::InlineButtonSpec{.label=manage}}, 28.0f, 6.0f, actions)) {
+                    editor.aiModelManagerSection = 0; editor.aiModelManagerTab = 3;
+                    editor.aiModelCatalogSelection = offer.id;
+                }
+                }
+                gui::advance_cursor({0.0f, 20.0f});
+            }
+            }
+            if (editor.aiModelGuideCategory == 2) {
+            gui::wrapped_label("Engine packages and generation components. Coding tiers do not apply to image or audio models.", width);
+            for (const auto& package : package_registry::known_packages()) {
+                if (package.kind != package_registry::PackageKind::ModelAsset) continue;
+                gui::semantic_block(std::string{package.displayName}, gui::SemanticTone::info, width);
+                if (details("package:" + std::string{package.id})) {
+                gui::wrapped_label(package.summary, width);
+                if (package.id == package_registry::kQwenCoderPackageId)
+                    gui::wrapped_label("Medium reference | Normal Qwen 27B; this pinned UD-Q4_K_M download differs from the imported Smaller IQ4_XS quantization.", width);
+                else if (package.id == package_registry::kNemotronNanoPackageId)
+                    gui::wrapped_label("Micro reference | Small general model; this exact BF16 package still needs local task evaluation.", width);
+                else gui::wrapped_label("Specialist image model, outside the coding ladder. Backend/platform compatibility is separate from download availability.", width);
+                if (const auto plan = ai::model_install::plan_for(package.id))
+                    render_model_plan_controls(editor, width, *plan, state);
+                else gui::wrapped_label("No standalone pinned download in this build; managed by the relevant generation workflow.", width);
+                }
+                gui::advance_cursor({0.0f, 20.0f});
+            }
+            gui::section_heading("Generation model components");
+            // Use the installer's authoritative plans, including components which
+            // belong to generation workflows rather than the package list.
+            for (const auto id : std::array<std::string_view, 5>{
+                    "os_model_trellis_2_cpp_q4_512", "os_model_triposr",
+                    "os_model_flux_2_klein_4b_q4_0", "os_model_qwen_3_4b_image_encoder_q4_k_m",
+                    "os_model_flux_2_small_decoder"}) {
+                const auto plan = ai::model_install::plan_for(id);
+                if (!plan) continue;
+                std::uint64_t bytes{};
+                for (const auto& artifact : plan->artifacts) bytes += artifact.bytes;
+                gui::semantic_block(plan->display_name, gui::SemanticTone::info, width);
+                gui::wrapped_label(epochengine::format_text("{:.2f} GiB download | Specialist generation component; "
+                    "not a coding tier. Managed by its Asset Generation workflow.",
+                    static_cast<double>(bytes) / (1024.0 * 1024.0 * 1024.0)), width);
+                if (details("component:" + std::string{id}))
+                    render_model_plan_controls(editor, width, *plan, state);
+                gui::advance_cursor({0.0f, 20.0f});
+            }
+            }
+            if (editor.aiModelGuideCategory == 3) {
+            gui::wrapped_label("External API inventory. Use Local API to refresh the selected provider.", width);
+            gui::wrapped_label("Paid frontier models belong to Frontier by operator classification; no local benchmark is required. This does not classify every external API model as frontier or authorize paid inference.", width);
+            const auto externalModels = ai::detected_model_names();
+            if (externalModels.empty()) gui::wrapped_label("No external API inventory discovered. Local API can refresh the selected provider.", width);
+            for (const auto& id : externalModels)
+                gui::wrapped_label(id + " — provider-managed; local size, residency and capability unverified", width);
+            }
+        }
+
         void render_native_ai_role_controls(float width)
         {
             namespace native = epochengine::ai::native_runtime;
@@ -315,7 +700,8 @@
                     for (const auto& model:state.models) {
                         // Source implementation choices list actual resident
                         // processes, not downloaded or merely registered weights.
-                        if (implementation && !model.active) continue;
+                        if (implementation && (!model.active
+                            || !ai::model_capability::coding_restriction(model.id).empty())) continue;
                         names.push_back(ai::model_behavior::choice_label(
                             model.label.empty()?model.id:model.label,model.behavior));
                         uris.push_back(model.uri);
@@ -334,7 +720,8 @@
                     gui::label(role.id=="controller"?"System 1 controller":role.id);
                     if (implementation)
                         gui::wrapped_label("Choose a loaded model for source coding, including Flash. "
-                            "Automatic uses the currently selected loaded model. "
+                            "Automatic uses the currently selected loaded model when coding is permitted. "
+                            "Qwen3.5 9B remains available for chat and planning, not coding. "
                             "No model is loaded as a side effect of running a task.", width);
                     const auto choice=gui::select_box({.id=role.id,.selected=value,
                         .options=views,.size={width,28.0f},.max_visible_options=6u,.enabled=editable});
@@ -489,8 +876,26 @@
             else chat.append_status("Another Epoch voice session owns the microphone.");
         }
 
-        [[nodiscard]] bool append_ai_chat_attachment(AiChat& chat, const std::filesystem::path& path)
+        [[nodiscard]] bool append_ai_chat_attachment(EditorState& editor, AiChat& chat, const std::filesystem::path& path,
+            const std::filesystem::path& capturedClipboardImage = std::filesystem::path())
         {
+            // Only the explicit Paste owner supplies its just-produced destination.
+            const bool hostImage = !capturedClipboardImage.empty()
+                && path == capturedClipboardImage
+                && ai::source_access::permits_file(path, capturedClipboardImage.parent_path());
+            const auto knownSourceRoot = core::path::find_epoch_repo_root(core::path::executable_dir());
+            const auto relativeAttachment = path.lexically_relative(knownSourceRoot);
+            auto attachmentRoot = relativeAttachment.empty() || *relativeAttachment.begin() == ".."
+                ? std::filesystem::path{} : knownSourceRoot;
+            if (!editor.projectRoot.empty())
+            {
+                const auto projectRoot = resolve_editor_path(editor.projectRoot);
+                const auto relativeProjectFile = path.lexically_relative(projectRoot);
+                if (!relativeProjectFile.empty() && *relativeProjectFile.begin() != "..")
+                    attachmentRoot = projectRoot;
+            }
+            if (!hostImage && !ai::source_access::permits_file(path, attachmentRoot))
+            { chat.append_status("Attachment is not admitted for model access."); return false; }
             std::error_code ec;
 #if EPOCH_EDITION_PUBLIC
             const bool textAllowed = editor_ai_file_scope::allows_text(path,
@@ -527,6 +932,8 @@
             else if (bytes.size() >= 3u && static_cast<unsigned char>(bytes[0]) == 0xffu
                 && static_cast<unsigned char>(bytes[1]) == 0xd8u && static_cast<unsigned char>(bytes[2]) == 0xffu) mime = "image/jpeg";
             else if (bytes.size() >= 12u && bytes.starts_with("RIFF") && bytes.compare(8, 4, "WEBP") == 0) mime = "image/webp";
+            if (hostImage && (mime.empty() || platform::filesystem::image_thumbnail(bytes).rgba.empty()))
+            { chat.append_status("Clipboard capture is not a decodable image."); return false; }
             if (!mime.empty())
             {
                 std::size_t total = bytes.size();
@@ -564,7 +971,7 @@
             return true;
         }
 
-        [[nodiscard]] bool paste_ai_chat_clipboard(AiChat& chat) noexcept
+        [[nodiscard]] bool paste_ai_chat_clipboard(EditorState& editor, AiChat& chat) noexcept
         {
             try
             {
@@ -573,9 +980,9 @@
                         std::chrono::system_clock::now().time_since_epoch().count()) + ".png");
                 const auto clipboard = platform::filesystem::read_clipboard_attachment(output);
                 if (!clipboard.recognized) return false;
-                if (!clipboard.image.empty()) (void)append_ai_chat_attachment(chat, clipboard.image);
+                if (!clipboard.image.empty()) (void)append_ai_chat_attachment(editor, chat, clipboard.image, output);
                 else if (!clipboard.files.empty())
-                    for (const auto& file : clipboard.files) (void)append_ai_chat_attachment(chat, file);
+                    for (const auto& file : clipboard.files) (void)append_ai_chat_attachment(editor, chat, file);
                 else chat.append_status(clipboard.diagnostic);
                 return true;
             }
@@ -593,7 +1000,7 @@
                 initial);
             if (!result.accepted)
             { if (!result.cancelled) chat.append_status(result.diagnostic); return; }
-            if (!folder) { (void)append_ai_chat_attachment(chat, result.path); return; }
+            if (!folder) { (void)append_ai_chat_attachment(editor, chat, result.path); return; }
             std::error_code ec;
             std::filesystem::directory_iterator iter{result.path.parent_path(), ec}, end;
             std::size_t visited{}, attached{};
@@ -602,7 +1009,7 @@
                 const auto ext = iter->path().extension().string();
                 if (ext != ".cpp" && ext != ".hpp" && ext != ".h" && ext != ".ixx"
                     && ext != ".txt" && ext != ".md" && ext != ".json" && ext != ".cmake") continue;
-                if (append_ai_chat_attachment(chat, iter->path())) ++attached;
+                if (append_ai_chat_attachment(editor, chat, iter->path())) ++attached;
             }
             chat.append_status("Attached " + std::to_string(attached) + " small text files from one folder, without recursion.");
         }

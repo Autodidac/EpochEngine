@@ -1,7 +1,7 @@
 {
   "schema": "epoch.portable_source_parity.v1",
   "repository": "Autodidac/EpochMediaEngine",
-  "upstream_revision": "47ae75acf1e2ff04af9852f7c80a28d26ef145f0",
+  "upstream_revision": "71ee101bb778eb28947d557f5f8fd3c5c655b375",
   "scope": [
     "modules",
     "tests"
@@ -10,11 +10,31 @@
   "files": [
     {
       "path": "modules/media.timeline_preview.ixx",
-      "sha256": "feee5cfd141a93ec5c3efba83f5812ef5ca8cb12707cdc4495984a122f4083e0"
+      "sha256": "7178f7298834c8dd6d86020a5606fc10a16c035c30f69ad37cecc867f201e2e5",
+      "canonical_upstream_sha256": "080778c49cfa6cc2f7c96cf8698d483a0aa2c5cc0e9c9b9e5f45d2635086f81a"
     },
     {
       "path": "tests/media.timeline_preview_contract.cpp",
-      "sha256": "d4b21131ad75e8cfc313ad39b9815114bae611aa46d07aeea695baa79780c76f"
+      "sha256": "9c7d8147a2573a7aeb80739858f2ee3424f1f89654e80c7f26e3aff6885eaced",
+      "canonical_upstream_sha256": "e7314b1bba34bb851f2619d138658e9d5c9020dd40346e8301c68260bcc63439"
+    }
+  ],
+  "published_revision": "71ee101bb778eb28947d557f5f8fd3c5c655b375",
+  "publication_status": "local_unpublished_changes",
+  "canonical_text_normalization": "CRLF to LF only.",
+  "validation": "Local fractional-rate seek regression and core timeline/atlas contracts passed on Windows Debug/Release and Linux Clang Release. Native interaction and decoding remain open.",
+  "pending_changes": [
+    {
+      "path": "modules/media.timeline_preview.ixx",
+      "published_sha256": "37fb56015a5c0048dea17de647a36e874c79cfef0ee78ce243711839064fe969",
+      "sha256": "7178f7298834c8dd6d86020a5606fc10a16c035c30f69ad37cecc867f201e2e5",
+      "reason": "Rational timestamp correction at frame boundaries."
+    },
+    {
+      "path": "tests/media.timeline_preview_contract.cpp",
+      "published_sha256": "922d62ef70069320169233002d1f34f1e385d1ba330d5d7d9426d48b47786e59",
+      "sha256": "9c7d8147a2573a7aeb80739858f2ee3424f1f89654e80c7f26e3aff6885eaced",
+      "reason": "Explicit optional include and 30000/1001 seek regression."
     }
   ]
 }

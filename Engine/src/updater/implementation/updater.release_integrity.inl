@@ -851,17 +851,53 @@
             return selected; // No older-release, tar, unsigned-checksum or foreign fallback.
         }
 
+        [[nodiscard]] inline std::string parse_public_source_module_version(const std::string& module)
+        {
+            static const std::regex numeric_definition{
+                R"([ \t]*#[ \t]*define[ \t]+EPOCH_VERSION_(MAJOR|MINOR|REVISION)_VALUE[ \t]+([0-9]{1,9})[ \t]*\r?)",
+                std::regex_constants::optimize};
+            std::array<std::optional<int>, 3> components{};
+            std::istringstream lines{module};
+            for (std::string line; std::getline(lines, line);)
+            {
+                std::smatch match;
+                if (!std::regex_match(line, match, numeric_definition)) continue;
+                const auto component = match[1].str();
+                const auto index = component == "MAJOR" ? 0u : component == "MINOR" ? 1u : 2u;
+                if (components[index]) return {};
+                components[index] = parse_int_or_zero(match[2].str());
+            }
+            if (!components[0] || !components[1] || !components[2]) return {};
+            const auto version = epochengine::format_version_components(
+                *components[0], *components[1], *components[2]);
+            return version.data();
+        }
+
         [[nodiscard]] inline ResolvedSourceArchive resolve_public_source_archive()
         {
             if (!PUBLIC_DISTRIBUTION) return {};
-            const auto path = make_temp_download_path("source_integrity").replace_extension(".json");
-            if (!download_file(PROJECT_RELEASE_INTEGRITY_URL(), path.string())) return {};
-            const auto document = read_text_file(path);
-            std::error_code ec;
-            std::filesystem::remove(path, ec);
+            const auto fetch = [](const std::string& url, std::filesystem::path path)
+            {
+                std::string text;
+                std::error_code error;
+                if (download_file(url, path.string())
+                    && std::filesystem::file_size(path, error) <= k_release_json_max_input_bytes
+                    && !error)
+                    text = read_text_file(path);
+                std::filesystem::remove(path, error);
+                return text;
+            };
+            const auto version = parse_public_source_module_version(fetch(PROJECT_SOURCE_URL(),
+                make_temp_download_path("source_version").replace_extension(".ixx")));
+            if (version.empty()) return {};
+            const auto integrity_url = std::string{GITHUB_BASE}
+                + "Autodidac/EpochEngine/releases/download/v" + version + "/epoch-release-integrity.json";
+            const auto document = fetch(integrity_url, make_temp_download_path("source_integrity").replace_extension(".json"));
             const auto payload = verified_release_integrity_payload(document);
-            return payload ? select_public_source_archive(parse_release_integrity_payload(*payload))
-                : ResolvedSourceArchive{};
+            if (!payload) return {};
+            auto source = select_public_source_archive(parse_release_integrity_payload(*payload));
+            if (source.version != version) return {};
+            return source;
         }
 
         [[nodiscard]] inline bool text_matches_ci_job(

@@ -403,11 +403,21 @@ namespace epochengine::forest::preview_mesh
                 return static_cast<std::byte>(static_cast<unsigned>(std::lround(255.0 * (value <= 0.0031308
                     ? value * 12.92 : 1.055 * std::pow(value, 1.0 / 2.4) - 0.055))));
             };
+            constexpr std::uint32_t seamWidth = 16u;
+            const auto feather = [](std::byte value, std::byte opposite, std::uint32_t distance) {
+                const auto weight = seamWidth - distance;
+                return static_cast<std::byte>((std::to_integer<unsigned>(value) * (2u * seamWidth - weight)
+                    + std::to_integer<unsigned>(opposite) * weight) / (2u * seamWidth));
+            };
+            const auto barkRow = [barkWidth](std::uint32_t row, std::uint32_t sourceHeight) {
+                return static_cast<std::uint32_t>(std::uint64_t{row} * barkWidth / 476u) % sourceHeight;
+            };
             for (std::uint32_t y = 0u; y < 512u; ++y)
                 for (std::uint32_t x = 0u; x < 1024u; ++x)
                 {
                     const bool leaf = x >= 512u;
                     const auto* custom = leaf ? foliage : bark;
+                    const bool customBark = !leaf && custom;
                     const auto& source = custom ? *custom : base;
                     const auto& mip = source.mips.front();
                     std::uint32_t sx{}, sy{};
@@ -424,7 +434,7 @@ namespace epochengine::forest::preview_mesh
                         // Preserve the source pixel aspect and vertical grain;
                         // repeat tall/short bark rather than stretching a square.
                         sx = barkLeft + local * (barkWidth - 1u) / 476u;
-                        sy = static_cast<std::uint32_t>(std::uint64_t{y} * barkWidth / 476u) % mip.height;
+                        sy = barkRow(y, mip.height);
                     }
                     else
                     {
@@ -433,18 +443,29 @@ namespace epochengine::forest::preview_mesh
                     }
                     const auto from = std::size_t{sy} * mip.row_pitch_bytes + sx * 4u;
                     const auto to = std::size_t{y} * target.row_pitch_bytes + x * 4u;
-                    const auto seamDistance = (std::min)(local, 476u - local);
-                    constexpr auto seamWidth = 16u;
+                    // The wood UV closes at U=0/1 and the sampler repeats V.
+                    // Feather the actual baked edges, even for uncropped bark
+                    // and when aspect preservation uses a partial source height.
+                    const auto horizontalDistance = (std::min)(local, 476u - local);
+                    const auto verticalDistance = (std::min)(y, 511u - y);
+                    const auto oppositeX = customBark && horizontalDistance < seamWidth
+                        ? barkLeft + (476u - local) * (barkWidth - 1u) / 476u : sx;
+                    const auto oppositeY = customBark && verticalDistance < seamWidth
+                        ? barkRow(511u - y, mip.height) : sy;
                     for (std::size_t c = 0u; c < 3u; ++c)
                     {
                         auto byte = mip.texels[from+c];
-                        if (!leaf && barkLeft && seamDistance < seamWidth)
+                        if (oppositeX != sx || oppositeY != sy)
                         {
-                            const auto opposite = barkLeft + (476u - local) * (barkWidth - 1u) / 476u;
-                            const auto other = mip.texels[std::size_t{sy} * mip.row_pitch_bytes + opposite * 4u + c];
-                            const auto weight = seamWidth - seamDistance;
-                            byte = static_cast<std::byte>((std::to_integer<unsigned>(byte) * (2u * seamWidth - weight)
-                                + std::to_integer<unsigned>(other) * weight) / (2u * seamWidth));
+                            const auto sampleRow = [&](std::uint32_t row) {
+                                const auto start = std::size_t{row} * mip.row_pitch_bytes;
+                                const auto value = mip.texels[start + sx * 4u + c];
+                                return oppositeX == sx ? value : feather(value,
+                                    mip.texels[start + oppositeX * 4u + c], horizontalDistance);
+                            };
+                            byte = sampleRow(sy);
+                            if (oppositeY != sy)
+                                byte = feather(byte, sampleRow(oppositeY), verticalDistance);
                         }
                         double value = std::to_integer<unsigned>(byte) / 255.0;
                         if (!custom && tintBase) value *= (leaf ? foliageTint : woodTint)[c];

@@ -1,5 +1,6 @@
 """Compile the optional real FFT source against the shared Water owners."""
 from pathlib import Path
+from Tests.support.cpp import engine_module_source
 import hashlib
 import json
 import os
@@ -31,7 +32,7 @@ class FFTWaterIntegration(unittest.TestCase):
         modules=('render.math','voxel.field','voxel.storage','water.system','water.surface','asset.texture_artifact','asset.mesh_artifact')
         owners=[engine/'src/water/water.system.cpp',engine/'src/water/water.surface.cpp',engine/'src/assets/texture/asset.texture_artifact.cpp']
         owner_text='\n'.join(f'"{p.as_posix()}"' for p in owners)
-        module_text='\n'.join(f'"{(engine/"modules"/(m+".ixx")).as_posix()}"' for m in modules)
+        module_text='\n'.join(f'"{(engine_module_source(engine/"modules", m + ".ixx")).as_posix()}"' for m in modules)
         cmake_text=f'''cmake_minimum_required(VERSION 3.28)
 cmake_policy(SET CMP0141 NEW)
 project(EpochFFTWater LANGUAGES CXX)
@@ -51,7 +52,7 @@ add_executable(water_consumer "{consumer.as_posix()}")
 target_link_libraries(water_consumer PRIVATE water_owners)
 '''
         (source/'CMakeLists.txt').write_text(cmake_text,encoding='utf-8')
-        paths=[*owners,consumer,Path(__file__),engine/'modules/water.wave.ixx',engine/'cmake/epoch_water_wave.cmake',package/'modules/water.fft.ixx',package/'CMakeLists.txt',package/'src/fft_ocean.cpp',package/'include/epoch/extensions/fft_ocean/fft_ocean.hpp',*[engine/'modules'/(m+'.ixx') for m in modules]]
+        paths=[*owners,consumer,Path(__file__),engine/'modules/water/water.wave.ixx',engine/'cmake/epoch_water_wave.cmake',package/'modules/water.fft.ixx',package/'CMakeLists.txt',package/'src/fft_ocean.cpp',package/'include/epoch/extensions/fft_ocean/fft_ocean.hpp',*[engine_module_source(engine/'modules', m + ".ixx") for m in modules]]
         hashes=lambda:{str(p.relative_to(ROOT)).replace('\\','/'):hashlib.sha256(p.read_bytes()).hexdigest() for p in paths}
         before=hashes(); verdict={'passed':False,'source_sha256':before,'invocations':[],'gpu_or_model_started':False}
         def run(name,cmd,timeout=120):

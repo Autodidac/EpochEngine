@@ -3,6 +3,9 @@
         gui::begin_window("", toolbar_pos, toolbar_size);
         const float toolbar_button_y = toolbar_pos.y + 8.0f;
         const float toolbar_button_h = 32.0f;
+        constexpr float toolbarHorizontalPadding = 12.0f;
+        constexpr float toolbarItemGap = 4.0f;
+        constexpr float toolbarToggleInset = 4.0f;
         // The app name owns only its own width; the colored FPS readout
         // belongs beside the task/status chips, never between name and File.
         const float application_label_width =
@@ -30,7 +33,7 @@
         const gui::Vec2 toolbarMouse = gui::mouse_position();
         std::vector<gui::ChromeItemSpec> chromeLeft{};
         chromeLeft.reserve(topMenus.size() + 1u);
-        chromeLeft.push_back(gui::ChromeItemSpec{
+        const gui::ChromeItemSpec applicationLabel{
             .id = "chrome.application",
             .label = application.display_name,
             .preferred_width = application_label_width,
@@ -41,7 +44,8 @@
             .enabled = true,
             .selected = false,
             .role = gui::ChromeItemRole::Label
-        });
+        };
+        if (editor.showCommandMenu)
         for (std::size_t index = 0; index < topMenus.size(); ++index)
         {
             const TopMenuButton& item = topMenus[index];
@@ -92,30 +96,98 @@
         // The status strip occupies the right of the first chrome row.
         // Menus use the remainder and their built-in overflow popup.
         const std::span<const gui::ChromeItemSpec> chromeCenter{};
-        float desiredMenuWidth = 24.0f;
-        for (const auto& item : chromeLeft) desiredMenuWidth += item.preferred_width + 4.0f;
-        const float minimumStatusWidth = gui::status_strip_minimum_width({.items = toolbarStatusItems});
-        const std::span<const gui::StatusStripItem> resourceMinimumItems{toolbarStatusItems.data(), 4u};
-        const float minimumResourceWidth = gui::status_strip_minimum_width({.items = resourceMinimumItems});
+        constexpr std::array<std::string_view, 5> telemetryNextLabels{
+            "Show Compact performance status", "Show Resources performance status", "Show Minimal performance status",
+            "Hide performance status", "Show Full performance status"};
+        const std::array telemetryToggleItems{gui::StatusStripItem{
+            .label = "Performance status",
+            .tooltip = telemetryNextLabels[telemetryDetail],
+            .icon = editor.showTelemetry ? gui::ButtonIcon::chevron_right : gui::ButtonIcon::chevron_left,
+            .translucent_face = true}};
+        const float telemetryToggleWidth = gui::status_strip_preferred_width({
+            .items = telemetryToggleItems, .horizontal_padding = toolbarToggleInset});
+        float desiredMenuWidth = 2.0f * toolbarHorizontalPadding;
+        for (std::size_t index = 0; index < chromeLeft.size(); ++index)
+            desiredMenuWidth += chromeLeft[index].preferred_width + (index == 0u ? 0.0f : toolbarItemGap);
+        auto visibleStatusItems = toolbarStatusItems;
+        std::array<std::size_t, std::tuple_size_v<decltype(toolbarStatusItems)>> visibleStatusIndices{};
+        std::size_t visibleStatusCount{};
+        for (std::size_t i = 0; i < toolbarStatusItems.size(); ++i)
+        {
+            const bool visible = telemetryDetail == 0u
+                || (telemetryDetail == 1u && i <= toolbarTaskIndex)
+                || (telemetryDetail == 2u && i <= toolbarScopeIndex)
+                || (telemetryDetail == 3u && (i == toolbarContextIndex || i == toolbarFpsIndex));
+            if (!visible) continue;
+            visibleStatusItems[visibleStatusCount] = toolbarStatusItems[i];
+            visibleStatusIndices[visibleStatusCount++] = i;
+        }
+        const float minimumStatusWidth = telemetryToggleWidth
+            + gui::status_strip_minimum_width({.items = std::span{visibleStatusItems}.first(visibleStatusCount)});
+        const std::array essentialStatusItems{
+            toolbarStatusItems[toolbarContextIndex], toolbarStatusItems[toolbarFpsIndex]};
+        const float minimumEssentialWidth = telemetryToggleWidth + (editor.showTelemetry
+            ? gui::status_strip_minimum_width({.items = essentialStatusItems}) : 0.0f);
+        constexpr float toolbarZoneGap = 12.0f;
+        const float commandGaps = updateToolbarState.visible ? 2.0f * toolbarZoneGap : 0.0f;
+        const float centeredCommandOffset = (std::max)(0.0f, (toolbar_size.x - toolbarCommandReserve) * 0.5f);
         const float minimumMenuReserve = (std::min)(
-            application_label_width + topMenus.front().width + 82.0f + 32.0f,
-            (std::max)(106.0f, w - toolbarCommandReserve - minimumResourceWidth));
-        // All status labels yield before command menus overflow. Keep every
-        // compact status field when possible; at extreme widths retain the
-        // leading CPU/RAM/GPU/VRAM fields and File/More rather than overlap controls.
-        const float menuReserve = (std::min)(desiredMenuWidth,
-            (std::max)(minimumMenuReserve, w - toolbarCommandReserve - minimumStatusWidth));
-        const float toolbarStatusWidth = gui::status_strip_preferred_width({
-            .items = toolbarStatusItems,
-            .available_width = (std::max)(1.0f, updateToolbarState.visible
-                ? (std::min)(w - menuReserve - toolbarCommandReserve,
-                    (w - toolbarCommandReserve) * 0.5f - 12.0f)
-                : w - menuReserve),
+            topMenus.front().width + 96.0f + 2.0f * toolbarHorizontalPadding + toolbarItemGap
+                + telemetryToggleWidth,
+            (std::max)(106.0f, w - toolbarCommandReserve - commandGaps - minimumEssentialWidth));
+        const float menuReserve = (std::min)(desiredMenuWidth + telemetryToggleWidth,
+            (std::max)(minimumMenuReserve, w - toolbarCommandReserve - commandGaps - minimumStatusWidth));
+        const float statusSpace = w - menuReserve - toolbarCommandReserve - commandGaps;
+        const float statusBudget = (std::max)(1.0f, (updateToolbarState.visible
+            ? (std::min)(statusSpace, (std::max)(centeredCommandOffset - toolbarZoneGap, minimumEssentialWidth))
+            : statusSpace) - telemetryToggleWidth);
+        // Keep the live context and FPS ahead of build identity in narrow panes.
+        constexpr std::array<std::size_t, 10> statusDropOrder{
+            toolbarBuildIndex, toolbarVersionIndex, toolbarTierIndex, toolbarTaskIndex,
+            3u, 2u, 1u, toolbarScopeIndex, 0u, toolbarFpsIndex};
+        for (const auto dropIndex : statusDropOrder)
+        {
+            const auto active = std::span{visibleStatusItems}.first(visibleStatusCount);
+            if (visibleStatusCount < 2u || gui::status_strip_minimum_width({.items = active}) <= statusBudget)
+                break;
+            const auto activeIndices = std::span{visibleStatusIndices}.first(visibleStatusCount);
+            const auto offset = static_cast<std::size_t>(
+                std::ranges::find(activeIndices, dropIndex) - activeIndices.begin());
+            if (offset == visibleStatusCount) continue;
+            std::move(active.begin() + offset + 1u, active.end(), active.begin() + offset);
+            std::move(activeIndices.begin() + offset + 1u, activeIndices.end(), activeIndices.begin() + offset);
+            --visibleStatusCount;
+        }
+        const auto visibleStatus = std::span{visibleStatusItems}.first(visibleStatusCount);
+        const float toolbarStatusContentWidth = gui::status_strip_preferred_width({
+            .items = visibleStatus,
+            .available_width = statusBudget,
             .single_row = true});
+        const float toolbarStatusWidth = toolbarStatusContentWidth + telemetryToggleWidth;
+        const float toolbarStatusLeft = toolbar_pos.x + toolbar_size.x - toolbarStatusWidth;
+        const float updateCommandOffset = std::clamp(
+            toolbar_size.x - toolbarStatusWidth - toolbarCommandReserve - toolbarZoneGap,
+            0.0f, centeredCommandOffset);
 
         // Only the chrome menu buttons may switch the open application menu.
         // Other panels have already been blocked this frame.
         if (!editor.outlinerContextMenu.menu.popup.open) gui::allow_background_for_popup();
+        const std::array commandToggleItems{gui::StatusStripItem{
+            .label = "Command menu",
+            .tooltip = editor.showCommandMenu ? "Hide command menu" : "Show command menu",
+            .icon = editor.showCommandMenu ? gui::ButtonIcon::chevron_left : gui::ButtonIcon::chevron_right,
+            .translucent_face = true}};
+        const float commandToggleWidth = telemetryToggleWidth;
+        const float availableMenuWidth = (std::max)(0.0f, (updateToolbarState.visible
+            ? updateCommandOffset - toolbarZoneGap : toolbar_size.x - toolbarStatusWidth) - commandToggleWidth);
+        const float namedMenuWidth = desiredMenuWidth + applicationLabel.preferred_width
+            + (chromeLeft.empty() ? 0.0f : toolbarItemGap);
+        // The application label may use spare space once every command fits.
+        const bool showApplicationLabel = !applicationLabel.label.empty() && namedMenuWidth <= availableMenuWidth;
+        if (showApplicationLabel) chromeLeft.insert(chromeLeft.begin(), applicationLabel);
+        const std::size_t firstMenuIndex = showApplicationLabel ? 1u : 0u;
+        const float commandMenuWidth = (std::min)(availableMenuWidth,
+            showApplicationLabel ? namedMenuWidth : desiredMenuWidth);
         const gui::ChromeBarResult chromeResult =
             gui::chrome_bar(gui::ChromeBarOptions{
                 .id = "editor.primary-chrome",
@@ -123,21 +195,44 @@
                 .center_items = chromeCenter,
                 .right_items = {},
                 .position = { toolbar_pos.x, toolbar_button_y },
-                .size = { updateToolbarState.visible
-                    ? (toolbar_size.x - toolbarCommandReserve) * 0.5f - 12.0f
-                    : toolbar_size.x - toolbarStatusWidth, toolbar_button_h },
-                .item_gap = 4.0f,
+                .size = { commandMenuWidth, toolbar_button_h },
+                .item_gap = toolbarItemGap,
                 .zone_gap = 12.0f,
                 .overflow_width = 82.0f,
-                .horizontal_padding = 12.0f
+                .horizontal_padding = toolbarHorizontalPadding
             });
 
+        float commandVisibleRight = toolbar_pos.x;
+        const auto includeCommandBounds = [&](const gui::WidgetBounds& bounds) {
+            if (bounds.size.x > 0.0f && bounds.size.y > 0.0f)
+                commandVisibleRight = (std::max)(commandVisibleRight, bounds.position.x + bounds.size.x);
+        };
+        for (const auto& bounds : chromeResult.left_bounds) includeCommandBounds(bounds);
+        for (const auto& bounds : chromeResult.center_bounds) includeCommandBounds(bounds);
+        includeCommandBounds(chromeResult.left_overflow);
+        includeCommandBounds(chromeResult.center_overflow);
+        const float commandToggleX = (std::min)(toolbar_pos.x + commandMenuWidth,
+            commandVisibleRight + toolbarItemGap - toolbarToggleInset);
+        const auto commandToggle = render_automation_inspection(automationBackgroundInput,
+            canInspectAutomation() && !menusBlockedByModal,
+            [&]() { return gui::status_strip(gui::StatusStripOptions{
+                .items = commandToggleItems,
+                .position = {commandToggleX, toolbar_button_y},
+                .available_width = commandToggleWidth, .item_height = toolbar_button_h,
+                .horizontal_padding = toolbarToggleInset, .single_row = true}); });
+        if (commandToggle.selected_index && !menusBlockedByModal)
+        {
+            editor.showCommandMenu = !editor.showCommandMenu;
+            editor.openMenu = TopMenu::None;
+            editor.suppressedMenuHover = TopMenu::None;
+            result.scene_input_captured = true;
+        }
         gui::ChromeBarResult updateChromeResult{};
         if (updateToolbarState.visible)
             updateChromeResult = gui::chrome_bar(gui::ChromeBarOptions{
                 .id = "editor.update-chrome",
                 .center_items = chromeRight,
-                .position = {toolbar_pos.x + (toolbar_size.x - toolbarCommandReserve) * 0.5f, toolbar_button_y},
+                .position = {toolbar_pos.x + updateCommandOffset, toolbar_button_y},
                 .size = {toolbarCommandReserve, toolbar_button_h},
                 .item_gap = 4.0f,
                 .zone_gap = 0.0f,
@@ -145,12 +240,12 @@
 
         const auto chrome_menu_route = [&](std::optional<std::size_t> index) -> TopMenu
         {
-            if (menusBlockedByModal || !index || *index == 0u
-                || *index > topMenus.size())
+            if (!editor.showCommandMenu || commandToggle.selected_index || menusBlockedByModal || !index
+                || *index < firstMenuIndex || *index - firstMenuIndex >= topMenus.size())
             {
                 return TopMenu::None;
             }
-            return topMenus[*index - 1u].menu;
+            return topMenus[*index - firstMenuIndex].menu;
         };
         const auto hoveredMenu = chrome_menu_route(chromeResult.hovered_left);
         const auto selectedMenu = chrome_menu_route(chromeResult.selected_left);
@@ -168,7 +263,7 @@
 
         for (std::size_t index = 0; index < topMenus.size(); ++index)
         {
-            const std::size_t chromeIndex = index + 1u;
+            const std::size_t chromeIndex = index + firstMenuIndex;
             const bool visible = chromeIndex < chromeResult.left_bounds.size()
                 && chromeResult.left_bounds[chromeIndex].size.x > 0.0f;
             const auto actualBounds = visible
@@ -214,25 +309,50 @@
                 break;
             }
         }
-        const auto statusResult = gui::status_strip(gui::StatusStripOptions{
-            .items = toolbarStatusItems,
-            .position = {toolbar_pos.x + toolbar_size.x - toolbarStatusWidth,
-                toolbar_pos.y + toolbarStatusTop},
-            .available_width = toolbarStatusWidth,
-            .item_height = 22.0f,
+        const auto statusResult = render_automation_inspection(automationBackgroundInput,
+            canInspectAutomation() && !menusBlockedByModal && !toolbarControlsBlockedByMenu,
+            [&]() { return editor.showTelemetry ? gui::status_strip(gui::StatusStripOptions{
+            .items = visibleStatus,
+            .position = {toolbarStatusLeft + telemetryToggleWidth,
+                toolbar_button_y},
+            .available_width = toolbarStatusContentWidth,
+            .item_height = toolbar_button_h,
+            .horizontal_padding = toolbarHorizontalPadding,
             .align_right = true,
             .single_row = true
-        });
-        if (statusResult.selected_index && !toolbarControlsBlockedByMenu)
+        }) : gui::StatusStripResult{}; });
+        if (statusResult.selected_index && *statusResult.selected_index < visibleStatusCount
+            && !menusBlockedByModal && !toolbarControlsBlockedByMenu)
         {
-            // The task count is actionable: open its real Tasks & Threads
-            // dashboard, rather than sending every status click to Systems.
-            if (*statusResult.selected_index == toolbarTaskIndex)
+            const auto item = visibleStatusIndices[*statusResult.selected_index];
+            if (item < 4u || item == toolbarScopeIndex)
+            {
+                editor.showEpochResourceUsage = !editor.showEpochResourceUsage;
+                result.scene_input_captured = true;
+            }
+            else if (!automationInputReserved && item == toolbarTaskIndex)
             {
                 open_editor_surface(EditorMainSurface::AISandbox, "chrome tasks");
             }
-            else
+            else if (!automationInputReserved)
                 open_editor_surface(EditorMainSurface::Systems, "chrome status");
+        }
+        const auto telemetryToggle = render_automation_inspection(automationBackgroundInput,
+            canInspectAutomation() && !menusBlockedByModal && !toolbarControlsBlockedByMenu,
+            [&]() { return gui::status_strip(gui::StatusStripOptions{
+            .items = telemetryToggleItems,
+            .position = {toolbarStatusLeft + (visibleStatusCount > 0u ? toolbarHorizontalPadding : 0.0f),
+                toolbar_button_y},
+            .available_width = telemetryToggleWidth,
+            .item_height = toolbar_button_h,
+            .horizontal_padding = toolbarToggleInset,
+            .align_right = true,
+            .single_row = true}); });
+        if (telemetryToggle.selected_index && !menusBlockedByModal && !toolbarControlsBlockedByMenu)
+        {
+            editor.telemetryDetail = ((editor.showTelemetry ? (std::min)(editor.telemetryDetail, 3u) : 4u) + 1u) % 5u;
+            editor.showTelemetry = editor.telemetryDetail != 4u;
+            result.scene_input_captured = true;
         }
 
         const float tab_y = toolbar_pos.y + 48.0f;
@@ -329,8 +449,10 @@
         const bool traceDividerPendingBefore = editor.layoutDividerDrag.pending;
         gui::Vec2 traceDividerDelta{};
         bool traceDividerReleased{};
-        const bool dividerInputBlocked = automationInputReserved || floating_gui_visible() || modal_visible_now()
-            || editor.openMenu != TopMenu::None;
+        const bool dividerInputBlocked = floating_gui_visible() || modal_visible_now()
+            || editor.openMenu != TopMenu::None || nativeDockProjection.active
+            || editor.paneTitleDragActive || editor.floatingGuiWindow.floating.dragging
+            || editor.floatingGuiWindow.floating.resizing;
         if (dividerInputBlocked || editor.layoutDrag == EditorLayoutDrag::None)
         {
             editor.layoutDividerDrag = {};
@@ -339,7 +461,10 @@
 
         // Admission uses the queued press origin, not the pointer's later
         // frame position. Fast Down/Move/Up belongs to the existing drag owner.
-        const auto dividerPress = gui::mouse_press_position();
+        std::optional<gui::Vec2> dividerPress;
+        (void)render_automation_inspection(automationBackgroundInput,
+            canInspectAutomation(true) && !dividerInputBlocked, [&]() {
+        dividerPress = gui::mouse_press_position();
         if (!dividerInputBlocked && editor.layoutDrag == EditorLayoutDrag::None && dividerPress)
         {
             const auto captureDivider = [&](EditorLayoutDrag role, gui::Vec2 position)
@@ -394,6 +519,7 @@
         }
         if (editor.layoutDrag != EditorLayoutDrag::None)
             result.scene_input_captured = true;
+        });
 
         if (core::cli::trace_menu_button0_rect)
         {

@@ -14,7 +14,7 @@ class OpenGLContextRetirement(unittest.TestCase):
     def test_actual_texture_retirement_preserves_sibling_context(self):
         if os.name != 'nt':
             self.skipTest('Installed MSVC CPU lane')
-        source = (ROOT/'Engine/modules/opengl.textures.ixx').read_text(encoding='utf-8')
+        source = (ROOT/'Engine/modules/opengl/opengl.textures.ixx').read_text(encoding='utf-8')
         structures = '\n'.join(definition(source, '    struct '+name, True)
             for name in ('AtlasGPU', 'NativeRenderTextureGPU', 'NativeTextureGPU',
                          'NativeTextureKey final', 'NativeTextureKeyHash final'))

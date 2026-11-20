@@ -360,6 +360,7 @@
             case core::ContextType::RayLib:
             case core::ContextType::SFML:
             case core::ContextType::SDL:
+            case core::ContextType::DirectX:
                 return workerCount >= 6 ? perf::tier::desktop_60 : perf::tier::mobile_30;
             case core::ContextType::Software:
             default:
@@ -370,11 +371,14 @@
         [[nodiscard]] static std::string recommended_support_tier(
             const std::shared_ptr<core::Context>& ctx, std::size_t workerCount)
         {
+            if (!ctx || ctx->type == core::ContextType::None || ctx->type == core::ContextType::Software)
+                return "Tier 0";
             switch (recommended_editor_performance_tier(ctx, workerCount))
             {
-            case perf::tier::editor_120: return "Extended";
-            case perf::tier::desktop_60: return "Standard";
-            default: return "Baseline";
+            case perf::tier::editor_120: return "Tier 4";
+            case perf::tier::desktop_60: return "Tier 3";
+            case perf::tier::deck_40: return "Tier 2";
+            default: return "Tier 1";
             }
         }
 

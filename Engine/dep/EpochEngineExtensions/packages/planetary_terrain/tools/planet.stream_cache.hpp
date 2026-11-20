@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <bit>
 #include <charconv>
+#include <chrono>
 #include <cstdint>
 #include <cstddef>
 #include <filesystem>
@@ -56,7 +57,34 @@ namespace planet_stream_cache
             result+="size_reference_body="+std::to_string(options.size_reference_body)+"\nreference_radius_meters="+size.str()+"\n";}
         return result;
     }
-    template<class T> bool write_scalar(std::ostream& output,T value)
+    namespace detail
+    {
+        // Flush a bounded batch of canonical bytes at once instead of taking
+        // the file stream's sentry for every individual mesh scalar.
+        class BufferedPatchOutput final
+        {
+            std::ostream& output_;
+            std::array<char,16u*1024u> bytes_;
+            std::size_t used_{};
+        public:
+            explicit BufferedPatchOutput(std::ostream& output) noexcept : output_(output) {}
+            void flush()
+            {
+                if(used_)output_.write(bytes_.data(),static_cast<std::streamsize>(used_));
+                used_=0u;
+            }
+            void write(const char* source,std::streamsize count)
+            {
+                const auto size=static_cast<std::size_t>(count);
+                if(size>bytes_.size()-used_)flush();
+                std::copy_n(source,size,bytes_.data()+used_);
+                used_+=size;
+            }
+            [[nodiscard]] bool good() const noexcept {return output_.good();}
+        };
+    }
+
+    template<class Output,class T> bool write_scalar(Output& output,T value)
     {
         if constexpr(std::is_floating_point_v<T>)
         {
@@ -93,7 +121,7 @@ namespace planet_stream_cache
         }
         return static_cast<bool>(input);
     }
-    template<class V> bool write_vec(std::ostream& output,const V& value)
+    template<class Output,class V> bool write_vec(Output& output,const V& value)
     {return write_scalar(output,value.x)&&write_scalar(output,value.y)&&write_scalar(output,value.z);}
     template<class T> bool read_scalar(std::span<const std::byte>& input,T& value)
     {
@@ -163,8 +191,9 @@ namespace planet_stream_cache
     }
     template<class Key,class Mesh> bool write_patch(const std::filesystem::path& path,Key key,const Mesh& mesh)
     {
-        std::ofstream output{path,std::ios::binary|std::ios::noreplace};
-        if(!output)return false;
+        std::ofstream file{path,std::ios::binary|std::ios::noreplace};
+        if(!file)return false;
+        detail::BufferedPatchOutput output{file};
         output.write("EPLOD01",7);
         write_scalar(output,static_cast<std::uint32_t>(key.body));write_scalar(output,static_cast<std::uint32_t>(key.face));
         write_scalar(output,static_cast<std::uint32_t>(key.level));write_scalar(output,key.x);write_scalar(output,key.y);
@@ -178,11 +207,19 @@ namespace planet_stream_cache
             write_vec(output,vertex.parent_delta);
         }
         for(const auto index:mesh.indices)write_scalar(output,index);
-        output.close();return static_cast<bool>(output);
+        output.flush();
+        file.close();return static_cast<bool>(file);
     }
-    template<class Key,class Mesh> bool read_patch(const std::filesystem::path& path,Key expected,std::uint32_t cells,Mesh& mesh,
-        bool ocean_surface=false)
+    struct PatchReadTiming
     {
+        std::chrono::steady_clock::duration path_checks{}, file_read{}, decode{};
+        std::uint64_t bytes{};
+    };
+    template<class Key,class Mesh> bool read_patch(const std::filesystem::path& path,Key expected,std::uint32_t cells,Mesh& mesh,
+        bool ocean_surface=false,PatchReadTiming* timing=nullptr)
+    {
+        using Clock=std::chrono::steady_clock;
+        const auto started=timing?Clock::now():Clock::time_point{};
         if(cells<2u||cells>64u||!plain_path(path,false))return false;
         const std::uint64_t side=cells+1u,vertices=side*side+4u*cells,indices=6u*cells*cells+24u*cells;
         const std::uint64_t header_bytes=7u+5u*4u+4u*8u+4u*3u*4u+2u*4u;
@@ -190,6 +227,7 @@ namespace planet_stream_cache
         const std::uint64_t layers=bytes==header_bytes+vertices*52u+indices*4u?1u
             :ocean_surface&&bytes==header_bytes+2u*(vertices*52u+indices*4u)?2u:0u;
         if(!layers)return false;
+        const auto admitted=timing?Clock::now():Clock::time_point{};
         std::ifstream input{path,std::ios::binary};
         // Exact cell/layer sizes bound this temporary to at most675'035 bytes.
         // It is released before the next patch; mesh+encoded bytes fit the
@@ -198,6 +236,7 @@ namespace planet_stream_cache
         std::vector<std::byte> encoded(static_cast<std::size_t>(bytes));
         if(!input.read(reinterpret_cast<char*>(encoded.data()),static_cast<std::streamsize>(encoded.size()))
             ||input.peek()!=std::char_traits<char>::eof())return false;
+        const auto loaded=timing?Clock::now():Clock::time_point{};
         std::span<const std::byte> payload{encoded};
         if(std::string_view{reinterpret_cast<const char*>(payload.data()),7u}!="EPLOD01")return false;
         payload=payload.subspan(7u);
@@ -214,6 +253,8 @@ namespace planet_stream_cache
             if(!read_vec(payload,vertex.parent_delta))return false;
         }
         for(auto& index:mesh.indices)if(!read_scalar(payload,index))return false;
-        return payload.empty();
+        if(!payload.empty())return false;
+        if(timing)*timing={admitted-started,loaded-admitted,Clock::now()-loaded,bytes};
+        return true;
     }
 }

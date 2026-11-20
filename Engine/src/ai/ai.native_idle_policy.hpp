@@ -43,11 +43,16 @@ private:
     bool retiring_{};
 };
 
-inline WorkGate work_gate;
+// Initialize on first use so consumers share one gate without registering a
+// startup initializer in every translation unit that includes this header.
+inline WorkGate& work_gate() noexcept {
+    static WorkGate gate;
+    return gate;
+}
 
 class WorkLease final {
 public:
-    explicit WorkLease(WorkGate& gate = work_gate)
+    explicit WorkLease(WorkGate& gate = work_gate())
         : gate_(&gate), admitted_(gate.acquire()) {}
     ~WorkLease() { if (gate_) gate_->release(); }
     WorkLease(WorkLease&& other) noexcept
@@ -65,7 +70,7 @@ private:
 
 class RetirementClaim final {
 public:
-    explicit RetirementClaim(WorkGate& gate = work_gate)
+    explicit RetirementClaim(WorkGate& gate = work_gate())
         : gate_(gate.try_claim_retirement() ? &gate : nullptr) {}
     ~RetirementClaim() { if (gate_) gate_->finish_retirement(); }
     RetirementClaim(const RetirementClaim&) = delete;

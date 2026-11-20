@@ -8,6 +8,59 @@ ROOT=Path(__file__).resolve().parents[2]
 OWNER=ROOT/'Engine/src/editor/application'
 
 class ForestPointerPaint(unittest.TestCase):
+    def test_stale_generated_body_selection_cannot_retarget_forest(self):
+        placement=(OWNER/'editor.application_scene_preview.inl').read_text()
+        picking=(OWNER/'editor.application_document_editing.inl').read_text()
+        implementation=definition(placement,'        [[nodiscard]] std::uint32_t forest_placement_body_id(')
+        for owner, marker in (
+            (placement,'        [[nodiscard]] bool begin_forest_surface_placement('),
+            (placement,'        [[nodiscard]] bool fill_painted_forest_areas('),
+            (picking,'        void update_forest_lasso('),
+            (picking,'        void update_forest_brush('),
+        ):
+            body=owner[owner.index('\n        {',owner.index(marker)):]
+            self.assertIn('forest_placement_body_id(state,',definition(body,'        {'))
+        report=ROOT/'Artifacts/Reports/forest-placement-body-identity'
+        report.mkdir(parents=True,exist_ok=True)
+        cpp=report/'consumer.cpp'
+        cpp.write_text(r"""
+#include <array>
+#include <cassert>
+#include <cstdint>
+#include <optional>
+using MeshKey=std::array<std::uint64_t,4>;
+struct EditorEntity {
+ std::uint64_t sceneObjectId{};
+ struct Mesh {MeshKey artifact_key{};};
+ std::optional<Mesh> meshAsset;
+};
+struct EditorState {
+ struct BodySelection {std::uint64_t entity{};MeshKey mesh_key{};std::uint32_t body{};};
+ std::optional<BodySelection> planetaryBodySelection;
+};
+""" + implementation + r"""
+int main(){
+ constexpr std::uint64_t terrainId=0x1'0000'0173;
+ constexpr MeshKey oldMesh{21,34,55,89},newMesh{21,34,55,90};
+ constexpr std::uint32_t moon=5,world=0;
+ EditorEntity terrain{terrainId,EditorEntity::Mesh{oldMesh}};
+ EditorState editor{EditorState::BodySelection{terrainId,oldMesh,moon}};
+ assert(forest_placement_body_id(editor,terrain,world)==moon);
+ terrain.meshAsset=EditorEntity::Mesh{newMesh}; // Regenerate preserves scene identity.
+ assert(forest_placement_body_id(editor,terrain,world)==world);
+ terrain.sceneObjectId=0x2'0000'0173; // Matching mesh imported as a separate object.
+ terrain.meshAsset=EditorEntity::Mesh{oldMesh};
+ assert(forest_placement_body_id(editor,terrain,world)==world);
+ terrain.sceneObjectId=terrainId;
+ terrain.meshAsset.reset();
+ assert(forest_placement_body_id(editor,terrain,world)==world);
+ terrain.meshAsset=EditorEntity::Mesh{oldMesh};
+ editor.planetaryBodySelection.reset();
+ assert(forest_placement_body_id(editor,terrain,world)==world);
+}
+""",encoding='utf-8')
+        compile_and_run(self,cpp,report,windows_flags=('/W4','/WX'),linux_flags=('-Wall','-Wextra','-Werror'))
+
     def test_real_body_space_hits(self):
         source=(OWNER/'editor.application_document_editing.inl').read_text()
         function=definition(source,'        [[nodiscard]] std::optional<std::array<double,3>> forest_brush_surface_direction(')

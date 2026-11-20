@@ -33,8 +33,8 @@ class SpriteStream(unittest.TestCase):
 
     def test_actual_geometry_order_capacity_upload_and_context_lifetime(self):
         from Tests.support.cpp import compile_and_run
-        source=(ROOT/'Engine/modules/opengl.textures.ixx').read_text(encoding='utf-8')
-        state=(ROOT/'Engine/modules/opengl.state.ixx').read_text(encoding='utf-8')
+        source=(ROOT/'Engine/modules/opengl/opengl.textures.ixx').read_text(encoding='utf-8')
+        state=(ROOT/'Engine/modules/opengl/opengl.state.ixx').read_text(encoding='utf-8')
         fields='        GLuint spriteStreamVao'+state.split('        GLuint spriteStreamVao',1)[1].split('        GLuint sceneShader',1)[0]
         constants='\n'.join(line for line in source.splitlines() if 'inline constexpr std::size_t sprite_stream_' in line)
         structures='\n'.join(definition(source,'    struct '+name+' final',True) for name in ('SpriteVertex','SpriteBatchTexture','SpriteBatchState'))
@@ -55,7 +55,7 @@ class SpriteStream(unittest.TestCase):
                   +gate+'\n}\n#define EPOCH_OPENGL_STATIC_QUADS_DIAGNOSTIC 1\n'
                   +'void prepare_static_control(epochengine::openglstate::OpenGL4State& nativeState) {\n'
                   +gate+'\n}\n#undef EPOCH_OPENGL_STATIC_QUADS_DIAGNOSTIC\n')
-        quad=(ROOT/'Engine/modules/opengl.quad.ixx').read_text(encoding='utf-8')
+        quad=(ROOT/'Engine/modules/opengl/opengl.quad.ixx').read_text(encoding='utf-8')
         quad_arrays='\n'.join(quad[quad.index(marker):quad.index(';',quad.index(marker))+1]
                               for marker in ('constexpr float quadVerts[]', 'constexpr unsigned int quadIdx[]'))
         prefix=r'''

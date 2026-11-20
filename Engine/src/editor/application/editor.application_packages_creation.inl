@@ -78,6 +78,37 @@
             return std::filesystem::exists(resolve_editor_path(path), ec);
         }
 
+        [[nodiscard]] static bool save_active_project_sources(EditorState& editor)
+        {
+            (void)project_gui_document_layout(editor);
+            if (!save_project_gui_document(editor, false) || !save_editor_scene_snapshot(editor))
+            {
+                editor.projectStatus =
+                    "Project save blocked because GUI and scene source evidence were not both committed.";
+                push_editor_log(editor, "[project] " + editor.projectStatus);
+                return false;
+            }
+            return persist_project_run_settings(editor);
+        }
+
+#if defined(__ANDROID__)
+        [[nodiscard]] static bool save_mobile_project_sources(EditorState& editor, std::string_view projectId)
+        {
+            // Save only the admitted project and its current authored documents.
+            const auto* profile = editor_find_project_profile(projectId);
+            if (!profile || projectId != editor.projectId || editor.projectRoot.empty()
+                || editor.projectRoot != profile->root_path || editor.projectManifest.empty()
+                || editor.projectManifest != profile->manifest_path || editor.projectScenePath.empty()
+                || editor.projectScenePath != profile->scene_path)
+            {
+                editor.projectStatus = "Save blocked because the open project identity changed. Reopen the saved project.";
+                push_editor_log(editor, "[project] " + editor.projectStatus);
+                return false;
+            }
+            return save_active_project_sources(editor);
+        }
+#endif
+
         void repair_project_evidence(EditorState& editor, std::string_view projectId)
         {
             if (projectId.empty())
@@ -87,6 +118,13 @@
                 push_editor_log(editor, "[project] Save blocked: no project is open.");
                 return;
             }
+#if defined(__ANDROID__)
+            if (save_mobile_project_sources(editor, projectId))
+            {
+                editor.projectStatus = "Active project saved on this device.";
+                push_editor_log(editor, "[project] " + editor.projectStatus);
+            }
+#else
             const std::string requestedProject{projectId};
             const std::string previousProject = editor.projectId;
             if (project_gui_document_is_active(editor))
@@ -149,6 +187,7 @@
             const auto preservedInputProfile = editor.inputProfilePreset;
             const std::string preservedRunBackend = editor.projectRunBackend;
             const double preservedRunFrameLimit = editor.projectRunFrameLimitFps;
+            const bool preservedScreenSpaceGuiEnabled = editor.projectScreenSpaceGuiEnabled;
             const auto preservedProjectFrameLimitEdit = editor.projectFrameLimitEdit;
             const auto preservedPlanetarySettings = editor.planetarySettings;
             const auto preservedPlanetarySeedDraft = editor.planetarySeedDraft;
@@ -221,6 +260,7 @@
                     editor.inputProfilePreset = preservedInputProfile;
                     editor.projectRunBackend = preservedRunBackend;
                     editor.projectRunFrameLimitFps = preservedRunFrameLimit;
+                    editor.projectScreenSpaceGuiEnabled = preservedScreenSpaceGuiEnabled;
                     editor.projectFrameLimitEdit = preservedProjectFrameLimitEdit;
                     editor.planetarySettings = preservedPlanetarySettings;
                     editor.planetarySeedDraft = preservedPlanetarySeedDraft;
@@ -306,18 +346,7 @@
                         }
                     }
                 }
-                (void)project_gui_document_layout(editor);
-                if (!save_project_gui_document(editor, false)
-                    || !save_editor_scene_snapshot(editor))
-                {
-                    editor.projectStatus =
-                        "Project save blocked because GUI and scene source evidence were not both committed.";
-                    push_editor_log(
-                        editor,
-                        "[project] " + editor.projectStatus);
-                    return;
-                }
-                if (!persist_project_run_settings(editor)) return;
+                if (!save_active_project_sources(editor)) return;
                 editor.projectStatus = ensured.summary + " Active project saved.";
                 editor.aiContinuousBuildStatus = isSandbox
                     ? "Sandbox evidence saved; queue a engine development build to stage verifier evidence."
@@ -336,6 +365,7 @@
                 editor.aiContinuousBuildStatus = "Project evidence save failed; inspect project status.";
                 push_editor_log(editor, "[project] Save active project evidence failed: " + ensured.summary);
             }
+#endif
         }
 
         void repair_active_project_evidence(EditorState& editor)
@@ -409,10 +439,11 @@
         }
 
         [[nodiscard]] bool model_snapshot_installed(
-            const ai::model_install::InstallPlan& plan)
+            const ai::model_install::InstallPlan& plan,
+            const std::filesystem::path& cache = {})
         {
             const std::filesystem::path root =
-                ai::model_install::version_root(model_cache_root_path(), plan);
+                ai::model_install::version_root(cache.empty() ? model_cache_root_path() : cache, plan);
             if (root.empty()
                 || !ai::model_install::receipt_matches(
                     plan,
@@ -1611,7 +1642,7 @@
                                 }
                                 else if (!project_planetary::save_settings(root, editor.planetarySettings))
                                     editor.planetaryStatus = "Package source added, but settings could not be saved. Open Project and retry Save Settings or Build & Generate.";
-                                else editor.planetaryStatus = "Planetary Terrain added. Open Project to change settings, then choose Build & Generate.";
+                                else editor.planetaryStatus = "Planetary Terrain added. Open Project > World Settings, then choose Build & Generate.";
                                 editor.packageSourceStatus = editor.planetaryStatus;
                                 editor.mainSurface = EditorMainSurface::Project;
                                 editor.showPackageManagerModal = false;
@@ -1883,6 +1914,7 @@
                                     {meshBudget.frame_indices,meshBudget.frame_bytes}))
                             {
                                 editor.planetaryStreamSnapshot = streamed.snapshot;
+                                editor.planetaryStreamAppearance = streamed.water_appearance;
                                 editor.planetaryStreamCloud = streamed.patch_snapshot
                                     ? streamed.patch_snapshot->metadata.cloud : std::nullopt;
                                 editor.planetaryStreamFrame = streamed.operation.mesh_frame;
@@ -1971,6 +2003,7 @@
                         { entity.meshSnapshot.reset(); entity.meshSnapshotFrame.reset(); entity.meshLoadAttempted = false; editor.sceneInteractionDirty = true; }
                 editor.planetaryStreamEntity = 0u;
                 editor.planetaryStreamSnapshot.reset(); editor.planetaryStreamCloud.reset();
+                editor.planetaryStreamAppearance.reset();
                 editor.planetaryStreamFrame.reset();
                 return;
             }
@@ -1999,7 +2032,13 @@
                 return;
             }
             if (entityAt->meshAsset->artifact_key != editor.planetaryStreamFallbackKey)
-            { editor.planetaryStreamSnapshot.reset(); editor.planetaryStreamCloud.reset(); editor.planetaryStreamFrame.reset(); changed = true; }
+            {
+                editor.planetaryStreamSnapshot.reset();
+                editor.planetaryStreamCloud.reset();
+                editor.planetaryStreamFrame.reset();
+                editor.planetaryStreamAppearance.reset();
+                changed = true;
+            }
             if (!changed && !editor.planetaryStreamContinue) return;
             auto view = desiredView;
             view.request_id = ++editor.planetaryStreamSequence;
@@ -2147,7 +2186,8 @@
             disabled,
             epoch_local,
             external_mcp,
-            engine_selected
+            engine_selected,
+            calculator_coach
         };
 
         [[nodiscard]] bool write_project_ai_profile(
@@ -2180,8 +2220,13 @@
             case ProjectAiProviderMode::epoch_local: provider = profile::Provider::epoch_local_qwen38; break;
             case ProjectAiProviderMode::external_mcp: provider = profile::Provider::external_mcp; break;
             case ProjectAiProviderMode::engine_selected: provider = profile::Provider::engine_selected; break;
+            case ProjectAiProviderMode::calculator_coach: provider = profile::Provider::calculator_coach; break;
             default: return fail("This project AI provider is not supported.");
             }
+            const bool calculatorProject = editor.projectId == profile::calculator_project_id;
+            const bool calculatorProvider = provider == profile::Provider::calculator_coach;
+            if (provider != profile::Provider::disabled && calculatorProject != calculatorProvider)
+                return fail("That AI setting does not apply to this project.");
             const auto encoded = profile::serialize_profile(profile::make_profile(provider));
             if (!encoded) return fail(encoded.status);
             std::error_code error;
@@ -2242,11 +2287,13 @@
             }
             editor.packageInstallStatus = provider == profile::Provider::disabled
                 ? "Project AI disabled. No models were stopped or removed."
-                : provider == profile::Provider::engine_selected
-                    ? "Project AI enabled using the engine-selected model. Confirm a model for each session; no weights were copied or loaded."
-                    : provider == profile::Provider::epoch_local_qwen38
-                        ? "Project AI enabled using the installed local Qwen provider. No model was loaded or weights copied."
-                        : "Project AI enabled using the operator-selected external provider. Confirm its model and connection; no connection was started.";
+                : calculatorProvider
+                    ? "Calculator Coach allowed. A confirmed model and verified isolated runtime are required."
+                    : provider == profile::Provider::engine_selected
+                        ? "Project AI enabled using the engine-selected model. Confirm a model for each session; no weights were copied or loaded."
+                        : provider == profile::Provider::epoch_local_qwen38
+                            ? "Project AI enabled using the installed local Qwen provider. No model was loaded or weights copied."
+                            : "Project AI enabled using the operator-selected external provider. Confirm its model and connection; no connection was started.";
             editor.packageInstallProgress = provider == profile::Provider::disabled ? 0.0f : 1.0f;
             push_editor_log(editor, "[package] " + editor.packageInstallStatus);
             return true;
@@ -3041,6 +3088,7 @@
         [[nodiscard]] std::string_view ai_project_creation_coverage(std::string_view request)
         {
             if (ai::project_lifecycle_request_tool(request) != "project.create") return {};
+            if (ai::calculator_project_request(request)) return "none";
             using ai::authoring_plan_detail::trim;
             using ai::project_request_detail::representation_object;
             using ai::project_request_detail::subject;
@@ -3352,6 +3400,7 @@
             const auto name = operation == "project.create" ? ai_requested_project_display_name(request) : std::nullopt;
             if (name && !ai::valid_project_display_name(*name))
                 return "Which display name should I use? Reply with 'Name: Your Project' (up to 64 letters, digits, spaces, hyphens or underscores), or 'Use the generated name'. Nothing was created.";
+            if (operation == "project.create" && ai::calculator_project_request(request)) return {};
             if (name)
                 text.replace(static_cast<std::size_t>(name->data() - request.data()), name->size(), name->size(), ' ');
             const auto unquoted = ai_project_package_unquoted(text);
@@ -3479,6 +3528,9 @@
                 const auto* name = ai::authoring_plan_detail::argument(call,"name");
                 if (requestedName ? !name || name->value != *requestedName : name != nullptr)
                     return {ai::McpErrorCode::invalid_argument,"The project display name changed after review. Nothing was created."};
+                const auto* kind = ai::authoring_plan_detail::argument(call,"kind");
+                if (ai::calculator_project_request(request) && (!kind || kind->value != "tool"))
+                    return {ai::McpErrorCode::invalid_argument,"A software application requires kind=tool."};
                 const auto* coverage = ai::authoring_plan_detail::argument(call,"coverage");
                 const auto requestedCoverage = ai_project_creation_coverage(request);
                 if (coverage && !requestedCoverage.empty() && coverage->value != requestedCoverage)
@@ -3533,6 +3585,12 @@
 
         [[nodiscard]] std::string ai_project_tool_selection_prompt(std::string_view request)
         {
+            if (ai::calculator_project_request(request))
+                return "\nREQUEST_OPERATION_CONSTRAINT_V1\nCreate an ordinary Software / Tool project shell for the requested application. "
+                    "The CALL line must be exactly:\nCALL project.create kind=tool coverage=none\n"
+                    "Omit name= even when the user supplied a name. Put descriptive names only in TITLE/SUMMARY. "
+                    "Epoch binds the requested display name before approval. "
+                    "Approval creates the shell. GUI and application logic are separate authoring work.\nEND_REQUEST_OPERATION_CONSTRAINT_V1\n";
             if (ai_project_creation_uses_defaults(request))
             {
                 std::string text = "\nHOST_PROJECT_CREATION_DEFAULTS_V1\n";
@@ -3605,8 +3663,10 @@
             if(result)
             {
                 if (result.plan.call.tool == "project.create")
+                {
                     if (const auto name = ai_requested_project_display_name(request); name && ai::valid_project_display_name(*name))
                         result.plan.call.arguments.push_back({"name", std::string{*name}});
+                }
                 if(const auto selected=validate_ai_project_tool_selection(request,result.plan.call);!selected)
                 {result.code=ai::ToolPlanCode::invalid_argument;result.message=selected.message;}
                 else if (result.plan.call.tool == "forest.paint"
@@ -3758,7 +3818,7 @@
                 return true;
             }
             editor.selectedPackageId = packageId;
-            editor.packageCatalogModelsOnly = false;
+            editor.packageManagerPage = EditorState::PackageManagerPage::packages;
             editor.showPackageManagerModal = true;
             open_package_source_review(editor, packageId);
             editor.aiToolStatus = generate
@@ -3808,11 +3868,11 @@
             { editor.aiToolStatus = "Created project " + created.project_id + " at " + created.root_path
                 + ", but could not open it. " + admitted.summary; return false; }
             editor.projectCreationOpen = false;
-            editor.requestedMainSurface = EditorMainSurface::Project;
+            if (kind != "tool") editor.requestedMainSurface = EditorMainSurface::Project;
             if (!terrain)
             {
                 editor.aiToolStatus = "project.create completed: " + created.project_id
-                    + ". Empty project created and opened; nothing was built or run.";
+                    + ". Project shell created and opened.";
                 return true;
             }
             const auto root = resolve_editor_path(std::filesystem::path{editor.projectRoot});

@@ -9,6 +9,10 @@ import forest.preview_mesh;
 import forest.factory;
 import authoring.morphology;
 import asset.texture_artifact;
+import project.lightning;
+import scene.snapshot;
+import scene.serializer;
+import scene.runtime;
 #define CHECK(x) do { if(!(x)) { std::ofstream("forest-junction-failure.txt") << __LINE__ << ": " << #x; std::exit(1); } } while(false)
 namespace f=epochengine::forest;
 namespace p=f::preview_mesh;
@@ -72,6 +76,85 @@ a::CompiledTextureArtifact offcentre_leaf(bool separatedStems = false)
     return result;
 }
 
+constexpr unsigned bark_source_width = 128u, bark_source_height = 192u;
+std::array<unsigned, 3> bark_color(unsigned x, unsigned y)
+{
+    // The edges both contain real grain, so margin detection keeps the full
+    // width. The x and y ramps expose both seam discontinuities.
+    return {24u + 112u*x/(bark_source_width-1u) + 84u*y/(bark_source_height-1u),
+        30u + 90u*x/(bark_source_width-1u) + 74u*y/(bark_source_height-1u),
+        18u + 48u*x/(bark_source_width-1u) + 58u*y/(bark_source_height-1u)};
+}
+
+a::CompiledTextureArtifact full_frame_bark()
+{
+    a::CompiledTextureMip mip{.width=bark_source_width,.height=bark_source_height,
+        .row_pitch_bytes=bark_source_width*4u};
+    mip.texels.resize(bark_source_width*bark_source_height*4u);
+    for (unsigned y=0;y<mip.height;++y)
+        for (unsigned x=0;x<mip.width;++x)
+        {
+            const auto color=bark_color(x,y);
+            const auto offset=std::size_t{y}*mip.row_pitch_bytes+x*4u;
+            for (unsigned c=0;c<3;++c) mip.texels[offset+c]=static_cast<std::byte>(color[c]);
+            mip.texels[offset+3u]=std::byte{255};
+        }
+    mip.content=a::compiled_texture_mip_content(mip);
+    a::CompiledTextureArtifact result;
+    result.identity=a::build_compiled_texture_artifact_identity(
+        {a::deterministic_content_hash("full-frame-bark",mip.texels),1u},
+        {.format=a::ArtifactFormat::rgba8_srgb,.color_space=a::ColorSpace::srgb},
+        mip.width,mip.height,1u);
+    result.identity.compilation_required=false;
+    result.mips.push_back(std::move(mip));
+    result.payload_content=a::compiled_texture_payload_content(result.identity,result.mips);
+    result.status=a::ArtifactCompilationStatus::ready;
+    return result;
+}
+
+int periodic_bark_contract()
+{
+    const auto bark=full_frame_bark();
+    CHECK(a::validate_compiled_artifact(bark));
+    const auto leaf=offcentre_leaf();
+    const auto leafOnly=p::compose_material_atlas(nullptr,&leaf,0,{1,1,1},{1,1,1});
+    const auto combined=p::compose_material_atlas(&bark,&leaf,0,{1,1,1},{1,1,1});
+    CHECK(leafOnly&&combined&&a::validate_compiled_artifact(combined.artifact));
+    const auto& atlas=combined.artifact.mips.front();
+    const auto& unmodifiedLeaves=leafOnly.artifact.mips.front();
+    CHECK(atlas.width==1024u&&atlas.height==512u);
+    const auto channel=[&](unsigned x,unsigned y,unsigned c) {
+        return std::to_integer<unsigned>(atlas.texels[
+            std::size_t{y}*atlas.row_pitch_bytes+x*4u+c]);
+    };
+    for (unsigned c=0;c<3;++c)
+    {
+        // Left/right bark close along a cylinder; top/bottom repeat through
+        // the same texture sampler used by a placed tree.
+        for (unsigned y=0;y<atlas.height;++y)
+            CHECK(channel(18u,y,c)==channel(494u,y,c));
+        for (unsigned x=0;x<512u;++x)
+            CHECK(channel(x,0,c)==channel(x,511u,c));
+        // Away from the feather, the authored grain, aspect mapping and
+        // exact source channel bytes survive on both sides of the tile.
+        for (const auto& xy : {std::array{90u,60u},std::array{300u,280u},std::array{400u,440u}})
+        {
+            const auto x=(xy[0]-18u)*(bark_source_width-1u)/476u;
+            const auto y=(xy[1]*bark_source_width/476u)%bark_source_height;
+            CHECK(channel(xy[0],xy[1],c)==bark_color(x,y)[c]);
+        }
+    }
+    for (unsigned y=0;y<atlas.height;++y)
+    {
+        const auto start=std::size_t{y}*atlas.row_pitch_bytes+512u*4u;
+        CHECK(std::equal(atlas.texels.begin()+start,atlas.texels.begin()+start+512u*4u,
+            unmodifiedLeaves.texels.begin()+start));
+    }
+    const auto repeated=p::compose_material_atlas(&bark,&leaf,0,{1,1,1},{1,1,1});
+    CHECK(repeated&&repeated.artifact.identity.key==combined.artifact.identity.key);
+    return 0;
+}
+
 int visible_stem_contract()
 {
     const auto& oak=p::material_atlas();
@@ -118,8 +201,77 @@ int visible_stem_contract()
     return 0;
 }
 
+int lightning_scene_contract()
+{
+    namespace lightning = epochengine::project_lightning;
+    namespace scene = epochengine::scene;
+    scene::SceneSnapshot authored{.scene_id = "project:storm", .project_id = "storm", .world_name = "Storm"};
+    const auto id = scene::stable_scene_object_id(authored.scene_id, "Lightning_01");
+    const auto camera = scene::stable_scene_object_id(authored.scene_id, "Camera");
+    const auto spawn = scene::stable_scene_object_id(authored.scene_id, "Spawn");
+    authored.primary_camera = camera;
+    authored.primary_spawn = spawn;
+    authored.objects.push_back({.id = id, .name = "Lightning_01", .type = std::string{lightning::scene_type},
+        .category = "World", .position = {2.0f, 6.0f, -3.0f}, .rotation = {10.0f, 15.0f, 20.0f},
+        .scale = {1.1f, 1.2f, 1.3f}, .position_anchor = std::array{5200.0, 100.0, -250.0}});
+    authored.objects.push_back({.id = camera, .name = "Camera", .type = "Camera", .category = "World"});
+    authored.objects.push_back({.id = spawn, .name = "Spawn", .type = "Spawn", .category = "World"});
+    const auto reopened = scene::parse_snapshot_text(scene::serialize_snapshot_text(authored));
+    CHECK(reopened && reopened.snapshot.objects.size() == authored.objects.size());
+    epochengine::scene_runtime::SceneRuntime playing;
+    CHECK(playing.replace(reopened.snapshot).committed());
+    const auto* live = playing.projection()->find(id);
+    CHECK(live && live->source_id == id && live->type == lightning::scene_type && live->visible());
+    CHECK(live->transform.position == authored.objects.front().position
+        && live->transform.rotation == authored.objects.front().rotation
+        && live->transform.scale == authored.objects.front().scale
+        && live->position_anchor == authored.objects.front().position_anchor && !live->mesh_asset);
+
+    lightning::PreviewCache editor, play;
+    const auto peak = editor.sample(id, 0.0);
+    CHECK(peak && peak.intensity == 1.0f && peak.mesh->vertices().size() <= lightning::mesh_limits.maximum_vertices);
+    CHECK(peak.mesh->indices().size() <= lightning::mesh_limits.maximum_indices);
+    CHECK(editor.sample(id, 0.0).mesh == peak.mesh);
+    const auto fading = editor.sample(id, 0.13);
+    CHECK(fading && fading.intensity > 0.0f && fading.intensity < peak.intensity && fading.mesh == peak.mesh);
+    CHECK(fading.color()[2] < peak.color()[2]);
+    CHECK(!editor.sample(id, 0.4) && !editor.sample(id, -1.0) && !editor.sample(0u, 0.0));
+    CHECK(!editor.sample(id, std::numeric_limits<double>::infinity()));
+    CHECK(editor.sample(id, lightning::repeat_seconds).mesh == peak.mesh);
+    const double propagating_time = lightning::repeat_seconds - 0.05;
+    const auto advancing = editor.sample(id, propagating_time);
+    CHECK(advancing && advancing.mesh->indices().size() < peak.mesh->indices().size());
+    CHECK(editor.sample(id, 0.0).mesh->key() == peak.mesh->key());
+    const auto rewind = editor.sample(id, propagating_time);
+    CHECK(rewind && rewind.intensity == advancing.intensity && rewind.mesh->key() == advancing.mesh->key());
+    const auto replay = play.sample(live->source_id, propagating_time);
+    CHECK(replay && replay.mesh->key() == advancing.mesh->key());
+    const auto other = play.sample(live->source_id + 1u, propagating_time);
+    CHECK(other && other.mesh->key() != replay.mesh->key());
+
+    namespace morphology = epochengine::authoring::morphology;
+    auto recipe = morphology::default_recipe(morphology::Domain::electrical);
+    recipe.growth.seed = id;
+    const auto graph = morphology::build_graph(recipe);
+    bool has_sharp_spatial_turn = false;
+    for (const auto& segment : graph.segments) {
+        if (segment.depth < 2u) continue;
+        const auto parent = std::find_if(graph.segments.begin(), graph.segments.end(),
+            [&](const auto& candidate) { return candidate.child_node == segment.parent_node; });
+        CHECK(parent != graph.segments.end());
+        const auto a = parent->tangent_end;
+        const auto b = segment.tangent_end;
+        const float alignment = a.x*b.x + a.y*b.y + a.z*b.z;
+        has_sharp_spatial_turn |= alignment < 0.75f && a.z*b.z < -0.12f;
+    }
+    CHECK(has_sharp_spatial_turn);
+    return 0;
+}
+
 int main(){
+ CHECK(periodic_bark_contract()==0);
  CHECK(visible_stem_contract()==0);
+ CHECK(lightning_scene_contract()==0);
  CHECK(p::run_contract().passed());
  namespace morph=epochengine::authoring::morphology;
  auto recipe=morph::default_recipe(morph::Domain::electrical);
@@ -327,14 +479,17 @@ int main(){
 class ForestJunctions(unittest.TestCase):
  def test_overlapping_junction_geometry(self):
   if os.name != "nt": self.skipTest("Installed MSVC CPU module lane")
-  proof=ROOT/"Artifacts/Reports/forest-leaf-rotation-nov07";proof.mkdir(parents=True,exist_ok=True)
+  material_owner=ROOT/"Engine/src/forest/forest.preview_mesh.cpp"
+  lightning_owner=ROOT/"Engine/modules/project/project.lightning.ixx"
+  identity=hashlib.sha256(CODE.encode()+material_owner.read_bytes()+lightning_owner.read_bytes()).hexdigest()[:16]
+  proof=ROOT/"Artifacts/Reports/forest-bark-repeat-20261116"/identity;proof.mkdir(parents=True,exist_ok=True)
   receipt=proof/"result.json";receipt.write_text(json.dumps({"pass":False,"status":"running"})+"\n")
-  build=ROOT/"Artifacts/Intermediate/tests/forest-leaf-rotation"
+  build=ROOT/"Artifacts/Intermediate/tests/forest-bark-repeat"/identity
   source=proof/"forest.junction_contract.cpp";source.write_text(CODE,encoding="utf-8")
   roots=[ROOT/"Engine/modules",ROOT/"Engine/dep/EpochPlatformEngine/modules"]
   found={}
   for folder in roots:
-   for path in folder.glob("*.ixx"):
+   for path in folder.rglob("*.ixx"):
     match=re.search(r"^export module\s+([\w.:]+);",path.read_text(encoding="utf-8-sig"),re.M)
     if match: found[match.group(1)]=path
   implementations=[ROOT/p for p in (
@@ -342,7 +497,7 @@ class ForestJunctions(unittest.TestCase):
    'Engine/src/assets/texture/asset.texture_import.cpp','Engine/src/assets/image.stb.cpp',
    'Engine/src/platform/core.path.cpp','Engine/dep/EpochPlatformEngine/src/core/core.log.cpp',
    'Engine/dep/EpochPlatformEngine/src/core/core.time.cpp')]
-  selected={};pending=["forest.preview_mesh","forest.factory"]
+  selected={};pending=["forest.preview_mesh","forest.factory","project.lightning","scene.serializer","scene.runtime"]
   for path in implementations:
    pending+=re.findall(r"^(?:export )?(?:import|module)\s+([\w.]+);",path.read_text(encoding="utf-8-sig"),re.M)
   while pending:
@@ -352,6 +507,8 @@ class ForestJunctions(unittest.TestCase):
    pending+=re.findall(r"^(?:export )?import\s+([\w.]+);",selected[name].read_text(encoding="utf-8-sig"),re.M)
   paths=lambda ps:" ".join('"'+p.as_posix()+'"' for p in ps)
   (proof/"CMakeLists.txt").write_text(f'''cmake_minimum_required(VERSION 3.30)
+cmake_policy(SET CMP0141 NEW)
+set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT Embedded)
 project(ForestJunctions LANGUAGES CXX)
 add_executable(anchor "{source.as_posix()}" {paths(implementations)})
 target_compile_features(anchor PRIVATE cxx_std_23)
@@ -365,7 +522,8 @@ add_test(NAME actual_scene_anchor COMMAND anchor "{(proof/'fixture').as_posix()}
   commands=[["cmake","-S",str(proof),"-B",str(build),"-G","Visual Studio 17 2022","-A","x64"]]
   for config in ("Debug","Release"):
    commands += [["cmake","--build",str(build),"--config",config,"--parallel","1"],["ctest","--test-dir",str(build),"-C",config,"--output-on-failure"]]
-  env=dict(os.environ,EPOCH_ASSET_ROOT=str(ROOT/"Engine/resource"))
+  scratch=proof/"tmp";scratch.mkdir(exist_ok=True)
+  env=dict(os.environ,EPOCH_ASSET_ROOT=str(ROOT/"Engine/resource"),TEMP=str(scratch),TMP=str(scratch),TMPDIR=str(scratch))
   results=[]
   for index,command in enumerate(commands):
    completed=subprocess.run(command,cwd=ROOT,env=env,capture_output=True,text=True,timeout=180)
@@ -381,7 +539,7 @@ add_test(NAME actual_scene_anchor COMMAND anchor "{(proof/'fixture').as_posix()}
     (proof/f"lane-{index}-procedural.log").write_text(fallback.stdout+fallback.stderr,encoding="utf-8")
     results.append({"command":command,"asset_root":str(empty_assets),"exit_code":fallback.returncode})
     self.assertEqual(fallback.returncode,0,fallback.stdout[-8500:]+fallback.stderr)
-  receipt.write_text(json.dumps({"pass":True,"scope":"Production seeded bounded leaf rotation, fixed stem attachment throughout growth and resizing, strict 2D planarity, junction overlap and cap winding; no native renderer or Editor acceptance.","runs":results,"sources":{str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in selected.values()}},indent=2)+"\n")
+  receipt.write_text(json.dumps({"pass":True,"scope":"Production forest geometry and material checks, and the normal lightning scene save/reopen and runtime projection with bounded pulse geometry, seed replay, rewind, pause and decay. Native renderer and Editor acceptance remain open.","runs":results,"sources":{str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in [material_owner,*selected.values()]}},indent=2)+"\n")
 
 if __name__ == "__main__":unittest.main()
 

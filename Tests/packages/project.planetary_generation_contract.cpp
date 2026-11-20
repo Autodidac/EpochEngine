@@ -39,6 +39,28 @@ namespace
 
 int main(int argc, char** argv)
 {
+    if(argc==7&&std::string_view{argv[1]}=="--packaged-shoreline")
+    {
+        namespace planet=epochengine::project_planetary;
+        const auto base=fs::canonical(argv[2]);
+        const auto scene=fs::canonical(base/"worlds/main.epoch");
+        const auto loaded=planet::load_packaged_shoreline(base,scene,argv[3],argv[4],argv[5],argv[6]);
+        CHECK(loaded&&loaded->selection.source&&loaded->selection.artifact&&loaded->selection.water_appearance);
+        CHECK(loaded->selection.source->water_sample_seconds==loaded->sample_seconds
+            &&!loaded->selection.source->metadata.water_triangles.empty());
+        CHECK(!planet::load_packaged_shoreline(base,scene,"AnotherProject",argv[4],argv[5],argv[6]));
+        CHECK(!planet::load_packaged_shoreline(base,scene,argv[3],std::string(64,'0'),argv[5],argv[6]));
+        const auto appearance=base.parent_path()/"assets/planetary/fixed-shoreline/terrain.water_appearance";
+        const auto original=read(appearance);
+        CHECK(!original.empty());
+        auto modified=original;
+        modified.back()^=1;
+        write(appearance,modified);
+        const auto refused=planet::load_packaged_shoreline(base,scene,argv[3],argv[4],argv[5],argv[6]);
+        write(appearance,original);
+        CHECK(!refused);
+        return 0;
+    }
     const std::string_view action = argc == 5 ? argv[4] : "";
     if (argc != 4 && (argc != 5 || (action != "--fresh-props" && action != "--verify-copy"
         && action != "--settings-only" && action != "--refuse-assets" && action != "--verify-runtime"
@@ -313,8 +335,13 @@ int main(int argc, char** argv)
             const auto recipeBefore=read(project/planet::recipe_relative_path);
             const auto prepared=planet::prepare_runtime_dependency(project);
             CHECK(prepared.ok);
-            CHECK(read(cmakeHook).find("set(EPOCH_PLANET_BUILD_RUNTIME_CONTROLLER ON)")!=std::string::npos);
-            CHECK(read(cmakeHook).find("epoch_extension_planetary_runtime")!=std::string::npos);
+            const auto generatedCmake=read(cmakeHook);
+            CHECK(generatedCmake.find("set(EPOCH_PLANET_BUILD_RUNTIME_CONTROLLER ON)")!=std::string::npos);
+            CHECK(generatedCmake.find("epoch_extension_planetary_runtime")!=std::string::npos);
+            CHECK(generatedCmake.find("if(ANDROID)\n  set(EPOCH_PLANET_BUILD_MESH_EXPORT OFF)\n"
+                "else()\n  set(EPOCH_PLANET_BUILD_MESH_EXPORT ON)\nendif()\n")!=std::string::npos);
+            CHECK(generatedCmake.find("if(NOT ANDROID)\n  add_dependencies(${target} epoch_planet_mesh_export)\n"
+                "  add_custom_command(TARGET ${target} POST_BUILD")!=std::string::npos);
 #ifdef _WIN32
             CHECK(read(propsHook).find("EPOCH_PROJECT_PLANETARY_RUNTIME=1")!=std::string::npos);
             CHECK(read(propsHook).find("epoch_extension_planetary_runtime.lib")!=std::string::npos);

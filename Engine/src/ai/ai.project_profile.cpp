@@ -171,8 +171,9 @@ namespace epochengine::ai::project_profile
             case Provider::epoch_local_qwen38: return "epoch_local_qwen38";
             case Provider::external_mcp: return "external_mcp";
             case Provider::engine_selected: return "engine_selected";
+            case Provider::calculator_coach: return "calculator_coach";
             }
-            return "disabled";
+            return {};
         }
 
         [[nodiscard]] std::optional<Provider> parse_provider(const std::string_view name)
@@ -185,6 +186,8 @@ namespace epochengine::ai::project_profile
                 return Provider::external_mcp;
             if (name == "engine_selected")
                 return Provider::engine_selected;
+            if (name == "calculator_coach")
+                return Provider::calculator_coach;
             return std::nullopt;
         }
 
@@ -224,6 +227,17 @@ namespace epochengine::ai::project_profile
 
     Profile make_profile(const Provider provider)
     {
+        if (provider == Provider::calculator_coach)
+            return Profile{
+                .provider = provider,
+                .enabled = true,
+                .model_binding = "calculator_small_model",
+                .runtime_binding = "epoch_isolated_application",
+                .inference_transport = "isolated_offline_cli_child_process",
+                .tool_protocol = "none",
+                .endpoint_binding = "none",
+                .self_iteration = "disabled"};
+
         const bool enabled = provider != Provider::disabled;
         const bool local = provider == Provider::epoch_local_qwen38;
         const bool external = provider == Provider::external_mcp;
@@ -257,13 +271,14 @@ namespace epochengine::ai::project_profile
 
     CodecResult serialize_profile(const Profile& profile)
     {
-        if (profile != make_profile(profile.provider))
+        const auto name = provider_name(profile.provider);
+        if (name.empty() || profile != make_profile(profile.provider))
             return reject("Project AI profile fields are inconsistent with the selected provider or safety policy.");
 
         std::ostringstream out{};
         out << "{\n"
             << "  \"schema\": \"epoch.project.ai.v1\",\n"
-            << "  \"provider\": \"" << provider_name(profile.provider) << "\",\n"
+            << "  \"provider\": \"" << name << "\",\n"
             << "  \"enabled\": " << (profile.enabled ? "true" : "false") << ",\n"
             << "  \"model_binding\": \"" << profile.model_binding << "\",\n"
             << "  \"runtime_binding\": \"" << profile.runtime_binding << "\",\n"

@@ -4,6 +4,7 @@ module;
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <span>
@@ -16,6 +17,7 @@ import core.context;
 import software.state;
 import package.registry;
 import render.arcade;
+import render.camera;
 import render.canvas2d_cpu;
 import render.canvas2d_limits;
 import render.canvas2d_runtime;
@@ -390,15 +392,23 @@ namespace epochengine::anativecontext::detail
         }
     }
 
+    struct SoftwarePreviewVertex
+    {
+        float x{};
+        float y{};
+        float depth{};
+    };
+
+    enum class SoftwarePreviewRasterPass { solid, wire_depth, wire_color };
+
+    template<SoftwarePreviewRasterPass pass = SoftwarePreviewRasterPass::solid>
     void draw_triangle(
-        float ax,
-        float ay,
-        float bx,
-        float by,
-        float cx,
-        float cy,
+        const SoftwarePreviewVertex& a,
+        const SoftwarePreviewVertex& b,
+        const SoftwarePreviewVertex& c,
         std::uint32_t color,
-        const core::RenderViewport& viewport) noexcept
+        const core::RenderViewport& viewport,
+        unsigned wireEdges) noexcept
     {
         auto& sr = s_softrendererstate;
         if (sr.framebuffer.empty() || sr.width <= 0 || sr.height <= 0)
@@ -409,39 +419,126 @@ namespace epochengine::anativecontext::detail
             return ((px - x0) * (y1 - y0)) - ((py - y0) * (x1 - x0));
         };
 
-        const float area = edge(ax, ay, bx, by, cx, cy);
-        if (std::abs(area) <= 1.0e-4f)
+        const float area = edge(a.x, a.y, b.x, b.y, c.x, c.y);
+        if (!std::isfinite(area) || std::abs(area) <= 1.0e-4f)
             return;
 
-        const float minXf = (std::min)(ax, (std::min)(bx, cx));
-        const float maxXf = (std::max)(ax, (std::max)(bx, cx));
-        const float minYf = (std::min)(ay, (std::min)(by, cy));
-        const float maxYf = (std::max)(ay, (std::max)(by, cy));
-
-        const int x0 = (std::max)(viewport.x, static_cast<int>(std::floor(minXf)));
-        const int x1 = (std::min)(viewport.x + viewport.width - 1, static_cast<int>(std::ceil(maxXf)));
-        const int y0 = (std::max)(viewport.y, static_cast<int>(std::floor(minYf)));
-        const int y1 = (std::min)(viewport.y + viewport.height - 1, static_cast<int>(std::ceil(maxYf)));
+        const float minX = (std::max)(static_cast<float>(viewport.x), (std::min)({a.x, b.x, c.x}));
+        const int lastX = viewport.x + viewport.width - 1;
+        const float maxX = (std::min)(static_cast<float>(lastX) + 1.0f, (std::max)({a.x, b.x, c.x}));
+        const float minY = (std::max)(static_cast<float>(viewport.y), (std::min)({a.y, b.y, c.y}));
+        const int lastY = viewport.y + viewport.height - 1;
+        const float maxY = (std::min)(static_cast<float>(lastY) + 1.0f, (std::max)({a.y, b.y, c.y}));
+        if (minX > maxX || minY > maxY)
+            return;
+        const int x0 = static_cast<int>(std::floor(minX));
+        const int x1 = (std::min)(lastX, static_cast<int>(std::ceil(maxX)));
+        const int y0 = static_cast<int>(std::floor(minY));
+        const int y1 = (std::min)(lastY, static_cast<int>(std::ceil(maxY)));
         if (x0 > x1 || y0 > y1)
             return;
 
         const bool positive = area > 0.0f;
+        const float inverseArea = 1.0f / area;
+        std::array<float, 3> edgeWidth{};
+        if constexpr (pass == SoftwarePreviewRasterPass::wire_color)
+        {
+            constexpr float pixelWidth = 1.25f;
+            edgeWidth = {
+                pixelWidth * std::hypot(c.x - b.x, c.y - b.y),
+                pixelWidth * std::hypot(a.x - c.x, a.y - c.y),
+                pixelWidth * std::hypot(b.x - a.x, b.y - a.y)
+            };
+        }
         for (int py = y0; py <= y1; ++py)
         {
             for (int px = x0; px <= x1; ++px)
             {
                 const float sampleX = static_cast<float>(px) + 0.5f;
                 const float sampleY = static_cast<float>(py) + 0.5f;
-                const float w0 = edge(sampleX, sampleY, bx, by, cx, cy);
-                const float w1 = edge(sampleX, sampleY, cx, cy, ax, ay);
-                const float w2 = edge(sampleX, sampleY, ax, ay, bx, by);
+                const float w0 = edge(sampleX, sampleY, b.x, b.y, c.x, c.y);
+                const float w1 = edge(sampleX, sampleY, c.x, c.y, a.x, a.y);
+                const float w2 = edge(sampleX, sampleY, a.x, a.y, b.x, b.y);
                 if (positive ? (w0 >= 0.0f && w1 >= 0.0f && w2 >= 0.0f) : (w0 <= 0.0f && w1 <= 0.0f && w2 <= 0.0f))
                 {
-                    sr.framebuffer[
-                        static_cast<std::size_t>(py) * static_cast<std::size_t>(sr.width)
-                        + static_cast<std::size_t>(px)] = color;
+                    const float depth = (w0 * a.depth + w1 * b.depth + w2 * c.depth) * inverseArea;
+                    const auto depthIndex = static_cast<std::size_t>(py - viewport.y) * viewport.width
+                        + static_cast<std::size_t>(px - viewport.x);
+                    auto& visibleDepth = sr.previewDepth[depthIndex];
+                    if constexpr (pass == SoftwarePreviewRasterPass::wire_color)
+                    {
+                        if (depth != visibleDepth
+                            || !(((wireEdges & 1u) && std::abs(w0) <= edgeWidth[0])
+                                || ((wireEdges & 2u) && std::abs(w1) <= edgeWidth[1])
+                                || ((wireEdges & 4u) && std::abs(w2) <= edgeWidth[2])))
+                            continue;
+                    }
+                    else
+                    {
+                        if (!(depth < visibleDepth))
+                            continue;
+                        visibleDepth = depth;
+                    }
+                    if constexpr (pass != SoftwarePreviewRasterPass::wire_depth)
+                        sr.framebuffer[static_cast<std::size_t>(py) * sr.width + static_cast<std::size_t>(px)] = color;
                 }
             }
+        }
+    }
+
+    bool prepare_preview_depth(const core::RenderViewport& viewport) noexcept
+    {
+        auto& sr = s_softrendererstate;
+        const auto width = static_cast<std::size_t>(viewport.width);
+        const auto height = static_cast<std::size_t>(viewport.height);
+        if (!width || !height || width > sr.framebuffer.size() / height)
+            return false;
+        try
+        {
+            sr.previewDepth.assign(width * height, std::numeric_limits<float>::infinity());
+            return true;
+        }
+        catch (...)
+        {
+            return false;
+        }
+    }
+
+    template<SoftwarePreviewRasterPass pass = SoftwarePreviewRasterPass::solid>
+    void draw_clipped_preview_triangle(std::array<previewgrid::ClipVertex, 3> triangle,
+        std::uint32_t color, const core::RenderViewport& viewport,
+        render_camera::ProjectionKind projection) noexcept
+    {
+        const auto polygon = previewgrid::clip_triangle<pass == SoftwarePreviewRasterPass::wire_color>(triangle);
+        const auto count = polygon.count;
+        const auto& originalEdges = polygon.originalEdges;
+        std::array<SoftwarePreviewVertex, std::tuple_size_v<decltype(polygon.vertices)>> screen{};
+        for (std::size_t index = 0; index < count; ++index)
+        {
+            const auto& vertex = polygon.vertices[index];
+            if (!(vertex.w > 0.0f))
+                return;
+            // Reciprocal camera depth is linear in screen space. It avoids the
+            // precision lost to the constant offset in perspective clip z/w.
+            const float depth = projection == render_camera::ProjectionKind::perspective
+                ? -1.0f / vertex.w : (std::clamp)(vertex.z / vertex.w, -1.0f, 1.0f);
+            screen[index] = {
+                viewport.x + (0.5f + 0.5f * (vertex.x / vertex.w)) * viewport.width,
+                viewport.y + (0.5f - 0.5f * (vertex.y / vertex.w)) * viewport.height,
+                depth
+            };
+        }
+        for (std::size_t index = 1; index + 1 < count; ++index)
+        {
+            unsigned wireEdges = 0;
+            if constexpr (pass == SoftwarePreviewRasterPass::wire_color)
+            {
+                // A clipping edge or fan diagonal cannot acquire a wire color.
+                wireEdges = ((originalEdges[index] & originalEdges[index + 1]) ? 1u : 0u)
+                    | ((originalEdges[index + 1] & originalEdges[0]) ? 2u : 0u)
+                    | ((originalEdges[0] & originalEdges[index]) ? 4u : 0u);
+            }
+            draw_triangle<pass>(screen[0], screen[index], screen[index + 1], color, viewport, wireEdges);
         }
     }
 
@@ -678,7 +775,7 @@ namespace epochengine::anativecontext::detail
         }
     }
 
-    void render_scene_preview(const core::Context& ctx) noexcept
+    bool render_scene_preview(const core::Context& ctx) noexcept
     {
         const auto requested = ctx.scene_viewport();
         const auto frame = rendercontext::resolve_frame_plan({
@@ -692,14 +789,14 @@ namespace epochengine::anativecontext::detail
         if (!frame.scene_visible)
         {
             reset_canvas2d_scene_renderer();
-            return;
+            return false;
         }
         const core::RenderViewport viewport{
             frame.scene.x, frame.scene.y, frame.scene.width, frame.scene.height
         };
 
         if (render_canvas2d_scene(ctx, viewport))
-            return;
+            return true;
 
         const auto clearColor = epochengine::previewgrid::kClearColor;
         fill_preview_rect(
@@ -757,9 +854,13 @@ namespace epochengine::anativecontext::detail
 
         const auto solidGeometry = matchedScene ? matchedScene->solids->geometry
             : epochengine::previewgrid::object_solid_geometry_for(&ctx);
-
+        const auto meshWire = matchedScene ? matchedScene->wire
+            : epochengine::previewgrid::object_mesh_wire_frame_for(&ctx);
         const auto& solidVertices = *solidGeometry;
-        for (std::size_t i = 0; i + 2 < solidVertices.size(); i += 3)
+        const auto* wireTriangles = meshWire->depth_triangles.get();
+        const bool hasWireTriangles = wireTriangles && wireTriangles->size() >= 3;
+        const bool depthReady = (solidVertices.size() >= 3 || hasWireTriangles) && prepare_preview_depth(viewport);
+        for (std::size_t i = 0; depthReady && i + 2 < solidVertices.size(); i += 3)
         {
             if (!epochengine::previewgrid::clockwise_solid_triangle_faces_camera(
                     solidVertices[i].position,
@@ -769,29 +870,12 @@ namespace epochengine::anativecontext::detail
             {
                 continue;
             }
-            float ax = 0.0f;
-            float ay = 0.0f;
-            float bx = 0.0f;
-            float by = 0.0f;
-            float cx = 0.0f;
-            float cy = 0.0f;
-            if (!project_preview_vertex(mvp, solidVertices[i].position, viewport, ax, ay)
-                || !project_preview_vertex(mvp, solidVertices[i + 1].position, viewport, bx, by)
-                || !project_preview_vertex(mvp, solidVertices[i + 2].position, viewport, cx, cy))
-            {
-                continue;
-            }
-
             const auto color = solidVertices[i].color;
-            draw_triangle(
-                ax,
-                ay,
-                bx,
-                by,
-                cx,
-                cy,
-                pack_color(color.x, color.y, color.z, 1.0f),
-                viewport);
+            draw_clipped_preview_triangle({
+                previewgrid::transform_point(mvp, solidVertices[i].position),
+                previewgrid::transform_point(mvp, solidVertices[i + 1].position),
+                previewgrid::transform_point(mvp, solidVertices[i + 2].position)
+            }, pack_color(color.x, color.y, color.z, 1.0f), viewport, camera.projection);
         }
 
         render_engine_arcade_sampled_surface_preview(ctx, mvp, viewport, matchedScene);
@@ -824,15 +908,35 @@ namespace epochengine::anativecontext::detail
 
         }
 
-        const auto objectGeometry = matchedScene ? matchedScene->lines
-            : epochengine::previewgrid::object_marker_geometry_for(&ctx);
-
-        const auto& objectVertices = *objectGeometry;
-        const auto meshWire = matchedScene ? matchedScene->wire
-            : epochengine::previewgrid::object_mesh_wire_frame_for(&ctx);
-        epochengine::previewgrid::for_each_visible_marker_line(*meshWire, objectVertices, camera.eye,
-            [&](const auto& first, const auto& second)
+        if (hasWireTriangles && depthReady)
         {
+            const auto drawWire = [&]<SoftwarePreviewRasterPass pass>()
+            {
+                const auto& triangles = *wireTriangles;
+                for (std::size_t i = 0; i + 2 < triangles.size(); i += 3)
+                {
+                    const auto& a = triangles[i];
+                    const auto& b = triangles[i + 1];
+                    const auto& c = triangles[i + 2];
+                    if (!previewgrid::clockwise_solid_triangle_faces_camera(a.position, b.position, c.position, camera.eye))
+                        continue;
+                    draw_clipped_preview_triangle<pass>({
+                        previewgrid::transform_point(mvp, a.position),
+                        previewgrid::transform_point(mvp, b.position),
+                        previewgrid::transform_point(mvp, c.position)
+                    }, pack_color(a.color.x, a.color.y, a.color.z, 1.0f), viewport, camera.projection);
+                }
+            };
+            drawWire.operator()<SoftwarePreviewRasterPass::wire_depth>();
+            drawWire.operator()<SoftwarePreviewRasterPass::wire_color>();
+        }
+
+        const auto objectGeometry = hasWireTriangles ? meshWire->helper_lines
+            : (matchedScene ? matchedScene->lines : previewgrid::object_marker_geometry_for(&ctx));
+        for (std::size_t i = 0; objectGeometry && i + 1 < objectGeometry->size(); i += 2)
+        {
+            const auto& first = (*objectGeometry)[i];
+            const auto& second = (*objectGeometry)[i + 1];
             float ax = 0.0f;
             float ay = 0.0f;
             float bx = 0.0f;
@@ -840,7 +944,7 @@ namespace epochengine::anativecontext::detail
             if (!project_preview_vertex(mvp, first.position, viewport, ax, ay)
                 || !project_preview_vertex(mvp, second.position, viewport, bx, by))
             {
-                return;
+                continue;
             }
 
             const auto color = first.color;
@@ -851,7 +955,11 @@ namespace epochengine::anativecontext::detail
                 static_cast<int>(std::lround(by)),
                 pack_color(color.x, color.y, color.z, 1.0f),
                 viewport);
-        });
+        }
+
+        // The fallback grid does not prove that the requested Canvas2D frame
+        // was drawn. An ordinary visible spatial preview is ready here.
+        return previewgrid::camera_mode_for(&ctx) != previewgrid::CameraMode::Canvas2D;
     }
 
 #endif

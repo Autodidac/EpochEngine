@@ -480,7 +480,7 @@ namespace epochengine::previewgrid
     {
         std::array<Vertex, 8> out{};
         const void* const rigKey = detail::normalize_camera_key(ctxKey);
-        if (!rigKey)
+        if (!rigKey || !authoring_guides_visible(rigKey))
             return out;
 
         const auto camera = camera_for(rigKey);

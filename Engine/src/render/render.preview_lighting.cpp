@@ -203,6 +203,12 @@ namespace epochengine::previewgrid
         [[nodiscard]] bool solid_uses_eye(const ObjectMarker& marker,
             const epochengine::lighting::LightingFrame& lights) noexcept
         {
+            // Water reflects the lighting environment even with the sun off.
+            if (marker.sphericalWater && !marker.neutralSurface && !marker.unlit
+                && (lights.revision != 0u || !lights.lights.empty())
+                && (lights.environment.ambient.r > 0.0f || lights.environment.ambient.g > 0.0f
+                    || lights.environment.ambient.b > 0.0f))
+                return true;
             return marker.primitive==ObjectPreviewPrimitive::EngineArcadeCabinet
                 ||(!marker.forestLighting&&std::ranges::any_of(lights.lights,[](const auto& light){
                     return light.desc.enabled&&light.desc.intensity>0.0f;}));

@@ -40,10 +40,13 @@ class SelectPopupPlacement(unittest.TestCase):
         begin_visit = definition(lifecycle, '        for (auto& [key, state] : g_selectBoxStates)')
         end_visit = lifecycle.split('    void end_frame() noexcept', 1)[1].split('        for (auto& [key, state] : g_selectBoxStates) {', 1)[1].split('        render_pending_select_popups();', 1)[0]
         end_visit = 'for (auto& [key, state] : g_selectBoxStates) {' + end_visit
+        escape = definition(select, '        if (state.open && options.enabled)')
         toolbar = read_owned_source(ROOT / 'Engine/src/editor/application/editor.frame_toolbar_dock_targets.inl')
         compact_bounds = 'for (std::size_t index = 0; index < topMenus.size(); ++index)' + toolbar.split('const auto selectedMenu = chrome_menu_route(chromeResult.selected_left);', 1)[1].split('for (std::size_t index = 0; index < topMenus.size(); ++index)', 1)[1].split('        const bool toolbarControlsBlockedByMenu', 1)[0]
         code = r'''
 #include <unordered_map>
+#include <algorithm>
+#include <vector>
 #include <string>
 namespace ownership_test {
 namespace core {struct Context {bool overlay{};void set_gui_overlay_priority(bool value){overlay=value;}};}
@@ -51,7 +54,9 @@ struct SelectBoxState;
 extern thread_local std::unordered_map<std::string, SelectBoxState> g_selectBoxStates;
 OWNERSHIP
 thread_local std::unordered_map<std::string, SelectBoxState> g_selectBoxStates;
-struct {const core::Context* ctx{};} g_frame;
+enum class EventType{KeyDown,TextInput};struct InputEvent{EventType type;int key;bool ctrl_down{},alt_down{};};
+struct {const core::Context* ctx{};std::vector<InputEvent> events;} g_frame;
+void dismiss(SelectBoxState&state,bool enabled){struct{bool enabled;}options{enabled};ESCAPE_DISMISS}
 POPUP_QUERY
 namespace gui {using ownership_test::select_box_popup_open;}
 enum class TopMenu {None};
@@ -106,7 +111,19 @@ GEOMETRY
 }
 #define CHECK(...) do{if(!(__VA_ARGS__))return __LINE__;}while(false)
 int main(){
+
     {using namespace ownership_test;
+    SelectBoxState popup;popup.open=true;popup.alignSelectedOnOpen=true;
+    ownership_test::g_frame.events={{EventType::TextInput,0},{EventType::KeyDown,27}};
+    dismiss(popup,true);
+    CHECK(!popup.open&&!popup.alignSelectedOnOpen&&ownership_test::g_frame.events.size()==1);
+    CHECK(ownership_test::g_frame.events.front().type==EventType::TextInput);
+    ownership_test::g_frame.events={{EventType::KeyDown,27}};
+    dismiss(popup,true);CHECK(ownership_test::g_frame.events.size()==1);
+    popup.open=true;dismiss(popup,false);CHECK(popup.open&&ownership_test::g_frame.events.size()==1);
+    ownership_test::g_frame.events={{EventType::KeyDown,27,true},{EventType::KeyDown,27,false,true}};
+    dismiss(popup,true);CHECK(popup.open&&ownership_test::g_frame.events.size()==2);
+    ownership_test::g_frame.events.clear();
     core::Context first,second;
     g_selectBoxStates["first"]={&first,true,false,true};
     g_selectBoxStates["second"]={&second,false,false,true};
@@ -169,7 +186,7 @@ COMPACT_BOUNDS
     CHECK(edge.rectangle.position.y+edge.rectangle.size.y<=596.0f);
     return 0;
 }
-'''.replace('COMPACT_BOUNDS', compact_bounds).replace('OWNERSHIP', ownership).replace('POPUP_QUERY', popup_query).replace('BOOTSTRAP_PRIORITY', bootstrap_priority).replace('FINISH_PRIORITY', finish_priority).replace('BEGIN_VISIT', begin_visit).replace('END_VISIT', end_visit).replace('PORTABLE', portable).replace('STANDALONE', contract).replace('GEOMETRY', geometry)
+'''.replace('COMPACT_BOUNDS', compact_bounds).replace('OWNERSHIP', ownership).replace('POPUP_QUERY', popup_query).replace('BOOTSTRAP_PRIORITY', bootstrap_priority).replace('FINISH_PRIORITY', finish_priority).replace('BEGIN_VISIT', begin_visit).replace('END_VISIT', end_visit).replace('ESCAPE_DISMISS', escape).replace('PORTABLE', portable).replace('STANDALONE', contract).replace('GEOMETRY', geometry)
         parent = (ROOT / 'build/contract-tests').resolve()
         parent.mkdir(parents=True, exist_ok=True)
         scratch = Path(tempfile.mkdtemp(prefix='select-popup-placement-', dir=parent))

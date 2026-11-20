@@ -247,7 +247,8 @@
 
             if (state.selectedEntityId != scene::kInvalidSceneObjectId
                 && editor_entity_index(state, state.selectedEntityId)
-                && !editor_entity_selected(state, state.selectedEntityId))
+                && std::ranges::find(state.selectedEntityIds, state.selectedEntityId)
+                    == state.selectedEntityIds.end())
             {
                 state.selectedEntityIds.push_back(state.selectedEntityId);
             }
@@ -321,6 +322,7 @@
                 object.mesh_asset = entity.meshAsset;
                 object.position_anchor = entity.positionAnchor;
                 object.forest_region = entity.forestRegion;
+                object.forest_paint_regions = entity.forestPaintRegions;
                 object.terrain_attachment = entity.terrainAttachment;
                 snapshot.objects.emplace_back(std::move(object));
             }

@@ -21,9 +21,7 @@
         if (options.fit_content)
         {
             const float fittedWidth = measure_text_width(displayLabel, kFontScale)
-                + (std::max)(measure_text_width("  v", kFontScale),
-                    measure_text_width("  ^", kFontScale))
-                + 2.0f * kContentPadding + 12.0f;
+                + 24.0f + 2.0f * kContentPadding + 2.0f;
             width = (std::clamp)(fittedWidth, (std::min)(96.0f, rowWidth), rowWidth);
         }
         const float offset = options.alignment == InlineButtonAlignment::Center
@@ -33,7 +31,7 @@
         set_cursor(start);
         const float rowHeight = (std::max)(22.0f, options.row_height);
         const float closedHeight = options.size.y > 0.0f
-            ? (std::max)(rowHeight, options.size.y)
+            ? (std::max)(base_line_height(kFontScale) + 2.0f * kBoxInnerPadding, options.size.y)
             : rowHeight;
         const std::string key = widget_state_key(
             options.id.empty() ? std::string_view{ "__select_box" } : options.id);
@@ -41,6 +39,22 @@
         state.owner = g_frame.ctx;
         state.visited_this_frame = true;
         if(!options.enabled){state.open=false;state.alignSelectedOnOpen=false;}
+        if (state.open && options.enabled)
+        {
+            const auto escape = [](const InputEvent& event) noexcept
+            {
+                return event.type == EventType::KeyDown && event.key == 27
+                    && !event.ctrl_down && !event.alt_down;
+            };
+            if (std::ranges::any_of(g_frame.events, escape))
+            {
+                state.open = false;
+                state.alignSelectedOnOpen = false;
+                // Consume only this popup's dismissal; do not leak Escape to
+                // the containing modal or discard unrelated queued input.
+                std::erase_if(g_frame.events, escape);
+            }
+        }
         // An already-open dropdown alone can receive the mouse. The owner
         // scope is restored on every return, including early exits.
         struct SelectPointerScope final {
@@ -51,14 +65,10 @@
             ~SelectPointerScope() { slot = old; }
         } pointerScope{g_frame.selectPopupOwnsInput, state.open && options.enabled};
 
-        std::string selectedLabel{displayLabel};
-        selectedLabel += state.open ? "  ^" : "  v";
-
         bool toggledThisFrame = false;
-        const bool pressed=options.enabled?button(selectedLabel,{width,closedHeight}):[&]{
-            const std::array disabled{InlineButtonSpec{.label=selectedLabel,.width=width,.enabled=false}};
-            (void)inline_button_row(disabled,closedHeight,0.0f);return false;
-        }();
+        const bool pressed = button_with_state(displayLabel, {width, closedHeight},
+            state.open, options.enabled, SemanticTone::neutral, false, false,
+            ButtonIcon::none, options.selected.empty() ? options.placeholder : options.selected, true);
         if (pressed)
         {
             const bool nextOpen = !state.open;
@@ -232,6 +242,7 @@
         {
             PendingSelectPopup popup{};
             popup.scrollKey = scroll_panel_key(listId);
+            popup.traceOpen = toggledThisFrame && core::cli::trace_menu_button0_rect;
             popup.position = listPos;
             popup.width = listWidth;
             popup.height = listHeight;
@@ -772,9 +783,18 @@
         const float chatGutter = options.conversation_style ? 12.0f : 0.0f;
         const float contentX = pos.x + kBoxInnerPadding + chatGutter;
         const float contentY = pos.y + kBoxInnerPadding;
-        const float contentWidth = (std::max)(1.0f,
+        const float unreservedWidth = (std::max)(1.0f,
             width - 2.0f * (kBoxInnerPadding + chatGutter) - scrollbarWidth);
         const float contentHeight = (std::max)(1.0f, height - 2.0f * kBoxInnerPadding);
+        constexpr float outputLatestDiameter = 28.0f;
+        constexpr float outputLatestPadding = 4.0f;
+        const bool latestFits = unreservedWidth >= 120.0f && contentHeight >= 65.0f;
+        // Keep Output's action outside the selectable text and beside the
+        // scrollbar. Its appearance must never change the wrap or hit layout.
+        const bool outputLatestRail = latestFits && options.show_scroll_to_end
+            && !options.conversation_style && !options.lines.empty();
+        const float contentWidth = unreservedWidth - (outputLatestRail
+            ? outputLatestDiameter + 2.0f * outputLatestPadding : 0.0f);
         const float linePitch = line_advance_amount(kFontScale);
         const float rowGap = options.conversation_style
             ? gui_lib::chat_surface::message_gap
@@ -1117,7 +1137,7 @@
                     activity_item_raw(index, ordinal), 0.0f, 0.0f,
                     (std::max)(1.0f, detailsWidth - 2.0f * activityItemPadding
                         - 2.0f * activityIndent),
-                    kFontScale, false) + 2.0f * activityItemPadding;
+                    kFontScale, false, info->stream_live) + 2.0f * activityItemPadding;
             return height;
         };
         if (options.incremental_line_measurements)
@@ -1255,19 +1275,19 @@
         // selection pass. Otherwise an underlying disclosure can consume its
         // press, making the visible button look clickable but do nothing.
         // The EpochGUI circular primitive uses a matching round hitbox.
-        if ((options.conversation_style || options.show_scroll_to_end) && !state.contextMenuOpen
-            && maxScrollY > 1.5f && state.scrollY < maxScrollY - 1.5f
-            && contentWidth >= 120.0f && contentHeight >= 65.0f)
+        if (latestFits && (options.conversation_style || outputLatestRail) && !state.contextMenuOpen
+            && maxScrollY > 1.5f && state.scrollY < maxScrollY - 1.5f)
         {
-            constexpr float latestDiameter = 34.0f;
+            const float latestDiameter = outputLatestRail ? outputLatestDiameter : 34.0f;
             const Vec2 latestPos{
-                contentX + (contentWidth - latestDiameter) * 0.5f,
-                contentY + contentHeight - latestDiameter - 9.0f};
+                outputLatestRail ? contentX + contentWidth + outputLatestPadding
+                    : contentX + (contentWidth - latestDiameter) * 0.5f,
+                contentY + contentHeight - latestDiameter - (outputLatestRail ? outputLatestPadding : 9.0f)};
             const Vec2 savedCursor = g_frame.cursor;
             begin_top_layer();
             set_cursor(latestPos);
             if (button_with_state("↓", {latestDiameter, latestDiameter},
-                    false, true, SemanticTone::neutral, true, true))
+                    false, true, SemanticTone::neutral, true))
             {
                 state.scrollY = maxScrollY;
                 state.followTail = true;
@@ -1784,7 +1804,7 @@
                                         (std::max)(1.0f,
                                             activityWidth - 2.0f * activityItemPadding
                                                 - 2.0f * activityIndent),
-                                        kFontScale, true);
+                                        kFontScale, true, info->stream_live);
                                 }
                                 itemY += height;
                             }

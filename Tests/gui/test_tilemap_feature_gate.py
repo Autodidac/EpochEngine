@@ -74,7 +74,8 @@ target_compile_definitions(tilemap_feature_{name} PRIVATE {definitions})
 add_test(NAME actual_tilemap_feature_{name} COMMAND tilemap_feature_{name})
 '''
         (proof / "CMakeLists.txt").write_text(cmake, encoding="utf-8")
-        commands = [["cmake", "-S", str(proof), "-B", str(build), "-G", "Visual Studio 17 2022", "-A", "x64"]]
+        commands = [["cmake", "-S", str(proof), "-B", str(build), "-G", "Visual Studio 17 2022", "-A", "x64",
+                     "-DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded"]]
         for config in ("Debug", "Release"):
             commands += [["cmake", "--build", str(build), "--config", config, "--parallel", "1"],
                          ["ctest", "--test-dir", str(build), "-C", config, "--output-on-failure"]]

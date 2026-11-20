@@ -52,12 +52,12 @@ int main(){Editor editor;auto ctx=std::make_shared<int>();
   dispatch=dispatch[:dispatch.rfind('        }')]
 
   project=(base/'editor.application_project_documents.inl').read_text(encoding='utf-8')
-  app=(ROOT/'Engine/modules/editor.application.ixx').read_text(encoding='utf-8')
+  app=(ROOT/'Engine/modules/editor/editor.application.ixx').read_text(encoding='utf-8')
   types='\n'.join(definition(state,marker,True) for marker in ('        enum class EditorToolDockRegion','        enum class OutlinerToolTab','        enum class EditorToolPane'))
   types+='\nconstexpr std::size_t kEditorToolPaneCount=static_cast<std::size_t>(EditorToolPane::Count);\n'
   types+='\n'.join(definition(state,marker) for marker in ('        [[nodiscard]] constexpr std::size_t tool_pane_index(', '        [[nodiscard]] constexpr std::array<std::string_view, kEditorToolPaneCount>\n            editor_tool_pane_routes()', '        [[nodiscard]] constexpr std::array<EditorToolDockRegion, kEditorToolPaneCount>\n            default_tool_pane_regions()', '        [[nodiscard]] constexpr std::optional<EditorToolPane>\n            editor_tool_pane_from_route(', '        [[nodiscard]] constexpr bool is_outliner_tool_pane(', '        [[nodiscard]] constexpr bool is_inspector_tool_pane(', '        [[nodiscard]] constexpr bool is_console_tool_pane('))
   app_types='\n'.join(definition(app,marker,True) for marker in ('    enum class EditorApplicationKind','    enum class EditorApplicationSurface','    struct EditorApplicationPanes'))
-  core=(ROOT/'Engine/modules/editor.core.ixx').read_text(encoding='utf-8')
+  core=(ROOT/'Engine/modules/editor/editor.core.ixx').read_text(encoding='utf-8')
   frame_types='\n'.join(definition(core,marker,True).replace('export ','',1) for marker in ('    export enum class EditorCommand','    export struct EditorFrameResult'))
   dedicated=definition(app,'    [[nodiscard]] constexpr bool\n        editor_application_owns_dedicated_gui_workspace(')
   pane='\n'.join(definition(bootstrap,marker,True) for marker in ('        auto pane_supported =', '        auto pane_family_enabled =', '        auto pane_is_shown =', '        auto set_pane_shown =', '        auto pane_dock_region =', '        auto active_pane_storage =', '        auto set_active_pane ='))

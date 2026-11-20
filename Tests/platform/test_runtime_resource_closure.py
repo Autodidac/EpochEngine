@@ -59,7 +59,9 @@ int main(){
  const auto staged=fixtureExecutableRoot/"assets";
  assert(runtime_root_dir()==repo);assert(engine_asset_dir()==repo/"Engine/assets");
  const char* resources[]={"fonts/Roboto-Regular.ttf","fonts/OFL.txt","vulkan/texture.ppm",
-     "vulkan/shaders/vert.spv","vulkan/shaders/frag.spv","vulkan/shaders/gui_vert.spv","vulkan/shaders/gui_frag.spv"};
+     "vulkan/shaders/vert.spv","vulkan/shaders/frag.spv","vulkan/shaders/gui_vert.spv","vulkan/shaders/gui_frag.spv",
+     "vulkan/shaders/atmosphere.vert.spv", "vulkan/shaders/atmosphere.frag.spv",
+     "vulkan/shaders/clouds.vert.spv", "vulkan/shaders/clouds.frag.spv"};
  for(const auto* name:resources){put(staged/name);}
  assert(engine_asset_dir()==staged);assert(runtime_root_dir()==repo);
  for(const auto* name:resources){
@@ -108,10 +110,12 @@ int main(){
         run = subprocess.run([str(binary)], cwd=scratch, capture_output=True, text=True, timeout=10)
         self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
 
-    def test_actual_shader_target_compiles_all_four_with_installed_glslc(self):
+    def test_actual_shader_target_compiles_all_stages_with_installed_glslc(self):
         compiler = ROOT / 'Engine/vcpkg_installed/x64-windows/tools/shaderc/glslc.exe'
         if os.name != 'nt':
             compiler = Path(shutil.which('glslc') or '')
+        elif not compiler.is_file():
+            compiler = ROOT / 'Artifacts/Dependencies/vcpkg_installed/x64-windows/tools/shaderc/glslc.exe'
         cmake, ninja = shutil.which('cmake'), shutil.which('ninja')
         if not compiler.is_file() or not cmake or not ninja:
             self.skipTest('Existing glslc/CMake/Ninja required; never download tools')
@@ -135,7 +139,8 @@ int main(){
                                capture_output=True, text=True, timeout=30)
         self.assertEqual(built.returncode, 0, built.stdout + built.stderr)
         outputs = {}
-        for name in ('vert', 'frag', 'gui_vert', 'gui_frag'):
+        for name in ('vert', 'frag', 'gui_vert', 'gui_frag', 'atmosphere.vert', 'atmosphere.frag',
+                     'clouds.vert', 'clouds.frag'):
             data = (build / 'assets/vulkan/shaders' / (name + '.spv')).read_bytes()
             self.assertGreater(len(data), 20)
             self.assertEqual(struct.unpack_from('<I', data)[0], 0x07230203)

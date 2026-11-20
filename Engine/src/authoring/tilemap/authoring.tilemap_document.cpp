@@ -561,9 +561,17 @@ namespace epochengine::authoring::tilemap
                 std::uint64_t result = sizeof(Type);
                 if constexpr (std::same_as<Type, CellsPaintedOperation>)
                     result += operation.deltas.size() * sizeof(CellDelta);
-                else if constexpr (std::same_as<Type, LayerRemovedOperation>)
+                else if constexpr (std::same_as<Type, LayerCreatedOperation>
+                    || std::same_as<Type, LayerRemovedOperation>)
                 {
-                    for (const ChunkSnapshot& chunk : operation.removed_chunks)
+                    const auto& chunks = [&]() -> const std::vector<ChunkSnapshot>&
+                    {
+                        if constexpr (std::same_as<Type, LayerCreatedOperation>)
+                            return operation.initial_chunks;
+                        else
+                            return operation.removed_chunks;
+                    }();
+                    for (const auto& chunk : chunks)
                     {
                         result += sizeof(ChunkSnapshot)
                             + chunk.occupied_cells.size() * sizeof(CellEdit);
@@ -1050,6 +1058,36 @@ namespace epochengine::authoring::tilemap
                 ? std::optional{operation.descriptor} : std::nullopt;
         }
 
+        [[nodiscard]] static std::vector<ChunkSnapshot> snapshot_layer_chunks(
+            const LayerSlot& slot, LayerHandle handle)
+        {
+            std::vector<ChunkSnapshot> snapshots;
+            snapshots.reserve(slot.chunks.size());
+            for (const auto& chunk : slot.chunks)
+            {
+                ChunkSnapshot snapshot{
+                    handle, chunk.coordinate, chunk.extent, chunk.revision};
+                snapshot.occupied_cells.reserve(chunk.occupied);
+                for (std::uint32_t y = 0u; y < chunk.extent.y; ++y)
+                {
+                    for (std::uint32_t x = 0u; x < chunk.extent.x; ++x)
+                    {
+                        const CellValue& value = chunk.cells[
+                            static_cast<std::size_t>(y) * chunk.extent.x + x];
+                        if (value.occupied())
+                        {
+                            snapshot.occupied_cells.push_back({
+                                {chunk.coordinate.x * slot.descriptor->chunk_extent.x + x,
+                                 chunk.coordinate.y * slot.descriptor->chunk_extent.y + y},
+                                value});
+                        }
+                    }
+                }
+                snapshots.push_back(std::move(snapshot));
+            }
+            return snapshots;
+        }
+
         void restore_layer_chunks(
             LayerSlot& slot,
             std::span<const ChunkSnapshot> snapshots)
@@ -1091,11 +1129,14 @@ namespace epochengine::authoring::tilemap
                     set_active_state(operation, !forward);
                 else if constexpr (std::same_as<Type, LayerCreatedOperation>)
                 {
+                    LayerSlot replacement{operation.handle.generation};
+                    if (forward)
+                    {
+                        replacement.descriptor = operation.descriptor;
+                        restore_layer_chunks(replacement, operation.initial_chunks);
+                    }
                     LayerSlot& slot = layers[operation.handle.index];
-                    slot.generation = operation.handle.generation;
-                    slot.descriptor = forward
-                        ? std::optional{operation.descriptor} : std::nullopt;
-                    slot.chunks.clear();
+                    slot = std::move(replacement);
                 }
                 else if constexpr (std::same_as<Type, LayerRemovedOperation>)
                 {
@@ -1438,7 +1479,8 @@ namespace epochengine::authoring::tilemap
         }
     }
 
-    MutationResult Document::create_layer(LayerDescriptor descriptor) noexcept
+    MutationResult Document::create_layer(
+        LayerDescriptor descriptor, LayerHandle copyFrom) noexcept
     {
         try
         {
@@ -1449,7 +1491,8 @@ namespace epochengine::authoring::tilemap
             {
                 return {ResultCode::invalid_descriptor, impl_->revision};
             }
-            if (metrics().active_layers >= impl_->limits.maximum_layers)
+            const auto before = metrics();
+            if (before.active_layers >= impl_->limits.maximum_layers)
                 return {ResultCode::capacity_exceeded, impl_->revision};
             if (std::any_of(
                     impl_->layers.begin(), impl_->layers.end(),
@@ -1464,12 +1507,43 @@ namespace epochengine::authoring::tilemap
             const LayerHandle handle{
                 static_cast<std::uint32_t>(impl_->layers.size()), 1u};
             LayerCreatedOperation operation{handle, std::move(descriptor)};
-            OperationPayload payload = operation;
+            const Impl::LayerSlot* source = nullptr;
+            std::uint64_t copiedCells{};
+            if (copyFrom)
+            {
+                source = Impl::resolve(impl_->layers, copyFrom);
+                if (!source)
+                    return {Impl::handle_failure(impl_->layers, copyFrom), impl_->revision};
+                if (operation.descriptor.extent_tiles != source->descriptor->extent_tiles
+                    || operation.descriptor.chunk_extent != source->descriptor->chunk_extent)
+                {
+                    return {ResultCode::invalid_descriptor, impl_->revision};
+                }
+                for (const auto& chunk : source->chunks)
+                    copiedCells += chunk.occupied;
+                if (before.active_chunks + source->chunks.size() > impl_->limits.maximum_chunks
+                    || before.occupied_cells + copiedCells > impl_->limits.maximum_occupied_cells)
+                {
+                    return {ResultCode::capacity_exceeded, impl_->revision};
+                }
+                operation.initial_chunks = Impl::snapshot_layer_chunks(*source, handle);
+            }
+            OperationPayload payload = std::move(operation);
             if (!impl_->reserve_history(payload))
                 return {ResultCode::history_limit_exceeded, impl_->revision};
-            impl_->layers.push_back({1u, operation.descriptor, {}});
+            Impl::LayerSlot newLayer{handle.generation,
+                std::get<LayerCreatedOperation>(payload).descriptor, {}};
+            if (source)
+                newLayer.chunks = source->chunks;
+            if (impl_->operation_cursor == impl_->operations.capacity())
+            {
+                const auto capacity = impl_->operations.capacity();
+                impl_->operations.reserve((std::max)(std::size_t{1}, capacity * 2u));
+            }
+            impl_->layers.push_back(std::move(newLayer));
             MutationResult result = impl_->commit(std::move(payload));
             result.layer = handle;
+            result.affected_cells = copiedCells;
             return result;
         }
         catch (const std::bad_alloc&)
@@ -1491,30 +1565,7 @@ namespace epochengine::authoring::tilemap
             LayerRemovedOperation operation{};
             operation.handle = handle;
             operation.descriptor = *slot->descriptor;
-            for (const Impl::Chunk& chunk : slot->chunks)
-            {
-                ChunkSnapshot snapshot{};
-                snapshot.layer = handle;
-                snapshot.coordinate = chunk.coordinate;
-                snapshot.extent = chunk.extent;
-                snapshot.revision = chunk.revision;
-                for (std::uint32_t y = 0u; y < chunk.extent.y; ++y)
-                {
-                    for (std::uint32_t x = 0u; x < chunk.extent.x; ++x)
-                    {
-                        const CellValue& value = chunk.cells[
-                            static_cast<std::size_t>(y) * chunk.extent.x + x];
-                        if (value.occupied())
-                        {
-                            snapshot.occupied_cells.push_back({
-                                {chunk.coordinate.x * slot->descriptor->chunk_extent.x + x,
-                                 chunk.coordinate.y * slot->descriptor->chunk_extent.y + y},
-                                value});
-                        }
-                    }
-                }
-                operation.removed_chunks.push_back(std::move(snapshot));
-            }
+            operation.removed_chunks = Impl::snapshot_layer_chunks(*slot, handle);
             OperationPayload payload = operation;
             if (!impl_->reserve_history(payload))
                 return {ResultCode::history_limit_exceeded, impl_->revision};

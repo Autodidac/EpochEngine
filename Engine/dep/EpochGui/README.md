@@ -4,7 +4,7 @@ MPL-2.0 permits commercial use, including proprietary larger works subject to it
 
 EpochGui is a portable C++23 GUI layout, input-adapter, raster-data, and geometry library used by EpochEngine and standalone applications.
 
-Bundled library version: `0.90.0`. The portable library code is checked against
+Bundled library version: `0.90.4`. The portable library code is checked against
 the pinned standalone revision in `Engine/dep/dependencies.json`. Engine build
 integration and documentation have their own changes; this is not a full-tree mirror.
 

@@ -64,6 +64,7 @@ public:
     [[nodiscard]] nlohmann::json cache_status(const RuntimeModelProfile& profile) const;
     [[nodiscard]] std::filesystem::path discover_server() const;
     [[nodiscard]] bool runtime_verified() const;
+    [[nodiscard]] std::optional<core::Error> diagnostic_admission_error() const;
     [[nodiscard]] static bool installed_backend_verified(const std::filesystem::path& executable);
     [[nodiscard]] bool worker_retired() const;
     [[nodiscard]] std::expected<ResidentSnapshot, core::Error> capture_resident() const;
@@ -81,6 +82,7 @@ private:
         std::string recipe;
         bool qwen38_q2_padded_down{false};
         bool expert_cache_candidate{false};
+        bool expert_streaming{false};
     };
 
     struct HardwareSnapshot {

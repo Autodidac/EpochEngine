@@ -18,10 +18,18 @@ module project.tilemap_runtime;
 
 import asset.texture_artifact;
 import project.asset_registry;
+import project.texture_library;
 import project.tilemap_library;
+import render.canvas2d_cpu;
+import render.canvas2d_tilemap;
 
 #if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
 import authoring.tilemap;
+#if EPOCH_ENABLE_TEXTURE_EDITOR
+import authoring.texture;
+import project.texture_source;
+import render.texture_artifact;
+#endif
 #endif
 
 namespace epochengine::project_tilemap_runtime
@@ -197,8 +205,39 @@ namespace epochengine::project_tilemap_runtime
                 }
                 const asset::texture::ContentHash artifactKey{
                     dependency.artifact_key};
-                const auto texture = textures_.restore_exact(
+                auto texture = textures_.restore_exact(
                     dependency.logical_path, artifactKey);
+#if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR && EPOCH_ENABLE_TEXTURE_EDITOR
+                // An admitted source map can regenerate an absent derived
+                // texture. A bad cached artifact is evidence of a failure.
+                if (!texture && sourceResolved
+                    && texture.library_code == project_textures::LibraryCode::not_found)
+                {
+                    project_texture_sources::ProjectTextureSourceStore sourceStore{
+                        std::string{project_id()}, std::filesystem::path{project_root()}};
+                    const auto source = sourceStore.load(dependency.logical_path);
+                    if (!source)
+                        return reject(RuntimeCode::texture_restore_failure,
+                            "exact tile-set texture source unavailable: "
+                            + std::string{project_texture_sources::source_code_name(source.code)});
+                    const auto profile =
+                        project_texture_sources::authored_texture_profile(*source.document);
+                    const auto compiled = source.document->compile_artifact(profile);
+                    if (!compiled)
+                        return reject(RuntimeCode::texture_restore_failure,
+                            "authored tile-set texture could not be compiled");
+                    if (compiled.identity.key != artifactKey
+                        || dependency.asset_key != project_assets::stable_asset_identity(
+                            dependency.project_key, project_assets::AssetKind::texture,
+                            source.location.canonical_logical_path)
+                        || dependency.artifact_revision
+                            != texture_artifact::compiled_artifact_revision(compiled.identity))
+                        return reject(RuntimeCode::texture_identity_mismatch,
+                            "authored tile-set texture did not reproduce the map's exact identity");
+                    texture = textures_.publish(dependency.logical_path, compiled);
+                    libraryChanged |= texture && texture.library_code == project_textures::LibraryCode::ready;
+                }
+#endif
                 if (!texture)
                 {
                     return reject(
@@ -272,6 +311,27 @@ namespace epochengine::project_tilemap_runtime
                         "visible tile textures did not produce a Canvas2D lease");
                 }
                 lease = std::move(binding.lease);
+
+                for (auto& sprite : visible.sprites)
+                {
+                    auto& material = sprite.material;
+                    if (material.source != canvas2d::SpriteSourceKind::texture)
+                        continue;
+
+                    const auto& views = lease.bindings.textures;
+                    const auto view = std::ranges::find(
+                        views, material.logical_texture, &canvas2d::cpu::TextureView::logical);
+                    if (view == views.end())
+                        return reject(RuntimeCode::texture_binding_failure,
+                            "visible tile texture is missing from its Canvas2D lease");
+
+                    // Old tile maps recorded default encoding values regardless
+                    // of the attached texture. Interpret the exact verified bytes
+                    // without changing the saved map, key, sampler or blend policy.
+                    canvas2d::tilemap_runtime::apply_texture_encoding(material,
+                        view->color_space,
+                        view->alpha_encoding == canvas2d::cpu::AlphaEncoding::premultiplied);
+                }
             }
             canvas2d::CameraState camera = request.camera;
             if (request.use_project_pixel_density)

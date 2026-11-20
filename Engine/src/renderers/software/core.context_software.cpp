@@ -160,6 +160,7 @@ namespace epochengine::core::detail
         bind_default_input(ctx);
 
         ctx->draw_sprite = epochengine::anativecontext::draw_sprite;
+        ctx->draw_sprite_pixels = epochengine::anativecontext::draw_sprite_pixels;
         ctx->add_texture = &default_add_texture;
         ctx->add_atlas = +[](const TextureAtlas& a) { return default_add_atlas(a, ContextType::Software); };
 

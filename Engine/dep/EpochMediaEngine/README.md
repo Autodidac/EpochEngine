@@ -8,6 +8,12 @@ interactive EpochGui demonstration. The core `Epoch::MediaEngine` target owns
 pixel aspect, rotation and contain-fit geometry. It does not decode video or
 claim audio/video synchronization.
 
+`current_atlas_frame` maps an admitted transport position to a source pixel
+rectangle in an equal-cell, row-major frame atlas. The caller supplies the
+atlas layout and owns its pixels, texture upload and display orientation.
+The timeline continues to report metadata-only presentation until a host
+supplies its own frame pixels.
+
 ## Source distribution
 
 EpochGui accompanies the Media demonstration as a separate public dependency;
@@ -16,29 +22,26 @@ Audio dependencies. `dependencies.json` records the reviewed source graph.
 No configuration fetches from the network or falls back to Engine source.
 
 The optional demonstration reuses EpochGui_Demo's real renderer/native host.
-Its Libraries page advances generated timeline metadata, draws the admitted
-aspect-fit rectangle and GUI playhead. The media-only composition requires no
+Its Libraries page previews a generated 20-frame atlas with Play, Pause,
+Step, Seek and Loop. The media-only composition requires no
 Audio or Platform dependency and introduces no duplicate renderer.
 
 Configure core/tests with `cmake -S . -B build` and a module-capable generator,
 then build and run CTest. To build the interactive demonstration, additionally
-set `EPOCHMEDIA_BUILD_GUI_DEMO=ON`, `EPOCHGUI_DEMO_ROOT`, `EPOCHGUI_ROOT`,
-and `EPOCH_MEDIA_ROOT` to the explicit
-local repositories (the last points here). Build `epoch_gui_demo_app`; the
+set `EPOCHMEDIA_BUILD_GUI_DEMO=ON` and point `EPOCHGUI_DEMO_ROOT` and
+`EPOCHGUI_ROOT` to the reviewed local source. Media injects
+its own source root into the demo composition. Build `epoch_gui_demo_app`; the
 result is named `EpochMediaDemo` and opens its Libraries page. This is a source
 composition, not a packaged release or runtime-acceptance claim.
 
 The original repository history is retained. First-party source, including the
 owner-authorized migrated implementation, is MPL-2.0. Historical release licenses
-remain unchanged. Current source version is 0.1.0; no release artifacts or native runtime acceptance are claimed.
+remain unchanged. Current source version is 0.1.1. Native playback acceptance is separate.
 
-Local working EpochGui dependency: `28d81396a4b1e782264712d97bbe7c8aefc05748` (unpublished input-ownership checkpoint). Published0.90.1 remains unchanged at `7d5d5514a1443c0ef340a626fa163569858ca362`. Use an explicit local `EPOCHGUI_ROOT`; release validation is pending.
-Reviewed Demo source dependency: `4ae2233a5da36d636a4f6a4af4dc6df852ca9430` (0.7.0).
-All ten Windows Demo composition/configuration builds and CPU contracts pass.
-The Media-owned optional composition now builds with these exact dependencies
-on Windows x64 in Debug and Release. Its six CPU contracts pass in both modes.
-Interactive Media window acceptance remains separate; this source graph is not
-a new binary-release acceptance claim.
+Use EpochGui 0.90.4 (`7761f146b55fa4f78d15c53db5c33385f80f58f9`) and the companion
+EpochGui Demo atlas source (`0bb44dc85de873f6d5d39948b80f6f4cf6eba74d`). The core contracts
+passed on Windows x64 in Debug and Release. The optional atlas GUI built in
+Release and passed its Libraries contract. Native interaction remains open.
 
 ## Commercial use and giving back
 

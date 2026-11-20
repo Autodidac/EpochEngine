@@ -18,7 +18,8 @@ namespace epochengine::ai::project_profile
                 Provider::disabled,
                 Provider::epoch_local_qwen38,
                 Provider::external_mcp,
-                Provider::engine_selected})
+                Provider::engine_selected,
+                Provider::calculator_coach})
         {
             const CodecResult encoded = serialize_profile(make_profile(provider));
             const CodecResult decoded = parse_profile(encoded.canonical_bytes);
@@ -89,6 +90,18 @@ namespace epochengine::ai::project_profile
             std::string{"\"provider\": \"disabled\""}.size(),
             "\"provider\": \"external_mcp\"");
 
+        const Profile coach = make_profile(Provider::calculator_coach);
+        std::string coach_tools = serialize_profile(coach).canonical_bytes;
+        coach_tools.replace(
+            coach_tools.find("\"tool_protocol\": \"none\""),
+            std::string{"\"tool_protocol\": \"none\""}.size(),
+            "\"tool_protocol\": \"epoch_mcp_v1\"");
+        std::string coach_write = serialize_profile(coach).canonical_bytes;
+        coach_write.replace(
+            coach_write.find("\"project_source_write\": false"),
+            std::string{"\"project_source_write\": false"}.size(),
+            "\"project_source_write\": true");
+
         return !parse_profile(engine_write)
             && !parse_profile(duplicate)
             && !parse_profile(listener)
@@ -97,6 +110,12 @@ namespace epochengine::ai::project_profile
             && !parse_profile(no_approval)
             && !parse_profile(no_project_write)
             && !parse_profile(enabled_legacy)
+            && coach.enabled && !coach.project_source_write && !coach.engine_source_write
+            && !coach.auto_start && !coach.server_or_listener && !coach.weights_bundled
+            && coach.tool_protocol == "none" && coach.endpoint_binding == "none"
+            && coach.self_iteration == "disabled"
+            && !parse_profile(coach_tools) && !parse_profile(coach_write)
+            && !serialize_profile(make_profile(static_cast<Provider>(255)))
             && !serialize_profile(Profile{
                 .provider = Provider::disabled,
                 .enabled = true});

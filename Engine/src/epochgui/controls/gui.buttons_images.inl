@@ -34,22 +34,103 @@
             for(unsigned dot{};dot<3u;++dot)
                 draw_sprite(ink,x+extent*.5f-1.0f,y+extent*static_cast<float>(dot)*.4f,2.0f,2.0f);
             break;
+        case ButtonIcon::chevron_down:
+        case ButtonIcon::chevron_up:
+            for (unsigned step = 0; step < 5u; ++step)
+            {
+                const float delta = static_cast<float>(step);
+                const float center = position.x + size.x * 0.5f;
+                const float middle = position.y + size.y * 0.5f;
+                const float cy = middle + (icon == ButtonIcon::chevron_up ? 2.0f - delta : delta - 2.0f);
+                draw_sprite(ink, center - 4.0f + delta, cy, 1.5f, 1.5f);
+                draw_sprite(ink, center + 4.0f - delta, cy, 1.5f, 1.5f);
+            }
+            break;
+        case ButtonIcon::chevron_left:
+        case ButtonIcon::chevron_right:
+            for (int step = -4; step <= 4; ++step)
+            {
+                const float profile = 2.0f - static_cast<float>(std::abs(step));
+                const float direction = icon == ButtonIcon::chevron_right ? 1.0f : -1.0f;
+                draw_sprite(ink, position.x + size.x * 0.5f + direction * profile - 0.75f,
+                    position.y + size.y * 0.5f + static_cast<float>(step) - 0.75f, 1.5f, 1.5f);
+            }
+            break;
         default:break;
         }
     }
 
-    static void draw_button_tooltip(std::string_view text,Vec2 position) noexcept
+    static void draw_button_tooltip(std::string_view text, Vec2 buttonPosition, float buttonHeight) noexcept
     {
-        if(text.empty())return;
-        const float width=(std::min)(g_frame.windowSize.x,measure_text_width(text,kFontScale)+20.0f);
-        position.x=(std::clamp)(position.x,g_frame.origin.x,
-            (std::max)(g_frame.origin.x,g_frame.origin.x+g_frame.windowSize.x-width));
-        position.y=(std::min)(position.y,g_frame.origin.y+(std::max)(0.0f,g_frame.windowSize.y-28.0f));
+        if (text.empty())
+            return;
+
+        constexpr float horizontalPadding = 10.0f;
+        constexpr float verticalPadding = 5.0f;
+        constexpr float gap = 3.0f;
+        constexpr float maximumWidth = 340.0f;
+        constexpr float maximumLines = 8.0f;
+        const float availableWidth = g_frame.contentMax.x - g_frame.contentMin.x;
+        const float availableHeight = g_frame.contentMax.y - g_frame.contentMin.y;
+        const float baseHeight = std::ceil(base_line_height(kFontScale));
+        const float lineAdvance = (std::max)(baseHeight, line_advance_amount(kFontScale));
+        if (availableWidth <= 2.0f * horizontalPadding || availableHeight < baseHeight + 2.0f * verticalPadding)
+            return;
+
+        const float width = (std::min)({availableWidth, maximumWidth,
+            std::ceil(measure_text_width(text, kFontScale)) + 2.0f * horizontalPadding});
+        const float textWidth = width - 2.0f * horizontalPadding;
+        if (textWidth < space_advance(kFontScale)) return;
+        const float measuredHeight = measure_wrapped_text_height(text, textWidth, kFontScale);
+        const float lines = (std::min)(maximumLines, 1.0f + std::floor(
+            (availableHeight - 2.0f * verticalPadding - baseHeight) / lineAdvance));
+        const float textHeight = (std::min)(measuredHeight, baseHeight + (lines - 1.0f) * lineAdvance);
+        const bool truncated = measuredHeight > textHeight + 0.001f;
+        const auto singleLineExcerpt = truncated && lines <= 1.0f
+            ? fit_text_to_width(text, textWidth, kFontScale) : std::string{};
+        if (truncated && lines <= 1.0f && (singleLineExcerpt.empty()
+            || measure_text_width(singleLineExcerpt, kFontScale) > textWidth)) return;
+        const float height = textHeight + 2.0f * verticalPadding;
+        const float below = buttonPosition.y + buttonHeight + gap;
+        const float above = buttonPosition.y - gap - height;
+        const float maxY = g_frame.contentMax.y - height;
+        const Vec2 position{
+            (std::clamp)(buttonPosition.x, g_frame.contentMin.x, g_frame.contentMax.x - width),
+            below > maxY && above >= g_frame.contentMin.y
+                ? above : (std::clamp)(below, g_frame.contentMin.y, maxY)
+        };
+
+        const auto& palette = active_palette();
         begin_top_layer();
-        draw_rounded_sprite(active_palette().panelBackground,position.x,position.y,width,28.0f,
-            {.enabled=true,.control_radius=4.0f});
-        const auto fitted=fit_text_to_width(text,(std::max)(1.0f,width-20.0f),kFontScale);
-        draw_text_line(fitted,position.x+10.0f,position.y+4.0f,kFontScale);
+        draw_window_shadow(position, {width, height}, true);
+        draw_rounded_sprite(palette.panelBackground, position.x, position.y, width, height,
+            {.enabled = true, .control_radius = 4.0f});
+        draw_sprite_raw(palette.headingAccent, position.x + 3.0f, position.y + verticalPadding,
+            1.0f, height - 2.0f * verticalPadding);
+        const Vec2 textPosition{position.x + horizontalPadding, position.y + verticalPadding};
+        if (truncated && lines <= 1.0f)
+        {
+            // A very short dock still gets a useful excerpt rather than a
+            // partially clipped second line or an empty tooltip.
+            draw_text_line(singleLineExcerpt, textPosition.x, textPosition.y, kFontScale);
+        }
+        else
+        {
+            const float visibleHeight = truncated ? textHeight - lineAdvance : textHeight;
+            {
+                const ContentClipScope tooltipTextClip{textPosition,
+                    {textPosition.x + textWidth, textPosition.y + visibleHeight}};
+                draw_wrapped_text(text, textPosition.x, textPosition.y, textWidth, kFontScale);
+            }
+            if (truncated)
+            {
+                std::string_view marker = "...";
+                while (!marker.empty() && measure_text_width(marker, kFontScale) > textWidth)
+                    marker.remove_suffix(1u);
+                if (!marker.empty())
+                    draw_text_line(marker, textPosition.x, textPosition.y + textHeight - baseHeight, kFontScale);
+            }
+        }
         end_top_layer();
     }
 
@@ -62,7 +143,9 @@
         bool circular = false,
         bool high_contrast = false,
         ButtonIcon icon = ButtonIcon::none,
-        std::string_view tooltip = {}) noexcept
+        std::string_view tooltip = {},
+        bool dropdown = false,
+        const AuthoredButtonStyle* authoredStyle = nullptr) noexcept
     {
         if (!g_frame.insideWindow || !g_frame.ctx) return false;
 
@@ -70,20 +153,24 @@
         const float baseHeight = base_line_height(kFontScale);
         const float minWidth = icon==ButtonIcon::none
             ?space_advance(kFontScale)+2.0f*kContentPadding:20.0f;
-        const float width = (std::max)(static_cast<float>(size.x), minWidth);
-        const float height = (std::max)(static_cast<float>(size.y),
+        const bool fixedCircle = circular && size.x == size.y && size.x >= 8.0f;
+        // Authored widgets already own their layout and clip rectangle.
+        const bool fixedBounds = fixedCircle || authoredStyle != nullptr;
+        if (fixedBounds && (size.x <= 0.0f || size.y <= 0.0f)) return false;
+        const float width = fixedBounds ? size.x : (std::max)(size.x, minWidth);
+        const float height = fixedBounds ? size.y : (std::max)(size.y,
             icon==ButtonIcon::none?baseHeight+2.0f*kBoxInnerPadding:20.0f);
 
         const float centerX = pos.x + width * 0.5f;
         const float centerY = pos.y + height * 0.5f;
         const float radius = (std::min)(width, height) * 0.5f;
-        const auto containsPointer = [&](Vec2 point) noexcept
+        const auto containsPointer = [&](Vec2 point, bool tooltip_only = false) noexcept
         {
             const float dx = point.x - centerX;
             const float dy = point.y - centerY;
             return enabled && point_in_rect(point, pos.x, pos.y, width, height)
                 && (!circular || (dx * dx + dy * dy <= radius * radius))
-                && point_in_active_clip(point);
+                && (tooltip_only ? point_in_tooltip_capture(point) : point_in_active_clip(point));
         };
         const bool hovered = containsPointer(g_frame.mousePos);
         const std::size_t pressKey = widget_press_key(label, pos, { width, height });
@@ -109,11 +196,13 @@
 
         const bool contrastPainted = high_contrast
             && draw_high_contrast_control(pos.x, pos.y, width, height, circular);
-        if (contrastPainted)
+        const bool authoredPainted = authoredStyle && draw_authored_button_face(*authoredStyle,
+            pos, width, height, hovered, selected || pressed, enabled);
+        if (contrastPainted || authoredPainted)
         {
             // Opaque inverse face and outline; input remains this same button.
         }
-        else if (draw_beveled_control(palette, palette.buttonNormal,
+        else if (!fixedCircle && draw_beveled_control(palette, palette.buttonNormal,
                 pos.x, pos.y, width, height, selected || pressed))
         {
             // Classic face and pressed edge are painted by the same control;
@@ -126,16 +215,16 @@
             if (semantic)
             {
                 const auto& sprites = active_semantic_pair(tone);
-                draw_rounded_sprite(sprites.accent, pos.x, pos.y, width, height, style);
+                draw_rounded_sprite(sprites.accent, pos.x, pos.y, width, height, style, fixedCircle);
                 draw_rounded_sprite(sprites.background, pos.x + 2.0f, pos.y + 2.0f,
-                    width - 4.0f, height - 4.0f, style);
+                    width - 4.0f, height - 4.0f, style, fixedCircle);
             }
             else
             {
                 const auto background = !enabled ? palette.buttonNormal
                     : selected || pressed ? palette.buttonActive
                     : hovered ? palette.buttonHover : palette.buttonNormal;
-                draw_rounded_sprite(background, pos.x, pos.y, width, height, style);
+                draw_rounded_sprite(background, pos.x, pos.y, width, height, style, fixedCircle);
             }
         }
         else if (semantic)
@@ -183,21 +272,25 @@
             draw_button_icon(icon,pos,{width,height});
         else
         {
+        const float labelHeight = height - 2.0f * kBoxInnerPadding;
+        const float labelScale = fixedBounds && baseHeight > labelHeight
+            ? kFontScale * (std::max)(1.0f, labelHeight) / baseHeight : kFontScale;
+        const float indicatorWidth = dropdown ? (std::min)(24.0f, width) : 0.0f;
         const std::string fittedLabel = fit_text_to_width(
             label,
-            (std::max)(1.0f, width - 2.0f * kContentPadding - 2.0f),
-            kFontScale);
+            (std::max)(1.0f, width - 2.0f * kContentPadding - 2.0f - indicatorWidth),
+            labelScale);
         const std::string_view displayLabel = fittedLabel.empty()
-            ? label
+            ? (dropdown ? std::string_view{} : label)
             : std::string_view{ fittedLabel };
-        const float textWidth = measure_text_width(displayLabel, kFontScale) + 2.0f;
-        const float textHeight = baseHeight;
+        const float textWidth = measure_text_width(displayLabel, labelScale) + 2.0f;
+        const float textHeight = base_line_height(labelScale);
         const float minTextX = pos.x + kContentPadding + kButtonTextClipInset;
         const float maxTextX = pos.x + width - kContentPadding - textWidth;
         const float centeredTextX = pos.x + (std::max)(0.0f, (width - textWidth) * 0.5f);
         // Circular buttons have no rectangular left-padding minimum. That
         // clamp shifted compact +/Stop glyphs to the right at 30 pixels.
-        const float textX = circular ? centeredTextX
+        const float textX = dropdown ? minTextX : circular ? centeredTextX
             : maxTextX > minTextX
                 ? (std::clamp)(centeredTextX, minTextX, maxTextX)
                 : minTextX;
@@ -205,16 +298,24 @@
             + std::floor((std::max)(0.0f, (height - textHeight) * 0.5f))
             + (circular ? 0.0f : 1.0f);
 
-        const float pressedOffset = !contrastPainted && palette.beveledControls && (selected || pressed) ? 1.0f : 0.0f;
+        const float pressedOffset = !fixedCircle && !contrastPainted && !authoredPainted
+            && palette.beveledControls && (selected || pressed) ? 1.0f : 0.0f;
         if (contrastPainted)
-            draw_contrast_text(displayLabel, textX, textY, kFontScale);
+            draw_contrast_text(displayLabel, textX, textY, labelScale);
         else
-            draw_text_line(displayLabel, textX + pressedOffset, textY + pressedOffset, kFontScale);
+            draw_text_line(displayLabel, textX + pressedOffset, textY + pressedOffset, labelScale);
+        if (dropdown)
+        {
+            // Reserve a separate indicator well so long labels cannot push the
+            // chevron off the control or turn it into part of the text.
+            draw_button_icon(selected ? ButtonIcon::chevron_up : ButtonIcon::chevron_down,
+                {pos.x + width - indicatorWidth, pos.y}, {indicatorWidth, height});
+        }
         }
 
-        if(hovered&&g_frame.pointerInputAllowed&&point_in_modal_input_capture(g_frame.mousePos)
-            &&(!tooltip.empty()||icon!=ButtonIcon::none))
-            draw_button_tooltip(tooltip.empty()?label:tooltip,{pos.x,pos.y+height+3.0f});
+        if ((!tooltip.empty() || icon != ButtonIcon::none)
+            && containsPointer(g_frame.mousePos, true))
+            draw_button_tooltip(tooltip.empty() ? label : tooltip, pos, height);
 
         g_frame.lastButtonBounds = WidgetBounds{ .position = pos, .size = { width, height } };
         advance_cursor({ 0.0f, height + kContentPadding });
@@ -230,6 +331,13 @@
     bool button_selected(std::string_view label, Vec2 size, bool selected) noexcept
     {
         return button_with_state(label, size, selected);
+    }
+
+    bool authored_button(std::string_view label, Vec2 size, bool selected,
+        bool enabled, const AuthoredButtonStyle& style) noexcept
+    {
+        return button_with_state(label, size, selected, enabled,
+            SemanticTone::neutral, false, false, ButtonIcon::none, {}, false, &style);
     }
 
     struct MenuItemLayout

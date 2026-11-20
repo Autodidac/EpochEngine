@@ -695,7 +695,7 @@
             gui::label("Project Scripts");
             const std::array navigation{
                 gui::SegmentedButtonSpec{
-                    .label = "3D Preview",
+                    .label = "Main Scene",
                     .width = 112.0f,
                     .active = false},
                 gui::SegmentedButtonSpec{

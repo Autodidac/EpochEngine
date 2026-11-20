@@ -1,8 +1,27 @@
 // Epoch feature implementation; included by editor.core application owner only.
 // SPDX-License-Identifier: LicenseRef-MIT-NoSell
+#if defined(__ANDROID__)
+        constexpr bool projectChildActionsAvailable = false;
+        const bool projectScenePlayAvailable =
+            editor.projectKind != editor_project_kind_name(EditorProjectKind::Editor)
+            && editor.projectKind != editor_project_kind_name(EditorProjectKind::EngineDevelopment);
+#else
+        constexpr bool projectChildActionsAvailable = true;
+        constexpr bool projectScenePlayAvailable = true;
+#endif
+        constexpr std::string_view projectDesktopBuildMessage =
+            "Build and launch Android packages from the desktop.";
+        constexpr std::string_view projectMobilePlayMessage =
+            "Open a Game or Tool project to preview it on Android.";
+
         auto start_ai_project_test = [&](
             const std::filesystem::path& executable) -> bool
         {
+            if constexpr (!projectChildActionsAvailable)
+            {
+                editor.aiToolStatus = projectDesktopBuildMessage;
+                return false;
+            }
             if (editor.aiToolTestPending)
             {
                 editor.aiToolStatus =
@@ -65,6 +84,13 @@
         auto launch_active_project_context = [&](bool inEditor = false, std::uint64_t requiredBuild = 0u,
             bool allowTerrainWait = false)
         {
+            if constexpr (!projectChildActionsAvailable)
+            {
+                editor.projectBuildStatus = projectDesktopBuildMessage;
+                editor.projectRuntimeStatus = projectDesktopBuildMessage;
+                push_editor_log(editor, "[project] " + editor.projectRuntimeStatus);
+                return;
+            }
             clear_completed_editor_builds(editor, "run request");
             if (editor.projectBuildPending)
             {
@@ -100,7 +126,8 @@
 
             const std::string runBackend = editor.projectRunBackend.empty()
                 ? std::string{"opengl"} : editor.projectRunBackend;
-            inEditor = resolve_project_runtime_embedding(editor, ctx.get(), inEditor, runBackend);
+            if (!validate_project_runtime_presentation(editor, ctx.get(), inEditor, runBackend))
+                return;
 
             const bool selectedScriptAsset = !editor.selectedAssetPath.empty()
                 && std::filesystem::path{editor.selectedAssetPath}
@@ -227,12 +254,10 @@
                 (void)focus_project_runtime(editor);
                 return;
             case project_lifecycle::Action::launch_runtime:
-                if (requiredBuild == 0u)
-                {
-                    start_project_build(editor,true,"Run incremental build check",inEditor);
-                    return;
-                }
-                break;
+                start_project_build(editor, true, requiredBuild == 0u
+                    ? "Run incremental build check"
+                    : "Reviewed Run model resource handoff", inEditor, requiredBuild);
+                return;
             default:
                 editor.projectBuildStatus = epochengine::format_text(
                     "Run blocked: {} ({}).",
@@ -243,37 +268,27 @@
                 return;
             }
 
-            const std::string sceneId = project_runtime_scene_id(editor);
-            if (!launch_project_runtime(
-                    editor,
-                    outputExe,
-                    sceneId,
-                    runBackend,
-                    editor.projectRunFrameLimitFps,
-                    editor.projectCameraMode,
-                    editor.inputProfilePreset,
-                    inEditor))
-            {
-                push_editor_log(
-                    editor,
-                    "[project] Runtime launch refused: "
-                        + editor.projectRuntimeStatus);
-                return;
-            }
-
-            push_editor_log(
-                editor,
-                std::string{inEditor ? "[project] Owned runtime started; in-editor attachment requested for " : "[project] Owned standalone launch accepted for "}
-                    + sceneId + " using "
-                    + std::string{project_run_backend_label(runBackend)} + ".");
-            append_project_note(
-                editor,
-                "Launch Single Context",
-                "Launching the accepted child artifact through the owned runtime supervisor.",
-                editor.projectRuntimeStatus);
         };
         auto play_active_context = [&](bool allowTerrainWait = false)
         {
+            if (!projectScenePlayAvailable)
+            {
+                editor.projectStatus = projectMobilePlayMessage;
+                push_editor_log(editor, "[project] " + editor.projectStatus);
+                return;
+            }
+            const bool isTool = editor.projectKind == editor_project_kind_name(EditorProjectKind::Tool);
+            if (isTool)
+            {
+                std::error_code error;
+                const auto application = std::filesystem::path{editor.projectRoot}
+                    / "source" / "project.gui_application.hpp";
+                if (std::filesystem::is_regular_file(application, error))
+                {
+                    launch_active_project_context(true, 0u, allowTerrainWait);
+                    return;
+                }
+            }
             const auto requirement=project_planetary::runtime_requirement(std::filesystem::path{editor.projectRoot});
             if(!requirement.ok)
             {
@@ -283,34 +298,49 @@
             }
             if(requirement.requires_project_runtime)
             {
-                editor.projectStatus=requirement.message;
-                push_editor_log(editor,"[project] "+requirement.message);
                 launch_active_project_context(true, 0u, allowTerrainWait);
                 return;
             }
+#if defined(__ANDROID__)
+            const bool mobileAuthoredTool = isTool;
+            if (mobileAuthoredTool)
+            {
+                if (!editor.projectScreenSpaceGuiEnabled || !project_gui_document_is_active(editor))
+                {
+                    editor.projectStatus = "Tool preview requires an active screen-space GUI document.";
+                    push_editor_log(editor, "[project] " + editor.projectStatus);
+                    return;
+                }
+                if (!save_mobile_project_sources(editor, editor.projectId))
+                    return;
+            }
+            else
+#else
+            constexpr bool mobileAuthoredTool = false;
+#endif
             if (!save_editor_scene_snapshot(editor))
             {
                 editor.projectStatus = "Play In Editor blocked because the active scene revision was not committed.";
                 push_editor_log(editor, "[project] " + editor.projectStatus);
                 return;
             }
-            const auto& projectProfile = active_project_profile(editor);
-            const previewgrid::CameraMode playCameraMode =
-                projectProfile.tilemap_path.empty()
-                    ? editor.projectCameraMode
-                    : previewgrid::CameraMode::Canvas2D;
+            const auto playCameraMode = project_camera_for_run(editor);
             const std::string sceneId =
-                project_runtime_scene_id(editor)
+                (mobileAuthoredTool ? "project:" + editor.projectId : project_runtime_scene_id(editor))
                 + "|camera="
                 + std::string(project_camera_argument(playCameraMode))
                 + "|input="
                 + std::string(input_profile_argument(editor.inputProfilePreset));
-            editor.projectStatus = std::string("Play In Editor requested using saved editor scene snapshot: ") + sceneId;
-            push_editor_log(editor, std::string("[project] Play In Editor requested for ") + editor.projectName + " using saved scene snapshot: " + sceneId);
+            editor.projectStatus = std::string(mobileAuthoredTool
+                ? "Tool preview requested using saved project GUI: "
+                : "Play In Editor requested using saved editor scene snapshot: ") + sceneId;
+            push_editor_log(editor, std::string("[project] Play In Editor requested for ") + editor.projectName
+                + (mobileAuthoredTool ? " using saved project GUI: " : " using saved scene snapshot: ") + sceneId);
             append_project_note(
                 editor,
                 "Play In Editor",
-                "Running the saved active project scene snapshot inside the editor without launching a child process.",
+                mobileAuthoredTool ? "Previewing the compiled project GUI inside the editor."
+                                   : "Running the saved active project scene snapshot inside the editor without launching a child process.",
                 sceneId);
             emit_command(EditorCommand::RunGame, sceneId);
         };
@@ -466,17 +496,7 @@
                 return false;
             }
 
-            bool unsavedOther = editor.scriptEditorDirty || editor.projectCodeWorkspace.controller.has_dirty_documents()
-                || (editor.projectInputSettings && editor.projectInputSettings->dirty());
-            if (editor.projectTextures)
-                if (const auto texture = editor.projectTextures->editable_state()) unsavedOther = unsavedOther || texture->dirty;
-#if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
-            const bool unsavedTileMap = editor.tileMapWorkspace && (editor.tileMapWorkspace->dirty()
-                || editor.tileMapWorkspace->selected_layer_draft_dirty()
-                || editor.tileMapWorkspace->selected_palette_collision_draft_dirty()
-                || editor.tileMapWorkspace->selected_object_draft_dirty());
-            unsavedOther = unsavedOther || unsavedTileMap;
-#endif
+            const bool unsavedOther = project_has_unsaved_auxiliary_documents(editor);
             if (unsavedOther && (call.tool == "project.save" || call.tool == "project.build"
                     || call.tool == "project.run" || call.tool == "project.test"))
             {
@@ -637,7 +657,9 @@
                 if (editor.projectBuildPending)
                 {
                     const auto& active = editor.projectLifecycle.evidence().generations.active_build;
-                    if (active.project != selection || !cancel_project_build(editor))
+                    const bool ownsPending = editor.projectBuildReusesReviewedArtifact
+                        ? project_build_targets_selected_project(editor) : active.project == selection;
+                    if (!ownsPending || !cancel_project_build(editor))
                     {
                         editor.aiToolStatus = "project.stop refused: no cancellable build belongs to this project selection.";
                         return false;
@@ -840,7 +862,7 @@
 #if EPOCH_ENABLE_AUTHORING_PLATFORM && EPOCH_ENABLE_TILEMAP_EDITOR
                 if ((editor.mainSurface == EditorMainSurface::Game2D
                         ? !editor.game2DGuiWorkspace : editor.outlinerToolTab == OutlinerToolTab::TileMap)
-                    && unsavedTileMap)
+                    && project_tile_map_has_unsaved_drafts(editor))
                 {
                     editor.aiToolStatus = "Save the edited tile-map drafts in their editor before updating painted trees and saving the scene.";
                     return false;
@@ -892,7 +914,7 @@
                     for (std::size_t index = 0; index < editor.entities.size(); ++index)
                         if (editor.entities[index].category == "Planetary Terrain")
                         {
-                            if (planet) { editor.aiToolStatus = "Select the target generated planet in 3D Objects before painting a forest."; return false; }
+                            if (planet) { editor.aiToolStatus = "Select the target generated planet in Scene Hierarchy before painting a forest."; return false; }
                             planet = index;
                         }
                     if (!planet) { editor.aiToolStatus = "Generate a planet before painting a forest."; return false; }
@@ -922,6 +944,11 @@
             }
             else if (call.tool == "project.build")
             {
+                if constexpr (!projectChildActionsAvailable)
+                {
+                    editor.aiToolStatus = projectDesktopBuildMessage;
+                    return false;
+                }
                 if (editor.projectBuildPending)
                 {
                     editor.aiToolStatus = "A build is already active. Wait for it or cancel it before approving another Build.";
@@ -956,7 +983,7 @@
                         : "project.run compiled standalone host status: "}
                     + "runtime=" + editor.projectRuntimeStatus
                     + " | build=" + editor.projectBuildStatus;
-                if ((requiredBuild == 0u && editor.projectBuildPending) || (editor.projectRuntimeSnapshot && editor.projectRuntimeSnapshot->active()
+                if (editor.projectBuildPending || (editor.projectRuntimeSnapshot && editor.projectRuntimeSnapshot->active()
                         && project_runtime_identity_current(editor, *editor.projectRuntimeSnapshot)))
                     watch_execution("project.run");
                 else
@@ -964,6 +991,11 @@
             }
             else if (call.tool == "project.test")
             {
+                if constexpr (!projectChildActionsAvailable)
+                {
+                    editor.aiToolStatus = projectDesktopBuildMessage;
+                    return false;
+                }
                 if (editor.projectId.empty()
                     || editor.projectRoot.empty())
                 {
@@ -1111,6 +1143,7 @@
                 return;
             }
 
+            const bool reviewedRun = editor.projectBuildReusesReviewedArtifact;
             try
             {
                 const auto build = editor.projectBuildPending->get();
@@ -1132,17 +1165,30 @@
                     editor.projectBuildRunInputProfile;
                 const std::filesystem::path output =
                     resolved_project_build_output(editor, build);
+                const auto diagnosticGeneration = !reviewedRun && project_build_targets_selected_project(editor)
+                    ? editor.projectBuildLifecycleGeneration : 0u;
                 const bool accepted =
                     settle_project_build_lifecycle(editor, build);
 
-                editor.projectBuildStatus = build.summary.empty()
+                if (reviewedRun)
+                {
+                    if (build.cancelled || !shouldRun)
+                        editor.projectBuildStatus = "Reviewed Run cancelled.";
+                    else if (!build.summary.empty())
+                        editor.projectBuildStatus = build.summary;
+                    else if (accepted)
+                        editor.projectBuildStatus = "Editor models retired. The reviewed executable is still current.";
+                    else
+                        editor.projectBuildStatus = "Reviewed Run refused because the model handoff or artifact could not be verified.";
+                }
+                else editor.projectBuildStatus = build.summary.empty()
                     ? (build.cancelled
                         ? std::string{"Project build cancelled."}
                         : build.succeeded
                             ? std::string{"Project build completed."}
                             : std::string{"Project build failed."})
                     : build.summary;
-                if (build.succeeded && !accepted)
+                if (!reviewedRun && build.succeeded && !accepted)
                 {
                     editor.projectBuildStatus +=
                         " Artifact evidence was rejected.";
@@ -1162,11 +1208,12 @@
                     editor.projectBuildDiagnosticTail =
                         editor.projectBuildStatus;
                 }
+                editor.projectBuildDiagnosticGeneration = accepted ? 0u : diagnosticGeneration;
 
                 push_editor_log(
                     editor,
                     std::string{"[project] "}
-                        + (build.cancelled
+                        + (reviewedRun ? "Reviewed Run handoff: " : build.cancelled
                             ? "Build cancelled. "
                             : accepted
                                 ? "Build accepted. "
@@ -1187,7 +1234,7 @@
 
                 append_project_note(
                     editor,
-                    build.cancelled
+                    reviewedRun ? "Reviewed Run Handoff" : build.cancelled
                         ? "Project Build Cancelled"
                         : accepted
                             ? "Project Build Accepted"
@@ -1226,7 +1273,8 @@
                 {
                     push_editor_log(
                         editor,
-                        "[project] Run refused because the completed build did not produce accepted artifact evidence.");
+                        reviewedRun ? "[project] Run refused because the reviewed artifact or model retirement could not be verified."
+                            : "[project] Run refused because the completed build did not produce accepted artifact evidence.");
                     return;
                 }
                 if (!path_exists(output))
@@ -1240,7 +1288,9 @@
                     return;
                 }
 
-                const bool inEditor = resolve_project_runtime_embedding(editor, ctx.get(), runInEditor, runBackend);
+                if (!validate_project_runtime_presentation(editor, ctx.get(), runInEditor, runBackend))
+                    return;
+                const bool inEditor = runInEditor;
                 if (!launch_project_runtime(
                         editor,
                         output,
@@ -1249,7 +1299,8 @@
                         runFrameLimit,
                         runCameraMode,
                         runInputProfile,
-                        inEditor))
+                        inEditor,
+                        build.model_admission))
                 {
                     push_editor_log(
                         editor,
@@ -1277,7 +1328,8 @@
                 editor.projectBuildPending.reset();
                 reset_project_build_request(editor);
                 editor.projectBuildStatus =
-                    "Project build cancelled before its process tree started.";
+                    reviewedRun ? "Reviewed Run cancelled before the model handoff started."
+                        : "Project build cancelled before its process tree started.";
                 push_editor_log(
                     editor, "[project] " + editor.projectBuildStatus);
             }
@@ -1480,16 +1532,19 @@
                         + (editor.projectRuntimeAttachmentError.empty() ? std::string{} : " | " + editor.projectRuntimeAttachmentError);
                 else
                     editor.aiToolStatus = "project.stop completed: the owned build/runtime is no longer active. " + editor.projectRuntimeStatus;
-                if (!editor.projectBuildDiagnosticTail.empty() && editor.aiToolExecution != "project.stop"
-                    && editor.aiToolExecution != "forest.species.add"
-                    && editor.aiToolExecution != "scene.attachments.refresh"
-                    &&!ai::asset_generation_tool(editor.aiToolExecution))
+                if (current && (editor.aiToolExecution == "project.build" || editor.aiToolExecution == "project.run")
+                    && editor.aiToolExecutionBuildGeneration != 0u
+                    && editor.projectBuildDiagnosticGeneration == editor.aiToolExecutionBuildGeneration
+                    && !editor.projectBuildDiagnosticTail.empty())
                     editor.aiToolStatus += "\nCompiler output: " + editor.projectBuildDiagnosticTail;
                 // Return to the preview only if the user has not chosen a
                 // different workspace during this project's approved job.
-                if(current&&editor.aiToolExecution!="forest.paint"&&!ai::asset_generation_tool(editor.aiToolExecution)&&(editor.mainSurface==EditorMainSurface::Project
-                    ||editor.requestedMainSurface==EditorMainSurface::Project))
-                    editor.requestedMainSurface=EditorMainSurface::Scene;
+                if (current && editor.aiToolExecution != "forest.paint"
+                    && !ai::asset_generation_tool(editor.aiToolExecution)
+                    && editor.requestedMainSurface.value_or(editor.mainSurface) == EditorMainSurface::Project)
+                {
+                    editor.requestedMainSurface = EditorMainSurface::Scene;
+                }
                 if(current&&editor.aiToolExecution=="forest.paint"
                     &&editor.requestedMainSurface.value_or(editor.mainSurface)==EditorMainSurface::ForestFactory)
                     editor.requestedMainSurface=EditorMainSurface::Scene;

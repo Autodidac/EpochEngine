@@ -64,6 +64,23 @@ int main(int argc, char** argv)
         const auto original = read(manifest);
         const auto legacyReview = inspect_local_source(manifest);
         CHECK(legacyReview.review_ready() && legacyReview.declared_repository == legacy);
+        const std::string_view weightFiles[]{"MODEL.SafeTensors", "experts.bin", "pytorch_model-00001-of-00003.bin"};
+        constexpr std::string_view lastSourceFile = "\"src/unit.cpp\"";
+        const auto lastSourceFileOffset = original.find(lastSourceFile);
+        CHECK(lastSourceFileOffset != std::string::npos);
+        // Only the approved manifest inventory is eligible for copying. A
+        // nearby file stays outside both the review and the staged package.
+        for (const auto file : weightFiles)
+        {
+            write(manifest.parent_path() / file, "Weight fixtures must stay outside project packages.");
+            const auto withoutWeight = inspect_local_source(manifest);
+            CHECK(withoutWeight.review_ready() && withoutWeight.content_hash == legacyReview.content_hash);
+            auto declared = original;
+            declared.insert(lastSourceFileOffset + lastSourceFile.size(), ",\"" + std::string{file} + "\"");
+            write(manifest, declared);
+            CHECK(inspect_local_source(manifest).code == Code::unsafe_path);
+            write(manifest, original);
+        }
         for (const auto& binding : registry::kSourceManifestBindings)
         {
             CHECK(binding.declared_repository == registry::kEpochEngineExtensionsRepo);
@@ -100,6 +117,11 @@ int main(int argc, char** argv)
         const auto migrationCache = base / "origin migration cache";
         const auto oldStage = stage_local_source(legacyReview, legacyReview.content_hash, migrationCache);
         CHECK(oldStage.source_staged());
+        for (const auto file : weightFiles)
+        {
+            CHECK(!fs::exists(oldStage.source_root / file));
+            CHECK(fs::remove(manifest.parent_path() / file));
+        }
         const auto migrationProject = base / "origin migration project";
         write(migrationProject / "project.epoch.json", "{\"id\":\"retained\"}\n");
         write(migrationProject / "worlds/main.epoch", "retained scene and tree materials\n");
@@ -381,7 +403,10 @@ int main(int argc, char** argv)
         CHECK(read(localInspection.repository_root / file.relative_path) == read(inspection.repository_root / file.relative_path));
     CHECK(verify_project_source(inspection, project).source_attached());
     CHECK(attach_project_source(inspection, staged, inspection.content_hash, project).code == Code::already_staged);
-    CHECK(load_project_attachment(project, "research_planetary_terrain").source_attached());
+    Inspection approvedReview;
+    CHECK(load_project_attachment(project, "research_planetary_terrain", {}, &approvedReview).source_attached());
+    CHECK(approvedReview.content_hash == inspection.content_hash && approvedReview.source_path == inspection.source_path);
+    CHECK(verify_project_source(approvedReview, project).source_attached());
     const auto replacementRepository = base / "replacement source";
     for (const auto& file : inspection.files)
         write(replacementRepository / file.relative_path, read(inspection.repository_root / file.relative_path));
@@ -394,22 +419,35 @@ int main(int argc, char** argv)
     CHECK(load_project_attachment(project, "research_planetary_terrain").content_hash == inspection.content_hash);
     CHECK(load_project_attachment(project, "planetary_terrain").source_attached());
     CHECK(load_project_attachment(project, "../escape").code == Code::unknown_package);
-    CHECK(load_project_attachment(project, "research_planetary_terrain", stop.get_token()).code == Code::cancelled);
+    CHECK(load_project_attachment(project, "research_planetary_terrain", stop.get_token(), &approvedReview).code == Code::cancelled);
+    CHECK(approvedReview.content_hash == inspection.content_hash);
     const auto dependencyReceipt = read(project / attached.relative_receipt_path);
     write(project / attached.relative_receipt_path, "foreign project receipt");
-    CHECK(!load_project_attachment(project, "research_planetary_terrain").source_attached());
+    CHECK(!load_project_attachment(project, "research_planetary_terrain", {}, &approvedReview).source_attached());
+    CHECK(approvedReview.content_hash == inspection.content_hash);
+    CHECK(!verify_project_source(approvedReview, project).source_attached());
     CHECK(attach_project_source(inspection, staged, inspection.content_hash, project).code == Code::cache_collision);
     CHECK(read(project / attached.relative_receipt_path) == "foreign project receipt");
     write(project / attached.relative_receipt_path, dependencyReceipt);
-    const auto projectCmake = read(projectSource / "CMakeLists.txt");
-    write(projectSource / "CMakeLists.txt", projectCmake + "\n# unapproved project modification\n");
-    CHECK(verify_project_source(inspection, project).code == Code::source_changed);
+    const auto installedSourceReceipt = (project / attached.relative_receipt_path).parent_path() / "source.receipt.json";
+    const auto installedReceipt = read(installedSourceReceipt);
+    write(installedSourceReceipt, "foreign source receipt");
+    CHECK(!verify_project_source(approvedReview, project).source_attached());
+    write(installedSourceReceipt, installedReceipt);
+    const auto cmakePath = projectSource / "CMakeLists.txt";
+    const auto projectCmake = read(cmakePath);
+    const auto modifiedTime = fs::last_write_time(cmakePath);
+    auto changedCmake = projectCmake;
+    changedCmake.front() = changedCmake.front() == '#' ? 'x' : '#';
+    write(cmakePath, changedCmake);
+    fs::last_write_time(cmakePath, modifiedTime);
+    CHECK(verify_project_source(approvedReview, project).code == Code::source_changed);
     CHECK(load_project_attachment(project, "research_planetary_terrain").code == Code::source_changed);
-    write(projectSource / "CMakeLists.txt", projectCmake);
+    write(cmakePath, projectCmake);
     write((project / attached.relative_receipt_path).parent_path() / "unexpected.cpp", "unapproved");
     CHECK(!load_project_attachment(project, "research_planetary_terrain").source_attached());
     fs::remove((project / attached.relative_receipt_path).parent_path() / "unexpected.cpp");
-    CHECK(load_project_attachment(project, "research_planetary_terrain").source_attached());
+    CHECK(verify_project_source(approvedReview, project).source_attached());
     const auto copied = inspect_local_source(staged.source_root / "package.epoch-package.json");
     CHECK(copied.review_ready() && copied.content_hash == inspection.content_hash);
     CHECK(stage_local_source(copied, copied.content_hash, copied.repository_root / "cache").code == Code::unsafe_path);

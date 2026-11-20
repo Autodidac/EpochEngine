@@ -116,13 +116,15 @@ namespace epochengine::editor_clipboard_screenshot
             ::GlobalFree(dib);
             return {false, "Clipboard is busy. Try again."};
         }
-        bool success = false;
-        if (::EmptyClipboard())
-            success = ::SetClipboardData(CF_DIB, dib) != nullptr;
+        const BOOL emptied = ::EmptyClipboard();
+        const HANDLE published = emptied ? ::SetClipboardData(CF_DIB, dib) : nullptr;
+        const DWORD error = published ? ERROR_SUCCESS : ::GetLastError();
         ::CloseClipboard();
-        if (!success) ::GlobalFree(dib); // Ownership transfers on success only.
-        return success ? Result{true, "Entire Epoch window copied as an image; paste with Ctrl+V."}
-            : Result{false, "Windows clipboard rejected the screenshot."};
+        if (published)
+            return {true, "Entire Epoch window copied as an image; paste with Ctrl+V."};
+        ::GlobalFree(dib); // Ownership transfers on success only.
+        return {false, std::string{emptied ? "Windows couldn't publish the screenshot"
+            : "Windows couldn't clear the clipboard"} + " (error " + std::to_string(error) + ")."};
 #else
         (void)nativeWindow;
         return {false, "Window screenshot clipboard capture is available on Windows."};

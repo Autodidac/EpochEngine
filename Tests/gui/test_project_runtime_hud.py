@@ -19,11 +19,11 @@ GUI = ROOT / "Engine/src/epochgui"
 
 
 def hud_prefix(source):
-    start = source.index("                if (!m_runtimeControlsVisible)\n")
+    start = source.index("                gui::begin_top_layer();\n                if (!m_runtimeControlsVisible)\n")
     end = source.index("                        if (!m_inputProfilePath.empty())", start)
     # The real common/planetary action and diagnostics prefix. The unrelated
     # gameplay/cost inspector is outside this regression's admitted CPU scope.
-    return source[start:end] + "\n                        gui::end_scroll_area();\n                    }\n                    gui::end_window();\n                }\n"
+    return source[start:end] + "\n                        gui::end_scroll_area();\n                    }\n                    gui::end_window();\n                }\n                gui::end_top_layer();\n"
 
 
 def before_exploration_order(source):
@@ -52,7 +52,7 @@ def before_exploration_order(source):
 
 def fixture(source):
     engine = (GUI / "gui.engine.cpp").read_text(encoding="utf-8")
-    api = (ROOT / "Engine/modules/gui.engine.ixx").read_text(encoding="utf-8")
+    api = (ROOT / "Engine/modules/gui/gui.engine.ixx").read_text(encoding="utf-8")
     windows = (GUI / "controls/gui.window_controls.inl").read_text(encoding="utf-8")
     navigation = (GUI / "controls/gui.navigation_chrome.inl").read_text(encoding="utf-8")
     text = (GUI / "controls/gui.text_controls.inl").read_text(encoding="utf-8")
@@ -64,9 +64,17 @@ def fixture(source):
     base = base.replace("struct SpriteHandle {int value{};};", "struct SpriteHandle {int value{};bool is_valid()const{return value!=0;}};")
     base = base.replace("struct GuiFontCache {bool asset{};};", "struct Glyph{SpriteHandle handle{1};Vec2 size_px{6,12},offset_px{0,-10};};\nstruct GuiFontCache {bool asset{true};const Glyph* fallbackGlyph{};};")
     base = base.replace("struct {GuiFontCache halfTextLightFont,halfTextFont;}g_resources;",
-                        "struct {GuiFontCache halfTextLightFont,halfTextFont,statusInfoFont,statusInfoLightFont,statusSuccessFont,statusSuccessLightFont;SpriteHandle windowShadow;}g_resources;")
+                        "struct {GuiFontCache font,halfTextLightFont,halfTextFont,statusInfoFont,statusInfoLightFont,statusSuccessFont,statusSuccessLightFont;std::array<std::array<SpriteHandle,3>,3>windowShadow;}g_resources;")
     base = base.replace("consoleBackground{5},buttonNormal{6},buttonHover{7},panelBackground{8};",
-                        "consoleBackground{5},buttonNormal{6},buttonHover{7},panelBackground{8},titleBar{9},headingAccent{10};GuiFontCache headingFont;")
+                        "consoleBackground{5},buttonNormal{6},buttonHover{7},panelBackground{8},titleBar{9},headingAccent{10},overlayBackground{11};GuiFontCache headingFont;bool captionUsesLightText{};")
+    base = base.replace("void draw_text_line(std::string_view text,float x,float y,float scale){", r'''
+struct GlyphRun {std::string label;std::size_t first,last;bool topLayer;};
+std::vector<GlyphRun> glyphRuns;
+static void draw_line_glyphs(std::string_view,float,float,float,std::optional<float>);
+void draw_text_line(std::string_view text,float x,float y,float scale){
+ const auto first=paints.size();
+ draw_line_glyphs(text,x,y,scale,std::nullopt);
+ glyphRuns.push_back({std::string(text),first,paints.size(),g_frame.topLayerDepth>0});''')
     base = base.replace("    ScrollAreaResult begin_scroll_area(",
                         "struct ScrollCall{Vec2 position,size;};std::vector<ScrollCall>scrollCalls;\n    ScrollAreaResult begin_scroll_area(")
     scroll_start = base.index("    ScrollAreaResult begin_scroll_area(")
@@ -78,7 +86,11 @@ def fixture(source):
     font_owners = "\n".join(definition(engine, marker) for marker in (
         "        [[nodiscard]] static float measure_word_advance(",
         "        [[nodiscard]] static float measure_wrapped_text_height(",
-        "        static float draw_wrapped_text("))
+        "        static float draw_wrapped_text(",
+        "        [[nodiscard]] static float centered_text_top(",
+        "        [[nodiscard]] static const GuiFontCache* caption_text_font(",
+        "        static void draw_window_caption("))
+    font_owners += "\n" + definition(engine, "        static void draw_text_line(").replace("draw_text_line(", "draw_line_glyphs(", 1)
     text_owners = "\n".join(definition(text, marker) for marker in (
         "    Vec2 cursor_position()", "    float titled_window_total_height(",
         "    float measure_section_heading_height(", "    void section_heading(",
@@ -93,16 +105,22 @@ def fixture(source):
         "    [[nodiscard]] static InlineButtonRowLayout resolve_inline_button_layout(",
         "    float inline_button_row_height(", "    std::optional<std::size_t> inline_button_row("))
     window_owners = "\n".join(definition(windows, marker) for marker in (
+        "    static void begin_window_impl(",
         "    void begin_window(std::string_view title, Vec2 position, Vec2 size, bool draw_background, bool show_title_bar)",
+        "    void begin_overlay_window(",
         "    void end_window()"))
+    window_owners = definition(engine, "        static void draw_window_shadow(") + "\n" + window_owners
     runtime_owners = "\n".join(definition(source, marker) for marker in (
         "            [[nodiscard]] std::string_view runtime_terrain_activity()",
         "            [[nodiscard]] float runtime_panel_height()",
         "            [[nodiscard]] bool runtime_panel_captures_pointer(",
         "            [[nodiscard]] gui::WidgetBounds runtime_panel_bounds()",
+        "            void draw_planetary_flight_status()",
         "            void draw_runtime_controls_restore()", "            void draw_runtime_controls_hide(",
         "            [[nodiscard]] bool runtime_water_visibility_pending()",
         "            void draw_runtime_environment_controls(", "            void draw_planetary_exploration_controls("))
+    after_planetary_load = source.index("                prepare_planetary_runtime();\n") + len("                prepare_planetary_runtime();\n")
+    hud_defaults = source[after_planetary_load:source.index("                prepare_gameplay();", after_planetary_load)]
     return base + r'''
 namespace gui {
 EXTRA_API
@@ -121,12 +139,14 @@ float align_leading_glyph_to_clip(float x,float,float,float){return x;}
 bool glyph_intersects_clip(float x,float y,float w,float h,float l,float t,float r,float b){return x<r&&x+w>l&&y<b&&y+h>t;}
 const GuiFontCache*semantic_text_font(SemanticTone){return nullptr;}
 void draw_caption_text(std::string_view s,float x,float y,float scale){draw_text_line(s,x,y,scale);}
-void draw_sprite_raw(SpriteHandle s,float x,float y,float w,float h){draw_sprite(s,x,y,w,h);}
+constexpr unsigned kWindowShadowFade=12,kWindowShadowInset=5;
+void draw_sprite_raw(SpriteHandle s,float x,float y,float w,float h,bool=false){draw_sprite(s,x,y,w,h);}
 FONT_OWNERS
 void section_heading(std::string_view,SemanticTone=SemanticTone::neutral)noexcept;
 TEXT_OWNERS
 NAV_OWNERS
 void begin_window(std::string_view,Vec2,Vec2,bool,bool)noexcept;
+void begin_overlay_window(std::string_view,Vec2,Vec2,bool=true)noexcept;
 void begin_window(std::string_view title,Vec2 p,Vec2 s)noexcept{begin_window(title,p,s,true,true);}
 WINDOW_OWNERS
 }
@@ -142,17 +162,20 @@ namespace project_planetary {ExplorationSession save_exploration_session(const s
 struct Scheduler{bool cancel(int){return true;}};
 struct Gameplay{bool enabled{};bool active()const{return enabled;}};
 struct Scene {
- float m_runtimeViewportWidth{1280},m_runtimeViewportHeight{720};bool m_runtimeControlsVisible{true};
- std::optional<Gameplay>m_gameplayRuntime;std::string m_tileMapPath;
+ gui::WidgetBounds m_runtimeGuiBounds{{},{1280,720}};bool m_runtimeControlsVisible{true};
+ std::optional<Gameplay>m_gameplayRuntime;std::string m_tileMapPath;bool m_canReturnToEditor{};
  std::optional<Settings>m_planetarySettings{Settings{}},m_meshPlanetarySettings{Settings{}};
  std::optional<ExplorationController>m_explorationController{ExplorationController{}};
+ std::optional<int>m_planetaryStartupDeadline;
  std::optional<Scheduler>m_planetaryScheduler;std::optional<int>m_planetaryPending;
  bool m_planetaryFailed{},m_planetaryPaused{},m_planetaryContinue{},m_runtimeInspectionLight{},m_runtimeCloudsVisible{true},m_runtimeWaterVisible{true},m_hasPlanetRecipe{true},m_planetaryPublishedOcean{true};
+ bool m_planetaryInitialWaterCut{},m_planetaryPreparingInitialWater{},m_planetaryCutPlayback{};
  int m_planetaryEntity{1},m_planetaryCancellation{},m_planetaryNextTick{},m_screenshotAfterFrames{};
  std::string m_projectName{"Runtime"},m_projectRoot,m_runtimeViewStatus,m_terrainAttachmentStatus,m_screenshotStatus,m_planetaryStatus,m_planetaryWaterStatus,m_explorationStatus,m_explorationAdvanceStatus;
  std::optional<int>m_meshPlanetarySource;ExplorationSession m_explorationSession;
  struct Body{unsigned id;std::string name;};
- struct Frame{unsigned body_count{2},anchor{1},target{2};project_planetary_runtime::TravelMode mode{};double altitude{1.8},speed{0},seconds{0},time_scale{1};bool gravity_enabled{true},level_assist{true};std::array<Body,2>bodies{{{1,"VERDANT"},{2,"MOON"}}};}m_explorationFrame;
+ struct Frame{unsigned body_count{2},anchor{1},target{2};project_planetary_runtime::TravelMode mode{};double altitude{1.8},speed{0},seconds{0},time_scale{1};bool valid{true},gravity_enabled{true},level_assist{true};std::array<Body,2>bodies{{{1,"VERDANT"},{2,"MOON"}}};}m_explorationFrame;
+ struct ReachObjective{bool active{};bool objective()const{return active;}}m_reachObjective;
  struct Input{unsigned selected_body{};project_planetary_runtime::Command command{};double speed_multiplier{};}m_explorationInput;
  struct Entity{std::string type;bool visible()const{return true;}};std::array<Entity,1>m_entities{{{"Water"}}};
  struct Water{std::string diagnostic;};std::map<core::Context*,Water>m_waterCaches;
@@ -165,12 +188,13 @@ struct Scene {
   const auto start=gui::cursor_position();gui::set_cursor({start.x,start.y+32.0f});
  }
  RUNTIME_OWNERS
- void draw(const std::shared_ptr<core::Context>&ctx){HUD_PREFIX}
+ void start_controls_after_load(){HUD_DEFAULTS}
+ void draw(const std::shared_ptr<core::Context>&ctx){bool returnToEditor{};HUD_PREFIX (void)returnToEditor;}
 };
 CASES
 '''.replace("EXTRA_API", extra_api).replace("FONT_OWNERS", font_owners).replace("TEXT_OWNERS", text_owners).replace(
         "NAV_OWNERS", nav_owners).replace("WINDOW_OWNERS", window_owners).replace("RUNTIME_OWNERS", runtime_owners).replace(
-        "HUD_PREFIX", hud_prefix(source)).replace("CASES", CASES)
+        "HUD_PREFIX", hud_prefix(source)).replace("HUD_DEFAULTS", hud_defaults).replace("CASES", CASES)
 
 
 CASES = r'''
@@ -179,8 +203,8 @@ bool near(float a,float b){return std::abs(a-b)<.01f;}
 std::map<std::string,WidgetBounds>recorded;
 void draw(Scene&s,const std::shared_ptr<core::Context>&context,int wheel=0,Vec2 pointer={100,300}){
  if(wheel)push_input_for_context(context.get(),{.type=EventType::MouseWheel,.mouse_pos=pointer,.wheel_delta=wheel});
- begin_frame(context,.016f,pointer,false);paints.clear();actions.clear();labelCalls.clear();scrollCalls.clear();
- s.draw(context);CHECK(g_scrollAreaStack.empty()&&g_windowFrameStack.empty());end_frame();
+ begin_frame(context,.016f,pointer,false);paints.clear();actions.clear();labelCalls.clear();scrollCalls.clear();glyphRuns.clear();
+ s.draw(context);CHECK(g_scrollAreaStack.empty()&&g_windowFrameStack.empty()&&g_frame.topLayerDepth==0);end_frame();
 }
 std::map<std::string,WidgetBounds>buttons(){
  std::map<std::string,WidgetBounds>result;
@@ -201,9 +225,127 @@ void statuses(Scene&s,bool longStatus){
  s.m_explorationFrame.altitude=longStatus?999999999999.8:1.8;s.m_explorationFrame.speed=longStatus?999999999999.0:0;
  s.m_explorationFrame.seconds=longStatus?999999999999.9:0;s.m_explorationFrame.time_scale=longStatus?999999999.0:1;
 }
+struct GlyphSprite {
+ int handle;
+ float x,y,width,height;
+ bool operator==(const GlyphSprite&)const=default;
+};
+std::vector<GlyphSprite> static_glyphs(std::string_view label){
+ const auto run=std::ranges::find_if(glyphRuns,[&](const auto& run){return run.label==label;});
+ if(run==glyphRuns.end()||!run->topLayer||run->last-run->first!=label.size())
+  std::fprintf(stderr,"Static HUD glyph run missing or incomplete for %.*s\n",static_cast<int>(label.size()),label.data());
+ CHECK(run!=glyphRuns.end()&&run->topLayer&&run->last-run->first==label.size());
+ std::vector<GlyphSprite> result;
+ for(std::size_t index=run->first;index<run->last;++index){
+  const auto& sprite=paints[index];
+  CHECK(sprite.sprite==static_cast<unsigned char>(label[index-run->first])+100);
+  result.push_back({sprite.sprite,sprite.position.x,sprite.position.y,sprite.size.x,sprite.size.y});
+ }
+ return result;
+}
+void static_hud_glyphs(const std::shared_ptr<core::Context>& context){
+ constexpr std::array<std::string_view,4> labels{"Project Controls","Hide Controls","Orbit","Land"};
+ for(const auto viewport:{Vec2{1264,761},Vec2{320,560}}){
+  g_scrollAreaStates.clear();Scene scene;
+  scene.m_runtimeGuiBounds.size.x=viewport.x;scene.m_runtimeGuiBounds.size.y=viewport.y;
+  draw(scene,context);draw(scene,context);
+  std::array<std::vector<GlyphSprite>,labels.size()> reference;
+  for(std::size_t i=0;i<labels.size();++i)reference[i]=static_glyphs(labels[i]);
+  for(int frame=0;frame<12;++frame){
+   const bool pending=frame%2==0;
+   scene.m_explorationFrame.seconds=9.7+frame*.2;
+   scene.m_planetaryPending=pending?std::optional<int>{1}:std::nullopt;
+   scene.m_planetaryStatus=pending?"Planet LOD 0–24 | 120 visible patches | 48 loading":"Planet LOD 2–24 | 384 visible patches | 0 loading";
+   draw(scene,context);
+   CHECK(std::ranges::any_of(labelCalls,[&](const auto& call){return call.text==scene.m_planetaryStatus;}));
+   const auto time=epochengine::format_text("Time {:.1f} s  /  1x",scene.m_explorationFrame.seconds);
+   CHECK(std::ranges::any_of(labelCalls,[&](const auto& call){return call.text==time;}));
+   for(std::size_t i=0;i<labels.size();++i){
+    const auto actual=static_glyphs(labels[i]);
+    if(actual!=reference[i])
+     std::fprintf(stderr,"Static HUD glyph paint changed for %.*s on frame %d\n",static_cast<int>(labels[i].size()),labels[i].data(),frame);
+    CHECK(actual==reference[i]);
+   }
+  }
+ }
+}
+void planet_flight_hud(const std::shared_ptr<core::Context>& context){
+ g_scrollAreaStates.clear();
+ Scene scene;
+ scene.m_runtimeGuiBounds.size.x=1264;
+ scene.m_runtimeGuiBounds.size.y=761;
+ scene.m_explorationFrame.mode=project_planetary_runtime::TravelMode::flight;
+ scene.m_explorationFrame.altitude=130.0;
+ scene.m_explorationFrame.speed=12.0;
+ scene.start_controls_after_load();
+ CHECK(!scene.m_runtimeControlsVisible);
+ const auto reveal=scene.runtime_panel_bounds();
+ CHECK(reveal.size.x==108&&reveal.size.y==28&&reveal.position.x==1132&&reveal.position.y==24);
+ const Vec2 revealPointer{reveal.position.x+5,reveal.position.y+5};
+ CHECK(scene.runtime_panel_captures_pointer(revealPointer));
+ CHECK(!scene.runtime_panel_captures_pointer({reveal.position.x-12,revealPointer.y}));
+ draw(scene,context);
+ const auto status=std::ranges::find_if(labelCalls,[](const auto& call){
+  return call.text=="Flight · VERDANT\nAltitude 130 m  |  Speed 12 m/s";
+ });
+ CHECK(status!=labelCalls.end()&&buttons().contains("Controls")&&!buttons().contains("Hide Controls"));
+ CHECK(status->clipMin.y>650&&status->clipMax.y<=761&&status->clipMax.x<400);
+ CHECK(!scene.runtime_panel_captures_pointer(status->position));
+ const auto flightStatusPosition=status->position;
+ scene.m_planetaryStartupDeadline=1;
+ draw(scene,context);
+ CHECK(std::ranges::any_of(labelCalls,[](const auto& call){return call.text=="Preparing nearby terrain";}));
+ CHECK(buttons().contains("Controls"));
+ scene.m_planetaryStartupDeadline.reset();
+ const auto click=[&](Vec2 pointer){
+  push_input_for_context(context.get(),event(EventType::MouseDown,pointer.x,pointer.y));
+  push_input_for_context(context.get(),event(EventType::MouseUp,pointer.x,pointer.y));
+  draw(scene,context,0,pointer);
+ };
+ click(flightStatusPosition);
+ CHECK(!scene.m_runtimeControlsVisible&&scene.m_explorationInput.command==project_planetary_runtime::Command{});
+ click(revealPointer);
+ CHECK(scene.m_runtimeControlsVisible);
+ draw(scene,context);
+ CHECK(buttons().contains("Hide Controls")&&buttons().contains("Orbit")&&buttons().contains("Land"));
+ const auto hide=buttons().at("Hide Controls").position;
+ click({hide.x+5,hide.y+5});
+ CHECK(!scene.m_runtimeControlsVisible);
+
+ scene.m_explorationFrame.anchor=2;
+ scene.m_explorationFrame.mode=project_planetary_runtime::TravelMode::cruise;
+ scene.m_explorationFrame.altitude=2450.0;
+ draw(scene,context);
+ CHECK(std::ranges::any_of(labelCalls,[](const auto& call){return call.text=="Cruise · MOON\nAltitude 2.5 km  |  Speed 12 m/s";}));
+ scene.m_reachObjective.active=true;
+ scene.m_runtimeGuiBounds.size.x=460;
+ draw(scene,context);
+ CHECK(labelCalls.empty()&&buttons().contains("Controls"));
+ scene.m_reachObjective.active=false;
+ scene.m_runtimeGuiBounds.size.y=1;
+ draw(scene,context);
+ CHECK(labelCalls.empty());
+ scene.m_runtimeGuiBounds.size.y=480;
+ scene.m_explorationFrame.valid=false;
+ draw(scene,context);
+ CHECK(labelCalls.empty());
+
+ Scene ordinary;
+ ordinary.m_explorationController.reset();
+ ordinary.m_hasPlanetRecipe=false;
+ ordinary.m_planetarySettings.reset();
+ ordinary.start_controls_after_load();
+ CHECK(ordinary.m_runtimeControlsVisible);
+ ordinary.m_runtimeControlsVisible=false;
+ ordinary.start_controls_after_load();
+ const auto generic=ordinary.runtime_panel_bounds();
+ CHECK(!ordinary.m_runtimeControlsVisible&&generic.size.x==160&&generic.size.y==32);
+ draw(ordinary,context);
+ CHECK(labelCalls.empty()&&buttons().contains("Controls"));
+}
 void scenarios(const std::shared_ptr<core::Context>&context){
  for(const auto viewport:{Vec2{1280,900},Vec2{900,720},Vec2{460,480},Vec2{320,560}}){
-  g_scrollAreaStates.clear();Scene s;s.m_runtimeViewportWidth=viewport.x;s.m_runtimeViewportHeight=viewport.y;
+  g_scrollAreaStates.clear();Scene s;s.m_runtimeGuiBounds.size.x=viewport.x;s.m_runtimeGuiBounds.size.y=viewport.y;
   statuses(s,false);draw(s,context);const auto before=buttons();const auto bounds=s.runtime_panel_bounds();
   CHECK(bounds.position.x>=0&&bounds.position.y>=0&&bounds.position.x+bounds.size.x<=viewport.x&&bounds.position.y+bounds.size.y<=viewport.y);
   for(int frame=0;frame<12;++frame){statuses(s,(frame%2)==0);s.m_planetaryFailed=(frame%3)==0;s.m_planetaryPaused=(frame%4)==0;
@@ -236,7 +378,7 @@ void scenarios(const std::shared_ptr<core::Context>&context){
    &&paint.position.y>=scrollCalls[0].position.y&&paint.position.y+paint.size.y<=scrollCalls[0].position.y+scrollCalls[0].size.y+.01f)tailVisible=true;
   CHECK(tailVisible);
   // Resize reuses the same shared scroll identity and clamps to its new extent.
-  s.m_runtimeViewportHeight=360;draw(s,context);CHECK(g_scrollAreaStates.size()==1);
+  s.m_runtimeGuiBounds.size.y=360;draw(s,context);CHECK(g_scrollAreaStates.size()==1);
   CHECK(bottom.scrollY>=0&&bottom.scrollY<=bottom.contentHeight-bottom.viewportHeight+.01f);
   s.m_runtimeControlsVisible=false;const auto hidden=s.runtime_panel_bounds();CHECK(hidden.size.y<=32&&hidden.size.x<=160);
   CHECK(!s.runtime_panel_captures_pointer({1,1})&&s.runtime_panel_captures_pointer({hidden.position.x+1,hidden.position.y+1}));
@@ -246,11 +388,11 @@ void scenarios(const std::shared_ptr<core::Context>&context){
   draw(s,context,0,hidePointer);CHECK(s.m_runtimeControlsVisible);
  }
  // Invalid/minimal viewport input stays finite and physically bounded.
- for(const auto viewport:{Vec2{1,1},Vec2{100,80},Vec2{NAN,INFINITY}}){Scene s;s.m_runtimeViewportWidth=viewport.x;s.m_runtimeViewportHeight=viewport.y;const auto b=s.runtime_panel_bounds();CHECK(std::isfinite(b.size.x)&&std::isfinite(b.size.y)&&b.size.x>0&&b.size.y>0);}
+ for(const auto viewport:{Vec2{1,1},Vec2{100,80},Vec2{NAN,INFINITY}}){Scene s;s.m_runtimeGuiBounds.size.x=viewport.x;s.m_runtimeGuiBounds.size.y=viewport.y;const auto b=s.runtime_panel_bounds();CHECK(std::isfinite(b.size.x)&&std::isfinite(b.size.y)&&b.size.x>0&&b.size.y>0);}
 }
 void buffered_diagnostics(const std::shared_ptr<core::Context>&context){
  for(const auto width:{1280.0f,460.0f,320.0f}){
-  g_scrollAreaStates.clear();Scene s;s.m_runtimeViewportWidth=width;s.m_runtimeViewportHeight=480;
+  g_scrollAreaStates.clear();Scene s;s.m_runtimeGuiBounds.size.x=width;s.m_runtimeGuiBounds.size.y=480;
   const auto bounds=s.runtime_panel_bounds();draw(s,context);
   const Vec2 pointer{bounds.position.x+30,scrollCalls[0].position.y+20};
   draw(s,context,-1200000,pointer);draw(s,context);
@@ -281,7 +423,7 @@ void buffered_diagnostics(const std::shared_ptr<core::Context>&context){
   }
   // Reflow the same retained area, then keep its resized extent stable as the
   // measured numeric values change again. Width is not a second scroll owner.
-  s.m_runtimeViewportWidth=width==320.0f?1280.0f:320.0f;draw(s,context);draw(s,context);
+  s.m_runtimeGuiBounds.size.x=width==320.0f?1280.0f:320.0f;draw(s,context);draw(s,context);
   CHECK(g_scrollAreaStates.size()==1);const auto resizedExtent=g_scrollAreaStates.begin()->second.contentHeight;
   CHECK(near(g_scrollAreaStates.begin()->second.scrollY,resizedExtent-g_scrollAreaStates.begin()->second.viewportHeight));
   s.m_explorationFrame.altitude=-999999999999.9;s.m_explorationFrame.speed=999999999999.9;
@@ -290,13 +432,35 @@ void buffered_diagnostics(const std::shared_ptr<core::Context>&context){
   CHECK(near(g_scrollAreaStates.begin()->second.scrollY,resizedExtent-g_scrollAreaStates.begin()->second.viewportHeight));
  }
 }
-int main(){auto context=std::make_shared<core::Context>();fresh(context);scenarios(context);buffered_diagnostics(context);return 0;}
+void editor_return_control(const std::shared_ptr<core::Context>&context){
+ g_scrollAreaStates.clear();Scene scene;
+ draw(scene,context);CHECK(!buttons().contains("Return to Editor"));
+ scene.m_canReturnToEditor=true;
+ draw(scene,context);CHECK(buttons().contains("Return to Editor"));
+ scene.m_tileMapPath="Assets/Maps/main.epochmap";
+ draw(scene,context);
+ const auto button=buttons().at("Return to Editor");
+ CHECK(button.position.y+button.size.y<=scrollCalls.at(0).position.y);
+ const auto scroll=scrollCalls.at(0).position;
+ draw(scene,context,-1200000,{scroll.x+10,scroll.y+10});
+ CHECK(near(button.position.y,buttons().at("Return to Editor").position.y));
+ scene.m_canReturnToEditor=false;
+ draw(scene,context);CHECK(!buttons().contains("Return to Editor"));
+}
+int main(){auto context=std::make_shared<core::Context>();fresh(context);static_hud_glyphs(context);planet_flight_hud(context);scenarios(context);buffered_diagnostics(context);editor_return_control(context);return 0;}
 '''
 
 
 class RuntimeHud(unittest.TestCase):
     def test_actual_actions_wrapping_scroll_and_viewport(self):
         self.run_source(PLAY.read_text(encoding="utf-8"), "green")
+
+    def test_static_glyph_motion_is_detected_during_lod(self):
+        source = PLAY.read_text(encoding="utf-8")
+        marker = '"Project Controls",\n                        controls.position,'
+        self.assertEqual(source.count(marker), 1)
+        source = source.replace(marker, '"Project Controls",\n                        {controls.position.x + (m_planetaryPending ? 2.0f : 0.0f), controls.position.y},')
+        self.run_source(source, "red-static-glyphs", "Static HUD glyph paint changed for Project Controls")
 
     def test_before_exploration_order_reproduces_moving_controls(self):
         self.run_source(before_exploration_order(PLAY.read_text(encoding="utf-8")), "red-order", "Moved action:")
@@ -353,7 +517,7 @@ class RuntimeHud(unittest.TestCase):
                 "passed": completed.returncode == expected_exit and index == len(commands) - 1,
                 "negative_control": expected_failure,
                 "temporary_root": str(temporary),
-                "scope": "Actual runtime HUD common/planetary actions and diagnostics, stable measured line buffers across empty/short/lengthy status and numeric changes, shared scroll range/bottom anchoring, long diagnostic tail glyph, live width reflow and bounds/Hide/restore; actual core number formatting, GUI window/button/wrapping/measurement/scroll owners with compiled portable scroll geometry. Recording font/glyph/project/package services; excludes gameplay inspector/native window/renderer/model.",
+                "scope": "Actual runtime HUD layout, scroll anchoring, planetary Controls reveal and read-only flight status, and stable top-layer glyphs during changing time and terrain status. Records GUI glyph placement with font and sprite ports. Excludes native window, renderer and model.",
                 "owner_sha256": hashlib.sha256(source.encode()).hexdigest(),
                 "runs": runs}, indent=2) + "\n", encoding="utf-8")
             self.assertEqual(completed.returncode, expected_exit, completed.stdout[-7000:] + completed.stderr[-1500:])

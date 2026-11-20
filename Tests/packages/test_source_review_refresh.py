@@ -1,5 +1,6 @@
 """Real immutable source discovery and asynchronous Editor review admission; CPU only."""
 from pathlib import Path
+from Tests.support.cpp import dependency_include, engine_module_source
 import hashlib
 import json
 import os
@@ -39,7 +40,10 @@ def consumer():
     installer=(ROOT/'Engine/src/packages/package.source_install.cpp').read_text(encoding='utf-8')
     commit=definition(installer,'        enum class UpdateCommit',True)+'\ntemplate<class Rename>\n'+definition(installer,'        UpdateCommit commit_project_source_update(')
     planetary=(ROOT/'Engine/src/project/project.planetary.cpp').read_text(encoding='utf-8')
-    build_cache='\n'.join(definition(planetary.replace('std::string_view water_hash={}', 'std::string_view water_hash=std::string_view()'),marker) for marker in (
+    toolset_start = planetary.index('        constexpr char planetary_msvc_toolset[]')
+    toolset_end = planetary.index('\n#endif', toolset_start)
+    toolset = '\n#ifdef _WIN32\n' + planetary[toolset_start:toolset_end] + '\n#endif\n'
+    build_cache=toolset+'\n'.join(definition(planetary.replace('std::string_view water_hash={}', 'std::string_view water_hash=std::string_view()'),marker) for marker in (
         '        std::string read_small(', '        std::optional<fs::path> ordinary_directory(', '        std::optional<fs::path> project_directory(',
         '        std::optional<fs::path> generation_build_directory('))
     return PREFIX.replace('EDITION_HEADER',(ROOT/'Engine/include/epoch.edition.hpp').as_posix()) + task + STATE_PORT + functions + commit + build_cache + "\nbool can_attach(EditorState& editor){\n" + \
@@ -184,7 +188,15 @@ int main(){
  CHECK(generation_build_directory(cacheProject,newHash,cacheSdk)==newBuild&&generation_build_directory(cacheProject,oldHash,cacheSdk)==originalBuild);
  const auto readCache=[](const fs::path& path){std::ifstream input(path,std::ios::binary);return std::string{std::istreambuf_iterator<char>{input},{}};};
  CHECK(readCache(*originalBuild/"build.identity").find(oldHash)!=std::string::npos&&readCache(*originalBuild/"old-compiler.bin")=="retained old compiler output");
- const auto bound=readCache(*newBuild/"build.identity");write(*newBuild/"build.identity","wrong owner\n");
+ const auto bound=readCache(*newBuild/"build.identity");
+#ifdef _WIN32
+ CHECK(bound.find("\nmsvc_toolset=host=x64\n")!=std::string::npos);
+ CHECK(bound.find("\ncompiler_environment=windows-native-architecture\n")!=std::string::npos);
+ auto oldHost=bound;oldHost.replace(oldHost.find("host=x64"),8,"host=x86");
+ write(*newBuild/"build.identity",oldHost);
+ CHECK(!generation_build_directory(cacheProject,newHash,cacheSdk));
+#endif
+ write(*newBuild/"build.identity","wrong owner\n");
  CHECK(!generation_build_directory(cacheProject,newHash,cacheSdk));write(*newBuild/"build.identity",bound);
  CHECK(readCache(*newBuild/"build.identity")==bound&&!generation_build_directory(cacheProject,"invalid",cacheSdk));
  const auto unknown=root/"unbound-cache";write(unknown/"project.epoch.json","{}\n");write(unknown/"build/planet/foreign.bin","untouched");
@@ -226,7 +238,7 @@ class SourceReviewRefresh(unittest.TestCase):
         water_source.write_text(water_consumer(), encoding="utf-8")
         durable_source = proof / "project.water_requirement_contract.cpp"
         durable_source.write_text(durable_consumer(), encoding="utf-8")
-        modules = [ROOT / "Engine/modules" / (name+".ixx") for name in
+        modules = [engine_module_source(ROOT / "Engine/modules", name + ".ixx") for name in
                    ("core.sha256", "package.registry", "package.catalog", "platform.filesystem", "package.source_install", "asset.texture_artifact")]
         implementation = [ROOT / "Engine/src/packages" / name for name in ("package.catalog.cpp", "package.source_install.cpp")]
         implementation.append(ROOT/'Engine/src/assets/texture/asset.texture_artifact.cpp')
@@ -240,7 +252,7 @@ target_link_libraries({name} PRIVATE winhttp)
 add_test(NAME actual_{name} COMMAND {name})
 set_tests_properties(actual_{name} PROPERTIES TIMEOUT 20)
 '''
-        durable_modules = modules + [ROOT / "Engine/modules" / (name + ".ixx") for name in (
+        durable_modules = modules + [engine_module_source(ROOT / "Engine/modules", name + ".ixx") for name in (
             "project.planetary", "asset.cloud_volume", "project.planetary_snapshot", "water.wave", "asset.mesh_artifact", "platform.child_process", "platform.work_admission")]
         durable_modules.append(ROOT / "Engine/dep/EpochPlatformEngine/modules/core.env.ixx")
         durable_implementation = implementation + [ROOT / name for name in (
@@ -252,6 +264,7 @@ target_compile_features(project_water PRIVATE cxx_std_23)
 target_compile_options(project_water PRIVATE /utf-8 /EHsc /permissive-)
 target_compile_definitions(project_water PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
 target_include_directories(project_water PRIVATE "{(ROOT/'Engine/include').as_posix()}" "{(ROOT/'Engine/dep/EpochPlatformEngine/include').as_posix()}")
+target_include_directories(project_water PRIVATE "{dependency_include(ROOT).as_posix()}")
 target_link_libraries(project_water PRIVATE winhttp shell32 userenv advapi32 bcrypt comdlg32 windowscodecs ole32)
 add_test(NAME actual_project_water COMMAND project_water)
 set_tests_properties(actual_project_water PROPERTIES TIMEOUT 20)

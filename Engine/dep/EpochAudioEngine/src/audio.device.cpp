@@ -87,7 +87,16 @@ namespace epochengine::audio
     }
 
     PhysicalAudioDevice::PhysicalAudioDevice(PhysicalAudioDevice&&) noexcept = default;
-    PhysicalAudioDevice& PhysicalAudioDevice::operator=(PhysicalAudioDevice&&) noexcept = default;
+
+    PhysicalAudioDevice& PhysicalAudioDevice::operator=(PhysicalAudioDevice&& other) noexcept
+    {
+        if (this != &other)
+        {
+            close();
+            implementation_ = std::move(other.implementation_);
+        }
+        return *this;
+    }
 
     AudioDeviceCode PhysicalAudioDevice::open(
         const AudioDeviceConfiguration& configuration)

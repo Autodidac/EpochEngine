@@ -213,6 +213,7 @@ namespace epochengine::project_gameplay2d
             bool stale_rejected{};
             bool pause_reset{};
             bool canvas_published{};
+            bool camera_followed{};
             bool repeated_session{};
             bool teardown{};
             SessionMetrics metrics{};
@@ -241,6 +242,7 @@ namespace epochengine::project_gameplay2d
                     && left.stale_rejected == right.stale_rejected
                     && left.pause_reset == right.pause_reset
                     && left.canvas_published == right.canvas_published
+                    && left.camera_followed == right.camera_followed
                     && left.repeated_session == right.repeated_session
                     && left.teardown == right.teardown
                     && left.metrics == right.metrics
@@ -290,6 +292,8 @@ namespace epochengine::project_gameplay2d
             }
             evidence.settled = session.actor_state();
             evidence.settled_scene_hash = sceneHash();
+            const auto* settledScene = session.scene();
+            const float settledCameraX = settledScene ? settledScene->camera.center.x : 0.0f;
             evidence.saw_idle = poseIs(
                 project_sprite_animation::ActorPose::idle);
 
@@ -304,6 +308,13 @@ namespace epochengine::project_gameplay2d
             }
             evidence.moved = session.actor_state();
             evidence.moved_scene_hash = sceneHash();
+            if (const auto* movedScene = session.scene())
+            {
+                evidence.camera_followed = settledCameraX == static_cast<float>(evidence.settled.x)
+                    && movedScene->camera.center.x == static_cast<float>(evidence.moved.x)
+                    && movedScene->camera.center.x > settledCameraX
+                    && movedScene->camera.center.y > static_cast<float>(evidence.moved.y);
+            }
             evidence.saw_run = poseIs(
                 project_sprite_animation::ActorPose::run);
 
@@ -537,6 +548,7 @@ namespace epochengine::project_gameplay2d
                 return ContractFailure::audio_cue;
             }
             if (!first.canvas_published
+                || !first.camera_followed
                 || first.settled_scene_hash == 0u
                 || first.moved_scene_hash == 0u
                 || first.jumped_scene_hash == 0u

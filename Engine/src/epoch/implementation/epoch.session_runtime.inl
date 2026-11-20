@@ -1038,7 +1038,9 @@
 
                     epochengine::editor_set_context_selection_status(
                         targetCtx.get(),
-                        std::string{ "Switched to exclusive live " } + std::string{ context_type_label(targetType) } + " editor context.");
+                        std::string{ "Moved the Editor to the existing " }
+                            + std::string{ context_type_label(targetType) }
+                            + " context. Other open contexts remain available.");
                     if (sourceCtx && targetCtx.get() != sourceCtx.get())
                     {
                         epochengine::editor_set_context_selection_status(
@@ -1461,7 +1463,7 @@
 
                         auto begin_scene = [&](std::string_view scene_id, SessionMode return_mode)
                         {
-                            auto next_scene = make_scene_from_id(scene_id);
+                            auto next_scene = make_scene_from_id(scene_id, return_mode == SessionMode::Editor);
                             if (!next_scene)
                                 return false;
 
@@ -1469,6 +1471,9 @@
                             ensure_scene_audio_initialized();
                             session.menu.cleanup();
                             unload_active_scene(session);
+                            if (return_mode == SessionMode::Editor)
+                                session.editor_play_camera =
+                                    epochengine::previewgrid::capture_camera_rig_snapshot(ctx.get());
                             session.active_scene = std::move(next_scene);
                             session.active_scene->load();
                             session.mode = SessionMode::Scene;
@@ -2445,6 +2450,7 @@
                                 if (!ctx_running)
                                 {
                                     const bool window_closed = !win->running;
+                                    const auto editor_camera = std::move(session.editor_play_camera);
                                     unload_active_scene(session);
 
                                     if (window_closed || session.return_mode == SessionMode::Exit)
@@ -2459,6 +2465,9 @@
                                     }
                                     else
                                     {
+                                        if (editor_camera)
+                                            (void)epochengine::previewgrid::restore_camera_rig_snapshot(
+                                                ctx.get(), *editor_camera);
                                         session.mode = SessionMode::Editor;
                                         ctx_running = true;
                                     }

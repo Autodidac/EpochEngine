@@ -12,6 +12,13 @@ import subprocess
 import time
 
 
+def engine_module_source(module_root: Path, filename: str) -> Path:
+    """Resolve a module by owner, with support for stable source entry paths."""
+    owner, _, _ = filename.partition('.')
+    categorized = module_root / owner / filename
+    return categorized if categorized.is_file() else module_root / filename
+
+
 @cache
 def msvc_2022_root() -> Path | None:
     """Find the latest installed VS 2022 instance with the x64 C++ toolset."""
@@ -65,6 +72,27 @@ def compile_and_run(test, source, report, *, args=(), includes=(), windows_flags
     temporary.mkdir(exist_ok=True)
     env = dict(os.environ, TEMP=str(temporary), TMP=str(temporary), TMPDIR=str(temporary))
     if os.name == "nt":
+        # CPU fixture failures must remain failed processes with captured evidence,
+        # never interactive CRT dialogs that stall the operator's desktop.
+        diagnostics = report / "fixture_diagnostics.hpp"
+        diagnostics.write_text('''#pragma once
+#include <cstdlib>
+#include <crtdbg.h>
+#include <initializer_list>
+namespace epoch_fixture_diagnostics {
+inline const bool initialized = [] {
+    _set_error_mode(_OUT_TO_STDERR);
+    _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+#ifdef _DEBUG
+    for (const int kind : {_CRT_WARN, _CRT_ERROR, _CRT_ASSERT}) {
+        _CrtSetReportMode(kind, _CRTDBG_MODE_FILE);
+        _CrtSetReportFile(kind, _CRTDBG_FILE_STDERR);
+    }
+#endif
+    return true;
+}();
+}
+''', encoding="utf-8")
         tools = msvc_2022_toolsets()
         sdk = Path("C:/Program Files (x86)/Windows Kits/10")
         kits = windows_sdk_includes(sdk)
@@ -83,7 +111,7 @@ def compile_and_run(test, source, report, *, args=(), includes=(), windows_flags
         if os.name == "nt":
             flags = ["/Od", "/MDd", "/D_DEBUG"] if configuration == "Debug" else ["/O2", "/MD"]
             command = [str(tool / "bin/Hostx64/x64/cl.exe"), "/nologo", "/std:c++latest", "/utf-8", "/EHsc", "/Z7", "/UNDEBUG",
-                *flags, *windows_flags, "/I" + str(tool / "include"), "/I" + str(kit / "ucrt"),
+                *flags, *windows_flags, "/FI" + str(diagnostics), "/I" + str(tool / "include"), "/I" + str(kit / "ucrt"),
                 *("/I" + str(path) for path in includes), "/Fo" + str(report / (configuration + ".obj")),
                 "/Fe" + str(output), str(source), "/link", "/LIBPATH:" + str(tool / "lib/x64"),
                 "/LIBPATH:" + str(sdk / "Lib" / kit.name / "um/x64"),

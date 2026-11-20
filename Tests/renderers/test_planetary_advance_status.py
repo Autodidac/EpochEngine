@@ -17,14 +17,15 @@ def actual_advance():
     source = OWNER.read_text(encoding="utf-8-sig")
     start = source.index("            void advance_planetary_exploration(")
     end = source.index("            [[nodiscard]] std::vector<previewgrid::ObjectMarker>", start)
-    return source[start:end]
+    return '\n'.join((definition(source, '            [[nodiscard]] bool packaged_planetary_flight_enabled()'),
+        definition(source, '            [[nodiscard]] bool fixed_planetary_camera()'), source[start:end]))
 
 
 def fixture(body):
-    module=(ROOT/'Engine/modules/render.preview_grid.ixx').read_text(encoding='utf-8')
+    module=(ROOT/'Engine/modules/render/render.preview_grid.ixx').read_text(encoding='utf-8')
     camera_source=(ROOT/'Engine/src/render/render.preview_camera.cpp').read_text(encoding='utf-8')
     precise=definition(module,'    export struct PreciseMeshTransform final')+';\n'+definition(camera_source,'    [[nodiscard]] bool valid_precise_mesh_transform(')+'\n'+definition(camera_source,'    [[nodiscard]] std::optional<PreciseMeshTransform> make_precise_mesh_transform(')
-    world_position=definition((ROOT/'Engine/modules/scene.snapshot.ixx').read_text(encoding='utf-8').replace('anchor = {}','anchor'),
+    world_position=definition((ROOT/'Engine/modules/scene/scene.snapshot.ixx').read_text(encoding='utf-8').replace('anchor = {}','anchor'),
         '    [[nodiscard]] inline std::optional<std::array<double, 3>> world_position(')
     return r'''
 #include <algorithm>
@@ -41,7 +42,14 @@ namespace input {
 enum class Action{RollLeft,RollRight,MoveForward,MoveBackward,MoveRight,MoveLeft,MoveUp,MoveDown,LookRight,LookLeft,LookUp,LookDown};
 enum class Key{LeftShift,RightShift};struct InputProfile{float mouse_look_sensitivity{.15f};};
 }
-namespace project_input {enum class ActionSemantic{move_x,move_y};}
+namespace project_input {
+enum class ActionSemantic{move_x,move_y,pause};
+struct Profile{};
+struct ActionFrame{bool admitted{},pressed{};explicit operator bool()const{return admitted;}};
+const ActionFrame* find_action(const ActionFrame& frame,ActionSemantic action,const Profile&){
+ return action==ActionSemantic::pause?&frame:nullptr;
+}
+}
 namespace core {struct Context {
  bool focused=true,rolling{};
  bool has_input_focus_safe()const{return focused;}
@@ -50,14 +58,20 @@ namespace core {struct Context {
 };}
 namespace render_camera {enum class ProjectionKind{perspective};}
 namespace project_planetary_runtime {
-enum class Command{none,land};
+enum class Command{none,land,toggle_time_pause};
 enum class Code:std::uint8_t{ready,cancelled,invalid_input,invalid_frame,unavailable,provider_failure};
 struct Input{double elapsed_seconds{},forward{},right{},rise{},yaw{},pitch{},roll{};bool boost{};Command command{};};
 struct Frame{std::uint32_t anchor{};std::optional<int> sunlight{};bool valid{true};};
 struct Result{Code code{Code::ready};Frame frame{};};
 struct PreviewFrame{std::array<double,3> camera{},forward{0,0,-1},up{0,1,0};double meters_to_preview{1},far_distance{100},eye_clearance{1.8};};
 std::optional<PreviewFrame> preview_frame(const Frame& frame){return frame.valid?std::optional{PreviewFrame{}}:std::nullopt;}
-struct Controller{Result result{};unsigned calls{};Input last{};Result advance(Input input){++calls;last=input;return result;}};
+struct Controller {
+ Result result{};
+ unsigned calls{}, captures{};
+ Input last{};
+ Result advance(Input input){++calls;last=input;return result;}
+ Result capture(){++captures;return result;}
+};
 }
 namespace previewgrid {
 struct Vec3{float x{},y{},z{};};
@@ -72,6 +86,7 @@ struct Settings{bool original_sunlight{};};struct Mesh{std::optional<int> coordi
 namespace scene {using Vec3=std::array<float,3>;ACTUAL_WORLD_POSITION}
 struct Entity{std::optional<Mesh> mesh_asset{Mesh{}};std::optional<std::array<double,3>>position_anchor{};struct Transform{std::array<float,3> scale{1,1,1},position{},rotation{};}transform;};
 struct Scheduler{void cancel(int){}};
+struct PackagedPose{bool allow_flight{};};
 struct Probe {
  std::unique_ptr<project_planetary_runtime::Controller> m_explorationController{std::make_unique<project_planetary_runtime::Controller>()};
  std::optional<Settings> m_planetarySettings{Settings{}},m_meshPlanetarySettings{Settings{}};
@@ -82,10 +97,14 @@ struct Probe {
  gui::Vec2 m_explorationLastMouse{};bool m_explorationMouseHeld{},validTransform{true};
  std::string m_explorationStatus{"Saved exploration successfully."},m_explorationAdvanceStatus{};
  std::optional<int> m_planetaryPending{};Scheduler* m_planetaryScheduler{};int m_planetaryCancellation{};
+ std::optional<PackagedPose> m_packagedShoreline{}, m_packagedPlanetaryPose{};
+ double m_packagedWaterElapsed{};
  int m_entities{},m_meshes{},m_planetaryEntity{};Entity entity{};unsigned reconfigures{};
  bool runtime_panel_captures_pointer(gui::Vec2)const{return false;}
- // No project input artifact in this provider-status lane; the dedicated
- // runtime-input consumer covers admission, rebinding and refusal behavior.
+ // Record the admitted input boundary; the runtime-input fixture covers
+ // artifact admission and rebinding.
+ std::optional<project_input::Profile> m_projectInput{};
+ project_input::ActionFrame m_projectActionFrame{};
  input::InputProfile m_runtimeInputProfile{};
  bool runtime_input_ready()const{return true;}
  float runtime_planar_axis(project_input::ActionSemantic,float value)const{return value;}
@@ -129,11 +148,30 @@ int main(){
  gui::captured=true;advance();CHECK(controller.last.roll==0);gui::captured=false;
  probe.advance_planetary_exploration(&context,1.0f/60.0f,{},false,false,true);CHECK(controller.last.roll==0);
  context.focused=false;advance();CHECK(controller.last.roll==0);context.focused=true;context.rolling=false;
+ probe.m_projectInput.emplace();probe.m_projectActionFrame={true,true};advance();
+ CHECK(controller.last.command==project_planetary_runtime::Command::toggle_time_pause);
+ // The admitted frame already filters captured physical inputs and can contain a GUI impulse.
+ gui::captured=true;advance();CHECK(controller.last.command==project_planetary_runtime::Command::toggle_time_pause);
+ probe.m_projectActionFrame.pressed=false;advance();CHECK(controller.last.command==project_planetary_runtime::Command::none);
+ gui::captured=false;
  const auto oldFrame=probe.m_explorationFrame;
  controller.result.code=Code::invalid_input;advance();
  CHECK(probe.m_explorationFrame.anchor==oldFrame.anchor&&!probe.m_explorationAdvanceStatus.empty());
  controller.result.code=Code::ready;advance();
  CHECK(probe.m_explorationAdvanceStatus.empty()&&probe.m_explorationFrame.anchor==oldFrame.anchor);
+ const auto calls=controller.calls;
+ probe.m_packagedPlanetaryPose.emplace();advance();
+ CHECK(controller.calls==calls&&controller.captures==1);
+ probe.m_packagedPlanetaryPose->allow_flight=true;advance();
+ CHECK(controller.calls==calls+1&&controller.captures==1);
+ probe.m_packagedPlanetaryPose.reset();probe.m_packagedShoreline.emplace();advance();
+ CHECK(controller.calls==calls+1&&controller.captures==2&&probe.m_packagedWaterElapsed>0.0);
+ const double fixedElapsed=probe.m_packagedWaterElapsed;
+ probe.m_packagedShoreline->allow_flight=true;
+ probe.m_explorationInput.rise=1.0;
+ probe.m_projectActionFrame.pressed=true;advance();
+ CHECK(controller.calls==calls+2&&controller.captures==2&&probe.m_packagedWaterElapsed>fixedElapsed);
+ CHECK(controller.last.rise==1.0&&controller.last.command==project_planetary_runtime::Command::none);
  return 0;
 }
 '''.replace("ACTUAL_ADVANCE", body).replace("ACTUAL_PRECISE_TYPES",precise.replace('export ','')).replace("ACTUAL_WORLD_POSITION",world_position)

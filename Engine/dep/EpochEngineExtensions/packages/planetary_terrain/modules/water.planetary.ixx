@@ -9,6 +9,7 @@ module;
 #include <optional>
 #include <span>
 #include <stop_token>
+#include <utility>
 #include <vector>
 export module water.planetary;
 import planet.terrain;
@@ -22,6 +23,81 @@ export namespace epoch::extensions::planetary_terrain::water
     namespace mesh=::epochengine::asset::mesh;
     namespace wave=::epochengine::water::wave;
     namespace fft=::epochengine::water::fft;
+
+    namespace detail
+    {
+        [[nodiscard]] inline std::uint32_t lattice_top(std::uint32_t index,std::uint32_t cells) noexcept
+        {
+            const auto side=cells+1u,grid=side*side;
+            if(index<grid)return index;
+            const auto edge=index-grid;
+            if(edge<cells)return edge;
+            if(edge<2u*cells)return (edge-cells)*side+cells;
+            if(edge<3u*cells)return cells*side+3u*cells-edge;
+            return (4u*cells-edge)*side;
+        }
+    }
+
+    [[nodiscard]] inline std::optional<std::vector<::epochengine::project_planetary_snapshot::WaterVertex>>
+    build_water_lattice_basis(const core::Body& body,core::TileKey key,std::uint32_t cells,bool skirts,
+        std::stop_token stop) noexcept
+    {
+        namespace recipe=::epochengine::project_planetary_snapshot;
+        try
+        {
+            if(stop.stop_requested()||!body.ocean||key.body!=body.id||key.face>5u||key.level>20u
+                ||key.x>=(1u<<key.level)||key.y>=(1u<<key.level)||cells<2u||cells>64u
+                ||!std::isfinite(body.radius)||body.radius<=0.0)return {};
+            const auto side=cells+1u,grid=side*side,layer=grid+(skirts?4u*cells:0u);
+            const auto anchor=skirts?core::tile_mesh_anchor(body,key):core::DVec3{};
+            const auto skirt=skirts?core::tile_skirt_depth(body,key,static_cast<int>(cells)):0.0;
+            std::vector<recipe::WaterVertex> basis;
+            basis.reserve(layer);
+            for(std::uint32_t i=0;i<layer;++i)
+            {
+                if(stop.stop_requested())return {};
+                const auto top=detail::lattice_top(i,cells);
+                const auto direction=core::tile_direction(key,double(top%side)/cells,double(top/side)/cells);
+                double depth{};
+                if(i>=grid)
+                {
+                    // Match the cached undeformed water layer's two float narrowings.
+                    const auto local=core::FVec3{direction*body.radius-anchor};
+                    const auto lowered=anchor+core::DVec3{core::lower_tile_vertex(local,anchor,skirt)};
+                    depth=(std::max)(0.0,body.radius-core::length(lowered));
+                    if(!std::isfinite(depth)||depth>=body.radius)return {};
+                }
+                basis.push_back({{direction.x,direction.y,direction.z},depth,top});
+            }
+            return basis;
+        }
+        catch(...){return {};}
+    }
+
+    [[nodiscard]] inline double lattice_spacing_meters(const core::Body& body,core::TileKey key,
+        std::uint32_t cells) noexcept
+    {
+        const auto first=core::tile_direction(key,0.0,0.0);
+        const auto next=core::tile_direction(key,1.0/cells,0.0);
+        return core::length(next-first)*body.radius;
+    }
+
+    [[nodiscard]] inline std::array<float,4> breaker_edges_for_cut(const core::Body& body,core::TileKey key,
+        std::uint32_t cells,std::span<const core::TileKey> cut) noexcept
+    {
+        const float interior=wave::spherical_breaker_scale(lattice_spacing_meters(body,key,cells));
+        std::array<float,4> edges{};
+        edges.fill(interior);
+        if(!key.level||interior<=0.0f)return edges;
+        const auto neighbors=core::neighbors(key);
+        for(std::size_t side=0;side<edges.size();++side)
+        {
+            const auto coarse=core::parent(neighbors[side]);
+            if(std::ranges::find(cut,coarse)!=cut.end())
+                edges[side]=(std::min)(interior,wave::spherical_breaker_scale(lattice_spacing_meters(body,coarse,cells)));
+        }
+        return edges;
+    }
 
     // The package owns cube topology and ocean-layer semantics. Retain that
     // exact recipe for the Engine's existing asynchronous Water sampler; the
@@ -47,20 +123,12 @@ export namespace epoch::extensions::planetary_terrain::water
             std::vector<std::uint32_t> surface_indices(layer);
             for(std::size_t i=0;i<layer;++i)
             {
-                std::size_t x{},y{};
-                if(i<grid){x=i%side;y=i/side;}
-                else
-                {
-                    const auto edge=i-grid;
-                    if(edge<cells){x=edge;y=0;}
-                    else if(edge<2u*cells){x=cells;y=edge-cells;}
-                    else if(edge<3u*cells){x=3u*cells-edge;y=cells;}
-                    else{x=0;y=4u*cells-edge;}
-                }
+                const auto top=detail::lattice_top(static_cast<std::uint32_t>(i),cells);
+                const auto x=top%side,y=top/side;
                 const auto direction=core::tile_direction(key,double(x)/cells,double(y)/cells);
                 const auto original=source.anchor+core::DVec3{source.vertices[layer+i].position};
                 const double depth=i<grid?0.0:(std::max)(0.0,body.radius-core::length(original));
-                surface_indices[i]=static_cast<std::uint32_t>(y*side+x);
+                surface_indices[i]=top;
                 metadata.water_vertices.push_back({{direction.x,direction.y,direction.z},depth,
                     patch.first_water_vertex+surface_indices[i]});
             }
@@ -93,6 +161,8 @@ export namespace epoch::extensions::planetary_terrain::water
     class Surface final
     {
     public:
+        void use_sample(std::shared_ptr<const wave::Tile> tile) noexcept {tile_=std::move(tile);}
+
         [[nodiscard]] bool evaluate(std::uint32_t seed,double seconds,
             std::uint64_t maximum_bytes=4u*1024u*1024u,std::stop_token stop={}) noexcept
         {
@@ -109,7 +179,9 @@ export namespace epoch::extensions::planetary_terrain::water
             std::vector<std::uint32_t>& indices,std::uint32_t vertex_base,std::size_t index_base,
             const core::Mesh& source,const core::Body& body,core::TileKey key,std::uint32_t cells,
             double scale,core::DVec3 offset,std::uint64_t maximum_bytes,
-            std::vector<std::array<float,3>>* parent_delta=nullptr) const noexcept
+            std::vector<std::array<float,3>>* parent_delta=nullptr,
+            mesh::SphericalWaterRange* appearance=nullptr, float shore_tint_strength=1.0f,
+            const std::array<float,4>* breaker_edges=nullptr) const noexcept
         {
             if(!tile_||cells<2u||cells>64u||!std::isfinite(scale)||scale<=0.0
                 ||vertex_base>vertices.size()||vertices.size()-vertex_base!=source.vertices.size()
@@ -117,6 +189,7 @@ export namespace epoch::extensions::planetary_terrain::water
                 ||source.indices.size()%3u!=0u)return false;
             if(parent_delta&&parent_delta->size()!=vertices.size())return false;
             for(const auto index:source.indices)if(index>=source.vertices.size())return false;
+            if(appearance)*appearance={};
             if(!body.ocean)return true;
             const std::size_t side=cells+1u,grid=side*side;
             const auto first=std::ranges::find_if(source.vertices,[](const auto& vertex){return vertex.color[3]>0.5f;});
@@ -126,6 +199,11 @@ export namespace epoch::extensions::planetary_terrain::water
             try
             {
                 std::vector<std::uint32_t> surface_indices(layer);
+                const double spacing_meters=lattice_spacing_meters(body,key,cells);
+                const double wave_length_meters = tile_->length_meters();
+                const float breaker=shore_tint_strength>0.0f?wave::spherical_breaker_scale(spacing_meters):0.0f;
+                const bool blend_breaker=breaker_edges&&std::ranges::any_of(*breaker_edges,
+                    [&](float weight){return weight<breaker;});
                 // Every fine vertex interpolates the same immediate-parent
                 // lattice. Sample each lattice point once per patch rather
                 // than repeating four spherical FFT derivatives per vertex.
@@ -135,16 +213,8 @@ export namespace epoch::extensions::planetary_terrain::water
                 std::vector<std::uint8_t> parent_points_ready(parent_points_cache.size());
                 for(std::size_t i=0;i<layer;++i)
                 {
-                    std::size_t x{},y{};
-                    if(i<grid){x=i%side;y=i/side;}
-                    else
-                    {
-                        const auto edge=i-grid;
-                        if(edge<cells){x=edge;y=0;}
-                        else if(edge<2u*cells){x=cells;y=edge-cells;}
-                        else if(edge<3u*cells){x=3u*cells-edge;y=cells;}
-                        else{x=0;y=4u*cells-edge;}
-                    }
+                    const auto top=detail::lattice_top(static_cast<std::uint32_t>(i),cells);
+                    const auto x=top%side,y=top/side;
                     const auto direction=core::tile_direction(key,double(x)/cells,double(y)/cells);
                     const auto sampled=wave::spherical_sample(*tile_,{direction.x,direction.y,direction.z},
                         body.radius,tile_->seconds());
@@ -152,7 +222,7 @@ export namespace epoch::extensions::planetary_terrain::water
                     core::DVec3 p{sampled->position_meters[0],sampled->position_meters[1],sampled->position_meters[2]};
                     const auto radius=core::length(p);
                     const auto displaced_direction=p/radius;
-                    surface_indices[i]=static_cast<std::uint32_t>(y*side+x);
+                    surface_indices[i]=top;
                     // Preserve the cached skirt's radial depth, not its float
                     // position or time. It continues sealing the same grid edge.
                     if(i>=grid)
@@ -165,6 +235,14 @@ export namespace epoch::extensions::planetary_terrain::water
                     auto& vertex=vertices[vertex_base+layer+i];
                     vertex.position={static_cast<float>(output.x),static_cast<float>(output.y),static_cast<float>(output.z)};
                     vertex.normal=sampled->normal;
+                    const auto& bed = vertices[vertex_base+surface_indices[i]].position;
+                    const double bed_radius = std::hypot(bed[0]/scale-offset.x, bed[1]/scale-offset.y,
+                        bed[2]/scale-offset.z);
+                    const float breaker_weight=blend_breaker?wave::spherical_water_edge_weight(*breaker_edges,
+                        breaker,static_cast<std::uint32_t>(x),static_cast<std::uint32_t>(y),cells):breaker;
+                    vertex.color = wave::spherical_surface_color(body.radius - bed_radius,
+                        sampled->foam, spacing_meters, wave_length_meters, false, shore_tint_strength,
+                        radius - body.radius,breaker_weight);
                     if(parent_delta)
                     {
                         std::array<float,3> delta{};
@@ -200,9 +278,15 @@ export namespace epoch::extensions::planetary_terrain::water
                         (*parent_delta)[vertex_base+layer+i]=delta;
                     }
                 }
-                // Clip against the actual rendered terrain triangle. Analytic
-                // spherical crossings leave coarse straight terrain faces far
-                // below their shoreline and move water edges out of their face.
+                // Classify against the matching ground sample. The same water
+                // edge must have one contour even with tangential displacement.
+                const std::array body_center{offset.x*scale,offset.y*scale,offset.z*scale};
+                const auto depth=[&](std::size_t local) {
+                    // Lowered skirt vertices share wetness with their top edge.
+                    const auto surface=surface_indices[local];
+                    return wave::spherical_shore_depth(vertices[vertex_base+surface].position,
+                        vertices[vertex_base+layer+surface].position,body_center);
+                };
                 const auto old_indices=std::vector<std::uint32_t>{indices.begin()+static_cast<std::ptrdiff_t>(index_base),indices.end()};
                 indices.resize(index_base);
                 for(std::size_t t=0;t<old_indices.size();t+=3u)
@@ -215,49 +299,29 @@ export namespace epoch::extensions::planetary_terrain::water
                     const auto local_a=static_cast<std::size_t>(a-first_water);
                     const auto local_b=static_cast<std::size_t>(b-first_water);
                     const auto local_c=static_cast<std::size_t>(c-first_water);
-                    std::array<std::uint32_t,3> ground{surface_indices[local_a],surface_indices[local_b],surface_indices[local_c]};
-                    if(local_a>=grid||local_b>=grid||local_c>=grid)
+                    const auto depth_a=depth(local_a),depth_b=depth(local_b),depth_c=depth(local_c);
+                    if(!depth_a||!depth_b||!depth_c)return false;
+                    const auto polygon=wave::spherical_wet_polygon({*depth_a,*depth_b,*depth_c});
+                    const std::array input{a,b,c};
+                    std::array<std::uint32_t,4> output{};
+                    for(std::size_t corner=0;corner<polygon.count;++corner)
                     {
-                        // A lowered wall keeps the wetness of its top edge. Use
-                        // that edge's incident surface triangle, so clipping
-                        // retains the entire sealing depth at the same crossing.
-                        const auto min_index=*std::ranges::min_element(ground);
-                        const auto max_index=*std::ranges::max_element(ground);
-                        const auto x=static_cast<std::uint32_t>(min_index%side);
-                        const auto y=static_cast<std::uint32_t>(min_index/side);
-                        const bool upper=y==cells,left=x==0u&&max_index%side==0u;
-                        const auto gx=upper?x:(left?0u:(std::min)(x,cells-1u));
-                        const auto gy=upper?cells-1u:y;
-                        const auto first=gy*static_cast<std::uint32_t>(side)+gx;
-                        ground=upper||left?std::array<std::uint32_t,3>{first,first+static_cast<std::uint32_t>(side)+1u,first+static_cast<std::uint32_t>(side)}
-                            :std::array<std::uint32_t,3>{first,first+1u,first+static_cast<std::uint32_t>(side)+1u};
-                    }
-                    const auto point=[&](std::uint32_t index){const auto& p=vertices[vertex_base+index].position;return core::DVec3{p[0],p[1],p[2]};};
-                    const auto origin=point(ground[0]);
-                    const auto ab=point(ground[1])-origin,ac=point(ground[2])-origin;
-                    const core::DVec3 normal{ab.y*ac.z-ab.z*ac.y,ab.z*ac.x-ab.x*ac.z,ab.x*ac.y-ab.y*ac.x};
-                    if(normal.x*normal.x+normal.y*normal.y+normal.z*normal.z<=0.0)return false;
-                    const auto depth=[&](std::size_t local){const auto delta=
-                        point(static_cast<std::uint32_t>(layer)+surface_indices[local])-origin;
-                        return normal.x*delta.x+normal.y*delta.y+normal.z*delta.z;};
-                    struct Clip {std::uint32_t index{};double depth{};};
-                    const std::array<Clip,3> input{{{a,depth(local_a)},
-                        {b,depth(local_b)},{c,depth(local_c)}}};
-                    std::array<Clip,4> output{};std::size_t count{};bool clipped{};
-                    for(std::size_t edge=0;edge<3u;++edge)
-                    {
-                        const auto from=input[edge],to=input[(edge+1u)%3u];
-                        const bool wet_from=from.depth>0.0,wet_to=to.depth>0.0;
-                        if(wet_from)output[count++]=from;
-                        if(wet_from==wet_to)continue;
-                        clipped=true;
-                        const double fraction=from.depth/(from.depth-to.depth);
-                        const auto av=vertices[from.index],bv=vertices[to.index];mesh::Vertex boundary;
+                        const auto sample=polygon.corners[corner];
+                        const auto wet=input[sample.wet],other=input[sample.other];
+                        if(!sample.crossing())
+                        {
+                            output[corner]=wet;
+                            continue;
+                        }
+                        const auto av=vertices[wet],bv=vertices[other];
+                        const double fraction=sample.fraction;
+                        mesh::Vertex boundary;
                         double normal_length{};
                         for(std::size_t axis=0;axis<3u;++axis)
                         {
                             boundary.position[axis]=static_cast<float>(std::lerp(double(av.position[axis]),double(bv.position[axis]),fraction));
                             boundary.normal[axis]=static_cast<float>(std::lerp(double(av.normal[axis]),double(bv.normal[axis]),fraction));
+                            // Clipping must not introduce foam unsupported by the sampled edge.
                             boundary.color[axis]=static_cast<float>(std::lerp(double(av.color[axis]),double(bv.color[axis]),fraction));
                             normal_length+=double(boundary.normal[axis])*boundary.normal[axis];
                         }
@@ -271,31 +335,37 @@ export namespace epoch::extensions::planetary_terrain::water
                         {
                             std::array<float,3> delta{};
                             for(std::size_t axis=0;axis<3u;++axis)
-                                delta[axis]=static_cast<float>(std::lerp(double(av.position[axis])+(*parent_delta)[from.index][axis],
-                                    double(bv.position[axis])+(*parent_delta)[to.index][axis],fraction)-boundary.position[axis]);
+                                delta[axis]=static_cast<float>(std::lerp(double(av.position[axis])+(*parent_delta)[wet][axis],
+                                    double(bv.position[axis])+(*parent_delta)[other][axis],fraction)-boundary.position[axis]);
                             parent_delta->push_back(delta);
                         }
-                        output[count++]={index,0.0};
+                        output[corner]=index;
                     }
-                    for(std::size_t i=1u;i+1u<count;++i)
+                    for(std::size_t i=1u;i+1u<polygon.count;++i)
                     {
-                        if(clipped)
+                        if(polygon.clipped)
                         {
                             // Distinct double shoreline intersections can
                             // collapse after narrowing to artifact floats. Drop
                             // only unrenderable generated faces, using the
                             // artifact's area floor; input faces still validate.
-                            const auto& p=vertices[output[0].index].position;
-                            const auto& q=vertices[output[i].index].position;
-                            const auto& r=vertices[output[i+1u].index].position;
+                            const auto& p=vertices[output[0]].position;
+                            const auto& q=vertices[output[i]].position;
+                            const auto& r=vertices[output[i+1u]].position;
                             const core::DVec3 ab{double(q[0])-p[0],double(q[1])-p[1],double(q[2])-p[2]};
                             const core::DVec3 ac{double(r[0])-p[0],double(r[1])-p[1],double(r[2])-p[2]};
                             const core::DVec3 area{ab.y*ac.z-ab.z*ac.y,ab.z*ac.x-ab.x*ac.z,ab.x*ac.y-ab.y*ac.x};
                             if(area.x*area.x+area.y*area.y+area.z*area.z<=1.0e-24)continue;
                         }
-                        indices.insert(indices.end(),{output[0].index,output[i].index,output[i+1u].index});
+                        indices.insert(indices.end(),{output[0],output[i],output[i+1u]});
                     }
                     if(vertices.capacity()*sizeof(mesh::Vertex)+indices.capacity()*sizeof(std::uint32_t)>maximum_bytes)return false;
+                }
+                if(appearance)
+                {
+                    const auto first_water=static_cast<std::uint32_t>(vertex_base+layer);
+                    *appearance={first_water,static_cast<std::uint32_t>(vertices.size()-first_water),
+                        wave::spherical_specular_scale(spacing_meters,wave_length_meters)};
                 }
                 return true;
             }

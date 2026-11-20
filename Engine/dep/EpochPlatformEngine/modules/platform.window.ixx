@@ -105,6 +105,11 @@ export namespace epochengine::platform::window_adapter
         std::span<const NativeChildWindow> children, WindowHandle receiver) noexcept;
     void forget_native_child_close_group(WindowHandle group) noexcept;
 
+    // Extend the selected horizontal resize edge to its monitor work area;
+    // if already there, extend the opposite edge. Preserve height and activation.
+    [[nodiscard]] bool extend_native_horizontal_edge(WindowHandle window, bool left) noexcept;
+
+
     enum class WindowEventType : std::uint8_t
     {
         none,

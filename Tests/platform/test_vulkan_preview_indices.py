@@ -17,11 +17,11 @@ def section(source, first, last):
 
 class VulkanPreviewIndices(unittest.TestCase):
     def test_actual_mesh_and_immutable_upload_identity_debug_release(self):
-        owner = (ROOT / 'Engine/modules/vulkan.context_meshcube.ixx').read_text(encoding='utf-8')
-        grid = (ROOT / 'Engine/modules/render.preview_grid.ixx').read_text(encoding='utf-8')
-        arcade = (ROOT / 'Engine/modules/render.arcade.ixx').read_text(encoding='utf-8')
-        commands = (ROOT / 'Engine/modules/vulkan.context_commands.ixx').read_text(encoding='utf-8')
-        buffers = (ROOT / 'Engine/modules/vulkan.context_buffers.ixx').read_text(encoding='utf-8')
+        owner = (ROOT / 'Engine/modules/vulkan/vulkan.context_meshcube.ixx').read_text(encoding='utf-8')
+        grid = (ROOT / 'Engine/modules/render/render.preview_grid.ixx').read_text(encoding='utf-8')
+        arcade = (ROOT / 'Engine/modules/render/render.arcade.ixx').read_text(encoding='utf-8')
+        commands = (ROOT / 'Engine/modules/vulkan/vulkan.context_commands.ixx').read_text(encoding='utf-8')
+        buffers = (ROOT / 'Engine/modules/vulkan/vulkan.context_buffers.ixx').read_text(encoding='utf-8')
         code = (ROOT / 'Tests/renderers/vulkan.preview_geometry_contract.cpp').read_text(encoding='utf-8')
         code = code.replace('ARCADE_PLANE', section(arcade,
             '    [[nodiscard]] constexpr float screen_sample_plane_z(', '    static_assert('))

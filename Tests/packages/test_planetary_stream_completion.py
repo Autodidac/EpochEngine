@@ -1,5 +1,6 @@
 """Actual completion admission expressions and real moving-view policy; no GPU."""
 from pathlib import Path
+from Tests.support.cpp import engine_module_source
 from Tests.platform.test_child_close_router import definition
 from Tests.support.cpp import compile_and_run
 import hashlib
@@ -266,6 +267,8 @@ bool editor_planetary_mesh_policy_current(const Editor& editor){return editor.so
 bool editor_planetary_stream_identity_matches(const Editor& editor,const Entity&){return editor.identity_current&&editor.planetaryMeshPolicy&&editor.planetaryMeshPolicy->generated_mesh.has_value();}
 struct Fixture {
  bool m_planetaryPaused{},m_explorationController{true};
+ bool initialWater{};
+ std::uint64_t m_planetaryRequestWaterClock{},m_planetaryWaterClockGeneration{};
  bool runtime_water_visibility_pending()const{return false;} // normal unchanged visibility lane
  std::uint32_t m_planetaryRequestBody{};
  struct {std::uint32_t anchor{};}m_explorationFrame;
@@ -375,6 +378,13 @@ int main(){
   CHECK(flying.runtime_deadline()==1000&&flying.editor_deadline()==1000);}
  {Fixture f;f.m_planetaryRequestBody=1;CHECK(!f.runtime_accepts());}
  {Fixture f;f.m_explorationFrame.anchor=1;CHECK(!f.runtime_accepts());}
+ {Fixture f;f.initialWater=true;f.m_planetaryRequestWaterClock=8;f.m_planetaryWaterClockGeneration=8;
+  CHECK(f.runtime_accepts());
+  ++f.m_planetaryWaterClockGeneration;CHECK(!f.runtime_accepts());
+  f.initialWater=false;CHECK(f.runtime_accepts());
+  f.result.water_sample_seconds=2.0;CHECK(!f.runtime_accepts());
+  f.result.water_sample_seconds.reset();f.result.water_edge_sample_seconds=2.0;CHECK(!f.runtime_accepts());
+  f.m_planetaryRequestWaterClock=f.m_planetaryWaterClockGeneration;CHECK(f.runtime_accepts());}
  {Fixture f;f.m_planetarySettings->seed++;f.actualSettings.seed++;CHECK(!f.runtime_accepts()&&!f.editor_accepts());}
  {Fixture f;f.m_meshPlanetarySource->content_hash="changed";f.editor.planetaryMeshPolicy->source.content_hash="changed";CHECK(!f.runtime_accepts()&&!f.editor_accepts());}
  {Fixture f;f.m_meshPlanetarySource.reset();CHECK(!f.runtime_accepts());}
@@ -429,7 +439,7 @@ int main(){
             code = code.replace(key.upper(), value)
         (proof / 'completion.contract.cpp').write_text(code, encoding='utf-8')
         modules = ['project.planetary', 'project.planetary_snapshot', 'asset.mesh_artifact', 'asset.texture_artifact', 'asset.cloud_volume', 'water.wave']
-        files = ' '.join('"' + (ROOT / 'Engine/modules' / (name + '.ixx')).as_posix() + '"' for name in modules)
+        files = ' '.join('"' + (engine_module_source(ROOT / 'Engine/modules', name + ".ixx")).as_posix() + '"' for name in modules)
         (proof / 'CMakeLists.txt').write_text(f'''cmake_minimum_required(VERSION 3.30)
 set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT Embedded)
 project(PlanetMovingCompletion LANGUAGES CXX)
@@ -463,7 +473,7 @@ add_test(NAME moving_completion COMMAND completion)
             (proof / 'result.json').write_text(json.dumps(dict(
                 scope='Actual completion admission expressions, recorded identity/source-verifier ports, real module view policy; no renderer/process execution',
                 source={str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()
-                        for path in [runtime_path, editor_path, ROOT/'Engine/modules/project.planetary.ixx']},
+                        for path in [runtime_path, editor_path, ROOT/'Engine/modules/project/project.planetary.ixx']},
                 expressions=expressions, phases=results, native=False), indent=2) + '\n', encoding='utf-8')
             self.assertEqual(run.returncode, 0, (run.stdout + run.stderr)[-10000:])
 

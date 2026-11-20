@@ -53,16 +53,34 @@ def main():
                 command.extend(('--seconds', str(seconds)))
             result = subprocess.run(command, capture_output=True, timeout=30)
             assert result.returncode == expected, f'exit{result.returncode}: {command}'
+            admitted = None
             if expected == 0:
+                admitted = receipt(output, ocean_surface, seconds)
                 timing = dict(line.split('=', 1) for line in (output / 'terrain.performance').read_text().splitlines()[1:])
                 worker_limit = int(timing['worker_limit'])
                 assert 1 <= int(timing['peak_active_workers']) <= worker_limit <= 4
                 assert int(timing['worker_jobs_started']) >= int(timing['peak_active_workers'])
                 assert float(timing['worker_run_ms']) > 0
-            return output, receipt(output, ocean_surface, seconds) if result.returncode == 0 else None, command
+                checked = int(timing['cache_entries_checked'])
+                decoded = int(timing['cache_patches_read'])
+                cache_bytes = int(timing['cache_patch_bytes_read'])
+                assert 0 <= decoded <= checked <= 4096
+                assert decoded == int(admitted['reused'])
+                assert (cache_bytes > 0) == (decoded > 0)
+                owner_keys = ('cache_index_ms', 'cache_read_wave_ms', 'cache_restore_owner_ms', 'cache_prune_ms')
+                worker_keys = ('cache_path_worker_ms_sum', 'cache_file_read_worker_ms_sum', 'cache_decode_worker_ms_sum')
+                assert all(0 <= float(timing[key]) < float('inf') for key in (*owner_keys, *worker_keys))
+                assert sum(float(timing[key]) for key in owner_keys) <= float(timing['cache_prepare_ms']) + 1e-6
+                assert 0 <= float(timing['cache_write_owner_ms']) <= float(timing['patch_jobs_ms'])
+                if not decoded:
+                    assert float(timing['cache_file_read_worker_ms_sum']) == float(timing['cache_decode_worker_ms_sum']) == 0
+                if int(admitted['built']) == 0:
+                    assert float(timing['cache_write_owner_ms']) == 0
+            return output, admitted, command
 
         cold, r, _ = step((0, 2500, 0), maximum_new=2)
         assert r['snapshot_ready'] == '0' and r['built'] == '2' and not (cold / 'terrain.epoch_mesh').exists()
+        assert 'cache_entries_checked=0\n' in (cold / 'terrain.performance').read_text()
         distant, r, repeated = step((0, 2500, 0))
         assert r['snapshot_ready'] == '1' and r['reused'] == '2' and r['draw'] == '6' and r['max_level'] == '0'
         digest = hashlib.sha256((distant / 'terrain.epoch_mesh').read_bytes()).digest()

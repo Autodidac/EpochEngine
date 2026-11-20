@@ -1,0 +1,19 @@
+epoch_snapshot 4
+scene "project:PlatformerExample2D"
+project "PlatformerExample2D"
+world "PersistentLevel"
+document_kind "game"
+support_tier "baseline"
+revision 1
+primary_camera 7625654008115939043
+primary_spawn 11352894401096310128
+frame 0
+time 0
+packages 0
+objects 5
+object 6891326208384016650 "PersistentLevel" type "Level" category "World" pos 0,-0.319999993,0 rot 0,0,0 scale 14,0.200000003,14 visible 1 editor_only 0 material 0 mesh 0
+object 14771245232016626873 "GroundPlatform" type "Ground" category "World" pos 0,-0.25,0 rot 0,0,0 scale 12,0.5,12 visible 1 editor_only 0 material 0 mesh 0
+object 11352894401096310128 "PlayerStart" type "Spawn" category "Gameplay" pos -2.5,0,2.5 rot 0,0,0 scale 1,1,1 visible 1 editor_only 0 material 0 mesh 0
+object 7625654008115939043 "EditorCamera" type "Camera" category "Editor" pos 0,4.80000019,8.5 rot -28,0,0 scale 1,1,1 visible 1 editor_only 0 material 0 mesh 0
+object 11349737073782546293 "DirectionalLight" type "Light" category "Lighting" pos 2,5.5,2 rot -48,35,0 scale 1,1,1 visible 1 editor_only 0 material 0 mesh 0
+timeline_keys 0

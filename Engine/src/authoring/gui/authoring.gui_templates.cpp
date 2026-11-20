@@ -69,15 +69,16 @@ namespace epochengine::authoring::gui
                 TemplateWidgetSpec{WidgetKind::button, "MobileProfile", "Profile", 268.0f, 780.0f, 104.0f, 44.0f, "navigate.profile"}
             };
             static constexpr std::array hud{
-                TemplateWidgetSpec{WidgetKind::panel, "PlayerStatus", "Player Status", 24.0f, 24.0f, 360.0f, 116.0f},
-                TemplateWidgetSpec{WidgetKind::slider, "Health", "Health", 48.0f, 58.0f, 312.0f, 28.0f, {}, 100.0, true},
-                TemplateWidgetSpec{WidgetKind::slider, "Energy", "Energy", 48.0f, 96.0f, 312.0f, 24.0f, {}, 72.0},
-                TemplateWidgetSpec{WidgetKind::panel, "ObjectivePanel", "Current Objective", 440.0f, 24.0f, 400.0f, 86.0f},
-                TemplateWidgetSpec{WidgetKind::text, "ObjectiveText", "Reach the marked destination", 468.0f, 54.0f, 344.0f, 34.0f},
-                TemplateWidgetSpec{WidgetKind::panel, "ActionBar", "Actions", 424.0f, 620.0f, 432.0f, 76.0f},
-                TemplateWidgetSpec{WidgetKind::button, "ActionPrimary", "Primary", 444.0f, 636.0f, 120.0f, 44.0f, "interact", 0.0, true},
-                TemplateWidgetSpec{WidgetKind::button, "ActionSecondary", "Secondary", 580.0f, 636.0f, 120.0f, 44.0f, "jump"},
-                TemplateWidgetSpec{WidgetKind::button, "Pause", "Pause", 716.0f, 636.0f, 120.0f, 44.0f, "pause"}
+                // Keep the world clear. This is an editable example, not live
+                // health/objective telemetry that the project does not supply.
+                TemplateWidgetSpec{WidgetKind::panel, "HudIdentity", "", 24.0f, 24.0f, 252.0f, 64.0f},
+                TemplateWidgetSpec{WidgetKind::text, "HudTitle", "EXPLORER", 40.0f, 32.0f, 220.0f, 24.0f},
+                TemplateWidgetSpec{WidgetKind::text, "HudCaption", "Sample HUD / GUI Canvas", 40.0f, 58.0f, 220.0f, 22.0f},
+                TemplateWidgetSpec{WidgetKind::text, "ActionHint", "Sample actions", 24.0f, 620.0f, 232.0f, 24.0f},
+                TemplateWidgetSpec{WidgetKind::panel, "ActionBar", "", 24.0f, 648.0f, 232.0f, 48.0f},
+                TemplateWidgetSpec{WidgetKind::button, "ActionPrimary", "Interact", 32.0f, 656.0f, 104.0f, 32.0f, "interact", 0.0, true},
+                TemplateWidgetSpec{WidgetKind::button, "ActionSecondary", "Jump", 144.0f, 656.0f, 104.0f, 32.0f, "jump"},
+                TemplateWidgetSpec{WidgetKind::button, "Pause", "Pause", 1'160.0f, 24.0f, 96.0f, 36.0f, "pause"}
             };
 
             switch (preset)
@@ -184,7 +185,8 @@ namespace epochengine::authoring::gui
                 {
                 case WidgetKind::panel:
                     descriptor.content = PanelContent{std::string{spec.label}};
-                    descriptor.interaction.accepts_pointer = true;
+                    descriptor.interaction.accepts_pointer =
+                        preset != TemplatePreset::game_hud;
                     break;
                 case WidgetKind::button:
                     descriptor.content = ButtonContent{std::string{spec.label}};

@@ -583,7 +583,7 @@
         const Vec2 position = g_frame.cursor;
         const float width = (std::max)(options.size.x, 40.0f);
         const float height = (std::max)(
-            options.size.y, base_line_height(kFontScale) + 8.0f);
+            options.size.y, options.label.empty() ? 24.0f : base_line_height(kFontScale) + 8.0f);
         result.bounds = {position, {width, height}};
         const gui_lib::SliderLayoutOptions layoutOptions{
             .bounds = {

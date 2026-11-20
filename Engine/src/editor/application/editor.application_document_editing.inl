@@ -747,12 +747,13 @@
             const core::Context* ctx,
             const gui::WidgetBounds& viewport,
             const gui::Vec2& mouse,
-            const std::array<double,3>& coordinateOrigin = {}) noexcept
+            const std::array<double,3>& coordinateOrigin = {},
+            const previewgrid::Camera* displayedCamera = nullptr) noexcept
         {
             if (!ctx || viewport.size.x <= 1.0f || viewport.size.y <= 1.0f)
                 return std::nullopt;
 
-            const auto camera = epochengine::previewgrid::camera_for(ctx);
+            const auto camera = displayedCamera ? *displayedCamera : epochengine::previewgrid::camera_for(ctx);
             const auto absoluteEye=epochengine::previewgrid::camera_world_eye(camera);
             std::array<float,3> localEye{};
             for(std::size_t axis=0;axis<3u;++axis)
@@ -801,6 +802,160 @@
                 1u);
         }
 
+        [[nodiscard]] std::optional<std::array<double,3>> forest_terrain_mesh_hit(
+            const std::shared_ptr<const asset::mesh::Artifact>& mesh,
+            const epochengine::ray::RayDesc& meshLocalRay,
+            ForestTerrainRayCache* suppliedCache = nullptr,
+            std::size_t* hitFirstIndex = nullptr, bool clockwiseFrontOnly = false)
+        {
+            if (!mesh || !epochengine::ray::validate(meshLocalRay).valid) return std::nullopt;
+            const auto vertices = mesh->vertices();
+            const auto indices = mesh->indices();
+            if (vertices.empty() || indices.empty() || indices.size()%3u != 0u)
+                return std::nullopt;
+            ForestTerrainRayCache localCache;
+            auto& cache = suppliedCache ? *suppliedCache : localCache;
+            if (cache.artifact.lock() != mesh || cache.chunks.empty())
+            {
+                cache.artifact.reset();
+                cache.chunks.clear();
+                // Bounded metadata, without dropping triangles from larger artifacts.
+                constexpr std::size_t maximumChunks = 4096u;
+                const auto triangleCount = indices.size()/3u;
+                const auto trianglesPerChunk = (std::max)(std::size_t{256u},
+                    (triangleCount+maximumChunks-1u)/maximumChunks);
+                const auto stride = trianglesPerChunk*3u;
+                cache.chunks.reserve((indices.size()+stride-1u)/stride);
+                for (std::size_t first = 0; first < indices.size(); first += stride)
+                {
+                    ForestTerrainRayCache::Chunk chunk;
+                    chunk.firstIndex = first;
+                    chunk.indexCount = (std::min)(stride, indices.size()-first);
+                    for (std::size_t i = first; i < first+chunk.indexCount; ++i)
+                    {
+                        if (indices[i] >= vertices.size())
+                        { cache.chunks.clear(); return std::nullopt; }
+                        const auto& p = vertices[indices[i]].position;
+                        for (std::size_t axis = 0; axis < 3u; ++axis)
+                        {
+                            if (!std::isfinite(p[axis]))
+                            { cache.chunks.clear(); return std::nullopt; }
+                            if (i == first) chunk.minimum[axis] = chunk.maximum[axis] = p[axis];
+                            else
+                            {
+                                chunk.minimum[axis] = (std::min)(chunk.minimum[axis], p[axis]);
+                                chunk.maximum[axis] = (std::max)(chunk.maximum[axis], p[axis]);
+                            }
+                        }
+                    }
+                    for (std::size_t axis = 0; axis < 3u; ++axis)
+                    {
+                        chunk.minimum[axis] = std::nextafter(chunk.minimum[axis],
+                            -(std::numeric_limits<float>::infinity)());
+                        chunk.maximum[axis] = std::nextafter(chunk.maximum[axis],
+                            (std::numeric_limits<float>::infinity)());
+                    }
+                    cache.chunks.push_back(chunk);
+                }
+                cache.artifact = mesh;
+            }
+            auto query = epochengine::ray::normalized(meshLocalRay);
+            const std::array<double,3> origin{query.origin.x,query.origin.y,query.origin.z};
+            const std::array<double,3> direction{query.direction.x,query.direction.y,query.direction.z};
+            std::optional<std::array<double,3>> nearest;
+            for (const auto& chunk : cache.chunks)
+            {
+                // Segment/box overlap includes rays starting inside a chunk. A surface
+                // box intersection alone would incorrectly discard a clipped inside ray.
+                double entry = query.minimumDistance, exit = query.maximumDistance;
+                bool overlaps = true;
+                for (std::size_t axis = 0; axis < 3u; ++axis)
+                {
+                    const double low = chunk.minimum[axis];
+                    const double high = chunk.maximum[axis];
+                    if (direction[axis] == 0.0)
+                    {
+                        if (origin[axis] < low || origin[axis] > high) overlaps = false;
+                    }
+                    else
+                    {
+                        const double a = (low-origin[axis])/direction[axis];
+                        const double b = (high-origin[axis])/direction[axis];
+                        entry = (std::max)(entry,(std::min)(a,b));
+                        exit = (std::min)(exit,(std::max)(a,b));
+                        if (entry > exit) overlaps = false;
+                    }
+                    if (!overlaps) break;
+                }
+                if (!overlaps) continue;
+                for (std::size_t i = chunk.firstIndex; i < chunk.firstIndex+chunk.indexCount; i += 3u)
+                {
+                    const auto& a = vertices[indices[i]].position;
+                    // The OpenGL solid pass treats clockwise winding as front.
+                    const auto& b = vertices[indices[i+(clockwiseFrontOnly ? 2u : 1u)]].position;
+                    const auto& c = vertices[indices[i+(clockwiseFrontOnly ? 1u : 2u)]].position;
+                    const epochengine::ray::Triangle triangle{
+                        {a[0],a[1],a[2]},{b[0],b[1],b[2]},{c[0],c[1],c[2]},!clockwiseFrontOnly};
+                    const auto hit = epochengine::ray::intersect(query,triangle);
+                    if (!hit || !std::isfinite(hit->distance)) continue;
+                    query.maximumDistance = hit->distance;
+                    if (hitFirstIndex) *hitFirstIndex = i;
+                    const double u = hit->barycentrics[0], v = hit->barycentrics[1];
+                    nearest = std::array<double,3>{};
+                    for (std::size_t axis = 0; axis < 3u; ++axis)
+                        (*nearest)[axis] = double(a[axis])*(1.0-u-v)+double(b[axis])*u+double(c[axis])*v;
+                }
+            }
+            return nearest;
+        }
+
+        [[nodiscard]] std::optional<std::array<double,3>> forest_lasso_surface_direction(
+            const previewgrid::ObjectMarker& marker, const epochengine::ray::RayDesc& viewRay,
+            double forwardProjection, const project_planetary::GeneratedMeshFrame& meshFrame,
+            const project_planetary::GeneratedBody& body, bool bodyOnlyMesh, ForestTerrainRayCache& cache)
+        {
+            if (!marker.preciseTransform || !std::isfinite(forwardProjection) || forwardProjection <= 0.0
+                || !std::isfinite(meshFrame.meters_per_unit) || meshFrame.meters_per_unit <= 0.0)
+                return {};
+            const auto& transform = *marker.preciseTransform;
+            const auto origin = transform.inverse_apply({viewRay.origin.x, viewRay.origin.y, viewRay.origin.z});
+            const std::array<double,3> direction{viewRay.direction.x, viewRay.direction.y, viewRay.direction.z};
+            std::array<double,3> localDirection{};
+            for (std::size_t axis = 0; axis < 3u; ++axis)
+            {
+                for (std::size_t row = 0; row < 3u; ++row)
+                    localDirection[axis] += transform.rotation[row * 3u + axis] * direction[row];
+                localDirection[axis] /= transform.scale[axis];
+            }
+            const double length = std::hypot(localDirection[0], localDirection[1], localDirection[2]);
+            if (!std::isfinite(length) || length <= 0.0) return {};
+            // Perspective near/far planes are forward distances, then the
+            // marker transform changes the number of mesh units per ray unit.
+            const double localScale = length / forwardProjection;
+            const double nearDistance = viewRay.minimumDistance * localScale;
+            const double farDistance = viewRay.maximumDistance * localScale;
+            constexpr auto maxFloat = (std::numeric_limits<float>::max)();
+            if (std::ranges::any_of(origin, [](double axis) { return !std::isfinite(axis) || std::abs(axis) > maxFloat; })
+                || !std::isfinite(farDistance) || farDistance > maxFloat) return {};
+            const epochengine::ray::RayDesc localRay{
+                {float(origin[0]),float(origin[1]),float(origin[2])},
+                {float(localDirection[0]/length),float(localDirection[1]/length),float(localDirection[2]/length)},
+                float(nearDistance),float(farDistance),viewRay.visibilityMask};
+            std::size_t firstIndex{};
+            auto hit = forest_terrain_mesh_hit(marker.mesh, localRay, &cache, &firstIndex, true);
+            // A static universe mesh contains every body. Never sample through
+            // a closer body or apply its point to the currently selected body.
+            if (!hit || (!bodyOnlyMesh
+                && (firstIndex < body.first_index || firstIndex - body.first_index >= body.index_count))) return {};
+            for (std::size_t axis = 0; axis < 3u; ++axis)
+                (*hit)[axis] = (*hit)[axis] * meshFrame.meters_per_unit
+                    + (meshFrame.source_origin_meters[axis] - body.center_meters[axis]);
+            const double radius = std::hypot((*hit)[0], (*hit)[1], (*hit)[2]);
+            if (!std::isfinite(radius) || radius <= 0.0) return {};
+            for (auto& axis : *hit) axis /= radius;
+            return hit;
+        }
+
         [[nodiscard]] std::optional<std::array<double,3>> forest_brush_surface_direction(
             const std::array<double,3>& origin,const std::array<double,3>& direction,double radius) noexcept
         {
@@ -821,6 +976,133 @@
             return center;
         }
 
+        void update_forest_lasso(const std::shared_ptr<core::Context>& ctx, EditorState& state,
+            const EditorFrameResult& frame, bool pressed, bool held)
+        {
+            auto& gesture = state.forestLassoGesture;
+            const auto cancel = [&](std::string_view status) {
+                if (gesture || pressed) state.plantLabStatus = status;
+                gesture.reset();
+            };
+            if (ctx->type != core::ContextType::OpenGL || ctx->is_key_down_safe(input::Key::Escape))
+            { cancel("Forest lasso cancelled."); return; }
+            if (!pressed && !gesture) return;
+            if (frame.scene_input_captured)
+            { cancel("Forest lasso cancelled."); return; }
+
+            int mouseX{}, mouseY{};
+            ctx->get_mouse_position_safe(mouseX, mouseY);
+            const gui::Vec2 pointer{float(mouseX), float(mouseY)};
+            const auto& viewport = frame.scene_viewport;
+            if (pointer.x < viewport.position.x || pointer.y < viewport.position.y
+                || pointer.x >= viewport.position.x + viewport.size.x
+                || pointer.y >= viewport.position.y + viewport.size.y)
+            { cancel("Forest lasso cancelled outside the terrain viewport."); return; }
+
+            auto terrainIndex = editor_entity_index(state, gesture ? gesture->terrain : state.selectedEntityId);
+            if (!gesture && terrainIndex && state.entities[*terrainIndex].forestRegion)
+                terrainIndex = editor_entity_index(state, state.entities[*terrainIndex].forestRegion->terrain_object_id);
+            if (!gesture && (!terrainIndex || state.entities[*terrainIndex].category != "Planetary Terrain"))
+            {
+                terrainIndex.reset();
+                for (std::size_t index = 0; index < state.entities.size(); ++index)
+                {
+                    if (!state.entities[index].visible || state.entities[index].category != "Planetary Terrain") continue;
+                    if (terrainIndex) { cancel("Select a planet before drawing a forest lasso."); return; }
+                    terrainIndex = index;
+                }
+            }
+            if (!terrainIndex || !state.entities[*terrainIndex].visible
+                || !editor_planetary_stream_identity_matches(state,state.entities[*terrainIndex]))
+            { cancel("Forest lasso needs an admitted, visible terrain."); return; }
+            const auto& terrain = state.entities[*terrainIndex];
+            refresh_editor_planetary_body_inventory(state,terrain);
+            const auto& policy = *state.planetaryMeshPolicy;
+            const auto bodyId = forest_placement_body_id(state,terrain,policy.settings.body_index);
+            const auto body = std::ranges::find_if(policy.generated_bodies,
+                [&](const auto& item) { return item.id == bodyId; });
+            if (body == policy.generated_bodies.end())
+            { cancel("Forest lasso needs an admitted terrain body."); return; }
+
+            const auto generation = state.projectLifecycle.evidence().generations.selected_project.generation;
+            if (gesture && (gesture->projectGeneration != generation || gesture->sceneRevision != state.sceneDocumentRevision
+                || gesture->context != ctx.get() || gesture->selection != state.selectedEntityId
+                || gesture->bodyIndex != bodyId || gesture->bodySeed != policy.settings.seed
+                || gesture->bodyRadiusMeters != body->radius_meters || gesture->bodyCenterMeters != body->center_meters
+                || gesture->source != policy.source || gesture->mesh != *policy.generated_mesh
+                || gesture->viewport.position.x != viewport.position.x || gesture->viewport.position.y != viewport.position.y
+                || gesture->viewport.size.x != viewport.size.x || gesture->viewport.size.y != viewport.size.y))
+            { cancel("Forest lasso cancelled because the active terrain view changed."); return; }
+            if (held && gesture && gesture->lastTestedPointer.x == pointer.x && gesture->lastTestedPointer.y == pointer.y)
+                return;
+
+            const auto visible = previewgrid::scene_frame_for(ctx.get());
+            if (visible && visible->solids && visible->solids->markers.size() > 1u)
+            { cancel("Show one terrain before drawing a forest lasso."); return; }
+            const auto* solid = visible && visible->solids && visible->solids->markers.size() == 1u
+                    && visible->solids->geometry && !visible->solids->geometry->empty()
+                ? &visible->solids->markers.front() : nullptr;
+            const auto* marker = solid ? &solid->marker : nullptr;
+            if (!marker || !marker->mesh || marker->mesh->indices().empty()
+                || marker->mesh != terrain.meshSnapshot || !marker->preciseTransform
+                || !marker->paintView || marker->wireframe || (solid->textured && !solid->textured->empty()))
+            {
+                // Geometry publication may trail a newly installed LOD by a
+                // frame. Don't bridge a changed cut while the pointer moves.
+                cancel("Wait for the terrain preview before drawing a forest lasso.");
+                return;
+            }
+            const bool streamed = terrain.meshSnapshotFrame.has_value();
+            if (streamed && bodyId != policy.settings.body_index)
+            { cancel("This terrain view does not contain the selected body."); return; }
+            const auto meshFrame = terrain.meshSnapshotFrame.value_or(policy.generated_mesh->coordinates);
+            const auto ray = screen_point_to_world_ray(ctx.get(),viewport,pointer,{},&visible->camera);
+            const auto forward = previewgrid::camera_forward(visible->camera);
+            const double alignment = ray && visible->camera.projection == render_camera::ProjectionKind::perspective
+                ? double(forward.x)*ray->direction.x + double(forward.y)*ray->direction.y + double(forward.z)*ray->direction.z
+                : 1.0;
+            const auto point = ray ? forest_lasso_surface_direction(*marker,*ray,alignment,meshFrame,*body,
+                streamed,state.forestTerrainRayCache) : std::nullopt;
+            if (!point)
+            { cancel("Forest lasso cancelled at the terrain edge. Keep the outline on the visible body."); return; }
+
+            if (pressed)
+            {
+                gesture.emplace(EditorState::ForestLassoGesture{
+                    .terrain = terrain.sceneObjectId, .selection = state.selectedEntityId,
+                    .projectGeneration = generation, .sceneRevision = state.sceneDocumentRevision, .context = ctx.get(),
+                    .bodyIndex = bodyId, .bodySeed = policy.settings.seed, .bodyRadiusMeters = body->radius_meters,
+                    .bodyCenterMeters = body->center_meters, .source = policy.source, .mesh = *policy.generated_mesh,
+                    .viewport = viewport, .lastPointer = pointer, .lastTestedPointer = pointer, .outline = {*point}});
+                state.plantLabStatus = "Draw on the visible terrain, then release to close the lasso.";
+                return;
+            }
+
+            const auto dx = pointer.x - gesture->lastPointer.x;
+            const auto dy = pointer.y - gesture->lastPointer.y;
+            gesture->lastTestedPointer = pointer;
+            if (dx*dx + dy*dy >= 9.0f && *point != gesture->outline.back())
+            {
+                if (gesture->outline.size() == forest::kMaximumForestLassoVertices)
+                { cancel("Forest lasso exceeded its outline limit. Draw a shorter outline."); return; }
+                gesture->outline.push_back(*point);
+                gesture->lastPointer = pointer;
+            }
+            if (held) return;
+
+            auto outline = std::move(gesture->outline);
+            gesture.reset();
+            const auto footprint = forest::ForestLassoFootprint::from_directions(outline);
+            if (!footprint)
+            { state.plantLabStatus = "Draw a closed terrain area without crossing its outline."; return; }
+            if (!ensure_plant_lab_compiled_asset(state)) return;
+            const auto ordinal = static_cast<std::size_t>(std::ranges::count_if(state.entities,
+                [](const auto& entity) { return entity.category == "ForestFactory" && entity.type == "ForestTrunk"; }));
+            state.forestPlacementCamera = previewgrid::camera_for(ctx.get());
+            (void)begin_forest_surface_placement(state, terrain, ordinal, state.forestArea,
+                {}, false, nullptr, {}, &*footprint);
+        }
+
         // Collect the gesture while the pointer is down. One verified provider
         // request and one undoable scene transaction commit the released stroke.
         void update_forest_brush(const std::shared_ptr<core::Context>& ctx,
@@ -835,7 +1117,20 @@
                 ||ctx->is_mouse_button_held_safe(input::MouseButton::MouseRight)
                 ||ctx->is_mouse_button_held_safe(input::MouseButton::MouseMiddle)
                 ||ctx->is_key_held_safe(input::Key::LeftAlt)||ctx->is_key_held_safe(input::Key::RightAlt))
-            {state.forestBrushTerrain=scene::kInvalidSceneObjectId;state.forestBrushDirections.clear();return;}
+            {
+                state.forestBrushTerrain=scene::kInvalidSceneObjectId;
+                state.forestBrushDirections.clear();
+                state.forestLassoGesture.reset();
+                return;
+            }
+            if (state.forestLassoMode)
+            {
+                state.forestBrushTerrain = scene::kInvalidSceneObjectId;
+                state.forestBrushDirections.clear();
+                update_forest_lasso(ctx,state,frame,pressed,held);
+                return;
+            }
+            state.forestLassoGesture.reset();
             if(!held)
             {
                 const auto selected=editor_entity_index(state,state.forestBrushTerrain);
@@ -876,9 +1171,7 @@
             if(!editor_planetary_stream_identity_matches(state,planet))return;
             refresh_editor_planetary_body_inventory(state,planet);
             const auto& policy=*state.planetaryMeshPolicy;
-            auto bodyId=policy.settings.body_index;
-            if(state.planetaryBodySelection&&state.planetaryBodySelection->entity==planet.sceneObjectId)
-                bodyId=state.planetaryBodySelection->body;
+            const auto bodyId=forest_placement_body_id(state,planet,policy.settings.body_index);
             const auto body=std::find_if(policy.generated_bodies.begin(),policy.generated_bodies.end(),
                 [&](const auto& value){return value.id==bodyId;});
             if(body==policy.generated_bodies.end())return;
@@ -964,15 +1257,18 @@
         [[nodiscard]] epochengine::previewgrid::Vec3 scene_drag_plane_normal(
             const core::Context* ctx, ScenePointerMode mode) noexcept
         {
-            if (mode == ScenePointerMode::move_x || mode == ScenePointerMode::move_z)
-                return {0.0f, 1.0f, 0.0f};
             const auto camera = epochengine::previewgrid::camera_for(ctx);
             auto normal = epochengine::previewgrid::camera_forward(camera);
             if (mode == ScenePointerMode::move_free) return normal;
-            normal.y = 0.0f;
+            // The plane contains the world axis while facing the camera as much
+            // as possible. A fixed ground plane fails in front/side views.
+            if (mode == ScenePointerMode::move_x) normal.x = 0.0f;
+            else if (mode == ScenePointerMode::move_y) normal.y = 0.0f;
+            else if (mode == ScenePointerMode::move_z) normal.z = 0.0f;
             return epochengine::previewgrid::dot(normal, normal) > 1.0e-6f
                 ? epochengine::previewgrid::normalize(normal)
-                : epochengine::previewgrid::Vec3{0.0f, 0.0f, 1.0f};
+                : (mode == ScenePointerMode::move_z ? epochengine::previewgrid::Vec3{0.0f, 1.0f, 0.0f}
+                    : epochengine::previewgrid::Vec3{0.0f, 0.0f, 1.0f});
         }
 
         void anchor_scene_group_drag(const core::Context* ctx, EditorState& editor,
@@ -1079,6 +1375,59 @@
                 viewport.position.y
                     + (1.0f - (ndcY * 0.5f + 0.5f)) * viewport.size.y
             };
+        }
+
+        [[nodiscard]] std::optional<ScenePointerMode> pick_editor_translation_axis(
+            const core::Context* ctx, const EditorState& editor,
+            const gui::WidgetBounds& viewport, gui::Vec2 mouse)
+        {
+            if (!ctx || !editor.helpersVisible || editor.mainSurface != EditorMainSurface::Scene
+                || !editor_entity_index(editor, editor.selectedEntityId)
+                || viewport.size.x <= 1.0f || viewport.size.y <= 1.0f) return {};
+            const auto frame = previewgrid::translation_handles_for(ctx);
+            if (frame.count != 3u) return {};
+            const auto& camera = frame.camera;
+            const auto matrix = previewgrid::multiply(
+                previewgrid::projection_for(ctx, viewport.size.x / viewport.size.y, camera),
+                previewgrid::look_at(camera.eye, camera.target, camera.up));
+            constexpr std::array modes{ScenePointerMode::move_x,ScenePointerMode::move_y,ScenePointerMode::move_z};
+            std::optional<ScenePointerMode> picked;
+            float bestDistance = 7.0f * 7.0f;
+            for (std::size_t axis = 0; axis < modes.size(); ++axis)
+            {
+                const auto& arrow = frame.arrows[axis];
+                if (arrow.interactionOwner != editor.selectedEntityId) return {};
+                auto tip = arrow.position;
+                (axis == 0 ? tip.x : axis == 1 ? tip.y : tip.z) += arrow.scale.x;
+                auto a = previewgrid::transform_point(matrix, arrow.position);
+                auto b = previewgrid::transform_point(matrix, tip);
+                // Clip a shaft crossing the near plane before dividing by w.
+                const float da = a.z + a.w, db = b.z + b.w;
+                if (!std::isfinite(da) || !std::isfinite(db) || (da < 0.0f && db < 0.0f)) continue;
+                if ((da < 0.0f) != (db < 0.0f))
+                {
+                    const float t = da / (da - db);
+                    const auto clipped = decltype(a){a.x+(b.x-a.x)*t,a.y+(b.y-a.y)*t,
+                        a.z+(b.z-a.z)*t,a.w+(b.w-a.w)*t};
+                    if (da < 0.0f) a = clipped; else b = clipped;
+                }
+                if (a.w <= .0001f || b.w <= .0001f) continue;
+                const gui::Vec2 start{viewport.position.x+(a.x/a.w*.5f+.5f)*viewport.size.x,
+                    viewport.position.y+(.5f-a.y/a.w*.5f)*viewport.size.y};
+                const gui::Vec2 end{viewport.position.x+(b.x/b.w*.5f+.5f)*viewport.size.x,
+                    viewport.position.y+(.5f-b.y/b.w*.5f)*viewport.size.y};
+                const float dx = end.x-start.x, dy = end.y-start.y;
+                const float lengthSquared = dx*dx+dy*dy;
+                if (!std::isfinite(lengthSquared) || lengthSquared < 64.0f) continue;
+                const float t = (std::clamp)(((mouse.x-start.x)*dx+(mouse.y-start.y)*dy)/lengthSquared,0.0f,1.0f);
+                // Leave the shared origin available for ordinary object selection.
+                if (da >= 0.0f && t*t*lengthSquared < 36.0f) continue;
+                const float x = mouse.x-(start.x+t*dx), y = mouse.y-(start.y+t*dy);
+                const float distance = x*x+y*y;
+                if (distance < bestDistance || (distance == bestDistance && modes[axis] == editor.scenePointerMode))
+                { picked = modes[axis]; bestDistance = distance; }
+            }
+            return picked;
         }
 
         void apply_scene_marquee_selection(
@@ -1287,9 +1636,11 @@
 
             if (leftPressed && mouseInScene && !rightHeld && !middleHeld && !altHeld)
             {
+                const auto handle = !shiftHeld
+                    ? pick_editor_translation_axis(ctx.get(), editor, viewport, mouse) : std::nullopt;
                 const bool moving = !shiftHeld && editor.scenePointerMode != ScenePointerMode::select;
-                const auto pickedId = moving
-                    ? pick_editor_scene_entity(ctx.get(), editor, viewport, mouse) : std::nullopt;
+                const auto pickedId = handle ? std::optional{editor.selectedEntityId} : (moving
+                    ? pick_editor_scene_entity(ctx.get(), editor, viewport, mouse) : std::nullopt);
                 const auto picked = pickedId
                     ? editor_entity_index(editor, *pickedId)
                     : std::nullopt;
@@ -1307,7 +1658,9 @@
                     editor.sceneDragEntity = *picked;
                     editor.sceneDragEntityId = *pickedId;
                     editor.sceneDragMoved = false;
-                    editor.sceneDragMode = editor.scenePointerMode;
+                    editor.sceneDragFromHandle = handle.has_value();
+                    editor.sceneDragMode = handle.value_or(editor.scenePointerMode);
+                    if (handle) editor.previousSceneClick.reset();
                     anchor_scene_group_drag(ctx.get(), editor, viewport, mouse);
                     result.scene_input_captured = true;
                 }
@@ -1424,7 +1777,8 @@
                 const std::size_t movedCount = editor.sceneDragStartPositions.size();
                 if (!editor.sceneDragMoved)
                 {
-                    if (mouseInScene && complete_scene_click(editor, editor.sceneDragEntityId, mouse))
+                    if (!editor.sceneDragFromHandle && mouseInScene
+                        && complete_scene_click(editor, editor.sceneDragEntityId, mouse))
                         handle_scene_tool(editor, ctx.get(), "focus_selection");
                 }
                 else if (editor.sceneDragMoved && commit_scene_group_drag(editor))

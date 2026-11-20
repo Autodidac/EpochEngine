@@ -117,7 +117,7 @@ class PlanetaryBodyFocus(unittest.TestCase):
         owners=(ROOT/'Engine/modules',ROOT/'Engine/dep/EpochPlatformEngine/modules')
         modules={}
         for owner in owners:
-         for path in owner.glob('*.ixx'):
+         for path in owner.rglob('*.ixx'):
           m=re.search(r'^export module\s+([\w.:]+);',path.read_text(encoding='utf-8-sig'),re.M)
           if m:modules[m[1]]=path
         pending=re.findall(r'^\s*import\s+([\w.:]+);',code,re.M)+['authoring.texture_detail'];closure=set()

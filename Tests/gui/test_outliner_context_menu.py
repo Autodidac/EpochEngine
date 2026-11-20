@@ -10,7 +10,7 @@ class OutlinerContextMenu(unittest.TestCase):
   if os.name!='nt':self.skipTest('Installed MSVC CPU consumer')
   source=(ROOT/'Engine/src/editor/application/editor.frame_outliner.inl').read_text(encoding='utf-8')
   state=(ROOT/'Engine/src/editor/application/editor.application_state.inl').read_text(encoding='utf-8')
-  api=(ROOT/'Engine/modules/gui.engine.ixx').read_text(encoding='utf-8')
+  api=(ROOT/'Engine/modules/gui/gui.engine.ixx').read_text(encoding='utf-8')
   buttons=(ROOT/'Engine/src/epochgui/controls/gui.buttons_images.inl').read_text(encoding='utf-8')
   selection=(ROOT/'Engine/src/editor/application/editor.application_scene_selection.inl').read_text(encoding='utf-8')
   bootstrap=(ROOT/'Engine/src/editor/application/editor.frame_bootstrap.inl').read_text(encoding='utf-8')
@@ -98,6 +98,9 @@ struct Hierarchy{bool allowed=true;unsigned routes{};editor_hierarchy::NodeId no
  editor_hierarchy::Route route(editor_hierarchy::Action,std::uint64_t){++routes;return {allowed};}};
 
 enum class EditorMainSurface{Scene,Project};
+struct EditorEntity{
+ std::uint64_t sceneObjectId{};std::string type;bool terrainAttachment{},forestRegion{};
+};
 struct EditorState{
  EditorMainSurface mainSurface{EditorMainSurface::Scene};core::ScenePreviewMode previewMode{core::ScenePreviewMode::Editor};
  OUTLINER_STATE;
@@ -109,10 +112,19 @@ struct EditorState{
  unsigned selectedEntity{4};std::uint64_t selectedEntityId{7};std::vector<int>selectedEntityIds{7};bool sceneDragActive{},sceneDragHasPlaneHit{},sceneMarqueeActive{},textureBrushActive{};
  unsigned sceneDragEntity{};std::uint64_t sceneDragEntityId{};std::vector<int>sceneDragStartPositions;int guiSelectedWidget{},guiContentEditorWidget{};
  int guiDocumentSelection{42},tileMapSelection{27};
+ std::vector<EditorEntity>entities{{7,"IndexedMesh"}};unsigned terrainDetachments{};
 }editor;
 namespace scene{constexpr std::uint64_t kInvalidSceneObjectId=0;}
 CLEAR_SELECTION
 bool editor_has_selection(const EditorState&e){return e.selectedEntityId!=0;}
+std::optional<std::size_t> editor_entity_index(const EditorState& e,std::uint64_t id){
+ const auto found=std::find_if(e.entities.begin(),e.entities.end(),[&](const auto& entity){return entity.sceneObjectId==id;});
+ if(found==e.entities.end())return std::nullopt;
+ return static_cast<std::size_t>(found-e.entities.begin());
+}
+bool detach_editor_object_from_terrain(EditorState& e,EditorEntity& entity){
+ ++e.terrainDetachments;entity.terrainAttachment=false;return true;
+}
 std::string_view editor_scene_identity(const EditorState&e){return e.activeRuntimeScene;}
 void push_editor_log(EditorState&e,std::string_view){++e.deselections;}
 std::shared_ptr<Context>ctx=std::make_shared<Context>();Context&context=*ctx;OutlinerToolTab pane_tab{OutlinerToolTab::World};
@@ -189,11 +201,11 @@ int main(){
  const auto toolbar=[&](std::string_view name){gui::toolbar_clicked=name;frame();};
  toolbar("Create object");CHECK(editor.outlinerContextMenu.menu.popup.open&&created.empty()&&result.scene_input_captured);
  pick(0);CHECK(created==std::vector<std::string>{"cube"}&&!editor.outlinerContextMenu.menu.popup.open);
- for(const auto pair:std::array{std::pair{1u,"ground"},std::pair{2u,"light"},std::pair{3u,"water"},std::pair{6u,"spawn"},std::pair{7u,"camera"}}){toolbar("Create object");pick(pair.first);CHECK(created.back()==pair.second);}
- toolbar("Create object");pick(4);CHECK(cube_batch==4);toolbar("Create object");pick(5);CHECK(cube_batch==8);
+ for(const auto pair:std::array{std::pair{1u,"ground"},std::pair{2u,"light"},std::pair{3u,"water"},std::pair{4u,"lightning"},std::pair{7u,"spawn"},std::pair{8u,"camera"}}){toolbar("Create object");pick(pair.first);CHECK(created.back()==pair.second);}
+ toolbar("Create object");pick(5);CHECK(cube_batch==4);toolbar("Create object");pick(6);CHECK(cube_batch==8);
  const auto created_count=created.size();surface=editor_workspace_commands::Surface::gui;
  toolbar("Create object");pick(0);CHECK(created.size()==created_count&&editor.outlinerContextMenu.menu.popup.open);
- pick(8);CHECK(view_opens==1&&surface==editor_workspace_commands::Surface::world);
+ pick(9);CHECK(view_opens==1&&surface==editor_workspace_commands::Surface::world);
  toolbar("More actions");pick(1);CHECK(edits.back()==SurfaceEditAction::undo);
  toolbar("More actions");pick(2);CHECK(edits.back()==SurfaceEditAction::redo);
  toolbar("More actions");pick(3);CHECK(edits.back()==SurfaceEditAction::duplicate_selection);
@@ -252,6 +264,13 @@ int main(){
  gui::g_frame.mousePos={(std::numeric_limits<float>::quiet_NaN)(),70};frame(true);CHECK(!editor.outlinerContextMenu.menu.popup.open);
  gui::g_frame.mousePos={205,305};frame(true);CHECK(editor.outlinerContextMenu.menu.popup.open&&gui::lastBounds.position.x+gui::lastBounds.size.x<=w);
  frame(false,false,false,27);CHECK(!editor.outlinerContextMenu.menu.popup.open);
+ // Only a single attached model can detach, and dispatch preserves selection.
+ w=640;h=480;editor.activeRuntimeScene="scene-a";
+ editor.selectedEntityIds={7};editor.entities.front().terrainAttachment=true;
+ gui::g_frame.mousePos={30,70};frame(true);CHECK(editor.outlinerContextMenu.menu.popup.open&&gui::drawnLabel=="Detach from Terrain");
+ pick(1);CHECK(editor.terrainDetachments==1&&!editor.entities.front().terrainAttachment&&editor.selectedEntityId==7);
+ gui::g_frame.mousePos={30,70};frame(true);CHECK(editor.outlinerContextMenu.menu.popup.open&&gui::drawnLabel=="Deselect");
+ frame(false,false,false,27);
 }
 '''
   menu_state=definition(state,'            struct OutlinerContextMenu final')+' outlinerContextMenu{}'

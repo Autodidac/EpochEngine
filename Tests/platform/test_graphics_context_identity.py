@@ -10,11 +10,11 @@ ROOT = Path(__file__).resolve().parents[2]
 
 class GraphicsContextIdentity(unittest.TestCase):
     def test_actual_raylib_owner_capture_and_precise_presentation_guards(self):
-        linux = (ROOT/'Engine/modules/raylib.context_linux.ixx').read_text(encoding='utf-8')
+        linux = (ROOT/'Engine/modules/raylib/raylib.context_linux.ixx').read_text(encoding='utf-8')
         helper = linux[linux.index('export namespace epochengine::raylibcontext::linux'):linux.rindex('#endif')]
         helper = helper.replace('export namespace', 'namespace', 1)
         self.assertNotIn('get_window_handle()', helper)
-        context = (ROOT/'Engine/modules/raylib.context.ixx').read_text(encoding='utf-8')
+        context = (ROOT/'Engine/modules/raylib/raylib.context.ixx').read_text(encoding='utf-8')
         initialize_start=context.index('    export inline bool raylib_initialize(')
         initialize = definition(context[context.index('\n    {', initialize_start):], '\n    {')
         self.assertLess(initialize.index('epochengine::raylib_api::init_window('), initialize.index('linux::capture_native_context()'))
@@ -23,11 +23,11 @@ class GraphicsContextIdentity(unittest.TestCase):
         self.assertIn('st = {};', initialize)
         cleanup = definition(context, '        inline void raylib_cleanup_owner_thread(')
         self.assertLess(cleanup.index('epochengine::raylib_api::close_window();'), cleanup.index('st = {};'))
-        device = (ROOT/'Engine/modules/render.device_raylib.ixx').read_text(encoding='utf-8')
+        device = (ROOT/'Engine/modules/render/render.device_raylib.ixx').read_text(encoding='utf-8')
         methods = '\n'.join(definition(device, '        [[nodiscard]] '+signature) for signature in (
             'const char* native_resource_context_refusal(', 'bool native_resource_context_available(',
             'const char* native_presentation_context_refusal(', 'bool native_presentation_context_available('))
-        renderer = (ROOT/'Engine/modules/raylib.renderer.ixx').read_text(encoding='utf-8')
+        renderer = (ROOT/'Engine/modules/raylib/raylib.renderer.ixx').read_text(encoding='utf-8')
         diagnostic = definition(renderer, '        inline void log_no_context_refusal(')
         prefix = r'''
 #include <atomic>
@@ -146,7 +146,7 @@ int main() {
 
     @unittest.skipUnless(os.name == 'nt', 'Installed MSVC declaration proof')
     def test_native_and_graphics_descriptors_have_distinct_names(self):
-        source = (ROOT/'Engine/modules/platform.context.ixx').read_text()
+        source = (ROOT/'Engine/modules/platform/platform.context.ixx').read_text()
         declarations = source.split('export namespace epochengine::platform',1)[1].split('    class IGraphicsContext',1)[0] + '}\n'
         self.assertIn('struct GraphicsContextDesc', declarations)
         native = ROOT/'Engine/dep/EpochPlatformEngine/include'

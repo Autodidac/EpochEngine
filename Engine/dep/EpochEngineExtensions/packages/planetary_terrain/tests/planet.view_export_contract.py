@@ -20,16 +20,19 @@ def main():
         root = Path(temporary)
         sequence = 0
 
-        def run(flag, packet, expected=0, clouds=False):
+        def run(flag, packet, expected=0, clouds=False, *, patches=True, metric=True):
             nonlocal sequence
             sequence += 1
             output, cache = root / f'output-{sequence}', root / ('cloud-cache' if clouds else f'cache-{sequence}')
             command = [str(args.producer), '--stream-step-preview', str(output), str(cache),
                        '1337', '4', '0', '10.0001', '0', '0', '1080', '1.0471975511965976',
                        '20', '384', str(128 * 1024 * 1024), '6', str(sequence),
-                       '--mesh-bytes', str(32 * 1024 * 1024),
-                       '--patch-transport-v1', 'sha256:' + 'a' * 64 + ':' + 'b' * 64,
-                       '--metric-frame-v1', flag, packet]
+                       '--mesh-bytes', str(32 * 1024 * 1024)]
+            if patches:
+                command.extend(('--patch-transport-v1', 'sha256:' + 'a' * 64 + ':' + 'b' * 64))
+            if metric:
+                command.append('--metric-frame-v1')
+            command.extend((flag, packet))
             if clouds:
                 command.append("--cloud-layer-v1")
             completed = subprocess.run(command, capture_output=True, timeout=30)
@@ -47,6 +50,10 @@ def main():
             assert int(receipt['resident_bytes']) <= int(receipt['maximum_bytes']) == 128 * 1024 * 1024
             assert int(receipt['built']) <= 6 and int(receipt['draw']) <= 384
             assert int(receipt['max_level']) <= 20
+            if not patches:
+                assert 'patch_file' not in receipt and not (output / 'terrain.epoch_planet_patch').exists()
+                assert receipt['meters_to_preview_units'] == '1'
+                assert (output / receipt['mesh_file']).is_file()
             receipts.append({'schema': lines[0], 'receipt': receipt})
             return lines, receipt
 
@@ -61,6 +68,11 @@ def main():
                 'view_forward_x', 'view_forward_y', 'view_forward_z', 'view_aspect',
                 'view_up_x', 'view_up_y', 'view_up_z']
             assert [float(footprint['view_up_' + axis]) for axis in 'xyz'] == [float(x) for x in up.split(',')]
+        fixed_view = '-1,0,0,1.7777777777777777,0,1,0'
+        lines, cut = run('--view-footprint-v1', fixed_view, patches=False)
+        assert lines[0] == 'epoch.planet.stream.v9' and cut['view_forward_x'] == '-1'
+        run('--view-footprint-v1', fixed_view, expected=1, patches=False, clouds=True)
+        run('--view-footprint-v1', fixed_view, expected=1, patches=False, metric=False)
         run('--view-cone-v1', '-1,0,0,1.7777777777777777', clouds=True)
         cloud_cache = root / 'cloud-cache' / 'cloud.epoch_mesh'
         cloud_before = (cloud_cache.stat().st_mtime_ns, cloud_cache.read_bytes())
@@ -73,6 +85,7 @@ def main():
     if args.result:
         args.result.write_text(json.dumps({'passed': True, 'producer_sha256': hashlib.sha256(args.producer.read_bytes()).hexdigest(),
                                           'receipts': receipts, 'invalid_packets_refused': 8,
+                                          'invalid_transport_combinations_refused': 2,
                                           'gpu_or_native_acceptance': False}, indent=2) + '\n')
 
 

@@ -51,6 +51,14 @@
 #include "../editor/editor.frame_stall_watch.hpp"
 #include "../editor/ai/editor.clipboard_screenshot.hpp"
 
+#if defined(__ANDROID__) && defined(EPOCH_USING_SDL) && EPOCH_USING_SDL == 1
+#  include <SDL3/SDL_error.h>
+#  include <SDL3/SDL_init.h>
+#  include <SDL3/SDL_log.h>
+#  include <SDL3/SDL_properties.h>
+#  include <SDL3/SDL_system.h>
+#endif
+
 #if defined(_WIN32)
 #  ifndef WIN32_LEAN_AND_MEAN
 #    define WIN32_LEAN_AND_MEAN
@@ -164,6 +172,7 @@ import editor.tilemap_workspace;
 #endif
 import forest.factory;
 import forest.preview_mesh;
+import project.lightning;
 import project.forest_library;
 import package.registry;
 import package.catalog;
@@ -223,6 +232,7 @@ import canvas2d.scene_contracts;
 import project.contracts;
 import project.tilemap_runtime;
 import project.gui_library;
+import asset.gui_artifact;
 import project.gui_runtime;
 import project.gui_epochgui;
 import asset.tilemap_artifact;
@@ -236,6 +246,7 @@ import platform.budgets;
 import platform.work_admission;
 import project.sprite_animation;
 import project.audio_profile;
+import asset.texture_artifact;
 import project.planetary;
 import project.planetary_runtime;
 import package.source_install;
@@ -253,6 +264,7 @@ import render.device_raylib;
 import render.arcade;
 import render.graph;
 import render.preview_grid;
+import render.water_frame_evidence;
 import asset.mesh_artifact;
 import asset.cloud_volume;
 import atlas.texture;
@@ -304,6 +316,27 @@ namespace input = epochengine::input;
 namespace menu = epochengine::menu;
 namespace gui = epochengine::gui;
 
+#if defined(__ANDROID__)
+namespace
+{
+#if defined(EPOCH_USING_SDL) && EPOCH_USING_SDL == 1
+    constexpr char android_density_clouds_property[] = "epoch.android.density_clouds";
+#endif
+    struct ActiveAndroidShoreline final
+    {
+        std::string root{}, project_id{};
+        std::shared_ptr<const epochengine::project_planetary::PackagedShoreline> data{};
+    };
+    ActiveAndroidShoreline active_android_shoreline{};
+    struct ActiveAndroidPlanetaryPose final
+    {
+        std::string root{}, project_id{};
+        std::shared_ptr<const epochengine::project_planetary::PackagedPlanetaryPose> data{};
+    };
+    ActiveAndroidPlanetaryPose active_android_planetary_pose{};
+}
+#endif
+
 extern "C" bool epoch_bind_admitted_planetary_runtime(const char* root, const char* id) noexcept
 {
     try
@@ -311,6 +344,23 @@ extern "C" bool epoch_bind_admitted_planetary_runtime(const char* root, const ch
         if (!root || !id || !*root || !*id) return false;
         const auto admitted = epochengine::project::BindRuntimeProject(id);
         if (!admitted.succeeded || admitted.project_root != root) return false;
+#if defined(__ANDROID__)
+        const auto& coast = active_android_shoreline;
+        const auto& pose = active_android_planetary_pose;
+        const auto* coast_data = coast.root == admitted.project_root && coast.project_id == id
+            ? coast.data.get() : nullptr;
+        const auto* pose_data = pose.root == admitted.project_root && pose.project_id == id
+            ? pose.data.get() : nullptr;
+        if (!coast_data && !pose_data) return false;
+        const auto& settings = coast_data ? coast_data->settings : pose_data->settings;
+        return epochengine::project_planetary_runtime::bind_admitted_project({
+            .project_root=admitted.project_root,.project_id=id,
+            .source_hash=coast_data ? coast_data->planetary_source : pose_data->planetary_source,
+            .seed=settings.seed,.initial_body=settings.body_index,.ocean_surface=settings.ocean_surface,
+            .size_reference_body=settings.size_reference_body,.reference_radius_meters=settings.reference_radius_meters,
+            .original_sunlight=settings.original_sunlight,
+            .water_source_hash=coast_data ? coast_data->fft_source : pose_data->fft_source});
+#else
         const std::filesystem::path projectRoot{admitted.project_root};
         const auto source = epochengine::package_source::load_project_attachment(projectRoot, "planetary_terrain");
         const auto settings = epochengine::project_planetary::load_settings(projectRoot);
@@ -332,6 +382,7 @@ extern "C" bool epoch_bind_admitted_planetary_runtime(const char* root, const ch
             .size_reference_body=settings->size_reference_body, .reference_radius_meters=settings->reference_radius_meters,
             .original_sunlight=settings->original_sunlight,.water_source_hash=water.content_hash,
             .universe=settings->mode=="universe"});
+#endif
     }
     catch (...) { return false; }
 }
@@ -339,15 +390,19 @@ extern "C" bool epoch_bind_admitted_planetary_runtime(const char* root, const ch
 namespace epochengine::project
 {
     [[nodiscard]] static std::string scene_acceptance_diagnostic(
-        const scene::SceneSnapshot& snapshot, bool requiresRuntime)
+        const scene::SceneSnapshot& snapshot, bool requiresRuntime,
+        AuthoringSceneKind authoringKind)
     {
         if (!requiresRuntime)
         {
-            if (snapshot.document_kind != "tool")
-                return "tool profile requires a tool scene document";
+            const bool editor = authoringKind == AuthoringSceneKind::editor;
+            if (snapshot.document_kind != (editor ? "editor" : "tool"))
+                return editor ? "editor profile requires an editor scene document"
+                              : "tool profile requires a tool scene document";
             if (!scene::validate_scene_document(snapshot,
                     scene::SceneDocumentRequirement::authoring))
-                return "tool scene document is invalid";
+                return editor ? "editor scene document is invalid"
+                              : "tool scene document is invalid";
             return {};
         }
         scene_runtime::SceneRuntime runtime{};
@@ -404,7 +459,7 @@ namespace epochengine::core
         cfg.parented = false;
 #endif
 
-#if defined(__linux__)
+#if defined(__linux__) && !defined(__ANDROID__)
         cfg.parented = false;
         // Default Linux startup is one context. An explicit backend request
         // must retain its parsed counts instead of silently opening OpenGL.
@@ -477,6 +532,18 @@ namespace epochengine::core
 #endif
         return cfg;
     }
+
+#if defined(_WIN32) || (defined(__linux__) && !defined(__ANDROID__))
+    [[nodiscard]] constexpr bool prefer_editor_startup_vulkan(
+        bool explicit_backend, bool restricted_lane, bool native_platform,
+        bool vulkan_and_fallback_built, unsigned logical_threads) noexcept
+    {
+        // The current Editor Tier 4 recommendation uses the same CPU floor
+        // for OpenGL and Vulkan. The actual first frame admits the device.
+        return !explicit_backend && !restricted_lane && native_platform
+            && vulkan_and_fallback_built && logical_threads >= 10u;
+    }
+#endif
 
     [[nodiscard]] inline std::uint64_t smoke_frame_budget() noexcept
     {
@@ -1498,7 +1565,8 @@ namespace epochengine::core
 
 #endif
 
-        [[nodiscard]] std::unique_ptr<epochengine::scene::Scene> make_scene_from_id(std::string_view scene_id);
+        [[nodiscard]] std::unique_ptr<epochengine::scene::Scene> make_scene_from_id(
+            std::string_view scene_id, bool can_return_to_editor = false);
         [[nodiscard]] bool launch_project_child_process(std::string_view launch_argument);
 
         [[nodiscard]] std::string_view context_type_label(epochengine::core::ContextType type) noexcept
@@ -1765,10 +1833,15 @@ namespace epochengine::core
                     // This thread produces UI/simulation work, not native
                     // presents. It needs its own deadline, never a post-frame
                     // fixed sleep. Shared policy preserves inactive-window caps.
-                    const auto plan = with_frame_rate_ceiling(
-                        resolve_frame_pacing(
-                            with_frame_pacing_override(policy, window->editorFramePacingOverride),
-                            ctx->frame_pacing_activity(), false),
+                    const auto pacing = resolve_frame_pacing(
+                        with_frame_pacing_override(policy, window->editorFramePacingOverride),
+                        ctx->frame_pacing_activity(), false);
+#if defined(__ANDROID__)
+                    // The Android session presents directly without the desktop
+                    // render worker that usually publishes this status value.
+                    window->editorFramePacingHz.store(pacing.effective_hz, std::memory_order_relaxed);
+#endif
+                    const auto plan = with_frame_rate_ceiling(pacing,
                         window->editorThrottleHz.load(std::memory_order_relaxed));
                     anyContext = true;
                     uncapped = uncapped || !(plan.effective_hz > 0.0);
@@ -1791,6 +1864,7 @@ namespace epochengine::core
             SessionMode return_mode{ SessionMode::Menu };
             epochengine::menu::MenuOverlay menu{};
             std::unique_ptr<epochengine::scene::Scene> active_scene{};
+            std::optional<epochengine::previewgrid::CameraRigSnapshot> editor_play_camera{};
             timing::Clock::time_point last_frame{};
             bool has_last_frame{ false };
             epochengine::core::time::simulation_clock simulation{};
@@ -1815,18 +1889,9 @@ namespace epochengine::core
         struct ProjectSceneLaunchOptions
         {
             std::string project_id{};
-            epochengine::previewgrid::CameraMode camera_mode{ epochengine::previewgrid::CameraMode::Editor };
+            std::optional<epochengine::previewgrid::CameraMode> camera_mode{};
             input::ProfilePreset input_profile{ input::ProfilePreset::EditorDefault };
         };
-
-        [[nodiscard]] epochengine::previewgrid::CameraMode camera_mode_from_argument(std::string_view value) noexcept
-        {
-            if (value == "fps" || value == "first-person" || value == "first_person" || value == "runtime")
-                return epochengine::previewgrid::CameraMode::FPS;
-            if (value == "canvas2d" || value == "2d" || value == "2d-canvas" || value == "canvas")
-                return epochengine::previewgrid::CameraMode::Canvas2D;
-            return epochengine::previewgrid::CameraMode::Editor;
-        }
 
         [[nodiscard]] ProjectSceneLaunchOptions parse_project_scene_launch(std::string_view payload)
         {
@@ -1853,7 +1918,9 @@ namespace epochengine::core
                 constexpr std::string_view kCameraPrefix = "camera=";
                 constexpr std::string_view kInputPrefix = "input=";
                 if (option.starts_with(kCameraPrefix))
-                    launch.camera_mode = camera_mode_from_argument(std::string_view{ option }.substr(kCameraPrefix.size()));
+                    launch.camera_mode = editor_project_camera_from_token(
+                        std::string_view{option}.substr(kCameraPrefix.size()))
+                        .value_or(epochengine::previewgrid::CameraMode::Editor);
                 else if (option.starts_with(kInputPrefix))
                     launch.input_profile = input::profile_preset_from_id(std::string_view{ option }.substr(kInputPrefix.size()));
 
@@ -2305,23 +2372,39 @@ namespace epochengine::core
             const ProjectRuntimeEntity& entity,std::uint64_t suppressed_entity) noexcept
         {
             return entity.source_id!=suppressed_entity&&entity.visible()&&!entity.editor_only()
-                &&entity.category!="Editor"&&entity.type!="Camera"&&entity.type!="Light"&&entity.type!="Spawn"
+                &&entity.category!="Editor"&&entity.type!="Camera"&&entity.type!="Light"&&entity.type!="Spawn"&&entity.type!="Lightning"
+                // Legacy HUD entities are rendered by the GUI document. A
+                // meshless widget must not add proxy geometry or fit depth.
+                &&(entity.mesh_asset||!entity.type.starts_with("Gui"))
                 &&(!runtime_entity_is_forest_preview(entity)||runtime_forest_projection_admitted(entity));
         }
         [[nodiscard]] std::optional<epochengine::previewgrid::ObjectMarker> project_play_marker_for_entity(
             const ProjectRuntimeEntity& entity,std::shared_ptr<const asset::mesh::Artifact> mesh,
             const std::array<double,3>& origin_offset,bool precise=false,
-            const std::array<double,3>* managed_position=nullptr) noexcept
+            const std::array<double,3>* managed_position=nullptr,
+            const project_planetary::GeneratedMeshFrame* streamed_frame=nullptr) noexcept
         {
-            const auto scale=scene::mesh_render_scale(entity.transform.scale,entity.mesh_asset);
+            auto meshAsset=entity.mesh_asset;
+            if(meshAsset&&streamed_frame)
+                meshAsset->coordinates=scene::SceneMeshCoordinates{
+                    streamed_frame->meters_per_unit,streamed_frame->source_origin_meters};
+            const auto scale=scene::mesh_render_scale(entity.transform.scale,meshAsset);
             const auto world=managed_position?std::optional{*managed_position}
                 :scene::world_position(entity.transform.position,entity.position_anchor);
             if(!scale||!world)return {};
-            std::array<double,3> rebased{};
+            auto rebased=*world;
+            if(streamed_frame)
+            {
+                const auto authored=previewgrid::make_precise_mesh_transform(rebased,
+                    {entity.transform.scale[0],entity.transform.scale[1],entity.transform.scale[2]},
+                    {entity.transform.rotation[0],entity.transform.rotation[1],entity.transform.rotation[2]});
+                if(!authored)return {};
+                rebased=authored->apply(streamed_frame->source_origin_meters);
+            }
             std::array<float,3> position{};
             for(std::size_t axis=0;axis<3;++axis)
             {
-                rebased[axis]=(*world)[axis]+origin_offset[axis];
+                rebased[axis]+=origin_offset[axis];
                 if(!std::isfinite(rebased[axis])||std::abs(rebased[axis])>(std::numeric_limits<float>::max)())return {};
                 position[axis]=static_cast<float>(rebased[axis]);
             }
@@ -2332,7 +2415,7 @@ namespace epochengine::core
                 .primitive=mesh?previewgrid::ObjectPreviewPrimitive::IndexedMesh:runtime_preview_primitive_for_entity(entity),
                 .sampledRenderSurface=entity.category=="EngineArcade"&&entity.name=="EngineArcadeScreen",.mesh=std::move(mesh),
                 .forestLighting=entity.type=="ForestTrunk"&&entity.mesh_asset.has_value()};
-            if((precise||entity.position_anchor.has_value())&&marker.mesh)
+            if((precise||streamed_frame||entity.position_anchor.has_value())&&marker.mesh)
             {
                 marker.preciseTransform=previewgrid::make_precise_mesh_transform(
                     rebased,
@@ -2452,6 +2535,16 @@ namespace epochengine::core
             return project_planetary_runtime::SurfaceStart{.body = spawn.terrain_attachment->body_index,
                 .body_local_position_meters = transform->position,
                 .body_local_forward = {-transform->rotation[2], -transform->rotation[5], -transform->rotation[8]}};
+        }
+        [[nodiscard]] std::optional<project_planetary_runtime::FlightStart> project_play_flight_start(
+            const ProjectRuntimeEntity& camera, const ProjectRuntimeEntity& terrain) noexcept
+        {
+            const auto transform = project_play_attached_body_transform(camera, terrain);
+            if (!transform) return {};
+            return project_planetary_runtime::FlightStart{.body = camera.terrain_attachment->body_index,
+                .body_local_position_meters = transform->position,
+                .body_local_forward = {-transform->rotation[2], -transform->rotation[5], -transform->rotation[8]},
+                .body_local_up = {transform->rotation[1], transform->rotation[4], transform->rotation[7]}};
         }
         [[nodiscard]] std::optional<project_planetary_runtime::WalkBox> project_play_walk_box(
             const ProjectRuntimeEntity& object, const ProjectRuntimeEntity& terrain, const asset::mesh::Artifact& mesh) noexcept
@@ -2736,7 +2829,8 @@ namespace epochengine::core
             const epochengine::project_input::CompiledInputProfile& profile,
             std::uint64_t frameIndex,
             const epochengine::core::Context* ctx,
-            bool samplePhysicalInput)
+            bool samplePhysicalInput,
+            const std::optional<core::Context::WindowKeyPresses>& windowPresses)
         {
             namespace project_input = epochengine::project_input;
             project_input::InputSnapshot snapshot{};
@@ -2763,14 +2857,37 @@ namespace epochengine::core
                 const auto key = engine_key(projectKey);
                 if (!key)
                     continue;
+                std::optional<project_input::ModifierMask> pressModifiers;
+                if (const auto press = windowPresses ? windowPresses->for_key(*key) : std::nullopt)
+                {
+                    using project_input::Modifier;
+                    using project_input::modifier_mask;
+                    pressModifiers = static_cast<project_input::ModifierMask>(
+                        (press->shift ? modifier_mask(Modifier::shift) : 0u)
+                        | (press->control ? modifier_mask(Modifier::control) : 0u)
+                        | (press->alt ? modifier_mask(Modifier::alt) : 0u)
+                        | (press->super ? modifier_mask(Modifier::super) : 0u));
+                }
                 snapshot.keyboard.push_back({
                     .key = projectKey,
                     .held = ctx && ctx->is_key_held_safe(*key),
-                    .pressed = ctx && ctx->is_key_down_safe(*key)
+                    .pressed = windowPresses ? pressModifiers.has_value() : ctx && ctx->is_key_down_safe(*key),
+                    .press_modifiers = pressModifiers
                 });
             }
             return snapshot;
         }
+
+        struct ActiveGuiApplication final
+        {
+            std::string_view project_id;
+            std::string_view project_root;
+            project::GuiApplication* application{};
+#if defined(__ANDROID__)
+            bool authored_frame_ready{};
+#endif
+        };
+        thread_local ActiveGuiApplication activeGuiApplication{};
 
 #include "implementation/epoch.project_play_scene.inl"
         [[nodiscard]] std::vector<ContextGroup> collect_backend_contexts_shared()
@@ -2796,7 +2913,8 @@ namespace epochengine::core
             return snapshot;
         }
 
-        [[nodiscard]] std::unique_ptr<epochengine::scene::Scene> make_scene_from_id(std::string_view scene_id)
+        [[nodiscard]] std::unique_ptr<epochengine::scene::Scene> make_scene_from_id(
+            std::string_view scene_id, bool can_return_to_editor)
         {
             if (scene_id.starts_with("project:"))
             {
@@ -2808,7 +2926,7 @@ namespace epochengine::core
                         std::source_location::current());
                     return {};
                 }
-                return std::make_unique<ProjectPlayScene>(scene_id.substr(8));
+                return std::make_unique<ProjectPlayScene>(scene_id.substr(8), can_return_to_editor);
             }
             if (scene_id == "snake")
                 return std::make_unique<epochengine::snakelike::SnakeLikeScene>();
@@ -2900,6 +3018,7 @@ namespace epochengine::core
 
         void unload_active_scene(ContextSession& session)
         {
+            session.editor_play_camera.reset();
             if (session.active_scene)
             {
                 session.active_scene->unload();
@@ -3059,7 +3178,164 @@ namespace epochengine::core
                 return -1;
             }
         }
-#elif defined(__linux__)
+#elif defined(__ANDROID__) && defined(EPOCH_USING_SDL) && EPOCH_USING_SDL == 1
+        [[nodiscard]] bool android_project_scene_has_draw_work(const Context& context)
+        {
+            if (context.scene_preview_mode() != ScenePreviewMode::Editor
+                || !context.scene_viewport().valid()) return false;
+
+            if (const auto canvas = canvas2d::scene_content::acquire(&context))
+                return !canvas.content->sprites.empty();
+
+            const auto scene = previewgrid::scene_frame_for(&context);
+            const auto solids = scene && scene->solids ? scene->solids->geometry
+                : previewgrid::object_solid_geometry_for(&context);
+            const auto lines = scene ? scene->lines
+                : previewgrid::object_marker_geometry_for(&context);
+            const auto wire = scene ? scene->wire
+                : previewgrid::object_mesh_wire_frame_for(&context);
+            return (solids && solids->size() >= 3u) || (lines && lines->size() >= 2u)
+                || (wire && ((wire->depth_triangles && wire->depth_triangles->size() >= 3u)
+                    || (wire->helper_lines && wire->helper_lines->size() >= 2u)));
+        }
+
+        int RunEngineMainLoopAndroid(std::string_view host_project_id = {},
+            SessionMode startup_mode = SessionMode::Scene)
+        {
+            const bool gui_project = activeGuiApplication.application != nullptr;
+            const bool editor_project = startup_mode == SessionMode::Editor;
+            const auto project_id = gui_project ? activeGuiApplication.project_id : host_project_id;
+            if (project_id.empty() || (gui_project && (!host_project_id.empty() || editor_project)))
+            {
+                logger::error(kEngineLog, "Android requires one admitted project.");
+                return 2;
+            }
+
+            try
+            {
+                InitializeAllContexts();
+                std::shared_ptr<Context> context;
+                {
+                    std::shared_lock lock(g_backendsMutex);
+                    const auto backend = g_backends.find(ContextType::SDL);
+                    if (backend != g_backends.end()) context = backend->second.master;
+                }
+                const struct RestoreSessionContext final
+                {
+                    std::shared_ptr<Context> previous;
+                    std::string scene;
+                    ~RestoreSessionContext()
+                    {
+                        set_current_render_context(std::move(previous));
+                        cli::scene_name = std::move(scene);
+                    }
+                } restore{get_current_render_context(), cli::scene_name};
+                MultiContextManager mgr;
+                auto* window = mgr.attach_android_context(context, project_id);
+                if (!window)
+                {
+                    logger::error(kEngineLog, "Android could not admit its SDL context.");
+                    return 2;
+                }
+
+                cli::scene_name = editor_project ? std::string{} : "project:" + std::string{project_id};
+                if (!cli::frame_limit_explicit)
+                    window->editorFramePacingOverride.publish(
+                        epochengine::perf::frame_pacing_mode::target_hz, 30.0);
+                set_current_render_context(context);
+                context->initialize_safe();
+                if (context->init_failed)
+                {
+                    SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Epoch SDL backend initialization failed.");
+                    logger::error(kEngineLog, "Android SDL backend initialization failed.");
+                    return 2;
+                }
+                if (!gui_project)
+                {
+                    // A reused SDL context must not qualify using an earlier scene.
+                    context->clear_scene_viewport();
+                    context->set_scene_preview_mode(ScenePreviewMode::None);
+                    previewgrid::clear_object_markers(context.get());
+                    (void)canvas2d::scene_content::retire(context.get());
+                }
+
+                bool projectFramePresented = false;
+                bool renderFailed = false;
+                const auto authoredFrameDeadline = std::chrono::steady_clock::now() + std::chrono::seconds{8};
+                const auto pump = [&]()
+                {
+                    if (!window->running || window->get_should_close())
+                    {
+                        if (!projectFramePresented)
+                        {
+                            SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Epoch SDL window stopped before its first project frame.");
+                            logger::warn(kEngineLog, "Android SDL window closed before the authored project presented.");
+                        }
+                        return false;
+                    }
+                    (void)window->ownerThreadCommandQueue.drain();
+                    const auto authoredBatch = gui_project && activeGuiApplication.authored_frame_ready
+                        ? gui::top_layer_batch_generation(context.get()) : 0u;
+                    const bool editorFrameQueued = editor_project && !projectFramePresented
+                        && gui::deferred_batch_generation(context.get()) != 0u;
+                    const bool authoredSceneQueued = !gui_project && !editor_project && !projectFramePresented
+                        && android_project_scene_has_draw_work(*context);
+                    if (authoredSceneQueued || editorFrameQueued)
+                        window->firstPresentComplete.store(false, std::memory_order_release);
+                    if (!context->process_safe(context, window->commandQueue))
+                    {
+                        renderFailed = !window->get_should_close();
+                        if (renderFailed)
+                        {
+                            SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Epoch SDL frame processing failed: %s", SDL_GetError());
+                            logger::error(kEngineLog, "Android SDL stopped processing frames. See the SDL and Context logs.");
+                        }
+                        else if (!projectFramePresented)
+                        {
+                            SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Epoch SDL received a close event before its first project frame.");
+                            logger::warn(kEngineLog, "Android SDL received a close event before the authored project presented.");
+                        }
+                        return false;
+                    }
+                    if (window->firstPresentComplete.load(std::memory_order_acquire))
+                    {
+                        window->successfulFrameGeneration.fetch_add(1u);
+                        window->set_backend_lifecycle(BackendLifecycleState::ready);
+                        if (!projectFramePresented && (editorFrameQueued || authoredSceneQueued || (authoredBatch != 0u
+                            && gui::replayed_top_layer_batch_generation(context.get()) >= authoredBatch)))
+                        {
+                            projectFramePresented = true;
+                            logger::get(kEngineLog).log(logger::LogLevel::INFO,
+                                editor_project ? "Android SDL presented the packaged Epoch Editor."
+                                    : gui_project ? "Android SDL presented the authored project GUI."
+                                    : "Android SDL presented a frame with authored project scene draw work.");
+                        }
+                    }
+                    if (projectFramePresented || std::chrono::steady_clock::now() < authoredFrameDeadline)
+                        return true;
+                    logger::error(kEngineLog, "Android SDL reached the startup deadline without an authored project frame.");
+                    return false;
+                };
+
+                const int status = RunContextSessionLoop(mgr, pump, startup_mode);
+                if (status != 0) return status;
+                if (!projectFramePresented || renderFailed)
+                {
+                    logger::error(kEngineLog, editor_project
+                        ? "Android SDL ended without a successful Editor session."
+                        : gui_project ? "Android SDL ended without a successful authored GUI session."
+                                      : "Android SDL ended without a successful authored scene session.");
+                    return 2;
+                }
+                return 0;
+            }
+            catch (const std::exception& ex)
+            {
+                logger::error(kEngineLog, ex.what());
+                return 2;
+            }
+        }
+#elif defined(__linux__) && !defined(__ANDROID__)
         int RunEngineMainLoopLinux()
         {
             try
@@ -3138,7 +3414,9 @@ namespace epochengine::core
                 std::source_location::current(),
                 "RunEngine terminated with code {}",
                 result);
-#elif defined(__linux__)
+#elif defined(__ANDROID__) && defined(EPOCH_USING_SDL) && EPOCH_USING_SDL == 1
+        (void)engine::RunEngineMainLoopAndroid();
+#elif defined(__linux__) && !defined(__ANDROID__)
         const int result = engine::RunEngineMainLoopLinux();
         if (result != 0)
             logger::get(engine::kEngineLog).logf(
@@ -3164,6 +3442,189 @@ namespace epochengine::core
         RunEngine();
     }
 
+#if defined(_WIN32) || (defined(__linux__) && !defined(__ANDROID__))
+    enum class EditorStartupResult { started, cancelled, failed };
+
+#if defined(_WIN32)
+    class AutomaticVulkanStartupAttempt final
+    {
+    public:
+        enum class State { unavailable, armed, interrupted };
+
+        AutomaticVulkanStartupAttempt() noexcept
+        {
+            try
+            {
+                const auto executable = platform::child_process::inspect_executable(path::executable_path());
+                const auto directory = path::log_output_dir();
+                if (!executable || !executable->valid() || directory.empty())
+                    return;
+                std::error_code error;
+                std::filesystem::create_directories(directory, error);
+                if (error)
+                    return;
+
+                // Keep the reservation exclusive until the first Vulkan frame.
+                // An older image cannot transfer an interrupted trial to an update.
+                const auto marker = directory / ("vulkan-startup-" + executable->sha256 + ".pending");
+                handle_ = CreateFileW(marker.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr,
+                    OPEN_ALWAYS, FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
+                if (handle_ == INVALID_HANDLE_VALUE)
+                    return;
+                BY_HANDLE_FILE_INFORMATION info{};
+                if (!GetFileInformationByHandle(handle_, &info)
+                    || (info.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)) != 0
+                    || info.nNumberOfLinks != 1)
+                    return;
+                if (info.nFileSizeHigh != 0 || info.nFileSizeLow != 0)
+                {
+                    state_ = State::interrupted;
+                    return;
+                }
+                const char pending = '1';
+                DWORD written{};
+                if (WriteFile(handle_, &pending, 1, &written, nullptr) && written == 1
+                    && FlushFileBuffers(handle_))
+                    state_ = State::armed;
+            }
+            catch (...) {}
+        }
+
+        AutomaticVulkanStartupAttempt(const AutomaticVulkanStartupAttempt&) = delete;
+        AutomaticVulkanStartupAttempt& operator=(const AutomaticVulkanStartupAttempt&) = delete;
+
+        ~AutomaticVulkanStartupAttempt()
+        {
+            if (handle_ != INVALID_HANDLE_VALUE)
+                CloseHandle(handle_);
+        }
+
+        [[nodiscard]] State state() const noexcept { return state_; }
+
+        void complete() noexcept
+        {
+            if (state_ != State::armed)
+                return;
+            FILE_END_OF_FILE_INFO clear{};
+            if (SetFileInformationByHandle(handle_, FileEndOfFileInfo, &clear, sizeof(clear)))
+                (void)FlushFileBuffers(handle_);
+        }
+
+    private:
+        HANDLE handle_ = INVALID_HANDLE_VALUE;
+        State state_ = State::unavailable;
+    };
+#endif
+
+    template <typename Instance, typename PumpEvents>
+    [[nodiscard]] EditorStartupResult start_editor_contexts(
+        MultiContextManager& mgr, Instance instance, PumpEvents&& pump_events,
+        unsigned logical_threads = std::thread::hardware_concurrency())
+    {
+        const auto fallback = resolve_legacy_launch_config();
+        const auto start = [&](const LegacyLaunchConfig& cfg) {
+            if (!mgr.Initialize(instance, cfg.raylib_count, cfg.sdl_count, cfg.sfml_count,
+                    cfg.vulkan_count, cfg.opengl_count, cfg.directx_count, cfg.software_count,
+                    cfg.parented))
+                return false;
+            input::designate_polling_thread_to_current();
+            if (cfg.vulkan_count > 0)
+                logger::get(engine::kEditorLog).log(
+                    logger::LogLevel::INFO, "Vulkan host initialized. Arranging Editor windows.",
+                    std::source_location::current());
+            mgr.ArrangeDockedWindowsGrid();
+            if (cfg.vulkan_count > 0)
+                logger::get(engine::kEditorLog).log(
+                    logger::LogLevel::INFO, "Vulkan host windows arranged. Starting render threads.",
+                    std::source_location::current());
+            mgr.StartRenderThreads();
+            return true;
+        };
+#if defined(EPOCH_USING_VULKAN) && (EPOCH_USING_VULKAN == 1) \
+    && defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
+        constexpr bool compatible_build = true;
+#else
+        constexpr bool compatible_build = false;
+#endif
+        const bool native_platform = epochengine::GetRuntimePlatformDisplayString() != "WSL Linux";
+        if (!prefer_editor_startup_vulkan(cli::backend_selection_explicit,
+                cli::updater_shell_requested || cli::capture_requested || cli::smoke_requested
+                    || cli::smoke_context_switch_requested,
+                native_platform, compatible_build, logical_threads))
+            return start(fallback) ? EditorStartupResult::started : EditorStartupResult::failed;
+
+        const LegacyLaunchConfig vulkan{
+            .raylib_count = 0, .sdl_count = 0, .sfml_count = 0,
+            .vulkan_count = 1, .opengl_count = 0, .directx_count = 0,
+            .software_count = 0, .parented = fallback.parented};
+        auto opengl = vulkan;
+        opengl.vulkan_count = 0;
+        opengl.opengl_count = 1;
+#if defined(_WIN32)
+        AutomaticVulkanStartupAttempt attempt;
+        if (attempt.state() != AutomaticVulkanStartupAttempt::State::armed)
+        {
+            logger::get(engine::kEditorLog).log(logger::LogLevel::WARN,
+                attempt.state() == AutomaticVulkanStartupAttempt::State::interrupted
+                    ? "Previous automatic Vulkan startup ended before a first frame. Starting the OpenGL Editor."
+                    : "Could not reserve automatic Vulkan startup recovery. Starting the OpenGL Editor.",
+                std::source_location::current());
+            return start(opengl) ? EditorStartupResult::started : EditorStartupResult::failed;
+        }
+#endif
+        auto status = EditorStartupResult::failed;
+        if (start(vulkan))
+        {
+            const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(8);
+            while (std::chrono::steady_clock::now() < deadline)
+            {
+                if (!pump_events())
+                {
+                    status = EditorStartupResult::cancelled;
+                    break;
+                }
+                const auto& windows = mgr.GetWindows();
+                if (windows.empty())
+                {
+                    status = EditorStartupResult::cancelled;
+                    break;
+                }
+                const auto& window = *windows.front();
+                const auto lifecycle = window.backend_lifecycle();
+                if (window.get_should_close())
+                {
+                    status = EditorStartupResult::cancelled;
+                    break;
+                }
+                if (lifecycle == BackendLifecycleState::failed || lifecycle == BackendLifecycleState::stopped)
+                    break;
+                if (lifecycle == BackendLifecycleState::ready
+                    && window.successfulFrameGeneration.load(std::memory_order_acquire) != 0u)
+                {
+#if defined(_WIN32)
+                    attempt.complete();
+#endif
+                    return EditorStartupResult::started;
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(5));
+            }
+        }
+
+        // Retire the attempted renderer and its native host before another
+        // backend can claim them. A user close cancels the launch entirely.
+        mgr.StopAll();
+#if defined(_WIN32)
+        attempt.complete();
+#endif
+        if (status == EditorStartupResult::cancelled)
+            return status;
+        logger::get(engine::kEditorLog).log(logger::LogLevel::WARN,
+            "Automatic Vulkan startup did not complete a frame. Starting the OpenGL Editor.",
+            std::source_location::current());
+        return start(opengl) ? EditorStartupResult::started : EditorStartupResult::failed;
+    }
+#endif
+
     void RunEditorInterface()
     {
 #if defined(_WIN32)
@@ -3175,21 +3636,10 @@ namespace epochengine::core
 
             apply_post_update_startup_cooldown(engine::kEditorLog);
             apply_fullscreen_capture_window_defaults();
-            const auto launch_cfg = resolve_legacy_launch_config();
-
-                const bool ok = mgr.Initialize(
-                    hi,
-                    launch_cfg.raylib_count,
-                    launch_cfg.sdl_count,
-                    launch_cfg.sfml_count,
-                    launch_cfg.vulkan_count,
-                    launch_cfg.opengl_count,
-                    launch_cfg.directx_count,
-                    launch_cfg.software_count,
-                    launch_cfg.parented
-                );
-
-            if (!ok)
+            const auto startup = start_editor_contexts(mgr, hi, engine::pump_windows_messages_for_frame);
+            if (startup == EditorStartupResult::cancelled)
+                return;
+            if (startup == EditorStartupResult::failed)
             {
                 logger::get(engine::kEditorLog).log(
                     logger::LogLevel::Error,
@@ -3197,11 +3647,6 @@ namespace epochengine::core
                     std::source_location::current());
                 return;
             }
-
-            input::designate_polling_thread_to_current();
-
-            mgr.ArrangeDockedWindowsGrid();
-            mgr.StartRenderThreads();
 
 #if defined(_WIN32)
             prepare_parent_window_for_engine_capture(mgr);
@@ -3230,27 +3675,16 @@ namespace epochengine::core
                 logger::LogLevel::Error, ex.what(), std::source_location::current());
             MessageBoxA(nullptr, ex.what(), "Error", MB_ICONERROR | MB_OK);
         }
-#elif defined(__linux__)
+#elif defined(__linux__) && !defined(__ANDROID__)
         try
         {
             epochengine::core::MultiContextManager mgr;
 
             apply_post_update_startup_cooldown(engine::kEditorLog);
-            const auto launch_cfg = resolve_legacy_launch_config();
-
-                const bool ok = mgr.Initialize(
-                    nullptr,
-                    launch_cfg.raylib_count,
-                    launch_cfg.sdl_count,
-                    launch_cfg.sfml_count,
-                    launch_cfg.vulkan_count,
-                    launch_cfg.opengl_count,
-                    launch_cfg.directx_count,
-                    launch_cfg.software_count,
-                    launch_cfg.parented
-                );
-
-            if (!ok)
+            const auto startup = start_editor_contexts(mgr, nullptr, epochengine::platform::pump_events);
+            if (startup == EditorStartupResult::cancelled)
+                return;
+            if (startup == EditorStartupResult::failed)
             {
                 logger::get(engine::kEditorLog).log(
                     logger::LogLevel::Error,
@@ -3258,11 +3692,6 @@ namespace epochengine::core
                     std::source_location::current());
                 return;
             }
-
-            input::designate_polling_thread_to_current();
-
-            mgr.ArrangeDockedWindowsGrid();
-            mgr.StartRenderThreads();
 
             auto pump = []() -> bool
                 {
@@ -3300,6 +3729,9 @@ namespace epochengine::core
     {
         int run(bool editor_mode)
         {
+#if defined(__ANDROID__)
+            if (editor_mode) return 2;
+#endif
             if (editor_mode)
             {
                 RunEditorInterface();
@@ -3309,7 +3741,9 @@ namespace epochengine::core
 #if defined(_WIN32)
             const HINSTANCE instance = GetModuleHandleW(nullptr);
             return engine::RunEngineMainLoopInternal(instance, SW_SHOWNORMAL);
-#elif defined(__linux__)
+#elif defined(__ANDROID__) && defined(EPOCH_USING_SDL) && EPOCH_USING_SDL == 1
+            return engine::RunEngineMainLoopAndroid();
+#elif defined(__linux__) && !defined(__ANDROID__)
             return engine::RunEngineMainLoopLinux();
 #else
             logger::get(engine::kEngineLog).log(
@@ -3323,14 +3757,223 @@ namespace epochengine::core
 } // namespace epochengine::core
 namespace epochengine::project
 {
+#if defined(__ANDROID__)
+    [[nodiscard]] static bool initialize_android_project_logging() noexcept
+    {
+        const epochengine::string_view logTag{core::engine::kEngineLog.data(), core::engine::kEngineLog.size()};
+        try
+        {
+            const auto logs = core::path::log_output_dir();
+            std::error_code error;
+            if (!logs.empty()) (void)std::filesystem::create_directory(logs, error);
+            if (logs.empty() || error || !std::filesystem::is_directory(
+                    std::filesystem::symlink_status(logs, error)))
+            {
+                core::log::error(logTag, "Android requires an app-private log directory.");
+                return false;
+            }
+            logger::LogConfig config{};
+            config.root_dir = logs;
+            logger::init(std::move(config));
+            return true;
+        }
+        catch (...)
+        {
+            core::log::error(logTag, "Android project logging could not be initialized.");
+            return false;
+        }
+    }
+
+    static int run_android_saved_project(std::string_view project_id, EditorProjectKind kind,
+        int argc, char** argv, const AndroidFixedShoreline* shoreline = nullptr,
+        const AndroidPackagedPlanetaryPose* pose = nullptr)
+    {
+        if (core::engine::activeGuiApplication.application) return 2;
+        const bool editor_project = kind == EditorProjectKind::Editor;
+        const auto binding = BindRuntimeProject(project_id);
+        if (!binding.succeeded)
+        {
+#if defined(EPOCH_USING_SDL) && EPOCH_USING_SDL == 1
+            SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Epoch Android project binding failed: %s", binding.summary.c_str());
+#endif
+            const epochengine::string_view logTag{core::engine::kEngineLog.data(), core::engine::kEngineLog.size()};
+            core::log::error(logTag, {binding.summary.data(), binding.summary.size()});
+            return 2;
+        }
+        if (!initialize_android_project_logging()) return 2;
+        const auto* profile = editor_find_project_profile(project_id);
+        if (!profile || profile->kind != kind
+            || profile->manifest_path != binding.manifest_path
+            || profile->scene_path != binding.scene_path)
+        {
+            logger::error(core::engine::kEngineLog, editor_project
+                ? "Android requires an admitted saved Editor project."
+                : "Android requires an admitted saved game scene.");
+            return 2;
+        }
+        const auto scene = VerifyArtifacts({.project_id = project_id,
+            .project_root = binding.project_root, .scene_path = binding.scene_path,
+            .scene_requires_runtime = !editor_project,
+            .authoring_scene_kind = editor_project ? AuthoringSceneKind::editor : AuthoringSceneKind::tool});
+        if (!scene.succeeded)
+        {
+            logger::error(core::engine::kEngineLog, scene.diagnostic);
+            return 2;
+        }
+        struct ResetPackagedPlanetaryScene final
+        {
+#if defined(EPOCH_USING_SDL) && EPOCH_USING_SDL == 1
+            SDL_PropertiesID properties{};
+#endif
+            ~ResetPackagedPlanetaryScene()
+            {
+                active_android_shoreline = {};
+                active_android_planetary_pose = {};
+#if defined(EPOCH_USING_SDL) && EPOCH_USING_SDL == 1
+                if (properties) (void)SDL_ClearProperty(properties,android_density_clouds_property);
+#endif
+            }
+        } resetPlanetaryScene;
+        if (shoreline && shoreline->install && !editor_project)
+        {
+            auto fixed = project_planetary::load_packaged_shoreline(
+                binding.project_root,binding.scene_path,project_id,shoreline->descriptor_sha256,
+                shoreline->planetary_source,shoreline->fft_source);
+            if (fixed)
+            {
+                fixed->allow_flight = shoreline->allow_flight;
+                active_android_shoreline={binding.project_root,std::string{project_id},
+                    std::make_shared<const project_planetary::PackagedShoreline>(std::move(*fixed))};
+                if (!shoreline->install(binding.project_root.c_str(),active_android_shoreline.project_id.c_str()))
+                    active_android_shoreline={};
+            }
+            if (!active_android_shoreline.data)
+                logger::info(core::engine::kEngineLog,"Packaged shoreline refused. The saved terrain will be used.");
+        }
+        else if (pose && pose->install && !editor_project)
+        {
+            auto saved_pose = project_planetary::load_packaged_planetary_pose(
+                binding.project_root, binding.scene_path, pose->pose_sha256, pose->recipe_sha256,
+                pose->manifest_sha256, pose->scene_sha256, pose->planetary_source, pose->fft_source,
+                pose->terrain_sha256, pose->allow_flight);
+            if (saved_pose)
+            {
+                active_android_planetary_pose = {binding.project_root, std::string{project_id},
+                    std::make_shared<const project_planetary::PackagedPlanetaryPose>(std::move(*saved_pose))};
+                if (!pose->install(binding.project_root.c_str(), active_android_planetary_pose.project_id.c_str()))
+                    active_android_planetary_pose = {};
+            }
+            if (!active_android_planetary_pose.data)
+                logger::info(core::engine::kEngineLog, "Packaged planetary pose refused. The saved terrain will be used.");
+        }
+#if defined(EPOCH_USING_SDL) && EPOCH_USING_SDL == 1
+        if (active_android_planetary_pose.data
+            || (active_android_shoreline.data && active_android_shoreline.data->density_clouds))
+        {
+            resetPlanetaryScene.properties = SDL_GetGlobalProperties();
+            if (!resetPlanetaryScene.properties || !SDL_SetBooleanProperty(
+                resetPlanetaryScene.properties,android_density_clouds_property,true))
+                logger::error(core::engine::kEngineLog,"Android could not request packaged density clouds from SDL.");
+        }
+        SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "Epoch Android saved scene passed verification. Starting SDL.");
+        logger::info(core::engine::kEngineLog, "Android verified the saved scene and is starting SDL.");
+        core::ParseCommandLine(argc, argv);
+        return core::engine::RunEngineMainLoopAndroid(project_id,
+            editor_project ? core::engine::SessionMode::Editor : core::engine::SessionMode::Scene);
+#else
+        (void)argc;
+        (void)argv;
+        return 2;
+#endif
+    }
+
+    int RunAndroidSceneProject(std::string_view project_id, int argc, char** argv)
+    {
+        return run_android_saved_project(project_id, EditorProjectKind::Game, argc, argv);
+    }
+
+    int RunAndroidSceneProject(std::string_view project_id, int argc, char** argv,
+        const AndroidFixedShoreline& shoreline)
+    {
+        return run_android_saved_project(project_id, EditorProjectKind::Game, argc, argv, &shoreline);
+    }
+
+    int RunAndroidSceneProject(std::string_view project_id, int argc, char** argv,
+        const AndroidPackagedPlanetaryPose& pose)
+    {
+        return run_android_saved_project(project_id, EditorProjectKind::Game, argc, argv, nullptr, &pose);
+    }
+
+    int RunAndroidEditorProject(std::string_view project_id, int argc, char** argv)
+    {
+        return run_android_saved_project(project_id, EditorProjectKind::Editor, argc, argv);
+    }
+#endif
+
+    int RunGuiApplication(std::string_view project_id, GuiApplication& application,
+        int argc, char** argv)
+    {
+        auto& active = core::engine::activeGuiApplication;
+        if (active.application) return 2;
+        const auto binding = BindRuntimeProject(project_id);
+        if (!binding.succeeded)
+        {
+#if defined(__ANDROID__)
+            const epochengine::string_view logTag{core::engine::kEngineLog.data(), core::engine::kEngineLog.size()};
+            core::log::error(logTag, {binding.summary.data(), binding.summary.size()});
+#endif
+            return 2;
+        }
+#if defined(__ANDROID__)
+        if (!initialize_android_project_logging()) return 2;
+#endif
+        active = {project_id, binding.project_root, &application};
+        const struct ResetGuiApplication final
+        {
+            core::engine::ActiveGuiApplication& active;
+            ~ResetGuiApplication() { active = {}; }
+        } reset{active};
+        core::ParseCommandLine(argc, argv);
+#if defined(__ANDROID__)
+        return core::legacy_runtime::run(false);
+#else
+        core::RunEngine();
+        return 0;
+#endif
+    }
+
     RuntimeProjectBinding BindRuntimeProject(std::string_view expected_project_id) noexcept
     {
         RuntimeProjectBinding result{};
         try
         {
             namespace fs = std::filesystem;
-            auto current = fs::canonical(core::path::executable_dir());
-            for (unsigned depth = 0; depth < 16u; ++depth)
+            fs::path current;
+#if defined(__ANDROID__)
+            constexpr unsigned searchLimit = 1u;
+            constexpr auto missingManifest = "No packaged project manifest was found in Android app-private storage.";
+#  if defined(EPOCH_USING_SDL) && EPOCH_USING_SDL == 1
+            const char* storage = SDL_GetAndroidInternalStoragePath();
+            const fs::path privateStorage{storage ? storage : ""};
+            if (!privateStorage.is_absolute())
+            { result.summary = "Android app-private storage is unavailable."; return result; }
+            const auto packageRoot = fs::canonical(privateStorage) / "epoch";
+            const auto assetRoot = packageRoot / "assets";
+            current = packageRoot / "project";
+            if (!fs::is_directory(fs::symlink_status(packageRoot))
+                || !fs::is_directory(fs::symlink_status(assetRoot))
+                || !fs::is_directory(fs::symlink_status(current)))
+            { result.summary = "Android package storage is unavailable or redirected."; return result; }
+#  else
+            result.summary = "The Android packaged project requires the SDL application host.";
+            return result;
+#  endif
+#else
+            constexpr unsigned searchLimit = 16u;
+            constexpr auto missingManifest = "No project manifest was found above the generated executable.";
+            current = fs::canonical(core::path::executable_dir());
+#endif
+            for (unsigned depth = 0; depth < searchLimit; ++depth)
             {
                 const auto manifest = current / "project.epoch.json";
                 if (fs::exists(manifest))
@@ -3341,13 +3984,20 @@ namespace epochengine::project
                     if (!inspected.succeeded || fs::path{result.project_root} != current)
                     { result.summary = inspected.summary; return result; }
                     result.manifest_path = inspected.manifest_path;
-                    const std::array<std::pair<std::string_view, std::string>, 4> variables{{
+                    const std::pair<std::string_view, std::string> variables[]{
                         {"EPOCH_EDITOR_PROJECT_ID", std::string{expected_project_id}},
                         {"EPOCH_EDITOR_PROJECT_ROOT", result.project_root},
                         {"EPOCH_EDITOR_PROJECT_MANIFEST", result.manifest_path},
-                        {"EPOCH_PROJECT_AI_PROFILE", (current / "Assets/AI/project_ai.epochai").generic_string()}}};
-                    std::array<decltype(core::env::get("")), 4> previous{};
-                    for (std::size_t index = 0; index < variables.size(); ++index)
+                        {"EPOCH_PROJECT_AI_PROFILE", (current / "Assets/AI/project_ai.epochai").generic_string()},
+#if defined(__ANDROID__) && defined(EPOCH_USING_SDL) && EPOCH_USING_SDL == 1
+                        {"EPOCH_RUNTIME_ROOT", packageRoot.generic_string()},
+                        {"EPOCH_ASSET_ROOT", assetRoot.generic_string()},
+                        {"EPOCH_LOG_DIR", (packageRoot / "logs").generic_string()},
+#endif
+                    };
+                    constexpr auto variableCount = sizeof(variables) / sizeof(variables[0]);
+                    std::array<decltype(core::env::get("")), variableCount> previous{};
+                    for (std::size_t index = 0; index < variableCount; ++index)
                     {
                         const auto& [name, value] = variables[index];
                         previous[index] = core::env::get({name.data(), name.size()});
@@ -3371,7 +4021,7 @@ namespace epochengine::project
                 if (parent == current || parent.empty()) break;
                 current = parent;
             }
-            result.summary = "No project manifest was found above the generated executable.";
+            result.summary = missingManifest;
         }
         catch (...) { result.summary = "Generated project startup paths could not be resolved."; }
         return result;
@@ -3457,7 +4107,7 @@ namespace epochengine::project
                     return fail("scene", "scene project identity does not match the request");
 
                 const auto sceneDiagnostic = scene_acceptance_diagnostic(
-                    loaded.snapshot, request.scene_requires_runtime);
+                    loaded.snapshot, request.scene_requires_runtime, request.authoring_scene_kind);
                 if (!sceneDiagnostic.empty())
                     return fail("scene", sceneDiagnostic);
                 accept(ArtifactKind::scene);
@@ -3680,7 +4330,7 @@ namespace epochengine::project
             {
                 epochengine::project_gui::ArtifactLibrary library{
                     std::string{request.project_id}, root.string()};
-                auto loaded = library.load_latest(request.gui_path);
+                auto loaded = library.load_or_compile(request.gui_path);
                 if (!loaded)
                 {
                     return fail(
@@ -3884,7 +4534,10 @@ int WINAPI wWinMain(
             return 0;
         }
 
-        if (cli_result.editor_requested)
+        // The standard executable opens the launcher on a bare start. Use
+        // the Editor's renderer policy without changing the initial menu.
+        if (cli_result.editor_requested
+            || (argc == 1 && !epochengine::core::cli::updater_shell_requested))
         {
             epochengine::core::RunEditorInterface();
             return 0;
@@ -3961,7 +4614,8 @@ int epochengine::core::run_application_main(int argc, char** argv)
             return 0;
         }
 
-        if (cli_result.editor_requested)
+        if (cli_result.editor_requested
+            || (argc == 1 && !epochengine::core::cli::updater_shell_requested))
         {
             epochengine::core::RunEditorInterface();
             return 0;

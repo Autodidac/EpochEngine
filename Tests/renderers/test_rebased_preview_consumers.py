@@ -23,9 +23,9 @@ class RebasedPreviewConsumers(unittest.TestCase):
             'Engine/src/renderers/sdl/core.context_sdl.cpp',
             'Engine/src/renderers/sfml/core.context_sfml.cpp',
             'Engine/src/renderers/software/software.context_preview.cpp',
-            'Engine/modules/raylib.context.ixx',
-            'Engine/modules/sdl.context.ixx',
-            'Engine/modules/sfml.context.ixx',
+            'Engine/modules/raylib/raylib.context.ixx',
+            'Engine/modules/sdl/sdl.context.ixx',
+            'Engine/modules/sfml/sfml.context.ixx',
         ]
         readers = []
         for index, path in enumerate(paths):
@@ -33,11 +33,15 @@ class RebasedPreviewConsumers(unittest.TestCase):
             statements = []
             for marker in ('const auto camera = matchedScene',
                            'const auto solidGeometry = matchedScene',
-                           'const auto objectGeometry = matchedScene'):
+                           'const auto objectGeometry ='):
                 begin = text.index(marker)
                 statements.append(text[begin:text.index(';', begin)+1])
             ctx = '&ctx' if '/directx/' in path or '/software/' in path else 'ctx.get()'
             setup = 'core::Context ctx;' if ctx == '&ctx' else 'auto ctx=std::make_shared<core::Context>();'
+            if '/software/' in path:
+                begin = text.index('const auto meshWire = matchedScene')
+                end = text.index('const bool hasWireTriangles =', begin)
+                statements.insert(2, text[begin:text.index(';', end)+1])
             acquisition_owner = (ROOT/'Engine/src/renderers/directx/directx.context.cpp').read_text(encoding='utf-8') if '/directx/' in path else text
             start = acquisition_owner.index('const auto matchedScene =')
             acquisition = acquisition_owner[start:acquisition_owner.index(';', start)+1]
@@ -48,7 +52,7 @@ class RebasedPreviewConsumers(unittest.TestCase):
                 '\n'.join(statements)+
                 'CHECK(camera.eye.x==11);CHECK(solidGeometry==first->solids->geometry);'
                 'CHECK(objectGeometry==first->lines);}')
-        vk_path = 'Engine/modules/vulkan.context_meshcube.ixx'
+        vk_path = 'Engine/modules/vulkan/vulkan.context_meshcube.ixx'
         vk = (ROOT/vk_path).read_text(encoding='utf-8')
         body = '\n'.join(definition(vk, marker).replace('export ', '') for marker in (
             '    export bool preview_geometry_matches(',
@@ -58,23 +62,23 @@ class RebasedPreviewConsumers(unittest.TestCase):
             '    export std::vector<std::uint32_t> preview_indices_for(',
             '    export std::uint32_t preview_solid_index_count_for(',
             '    export std::uint32_t preview_arcade_screen_index_count_for('))
-        commands_path = 'Engine/modules/vulkan.context_commands.ixx'
+        commands_path = 'Engine/modules/vulkan/vulkan.context_commands.ixx'
         commands = (ROOT/commands_path).read_text(encoding='utf-8')
         rebuild = definition(commands, '        if (frame.scene_visible && ctx)')
         start = commands.index('previewSceneFrame = previewgrid::scene_frame_for(')
         capture = commands[start:commands.index(';', start)+1]
         self.assertLess(start, commands.index('updateUniformBuffer(imageIndex, cam);'))
-        descriptor_path = 'Engine/modules/vulkan.context_descriptor.ixx'
+        descriptor_path = 'Engine/modules/vulkan/vulkan.context_descriptor.ixx'
         descriptor = (ROOT/descriptor_path).read_text(encoding='utf-8')
         start = descriptor.index('const auto previewCamera =')
         camera_read = descriptor[start:descriptor.index(';', start)+1]
-        module_path = 'Engine/modules/render.preview_grid.ixx'
+        module_path = 'Engine/modules/render/render.preview_grid.ixx'
         module = (ROOT/module_path).read_text(encoding='utf-8')
         packet = definition(module, '    export struct PublishedSceneFrame', True).replace('export ', '')
         cloud_recipe = (ROOT/'Engine/modules/asset.cloud_volume.ixx').read_text(encoding='utf-8')
         cloud = ('namespace asset::cloud_volume {\n' + definition(cloud_recipe, '    struct Recipe final', True) + '\n}\n')
         cloud += 'namespace previewgrid {\n' + definition(module, '    export struct CloudVolume final', True).replace('export ', '') + '\n}\n'
-        arcade = (ROOT/'Engine/modules/render.arcade.ixx').read_text(encoding='utf-8')
+        arcade = (ROOT/'Engine/modules/render/render.arcade.ixx').read_text(encoding='utf-8')
         arcade_ports = '\n'.join(definition(arcade, marker, True) for marker in (
             '    struct ArcadeSceneNodeContract',
             '    inline constexpr ArcadeSceneNodeContract kCabinetBodySceneNode',
@@ -90,6 +94,7 @@ class RebasedPreviewConsumers(unittest.TestCase):
         ))
         routes += '\n' + definition(module, '    export [[nodiscard]] constexpr ObjectPreviewGeometryRoute object_preview_geometry_route(').replace('export ', '')
         wire = definition(module, '    export struct MeshWireDrawFrame final', True).replace('export ', '')
+        water_range = definition(module, '    export struct WaterDetailRange final', True).replace('export ', '')
         facing = definition(module, '    export [[nodiscard]] constexpr bool clockwise_solid_triangle_faces_camera(').replace('export ', '')
         visitor = 'template<class Emit>\n' + definition(module, '    inline void for_each_visible_marker_line(')
 
@@ -122,7 +127,11 @@ struct ObjectMarker{
     ObjectPreviewPrimitive primitive{ObjectPreviewPrimitive::EngineArcadeScreen};
     bool sampledRenderSurface{true};
 };
-struct SolidDrawFrame{std::shared_ptr<const std::vector<Vertex>> geometry;};
+@@WATER_RANGE@@
+struct SolidDrawFrame{
+    std::shared_ptr<const std::vector<Vertex>> geometry;
+    std::vector<WaterDetailRange> water_detail_ranges;
+};
 @@WIRE@@
 @@FACING@@
 @@VISITOR@@
@@ -130,7 +139,8 @@ struct GridGeometry{std::vector<Vertex> vertices;std::vector<std::uint32_t> indi
 @@PACKET@@
 inline std::shared_ptr<const PublishedSceneFrame> published,first,second;
 std::shared_ptr<const PublishedSceneFrame> scene_frame_for(const void*){return published;}
-std::uint64_t preview_geometry_revision_for(const void*){return 7;}
+std::uint64_t legacyPreviewRevision{7};
+std::uint64_t preview_geometry_revision_for(const void*){return legacyPreviewRevision;}
 unsigned legacyCalls{};
 void forbidden(){++legacyCalls;}
 Camera camera_for(const void*){forbidden();return {};}
@@ -175,6 +185,7 @@ int main(){
  auto a=std::make_shared<PublishedSceneFrame>();a->camera.eye.x=11;a->revision=1;
  auto solids=std::make_shared<SolidDrawFrame>();
  solids->geometry=std::make_shared<const std::vector<previewgrid::Vertex>>(3,previewgrid::Vertex{{1,2,3},{1,1,1}});a->solids=solids;
+ solids->water_detail_ranges.push_back({0,3});
  a->lines=std::make_shared<const std::vector<previewgrid::Vertex>>(2,previewgrid::Vertex{{4,5,6},{1,1,1}});
  a->markers.push_back({{7,8,9},{2,2,2}});a->wire=std::make_shared<const MeshWireDrawFrame>();
  auto b=std::make_shared<PublishedSceneFrame>(*a);b->camera.eye.x=99;b->revision=2;
@@ -186,10 +197,16 @@ int main(){
  auto indices=vulkanconsumer::preview_indices_for(nullptr,retained);
  CHECK(vertices.size()==9&&indices.size()==11);
  CHECK(vertices[0].position[0]==1&&vertices[7].position[0]==4);
+ CHECK(vertices[0].uv[0]==1&&vertices[2].uv[0]==1&&vertices[7].uv[0]==0);
  CHECK(vulkanconsumer::preview_solid_index_count_for(nullptr,retained)==3);
  CHECK(vulkanconsumer::preview_arcade_screen_index_count_for(nullptr,retained)==6);
  for(auto i:indices)CHECK(i<vertices.size());
  CHECK(legacyCalls==0);
+ // Water shading metadata must invalidate the upload even with identical vertices.
+ auto dry=std::make_shared<PublishedSceneFrame>(*retained);
+ auto drySolids=std::make_shared<SolidDrawFrame>(*retained->solids);
+ drySolids->water_detail_ranges.clear();dry->solids=drySolids;
+ CHECK(!vulkanconsumer::preview_geometry_matches(*retained,*dry));
  // Exact backend builders must replace every-edge fallback with front-face edges,
  // retain helper lines and keep index/vertex counts identical in both directions.
  auto wired=std::make_shared<PublishedSceneFrame>(*retained);
@@ -217,10 +234,15 @@ int main(){
  uploader.previewSceneFrame=empty;uploader.update();CHECK(uploader.uploads==2&&uploader.indexCount==0);
  uploader.previewSceneFrame=first;uploader.update();CHECK(uploader.uploads==4&&uploader.indexCount==11);
  uploader.previewSceneFrame.reset();uploader.update();CHECK(uploader.uploads==6);
+ uploader.update();CHECK(uploader.uploads==6);
+ ++legacyPreviewRevision;
+ uploader.update();CHECK(uploader.uploads==8&&uploader.previewGeometryRevision==legacyPreviewRevision);
+ uploader.update();CHECK(uploader.uploads==8);
  return 0;
 }
 '''
         cpp = cpp.replace('@@WIRE@@',wire).replace('@@FACING@@',facing).replace('@@VISITOR@@',visitor).replace('@@PACKET@@', packet).replace('@@READERS@@', '\n'.join(readers)).replace('@@BUILDERS@@', body).replace('@@REBUILD@@', rebuild).replace('@@CAPTURE@@', capture).replace('@@CAMERA_READ@@', camera_read)
+        cpp = cpp.replace('@@WATER_RANGE@@', water_range)
         cpp = cpp.replace('@@CLOUD@@', cloud).replace('@@ARCADE@@', arcade_ports).replace('@@ROUTES@@', routes)
         cpp = cpp.replace('@@RUN_READERS@@', '\n'.join('published=first;reader'+str(i)+'();' for i in range(len(readers))))
         proof = ROOT/'Artifacts/Reports/planetary-frame-precision-oct31/backend-consumers/cpu'/hashlib.sha256(cpp.encode()).hexdigest()[:12]
@@ -231,13 +253,113 @@ int main(){
         (proof/'result.json').write_text(json.dumps({'scope':'Actual PublishedSceneFrame declaration, backend read expressions and Vulkan mesh/count/rebuild functions with recording legacy getters; not whole producer module or native backend proof','declaration_sha256':hashlib.sha256(packet.encode()).hexdigest(),'runs':runs,'sources':{name:hashlib.sha256((ROOT/name).read_bytes()).hexdigest() for name in paths+[vk_path,module_path,commands_path,descriptor_path]},'native':False},indent=2),encoding='utf-8')
 
 
+    def test_sdl_preview_preserves_corner_colors_through_near_clip(self):
+        grid = (ROOT / 'Engine/modules/render/render.preview_grid.ixx').read_text(encoding='utf-8')
+        begin = grid.index('    export struct ClipVertex')
+        transform = '    export [[nodiscard]] inline ClipVertex transform_point'
+        clip = grid[begin:grid.index(transform)] + definition(grid, transform)
+        sdl = (ROOT / 'Engine/modules/sdl/sdl.renderer.ixx').read_text(encoding='utf-8')
+        draw = definition(sdl, '    [[nodiscard]] inline bool draw_preview_solid_triangle(')
+        code = r'''
+#include <algorithm>
+#include <array>
+#include <cassert>
+#include <cmath>
+#include <type_traits>
+#include <vector>
+
+struct SDL_Renderer {};
+struct SDL_Point { float x{}, y{}; };
+struct SDL_FColor { float r{}, g{}, b{}, a{}; };
+struct SDL_Vertex { SDL_Point position; SDL_FColor color; SDL_Point tex_coord; };
+std::vector<SDL_Vertex> submitted;
+std::vector<int> fan;
+unsigned draws{};
+bool SDL_RenderGeometry(SDL_Renderer*, void* texture, const SDL_Vertex* vertices, int count,
+    const int* indices, int index_count)
+{
+    assert(texture == nullptr);
+    submitted.assign(vertices, vertices + count);
+    fan.assign(indices, indices + index_count);
+    ++draws;
+    return true;
+}
+
+namespace core { struct RenderViewport { int x, y, width, height; }; }
+namespace previewgrid {
+struct Vec3 { float x{}, y{}, z{}; };
+struct Vertex { Vec3 position, color; };
+using Mat4 = std::array<float, 16>;
+''' + clip.replace('export ', '') + '\n}\n' + draw + r'''
+
+int main()
+{
+    using namespace previewgrid;
+    SDL_Renderer renderer;
+    constexpr core::RenderViewport view{9, 13, 200, 120};
+    constexpr Mat4 projection{1,0,0,0, 0,1,0,0, 0,0,1,0.5f, 0,0,0,1};
+    const auto draw = [&](const std::array<Vertex, 3>& v) {
+        return draw_preview_solid_triangle(&renderer, projection, view, v[0], v[1], v[2]);
+    };
+    const auto close = [](float a, float b) { return std::abs(a-b) <= 2.0e-5f; };
+    const auto expect_color = [&](const SDL_FColor& c, float r, float g, float b) {
+        assert(close(c.r,r) && close(c.g,g) && close(c.b,b) && c.a == 1.0f);
+    };
+    const std::array<Vertex, 3> triangle{{
+        {{-0.1f,0.1f,-1.5f}, {1,0,0}}, {{-0.5f,-0.2f,0}, {0,1,0}}, {{0.5f,-0.2f,0.5f}, {0,0,1}}
+    }};
+    auto visible = triangle;
+    visible[0].position.z = 0.0f;
+    assert(draw(visible) && draws == 1 && submitted.size() == 3);
+    expect_color(submitted[0].color, 1,0,0);
+    expect_color(submitted[1].color, 0,1,0);
+    expect_color(submitted[2].color, 0,0,1);
+
+    // z+w = (-1.25, 1, 1.75). Interpolate even when w differs.
+    assert(draw(triangle) && draws == 2 && submitted.size() == 4);
+    const std::vector<int> expected_fan{0,1,2,0,2,3};
+    assert(fan == expected_fan);
+    expect_color(submitted[0].color, 7.0f/12.0f, 0, 5.0f/12.0f);
+    expect_color(submitted[1].color, 4.0f/9.0f, 5.0f/9.0f, 0);
+    expect_color(submitted[2].color, 0,1,0);
+    expect_color(submitted[3].color, 0,0,1);
+    const auto plain = clip_triangle<true>({transform_point(projection,triangle[0].position),
+        transform_point(projection,triangle[1].position),transform_point(projection,triangle[2].position)});
+    assert(plain.count == submitted.size());
+    for (std::size_t i=0; i<plain.count; ++i) {
+        const auto p = plain.vertices[i];
+        assert(close(submitted[i].position.x,view.x+(0.5f+0.5f*(p.x/p.w))*view.width));
+        assert(close(submitted[i].position.y,view.y+(0.5f-0.5f*(p.y/p.w))*view.height));
+    }
+
+    auto reversed = triangle;
+    std::swap(reversed[1], reversed[2]);
+    assert(draw(reversed) && fan == expected_fan);
+    expect_color(submitted[0].color, 4.0f/9.0f, 5.0f/9.0f, 0);
+    expect_color(submitted[1].color, 7.0f/12.0f, 0, 5.0f/12.0f);
+
+    auto flat = triangle;
+    for (auto& v : flat) v.color = {-0.1f,0.31f,1.2f};
+    assert(draw(flat) && draws == 4 && submitted.size() == 4);
+    for (const auto& v : submitted) expect_color(v.color, 0,0.31f,1);
+    for (auto& v : flat) v.position.z = -1.5f;
+    assert(draw(flat) && draws == 4);
+}
+'''
+        report = ROOT / 'Artifacts/Reports/rebased-preview-sdl-color' / hashlib.sha256(code.encode()).hexdigest()[:12]
+        report.mkdir(parents=True, exist_ok=True)
+        source = report / 'fixture.cpp'
+        source.write_text(code, encoding='utf-8')
+        outcomes = compile_and_run(self, source, report)
+        (report / 'result.json').write_text(json.dumps(outcomes, indent=2), encoding='utf-8')
+
     def test_complete_sfml_functions_compile_with_installed_headers(self):
         if os.name != 'nt':
             self.skipTest('Installed MSVC/SFML graph compile-only check')
         sfml = ROOT/'Artifacts/Dependencies/vcpkg_installed/x64-windows/include'
         if not (sfml/'SFML/Graphics.hpp').is_file():
             self.skipTest('Installed SFML headers required; no dependency download')
-        paths = ['Engine/modules/sfml.context.ixx', 'Engine/src/renderers/sfml/core.context_sfml.cpp']
+        paths = ['Engine/modules/sfml/sfml.context.ixx', 'Engine/src/renderers/sfml/core.context_sfml.cpp']
         functions = [definition((ROOT/path).read_text(encoding='utf-8'), signature)
             for path,signature in zip(paths, ['        inline void render_scene_preview(', '    void render_scene_preview('])]
         ports = r"""#include <SFML/Graphics.hpp>

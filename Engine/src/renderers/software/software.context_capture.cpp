@@ -1,19 +1,10 @@
 module;
 
-#include <algorithm>
-#include <cctype>
 #include <cstdint>
 #include <cstring>
-#include <cstdio>
-#include <cstdlib>
 #include <filesystem>
 #include <fstream>
-#include <mutex>
 #include <string>
-#include <string_view>
-#include <system_error>
-#include <unordered_map>
-#include <unordered_set>
 #include <vector>
 
 #include <include/engine.config.hpp>
@@ -22,106 +13,17 @@ module software.context;
 
 import core.commandline;
 import core.log;
-import core.path;
+
+extern "C" const char* epoch_reserve_capture_path_utf8(
+    const char* backend, std::uintptr_t window);
+extern "C" void epoch_release_capture_path_utf8(
+    const char* backend, std::uintptr_t window);
 
 namespace epochengine::anativecontext
 {
 #if defined(EPOCH_USING_SOFTWARE_RENDERER) && (EPOCH_USING_SOFTWARE_RENDERER == 1)
     namespace detail
     {
-        [[nodiscard]] std::mutex& capture_mutex() noexcept
-        {
-            static std::mutex mutex{};
-            return mutex;
-        }
-
-        [[nodiscard]] std::unordered_set<std::string>& captured_outputs()
-        {
-            static std::unordered_set<std::string> outputs{};
-            return outputs;
-        }
-
-        [[nodiscard]] std::unordered_map<std::string, std::uint32_t>& capture_frame_counts()
-        {
-            static std::unordered_map<std::string, std::uint32_t> counts{};
-            return counts;
-        }
-
-        [[nodiscard]] std::filesystem::path capture_output_root()
-        {
-            return epochengine::core::path::capture_output_dir();
-        }
-
-        [[nodiscard]] std::string sanitize_capture_token(const std::string_view value)
-        {
-            std::string token;
-            token.reserve(value.size());
-
-            bool previousWasDash = false;
-            for (const unsigned char ch : value)
-            {
-                if (std::isalnum(ch) != 0)
-                {
-                    token.push_back(static_cast<char>(std::tolower(ch)));
-                    previousWasDash = false;
-                }
-                else if (!previousWasDash)
-                {
-                    token.push_back('-');
-                    previousWasDash = true;
-                }
-            }
-
-            while (!token.empty() && token.front() == '-')
-                token.erase(token.begin());
-            while (!token.empty() && token.back() == '-')
-                token.pop_back();
-
-            return token.empty() ? std::string{ "capture" } : token;
-        }
-
-        [[nodiscard]] std::string capture_output_stem()
-        {
-            if (!core::cli::scene_name.empty())
-                return sanitize_capture_token(core::cli::scene_name);
-
-            if (!core::cli::exe_path.empty())
-                return sanitize_capture_token(core::cli::exe_path.stem().string());
-
-            return "capture";
-        }
-
-        [[nodiscard]] std::filesystem::path reserve_capture_path(
-            const std::string_view backend,
-            const std::uintptr_t windowId,
-            const std::string_view extension = ".bmp")
-        {
-            if (!core::cli::capture_requested)
-                return {};
-
-            const std::string stem = capture_output_stem();
-            const std::string backendToken = sanitize_capture_token(backend);
-            const std::string key = stem + "|" + backendToken + "|" + std::to_string(windowId);
-
-            std::lock_guard guard(capture_mutex());
-            const auto frameCount = ++capture_frame_counts()[key];
-            if (core::cli::smoke_requested && frameCount < core::cli::capture_warmup_frames)
-                return {};
-
-            if (!captured_outputs().insert(key).second)
-                return {};
-
-            const auto root = capture_output_root();
-            std::error_code ec;
-            std::filesystem::create_directories(root, ec);
-
-            std::string filename = stem + "-" + backendToken;
-            if (windowId != 0)
-                filename += "-" + std::to_string(windowId);
-            filename += std::string(extension);
-            return root / filename;
-        }
-
         [[nodiscard]] bool write_bmp(
             const std::filesystem::path& filepath,
             const std::vector<std::uint32_t>& pixels,
@@ -194,16 +96,27 @@ namespace epochengine::anativecontext
         const std::vector<std::uint32_t>& framebuffer,
         const int width,
         const int height,
-        const std::uintptr_t windowId)
+        const std::uintptr_t windowId,
+        bool projectPreviewRendered)
     {
-        const auto capturePath = detail::reserve_capture_path("software", windowId);
-        if (capturePath.empty() || framebuffer.empty() || width <= 0 || height <= 0)
+        if (!core::cli::capture_requested || width <= 0 || height <= 0
+            || framebuffer.size() / static_cast<std::size_t>(width) < static_cast<std::size_t>(height))
+            return;
+        if (core::cli::smoke_requested && core::cli::scene_name.starts_with("project:")
+            && !projectPreviewRendered)
             return;
 
-        const bool wrote = detail::write_bmp(capturePath, framebuffer, width, height);
+        const char* capturePath = epoch_reserve_capture_path_utf8("software", windowId);
+        if (!capturePath || !*capturePath)
+            return;
+
+        const bool wrote = detail::write_bmp(
+            std::filesystem::path(capturePath), framebuffer, width, height);
+        if (!wrote)
+            epoch_release_capture_path_utf8("software", windowId);
         const auto level = wrote ? epochengine::core::log::level::info : epochengine::core::log::level::warn;
         const std::string message = std::string(wrote ? "Captured software frame: " : "Failed to capture software frame: ")
-            + capturePath.string();
+            + capturePath;
         epochengine::core::log::write(
             level,
             "Software.Capture",

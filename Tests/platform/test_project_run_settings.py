@@ -13,6 +13,251 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class ProjectRunSettings(unittest.TestCase):
+    def test_android_save_requires_same_project_and_orders_writes(self):
+        owner = ROOT / "Engine/src/editor/application/editor.application_packages_creation.inl"
+        play_owner = ROOT / "Engine/src/editor/application/editor.frame_project_runtime.inl"
+        scene_owner = ROOT / "Engine/src/epoch/implementation/epoch.project_play_scene.inl"
+        source_text = owner.read_bytes()
+        save = "\n".join(definition(source_text.decode("utf-8"), marker) for marker in (
+            "        [[nodiscard]] static bool save_active_project_sources(",
+            "        [[nodiscard]] static bool save_mobile_project_sources(",
+            "        void repair_project_evidence("))
+        play = definition(play_owner.read_text(encoding="utf-8"), "        auto play_active_context =", True)
+        scene = scene_owner.read_text(encoding="utf-8")
+        constructor = definition(scene, "            ProjectPlayScene(")
+        entry_start = constructor.index("#if defined(__ANDROID__)")
+        preview_entry = constructor[entry_start:constructor.index("#endif", entry_start) + len("#endif")]
+        self.assertLess(constructor.index("prepare_project_gui(runSettings);"), entry_start)
+        self.assertLess(constructor.index("if (m_guiApplication) return;"), entry_start)
+        self.assertLess(entry_start, constructor.index("load_project_runtime_snapshot("))
+        load = definition(scene, "            void load() override")
+        self.assertLess(load.index("if (m_guiApplication || m_mobileAuthoredTool) return;"),
+                        load.index("prepare_gameplay();"))
+        body = r'''
+#include <filesystem>
+#include <iostream>
+#include <string>
+#include <string_view>
+#include <vector>
+
+struct ProjectProfile {
+    std::string root_path = "files/epoch/Projects/Fixture";
+    std::string manifest_path = root_path + "/project.epoch.json";
+    std::string scene_path = root_path + "/worlds/main.epoch";
+};
+const ProjectProfile profile;
+const ProjectProfile* editor_find_project_profile(std::string_view id)
+{
+    return id == "Fixture" ? &profile : nullptr;
+}
+
+struct EditorState {
+    std::string projectId = "Fixture";
+    std::string projectRoot = profile.root_path;
+    std::string projectManifest = profile.manifest_path;
+    std::string projectScenePath = profile.scene_path;
+    std::string projectStatus;
+    std::vector<std::string_view> events;
+    bool guiOk = true;
+    bool sceneOk = true;
+    bool settingsOk = true;
+    bool projectScreenSpaceGuiEnabled = true;
+    bool activeGuiDocument = true;
+    std::string projectKind = "tool";
+    std::string projectName = "Fixture";
+    std::string projectBuildStatus;
+    int inputProfilePreset = 0;
+    std::string guiEdit = "B";
+    std::string savedGui = "A";
+    std::string playedGui;
+};
+
+void push_editor_log(EditorState&, std::string_view) {}
+void project_gui_document_layout(EditorState& editor)
+{
+    editor.events.push_back("layout");
+}
+bool save_project_gui_document(EditorState& editor, bool)
+{
+    editor.events.push_back("GUI");
+    if (editor.guiOk)
+        editor.savedGui = editor.guiEdit;
+    return editor.guiOk;
+}
+bool save_editor_scene_snapshot(EditorState& editor)
+{
+    editor.events.push_back("scene");
+    return editor.sceneOk;
+}
+bool persist_project_run_settings(EditorState& editor)
+{
+    editor.events.push_back("settings");
+    if (!editor.settingsOk) editor.projectStatus = "Run settings save failed.";
+    return editor.settingsOk;
+}
+
+#ifndef __ANDROID__
+#define __ANDROID__ 1
+#endif
+@SAVE@
+
+enum class EditorProjectKind { Tool, Game };
+std::string_view editor_project_kind_name(EditorProjectKind) {return "tool";}
+enum class EditorCommand { RunGame };
+namespace project_planetary
+{
+    struct Requirement {bool ok = true, requires_project_runtime = false; std::string message;};
+    Requirement runtime_requirement(const std::filesystem::path&) {return {};}
+}
+bool project_gui_document_is_active(const EditorState& editor) {return editor.activeGuiDocument;}
+int project_camera_for_run(const EditorState&) {return 0;}
+std::string project_runtime_scene_id(const EditorState& editor) {return "project:" + editor.projectId;}
+std::string_view project_camera_argument(int) {return "canvas2d";}
+std::string_view input_profile_argument(int) {return "default";}
+void append_project_note(EditorState&, std::string_view, std::string_view, std::string_view) {}
+void play_in_editor(EditorState& editor)
+{
+    constexpr bool projectScenePlayAvailable = true;
+    constexpr auto projectMobilePlayMessage = "Play unavailable.";
+    auto launch_active_project_context = [&](bool, unsigned, bool) {editor.events.push_back("child");};
+    const auto emit_command = [&](EditorCommand, std::string_view id)
+    {
+        if (id.starts_with("project:Fixture|"))
+            editor.playedGui = editor.savedGui;
+        editor.events.push_back("play");
+    };
+@PLAY@
+    play_active_context();
+}
+
+namespace previewgrid { enum class CameraMode { Editor, Canvas2D }; }
+
+struct SceneEntry
+{
+    bool m_mobileAuthoredTool = false;
+    previewgrid::CameraMode m_cameraMode = previewgrid::CameraMode::Editor;
+    int gameplayLoads = 0;
+    void open(bool m_canReturnToEditor, EditorProjectKind kind, std::string_view projectId)
+    {
+        const struct {std::string_view id; EditorProjectKind kind;} admitted{"Fixture", kind};
+        const auto* profile = &admitted;
+        const struct {std::string_view project_id;} launch{projectId};
+@PREVIEW_ENTRY@
+        ++gameplayLoads;
+    }
+};
+
+#define CHECK(...) do { if (!(__VA_ARGS__)) { std::cerr << "Failed: " << #__VA_ARGS__ << '\n'; return __LINE__; } } while (false)
+int main()
+{
+    for (int mismatch = 0; mismatch < 7; ++mismatch)
+    {
+        EditorState editor;
+        std::string_view requested = "Fixture";
+        if (mismatch == 0) requested = {};
+        if (mismatch == 1) requested = "Unknown";
+        if (mismatch == 2) editor.projectId = "Other";
+        if (mismatch == 3) editor.projectRoot = "files/epoch/Projects/Other";
+        if (mismatch == 4) editor.projectManifest = "elsewhere/project.epoch.json";
+        if (mismatch == 5) editor.projectScenePath = "elsewhere/main.epoch";
+        if (mismatch == 6) editor.projectScenePath.clear();
+        repair_project_evidence(editor, requested);
+        CHECK(editor.events.empty() && !editor.projectStatus.empty());
+    }
+
+    EditorState saved;
+    repair_project_evidence(saved, saved.projectId);
+    CHECK(saved.events == std::vector<std::string_view>{"layout", "GUI", "scene", "settings"});
+    CHECK(saved.projectStatus.starts_with("Active project saved"));
+
+    EditorState guiFailed;
+    guiFailed.guiOk = false;
+    repair_project_evidence(guiFailed, guiFailed.projectId);
+    CHECK(guiFailed.events == std::vector<std::string_view>{"layout", "GUI"});
+    CHECK(guiFailed.projectStatus.starts_with("Project save blocked"));
+
+    EditorState sceneFailed;
+    sceneFailed.sceneOk = false;
+    repair_project_evidence(sceneFailed, sceneFailed.projectId);
+    CHECK(sceneFailed.events == std::vector<std::string_view>{"layout", "GUI", "scene"});
+    CHECK(sceneFailed.projectStatus.starts_with("Project save blocked"));
+
+    EditorState settingsFailed;
+    settingsFailed.settingsOk = false;
+    repair_project_evidence(settingsFailed, settingsFailed.projectId);
+    CHECK(settingsFailed.events == saved.events);
+    CHECK(settingsFailed.projectStatus == "Run settings save failed.");
+
+    EditorState toolPlay;
+    play_in_editor(toolPlay);
+    CHECK(toolPlay.playedGui == "B");
+    CHECK(toolPlay.events == std::vector<std::string_view>{"layout", "GUI", "scene", "settings", "play"});
+
+    EditorState playGuiFailed;
+    playGuiFailed.guiOk = false;
+    play_in_editor(playGuiFailed);
+    CHECK(playGuiFailed.events == std::vector<std::string_view>{"layout", "GUI"});
+    CHECK(playGuiFailed.savedGui == "A" && playGuiFailed.playedGui.empty());
+
+    EditorState playSceneFailed;
+    playSceneFailed.sceneOk = false;
+    play_in_editor(playSceneFailed);
+    CHECK(playSceneFailed.events == std::vector<std::string_view>{"layout", "GUI", "scene"});
+    CHECK(playSceneFailed.playedGui.empty());
+
+    EditorState playSettingsFailed;
+    playSettingsFailed.settingsOk = false;
+    play_in_editor(playSettingsFailed);
+    CHECK(playSettingsFailed.events == std::vector<std::string_view>{"layout", "GUI", "scene", "settings"});
+    CHECK(playSettingsFailed.playedGui.empty());
+
+    EditorState noGui;
+    noGui.activeGuiDocument = false;
+    play_in_editor(noGui);
+    CHECK(noGui.events.empty() && !noGui.projectStatus.empty());
+
+    EditorState disabledGui;
+    disabledGui.projectScreenSpaceGuiEnabled = false;
+    play_in_editor(disabledGui);
+    CHECK(disabledGui.events.empty() && !disabledGui.projectStatus.empty());
+
+    EditorState stalePlay;
+    stalePlay.projectManifest.clear();
+    play_in_editor(stalePlay);
+    CHECK(stalePlay.events.empty() && stalePlay.playedGui.empty());
+
+    EditorState gamePlay;
+    gamePlay.projectKind = "game";
+    play_in_editor(gamePlay);
+    CHECK(gamePlay.events == std::vector<std::string_view>{"scene", "play"});
+
+    SceneEntry emptyAuthoredTool;
+    emptyAuthoredTool.open(true, EditorProjectKind::Tool, "Fixture");
+    CHECK(emptyAuthoredTool.m_mobileAuthoredTool && emptyAuthoredTool.gameplayLoads == 0);
+    CHECK(emptyAuthoredTool.m_cameraMode == previewgrid::CameraMode::Canvas2D);
+    SceneEntry gameEntry, standalone, differentProject;
+    gameEntry.open(true, EditorProjectKind::Game, "Fixture");
+    standalone.open(false, EditorProjectKind::Tool, "Fixture");
+    differentProject.open(true, EditorProjectKind::Tool, "Other");
+    CHECK(!gameEntry.m_mobileAuthoredTool && gameEntry.gameplayLoads == 1);
+    CHECK(!standalone.m_mobileAuthoredTool && standalone.gameplayLoads == 1);
+    CHECK(!differentProject.m_mobileAuthoredTool && differentProject.gameplayLoads == 1);
+}
+'''.replace("@SAVE@", save).replace("@PLAY@", play).replace("@PREVIEW_ENTRY@", preview_entry)
+        report = ROOT / "Artifacts/Reports/android-editor-save" / str(time.time_ns())
+        report.mkdir(parents=True)
+        source = report / "contract.cpp"
+        source.write_text(body, encoding="utf-8")
+        runs = compile_and_run(self, source, report)
+        (report / "result.json").write_text(json.dumps({
+            "passed": True,
+            "runs": runs,
+            "owner_sha256": hashlib.sha256(source_text).hexdigest(),
+            "play_owner_sha256": hashlib.sha256(play_owner.read_bytes()).hexdigest(),
+            "scene_owner_sha256": hashlib.sha256(scene_owner.read_bytes()).hexdigest(),
+            "scope": "Extracted Android Save and Play dispatch and authored Tool preview entry with recording file and scene ports.",
+        }, indent=2) + "\n", encoding="utf-8")
+
     def test_same_project_refresh_retains_bound_run_goal(self):
         owner = ROOT / "Engine/src/editor/application/editor.application_packages_creation.inl"
         runtime_owner = ROOT / "Engine/src/editor/application/editor.frame_project_runtime.inl"
@@ -47,6 +292,7 @@ struct EditorState {
  std::string aiGoalLastMilestoneSignature,aiGoalLastMilestoneReceipt="project.save accepted",aiToolStatus="runtime active";
  int aiToolPlan=17;bool aiToolPlanApplied=true;
  std::uint64_t sceneDocumentRevision{8};
+ struct {std::uint64_t revision{1},contentHash{};} plantLabDocument;
  struct {
   struct {
    struct {
@@ -184,9 +430,25 @@ int main(){
     def test_actual_persistence_readback_and_refusals(self):
         scene = (ROOT / "Engine/src/editor/editor.scene.cpp").read_text(encoding="utf-8")
         registry = (ROOT / "Engine/src/editor/implementation/editor.project_registry.inl").read_text(encoding="utf-8")
-        core = (ROOT / "Engine/modules/editor.core.ixx").read_text(encoding="utf-8")
-        filesystem = (ROOT / "Engine/modules/platform.filesystem.ixx").read_text(encoding="utf-8")
+        core = (ROOT / "Engine/modules/editor/editor.core.ixx").read_text(encoding="utf-8")
+        filesystem = (ROOT / "Engine/modules/platform/platform.filesystem.ixx").read_text(encoding="utf-8")
         value = definition(core, "    export struct EditorProjectRunSettings final", True).replace("export ", "", 1)
+        camera_api = core.replace("launch_override = {}", "launch_override = std::nullopt")
+        value += "\n" + "\n".join(definition(camera_api, marker).replace("export ", "", 1) for marker in (
+            "    export [[nodiscard]] constexpr std::string_view editor_project_camera_token(",
+            "    export [[nodiscard]] constexpr std::optional<previewgrid::CameraMode>\n        editor_project_camera_from_token(",
+            "    export [[nodiscard]] constexpr previewgrid::CameraMode editor_resolve_project_run_camera(",
+        ))
+        legacy = (ROOT / "Engine/src/epoch/epoch.engine_legacy.cpp").read_text(encoding="utf-8")
+        launch = definition(legacy, "        struct ProjectSceneLaunchOptions", True) + "\n" + definition(
+            legacy, "        [[nodiscard]] ProjectSceneLaunchOptions parse_project_scene_launch(")
+        app = ROOT / "Engine/src/editor/application"
+        runtime = (app / "editor.application_project_runtime.inl").read_text(encoding="utf-8")
+        frame = (app / "editor.frame_project_runtime.inl").read_text(encoding="utf-8")
+        scene_boot = (ROOT / "Engine/src/epoch/implementation/epoch.project_play_scene.inl").read_text(encoding="utf-8")
+        self.assertIn("projectBuildRunCameraMode = project_camera_for_run(editor)", runtime)
+        self.assertIn("const auto playCameraMode = project_camera_for_run(editor)", frame)
+        self.assertIn("runSettings ? runSettings->camera : std::nullopt, launch.camera_mode", scene_boot)
         codec = definition(registry, "    [[nodiscard]] static std::optional<nlohmann::ordered_json>\n        parse_project_build_configuration_manifest(")
         persistence = "\n".join(definition(scene, marker) for marker in (
             "    [[nodiscard]] static std::optional<std::string> read_project_build_configuration_manifest(",
@@ -228,7 +490,12 @@ int main(){
 namespace fs=std::filesystem;
 namespace platform::filesystem {@FILES@}
 namespace updater::distribution {constexpr std::string_view edition_id="epoch.development.site.v1";}
+namespace epochengine::previewgrid {enum class CameraMode{Editor,FPS,Canvas2D};}
+namespace previewgrid=epochengine::previewgrid;
+namespace input {enum class ProfilePreset{EditorDefault};ProfilePreset profile_preset_from_id(std::string_view){return ProfilePreset::EditorDefault;}}
+enum class EditorProjectKind{Game,Tool,Editor};
 @VALUE@
+@LAUNCH@
 inline bool admitted=true;
 const bool* find_project_profile_by_root(std::string_view){return admitted?&admitted:nullptr;}
 fs::path resolve_project_root_path(const fs::path& p){return p.empty()?fs::path{}:fs::absolute(p).lexically_normal();}
@@ -246,22 +513,44 @@ int main(int argc,char**argv) try {
  const std::string original=R"({"id":"Fixture","engine_edition":"epoch.development.site.v1","custom":{"retain":[1,2,3]},"build_configuration":"Release"})";
  write(manifest,original);std::string diagnostic;
  assert(editor_project_run_settings(root.string())==EditorProjectRunSettings{});
- const EditorProjectRunSettings requested{"vulkan",120.0};
+ assert(editor_project_run_settings(root.string())->frame_limit_fps == 0.0);
+ using enum previewgrid::CameraMode;
+ const auto direct=parse_project_scene_launch("Fixture");
+ const auto explicitOrbit=parse_project_scene_launch("Fixture|camera=editor");
+ const auto explicitFps=parse_project_scene_launch("Fixture|input=default|camera=first-person");
+ const auto explicit2D=parse_project_scene_launch("Fixture|camera=2d-canvas");
+ assert(direct.project_id=="Fixture"&&!direct.camera_mode);
+ assert(explicitOrbit.camera_mode==Editor&&explicitFps.camera_mode==FPS&&explicit2D.camera_mode==Canvas2D);
+ assert(parse_project_scene_launch("Fixture|camera=invalid").camera_mode==Editor);
+ assert(editor_resolve_project_run_camera(EditorProjectKind::Game,true,{},direct.camera_mode)==Canvas2D);
+ assert(editor_resolve_project_run_camera(EditorProjectKind::Game,false,{},direct.camera_mode)==Editor);
+ assert(editor_resolve_project_run_camera(EditorProjectKind::Tool,true,{},direct.camera_mode)==Editor);
+ assert(editor_resolve_project_run_camera(EditorProjectKind::Game,true,FPS,direct.camera_mode)==FPS);
+ assert(editor_resolve_project_run_camera(EditorProjectKind::Game,true,FPS,explicitOrbit.camera_mode)==Editor);
+ assert(editor_resolve_project_run_camera(EditorProjectKind::Game,true,Editor,explicit2D.camera_mode)==Canvas2D);
+ const EditorProjectRunSettings requested{"vulkan",120.0,false,Canvas2D};
  assert(editor_set_project_run_settings(root.string(),requested,diagnostic));
  assert(editor_project_run_settings(root.string())==requested);
  const auto saved=read_text_file(manifest);
  const auto document=nlohmann::ordered_json::parse(saved);
  assert(document["custom"]==nlohmann::ordered_json::parse(original)["custom"]&&document["build_configuration"]=="Release");
+ assert(document["screen_space_gui_enabled"]==false&&document["run_camera"]=="canvas2d");
  assert(editor_set_project_run_settings(root.string(),requested,diagnostic)&&read_text_file(manifest)==saved);
  for(const auto fps:{0.0,30.0,120.0,1500.0,5000.0,20000.0}){
   const EditorProjectRunSettings manual{"opengl",fps};
   assert(editor_set_project_run_settings(root.string(),manual,diagnostic)&&editor_project_run_settings(root.string())==manual);
+  assert(!nlohmann::ordered_json::parse(read_text_file(manifest)).contains("run_camera"));
+ }
+ for(const bool enabled:{false,true,false}){
+  const EditorProjectRunSettings guiSettings{"opengl",60.0,enabled};
+  assert(editor_set_project_run_settings(root.string(),guiSettings,diagnostic));
+  assert(editor_project_run_settings(root.string())==guiSettings);
  }
  write(manifest,saved);admitted=false;
  assert(!editor_set_project_run_settings(root.string(),{"sfml",60},diagnostic)&&read_text_file(manifest)==saved);admitted=true;
  for(const auto invalid:{EditorProjectRunSettings{"unknown",120},EditorProjectRunSettings{"opengl",-1},EditorProjectRunSettings{"opengl",std::numeric_limits<double>::infinity()}})
   assert(!editor_set_project_run_settings(root.string(),invalid,diagnostic)&&read_text_file(manifest)==saved);
- for(const auto malformed:{R"({"run_backend":1})",R"({"run_backend":"bogus"})",R"({"run_frame_limit_fps":-1})",R"({"run_frame_limit_fps":"120"})",R"({"run_backend":"opengl","run_backend":"vulkan"})","{broken"}){
+ for(const auto malformed:{R"({"run_backend":1})",R"({"run_backend":"bogus"})",R"({"run_frame_limit_fps":-1})",R"({"run_frame_limit_fps":"120"})",R"({"run_backend":"opengl","run_backend":"vulkan"})",R"({"screen_space_gui_enabled":0})",R"({"screen_space_gui_enabled":"false"})",R"({"screen_space_gui_enabled":null})",R"({"screen_space_gui_enabled":false,"screen_space_gui_enabled":true})",R"({"run_camera":1})",R"({"run_camera":"2d"})",R"({"run_camera":"mixed"})",R"({"run_camera":"editor","run_camera":"fps"})","{broken"}){
   write(manifest,malformed);assert(!editor_project_run_settings(root.string()));
  }
  auto foreign=document;foreign["engine_edition"]="foreign";write(manifest,foreign.dump());
@@ -275,10 +564,10 @@ int main(int argc,char**argv) try {
   assert(!editor_project_run_settings(root.string())&&!editor_set_project_run_settings(root.string(),requested,diagnostic));
   assert(read_text_file(manifest)==saved);fs::remove(linked);
  }
- std::ofstream(root/"result.json")<<"{\"run_roundtrip\":true,\"unknown_fields_retained\":true,\"busy_refused\":true,\"edition_refused\":true,\"alias_test_available\":"<<(!linkError?"true":"false")<<"}";
+ std::ofstream(root/"result.json")<<"{\"run_roundtrip\":true,\"saved_camera_roundtrip\":true,\"automatic_camera_restored\":true,\"launch_override_precedence\":true,\"unknown_fields_retained\":true,\"busy_refused\":true,\"edition_refused\":true,\"alias_test_available\":"<<(!linkError?"true":"false")<<"}";
  assert(editor_project_run_settings(root.string())==requested);
 } catch(const std::exception& error){std::fprintf(stderr,"%s\n",error.what());return 92;}
-'''.replace("@FILES@", files).replace("@VALUE@", value).replace("@CODEC@", codec).replace("@PERSISTENCE@", persistence)
+'''.replace("@FILES@", files).replace("@VALUE@", value).replace("@LAUNCH@", launch).replace("@CODEC@", codec).replace("@PERSISTENCE@", persistence)
         report = ROOT / "Artifacts/Reports/project-settings-save-nov01" / ("cpu-" + str(time.time_ns()))
         report.mkdir(parents=True)
         source = report / "contract.cpp"
@@ -321,6 +610,7 @@ int main(int argc,char**argv) try {
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <vector>
 namespace scene{constexpr unsigned kInvalidSceneObjectId=0;}
 struct EditorState {
  std::string projectRoot="one",projectScenePath="worlds/main.epoch",projectId="one",planetaryStatus;
@@ -331,7 +621,11 @@ struct EditorState {
  bool planetaryInitialFramePending{};std::uint64_t planetaryInitialFrameGeneration{7};
  bool forestTerrainPainting=true,forestBrushHeld=true,forestPlacementFocusPending=true;
  unsigned forestBrushTerrain=9;
- std::optional<int> forestSurfacePlacement{1},forestBrushLastDirection{2};
+ std::vector<std::array<double,3>> forestBrushDirections{{1.0,0.0,0.0}};
+ std::optional<int> forestSurfacePlacement{1},previousSceneClick{2};
+ std::optional<int> forestLassoGesture{1},selectedForestLasso{2};
+ std::vector<int> forestTerrainRayCache{3};
+ std::optional<bool> forestPlacementSaved{true},projectRunAfterTerrainPreview{true};
  struct {struct {struct {struct {std::uint64_t generation{7};}selected_project;}generations;} data;
   const auto& evidence()const{return data;}}projectLifecycle;
 };
@@ -364,7 +658,8 @@ int main(){
  #define CHECK(value) do{if(!(value))return __LINE__;}while(false)
  CHECK(!state.planetaryInitialFramePending&&state.planetaryInitialFrameGeneration==0);
  CHECK(state.forestTerrainPainting&&!state.forestBrushHeld&&!state.forestPlacementFocusPending);
- CHECK(!state.forestSurfacePlacement&&!state.forestBrushLastDirection&&state.forestBrushTerrain==0);
+ CHECK(!state.forestSurfacePlacement&&state.forestBrushDirections.empty()&&state.forestBrushTerrain==0);
+ CHECK(!state.forestPlacementSaved&&!state.projectRunAfterTerrainPreview&&!state.previousSceneClick);
  EditorState plant;plant.forestTerrainPainting=false;save_refresh(plant,true,true,true);
  CHECK(!plant.forestTerrainPainting&&!plant.forestBrushHeld&&!plant.forestSurfacePlacement);
  for(const bool pending:{false,true}){

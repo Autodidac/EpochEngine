@@ -81,8 +81,9 @@
             if (count == 1u && gui::segmented_button_row_width(
                 std::span<const gui::SegmentedButtonSpec>{filters}.subspan(first, 1u), 3.0f) > outputFilterWidth)
                 filters[first].width = outputFilterWidth;
-            if (const auto selected = gui::segmented_button_row(
-                std::span<const gui::SegmentedButtonSpec>{filters}.subspan(first, count), 27.0f, 3.0f))
+            if (const auto selected = render_automation_inspection(automationBackgroundInput,
+                canInspectAutomation(), [&]() { return gui::segmented_button_row(
+                    std::span<const gui::SegmentedButtonSpec>{filters}.subspan(first, count), 27.0f, 3.0f); }))
                 applyOutputFilter(first + *selected);
             first += count;
         }
@@ -92,15 +93,17 @@
             && editor.dockStatusTab != EditorWorkspaceTab::Output;
         const auto outputSearchPosition = gui::cursor_position();
         const bool inlineOutputDetails = canShowOutputDetails && outputContentWidth >= 200.0f;
-        if (gui::edit_box(editor.outputSearch,
+        if (render_automation_inspection(automationBackgroundInput, canInspectAutomation(),
+            [&]() { return gui::edit_box(editor.outputSearch,
             {inlineOutputDetails ? outputContentWidth - 96.0f : outputContentWidth, 26.0f},
-            256u, false, gui::TextInputKeyboardPolicy::focused, false, "Search Output...").changed)
+            256u, false, gui::TextInputKeyboardPolicy::focused, false, "Search Output..."); }).changed)
             editor.outputShowDetails = false;
         if (canShowOutputDetails)
         {
             if (inlineOutputDetails)
                 gui::set_cursor({outputSearchPosition.x + outputContentWidth - 88.0f, outputSearchPosition.y});
-            if (gui::button_selected("Details", {88.0f, 26.0f}, editor.outputShowDetails))
+            if (render_automation_inspection(automationBackgroundInput, canInspectAutomation(),
+                [&]() { return gui::button_selected("Details", {88.0f, 26.0f}, editor.outputShowDetails); }))
                 editor.outputShowDetails = !editor.outputShowDetails;
             if (inlineOutputDetails)
                 gui::set_cursor({outputSearchPosition.x, outputSearchPosition.y + 30.0f});
@@ -116,7 +119,7 @@
                 editor.projectId.empty() ? "no-project" : editor.projectId,
                 editor_main_surface_index(editor.mainSurface),
                 static_cast<unsigned>(editor.dockStatusTab), editor.outputGeneralOnly);
-            const auto outputScroll = gui::scroll_text_panel(gui::ScrollTextPanelOptions{
+            const gui::ScrollTextPanelOptions outputPanel{
                 .id = outputPanelId,
                 .size = {outputContentWidth, outputHeight},
                 .lines = filtered_editor_output(editor),
@@ -125,7 +128,9 @@
                 .selectable = true,
                 .stick_to_bottom = editor.outputFollowTail,
                 .scroll_to_end_generation = editor.outputScrollToEndGeneration,
-                .show_scroll_to_end = true});
+                .show_scroll_to_end = true};
+            const auto outputScroll = render_automation_inspection(automationBackgroundInput,
+                canInspectAutomation(), [&]() { return gui::scroll_text_panel(outputPanel); });
             editor.outputFollowTail = outputScroll.at_end;
         };
 
@@ -138,14 +143,17 @@
         auto renderDockStatusPanel = [&](std::string_view id, const std::vector<std::string>& lines) {
             const gui::Vec2 panelCursor = gui::cursor_position();
             const float panelHeight = (std::max)(72.0f, console_render_pos.y + console_render_size.y - panelCursor.y - 12.0f);
-            (void)gui::scroll_text_panel(gui::ScrollTextPanelOptions{
-                .id = std::string("editor-dock-status-") + std::string(id),
+            const std::string panelId = std::string("editor-dock-status-") + std::string(id);
+            const gui::ScrollTextPanelOptions panel{
+                .id = panelId,
                 .size = { (std::max)(180.0f, console_render_size.x - 24.0f), panelHeight },
                 .lines = lines,
                 .max_line_chars = 1024,
-                .selectable = false,
+                .selectable = true,
                 .stick_to_bottom = false
-            });
+            };
+            (void)render_automation_inspection(automationBackgroundInput, canInspectAutomation(),
+                [&]() { return gui::scroll_text_panel(panel); });
         };
 
         const bool dockUsesOuterScroll = false;

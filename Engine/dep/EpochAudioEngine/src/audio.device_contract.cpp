@@ -9,6 +9,7 @@ module;
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 module audio.device;
@@ -38,7 +39,10 @@ namespace epochengine::audio
             void close() noexcept override
             {
                 if (opened)
+                {
                     ++close_count;
+                    if (observed_closes) ++*observed_closes;
+                }
                 opened = false;
                 paused = false;
                 queued = 0;
@@ -93,6 +97,7 @@ namespace epochengine::audio
             std::uint64_t queued{};
             std::uint64_t open_count{};
             std::uint64_t close_count{};
+            std::uint64_t* observed_closes{};
             std::vector<float> received{};
             std::string diagnostic_text{"contract sink ready"};
         };
@@ -209,6 +214,27 @@ namespace epochengine::audio
             }
             return 0;
         }
+
+        [[nodiscard]] int move_assignment_ownership_contract()
+        {
+            std::uint64_t displaced_closes{}, transferred_closes{};
+            auto displaced = std::make_unique<ContractSink>();
+            auto transferred = std::make_unique<ContractSink>();
+            displaced->observed_closes = &displaced_closes;
+            transferred->observed_closes = &transferred_closes;
+            {
+                PhysicalAudioDevice destination{std::move(displaced)};
+                PhysicalAudioDevice source{std::move(transferred)};
+                if (destination.open() != AudioDeviceCode::success
+                    || source.open() != AudioDeviceCode::success)
+                    return 1;
+                destination = std::move(source);
+                if (displaced_closes != 1u || transferred_closes != 0u
+                    || destination.state() != AudioDeviceState::ready)
+                    return 2;
+            }
+            return displaced_closes == 1u && transferred_closes == 1u ? 0 : 3;
+        }
     }
 
     int run_audio_device_contract_tests()
@@ -219,6 +245,8 @@ namespace epochengine::audio
             return 200 + code;
         if (const int code = fault_and_recovery_contract(); code != 0)
             return 300 + code;
+        if (const int code = move_assignment_ownership_contract(); code != 0)
+            return 400 + code;
         return 0;
     }
 }

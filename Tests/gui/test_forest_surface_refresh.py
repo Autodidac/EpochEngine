@@ -28,6 +28,8 @@ class ForestSurfaceRefresh(unittest.TestCase):
             '        [[nodiscard]] std::optional<double> terrain_attachment_support(',
             '        [[nodiscard]] const EditorEntity* selected_terrain_attachment_refresh_target(',
             '        [[nodiscard]] project_planetary::SurfaceBatchResult query_forest_surfaces(',
+            '        [[nodiscard]] std::uint32_t forest_placement_body_id(',
+            '        [[nodiscard]] bool capture_terrain_project_camera(',
             '        [[nodiscard]] bool begin_forest_surface_refresh(',
             '        void complete_forest_surface_refresh(',
             '        void poll_forest_surface_placement('))
@@ -37,13 +39,16 @@ class ForestSurfaceRefresh(unittest.TestCase):
         transaction_functions = '\n'.join(definition(transactions, marker) for marker in (
             '        [[nodiscard]] bool project_scene_document_into_editor(',
             '        [[nodiscard]] scene::SceneObjectSnapshot editor_entity_snapshot(',
-            '        [[nodiscard]] bool apply_editor_scene_transaction('))
+            '        [[nodiscard]] bool apply_editor_scene_transaction(',
+            '        [[nodiscard]] bool detach_editor_object_from_terrain('))
         camera = (ROOT / 'Engine/src/render/render.preview_camera.cpp').read_text(encoding='utf-8')
-        transform = definition((ROOT / 'Engine/modules/render.preview_grid.ixx').read_text(encoding='utf-8'),
+        transform = definition((ROOT / 'Engine/modules/render/render.preview_grid.ixx').read_text(encoding='utf-8'),
                                '    export struct PreciseMeshTransform final', True).replace('export ', '')
         transform += '\n' + '\n'.join(definition(camera, marker) for marker in (
             '    [[nodiscard]] bool valid_precise_mesh_transform(',
             '    [[nodiscard]] std::optional<PreciseMeshTransform> make_precise_mesh_transform('))
+        plant_mesh = (ROOT / 'Engine/modules/forest/forest.preview_mesh.ixx').read_text(encoding='utf-8')
+        rotation = definition(plant_mesh, '    [[nodiscard]] inline std::optional<std::array<float,3>> surface_rotation(')
         code = r'''
 #include "core.format_text.hpp"
 #include "provider_ports.hpp"
@@ -86,13 +91,18 @@ std::mutex lock;std::condition_variable condition;
 }
 namespace epochengine {
 namespace fs=std::filesystem;
+namespace render_camera {enum class ProjectionKind {perspective,orthographic};}
 namespace forest {
 namespace preview_mesh {
-std::optional<std::array<float,3>> surface_rotation(std::array<double,3>,std::array<double,3>){std::abort();}
+SURFACE_ROTATION
 }
 }
 namespace previewgrid {
 struct Vec3 {float x{},y{},z{};};
+struct Camera {std::array<double,3> eye{};Vec3 forward{0,0,1};Vec3 up{0,1,0};
+ render_camera::ProjectionKind projection{render_camera::ProjectionKind::perspective};};
+std::array<double,3> camera_world_eye(const Camera&view){return view.eye;}
+Vec3 camera_forward(const Camera&view){return view.forward;}
 TRANSFORM
 }
 struct EditorEntity {
@@ -102,6 +112,7 @@ struct EditorEntity {
  decltype(scene::SceneObjectSnapshot{}.mesh_asset) meshAsset{};
  bool meshLoadAttempted{};std::shared_ptr<const asset::mesh::Artifact> meshSnapshot;
  std::optional<std::array<double,3>> positionAnchor;std::optional<scene::SceneForestRegionInstance>forestRegion;
+ std::vector<scene::SceneForestPaintRegion> forestPaintRegions;
  std::optional<scene::SceneTerrainAttachment>terrainAttachment;
 };
 struct EditorState {
@@ -129,6 +140,8 @@ struct EditorState {
   std::vector<project_planetary::GeneratedBody>generated_bodies;bool body_inventory_checked{true};
  };
  std::optional<PlanetaryMeshPolicy>planetaryMeshPolicy;
+ struct PlanetaryBodySelection {std::uint64_t entity{};std::array<std::uint64_t,4>mesh_key{};std::uint32_t body{};};
+ std::optional<PlanetaryBodySelection>planetaryBodySelection;
  STRUCTS
  std::optional<ForestSurfacePlacement>forestSurfacePlacement;
  std::optional<std::future<ForestSurfacePrepared>>forestSurfacePending;
@@ -250,11 +263,162 @@ void refusal_contract(const fs::path&root,int mode,const std::function<void(Edit
  assert(scene_bytes(s)==beforeCompletion&&s.saveCalls==0&&s.plantCalls==0);
  assert(s.plantLabStatus.starts_with("Forest placement unchanged:"));
 }
+
+EditorState make_player_start(const fs::path& root){
+ auto state=make_state(root,true);
+ auto authored=state.sceneDocument.project_snapshot().snapshot;
+ authored.objects.push_back({.id=400,.name="PlayerStart",.type="Spawn",.category="Gameplay",
+  .position={-2.5f,0,2.5f},.rotation={5,10,15}});
+ authored.objects.push_back({.id=401,.name="Other Start",.type="Spawn",.category="Gameplay",.position={1,2,3}});
+ authored.objects.push_back({.id=402,.name="Authored Camera",.type="Camera",.category="Editor",
+  .position={8,5,4},.rotation={-45,10,0}});
+ authored.primary_spawn=400;
+ authored.primary_camera=402;
+ auto document=authoring::scene::SceneDocument::from_snapshot(authored);assert(document);
+ state.sceneDocument=std::move(document.value);assert(project_scene_document_into_editor(state));
+ state.planetaryMeshPolicy->settings.mode="universe";
+ return state;
+}
+
+void player_start_contract(const fs::path&root){
+ auto project=make_player_start(root/"player-start");
+ const auto authored=project.sceneDocument.project_snapshot().snapshot;
+ const auto& terrain=authored.objects.front();
+ const auto parent=previewgrid::make_precise_mesh_transform(*scene::world_position(terrain),{2,2,2},{0,0,90});
+ assert(parent&&terrain.mesh_asset);
+ project.planetaryBodySelection=EditorState::PlanetaryBodySelection{100,terrain.mesh_asset->artifact_key,1};
+ previewgrid::Camera view{.eye=parent->apply({13500,1000,-50})};
+ reset_ports(3); // This moon is dry even though its surface is below datum.
+ assert(begin_forest_surface_refresh(project,true,&view));wait_entered();
+ assert(project.forestSurfacePlacement->query.body.id==1&&project.forestSurfacePlacement->refreshObjects.size()==1);
+ assert(scene::persistence::scene_snapshot_semantically_equal(project.sceneDocument.project_snapshot().snapshot,authored));
+ view.eye={}; // View motion does not change the accepted sample.
+ finish(project);
+ assert(project.saveCalls==1&&project.projectStatus.find("placed and saved")!=std::string::npos);
+ auto placed=project.sceneDocument.project_snapshot().snapshot;
+ const auto spawn=std::ranges::find(placed.objects,400u,&scene::SceneObjectSnapshot::id);
+ assert(spawn!=placed.objects.end()&&spawn->terrain_attachment&&spawn->terrain_attachment->body_index==1u);
+ assert(spawn->terrain_attachment->matches(100,*terrain.mesh_asset)&&!spawn->terrain_attachment->solid_walk_box);
+ const auto foot=scene::world_position(*spawn);
+ assert(foot==std::optional{parent->apply({13500,99,-50})});
+ const auto facing=previewgrid::make_precise_mesh_transform({}, {1,1,1},
+  {spawn->rotation[0],spawn->rotation[1],spawn->rotation[2]});
+ assert(facing&&std::abs(facing->rotation[2])<1e-5&&std::abs(facing->rotation[5])<1e-5&&facing->rotation[8]<-.99999);
+ auto withoutPlacement=placed;
+ *std::ranges::find(withoutPlacement.objects,400u,&scene::SceneObjectSnapshot::id)=
+  *std::ranges::find(authored.objects,400u,&scene::SceneObjectSnapshot::id);
+ withoutPlacement.revision=authored.revision;
+ assert(scene::persistence::scene_snapshot_semantically_equal(withoutPlacement,authored));
+ const auto saved=scene::persistence::load_scene_snapshot(root/"player-start/main.epoch");
+ assert(saved.result&&scene::persistence::scene_snapshot_semantically_equal(saved.snapshot,placed));
+ const auto handle=project.sceneDocument.find({100});assert(handle);
+ auto pose=project.sceneDocument.object(*handle)->descriptor.transform;pose.position.y+=16;
+ const std::array<authoring::scene::SceneOperation,1> move{authoring::scene::ObjectTransformChangedOperation{*handle,pose}};
+ assert(apply_editor_scene_transaction(project,move,"Move Planet"));
+ const auto moved=project.sceneDocument.project_snapshot().snapshot;
+ const auto movedFoot=scene::world_position(*std::ranges::find(moved.objects,400u,&scene::SceneObjectSnapshot::id));
+ assert(movedFoot&&(*movedFoot)[1]==(*foot)[1]+16.0);
+ assert(project.sceneDocument.undo()&&project.sceneDocument.undo());
+ auto undone=project.sceneDocument.project_snapshot().snapshot;undone.revision=authored.revision;
+ assert(scene::persistence::scene_snapshot_semantically_equal(undone,authored));
+
+ auto refused=make_player_start(root/"player-start-refusals");
+ const auto initial=scene_bytes(refused);
+ const previewgrid::Camera mainView{.eye=parent->apply({500,1400,-50})};
+ for(int mode:{3,8}){
+  reset_ports(mode);assert(begin_forest_surface_refresh(refused,true,&mainView));wait_entered();finish(refused);
+  assert(scene_bytes(refused)==initial&&refused.saveCalls==0&&refused.projectStatus.starts_with("PlayerStart placement unchanged:"));
+ }
+ reset_ports();assert(begin_forest_surface_refresh(refused,true,&mainView));wait_entered();
+ fixture_ports::source_current=false;finish(refused);
+ assert(scene_bytes(refused)==initial&&refused.saveCalls==0);
+ reset_ports();assert(begin_forest_surface_refresh(refused,true,&mainView));wait_entered();release_worker();
+ assert(refused.forestSurfacePending->wait_for(std::chrono::seconds{3})==std::future_status::ready);
+ request_editor_automation_stop(refused);poll_forest_surface_placement(refused);
+ assert(scene_bytes(refused)==initial&&refused.saveCalls==0&&!refused.forestSurfacePending);
+ auto withoutSpawn=make_state(root/"player-start-missing");withoutSpawn.planetaryMeshPolicy->settings.mode="planet";
+ reset_ports();assert(!begin_forest_surface_refresh(withoutSpawn,true,&mainView));
+ assert(!withoutSpawn.forestSurfacePending&&fixture_ports::calls==0);
+}
+
+void terrain_camera_contract(const fs::path& root){
+ namespace document=authoring::scene;
+ auto state=make_player_start(root/"terrain-camera");
+ auto original=state.sceneDocument.project_snapshot().snapshot;
+ original.objects.emplace_back(scene::SceneObjectSnapshot{.id=403,.name="Second Camera",.type="Camera",
+  .category="Editor",.position={5,6,7},.rotation={23,27,31}});
+ auto built=document::SceneDocument::from_snapshot(original);assert(built);
+ state.sceneDocument=std::move(built.value);assert(project_scene_document_into_editor(state));
+ const auto before=scene_bytes(state);assert(before.starts_with("epoch_snapshot 8\n"));
+ const auto old=scene::parse_snapshot_text(before);assert(old);
+ assert(scene::serialize_snapshot_text(old.snapshot)==before);
+ const auto& terrain=original.objects.front();assert(terrain.mesh_asset);
+ const auto parent=previewgrid::make_precise_mesh_transform(*scene::world_position(terrain),{2,2,2},{0,0,90});assert(parent);
+ state.planetaryBodySelection=EditorState::PlanetaryBodySelection{100,terrain.mesh_asset->artifact_key,1};
+ const previewgrid::Camera view{.eye=parent->apply({13500.125,1000,-50}),.forward={.8f,.6f,0},.up={-.36f,.48f,.8f}};
+ auto invalid=view;invalid.projection=render_camera::ProjectionKind::orthographic;
+ assert(!capture_terrain_project_camera(state,state.entities.front(),invalid));
+ invalid=view;invalid.up=invalid.forward;
+ assert(!capture_terrain_project_camera(state,state.entities.front(),invalid));
+ state.planetaryMeshPolicy->generated_mesh->artifact_key[0]^=1;
+ assert(!capture_terrain_project_camera(state,state.entities.front(),view));
+ state.planetaryMeshPolicy->generated_mesh->artifact_key[0]^=1;
+ assert(scene_bytes(state)==before&&state.saveCalls==0);
+ reset_ports();assert(capture_terrain_project_camera(state,state.entities.front(),view));
+ assert(fixture_ports::calls==0&&state.saveCalls==1&&state.selectedEntityId==402);
+ const auto captured=state.sceneDocument.project_snapshot().snapshot;
+ const auto find=[](const scene::SceneSnapshot& snapshot,scene::SceneObjectId id)->const auto&{
+  return *std::ranges::find(snapshot.objects,id,&scene::SceneObjectSnapshot::id);};
+ const auto& camera=find(captured,402);
+ assert(scene::world_position(camera)==std::optional{view.eye}&&camera.terrain_attachment);
+ assert(camera.terrain_attachment->body_index==1&&camera.terrain_attachment->matches(100,*terrain.mesh_asset));
+ const auto pose=previewgrid::make_precise_mesh_transform(view.eye,{1,1,1},
+  {camera.rotation[0],camera.rotation[1],camera.rotation[2]});assert(pose);
+ assert(std::abs(pose->rotation[2]+view.forward.x)<1e-6&&std::abs(pose->rotation[5]+view.forward.y)<1e-6);
+ assert(std::abs(pose->rotation[1]-view.up.x)<1e-6&&std::abs(pose->rotation[4]-view.up.y)<1e-6
+  &&std::abs(pose->rotation[7]-view.up.z)<1e-6);
+ auto neighbors=captured;neighbors.revision=original.revision;
+ *std::ranges::find(neighbors.objects,402u,&scene::SceneObjectSnapshot::id)=find(original,402);
+ assert(scene::persistence::scene_snapshot_semantically_equal(neighbors,original));
+ const auto loaded=scene::persistence::load_scene_snapshot(root/"terrain-camera/main.epoch");assert(loaded.result);
+ assert(document::SceneDocument::from_snapshot(loaded.snapshot));
+ assert(scene::persistence::scene_snapshot_semantically_equal(loaded.snapshot,captured));
+ assert(scene_bytes(state).starts_with("epoch_snapshot 9\n"));
+ auto malformed=captured;auto bad=std::ranges::find(malformed.objects,402u,&scene::SceneObjectSnapshot::id);
+ bad->terrain_attachment->solid_walk_box=true;
+ assert(!scene::validate_scene_document(malformed,scene::SceneDocumentRequirement::authoring));
+ assert(!document::SceneDocument::from_snapshot(malformed));
+ assert(state.sceneDocument.undo());assert(project_scene_document_into_editor(state));
+ auto undone=state.sceneDocument.project_snapshot().snapshot;undone.revision=original.revision;
+ assert(scene::persistence::scene_snapshot_semantically_equal(undone,original));
+ assert(state.sceneDocument.redo());assert(project_scene_document_into_editor(state));
+ const auto terrainHandle=state.sceneDocument.find({100});assert(terrainHandle);
+ auto moved=state.sceneDocument.object(*terrainHandle)->descriptor.transform;
+ moved.position.x+=8;moved.rotation_degrees.z+=90;
+ const std::array<document::SceneOperation,1> transform{document::ObjectTransformChangedOperation{*terrainHandle,moved}};
+ assert(apply_editor_scene_transaction(state,transform,"Move and rotate attached Camera"));
+ const auto after=state.sceneDocument.project_snapshot().snapshot;
+ const auto newParent=previewgrid::make_precise_mesh_transform(*scene::world_position(find(after,100)),{2,2,2},{0,0,180});assert(newParent);
+ const auto expected=newParent->apply(parent->inverse_apply(view.eye));
+ const auto& movedCamera=find(after,402);const auto actual=scene::world_position(movedCamera);assert(actual);
+ for(std::size_t axis=0;axis<3;++axis)assert(std::abs((*actual)[axis]-expected[axis])<.002);
+ const auto facing=previewgrid::make_precise_mesh_transform({}, {1,1,1},
+  {movedCamera.rotation[0],movedCamera.rotation[1],movedCamera.rotation[2]});assert(facing);
+ assert(std::abs(facing->rotation[2]-view.forward.y)<1e-6&&std::abs(facing->rotation[5]+view.forward.x)<1e-6);
+ assert(!selected_terrain_attachment_refresh_target(state));
+ const auto cameraIndex=editor_entity_index(state,402);assert(cameraIndex);
+ assert(detach_editor_object_from_terrain(state,state.entities[*cameraIndex]));
+ const auto detached=state.sceneDocument.project_snapshot().snapshot;
+ assert(!find(detached,402).terrain_attachment&&scene::world_position(find(detached,402))==actual);
+ assert(find(detached,402).rotation==movedCamera.rotation&&scene_bytes(state).starts_with("epoch_snapshot 8\n"));
+}
 }
 int main(int argc,char**argv){
  _CrtSetReportMode(_CRT_ASSERT,_CRTDBG_MODE_FILE);_CrtSetReportFile(_CRT_ASSERT,_CRTDBG_FILE_STDERR);
  using namespace epochengine;assert(argc==2);const auto root=fs::path{argv[1]};assert(root.is_absolute());
  success_contract(root/"one",false);success_contract(root/"two",true);
+ player_start_contract(root);
+ terrain_camera_contract(root);
  reset_ports(9);auto contended=make_state(root/"contended");
  assert(begin_forest_surface_refresh(contended));wait_entered();finish(contended);
  assert(fixture_ports::calls==2&&contended.saveCalls==1);
@@ -362,9 +526,9 @@ int main(int argc,char**argv){
  many.sceneDocument=std::move(manyDocument.value);assert(project_scene_document_into_editor(many));
  reset_ports();assert(begin_forest_surface_refresh(many,true));wait_entered();finish(many);
  assert(fixture_ports::calls==2&&many.saveCalls==1&&many.projectStatus.find("65 model")!=std::string::npos);
- std::ofstream result(root/"case-result.json");result<<"{\"five_ids_preserved\":true,\"actual_scheduler\":true,\"actual_scene_history_and_persistence\":true,\"actual_common_stop_ready_result_revoked\":true,\"native_acceptance\":false}";
+ std::ofstream result(root/"case-result.json");result<<"{\"five_ids_preserved\":true,\"actual_scheduler\":true,\"actual_scene_history_and_persistence\":true,\"actual_common_stop_ready_result_revoked\":true,\"player_start_placement\":true,\"native_acceptance\":false}";
 }
-'''.replace('TRANSFORM', transform).replace('STRUCTS', structs).replace('TRANSACTIONS', transaction_functions).replace('STOP', stop).replace('REFRESH', refresh)
+'''.replace('TRANSFORM', transform).replace('STRUCTS', structs).replace('TRANSACTIONS', transaction_functions).replace('STOP', stop).replace('REFRESH', refresh).replace('SURFACE_ROTATION', rotation)
         port_header = r'''
 #pragma once
 #include <atomic>
@@ -422,7 +586,7 @@ SurfaceBatchResult query_surfaces(const std::filesystem::path&,const SurfaceBatc
         (report / 'provider_ports.hpp').write_text(port_header, encoding='utf-8')
         (report / 'provider.cpp').write_text(provider, encoding='utf-8')
         modules = {}
-        for path in (ROOT / 'Engine/modules').glob('*.ixx'):
+        for path in (ROOT / 'Engine/modules').rglob('*.ixx'):
             match = re.search(r'^export module\s+([\w.:]+);', path.read_text(encoding='utf-8-sig'), re.M)
             if match:
                 modules[match.group(1)] = path
@@ -469,7 +633,7 @@ set_tests_properties(actual_async_forest_refresh PROPERTIES TIMEOUT 30)
         (report / 'result.json').write_text(json.dumps(dict(passed=True, runs=runs, fixture=str(fixture),
             source_sha256=hashlib.sha256(source.encode()).hexdigest(), native_acceptance=False,
             stop_owner_sha256=hashlib.sha256(context.encode()).hexdigest(),
-            scope='Actual begin/worker/poll/completion, actual scheduler, scene transaction, Undo/Redo, save/cold reopen. Provider process boundary is deterministic recording/failure port.'), indent=2), encoding='utf-8')
+            scope='Actual terrain refresh, PlayerStart and Camera placement through scene transactions, parent movement, Undo/Redo, save/cold reopen and camera detach. Provider process boundary is deterministic recording/failure port.'), indent=2), encoding='utf-8')
 
 
 if __name__ == '__main__':

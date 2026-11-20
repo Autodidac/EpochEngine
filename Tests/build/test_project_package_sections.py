@@ -22,15 +22,15 @@ class ProjectPackageSections(unittest.TestCase):
     def roots(self):
         result = [ROOT]
         public = ROOT / 'build/publication/EpochEngine'
-        if (public / 'Engine/modules/package.registry.ixx').exists():
+        if (public / 'Engine/modules/package/package.registry.ixx').exists():
             result.append(public)
         return result
 
     def test_actual_catalog_labels_preserve_payload_and_unknown_identities(self):
-        registry = read_owned_source(ROOT / 'Engine/modules/package.registry.ixx', encoding='utf-8')
+        registry = read_owned_source(ROOT / 'Engine/modules/package/package.registry.ixx', encoding='utf-8')
         namespace = registry[registry.index('export namespace epochengine::package_registry'):]
         namespace = namespace.replace('export namespace', 'namespace', 1)
-        catalog = read_owned_source(ROOT / 'Engine/modules/package.catalog.ixx', encoding='utf-8')
+        catalog = read_owned_source(ROOT / 'Engine/modules/package/package.catalog.ixx', encoding='utf-8')
         catalog = catalog[catalog.index('export namespace epochengine::package_catalog'):]
         catalog = catalog.replace('export namespace', 'namespace', 1)
         writer = read_owned_source(ROOT / 'Engine/src/editor/application/editor.application_packages_creation.inl', encoding='utf-8')
@@ -138,8 +138,8 @@ int main() {
         scratch = Path(tempfile.mkdtemp(prefix='package-sections-', dir=parent))
         try:
             for index, root in enumerate(self.roots()):
-                registry = read_owned_source(root / 'Engine/modules/package.registry.ixx', encoding='utf-8')
-                forest = read_owned_source(root / 'Engine/modules/forest.factory.ixx', encoding='utf-8')
+                registry = read_owned_source(root / 'Engine/modules/package/package.registry.ixx', encoding='utf-8')
+                forest = read_owned_source(root / 'Engine/modules/forest/forest.factory.ixx', encoding='utf-8')
                 forest_ids = []
                 for name in ('kForestFactoryPackageId', 'kForestFactoryReferenceRepo'):
                     declaration = re.search(r'inline constexpr std::string_view ' + name + r'\s*=[^;]+;', forest)
@@ -193,7 +193,7 @@ int main() {
                     result = subprocess.run([str(compiler), '/nologo', '/std:c++latest',
                         '/EHsc', '/c', '/interface', *includes,
                         '/ifcOutput' + str(ifc), '/Fo' + str(scratch / 'registry.obj'),
-                        str(ROOT / 'Engine/modules/package.registry.ixx')],
+                        str(ROOT / 'Engine/modules/package/package.registry.ixx')],
                         cwd=scratch, capture_output=True, text=True)
                     self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                     consumer = scratch / 'consumer.cpp'
@@ -252,7 +252,7 @@ int main() {
 
     def test_both_http_implementations_use_project_resource_endpoint(self):
         for root in self.roots():
-            module = read_owned_source(root / 'Engine/modules/package.catalog.ixx', encoding='utf-8')
+            module = read_owned_source(root / 'Engine/modules/package/package.catalog.ixx', encoding='utf-8')
             source = read_owned_source(root / 'Engine/src/packages/package.catalog.cpp', encoding='utf-8')
             endpoint = '/api/epoch/project-resources/catalog'
             self.assertIn('https://epoch.adamrushford.chatgpt.site' + endpoint, module)

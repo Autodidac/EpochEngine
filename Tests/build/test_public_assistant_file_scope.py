@@ -45,7 +45,9 @@ namespace core::path {
  inline std::filesystem::path executable_dir() { return testEngineRoot/"output"; }
  inline std::filesystem::path find_epoch_repo_root(const std::filesystem::path&) { return testEngineRoot; }
 }
+struct EditorState { std::string projectRoot; };
 namespace ai {
+ namespace source_access=epochengine::ai::source_access;
  struct EvidencePaths { std::string workspace_root; };
  inline EvidencePaths default_evidence_paths() { return {testEngineRoot.generic_string()}; }
 }
@@ -63,7 +65,10 @@ namespace gui {
 }
 namespace platform::filesystem {
  struct Thumbnail { std::vector<std::uint8_t> rgba; unsigned width{},height{}; };
- inline Thumbnail image_thumbnail(std::string_view) { return {}; }
+ inline Thumbnail image_thumbnail(std::string_view bytes) {
+  if(bytes.size()==68u) return {{0,0,0,255},1,1};
+  return {};
+ }
 }
 struct AiChat {
  struct Image { std::string name,mime,bytes,identity; };
@@ -86,7 +91,7 @@ struct AiChat {
             cpp.write_text(prefix+project+'\n'+attachment+'\n'+fixture, encoding='utf-8')
             args = [str(tool/'bin/Hostx64/x64/cl.exe'), '/nologo', '/utf-8', '/std:c++latest', '/EHsc',
                     '/DEPOCH_EDITION_PUBLIC=1', '/DEPOCH_TEST_PUBLIC_GUI_PATHS=1',
-                    '/I'+str(ROOT/'Engine/src/editor/ai'), '/I'+str(tool/'include'), '/I'+str(kit/'ucrt'),
+                    '/I'+str(ROOT/'Engine/src/editor/ai'), '/I'+str(ROOT/'Engine/dep/EpochPlatformEngine/include'), '/I'+str(tool/'include'), '/I'+str(kit/'ucrt'),
                     '/Fo'+str(scratch/'contract.obj'), '/Fe'+str(binary), str(cpp), '/link',
                     '/LIBPATH:'+str(tool/'lib/x64'), '/LIBPATH:'+str(sdk/'Lib'/kit.name/'um/x64'),
                     '/LIBPATH:'+str(sdk/'Lib'/kit.name/'ucrt/x64')]

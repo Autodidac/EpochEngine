@@ -8,6 +8,36 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class SceneViewportFit(unittest.TestCase):
+    def test_reserved_header_spacing_erases_stale_pixels(self):
+        from Tests.support.cpp import compile_and_run
+        from Tests.build.test_opengl_sprite_stream import definition
+        viewport=(ROOT/'Engine/src/editor/application/editor.frame_viewport.inl').read_text(encoding='utf-8')
+        start=viewport.index('            if (sceneFits && !projectViewportMaximized)')
+        actual=definition(viewport,'            if (sceneFits && !projectViewportMaximized)',False)
+        owner=(ROOT/'Engine/src/epochgui/controls/gui.window_controls.inl').read_text(encoding='utf-8')
+        panel=definition(owner,'    void panel_rect(',False)
+        code=r"""#include <algorithm>
+#include <array>
+namespace gui{struct Vec2{float x,y;};struct{bool ctx=true;}g_frame;
+std::array<int,400*300>pixels;void ensure_resources(){}struct Palette{int panelBackground=7;};Palette active_palette(){return {};}
+void draw_sprite(int color,float x,float y,float w,float h){for(int yy=int(y);yy<int(y+h);++yy)for(int xx=int(x);xx<int(x+w);++xx)pixels[yy*400+xx]=color;}
+"""+panel+r"""}
+int main(){for(float fontHeight:{16.f,22.f,38.f,58.f})for(unsigned rows:{1u,2u,3u}){
+ gui::pixels.fill(3);const gui::Vec2 scene_pos{0,20},scene_size{390,270};
+ const float sceneNoticeTop=2+(fontHeight+10+6)*rows;
+ const bool sceneFits=true,projectViewportMaximized=false;
+ struct{struct{gui::Vec2 position,size;}scene_viewport;}result{{{2,50},{386,238}}};
+"""+actual+r"""
+ const int bottom=int(result.scene_viewport.position.y);
+ for(int y=50;y<bottom;++y)for(int x=0;x<390;++x)if(gui::pixels[y*400+x]!=7)return 1;
+ // Title, newly exposed scene and neighboring dock remain untouched.
+ if(gui::pixels[49*400]!=3||gui::pixels[bottom*400]!=3||gui::pixels[60*400+399]!=3)return 2;
+ if(result.scene_viewport.position.y+result.scene_viewport.size.y!=288)return 3;
+ }return 0;}
+"""
+        report=ROOT/'Artifacts/Reports/header-reserved-paint';report.mkdir(parents=True,exist_ok=True)
+        src=report/'paint.cpp';src.write_text(code,encoding='utf-8');compile_and_run(self,src,report)
+
     def test_disabled_preview_erases_old_scene_and_resized_panel_pixels(self):
         viewport = (ROOT / 'Engine/src/editor/application/editor.frame_viewport.inl').read_text(encoding='utf-8')
         begin = viewport.index('            // None stops scene submissions')
@@ -84,6 +114,7 @@ assert(gui::panelSize.y<=actualRowAdvance+gui::line_height()+8.0f);
         sizing = viewport[viewport.index('            const std::string_view sceneTitle ='):viewport.index('            editor.planetaryViewportHeight =')]
         source = r'''
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <string_view>
 namespace gui {
@@ -93,7 +124,12 @@ inline Vec2 cursor;inline unsigned draws;
 Vec2 cursor_position(){return cursor;}
 float line_height(){return 20;}
 float titled_window_total_height(float){return 50;}
-WidgetBounds scene_viewport(std::string_view,Vec2 position,Vec2 size){++draws;return {position,size};}
+struct InlineButtonSpec{std::string_view label;float width;};
+enum class InlineButtonSizing{FitContent};
+struct InlineButtonRowOptions{InlineButtonSizing sizing;};
+float inline_button_row_height(const std::array<InlineButtonSpec,1>&,float,float,InlineButtonRowOptions){return 31;}
+WidgetBounds scene_viewport(std::string_view,Vec2 position,Vec2 size,float height)
+{assert(height==31);++draws;return {position,size};}
 }
 enum class EditorMainSurface{Scene,Game2D,ForestFactory};
 std::string_view main_surface_title(EditorMainSurface){return "Scene";}

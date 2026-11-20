@@ -75,6 +75,8 @@ namespace epochengine::authoring::gui
                 return asset::gui::LayoutFlow::horizontal;
             case LayoutFlow::vertical: return asset::gui::LayoutFlow::vertical;
             case LayoutFlow::overlay: return asset::gui::LayoutFlow::overlay;
+            case LayoutFlow::responsive_columns:
+                return asset::gui::LayoutFlow::responsive_columns;
             }
             return asset::gui::LayoutFlow::absolute;
         }

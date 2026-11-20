@@ -62,7 +62,8 @@ enum class ScenePreviewMode {None,Editor,Runtime};
 enum class BackendLifecycleState {ready,failed};
 struct RenderViewport { int x{},y{},width{},height{}; };
 struct Context {
- void* native_window{}; int width{1000},height{700}; RenderViewport viewport{100,80,600,420};
+ HWND hwnd{}; void* native_window{}; int width{1000},height{700}; RenderViewport viewport{100,80,600,420};
+ HWND get_hwnd() const {return hwnd;}
  bool overlay{}; ScenePreviewMode mode{ScenePreviewMode::Editor};
  bool gui_overlay_priority() const {return overlay;}
  ScenePreviewMode scene_preview_mode() const {return mode;}
@@ -114,7 +115,8 @@ int main() {
  native[parent]={{},{0,0,1600,1100},{30,40},true};
  native[owner]={parent,{0,0,1250,875},{150,115},true};
  native[child]={parent,{0,0,20,20},{30,40},true,42};
- auto context=std::make_shared<Context>();context->native_window=owner;
+ auto context=std::make_shared<Context>();context->hwnd=owner;
+ CHECK(context->native_window==nullptr); // Initial Windows Vulkan startup only sets the HWND.
  auto lease=std::make_shared<Lease>();
  ExternalProcessPresentation presentation{.attachment=lease,.viewport_context=context,.in_viewport=true,.visible=true};
  CHECK(place_external_viewport_attachment(parent,presentation));
@@ -129,7 +131,8 @@ int main() {
  CHECK(last_placement_trace.find("placement_ms=")!=std::string::npos
   &&last_placement_trace.find("z_order_ms=")!=std::string::npos
   &&last_placement_trace.find("verification_ms=")!=std::string::npos
-  &&last_placement_trace.find("outcome=placed")!=std::string::npos);
+  &&last_placement_trace.find("outcome=placed")!=std::string::npos
+  &&last_placement_trace.find("slot=750x525 child_visible=1 child_top_sibling=1")!=std::string::npos);
  epochengine::core::cli::trace_menu_button0_rect=false;
  // Compressed client retains the same logical viewport and cannot cover its tools.
  native[owner].client={0,0,300,210};

@@ -207,12 +207,21 @@ int main(){
 #include "CATALOG"
 namespace ai=epochengine::ai;
 #include "FORMAT_HEADER"
-struct EditorState {std::string aiModelCatalogSelection,aiModelCatalogApproval,packageInstallStatus;float packageInstallProgress{};bool packageModelInstall{},aiModelCatalogDetailsOpen{};};
-struct NativeState {struct Model{std::string id;};std::vector<Model> models;bool busy{};};
+struct EditorState {std::string aiModelCatalogSelection,aiModelCatalogApproval,packageInstallStatus,aiModelPendingDownloadDeletion,aiModelManagerFeedback;int aiModelManagerSection{};float packageInstallProgress{};bool packageModelInstall{},aiModelCatalogDetailsOpen{};};
+struct NativeState {struct Model{std::string id;bool active{};};std::vector<Model> models;bool busy{};};
 unsigned downloads{},registrations{},cancellations{},warnings{},technicalLines{};bool ack{};std::optional<std::size_t> fixtureChoice;
 std::string click,captured;
 bool writableStore=true;
-namespace native {std::filesystem::path model_install_cache_root(){return writableStore?std::filesystem::current_path()/"shared-model-store":std::filesystem::path{};}}
+namespace native {
+std::filesystem::path model_install_cache_root(){return writableStore?std::filesystem::current_path()/"shared-model-store":std::filesystem::path{};}
+bool delete_model_offer_download(std::string){return false;}
+}
+// This action-admission fixture has no previously downloaded weights.
+namespace epochengine::ai::model_install {
+std::optional<int> plan_for(std::string_view){return 1;}
+std::filesystem::path version_root(const std::filesystem::path& root,int){return root/"not-installed";}
+}
+bool model_snapshot_installed(int,const std::filesystem::path&){return false;}
 namespace gui {
 struct Vec2{float x{},y{};};enum class SemanticTone{warning,info};enum class InlineButtonAlignment{Center};
 struct SelectBoxOptions {std::string_view id,placeholder,selected;std::span<const std::string_view> options;Vec2 size;bool fit_content{};InlineButtonAlignment alignment{};unsigned max_visible_options{};};

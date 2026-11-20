@@ -14,7 +14,7 @@ ROOT=Path(__file__).resolve().parents[2]
 
 def fixture():
     view=(ROOT/'Engine/src/editor/application/editor.frame_viewport.inl').read_text(encoding='utf-8')
-    module=(ROOT/'Engine/modules/project.planetary.ixx').read_text(encoding='utf-8')
+    module=(ROOT/'Engine/modules/project/project.planetary.ixx').read_text(encoding='utf-8')
     mesh=(ROOT/'Engine/modules/asset.mesh_artifact.ixx').read_text(encoding='utf-8')
     snapshot=(ROOT/'Engine/modules/project.planetary_snapshot.ixx').read_text(encoding='utf-8')
     snapshot_types='\n'.join(definition(snapshot,'    struct '+name+' final',True)
@@ -49,7 +49,7 @@ def fixture():
 #include <system_error>
 #include <unordered_map>
 #include <vector>
-namespace epochengine::asset::mesh {class Artifact;LIMITS}
+namespace epochengine::asset::mesh {class Artifact;struct SphericalWaterAppearance;LIMITS}
 namespace epochengine::project_planetary_snapshot {struct Snapshot;SNAPSHOT_TYPES}
 namespace epochengine {template<class...Args>std::string format_text(std::string_view value,Args&&...){return std::string(value);}}
 SETTINGS
@@ -76,7 +76,13 @@ void section_heading(std::string_view text){label(text);y+=10;}
 struct EditResult {bool changed{};};
 EditResult edit_box(std::string&,Vec2 size,unsigned,bool){y+=size.y+4;return {};}
 bool toggle_switch(std::string_view label,bool& value,Vec2 size){y+=size.y+4;if(requested==label){value=!value;return true;}return false;}
-SelectBoxResult select_box(SelectBoxOptions o){y+=o.size.y+4;return {};}
+SelectBoxResult select_box(SelectBoxOptions o){
+ y+=o.size.y+4;
+ messages.emplace_back(o.selected);
+ const auto chosen=std::ranges::find(o.options,requested);
+ if(chosen==o.options.end())return {};
+ return {true,static_cast<std::size_t>(chosen-o.options.begin())};
+}
 SliderResult slider(SliderOptions o){
  y+=o.size.y+4;lastControlY=y;if(o.id=="planet-cells")cellsMaximum=o.maximum;
  const auto at=edits.find(std::string(o.id));
@@ -136,10 +142,13 @@ int main(){
   EditorState s;const auto original=s.planetarySettings;
   CHECK(project_planetary::valid_settings(original));
   gui::fresh("");draw(s,false,width);
-  CHECK(gui::firstActionY>100&&gui::firstActionY>=gui::lastControlY&&s.planetarySettings==original&&s.starts==0&&gui::presetClicks==0);
+  CHECK(gui::firstActionY==0&&gui::lastControlY>gui::firstActionY&&s.planetarySettings==original&&s.starts==0&&gui::presetClicks==0);
   gui::fresh("Build & Generate");draw(s,false,width);
-  CHECK(s.starts==1&&s.submitted==original&&gui::firstActionY>=gui::lastControlY&&gui::presetClicks==0);
+  CHECK(s.starts==1&&s.submitted==original&&gui::firstActionY==0&&gui::presetClicks==0);
  }
+ EditorState verbose;verbose.planetaryStatus=std::string(3000,'x');
+ gui::fresh("");draw(verbose,false,220);
+ CHECK(gui::firstActionY==0&&gui::lastControlY>gui::firstActionY);
  EditorState custom;custom.planetarySeedDraft="987";
  gui::fresh("Build & Generate");gui::edits={{"planet-cells",48.f},{"planet-snapshot-memory",64.f},
   {"planet-lod-pixels",170.f},{"planet-lod-stability",20.f}};
@@ -151,12 +160,23 @@ int main(){
  gui::fresh("Build & Generate");gui::edits={{"planet-cells",32.f},{"planet-snapshot-memory",16.f}};
  draw(tiled,false,520);
  CHECK(tiled.starts==1&&tiled.submitted.mode=="tiled"&&tiled.submitted.cells_per_tile==32&&tiled.submitted.snapshot_megabytes==16);
+ constexpr std::string_view labels[]{"Classic Terrain","Tiled Terrain","Hemisphere","Planet","Universe"};
+ constexpr std::string_view modes[]{"classic","tiled","hemisphere","planet","universe"};
+ for(std::size_t i=0;i<std::size(labels);++i){
+  EditorState coverage;gui::fresh(std::string(labels[i]));draw(coverage,false,520);
+  CHECK(coverage.planetarySettings.mode==modes[i]&&coverage.starts==0);
+  gui::fresh("");draw(coverage,false,520);
+  CHECK(std::ranges::find(gui::messages,labels[i])!=gui::messages.end());
+ }
  EditorState refused;gui::fresh("Build & Generate");gui::edits={{"planet-cells",64.f},{"planet-snapshot-memory",1.f}};
  draw(refused,false,520);CHECK(refused.starts==0);
  EditorState recovered;recovered.planetarySettings.cells_per_tile=64;recovered.planetarySettings.snapshot_megabytes=1;
  CHECK(!project_planetary::valid_settings(recovered.planetarySettings));
  gui::fresh("Build & Generate");gui::edits={{"planet-snapshot-memory",64.f}};
- draw(recovered,false,520);CHECK(recovered.starts==1&&recovered.submitted.snapshot_megabytes==64);
+ draw(recovered,false,520);CHECK(recovered.starts==0&&project_planetary::valid_settings(recovered.planetarySettings));
+ // Top actions become enabled on the next frame after an invalid form is repaired.
+ gui::fresh("Build & Generate");draw(recovered,false,520);
+ CHECK(recovered.starts==1&&recovered.submitted.snapshot_megabytes==64);
  EditorState seed;seed.planetarySeedDraft="4294967296";gui::fresh("Build & Generate");draw(seed,false,520);
  CHECK(seed.starts==0&&std::ranges::any_of(gui::messages,[](const auto& s){return s.find("whole-number seed")!=std::string::npos;}));
  EditorState busy;gui::fresh("Cancel");draw(busy,true,520);CHECK(busy.cancels==1&&busy.starts==0);

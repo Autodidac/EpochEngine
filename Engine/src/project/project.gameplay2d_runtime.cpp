@@ -367,6 +367,13 @@ namespace epochengine::project_gameplay2d
             sprite.transform.size = {
                 static_cast<float>(configuration.width),
                 static_cast<float>(configuration.height)};
+            // Keep the player and the surface below in the gameplay view.
+            // The editable map continues to use its independent overview camera.
+            const float visibleHeight = static_cast<float>(scene.project.logical_canvas.height)
+                / (scene.project.pixels_per_world_unit * scene.camera.zoom);
+            scene.camera.center = {
+                sprite.transform.position.x,
+                sprite.transform.position.y + visibleHeight * 0.2f};
             sprite.tint = actor.paused
                 ? canvas2d::LinearColor{0.95f, 0.72f, 0.18f, 1.0f}
                 : (actor.grounded

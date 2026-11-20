@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.28)
-project(EpochAudioEngine VERSION 0.1.0 LANGUAGES CXX)
+project(EpochAudioEngine VERSION 0.1.1 LANGUAGES CXX)
 add_library(epoch_audio_engine STATIC
     src/audio.manager.cpp
     src/audio.mixer.cpp

@@ -12,9 +12,9 @@ ROOT = Path(__file__).resolve().parents[2]
 BOOTSTRAP = ROOT / "Engine/src/editor/application/editor.frame_bootstrap.inl"
 MENU = ROOT / "Engine/src/editor/application/editor.frame_command_menus.inl"
 PANEL = ROOT / "Engine/src/editor/systems/editor.systems_panel.cpp"
-API = ROOT / "Engine/modules/gui.engine.ixx"
-SCHEDULER = ROOT / "Engine/modules/editor.task_scheduler.ixx"
-GRAPH = ROOT / "Engine/modules/taskgraph.dotsystem.ixx"
+API = ROOT / "Engine/modules/gui/gui.engine.ixx"
+SCHEDULER = ROOT / "Engine/modules/editor/editor.task_scheduler.ixx"
+GRAPH = ROOT / "Engine/modules/taskgraph/taskgraph.dotsystem.ixx"
 
 
 def statement(source, marker):
@@ -38,29 +38,31 @@ def fixture():
     start = panel.index("                if (gui::menu_item({.label = label")
     row_control = panel[start:panel.index("            {", start)]
     toolbar = statement(bootstrap, "        toolbarStatusItems[toolbarTaskIndex].tone =")
-    start = bootstrap.index("        toolbarStatusItems[toolbarTaskIndex].tooltip =")
+    start = bootstrap.index("            toolbarTaskDetail = epochengine::format_text(")
     tooltip = bootstrap[start:bootstrap.index("        toolbarStatusItems[toolbarFpsIndex].tone =", start)]
     labels = []
-    for marker in ('epochengine::format_text("Thread {} / Queued {} / Idle {}"',
-                   'epochengine::format_text("{}T / {}Q / {}I"'):
-        start = bootstrap.index(marker)
-        end = bootstrap.index("toolbarActivity.idle_workers)", start) + len("toolbarActivity.idle_workers)")
+    offset = 0
+    for _ in range(2):
+        start = bootstrap.index('epochengine::format_text("Total {} / Ready {} / Queued {}"', offset)
+        end = bootstrap.index("toolbarQueued)", start) + len("toolbarQueued)")
         labels.append(bootstrap[start:end])
+        offset = end
     return PREFIX + "\nnamespace gui {\n" + tone + GUI_PORTS + "\n}\n" + \
         "namespace epochengine::taskgraph {\n" + graph_types + "\n}\n" + \
         "namespace taskgraph=epochengine::taskgraph;\nnamespace editor_tasks {\n" + activity + "\n}\n" + \
-        PORTS + row_tone + "\nvoid build_menu(Editor& editor, std::size_t toolbarRunning, std::size_t toolbarQueued, const editor_tasks::ActivitySnapshot& toolbarActivity) {\n" + menu_body + "\n}\n" + \
-        "void toolbar_status(std::size_t toolbarRunning,std::size_t toolbarQueued) {\n" + toolbar + tooltip + "\n}\n" + \
-        "std::string toolbar_label(std::size_t toolbarRunning,std::size_t toolbarQueued, const editor_tasks::ActivitySnapshot& toolbarActivity,bool compact) { return compact ? " + labels[1] + " : " + labels[0] + ";}\n" + \
+        PORTS + row_tone + "\nvoid build_menu(Editor& editor, std::size_t toolbarRunning, std::size_t toolbarQueued, const editor_tasks::ActivitySnapshot& toolbarActivity) {\n" + \
+        "const auto tasks = editor.taskScheduler ? editor.taskScheduler->snapshot(0u) : taskgraph::GraphSnapshot{};\n" + menu_body + "\n}\n" + \
+        "void toolbar_status(std::size_t toolbarRunning,std::size_t toolbarQueued,const editor_tasks::ActivitySnapshot& toolbarActivity) {\n" + toolbar + tooltip + "\n}\n" + \
+        "std::string toolbar_label([[maybe_unused]] std::size_t toolbarRunning,std::size_t toolbarQueued, const editor_tasks::ActivitySnapshot& toolbarActivity,bool compact) { return compact ? " + labels[1] + " : " + labels[0] + ";}\n" + \
         "bool task_row(const RowView& row, bool selected, float width) {\n" + row_label + row_control + "{ return true; } return false; }\n" + CHECKS
 
 
 PREFIX = r'''
 #include <algorithm>
 #include <array>
-#include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <functional>
 #include <string>
 #include <string_view>
@@ -98,11 +100,18 @@ std::vector<Command> commands;
 void menu_item(std::string_view label,std::function<void()> action,gui::MenuItemOptions options={}) {commands.push_back({std::string(label),options.tone,std::move(action)});}
 struct ToolbarItem {Tone tone{};std::string_view tooltip{};};
 constexpr std::size_t toolbarTaskIndex=0;
-std::array<ToolbarItem,1> toolbarStatusItems{};
+std::array<ToolbarItem,1> toolbarStatusItems{};std::string toolbarTaskDetail;
 struct Row {std::string label;Status status;};struct RowView {const Row* row;};
 '''
 
 CHECKS = r'''
+#define CHECK(condition) do {                                                      \
+    if (!(condition)) {                                                            \
+        std::fprintf(stderr, "Task status line %d: %s\n", __LINE__, #condition);  \
+        return 1;                                                                 \
+    }                                                                             \
+} while (false)
+
 int main() {
  Scheduler scheduler;
  scheduler.graph.workerCount=4;
@@ -115,10 +124,12 @@ int main() {
  assert(commands[1].label=="Queued work: 0"&&commands[1].tone==Tone::muted);
  assert(commands[2].label=="Idle Editor workers: 4 / 4"&&commands[2].tone==Tone::muted);
  assert(commands[3].tone==Tone::muted&&commands[4].tone==Tone::muted&&commands[5].tone==Tone::neutral);
- toolbar_status(0,0);assert(toolbarStatusItems[0].tone==Tone::muted);
+ toolbar_status(0,0,activity);assert(toolbarStatusItems[0].tone==Tone::muted);
  assert(toolbarStatusItems[0].tooltip.find("Planet workers: Planet LOD")!=std::string::npos);
- assert(toolbar_label(0,0,activity,false)=="Thread 0 / Queued 0 / Idle 4");
- assert(toolbar_label(0,0,activity,true)=="0T / 0Q / 4I");
+ assert(toolbarStatusItems[0].tooltip.find("external Assistant work")!=std::string::npos);
+ assert(toolbarStatusItems[0].tooltip.find("Ready counts available workers")!=std::string::npos);
+ assert(toolbar_label(0,0,activity,false)=="Total 0 / Ready 4 / Queued 0");
+ assert(toolbar_label(0,0,activity,true)=="Total 0 / Ready 4 / Queued 0");
  scheduler.graph.runningCount=2;scheduler.graph.queueCount=3;scheduler.graph.pendingCount=1;
  scheduler.graph.outstandingCount=6;scheduler.graph.completedCount=7;scheduler.graph.failedCount=2;scheduler.graph.cancelledCount=5;
  activity=editor_tasks::activity_snapshot(scheduler.graph);
@@ -131,14 +142,15 @@ int main() {
  assert(commands[4].label=="Failed Editor tasks: 2"&&commands[4].tone==Tone::error);
  assert(commands[5].label=="Cancelled Editor tasks: 5"&&commands[5].tone==Tone::neutral);
  commands[4].action();assert(editor.openMenu==TopMenu::None&&opened==EditorMainSurface::Systems&&origin=="Tasks status");
- toolbar_status(0,4);assert(toolbarStatusItems[0].tone==Tone::warning);
- toolbar_status(2,4);assert(toolbarStatusItems[0].tone==Tone::info);
- assert(toolbar_label(2,4,activity,false)=="Thread 2 / Queued 4 / Idle 2");
- assert(toolbar_label(2,4,activity,true)=="2T / 4Q / 2I");
+ toolbar_status(0,4,{});assert(toolbarStatusItems[0].tone==Tone::warning);
+ toolbar_status(2,4,activity);assert(toolbarStatusItems[0].tone==Tone::info);
+ assert(toolbar_label(2,4,activity,false)=="Total 2 / Ready 2 / Queued 4");
+ assert(toolbar_label(2,4,activity,true)=="Total 2 / Ready 2 / Queued 4");
  // A model job can be active while all Editor workers are sleeping.
  scheduler.graph.runningCount=0;activity=editor_tasks::activity_snapshot(scheduler.graph);
  commands.clear();build_menu(editor,1,0,activity);
  assert(commands[0].label=="Active work: 1"&&commands[2].label=="Idle Editor workers: 4 / 4");
+ assert(toolbar_label(1,0,activity,false)=="Total 0 / Ready 4 / Queued 0");
  editor.taskScheduler=nullptr;commands.clear();build_menu(editor,0,0,{});
  assert(commands.size()==3&&commands[2].label=="Idle Editor workers: 0 / 0");
  constexpr std::array statuses{Status::unknown,Status::healthy,Status::idle,Status::queued,Status::running,Status::waiting,Status::blocked,Status::failed,Status::cancelled,Status::disabled};
@@ -151,7 +163,7 @@ int main() {
  }
  return 0;
 }
-'''
+'''.replace("assert(", "CHECK(")
 
 
 class TaskStatusColors(unittest.TestCase):

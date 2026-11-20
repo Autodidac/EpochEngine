@@ -212,7 +212,7 @@
             // in conversation mode, let the user correct transcription before
             // it can issue a tool call or change a running coding campaign.
             (void)activeModel;
-            if (editor.aiVoiceConversation && transcript.text.size() <= 4096u)
+            if (!automationInputReserved && editor.aiVoiceConversation && transcript.text.size() <= 4096u)
             {
                 // Conversation mode is explicit opt-in. Dispatch through the
                 // ordinary typed-message and steering permission gates below.
@@ -394,7 +394,8 @@
                 .label = "Details",
                 .width = activityControlWidth, .activate_on_press = true,
                 .tone = chat.showActivities
-                    ? gui::SemanticTone::info : gui::SemanticTone::neutral}
+                    ? gui::SemanticTone::info : gui::SemanticTone::neutral,
+                .inspection_only = true}
         };
         // Resident selection is immediate and separate from installing,
         // loading or tuning models. List every ACTUALLY resident native model.
@@ -468,9 +469,11 @@
             case ai::ModelRequestStage::queued: currentAction = "Waiting to start"; break;
             case ai::ModelRequestStage::sending: currentAction = "Sending your request"; break;
             case ai::ModelRequestStage::request_sent:
-            case ai::ModelRequestStage::awaiting_response: currentAction = "Waiting for the model response"; break;
+            // This is the current request, which can be a follow-up within an
+            // engine task. Workflow Stages retains prior response evidence.
+            case ai::ModelRequestStage::awaiting_response: currentAction = "Waiting for response"; break;
             case ai::ModelRequestStage::receiving:
-                currentAction = engineWorkActive ? "Preparing changes" : "Responding"; break;
+                currentAction = engineWorkActive ? "Receiving model output" : "Responding"; break;
             case ai::ModelRequestStage::completed: currentAction = "Checking the response"; break;
             case ai::ModelRequestStage::cancelled: currentAction = "Stopping"; break;
             case ai::ModelRequestStage::failed: currentAction = "Request failed"; break;
@@ -495,9 +498,11 @@
                 // technical Activity evidence, not the visible status line.
             }
         }
+        // Busy also covers inventory, unload and project/asset handoff. The
+        // observed native phase is the authority for which operation is running.
         else if (editor.aiMethodSelection == 0 && nativeReadiness.busy)
             currentAction = nativeReadiness.phase.empty()
-                ? "Loading model..." : nativeReadiness.phase;
+                ? "Local model service busy..." : nativeReadiness.phase;
         else if (methodReady && editor.aiMethodSelection >= 0 && editor.aiMethodSelection <= 2)
             currentAction = "Ready to chat";
         bool codexImageRoute = false;
@@ -514,13 +519,11 @@
             if (ai::asset_review_tool(projectTool))
                 currentAction += "\nSend to: Asset Generation · local output review · approval required";
             else if (ai::scene_placement_tool(projectTool))
-                currentAction += "\nSend to: 3D Preview · local scene placement · approval required";
+                currentAction += "\nSend to: Main Scene · local scene placement · approval required";
             else
 #endif
             currentAction += "\nSend to: " + currentModelIdentity;
         }
-        if (nativeReadiness.busy && !nativeReadiness.loaded)
-            currentAction += "\nModels are loading. Avoid closing until ready; closing interrupts this load.";
         if (!chat.draftReferenceImages.empty() && editor.aiMethodSelection == 0
             && !codexImageRoute && !nativeReadiness.image_input_supported)
             currentAction += nativeReadiness.image_input_known
@@ -577,23 +580,25 @@
             .composer_pause = engineWorkActive || selfCodingPaused,
             .composer_paused = selfCodingPaused,
             .composer_attachment_labels = referenceLabels,
-            .composer_paste = [&]() { return paste_ai_chat_clipboard(chat); },
+            .composer_paste = [&]() { return paste_ai_chat_clipboard(editor, chat); },
             // Dock tab already names this pane: avoid a second full-width header.
             // C++23 designated initializers must follow ConsoleWindowOptions declaration order (MSVC C7560).
             .show_title_bar = false,
             .composer_menu_actions = chatComposerActions,
             .model_picker_actions = residentPickerActions,
-            .model_picker_open = editor.aiChatModelPickerOpen,
+            .model_picker_open = !automationInputReserved && editor.aiChatModelPickerOpen,
             .composer_placeholder = "What should we create?",
             .input_keyboard_policy = gui::TextInputKeyboardPolicy::focused,
             .show_send_button = true,
-            .send_button_enabled = (chatCanQueue || chatStopAvailable || selfCodingPaused
+            .send_button_enabled = automationInputReserved ? chatStopAvailable
+                : (chatCanQueue || chatStopAvailable || selfCodingPaused
                 || (engineWorkActive && !chat.input.empty())
                 || epochengine::editor::ai_chat_goal::parse(chat.input).action
                     != epochengine::editor::ai_chat_goal::Action::none)
                 && (manualChatQueueAllowed || chatStopAvailable || selfCodingPaused || engineWorkActive),
             .send_button_width = 30.0f,
-            .send_button_label = (!chat.input.empty() || !chat.draftReferenceFiles.empty()) ? ">"
+            .send_button_label = automationInputReserved ? "X"
+                : (!chat.input.empty() || !chat.draftReferenceFiles.empty()) ? ">"
                 : chatStopAvailable ? "X"
                 : !chat.queuedInput.empty() ? "..." : ">",
             // A project goal is created, edited and controlled by messages in
@@ -609,11 +614,34 @@
             .footer_actions = compactChatActions,
             .composer_image_previews = referencePreviews,
             .composer_files = chat.draftReferenceFiles,
+            .draft_only = automationInputReserved,
         };
 
-        gui::ConsoleWindowResult r = gui::console_window(opts);
+        gui::ConsoleWindowResult r;
+        {
+            // A covering settings or model popup keeps precedence even when
+            // the Editor opens a draft and Stop path through the work lock.
+            const gui::ScopedInputSuppression coveredChatInput{automationInputReserved
+                && (modal_visible_now() || floating_gui_visible())};
+            r = gui::console_window(opts);
+        }
+        editor.aiChatFollowTail = r.log_at_end;
+        if (r.copy_line_index && *r.copy_line_index < chat.lines.size())
+            (void)gui::set_clipboard_text(chat.copyable_line(*r.copy_line_index));
+        if (r.footer_action_index && *r.footer_action_index == 2u)
+        {
+            chat.showActivities = !chat.showActivities;
+            if (editor.aiChatFollowTail)
+                ++editor.aiChatScrollToEndGeneration;
+        }
+        if (automationInputReserved)
+        {
+            editor.aiChatModelPickerOpen = false;
+            if (r.send_clicked && chatStopAvailable) stopCurrentWork();
+            return;
+        }
         for (const auto& file : r.dropped_files)
-            (void)append_ai_chat_attachment(chat, std::filesystem::path{std::u8string{file.begin(), file.end()}});
+            (void)append_ai_chat_attachment(editor, chat, std::filesystem::path{std::u8string{file.begin(), file.end()}});
         if (r.model_picker_dismissed)
             editor.aiChatModelPickerOpen = false;
         if (r.model_picker_action_index)
@@ -674,12 +702,6 @@
             {
                 editor.aiChatModelPickerOpen = !editor.aiChatModelPickerOpen;
             }
-            else if (index == 2u)
-            {
-                chat.showActivities = !chat.showActivities;
-                if (editor.aiChatFollowTail)
-                    ++editor.aiChatScrollToEndGeneration;
-            }
         }
         if (r.composer_voice_action_index)
         {
@@ -703,7 +725,7 @@
             case 0u: add_ai_chat_file_to_input(editor, chat, false); break;
             case 1u: add_ai_chat_file_to_input(editor, chat, true); break;
             case 2u:
-                if (!paste_ai_chat_clipboard(chat))
+                if (!paste_ai_chat_clipboard(editor, chat))
                 {
                     const auto clipboard = gui::clipboard_text();
                     if (clipboard.empty()) chat.append_status("Clipboard has no supported image, files or text.");
@@ -747,13 +769,6 @@
                 break;
             default: break;
             }
-        }
-        editor.aiChatFollowTail = r.log_at_end;
-        if (r.copy_line_index
-            && *r.copy_line_index < chat.lines.size())
-        {
-            (void)gui::set_clipboard_text(
-                chat.copyable_line(*r.copy_line_index));
         }
         if (r.edit_line_index
             && *r.edit_line_index < chat.lines.size())

@@ -191,7 +191,7 @@
         auto atlases = epochengine::atlasmanager::get_atlas_vector_snapshot();
         std::span<const TextureAtlas* const> span(atlases.data(), atlases.size());
         for (const auto& draw : *draws)
-            ctx->draw_sprite_safe(draw.handle, span, draw.x, draw.y, draw.w, draw.h);
+            ctx->draw_sprite_safe(draw.handle, span, draw.x, draw.y, draw.w, draw.h, true);
         return true;
     }
 
@@ -202,6 +202,7 @@
 
         std::shared_ptr<std::vector<QueuedSpriteDraw>> draws;
         std::uint64_t generation = 0;
+        bool tracePopupReplay = false;
         {
             std::scoped_lock lock(g_deferredBatchMutex);
             const auto it = g_topLayerDrawBatches.find(ctx);
@@ -209,6 +210,7 @@
                 return false;
             draws = it->second.draws;
             generation = it->second.generation;
+            tracePopupReplay = std::exchange(it->second.tracePopupReplay, false);
         }
 
         if (!draws || draws->empty())
@@ -217,7 +219,11 @@
         auto atlases = epochengine::atlasmanager::get_atlas_vector_snapshot();
         std::span<const TextureAtlas* const> span(atlases.data(), atlases.size());
         for (const auto& draw : *draws)
-            ctx->draw_sprite_safe(draw.handle, span, draw.x, draw.y, draw.w, draw.h);
+            ctx->draw_sprite_safe(draw.handle, span, draw.x, draw.y, draw.w, draw.h, true);
+        if (tracePopupReplay)
+            logger::info("Epoch.GUI.Popup", epochengine::format_text(
+                "replay ctx={} generation={} sprites={}",
+                reinterpret_cast<std::uintptr_t>(ctx), generation, draws->size()));
         {
             std::scoped_lock lock(g_deferredBatchMutex);
             const auto it = g_topLayerDrawBatches.find(ctx);
@@ -267,6 +273,7 @@
         g_frame.ctxShared = ctx;
         g_frame.ctx = rawCtx;
         g_frame.visitedActiveWidget = nullptr;
+        g_frame.nativeTextInput.reset();
         g_frame.deltaTime = dt;
 
         // Constant-time wrap: repeated subtraction can spin for an enormous
@@ -472,6 +479,8 @@
             active != g_contextActiveWidgets.end()
             && active->second != g_frame.visitedActiveWidget)
             active->second = nullptr;
+        if (g_frame.ctx && g_frame.ctx->update_native_text_input)
+            g_frame.ctx->update_native_text_input(*g_frame.ctx, g_frame.nativeTextInput);
         flush_queued_draws();
         g_frame.ctxShared.reset();
         g_frame.ctx = nullptr;
@@ -496,10 +505,12 @@
         g_frame.topLayerDepth = 0;
     }
 
-    ScopedInputSuppression::ScopedInputSuppression(bool suppress) noexcept
+    ScopedInputSuppression::ScopedInputSuppression(bool suppress, bool preserve_hover) noexcept
         : gate_{g_frame.modalInput, suppress}, active_{suppress}
     {
         if (!active_) return;
+        previousHover_ = inspectionHover_;
+        inspectionHover_ = preserve_hover;
         events_.swap(g_frame.events);
         wheel_ = g_frame.mouseWheelDelta;
         mouseDown_ = g_frame.mouseDown;
@@ -520,6 +531,7 @@
     ScopedInputSuppression::~ScopedInputSuppression() noexcept
     {
         if (!active_) return;
+        inspectionHover_ = previousHover_;
         events_.swap(g_frame.events);
         g_frame.mouseWheelDelta = wheel_;
         g_frame.mouseDown = mouseDown_;
@@ -535,6 +547,19 @@
     Vec2 mouse_position() noexcept
     {
         return g_frame.mousePos;
+    }
+
+    [[nodiscard]] static bool point_in_tooltip_capture(Vec2 point) noexcept
+    {
+        if (point_in_modal_input_capture(point)) return true;
+        // Tooltips may paint under an Automation lock. A modal, popup or
+        // native pointer cover keeps priority, and action hit tests are unchanged.
+        return ScopedInputSuppression::hover_preserved() && !g_frame.modalInput.active()
+            && g_frame.pointerInputAllowed && !g_frame.selectPopupCapturedThisFrame
+            && !g_frame.menuPopupBlocksBackground
+            && (!has_content_clip() || point_in_rect(point, g_frame.contentMin.x,
+                g_frame.contentMin.y, g_frame.contentMax.x - g_frame.contentMin.x,
+                g_frame.contentMax.y - g_frame.contentMin.y));
     }
 
     std::optional<Vec2> mouse_press_position() noexcept
@@ -578,6 +603,85 @@
         { trace_query(true, "sampled_press"); return g_frame.mousePos; }
         trace_query(false, queuedPress ? "queued_down_blocked" : "no_press");
         return {};
+    }
+
+    void visit_left_pointer_edges(
+        DragSurfaceState& state, const std::function<void(EventType, Vec2)>& visit)
+    {
+        if (!g_frame.ctx || !visit)
+        {
+            state = {};
+            return;
+        }
+
+        bool down = g_frame.prevMouseDown;
+        const bool admitted = down && state.pending && !g_frame.mousePressConsumed
+            && !g_frame.mouseReleaseConsumed && point_in_active_clip(state.press_position);
+        gui_lib::input::PointerDragState gesture{
+            {state.press_position.x, state.press_position.y}, admitted, admitted && state.dragging};
+        state = {};
+        constexpr float dragThreshold = DragSurfaceOptions{}.drag_threshold;
+        const auto advance = [&](EventType type, Vec2 position)
+        {
+            const gui_lib::Vec2 point{position.x, position.y};
+            if (type == EventType::MouseMove)
+            {
+                (void)gui_lib::input::update_pointer_drag(gesture,
+                    {.position = point, .down = down}, dragThreshold);
+                return;
+            }
+            const bool pressed = type == EventType::MouseDown;
+            if (pressed == down)
+                return;
+            down = pressed;
+            if (pressed)
+            {
+                const auto press = gui_lib::input::update_pointer_drag(gesture,
+                    {.position = point, .down = true, .pressed = true,
+                        .press_allowed = !g_frame.mousePressConsumed
+                            && point_in_active_clip(position)}, dragThreshold);
+                if (press.pressed)
+                    visit(EventType::MouseDown, position);
+                return;
+            }
+
+            if (gesture.pending)
+            {
+                const Vec2 origin{gesture.press_position.x, gesture.press_position.y};
+                const auto release = gui_lib::input::update_pointer_drag(gesture,
+                    {.position = point, .released = true}, dragThreshold);
+                if (!release.released && std::isfinite(position.x) && std::isfinite(position.y)
+                    && !g_frame.mousePressConsumed && !g_frame.mouseReleaseConsumed
+                    && point_in_active_clip(position) && point_in_active_clip(origin))
+                    visit(EventType::MouseUp, origin);
+            }
+        };
+        bool sawEdge{};
+        for (const auto& event : g_frame.events)
+        {
+            if (event.type == EventType::MouseMove)
+                advance(event.type, event.mouse_pos);
+            else if (event.mouse_button == 0
+                && (event.type == EventType::MouseDown || event.type == EventType::MouseUp))
+            {
+                sawEdge = true;
+                advance(event.type, event.mouse_pos);
+            }
+        }
+
+        if (!sawEdge)
+        {
+            if (left_press_available())
+                advance(EventType::MouseDown, g_frame.mousePos);
+            if (left_release_available())
+                advance(EventType::MouseUp, g_frame.mousePos);
+        }
+        if (gesture.pending && g_frame.mouseDown)
+        {
+            advance(EventType::MouseMove, g_frame.mousePos);
+            state = {{gesture.press_position.x, gesture.press_position.y},
+                gesture.pending, gesture.dragging};
+        }
     }
 
     bool is_mouse_down() noexcept

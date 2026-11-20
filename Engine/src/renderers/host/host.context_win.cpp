@@ -145,6 +145,11 @@ import raylib.context;
 
 #if defined(_WIN32)
 
+namespace epochengine::core::backend
+{
+    void log_native_window_icon_identity(HWND hwnd, std::string_view phase);
+}
+
 #include "implementation/host.window_interaction.inl"
 namespace epochengine::core
 {
@@ -353,7 +358,7 @@ namespace epochengine::core
             return title;
         }
 
-        // Once per owned creation; observe only, never change an icon.
+        // Observe the shell at creation or after native promotion.
         void log_native_window_icon_identity(HWND hwnd, std::string_view phase)
         {
             DWORD process{};
@@ -852,6 +857,11 @@ namespace epochengine::core
             return false;
         }
 
+#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
+        if (request.type == ContextType::OpenGL && !EnsureSharedGLContext(::GetModuleHandleW(nullptr)))
+            return false;
+#endif
+
         const bool startDocked =
             request.start_docked
             && hasValidParent;
@@ -1064,6 +1074,41 @@ namespace epochengine::core
         wc.hbrBackground = nullptr;
         return ::RegisterClassW(&wc);
     }
+
+#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
+    bool MultiContextManager::EnsureSharedGLContext(HINSTANCE instance) noexcept
+    {
+        if (sharedContext) return true;
+
+        const HWND dummy = ::CreateWindowExW(WS_EX_TOOLWINDOW, L"EpochChild", L"Dummy", WS_POPUP,
+            0, 0, 1, 1, nullptr, nullptr, instance, nullptr);
+        if (!dummy) return false;
+
+        const HDC dc = ::GetDC(dummy);
+        HGLRC context{};
+        bool ready = false;
+        if (dc)
+        {
+            try
+            {
+                context = CreateSharedGLContext(dc);
+                if (context && ::wglMakeCurrent(dc, context))
+                {
+                    static bool gladInitialized = false;
+                    if (!gladInitialized) gladInitialized = (gladLoadGL() != 0);
+                    ready = gladInitialized;
+                    ::wglMakeCurrent(nullptr, nullptr);
+                }
+            }
+            catch (...) {}
+            if (!ready && context) ::wglDeleteContext(context);
+            ::ReleaseDC(dummy, dc);
+        }
+        ::DestroyWindow(dummy);
+        if (ready) sharedContext = context;
+        return ready;
+    }
+#endif
 
     void MultiContextManager::SetupPixelFormat(HDC hdc)
     {
@@ -1289,47 +1334,11 @@ namespace epochengine::core
         }
 
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
-        // ---------------- Shared dummy GL context (for wglShareLists + glad bootstrap) ----------------
+        if (OpenGLWinCount > 0 && !EnsureSharedGLContext(hInst))
         {
-            HWND dummy = ::CreateWindowExW(
-                WS_EX_TOOLWINDOW,
-                L"EpochChild",
-                L"Dummy",
-                WS_POPUP,
-                0, 0, 1, 1,
-                nullptr,
-                nullptr,
-                hInst,
-                nullptr);
-
-            if (!dummy) return false;
-
-            HDC dummyDC = ::GetDC(dummy);
-            sharedContext = CreateSharedGLContext(dummyDC);
-            if (!sharedContext)
-            {
-                ::ReleaseDC(dummy, dummyDC);
-                ::DestroyWindow(dummy);
-                throw std::runtime_error("Failed to create shared OpenGL context");
-            }
-
-            ::wglMakeCurrent(dummyDC, sharedContext);
-
-            static bool gladInitialized = false;
-            if (!gladInitialized)
-            {
-                gladInitialized = (gladLoadGL() != 0);
-#if EPOCH_ENABLE_BACKEND_CONTEXT_CONFIRMATION_LOGS
-                epochengine::logger::get(kLogSys).log(
-                    epochengine::logger::LogLevel::INFO,
-                    "GLAD loaded on dummy context",
-                    std::source_location::current());
-#endif
-            }
-
-            ::wglMakeCurrent(nullptr, nullptr);
-            ::ReleaseDC(dummy, dummyDC);
-            ::DestroyWindow(dummy);
+            epochengine::logger::get(kLogSys).log(logger::LogLevel::Error,
+                "Could not initialize the shared OpenGL context.", std::source_location::current());
+            return false;
         }
 #endif
 
@@ -1683,19 +1692,19 @@ namespace epochengine::core
         s_activeInstance = this;
         g_activeManager = this;
 
-        if (!hdc) hdc = ::GetDC(hwnd);
+        const bool ownsDC = !hdc;
+        if (ownsDC) hdc = ::GetDC(hwnd);
 
 #if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
         if (type == ContextType::OpenGL && !glContext)
         {
-            glContext = CreateSharedGLContext(hdc);
-            static bool gladInitialized = false;
-            if (!gladInitialized)
+            if (!hdc || !EnsureSharedGLContext(::GetModuleHandleW(nullptr)))
             {
-                ::wglMakeCurrent(hdc, glContext);
-                gladInitialized = (gladLoadGL() != 0);
-                ::wglMakeCurrent(nullptr, nullptr);
+                if (ownsDC && hdc) ::ReleaseDC(hwnd, hdc);
+                return;
             }
+            glContext = CreateSharedGLContext(hdc);
+            usesSharedContext = (glContext != nullptr);
         }
 #if defined(EPOCH_USING_VULKAN) && (EPOCH_USING_VULKAN == 1)
         if (type == ContextType::Vulkan)
@@ -2778,6 +2787,17 @@ namespace epochengine::core
             forget_native_title_frame_source(window.get());
             cleanup_window_resources(window);
         }
+
+        if (parent)
+        {
+            const HWND ownedParent = std::exchange(parent, nullptr);
+            if (::IsWindow(ownedParent))
+                ::DestroyWindow(ownedParent);
+        }
+#if defined(EPOCH_USING_OPENGL) && (EPOCH_USING_OPENGL == 1)
+        if (sharedContext)
+            ::wglDeleteContext(std::exchange(sharedContext, nullptr));
+#endif
 
         if (s_activeInstance == this) s_activeInstance = nullptr;
         if (g_activeManager == this) g_activeManager = nullptr;

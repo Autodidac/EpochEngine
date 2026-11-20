@@ -38,6 +38,7 @@ module;
 #include <include/engine.config.hpp> // macros only - must stay in the global module fragment
 
 #include <algorithm>
+#include <atomic>
 #include <cstdint>
 #include <exception>
 #include <map>
@@ -214,23 +215,6 @@ namespace epochengine::core
         }
     }
 
-    namespace
-    {
-        inline void copy_atomic_function(
-            EpochAtomicFunction<std::uint32_t(TextureAtlas&, std::string, const ImageData&)>& dst,
-            const EpochAtomicFunction<std::uint32_t(TextureAtlas&, std::string, const ImageData&)>& src)
-        {
-            dst.ptr.store(src.ptr.load(std::memory_order_acquire), std::memory_order_release);
-        }
-
-        inline void copy_atomic_function(
-            EpochAtomicFunction<std::uint32_t(const TextureAtlas&)>& dst,
-            const EpochAtomicFunction<std::uint32_t(const TextureAtlas&)>& src)
-        {
-            dst.ptr.store(src.ptr.load(std::memory_order_acquire), std::memory_order_release);
-        }
-    }
-
     std::shared_ptr<core::Context> CloneContext(const core::Context& prototype)
     {
         auto clone = std::make_shared<core::Context>();
@@ -245,6 +229,8 @@ namespace epochengine::core
         clone->registry_get = prototype.registry_get;
         clone->draw_sprite = prototype.draw_sprite;
         clone->add_model = prototype.add_model;
+        clone->preview_density_clouds.store(prototype.preview_density_clouds.load(std::memory_order_relaxed),
+            std::memory_order_relaxed);
         clone->frame_pacing_capabilities = prototype.frame_pacing_capabilities;
         clone->apply_frame_pacing = prototype.apply_frame_pacing;
 
@@ -254,8 +240,8 @@ namespace epochengine::core
         clone->is_mouse_button_held = prototype.is_mouse_button_held;
         clone->is_mouse_button_down = prototype.is_mouse_button_down;
 
-        copy_atomic_function(clone->add_texture, prototype.add_texture);
-        copy_atomic_function(clone->add_atlas, prototype.add_atlas);
+        clone->add_texture.copy_from(prototype.add_texture);
+        clone->add_atlas.copy_from(prototype.add_atlas);
 
         clone->onResize = prototype.onResize;
         clone->width = prototype.width;

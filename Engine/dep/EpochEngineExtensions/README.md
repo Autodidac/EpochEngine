@@ -94,6 +94,13 @@ nested: MSVC's generated module/tracker paths can otherwise exceed its path
 limit. A single-node build (`--parallel 1 -- /nodeReuse:false`) also avoids
 MSBuild worker-IPC restrictions in constrained build environments.
 
+To include the optional planetary water provider, enable
+`EPOCH_PLANET_BUILD_MESH_EXPORT` and `EPOCH_PLANET_BUILD_WATER`, set
+`EPOCH_ENGINE_SOURCE_ROOT` to the matching Engine checkout root, and set
+`EPOCH_PLANET_WATER_SOURCE_ROOT` to this checkout's `packages/fft_ocean`.
+Use `-DCMAKE_CXX_EXTENSIONS=OFF` with Clang so the provider and contract
+consumers use the same C++ module dialect.
+
 The Windows CI workflow checks the same two configurations against the pinned
 Public source. It does not run an Editor, model, listener or renderer. Linux,
 macOS and native Package Manager activation remain separate acceptance gates.

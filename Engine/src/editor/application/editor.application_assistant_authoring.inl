@@ -36,6 +36,13 @@
                 entity.category = "World";
                 entity.position = {0.0f, 0.0f, 0.0f};
             }
+            else if (archetype == "lightning")
+            {
+                entity.name = make_entity_name(state, "Lightning", ordinalOffset);
+                entity.type = project_lightning::scene_type;
+                entity.category = "World";
+                entity.position = next_entity_position(state, primary_ground_top_y(state) + 6.0f, ordinalOffset);
+            }
             else if (archetype == "light")
             {
                 entity.name = make_entity_name(state, "PointLight", ordinalOffset);
@@ -174,6 +181,47 @@
                 + " ["
                 + addedType
                 + "].");
+            return true;
+        }
+
+        [[nodiscard]] bool add_gui_palette_widget(EditorState& state, std::string_view archetype)
+        {
+            using namespace authoring::gui;
+            const auto selected = selected_gui_widget(state);
+            const auto container = selected ? state.guiDocument->widget(*selected) : std::nullopt;
+            if (!container || (container->descriptor.kind != WidgetKind::panel
+                    && container->descriptor.kind != WidgetKind::scroll_area
+                    && container->descriptor.kind != WidgetKind::tab_page))
+            {
+                return add_entity(state, archetype);
+            }
+
+            const auto blueprint = make_editor_entity(state, archetype);
+            if (!blueprint || !is_gui_authoring_entity(*blueprint))
+                return false;
+
+            // Prepare the authored operation before publishing its scene projection.
+            auto document = *state.guiDocument;
+            auto descriptor = gui_widget_descriptor_from_entity(*blueprint);
+            descriptor.layout.x = descriptor.layout.y = 12.0f;
+            const auto created = create_authored_gui_widget(document, std::move(descriptor), container->handle);
+            if (!created)
+            {
+                state.guiDocumentStatus = "GUI widget admission failed: "
+                    + std::string(result_code_name(created.code));
+                return false;
+            }
+            const auto widget = document.widget(created.widget);
+            if (!widget || !create_gui_widget_projection(state,
+                    gui_projection_entity(*widget, state.guiDocumentWidgets.size()), created.widget,
+                    "Create " + blueprint->name))
+            {
+                state.guiDocumentStatus = "The new GUI widget could not be projected into the scene.";
+                return false;
+            }
+            using std::swap;
+            swap(*state.guiDocument, document);
+            (void)select_gui_widget(state, created.widget);
             return true;
         }
 
@@ -485,7 +533,12 @@
                 "directory, not the Editor project catalog. An empty workspace does not mean "
                 "a listed project is missing. This context performs no filesystem search. "
                 "Project actions use the Editor's reviewed commands; never claim you searched, "
-                "opened or changed a project without its host result.\n";
+                "opened or changed a project without its host result.\n"
+                "Pathways: new software uses ordinary Software / Tool project creation; "
+                "screen-space UI/HUD uses reviewed GUI authoring in the 2D workspace, while 3D objects use scene authoring. "
+                "Project Save, Build, Run and Test are separate reviewed operations. project.inspect and diagnostics.read "
+                "provide host status, not visual proof. Supplied screenshots can support appearance review; do not invent "
+                "a capture/input tool or claim a build/test receipt proves visual correctness.\n";
             append_project_assistant_catalog(prompt);
             prompt += "Project: ";
             prompt += editor.projectName.empty()
@@ -680,6 +733,8 @@
 
         [[nodiscard]] bool prepare_ai_project_script(EditorState& editor)
         {
+            editor.aiProjectScriptDraft.clear();
+            editor.aiProjectScriptPreimage.clear();
 #if EPOCH_EDITION_PUBLIC
             if (!project_ai_scope_allowed(editor.projectRoot))
             {
@@ -687,7 +742,6 @@
                 return false;
             }
 #endif
-            editor.aiProjectScriptDraft.clear();
             if (editor.projectRoot.empty() || editor.scriptEditorDirty || editor.scriptBuildPending)
             {
                 editor.aiAuthoringStatus = "Select a project and save unfinished script edits before requesting a script.";
@@ -698,21 +752,32 @@
             std::error_code error{};
             root = std::filesystem::weakly_canonical(root, error);
             if (error || root.empty() || !root.is_absolute() || !std::filesystem::is_directory(root, error) || error) return false;
-            const auto scripts = std::filesystem::weakly_canonical(root / "scripts", error);
-            if (error || scripts.parent_path() != root) return false;
+            const auto scripts = root / "scripts";
+            if (std::filesystem::weakly_canonical(scripts, error) != scripts || error)
+                return false;
             auto target = std::filesystem::path{editor_resolve_script_source_path(editor.activeScript, editor.projectRoot)};
-            target = std::filesystem::weakly_canonical(resolve_editor_path(target), error);
+            target = resolve_editor_path(target);
             if (error || target.parent_path() != scripts || !target.filename().string().ends_with(".ascript.cpp"))
             {
                 error.clear();
                 for (std::size_t index = 1u; ; ++index)
                 {
                     target = scripts / ("ai_project_" + std::to_string(index) + ".ascript.cpp");
-                    if (!std::filesystem::exists(target, error)) break;
+                    const auto status = std::filesystem::symlink_status(target, error);
+                    if (status.type() == std::filesystem::file_type::not_found
+                        && (!error || error == std::errc::no_such_file_or_directory))
+                    {
+                        error.clear();
+                        break;
+                    }
                     if (error || index >= 10000u) return false;
                 }
             }
-            const bool existed = std::filesystem::exists(target, error);
+            const auto targetStatus = std::filesystem::symlink_status(target, error);
+            if (targetStatus.type() == std::filesystem::file_type::not_found
+                && error == std::errc::no_such_file_or_directory) error.clear();
+            if (error) return false;
+            const bool existed = std::filesystem::exists(targetStatus);
 #if EPOCH_EDITION_PUBLIC
             if (!editor_ai_file_scope::allows_text(target,
                     core::path::find_epoch_repo_root(core::path::executable_dir())))
@@ -721,14 +786,23 @@
                 return false;
             }
 #endif
-            if (error || (existed && (std::filesystem::is_symlink(std::filesystem::symlink_status(target, error))
-                || error || std::filesystem::file_size(target, error) > 128u * 1024u || error))) return false;
             std::string prior{};
             if (existed)
             {
+                constexpr std::size_t maximumBytes = 128u * 1024u;
+                if (!std::filesystem::is_regular_file(targetStatus)
+                    || !ai::source_access::permits_file(target, root))
+                {
+                    editor.aiAuthoringStatus = "Choose an ordinary project-owned script for this request.";
+                    return false;
+                }
+                const auto bytes = std::filesystem::file_size(target, error);
+                if (error || bytes > maximumBytes) return false;
                 std::ifstream file{target, std::ios::binary};
-                prior.assign(std::istreambuf_iterator<char>{file}, std::istreambuf_iterator<char>{});
-                if (!file || !ai::valid_project_context_text(prior)) return false;
+                prior.resize(static_cast<std::size_t>(bytes));
+                if (!file.read(prior.data(), static_cast<std::streamsize>(prior.size()))
+                    || file.peek() != std::char_traits<char>::eof()
+                    || file.bad() || !ai::valid_project_context_text(prior)) return false;
             }
             editor.aiProjectScriptRoot = root.generic_string();
             editor.aiProjectScriptPath = target.generic_string();

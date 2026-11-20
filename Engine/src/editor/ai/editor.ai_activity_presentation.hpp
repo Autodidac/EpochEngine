@@ -19,6 +19,10 @@ namespace epochengine::editor::ai_activity_presentation
         {
             // Stages and actionable failures remain visible.
             return !(detail.starts_with("Preparing candidate")
+                || detail.starts_with("Waiting for first response")
+                || detail.starts_with("Waiting for next response")
+                || detail.starts_with("Receiving model output")
+                || detail.starts_with("Checking model response")
                 || detail.starts_with("Building candidate")
                 || detail.starts_with("Validating")
                 || detail.starts_with("Running checks")
@@ -30,6 +34,10 @@ namespace epochengine::editor::ai_activity_presentation
                 || detail.starts_with("Headless checks")
                 || detail.starts_with("Full validation")
                 || detail.starts_with("Awaiting approval")
+                || detail.starts_with("Awaiting RAM approval")
+                || detail.starts_with("Preparing local model")
+                || detail.starts_with("Awaiting plan review")
+                || detail.starts_with("Awaiting proposal review")
                 || detail.starts_with("Stopped")
                 || detail.starts_with("Failed")
                 || detail.starts_with("Coding blocked"));

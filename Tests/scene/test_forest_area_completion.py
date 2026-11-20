@@ -11,8 +11,14 @@ actual='\n'.join(definition(owner, marker) for marker in (
     '        [[nodiscard]] bool forest_area_matches_terrain_frame(',
     '        void poll_forest_surface_placement(',
     '        [[nodiscard]] const EditorEntity* selected_forest_species_target(',
-    '        [[nodiscard]] bool add_plant_lab_species_to_forest('))
-preview=(ROOT/'Engine/modules/render.preview_grid.ixx').read_text(encoding='utf-8')
+    '        [[nodiscard]] bool add_plant_lab_species_to_forest(',
+    '        [[nodiscard]] const EditorEntity* forest_lasso_list_terrain(',
+    '        [[nodiscard]] bool forest_area_tree_matches(',
+    '        [[nodiscard]] std::optional<EditorState::ForestAreaSelection> selected_forest_area(',
+    '        [[nodiscard]] bool erase_selected_forest_area('))
+state=(ROOT/'Engine/src/editor/application/editor.application_state.inl').read_text(encoding='utf-8')
+area_selection=definition(state,'struct ForestAreaSelection final',True)
+preview=(ROOT/'Engine/modules/render/render.preview_grid.ixx').read_text(encoding='utf-8')
 transform=definition(preview,'    export struct PreciseMeshTransform final',True).replace('export ','')
 camera_source=(ROOT/'Engine/src/render/render.preview_camera.cpp').read_text(encoding='utf-8')
 transform+='\n'+definition(camera_source,'    [[nodiscard]] bool valid_precise_mesh_transform(')+'\n'+definition(camera_source,'    [[nodiscard]] std::optional<PreciseMeshTransform> make_precise_mesh_transform(')
@@ -28,9 +34,10 @@ import forest.factory;
 import asset.mesh_artifact;
 namespace forest=epochengine::forest;
 namespace asset=epochengine::asset;
+namespace authoring=epochengine::authoring;
 namespace editor_tasks { struct TaskCancelled final {}; }
 namespace project_planetary {
-struct Settings {bool ocean_surface{};friend bool operator==(const Settings&,const Settings&)=default;};
+struct Settings {bool ocean_surface{};unsigned seed{1337};friend bool operator==(const Settings&,const Settings&)=default;};
 struct Mesh {std::array<std::uint64_t,4>artifact_key{1,2,3,4};struct Coordinates {std::array<double,3>source_origin_meters{};friend bool operator==(const Coordinates&,const Coordinates&)=default;}coordinates;friend bool operator==(const Mesh&,const Mesh&)=default;};
 struct Body {unsigned id{};double radius_meters{6371000};std::array<double,3>center_meters{};friend bool operator==(const Body&,const Body&)=default;};
 struct Source {std::string content_hash="sha256:"+std::string(64,'a');};
@@ -51,6 +58,7 @@ struct EditorEntity {
  std::optional<scene::SceneMeshSnapshot>meshAsset;
  std::shared_ptr<const asset::mesh::Artifact>meshSnapshot;
  std::optional<scene::SceneForestRegionInstance>forestRegion;
+ std::vector<scene::SceneForestPaintRegion>forestPaintRegions;
 };
 struct EditorState {
  std::string projectId="project",projectRoot="root",plantLabStatus,projectStatus;
@@ -61,14 +69,17 @@ struct EditorState {
  forest::CompiledForestAsset plantLabCompiled=forest::compile_forest_asset(forest::make_default_plant_lab_document());
  struct PlanetaryMeshPolicy {project_planetary::Settings settings;std::optional<project_planetary::Mesh>generated_mesh{project_planetary::Mesh{}};std::vector<project_planetary::Body>generated_bodies{project_planetary::Body{}};bool body_inventory_checked{true};};
  std::optional<PlanetaryMeshPolicy>planetaryMeshPolicy{PlanetaryMeshPolicy{}};
- struct ForestSurfacePlacement {std::string projectId="project",projectRoot="root";std::uint64_t projectGeneration=1,plantRevision{},plantHash{},entity=2,ordinal{},existingRegion{},sceneRevision{};std::array<float,3>position{},rotation{},scale{1,1,1};std::optional<std::array<double,3>>anchor;std::array<double,3>heading{0,0,1};project_planetary::SurfaceQuery query;std::optional<forest::ForestAreaDistribution>area{forest::ForestAreaDistribution{}};std::vector<std::array<double,3>>directions{{0,1,0},{0,1,0},{0,1,0}},brushCenters;bool findOceanShoreline{},refreshAttachments{};std::vector<scene::SceneObjectSnapshot> refreshObjects;};
+ struct ForestSurfacePlacement {std::string projectId="project",projectRoot="root";std::uint64_t projectGeneration=1,plantRevision{},plantHash{},entity=2,ordinal{},existingRegion{},sceneRevision{};std::array<float,3>position{},rotation{},scale{1,1,1};std::optional<std::array<double,3>>anchor;std::array<double,3>heading{0,0,1};project_planetary::SurfaceQuery query;std::optional<forest::ForestAreaDistribution>area{forest::ForestAreaDistribution{}};std::vector<std::array<double,3>>directions{{0,1,0},{0,1,0},{0,1,0}},brushCenters,lassoOutline;bool findOceanShoreline{},refreshAttachments{};std::vector<scene::SceneObjectSnapshot> refreshObjects;};
  struct ForestSurfacePrepared {project_planetary::Batch surface;std::vector<EditorEntity>prototype;std::optional<std::array<double,3>>shorelineCenter;std::vector<double>groundSupports;std::vector<bool>brushInland;};
  std::optional<ForestSurfacePlacement>forestSurfacePlacement;
  std::optional<std::future<ForestSurfacePrepared>>forestSurfacePending;
  struct Scheduler {unsigned calls{};bool cancel(int){++calls;return true;}}scheduler;Scheduler* taskScheduler=&scheduler;int forestSurfaceCancellation{};
  std::vector<EditorEntity>entities{EditorEntity{}};
  std::uint64_t selectedEntityId{};std::vector<std::uint64_t> selectedEntityIds;
+ AREA_SELECTION
+ std::optional<ForestAreaSelection> selectedForestLasso;
  std::uint64_t sceneDocumentRevision{5};
+ document::SceneDocument sceneDocument;
  std::string publishedPath;
  unsigned commits{},saves{},publishes{};bool allowCommit{true},allowPublish{true};std::vector<EditorEntity>created;
 };
@@ -83,8 +94,17 @@ struct Budget {std::uint64_t cache_bytes{48ull*1024*1024};};Budget editor_planet
 constexpr std::string_view kDefaultPlantLabLogicalPath="Assets/Forest/default.epoch_forest";
 bool publish_plant_lab_project_asset(EditorState&s,const forest::ForestAssetDocument*,std::string_view path){
  ++s.publishes;s.publishedPath=path;return s.allowPublish;}
-bool create_editor_scene_entities(EditorState&s,std::vector<EditorEntity>created,std::string_view,const std::function<bool()>&before){if(!before()||!s.allowCommit)return false;++s.commits;s.created=std::move(created);return true;}
+bool create_editor_scene_entities(EditorState&s,std::vector<EditorEntity>created,std::string_view label,const std::function<bool()>&before,std::vector<document::SceneOperation> operations){
+ if(!before()||!s.allowCommit)return false;
+ if(!operations.empty()&&!s.sceneDocument.apply_transaction(operations,label))return false;
+ ++s.commits;s.created=std::move(created);return true;
+}
 bool save_editor_scene_snapshot(EditorState&s){++s.saves;return true;}
+bool rebuild_editor_scene_document(EditorState&,std::string_view){CHECK(false);return false;}
+bool apply_editor_scene_transaction(EditorState&s,std::span<const document::SceneOperation> ops,std::string_view label){
+ if(!s.sceneDocument.apply_transaction(ops,label))return false;
+ ++s.commits;return true;
+}
 // The separate forest surface refresh contract exercises the actual refresh route.
 void complete_forest_surface_refresh(EditorState&,const EditorState::ForestSurfacePlacement&,const project_planetary::Batch&,std::span<const double>){CHECK(false);}
 unsigned queuedSpecies{};
@@ -202,9 +222,65 @@ int main(int,char**) {
  CHECK(changed.forestPlacementSaved==false&&!changed.forestPlacementFocusPending);
  EditorState missing;auto empty=prepare(missing);missing.forestSurfacePlacement->findOceanShoreline=true;
  deliver(missing,std::move(empty));CHECK(missing.commits==0&&missing.saves==0);
+ EditorState lasso;auto lassoSamples=prepare(lasso);
+ auto lassoScene=legacy_source();lassoScene.objects[1].category="Planetary Terrain";
+ auto lassoDocument=document::SceneDocument::from_snapshot(lassoScene);CHECK(lassoDocument);
+ lasso.sceneDocument=std::move(lassoDocument.value);
+ auto& lassoIntent=*lasso.forestSurfacePlacement;
+ lassoIntent.lassoOutline={{1,0,0},{0,1,0},{0,0,1}};
+ lassoIntent.sceneRevision=lasso.sceneDocumentRevision;
+ lassoIntent.query.settings.ocean_surface=true;lasso.planetaryMeshPolicy->settings.ocean_surface=true;
+ for(auto& sample:lassoSamples.surface.samples)sample.height_meters=-1;
+ deliver(lasso,std::move(lassoSamples));
+ CHECK(lasso.commits==1&&lasso.saves==1&&lasso.publishes==1&&lasso.created.empty());
+ const auto owner=lasso.sceneDocument.find({2});CHECK(owner);
+ const auto stored=lasso.sceneDocument.object(*owner);
+ CHECK(stored&&stored->descriptor.forest_paint_regions.size()==1);
+ const auto footprint=stored->descriptor.forest_paint_regions.front();
+ CHECK(footprint.candidate_count==3&&footprint.plant_source==lasso.publishedPath);
+ CHECK(lasso.sceneDocument.undo());
+ CHECK(lasso.sceneDocument.object(*owner)->descriptor.forest_paint_regions.empty());
+
+ auto neighbor=footprint;
+ ++neighbor.region_id;
+ lassoScene.objects[1].forest_paint_regions={footprint,neighbor};
+ lassoScene.objects.back().category="Planetary Terrain";
+ lassoScene.objects.back().forest_paint_regions={footprint};
+ auto tree=*original.forestRegion;
+ tree.region_id=footprint.region_id;
+ tree.terrain_object_id=3;
+ tree.body_index=footprint.body_index;
+ lassoScene.objects.push_back({.id=4,.name="Other terrain tree",.type="StaticMesh",.category="Forest",.forest_region=tree});
+ tree.terrain_object_id=2;
+ ++tree.body_index;
+ lassoScene.objects.push_back({.id=5,.name="Other body tree",.type="StaticMesh",.category="Forest",.forest_region=tree});
+ auto eraseDocument=document::SceneDocument::from_snapshot(lassoScene);CHECK(eraseDocument);
+ EditorState erase;
+ erase.sceneDocument=std::move(eraseDocument.value);
+ erase.entities.front().forestPaintRegions={footprint,neighbor};
+ EditorEntity other;other.sceneObjectId=3;other.forestPaintRegions={footprint};
+ EditorEntity selectedTree;selectedTree.sceneObjectId=5;selectedTree.category="Forest";selectedTree.forestRegion=tree;
+ erase.entities.push_back(other);erase.entities.push_back(selectedTree);
+ CHECK(!forest_lasso_list_terrain(erase)); // Two visible terrains need an explicit owner.
+ erase.selectedEntityId=5;
+ CHECK(selected_forest_area(erase)->body==tree.body_index);
+ erase.selectedForestLasso=EditorState::ForestAreaSelection{2,footprint.body_index,footprint.region_id,0};
+ CHECK(!selected_forest_area(erase)&&!erase_selected_forest_area(erase));
+ CHECK(erase.commits==0&&erase.saves==0&&erase.sceneDocument.find({5}));
+ erase.selectedForestLasso->projectGeneration=1;
+ CHECK(selected_forest_area(erase)->body==footprint.body_index);
+ const auto beforeErase=erase.sceneDocument.revision().content;
+ CHECK(erase_selected_forest_area(erase));
+ CHECK(!erase.selectedForestLasso&&erase.commits==1&&erase.saves==1);
+ const auto erasedOwner=erase.sceneDocument.find({2});CHECK(erasedOwner);
+ const auto otherOwner=erase.sceneDocument.find({3});CHECK(otherOwner);
+ CHECK(erase.sceneDocument.object(*erasedOwner)->descriptor.forest_paint_regions==std::vector{neighbor});
+ CHECK(erase.sceneDocument.object(*otherOwner)->descriptor.forest_paint_regions==std::vector{footprint});
+ CHECK(erase.sceneDocument.find({4})&&erase.sceneDocument.find({5}));
+ CHECK(erase.sceneDocument.undo()&&erase.sceneDocument.revision().content==beforeErase);
 }
 '''
-CODE=CODE.replace('TRANSFORM',transform).replace('ACTUAL',actual)
+CODE=CODE.replace('TRANSFORM',transform).replace('AREA_SELECTION',area_selection).replace('ACTUAL',actual)
 # Include all standard declarations before importing MSVC modules.
 extra_includes='\n'.join(re.findall(r'^#include .*$',CODE,re.M))
 CODE=re.sub(r'^#include .*\n','',CODE,flags=re.M)

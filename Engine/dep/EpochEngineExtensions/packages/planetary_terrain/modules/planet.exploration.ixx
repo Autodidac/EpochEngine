@@ -14,6 +14,7 @@ export namespace epoch::extensions::planetary_terrain::exploration
     using ::epoch::planet::PilotInput;
     using ::epoch::planet::SessionState;
     using ::epoch::planet::Simulation;
+    using ::epoch::planet::surface_clearance_meters;
     using ::epoch::planet::valid_state;
 
     enum class StepCode { advanced, cancelled, invalid_input };

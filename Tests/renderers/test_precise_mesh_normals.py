@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 class PreciseMeshNormals(unittest.TestCase):
     def test_shared_box_faces_match_geometric_lighting_normals(self):
-        owner = ROOT / "Engine/modules/render.preview_grid.ixx"
+        owner = ROOT / "Engine/modules/render/render.preview_grid.ixx"
         source = owner.read_text(encoding="utf-8-sig")
         def plain_module(path):
             text = path.read_text(encoding="utf-8-sig")
@@ -90,8 +90,8 @@ int main(){
    CHECK(std::count_if(outward.begin(),outward.end(),[&](F3 n){return math::dot(n,point(target))>.99999f;})==1);}
  }
 }
-'''.replace('MATH', plain_module(ROOT/'Engine/modules/render.math.ixx'))
-        code = code.replace('LIGHTING', plain_module(ROOT/'Engine/modules/render.lighting.ixx'))
+'''.replace('MATH', plain_module(ROOT/'Engine/modules/render/render.math.ixx'))
+        code = code.replace('LIGHTING', plain_module(ROOT/'Engine/modules/render/render.lighting.ixx'))
         code = code.replace('GEOMETRY', geometry).replace('BUILDERS', builder)
         report = ROOT/'Artifacts/Reports/shared-box-normals-nov06'
         report.mkdir(parents=True, exist_ok=True)
@@ -102,7 +102,7 @@ int main(){
             'box_cases':126,'faces':756,'triangles':1512,'records':records},indent=2)+'\n',encoding='utf-8')
 
     def test_composed_rotation_and_inverse_transpose_scale(self):
-        path = ROOT / "Engine/modules/render.preview_grid.ixx"
+        path = ROOT / "Engine/modules/render/render.preview_grid.ixx"
         source = path.read_text(encoding="utf-8-sig")
         implementation = ROOT / "Engine/src/render/render.preview_camera.cpp"
         camera_source = implementation.read_text(encoding="utf-8")

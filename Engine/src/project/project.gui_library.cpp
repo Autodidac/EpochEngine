@@ -20,6 +20,10 @@ module;
 
 module project.gui_library;
 
+import platform.filesystem;
+import authoring.gui_document;
+import authoring.gui_compiler;
+
 namespace epochengine::project_gui
 {
     namespace
@@ -133,32 +137,6 @@ namespace epochengine::project_gui
             catch (...)
             {
                 return {LibraryCode::allocation_failure};
-            }
-        }
-
-        [[nodiscard]] LibraryCode write_bytes(
-            const fs::path& path,
-            const std::vector<std::byte>& bytes) noexcept
-        {
-            try
-            {
-                std::ofstream output{
-                    path, std::ios::binary | std::ios::trunc};
-                if (!output)
-                    return LibraryCode::write_failure;
-                output.write(
-                    reinterpret_cast<const char*>(bytes.data()),
-                    static_cast<std::streamsize>(bytes.size()));
-                output.flush();
-                if (!output)
-                    return LibraryCode::write_failure;
-                output.close();
-                return output ? LibraryCode::ready
-                              : LibraryCode::write_failure;
-            }
-            catch (...)
-            {
-                return LibraryCode::write_failure;
             }
         }
 
@@ -350,7 +328,7 @@ namespace epochengine::project_gui
             if (error)
                 return reject_locator(LibraryCode::directory_failure);
 
-            if (fs::exists(destination, error) && !error)
+            const auto read_existing = [&]() -> ArtifactLocator
             {
                 ReadResult existing = read_artifact(destination, limits_);
                 metrics_.bytes_read += existing.bytes.size();
@@ -364,20 +342,25 @@ namespace epochengine::project_gui
                     return locator;
                 }
                 return reject_locator(LibraryCode::identity_collision);
-            }
+            };
+            if (fs::exists(destination, error) && !error)
+                return read_existing();
             if (error)
                 return reject_locator(LibraryCode::read_failure);
             if (artifactCount >= limits_.maximum_artifacts_per_asset)
                 return reject_locator(
                     LibraryCode::artifact_limit_exceeded);
 
-            fs::path temporary = destination;
-            temporary += ".pending." + hex_u64(next_temporary_id());
-            const LibraryCode written = write_bytes(temporary, serialized.bytes);
-            if (written != LibraryCode::ready)
+            // Exclusive creation leaves another process's staging file untouched.
+            fs::path temporary;
+            constexpr unsigned maximumStagingAttempts = 8u;
+            for (unsigned attempt = 0u; attempt < maximumStagingAttempts; ++attempt)
             {
-                fs::remove(temporary, error);
-                return reject_locator(written);
+                temporary = directory / (".pending." + hex_u64(next_temporary_id()));
+                if (platform::filesystem::exclusive_create_and_write(temporary, serialized.bytes, error))
+                    break;
+                if (error != std::errc::file_exists || attempt + 1u == maximumStagingAttempts)
+                    return reject_locator(LibraryCode::write_failure);
             }
             ReadResult verified = read_artifact(temporary, limits_);
             metrics_.bytes_read += verified.bytes.size();
@@ -389,10 +372,12 @@ namespace epochengine::project_gui
                 return reject_locator(LibraryCode::integrity_failure);
             }
 
-            fs::rename(temporary, destination, error);
-            if (error)
+            if (!platform::filesystem::atomic_publish_new_same_filesystem(temporary, destination, error))
             {
-                fs::remove(temporary, error);
+                std::error_code cleanupError{};
+                fs::remove(temporary, cleanupError);
+                if (error == std::errc::file_exists)
+                    return read_existing();
                 return reject_locator(LibraryCode::write_failure);
             }
             ++metrics_.writes;
@@ -506,6 +491,87 @@ namespace epochengine::project_gui
                 LibraryCode::ready,
                 std::move(locator),
                 std::move(selected.artifact)};
+        }
+        catch (...)
+        {
+            return reject_load(LibraryCode::allocation_failure);
+        }
+    }
+
+    LoadedArtifact ArtifactLibrary::load_or_compile(
+        std::string_view logicalPath) noexcept
+    {
+        auto loaded = load_latest(logicalPath);
+        if (loaded.code == LibraryCode::not_found
+            && logicalPath == canonical_source_path)
+        {
+            return compile_source(logicalPath);
+        }
+        return loaded;
+    }
+
+    LoadedArtifact ArtifactLibrary::compile_source(
+        std::string_view logicalPath) noexcept
+    {
+        if (!valid())
+            return reject_load(LibraryCode::invalid_library);
+        if (logicalPath != canonical_source_path)
+            return reject_load(LibraryCode::invalid_path);
+
+        try
+        {
+            constexpr std::uintmax_t maximumSourceBytes = 64ull * 1024ull * 1024ull;
+            std::error_code error{};
+            const auto root = fs::canonical(fs::path{project_root_}, error);
+            if (error)
+                return reject_load(LibraryCode::invalid_path);
+            const auto source = root / fs::path{logicalPath};
+            const auto status = fs::symlink_status(source, error);
+            if (status.type() == fs::file_type::not_found
+                && (!error || error == std::errc::no_such_file_or_directory))
+            {
+                return reject_load(LibraryCode::not_found);
+            }
+            if (error || !fs::is_regular_file(status)
+                || fs::canonical(source, error) != source || error)
+            {
+                return reject_load(LibraryCode::invalid_path);
+            }
+
+            const auto byteCount = fs::file_size(source, error);
+            if (error || byteCount == 0u)
+                return reject_load(LibraryCode::read_failure);
+            if (byteCount > maximumSourceBytes)
+                return reject_load(LibraryCode::serialized_budget_exceeded);
+            std::vector<std::byte> bytes(static_cast<std::size_t>(byteCount));
+            std::ifstream input{source, std::ios::binary};
+            if (!input.read(reinterpret_cast<char*>(bytes.data()),
+                    static_cast<std::streamsize>(bytes.size()))
+                || input.peek() != std::char_traits<char>::eof() || input.bad())
+            {
+                return reject_load(LibraryCode::read_failure);
+            }
+
+            const auto decoded = authoring::gui::deserialize_gui_document(bytes);
+            if (!decoded)
+                return reject_load(LibraryCode::invalid_artifact);
+            const auto compiled = authoring::gui::compile_gui_document(*decoded.snapshot);
+            if (!compiled)
+                return reject_load(LibraryCode::invalid_artifact);
+            const auto candidate = identify(logicalPath, compiled.artifact);
+            if (!candidate)
+                return reject_load(candidate.code);
+
+            const auto destination = artifact_path(root.generic_string(), candidate.asset_key,
+                compiled.artifact.identity.key);
+            if (fs::weakly_canonical(destination, error) != destination || error
+                || fs::is_symlink(fs::symlink_status(destination, error))
+                || (error && error != std::errc::no_such_file_or_directory))
+                return reject_load(LibraryCode::invalid_path);
+
+            const auto published = persist(logicalPath, compiled.artifact);
+            return published ? load_exact(logicalPath, compiled.artifact.identity.key)
+                : reject_load(published.code);
         }
         catch (...)
         {

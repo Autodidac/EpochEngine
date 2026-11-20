@@ -1683,7 +1683,8 @@ namespace epochengine::project_input
         {
             const KeyboardSample& sample = input.keyboard[index];
             if (!valid_key(static_cast<std::uint16_t>(sample.key))
-                || (sample.pressed && !sample.held))
+                || (sample.press_modifiers
+                    && (!sample.pressed || (*sample.press_modifiers & ~kAllModifiers) != 0u)))
             {
                 return {EvaluationCode::invalid_input, input.frame_index};
             }
@@ -1765,15 +1766,15 @@ namespace epochengine::project_input
                 switch (binding.device)
                 {
                 case BindingDevice::keyboard:
-                    if (!modifiers_match(input.modifiers, binding))
-                        break;
                     for (const KeyboardSample& sample : input.keyboard)
                     {
                         if (static_cast<std::uint16_t>(sample.key)
                             == binding.code)
                         {
-                            raw = sample.held ? normalized_unit : 0;
-                            pressed = sample.pressed;
+                            if (sample.held && modifiers_match(input.modifiers, binding))
+                                raw = normalized_unit;
+                            pressed = sample.pressed && modifiers_match(
+                                sample.press_modifiers.value_or(input.modifiers), binding);
                             break;
                         }
                     }

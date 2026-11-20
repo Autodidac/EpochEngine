@@ -62,10 +62,11 @@
                 || ctx->is_key_down_safe(input::Key::Escape)))
             (void)queue_detached_ai_chat_command(paneProjection.ownerContext,
                 DetachedAiChatCommandKind::stop_pending);
-        // Only Assistant Chat retains its Stop control during owned work.
+        // Assistant Chat handles its draft and Stop explicitly below. Other
+        // panes keep action input reserved while rendering their inspectable text.
         // Native window Close is outside this shared GUI event reservation.
         std::optional<gui::ScopedInputSuppression> automationBackgroundInput;
-        if (automationInputReserved && !aiChatRoute) automationBackgroundInput.emplace();
+        if (automationInputReserved && !aiChatRoute) automationBackgroundInput.emplace(true, true);
         const auto& application = editor_application_profile(
             paneProjection.ready
                 ? paneProjection.applicationKind
@@ -135,13 +136,15 @@
                     const float viewportHeight = (std::max)(1.0f,
                         h - gui::cursor_position().y - 12.0f);
                     constexpr float rowStride = 31.0f;
-                    const auto scrolling = gui::begin_scroll_area(gui::ScrollAreaOptions{
+                    const gui::ScrollAreaOptions options{
                         .id = "popout-gui-hierarchy",
                         .size = {contentWidth, viewportHeight},
                         .content_height = rowStride * static_cast<float>(hierarchy->rows.size()),
                         .draw_background = true,
                         .show_scrollbar = true,
-                        .capture_wheel = true});
+                        .capture_wheel = true};
+                    const auto scrolling = render_automation_inspection(automationBackgroundInput, true,
+                        [&]() { return gui::begin_scroll_area(options); });
                     const auto origin = gui::cursor_position();
                     const auto first = (std::min)(hierarchy->rows.size(),
                         static_cast<std::size_t>((std::max)(0.0f, scrolling.scroll_y) / rowStride));
@@ -186,13 +189,14 @@
                     lines.push_back(std::string(entity.sceneObjectId == paneSelection ? "> " : "  ")
                         + entity.name + " | " + entity.type + " | " + entity.category);
                 }
-                (void)gui::scroll_text_panel(gui::ScrollTextPanelOptions{
+                const gui::ScrollTextPanelOptions panel{
                     .id = "popout-world-outliner",
                     .size = { contentWidth, (std::max)(120.0f, h - 178.0f) },
                     .lines = lines,
                     .max_line_chars = 160,
-                    .selectable = true
-                });
+                    .selectable = true};
+                (void)render_automation_inspection(automationBackgroundInput, true,
+                    [&]() { return gui::scroll_text_panel(panel); });
             }
             else if (inspectorRoute)
             {
@@ -268,14 +272,14 @@
                     gui::property_row("Selected", std::string("<none>"), 118.0f);
                 }
                 gui::property_row(
-                    "Preview",
+                    "Scene Preview",
                     std::string(preview_mode_name(
                         paneProjection.ready
                             ? paneProjection.previewMode
                             : editor.previewMode)),
                     118.0f);
                 gui::property_row("Camera", preview_camera_name(ctx), 118.0f);
-                gui::property_row("Zoom", preview_zoom_text(ctx), 118.0f);
+                gui::property_row("Camera", preview_zoom_text(ctx), 118.0f);
                 }
             }
             else if (consoleRoute)
@@ -283,14 +287,15 @@
                 const auto& paneLogs = paneProjection.ready
                     ? paneProjection.logLines
                     : editor.logLines;
-                (void)gui::scroll_text_panel(gui::ScrollTextPanelOptions{
+                const gui::ScrollTextPanelOptions panel{
                     .id = "popout-console-dock",
                     .size = { contentWidth, (std::max)(120.0f, h - 178.0f) },
                     .lines = paneLogs,
                     .max_line_chars = 1024,
                     .selectable = true,
-                    .stick_to_bottom = true
-                });
+                    .stick_to_bottom = true};
+                (void)render_automation_inspection(automationBackgroundInput, true,
+                    [&]() { return gui::scroll_text_panel(panel); });
             }
             else if (aiChatRoute)
             {
@@ -322,7 +327,7 @@
                 });
                 const auto inputResult = gui::edit_box(
                     editor.detachedAiChatInput, { contentWidth, 30.0f }, 4096, false);
-                if (inputResult.submitted
+                if (!automationInputReserved && inputResult.submitted
                     && paneProjection.ready
                     && paneProjection.ownerContext
                     && !editor.detachedAiChatInput.empty()
@@ -344,7 +349,7 @@
                                 "Message queued for the canonical editor AI session."}
                             : std::string_view{paneProjection.aiStatus},
                         contentWidth);
-                    if (paneProjection.aiDeferredChatQueued
+                    if (!automationInputReserved && paneProjection.aiDeferredChatQueued
                         && !paneProjection.aiDeferredDispatchQueued
                         && gui::button(
                             "Retry Queued Message", {contentWidth, 30.0f}))
@@ -353,7 +358,7 @@
                             paneProjection.ownerContext,
                             DetachedAiChatCommandKind::retry_queued);
                     }
-                    if (gui::button(
+                    if (!automationInputReserved && gui::button(
                             "Cancel Queued Message", {contentWidth, 30.0f}))
                     {
                         (void)queue_detached_ai_chat_command(

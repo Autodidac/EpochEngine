@@ -97,13 +97,13 @@ namespace epochengine::anativecontext
         }
     }
 
-    void draw_sprite(
+    static void draw_sprite_impl(
         SpriteHandle handle,
         std::span<const TextureAtlas* const> atlases,
         float x,
         float y,
         float width,
-        float height) noexcept
+        float height, bool pixelDimensions) noexcept
     {
         if (!handle.is_valid())
             return;
@@ -134,8 +134,8 @@ namespace epochengine::anativecontext
         float drawW = width;
         float drawH = height;
 
-        const bool wNorm = (drawW > 0.f && drawW <= 1.f);
-        const bool hNorm = (drawH > 0.f && drawH <= 1.f);
+        const bool wNorm = !pixelDimensions && drawW > 0.f && drawW <= 1.f;
+        const bool hNorm = !pixelDimensions && drawH > 0.f && drawH <= 1.f;
 
         if (wNorm)
         {
@@ -214,6 +214,12 @@ namespace epochengine::anativecontext
                 const std::size_t dstIndex =
                     static_cast<std::size_t>(py) * static_cast<std::size_t>(sr.width)
                     + static_cast<std::size_t>(px);
+                if (srcA == 255u)
+                {
+                    sr.framebuffer[dstIndex] = 0xFF000000u | (std::uint32_t(srcR) << 16u)
+                        | (std::uint32_t(srcG) << 8u) | std::uint32_t(srcB);
+                    continue;
+                }
 
                 const std::uint32_t dst = sr.framebuffer[dstIndex];
                 const float a = static_cast<float>(srcA) / 255.0f;
@@ -231,6 +237,18 @@ namespace epochengine::anativecontext
                     (0xFFu << 24) | (std::uint32_t(outR) << 16) | (std::uint32_t(outG) << 8) | std::uint32_t(outB);
             }
         }
+    }
+
+    void draw_sprite(SpriteHandle handle, std::span<const TextureAtlas* const> atlases,
+        float x, float y, float width, float height) noexcept
+    {
+        draw_sprite_impl(handle, atlases, x, y, width, height, false);
+    }
+
+    void draw_sprite_pixels(SpriteHandle handle, std::span<const TextureAtlas* const> atlases,
+        float x, float y, float width, float height) noexcept
+    {
+        draw_sprite_impl(handle, atlases, x, y, width, height, true);
     }
 #endif
 }

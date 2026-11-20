@@ -1,5 +1,6 @@
 """Actual planetary size codec/binding/transport admission, without graphics/models."""
 from pathlib import Path
+from Tests.support.cpp import dependency_include, engine_module_source
 import hashlib
 import copy
 import json
@@ -126,6 +127,12 @@ int main(int argc,char**argv) {
    const auto waterReview=source_owner::inspect_local_source(waterManifest);if(!waterReview.review_ready())return 81;
    const auto waterStage=source_owner::stage_local_source(waterReview,waterReview.content_hash,base/"water-cache");if(!waterStage.source_staged())return 82;
    if(!source_owner::attach_project_source(waterReview,waterStage,waterReview.content_hash,project).source_attached())return 83;
+   std::ofstream legacy(project/"Packages/epoch.dependencies.props",std::ios::binary);
+   legacy<<"<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
+         <<"<!-- EPOCH_MANAGED_GENERATED_FILE: planetary_dependency_v1 -->\n"
+         <<"<Project><ItemDefinitionGroup><Link><AdditionalDependencies>epoch_water_wave.lib;"
+         <<"</AdditionalDependencies></Link></ItemDefinitionGroup></Project>\n";
+   if(!legacy)return 84;
   }
   if(action=="--stage-prepare"||action=="--stage-wet"){planet::Settings settings;settings.cells_per_tile=4;settings.ocean_surface=action=="--stage-wet";if(!planet::save_settings(project,settings))return 79;}
   const auto prepared=planet::prepare_runtime_dependency(project);if(!prepared.ok){std::ofstream(base/"preparation-error.txt")<<prepared.message;return 80;}
@@ -208,6 +215,50 @@ int main(int argc,char**argv) {
   replace(frame,"content_key="+key,"content_key="+std::string(64,'0')),std::string(4097,'x')})
   CHECK(!host::admit_generated_mesh_frame(bad,settings,*artifact.artifact));
  CHECK(!host::admit_generated_mesh_frame(frame,{},*artifact.artifact));
+ auto streamFrame=replace(frame,"tiles_per_axis=4","tiles_per_axis=1");
+ streamFrame=replace(streamFrame,"seconds=0","seconds=81.5");
+ streamFrame=replace(streamFrame,"meters_to_preview_units=0.0004","meters_to_preview_units=1");
+ streamFrame=replace(streamFrame,"origin_meters=1000000000,-2000000000,3000000000",
+  "origin_meters=1000007500,-2000001250,3000000125");
+ const std::array<double,3> systemCenter{1000000000,-2000000000,3000000000};
+ const std::array<double,3> localMeshOrigin{7500,-1250,125};
+ namespace patch=epochengine::project_planetary_snapshot;
+ std::vector<mesh::Vertex> frameVertices;
+ std::vector<std::uint32_t> frameIndices;
+ patch::Metadata cloudFrame;
+ cloudFrame.identity.source_hash="sha256:"+std::string(64,'a');
+ cloudFrame.identity.recipe_key=std::string(64,'b');
+ cloudFrame.identity.request_id=1;
+ for(std::uint8_t face=0;face<6u;++face) {
+  const auto base=static_cast<std::uint32_t>(frameVertices.size());
+  frameVertices.insert(frameVertices.end(),artifact.artifact->vertices().begin(),artifact.artifact->vertices().end());
+  for(const auto index:artifact.artifact->indices())frameIndices.push_back(base+index);
+  patch::Patch tile{.key={0,0,0,face,0},.first_vertex=base,.vertex_count=3,.first_index=base,.index_count=3,.target=true};
+  for(std::uint8_t edge=0;edge<4u;++edge)tile.neighbors[edge]={0,0,0,static_cast<std::uint8_t>((face+edge+1u)%6u),0};
+  cloudFrame.patches.push_back(tile);
+ }
+ cloudFrame.parent_delta.resize(frameVertices.size());
+ const auto combined=mesh::build_artifact(frameVertices,frameIndices);
+ CHECK(combined);
+ cloudFrame.identity.artifact_key=combined.artifact->key();
+ cloudFrame.cloud=patch::CloudLayer{.body=0,.center_meters=systemCenter,.radius_meters=25000,.artifact=artifact.artifact};
+ const auto packetBytes=patch::encode(cloudFrame,*combined.artifact);
+ const auto combinedKey=epochengine::asset::texture::content_hash_hex(combined.artifact->key());
+ streamFrame=replace(streamFrame,"content_key="+key,"content_key="+combinedKey);
+ streamFrame=replace(streamFrame,"vertices=3","vertices=18");
+ streamFrame=replace(streamFrame,"indices=3","indices=18");
+ auto packet=patch::DecodedSnapshot::read(packetBytes,combined.artifact,cloudFrame.identity,{},{},localMeshOrigin);
+ CHECK(packet);
+ for(const auto& bad:std::vector<std::string>{frame,{},
+  replace(streamFrame,"seconds=81.5","seconds=81"),
+  replace(streamFrame,"3000000125","3000000126"),
+  replace(streamFrame,"content_key="+combinedKey,"content_key="+std::string(64,'0'))}){
+  CHECK(!host::normalize_stream_cloud_frame(*packet,bad,settings,81.5));
+  CHECK(packet->metadata().cloud->center_meters==systemCenter);
+ }
+ CHECK(host::normalize_stream_cloud_frame(*packet,streamFrame,settings,81.5));
+ const auto& cloud=*packet->metadata().cloud;
+ CHECK((cloud.center_meters==std::array<double,3>{})&&cloud.radius_meters==25000&&cloud.artifact->key()==artifact.artifact->key());
  planet::StreamView view;view.request_id=91;
  const std::string receipt="epoch.planet.stream.v5\nrequest_id=91\nsnapshot_ready=0\nbuilt=0\nreused=0\nresident=0\npending=6\ndraw=0\nmin_level=0\nmax_level=0\nresident_bytes=0\nmaximum_bytes=16777216\nmeters_to_preview_units=0.0004\nmesh_file=-\ncontent_key=-\nvertices=0\nindices=0\nocean_surface=0\nsimulation_seconds=0\npatch_pixels=210\nlod_hysteresis=0.14999999999999999\nsize_reference_body=5\nreference_radius_meters=25000\n";
  CHECK(host::parse_receipt(settings,view,receipt).operation.ok);
@@ -389,8 +440,9 @@ class PlanetarySizeSettings(unittest.TestCase):
             emitted=ET.parse(packages/'epoch.dependencies.props').getroot()
             dependencies=next(emitted.iter(ns+'AdditionalDependencies')).text
             expected_libraries=('epoch_extension_planetary_water.lib','epoch_extension_water_fft.lib',
-                'epoch_extension_fft_ocean.lib','epoch_water_wave.lib')
+                'epoch_extension_fft_ocean.lib')
             for library in expected_libraries:self.assertIn(library,dependencies)
+            self.assertNotIn('epoch_water_wave.lib',dependencies)
             source=project/'wet.link_contract.cpp'
             source.write_text('extern "C" bool epoch_install_planetary_runtime(const char*,const char*) noexcept;\n'
                 'extern "C" bool epoch_bind_admitted_planetary_runtime(const char*,const char*) noexcept{return false;}\n'
@@ -419,9 +471,11 @@ class PlanetarySizeSettings(unittest.TestCase):
                 ET.SubElement(compile,ns+'LanguageStandard').text='stdcpplatest'
                 ET.SubElement(compile,ns+'RuntimeLibrary').text='MultiThreadedDebugDLL' if config=='Debug' else 'MultiThreadedDLL'
                 link=ET.SubElement(definitions,ns+'Link');ET.SubElement(link,ns+'SubSystem').text='Console'
-                # This standalone fixture supplies the same SDK mesh/runtime contract symbols
+                # This standalone fixture supplies the same SDK mesh and wave symbols
                 # that EpochEngine.lib owns in ordinary generated projects.
-                ET.SubElement(link,ns+'AdditionalDependencies').text='$(EpochPlanetBuild)\\$(EpochPlanetConfiguration)\\epoch_planet_mesh_format.lib;%(AdditionalDependencies)'
+                ET.SubElement(link,ns+'AdditionalDependencies').text=(
+                    '$(EpochPlanetBuild)\\$(EpochPlanetConfiguration)\\epoch_planet_mesh_format.lib;'
+                    '$(EpochPlanetBuild)\\$(EpochPlanetConfiguration)\\epoch_water_wave.lib;%(AdditionalDependencies)')
                 files=ET.SubElement(wrapper,ns+'ItemGroup');ET.SubElement(files,ns+'ClCompile',{'Include':str(source)})
                 ET.SubElement(wrapper,ns+'Import',{'Project':'$(VCTargetsPath)\\Microsoft.Cpp.targets'})
                 ET.ElementTree(wrapper).write(path,encoding='utf-8',xml_declaration=True)
@@ -455,6 +509,7 @@ class PlanetarySizeSettings(unittest.TestCase):
             "        bool source_supports_mesh_frame(", "        bool source_supports_original_sunlight(", "        std::string real_text(",
             "        void append_size_arguments(", "        std::string stream_cache_identity(",
             "        std::optional<GeneratedMeshFrame> admit_generated_mesh_frame(",
+            "        bool normalize_stream_cloud_frame(",
             "        std::optional<fs::path> ordinary_directory(", "        std::optional<fs::path> project_directory(", "        bool write_owned(",
             "        std::optional<std::string> recipe_guard(", "        std::string water_source_requirement(", "        bool save_settings_observed(",
             "        bool supported_session_envelope(", "    bool save_settings("))
@@ -477,7 +532,7 @@ class PlanetarySizeSettings(unittest.TestCase):
         generation_fixture = ROOT / "Artifacts/pgi" / str(time.time_ns())
         (report / "consumer.cpp").write_text(code, encoding="utf-8")
         (report / "provider_refusal.cpp").write_text("int main(){return 17;}\n", encoding="utf-8")
-        modules = [ROOT / "Engine/modules" / name for name in (
+        modules = [engine_module_source(ROOT / "Engine/modules", name) for name in (
             "asset.texture_artifact.ixx", "asset.mesh_artifact.ixx", "asset.cloud_volume.ixx",
             "project.planetary.ixx", "project.planetary_snapshot.ixx", "project.planetary_runtime.ixx", "water.wave.ixx", "platform.filesystem.ixx",
             "package.catalog.ixx", "package.registry.ixx", "package.source_install.ixx",
@@ -498,6 +553,7 @@ target_compile_features(owners PUBLIC cxx_std_23)
 target_compile_options(owners PUBLIC /utf-8 /EHsc)
 target_compile_definitions(owners PUBLIC NOMINMAX WIN32_LEAN_AND_MEAN)
 target_include_directories(owners PUBLIC "{(ROOT/'Engine/include').as_posix()}" "{(ROOT/'Engine/dep/EpochPlatformEngine/include').as_posix()}")
+target_include_directories(owners PRIVATE "{dependency_include(ROOT).as_posix()}")
 target_link_libraries(owners PUBLIC winhttp shell32 userenv advapi32 bcrypt comdlg32 windowscodecs ole32)
 target_sources(owners PUBLIC FILE_SET CXX_MODULES BASE_DIRS "{(ROOT/'Engine').as_posix()}" FILES {paths})
 add_executable(size_admission consumer.cpp)

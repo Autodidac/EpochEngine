@@ -27,7 +27,7 @@ class ProjectGuiActivation(unittest.TestCase):
         start = viewport.index("                    const bool projectBuildWasPending =")
         stop = viewport.index("                    const bool runtimeActive =", start)
         action = viewport[start:stop]
-        api = (ROOT / "Engine/modules/gui.engine.ixx").read_text(encoding="utf-8")
+        api = (ROOT / "Engine/modules/gui/gui.engine.ixx").read_text(encoding="utf-8")
         structures = "\n".join(definition(api, marker, True).replace("export ", "", 1) for marker in (
             "    export enum class ButtonIcon", "    export struct InlineButtonSpec", "    export enum class InlineButtonSizing",
             "    export enum class InlineButtonAlignment", "    export struct InlineButtonRowOptions"))
@@ -44,15 +44,24 @@ namespace gui{
 ''' + structures + r'''
 inline std::optional<std::size_t> forced;
 inline std::array<InlineButtonSpec,2> last;
+inline bool input_reserved{};
 std::optional<std::size_t> inline_button_row(std::span<const InlineButtonSpec> items,float height,float gap,const InlineButtonRowOptions& options){
 assert(items.size()==2&&height==30&&gap==6&&options.wrap);
 assert(options.alignment==InlineButtonAlignment::Center);
-std::copy(items.begin(),items.end(),last.begin());return forced;
+std::copy(items.begin(),items.end(),last.begin());return input_reserved?std::nullopt:forced;
 }
+}
+bool inspection_allowed=true;
+bool canInspectAutomation(){return inspection_allowed;}
+template<class Draw> auto render_automation_inspection(bool& reservation,bool allowed,Draw&& draw){
+    const bool previous=reservation;
+    if(allowed)reservation=false;
+    auto result=draw();reservation=previous;return result;
 }
 void start_project_build(EditorState& state,bool,std::string_view){++state.builds;state.projectBuildPending=true;}
 bool cancel_project_build(EditorState& state){++state.cancels;state.projectBuildPending=false;return true;}
 void actual_controls(EditorState& editor,float centerWidth){
+    auto& automationBackgroundInput=gui::input_reserved;
 ''' + action + r'''
 }
 int main(){
@@ -76,6 +85,14 @@ for(const float width:{180.f,700.f}){
     assert(state.builds==0&&state.cancels==0);
     gui::forced=1;actual_controls(state,width);assert(state.cancels==1&&!state.projectBuildPending);
     gui::forced=0;actual_controls(state,width);assert(state.builds==1&&state.projectBuildPending);
+    gui::input_reserved=true;inspection_allowed=false;gui::forced=1;
+    actual_controls(state,width);assert(state.cancels==1&&state.projectBuildPending&&gui::input_reserved);
+    inspection_allowed=true;gui::forced=0;actual_controls(state,width);
+    assert(state.builds==1&&state.cancels==1&&gui::input_reserved);
+    gui::forced=1;actual_controls(state,width);
+    assert(state.cancels==2&&!state.projectBuildPending&&gui::input_reserved);
+    gui::forced=0;actual_controls(state,width);assert(state.builds==1&&gui::input_reserved);
+    gui::input_reserved=false;
 }
 }
 '''
@@ -121,7 +138,9 @@ for(const float width:{180.f,700.f}){
             "        [[nodiscard]] EditorState::GuiWidgetIdentity gui_widget_identity(",
             "        [[nodiscard]] bool gui_widget_identity_matches("))
         save = definition(documents, "        [[nodiscard]] bool save_project_gui_document(")
-        repair = definition(packages, "        void repair_project_evidence(")
+        repair = "\n".join(definition(packages, marker) for marker in (
+            "        [[nodiscard]] static bool save_active_project_sources(",
+            "        void repair_project_evidence("))
         scene_save = definition(scene_source, "        [[nodiscard]] bool save_editor_scene_snapshot(")
         scene_projection = definition(selection, "        [[nodiscard]] scene::SceneSnapshot capture_editor_scene_projection(")
         run_start = runtime.index("            (void)project_gui_document_layout(editor);")
@@ -214,6 +233,7 @@ struct EditorState {
     bool forestTerrainPainting{};
     bool showOutliner{},showInspector{},showConsoleDock{},showAiChat{},helpersVisible{};
     double projectRunFrameLimitFps{};
+    bool projectScreenSpaceGuiEnabled{true};
     int projectFrameLimitEdit{};
     int planetarySettings{},planetaryAttachment{},planetaryMeshPolicy{},planetaryBodySelection{};
     std::string planetarySeedDraft,planetaryRadiusDraft,planetaryCheckedRoot;

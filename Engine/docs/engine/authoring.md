@@ -495,3 +495,35 @@ not deferred until all authoring systems exist.
 - Dangerous extensions are sandboxed or explicitly installed.
 - Texture and 2D scene authoring deliver the first complete product loop before
   broad editor expansion.
+
+## Generated-content policy and approval — required November 17
+
+Projects must explicitly allow AI-generated assets, require approval, or exclude
+them. Apply the policy to images/textures, meshes, music/audio and derived or
+packaged dependencies. Preserve source hashes, provenance (human-authored,
+generated, mixed or unknown), model/version/settings where available, license
+references and the human decision. Imported is a transport origin, not evidence
+of human authorship. Unknown provenance must remain visible; no detector score
+proves human authorship or guarantees detector-free output.
+
+Enforce policy deterministically **before** model loading, downloads or generation
+dispatch. A disabled request returns a clear reason and the responsible project
+setting without inference. System One/Assistant UI may explain that host verdict,
+but cannot override it. Apply the same gate to chat, direct buttons, scripts and
+queued jobs; recheck the current policy at dispatch and import to prevent stale
+queued authority. Never silently enable generation or substitute another tool.
+
+Generation permission, reference approval, output acceptance and license/package
+admission are distinct decisions. Keep unapproved results outside admitted project
+assets. Bind approval to content and project identity; changed bytes require review.
+Save/reopen must retain provenance and decisions. Export/build checks must report
+blocked or unknown content through dependency/derived-asset lineage rather than
+trusting filenames or a model's claim. Projects excluding generated content need
+no AI model or detector to enforce this policy.
+
+This is an acceptance target, not a claim that the complete cross-media policy
+already ships. Extend existing project settings, asset jobs/import transactions
+and packaging admission; do not add a second asset registry. Required proof:
+zero worker/inference dispatch for disabled requests, consistent UI/chat/script
+rejection, policy changes during queued work, hash-bound approvals, persistence,
+and transitive export checks. Existing image-reference approval alone is narrower.

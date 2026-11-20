@@ -118,7 +118,7 @@ int main() {
 
     def test_both_surfaces_observe_native_completions_without_ui_override(self):
         editor = read_owned_source(ROOT / 'Engine/src/editor/editor.application.cpp', encoding='utf-8')
-        badge = editor.split('if (ctx->windowData)\n        {\n            const double chromeNow', 1)[1].split('const double chromeThrottle', 1)[0]
+        badge = editor.split('const double chromeNow', 1)[1].split('const double chromeThrottle', 1)[0]
         self.assertIn('successfulFrameGeneration.load(std::memory_order_acquire)', badge)
         self.assertIn('chromeFrameRate.live_rate()', badge)
         self.assertNotIn('++', badge)

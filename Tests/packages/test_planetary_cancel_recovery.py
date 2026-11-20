@@ -90,7 +90,7 @@ class PlanetaryCancelRecovery(unittest.TestCase):
         module_map = {}
         owners = (ROOT / 'Engine/modules', ROOT / 'Engine/dep/EpochPlatformEngine/modules')
         for owner in owners:
-            for path in owner.glob('*.ixx'):
+            for path in owner.rglob('*.ixx'):
                 match = re.search(r'^export module\s+([\w.:]+);', path.read_text(encoding='utf-8-sig'), re.M)
                 if match:
                     self.assertNotIn(match.group(1), module_map)

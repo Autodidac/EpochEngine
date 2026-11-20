@@ -97,24 +97,33 @@ namespace epochengine::package_source
             }
             const auto extension = folded(path.extension().string());
             constexpr std::array rejected{".exe", ".dll", ".so", ".dylib", ".lib", ".a", ".obj", ".pdb",
-                ".ifc", ".pyc", ".gguf", ".jsonl", ".pem", ".key", ".pfx", ".p12", ".db", ".sqlite",
+                ".ifc", ".pyc", ".gguf", ".safetensors", ".ckpt", ".onnx", ".pt", ".pth", ".tflite",
+                ".jsonl", ".pem", ".key", ".pfx", ".p12", ".db", ".sqlite",
                 ".zip", ".gz", ".tgz", ".tar", ".7z"};
+            const auto filename = folded(path.filename().string());
+            constexpr std::array weight_binaries{"experts.bin", "dense.bin", "latent_dense_q4.bin",
+                "latent_dense_q8.bin", "pytorch_model.bin"};
+            if (std::find(weight_binaries.begin(), weight_binaries.end(), filename) != weight_binaries.end()
+                || (filename.starts_with("pytorch_model-") && extension == ".bin"))
+                return false;
             return std::find(rejected.begin(), rejected.end(), extension) == rejected.end();
         }
-        void check_chain(const fs::path& path)
+        fs::file_status check_chain(const fs::path& path)
         {
             require(path.native().size() < 4096u, Code::unsafe_path,
                 "The package path exceeds the supported staging length.");
             std::error_code error;
             fs::path current;
+            fs::file_status status{fs::file_type::not_found};
             for (const auto& component : path)
             {
                 require(component != ".." && component != ".", Code::unsafe_path, "Source paths cannot contain parent traversal.");
                 current /= component;
-                const auto status = fs::symlink_status(current, error);
+                status = fs::symlink_status(current, error);
                 if (error == std::errc::no_such_file_or_directory) { error.clear(); continue; }
                 require(!error && !fs::is_symlink(status), Code::unsafe_path, "Source and cache paths must not contain symbolic links.");
             }
+            return status;
         }
         fs::path absolute_plain(const fs::path& input)
         {
@@ -128,9 +137,9 @@ namespace epochengine::package_source
         }
         std::string read_small(const fs::path& path, std::size_t maximum)
         {
-            check_chain(path);
+            const auto status = check_chain(path);
             std::error_code error;
-            require(fs::is_regular_file(path, error) && !error, Code::missing_file, "A declared source or license file is missing.");
+            require(fs::is_regular_file(status), Code::missing_file, "A declared source or license file is missing.");
             const auto size = fs::file_size(path, error);
             require(!error && size > 0u && size <= maximum, Code::budget_exceeded, "The manifest, license or receipt exceeds its local inspection limit.");
             std::ifstream input(path, std::ios::binary);
@@ -143,9 +152,9 @@ namespace epochengine::package_source
         {
             require(portable_relative(relative), Code::unsafe_path, "A package source path is unsafe or not portable.");
             const auto path = root / relative;
-            check_chain(path);
+            const auto status = check_chain(path);
             std::error_code error;
-            require(fs::is_regular_file(path, error) && !error, Code::missing_file, "A declared package source file is missing.");
+            require(fs::is_regular_file(status), Code::missing_file, "A declared package source file is missing.");
             const auto expected = fs::file_size(path, error);
             require(!error && expected <= kMaximumFileBytes, Code::budget_exceeded, "A source file exceeds the 16 MiB limit.");
             std::ifstream input(path, std::ios::binary);
@@ -769,7 +778,8 @@ namespace epochengine::package_source
         }
     }
 
-    ProjectAttachment load_project_attachment(const fs::path& project, std::string_view packageId, std::stop_token token)
+    ProjectAttachment load_project_attachment(const fs::path& project, std::string_view packageId, std::stop_token token,
+        Inspection* approved_review)
     {
         try
         {
@@ -797,11 +807,17 @@ namespace epochengine::package_source
                     Code::cache_collision, "The project source path is invalid.");
             }
             require(!error && count == 3u, Code::cache_collision, "The project dependency is incomplete.");
-            const auto reviewed = inspect_local_source(folder / "source" / binding->source_path / "package.epoch-package.json", token);
+            auto reviewed = inspect_local_source(folder / "source" / binding->source_path / "package.epoch-package.json", token);
             require(reviewed.review_ready(),
                 reviewed.code == Code::cancelled ? Code::cancelled : Code::source_changed,
                 "Project source changed; inspect and approve the replacement explicitly.");
-            return verify_project(reviewed, root, token, Code::source_changed);
+            auto attachment = verify_project(reviewed, root, token, Code::source_changed);
+            if (approved_review && attachment.source_attached())
+            {
+                check_cancelled(token);
+                *approved_review = std::move(reviewed);
+            }
+            return attachment;
         }
         catch (const Failure& failure) { return {failure.code, failure.message}; }
         catch (...) { return {Code::io_failure, "The saved project dependency could not be loaded."}; }

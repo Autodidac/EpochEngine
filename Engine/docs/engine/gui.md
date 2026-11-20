@@ -5,6 +5,33 @@ rendering, input, theme and native hosts. The editor, launcher, project hub,
 systems view, Assistant, package manager, scripting view and popout windows
 compose the same shared primitives.
 
+Scene overlays can opt into a tinted translucent background. EpochGui chooses
+the fill opacity against the active theme's text color and worst-case SDR
+scenery. The Engine adapter uses that fill for flight status and project
+controls while drawing captions and controls through their usual paths.
+
+Chrome overflow reserves measured `More (N)` text plus the existing select-box
+minimum, arrow and padding. A viewport too short for its second mesh-mode row
+hides that row instead of painting beyond the dock. Focused CPU checks cover
+multiple text scales/counts and short-dock boundaries; native acceptance remains open.
+
+The preview toolbar identifies its controls as `Move: <mode>` and
+`View: <projection>`, with a measured, untruncated `Reset` action. Mesh display
+offers Materials (authored materials and lighting), Solid (neutral lit geometry,
+preserving texture cutouts), and Wireframe. Materials preserves the previous default
+appearance. Display changes do not rewrite authored materials. Editor and child
+runtime acknowledge the actual admitted mode; runtime control protocol 3 rejects
+older peers rather than silently treating their textured Solid as neutral Solid.
+Focused geometry/material checks pass; combined Release and native acceptance
+remain required before calling this toolbar complete.
+
+The primary command strip has one independent arrow to hide/show File through
+Help. It retains the application label, closes an open command menu when toggled,
+and sits to the right of the command buttons at their same height and y position,
+and preserves its visibility across context switches. The performance strip keeps
+its separate staged collapse. Command visibility currently resets on Editor restart;
+native narrow-window/overflow acceptance remains pending.
+
 Asset Generation keeps reference approval directly beneath the image preview,
 outside the settings scroll when the image has its own column. Approving an
 image does not generate a model or import anything into a project.
@@ -116,15 +143,44 @@ control text stays dark. Choosing it does not rewrite the saved rounding prefere
 for other themes. Indigo Quartz uses saved ID16 and Signal Plum17; retired ID13
 stays retired. New settings start with System Light/Dark; saved choices still load.
 
-The jump-to-latest control uses the same circular button and hit test with an
-opaque high-contrast face and inverse outline. Dark themes use a black face and
-white arrow; light themes use a white face and dark arrow. Its drawing remains
-in the existing top layer; background code must not show through the circle.
+The circular jump-to-latest control uses the current palette's opaque button
+face and standard glyph in Assistant Chat. Output keeps its high-contrast face
+and outline. Both stay in the existing top layer. The composer Plus uses the
+shared add icon in the center of its circle. Its paint and hit target share the
+same geometry at enlarged text sizes, including Classic. Debug and Release
+recording checks pass. Native appearance remains open. [Chat controls receipt](../../../Artifacts/Reports/classic-controls-oct28/afd8a89ace8ed406/result.json).
 
 Physical divider acceptance is separate from CPU gesture tests. The existing
 `--trace-menu-button0` option enables bounded native delivery, GUI admission and
 divider decision evidence (120 interesting records per owner, no text or keys).
 It changes no input, frame or overlay order. Default operation records none of it.
+
+## Responsive project canvas
+
+In the GUI workspace, use **Layout → Canvas Layout → Stack on narrow screens**
+for a canvas with side-by-side panels. At narrower aspect ratios, the runtime
+stacks visible direct children in hierarchy order when that gives controls
+more room. **Stack gap** sets the gutter and spacing between panels. At wider
+aspect ratios the authored positions apply. Both layouts use the same widgets,
+actions, focus and saved document.
+
+On Android, project GUI layout and hit testing use the SDL logical safe area
+reported for system bars and cutouts. An editable field opens the Android
+keyboard on focus or a tap. The shared text control receives committed input,
+and Back dismisses the keyboard until the next tap or focus change.
+
+The GUI document owns the asset paths for images and image buttons. On
+reopen, the Editor reconstructs missing hierarchy entries through scene
+transactions for layout and selection. These entries can be saved while
+the texture cache is empty. Project Play resolves the authored assets
+through the project texture library. A legacy scene material seeds an image
+when the widget is first projected or an older GUI placeholder loads. Assign
+and Clear edit the GUI document. An empty path records an intentional clear
+across Save, Reload and Play.
+
+Open, Close, Reload and template replacement can replace the in-memory GUI
+document during a pane frame. The outliner reads the active document after
+those controls before drawing History, Placement, Hierarchy and Flow.
 
 ## Project keyboard input — October28, local source
 
@@ -325,11 +381,44 @@ Portable text-controller undo/redo, caret persistence and history bounds belong 
 The shared status strip measures labels before layout. Optional per-item
 compression priority abbreviates CPU/RAM tags to percentages first, then task
 counts, then lower-priority identity fields only when width requires it. Full
-Thread/Queued/Idle labels are retained whenever they fit, including default
-windows. CPU/RAM appears before version and is the last retained field under
-extreme compression. Abbreviated fields expose their full label on hover.
+Thread/Queued/Idle labels remain visible when they fit. Each pane retains the
+backend and assigned context caption and measured FPS ahead of version and build
+details as its own width shrinks. Abbreviated fields expose their full label on
+hover.
 The Editor reserves measured menu widths before assigning status space, rather
 than sacrificing menus while a long status label remains uncompressed.
+
+November 16 Windows source checks place the arrow immediately before the CPU
+badge when expanded and at the upper right when collapsed. The measured toolbar
+keeps its single row with or without the update button. Zoom belongs to the 3D
+viewport. The numbered tier badge shows suggested foreground Editor pacing
+based on the active renderer and detected hardware threads. Current detection
+assigns Tier 4 at 120 FPS, Tier 3 at 60 FPS, and Tier 1 at 30 FPS. Tier 0 is the
+software or unavailable-renderer case. Tier 2 names the 40 FPS pacing profile.
+The FPS badge reports the active cap and Systems reports renderer features.
+Ordinary capped background mode reads `30 FPS / 30 background cap`,
+or `Background 30 FPS` in the compact strip. Build and Project host retain
+their own labels. Debug and Release CPU checks cover four widths, blocked clicks,
+layout persistence, and the effective pacing text. Native layout acceptance
+remains open. [Toolbar geometry](../../../Artifacts/Reports/editor-status-layout-20261116/result.json)
+and [FPS label checks](../../../Artifacts/Reports/opengl-native-production-oct30/vsync-label/cpu/result.json).
+
+The narrow-pane checks cover six pane widths with Update present and absent.
+Version and architecture yield first. The Update command stays centered when
+the two live fields fit beside it and shifts only far enough to leave room when
+needed. Existing badge actions and the collapse arrow keep their meaning.
+The smallest fixtures keep the pane identity when room allows a single badge.
+[Toolbar retention checks](../../../Artifacts/Reports/editor-status-layout-20261116/readout-retention/result.json).
+
+Collapsing the strip pauses its frame rate, task and host observations and
+label formatting. Reopening requests a current host sample and a fresh FPS
+interval. Systems and the Tasks menu still request the data they display and
+share a single GPU or task snapshot with the toolbar in the same frame. The
+process-owned NVML worker refreshes on demand at its existing cadence. CPU/RAM
+checks for admission and frame pacing keep their independent cache, as do
+native title FPS observations. The CPU tests cover collapsed, open, and reopened
+frames, explicit GPU demand and reader/driver isolation. [Editor observation gate](../../../Artifacts/Reports/editor-status-layout-20261116/observation-gate/result.json)
+and [NVML worker contract](../../../Artifacts/Reports/gpu-sampler-concurrency-oct30/repaired/1794812562473973600/result.json).
 
 Tab/ShiftTab addresses a hovered tab strip; CtrlTab/CtrlShiftTab navigates its
 containing dock group or workspace, including from a text field. Text and scene
@@ -368,7 +457,7 @@ and pointer midpoint/endpoints. Runtime text-input acceptance remains pending.
 
 - Portable static-library API: `Engine/dep/EpochGui/include/gui/`
 - Portable implementation: `Engine/dep/EpochGui/src/epochgui/`
-- Engine adapter API/implementation: `Engine/modules/gui.engine.ixx` and
+- Engine adapter API/implementation: `Engine/modules/gui/gui.engine.ixx` and
   `Engine/src/epochgui/gui.engine.cpp`
 - Primary editor consumer: `Engine/src/editor/editor.application.cpp`
 - Backend replay consumers: renderer/context code that drains deferred GUI
@@ -676,6 +765,103 @@ The reusable GUI boundary also requires:
 
 ## Console Dock Boundary
 
+Workflow Stages uses one yellow current-position marker: when source-change
+substeps are expanded, all substeps are indented under their parent and only the
+active substep is highlighted;
+the parent stage remains plain. Build/check stages without substeps can carry
+the marker directly. A highlighted response wait means the workflow is waiting,
+not that GPU computation is proven. Completed source/model preparation is retained
+as display-only evidence by the session owner tick, even with Automation hidden;
+stopping invalidates live admission without rolling those labels back to Pending.
+An unanswered stopped request says Not received, while an actual response stays
+Received. These receipts reset for a new session and cannot authorize execution.
+Passed/Pending and retained Received labels
+keep their existing meanings.
+
+The main status arrow cycles Full, Compact, Resources, Minimal and Hidden. Full includes
+every status chip; Compact retains CPU/RAM/GPU/VRAM, shared Host/Epoch scope,
+renderer, FPS and Total/Ready/Queued; Resources retains CPU/RAM/GPU/VRAM and their shared scope;
+Minimal retains renderer and FPS; Hidden
+leaves the arrow. Total counts actively running Editor pool workers, Ready its available workers,
+and Queued waiting work. Labels always precede values, including Compact. The
+tooltip reports pool capacity and external/Assistant activity separately; model
+GPU work never adds a pool worker. These are not all OS-thread counts.
+Host means the entire PC; Epoch means the Editor and observed child processes.
+Clicking any resource chip or the shared scope switches all four together.
+Normal FPS omits the Editor prefix; build, project-host and unfocused states
+remain explicit. Tier chips use T0-T4; pacing recommendations stay in the tooltip.
+The arrow stays before the status chips and its tooltip names the next stage.
+It points right toward collapse while visible and left to expand from Hidden.
+Responsive width compression may omit lower-priority chips when space is tight.
+Layout schema 15 stores the stage, visibility and Host/Epoch scope. Earlier
+layouts default to Host. Schema 12 visibility restores Full or Hidden, and
+schema 13 Minimal/Hidden values migrate to stages 3/4. Context snapshots carry
+both the stage and scope. Optional toolbar resource and task polling is omitted in Minimal
+and Hidden; safety admission and resource monitoring retain their own lifecycle.
+
+November17 native979D58 acceptance verified the complete five-state cycle,
+resources surviving the second click, Host→Epoch switching all populated resource
+chips together, and Details access during prefill. Final observed state was
+Resources/Epoch; cross-restart/native multicontext persistence remains separate.
+
+The November 16 compact-toolbar checks passed Windows CPU consumers; shared
+label/layout logic has no Windows-only branch, but Linux native acceptance remains
+open. Calculator GUI regeneration also passed only the MSVC consumer. Its artifact
+library now uses short sibling staging names and the existing platform exclusive
+create/no-replace publication functions (POSIX uses O_EXCL/O_NOFOLLOW and link).
+The standalone CMake GUI-library contract explicitly owns platform.filesystem;
+its static module closure passed with five providers and no unresolved imports.
+This is not a Linux compile or runtime receipt. Evidence:
+Artifacts/Reports/linux-parity-20261116/gui-library-module-closure/result.json.
+
+Next native acceptance uses the exact combined Release and separate local layout
+data. At normal and narrow widths, cycle Full → Compact → Resources → Minimal → Hidden → Full;
+check the left arrow, next-stage tooltip, renderer/FPS priority and absence of
+overlap. Reopen each saved stage, then open legacy schema-12 layouts with telemetry
+true/false and verify Full/Hidden. Carry each stage into another context and back.
+During approved automation, verify resource clicks switch all four resource chips
+together, the arrow and Details remain usable, and modal coverage still blocks
+background interaction. Optional sampling suppression is proven by the CPU fixture
+`Tests/gui/test_automation_toolbar_inspection.py` through actual resource/task-call
+guards; do not infer it from low Task Manager utilization. Native visual checks
+remain pending until their executable/context and observed result are recorded.
+
+During a project build or reserved automation, ordinary dock panels such as
+Output may be closed through their tab close control. Assistant Chat stays open
+so progress and Stop remain reachable, including builds started outside chat.
+The existing inspection input scope admits only that panel closure: selecting,
+opening, dragging and keyboard-switching panels remain blocked. Modal, floating
+window and pointer-capture precedence still applies. The existing active-pane
+resolver chooses a visible sibling after closure. Native detached-window close
+still restores its route to the main dock; main Editor close and Stop are unchanged.
+The actual tab owner and active-pane resolver pass the focused CPU fixture
+`Tests/gui/test_automation_pane_close.py`. November 17 native OpenGL acceptance
+in Release PID 8228 (binary identity below) confirmed Output closes during Edge
+inference, Assistant remains visible without its close control, and selecting
+blocked Global Settings reopens Output with the automation explanation. This
+proves that inspected native path, not every backend or detached-window path.
+
+November 17 held-divider correction: automation must retain the existing
+layout-divider gesture between frames and let that owner continue its own pointer
+capture. Other pointer owners and real modal/floating windows still block it.
+`Tests/gui/test_editor_splitter_drag.py` now includes the actual Editor reservation
+preamble and passes Debug/Release horizontal and vertical multi-frame gestures.
+`Tests/gui/test_gui_scrollbar_drag.py` passes actual queued scrollbar dragging
+through the inspection scope while sibling input stays suppressed and a real modal
+still blocks input. These CPU results alone do not establish live dispatch.
+No active model was interrupted for these checks.
+The follow-up `Tests/gui/test_edit_box_scrolling.py` exercises actual scroll-area
+begin/end and queued held input through the inspection scope at the reported
+thumb coordinates (1155,330 to 1155,570), with a 650px viewport and 1870px content.
+Debug/Release pass and advance over 600px. At November 17 04:48 UTC, native
+OpenGL Release Editor PID 8228 (SHA-256 `61E7B1227832481A088C4894A2641F451A29116E214B44989F270818D45E04D6`)
+successfully dragged the Automation thumb down through the mission and back to
+the workflow header during Edge inference. The first automation attempt rejected
+stale window bounds/foreground identity; rebinding and raising the current window
+preceded success. This supersedes the general claim that thumb dragging is blocked,
+without proving the cause of every earlier failed gesture. The held-divider repair
+still needs its own native acceptance in the next binary.
+
 Console Dock is a compact evidence and diagnostic strip. It may show current
 status, build evidence, model selection state, and logs, but central workflows
 belong in proper GUI windows:
@@ -836,6 +1022,22 @@ contract. Native interaction still requires operator eye proof, and automatic
 monitor placement remains unfinished.
 Games, mobile apps, console targets, and headless tools may omit floating,
 detached, and context hosts while linking the portable GUI primitives.
+
+Retained native acceptance details (November 17 reconciliation):
+
+- Exercise unequal-DPI multi-monitor detach, dock and saved-layout restore with
+  one logical pane, one matching guide/ghost and correct pointer capture across
+  monitor boundaries. Use the actual destinations; no fixed Display 2 assumption.
+  The routing and coordinate contracts above do not establish this native proof.
+- Visually inset splitter rails must retain the full interaction hit area,
+  including the visually inset ends. The v177 dock-edge repair and
+  `Tests/ai/test_epoch_90177_title_activity_splitter_regressions.py` retain the
+  historical drawing case; native pointer acceptance is a separate check.
+- Code-workspace persistence acceptance covers tab order, active tab, selection
+  and find state across reopen. The session round-trip in
+  `Engine/src/editor/editor.code_workspace_contract.cpp` checks those fields.
+  Native save/reopen must exercise the same state; these fixtures do not establish
+  restoration of unsaved edit buffers or their Undo histories.
 
 ## Pane Hosts And Application-Defined Outputs
 
@@ -1190,6 +1392,15 @@ These are lifecycle and ownership contracts, not backend-specific visual tricks.
 
 EpochGui owns reusable text/window shadow intent. Font shadowing uses a GUI-owned glyph/atlas layer so editor domains do not render a second ad-hoc font pass. Window/chrome shadowing likewise belongs to shared GUI composition. Backends such as SDL3 may have their own native rendering mechanisms, but they consume the shared visual intent rather than defining a competing editor-only shadow system.
 
+The November 16 repair places a soft atlas perimeter beneath floating and modal
+windows, command menus, and select dropdowns. Eight nonoverlapping edge and
+corner sprites extend past the opaque surface. Docked panes retain flat seams.
+The existing hit regions and top-layer replay order still own input and stacking.
+Debug and Release fixtures exercised the atlas and surface draw owner, then the
+installed SDL3 3.4.16 software renderer checked the blend in memory. Native
+Editor window, contrast, and multicontext checks remain open. [Shared paint checks](../../../Artifacts/Reports/gui-window-shadow-20261116/5c5ede1e6ef2847b/result.json)
+and [SDL3 software pixels](../../../Artifacts/Reports/gui-window-shadow-20261116/sdl3-software/result.json).
+
 ### Interval-based theme cycling (development candidate)
 
 `Editor Settings > Theme > Theme Cycle` cycles through the seven fixed
@@ -1204,3 +1415,32 @@ cycle. The editor persists theme choice and interval in version 6 of its layout
 settings and accepts legacy versions 1-5 with the 30-second default. Other
 editor-snapshot restoration includes the interval. This is a source candidate;
 Windows runtime/appearance acceptance is not yet complete.
+
+### Native horizontal resize-edge double-click
+
+The shared Platform window adapter handles left/right nonclient resize-edge
+double-clicks for ordinary backend windows and multicontext hosts. It extends
+the clicked edge to the window's maximum-overlap monitor work area; if already
+within two DPI-scaled logical pixels, it extends the opposite edge. Horizontal
+bounds are confined to that monitor, including negative monitor coordinates;
+height, activation, caption maximize, corners and top/bottom behavior remain
+unchanged. Only owned-thread, resizable, top-level, nonminimized/nonmaximized
+windows participate. No restore toggle or virtual-desktop spanning is implied.
+
+`Tests.gui.test_native_horizontal_edge` passes actual geometry Debug/Release
+checks (0.919 seconds), including both edges, repeated action, DPI tolerance,
+adjacent monitors and oversized windows. Native Windows behavior, full Engine
+integration and standalone Platform synchronization remain acceptance gates.
+
+November17 popup diagnostic gate: `--trace-menu-button0` additionally logs one
+`Epoch.GUI.Popup` paint receipt per opened select box (context, option count,
+rectangle and top-layer draw range), then one native replay receipt (context,
+generation, sprite count). No option text is recorded. The existing
+`test_gui_window_shadow` now executes deferred popup replay after modal action
+controls with an inherited scroll clip; `test_gui_snapshot_publication` verifies
+the diagnostic handoff. These CPU checks pass. November17 native956CA acceptance confirmed the Model
+Manager popup above its action row with matching paint/replay receipts. The
+separate preview header row-height overlap remains a caller-layout repair.
+Shared select boxes now consume unmodified Escape to dismiss only their own
+open popup; closed/disabled boxes and unrelated input remain unchanged. Actual
+owner tests cover this input contract; rebuilt native Escape acceptance is pending.

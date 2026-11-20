@@ -1,0 +1,238 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- EPOCH_MANAGED_GENERATED_FILE: windows_project_v1 -->
+<Project DefaultTargets="Build" InitialTargets="EpochVerifyGeneratedSource" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="source\epoch.main.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="$(EpochRepoRoot)Engine\examples\EpochEngine\EpochEngine.vcxproj">
+      <Project>{BBA639B7-2B54-4E38-90AC-667FC3303475}</Project>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+      <AdditionalProperties>SolutionDir=$(EpochRepoRoot);VcpkgManifestRoot=$(EpochRepoRoot)Engine\;PlatformToolset=v143;VcpkgManifestInstall=false;VcpkgAutoBootstrap=false;VcpkgInstalledDir=$(VcpkgInstalledDir);EpochVcpkgInstallRoot=$(EpochVcpkgInstallRoot);UseMultiToolTask=$(UseMultiToolTask);CL_MPCount=$(CL_MPCount);EnforceProcessCountAcrossBuilds=true</AdditionalProperties>
+    </ProjectReference>
+    <ProjectReference Include="$(EpochRepoRoot)Engine\dep\EpochGui\EpochGui.vcxproj">
+      <Project>{7B41A9B2-4B7E-4B5D-9B39-68D2408BCA90}</Project>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+      <AdditionalProperties>SolutionDir=$(EpochRepoRoot);PlatformToolset=v143;VcpkgManifestInstall=false;VcpkgAutoBootstrap=false;VcpkgInstalledDir=$(VcpkgInstalledDir);EpochVcpkgInstallRoot=$(EpochVcpkgInstallRoot);UseMultiToolTask=$(UseMultiToolTask);CL_MPCount=$(CL_MPCount);EnforceProcessCountAcrossBuilds=true</AdditionalProperties>
+    </ProjectReference>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>17.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{3453F507-4B90-955B-5257-AC6B5B1DEDFD}</ProjectGuid>
+    <RootNamespace>PlatformerExample2D</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>false</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings" />
+  <ImportGroup Label="Shared" />
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <EpochRepoRoot Condition="'$(EpochRepoRoot)'=='' and '$(EPOCH_REPO_ROOT)'!=''">$([MSBuild]::EnsureTrailingSlash('$(EPOCH_REPO_ROOT)'))</EpochRepoRoot>
+    <EpochRepoRoot Condition="'$(EpochRepoRoot)'==''">$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\..\'))</EpochRepoRoot>
+    <EpochEngineLibraryDirectory Condition="'$(EpochEngineLibraryDirectory)'=='' and '$(EpochBuildRoot)'!=''">$([MSBuild]::EnsureTrailingSlash('$(EpochBuildRoot)'))Runtime\windows\public\$(Platform)\$(Configuration)\</EpochEngineLibraryDirectory>
+    <EpochEngineLibraryDirectory Condition="'$(EpochEngineLibraryDirectory)'==''">$(EpochRepoRoot)Artifacts\Runtime\windows\public\x64\$(Configuration)\</EpochEngineLibraryDirectory>
+    <SolutionDir Condition="'$(SolutionDir)'==''">$(EpochRepoRoot)</SolutionDir>
+    <VcpkgManifestRoot Condition="'$(VcpkgManifestRoot)'==''">$(EpochRepoRoot)Engine\</VcpkgManifestRoot>
+    <VcpkgTriplet Condition="'$(VcpkgTriplet)'==''">x64-windows</VcpkgTriplet>
+    <VcpkgInstalledDir Condition="'$(VcpkgInstalledDir)'==''">$(EpochRepoRoot)Artifacts\Dependencies\vcpkg_installed\</VcpkgInstalledDir>
+    <VcpkgManifestInstall>false</VcpkgManifestInstall>
+    <VcpkgAutoBootstrap>false</VcpkgAutoBootstrap>
+    <UseMultiToolTask>false</UseMultiToolTask>
+    <CL_MPCount Condition="'$(CL_MPCount)'==''">2</CL_MPCount>
+    <EnforceProcessCountAcrossBuilds>true</EnforceProcessCountAcrossBuilds>
+    <EpochVcpkgInstallRoot Condition="'$(EpochVcpkgInstallRoot)'==''">$(VcpkgInstalledDir)$(VcpkgTriplet)\</EpochVcpkgInstallRoot>
+    <EpochVcpkgNestedInstallRoot>$(EpochVcpkgInstallRoot)$(VcpkgTriplet)\</EpochVcpkgNestedInstallRoot>
+    <EpochVcpkgInstallRoot Condition="!Exists('$(EpochVcpkgInstallRoot)include\') And Exists('$(EpochVcpkgNestedInstallRoot)include\')">$(EpochVcpkgNestedInstallRoot)</EpochVcpkgInstallRoot>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <OutDir>$(MSBuildThisFileDirectory)Artifacts\Runtime\windows\Debug\x64\</OutDir>
+    <IntDir>$(MSBuildThisFileDirectory)Artifacts\Intermediate\msvc\Debug\x64\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <OutDir>$(MSBuildThisFileDirectory)Artifacts\Runtime\windows\Release\x64\</OutDir>
+    <IntDir>$(MSBuildThisFileDirectory)Artifacts\Intermediate\msvc\Release\x64\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Label="Vcpkg">
+    <VcpkgEnableManifest>true</VcpkgEnableManifest>
+    <VcpkgUseStatic Condition="'$(VcpkgUseStatic)'=='' and ('$(VcpkgTriplet)'=='x64-windows-static' or '$(VcpkgTriplet)'=='x64-windows-static-md' or '$(VcpkgTriplet)'=='x86-windows-static' or '$(VcpkgTriplet)'=='x86-windows-static-md')">true</VcpkgUseStatic>
+    <VcpkgUseStatic Condition="'$(VcpkgUseStatic)'==''">false</VcpkgUseStatic>
+    <VcpkgApplocalDeps Condition="'$(VcpkgUseStatic)'=='true'">false</VcpkgApplocalDeps>
+    <EpochRaylibDllDefine Condition="'$(VcpkgUseStatic)'!='true'">RAYLIB_DLL;</EpochRaylibDllDefine>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>ENGINE_STATICLIB;$(EpochRaylibDllDefine)_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp23</LanguageStandard>
+      <LanguageStandard_C>stdc17</LanguageStandard_C>
+      <AdditionalIncludeDirectories>$(EpochRepoRoot)Engine\include;$(EpochVcpkgInstallRoot)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
+      <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>
+      <CallingConvention>Cdecl</CallingConvention>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalLibraryDirectories>$(EpochEngineLibraryDirectory);$(EpochVcpkgInstallRoot)debug\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>sfml-graphics-d.lib;sfml-window-d.lib;sfml-system-d.lib;libcurl-d.lib;opengl32.lib;glad.lib;SDL3.lib;raylib.lib;sqlite3.lib;libcrypto.lib;ws2_32.lib;crypt32.lib;wldap32.lib;setupapi.lib;cfgmgr32.lib;version.lib;imm32.lib;winmm.lib;sapi.lib;ole32.lib;oleaut32.lib;uuid.lib;advapi32.lib;userenv.lib;bcrypt.lib;ncrypt.lib;user32.lib;gdi32.lib;shell32.lib;comdlg32.lib;d3d11.lib;dxgi.lib;d3dcompiler.lib;EpochPlatformEngine.lib;EpochAudioEngine.lib;EpochMediaEngine.lib;EpochSelfCoding.lib;EpochEngine.lib;EpochGui.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <EntryPointSymbol>mainCRTStartup</EntryPointSymbol>
+    </Link>
+    <Manifest>
+      <EmbedManifest>true</EmbedManifest>
+      <AdditionalManifestFiles>$(EpochRepoRoot)Engine\resource\epoch.manifest;%(AdditionalManifestFiles)</AdditionalManifestFiles>
+    </Manifest>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>false</FunctionLevelLinking>
+      <IntrinsicFunctions>false</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>ENGINE_STATICLIB;$(EpochRaylibDllDefine)NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <LanguageStandard>stdcpp23</LanguageStandard>
+      <LanguageStandard_C>stdc17</LanguageStandard_C>
+      <AdditionalIncludeDirectories>$(EpochRepoRoot)Engine\include;$(EpochVcpkgInstallRoot)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <ScanSourceForModuleDependencies>false</ScanSourceForModuleDependencies>
+      <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>
+      <CallingConvention>Cdecl</CallingConvention>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalLibraryDirectories>$(EpochEngineLibraryDirectory);$(EpochVcpkgInstallRoot)lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>sfml-graphics.lib;sfml-window.lib;sfml-system.lib;libcurl.lib;opengl32.lib;glad.lib;SDL3.lib;raylib.lib;sqlite3.lib;libcrypto.lib;ws2_32.lib;crypt32.lib;wldap32.lib;setupapi.lib;cfgmgr32.lib;version.lib;imm32.lib;winmm.lib;sapi.lib;ole32.lib;oleaut32.lib;uuid.lib;advapi32.lib;userenv.lib;bcrypt.lib;ncrypt.lib;user32.lib;gdi32.lib;shell32.lib;comdlg32.lib;d3d11.lib;dxgi.lib;d3dcompiler.lib;EpochPlatformEngine.lib;EpochAudioEngine.lib;EpochMediaEngine.lib;EpochSelfCoding.lib;EpochEngine.lib;EpochGui.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <EntryPointSymbol>mainCRTStartup</EntryPointSymbol>
+    </Link>
+    <Manifest>
+      <EmbedManifest>true</EmbedManifest>
+      <AdditionalManifestFiles>$(EpochRepoRoot)Engine\resource\epoch.manifest;%(AdditionalManifestFiles)</AdditionalManifestFiles>
+    </Manifest>
+  </ItemDefinitionGroup>
+  <Import Project="Packages\epoch.dependencies.props" Condition="Exists('Packages\epoch.dependencies.props')" />
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <Target Name="EpochVerifyGeneratedSource">
+    <Exec Command="python &quot;$(EpochRepoRoot)Tools/build/verify_epoch_project_source.py&quot; --root &quot;$(EpochRepoRoot).&quot; --edition epoch.public.github.v1" />
+  </Target>
+  <Target Name="EpochCopyDebugVcpkgRuntimeDlls" AfterTargets="Build" Condition="'$(Configuration)|$(Platform)'=='Debug|x64' And '$(VcpkgUseStatic)'!='true'">
+    <ItemGroup>
+      <EpochDebugVcpkgRuntimeDlls Include="$(EpochVcpkgInstallRoot)debug\bin\*.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(EpochDebugVcpkgRuntimeDlls)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" Condition="'@(EpochDebugVcpkgRuntimeDlls)'!=''" />
+  </Target>
+  <Target Name="EpochCopyReleaseVcpkgRuntimeDlls" AfterTargets="Build" Condition="'$(Configuration)|$(Platform)'=='Release|x64' And '$(VcpkgUseStatic)'!='true'">
+    <ItemGroup>
+      <EpochReleaseVcpkgRuntimeDlls Include="$(EpochVcpkgInstallRoot)bin\*.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(EpochReleaseVcpkgRuntimeDlls)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" Condition="'@(EpochReleaseVcpkgRuntimeDlls)'!=''" />
+  </Target>
+  <Target Name="EpochCopyProjectAssets" AfterTargets="Build" Condition="Exists('$(MSBuildThisFileDirectory)Assets')">
+    <ItemGroup>
+      <EpochProjectAssetFiles Include="$(MSBuildThisFileDirectory)Assets\**\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(EpochProjectAssetFiles)" DestinationFiles="@(EpochProjectAssetFiles->'$(OutDir)Assets\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+  </Target>
+  <ItemGroup>
+    <EpochRequiredRuntimeAsset Include="$(EpochRepoRoot)Engine\dep\EpochGui\LICENSE">
+      <TargetPath>licenses\epochgui.txt</TargetPath>
+    </EpochRequiredRuntimeAsset>
+    <EpochRequiredRuntimeAsset Include="$(EpochRepoRoot)Engine\dep\EpochGui\NOTICE">
+      <TargetPath>licenses\epochgui-NOTICE.txt</TargetPath>
+    </EpochRequiredRuntimeAsset>
+    <EpochRequiredRuntimeAsset Include="$(EpochRepoRoot)Engine\dep\EpochPlatformEngine\LICENSE">
+      <TargetPath>licenses\epochplatformengine.txt</TargetPath>
+    </EpochRequiredRuntimeAsset>
+    <EpochRequiredRuntimeAsset Include="$(EpochRepoRoot)Engine\dep\EpochPlatformEngine\NOTICE">
+      <TargetPath>licenses\epochplatformengine-NOTICE.txt</TargetPath>
+    </EpochRequiredRuntimeAsset>
+    <EpochRequiredRuntimeAsset Include="$(EpochRepoRoot)Engine\dep\EpochAudioEngine\LICENSE">
+      <TargetPath>licenses\epochaudioengine.txt</TargetPath>
+    </EpochRequiredRuntimeAsset>
+    <EpochRequiredRuntimeAsset Include="$(EpochRepoRoot)Engine\dep\EpochAudioEngine\NOTICE">
+      <TargetPath>licenses\epochaudioengine-NOTICE.txt</TargetPath>
+    </EpochRequiredRuntimeAsset>
+    <EpochRequiredRuntimeAsset Include="$(EpochRepoRoot)Engine\dep\EpochMediaEngine\LICENSE">
+      <TargetPath>licenses\epochmediaengine.txt</TargetPath>
+    </EpochRequiredRuntimeAsset>
+    <EpochRequiredRuntimeAsset Include="$(EpochRepoRoot)Engine\dep\EpochMediaEngine\NOTICE">
+      <TargetPath>licenses\epochmediaengine-NOTICE.txt</TargetPath>
+    </EpochRequiredRuntimeAsset>
+  </ItemGroup>
+  <ItemGroup>
+    <EpochRequiredRuntimeAsset Include="$(EpochRepoRoot)Engine\assets\fonts\Roboto-Regular.ttf">
+      <TargetPath>assets\fonts\Roboto-Regular.ttf</TargetPath>
+    </EpochRequiredRuntimeAsset>
+    <EpochRequiredRuntimeAsset Include="$(EpochRepoRoot)Engine\assets\fonts\OFL.txt">
+      <TargetPath>assets\fonts\OFL.txt</TargetPath>
+    </EpochRequiredRuntimeAsset>
+    <EpochRequiredRuntimeAsset Include="$(EpochRepoRoot)Engine\assets\vulkan\texture.ppm">
+      <TargetPath>assets\vulkan\texture.ppm</TargetPath>
+    </EpochRequiredRuntimeAsset>
+    <EpochRequiredRuntimeAsset Include="$(EpochRepoRoot)Engine\assets\vulkan\shaders\vert.spv">
+      <TargetPath>assets\vulkan\shaders\vert.spv</TargetPath>
+    </EpochRequiredRuntimeAsset>
+    <EpochRequiredRuntimeAsset Include="$(EpochRepoRoot)Engine\assets\vulkan\shaders\frag.spv">
+      <TargetPath>assets\vulkan\shaders\frag.spv</TargetPath>
+    </EpochRequiredRuntimeAsset>
+    <EpochRequiredRuntimeAsset Include="$(EpochRepoRoot)Engine\assets\vulkan\shaders\gui_vert.spv">
+      <TargetPath>assets\vulkan\shaders\gui_vert.spv</TargetPath>
+    </EpochRequiredRuntimeAsset>
+    <EpochRequiredRuntimeAsset Include="$(EpochRepoRoot)Engine\assets\vulkan\shaders\gui_frag.spv">
+      <TargetPath>assets\vulkan\shaders\gui_frag.spv</TargetPath>
+    </EpochRequiredRuntimeAsset>
+    <EpochRequiredRuntimeAsset Include="$(EpochRepoRoot)Engine\assets\vulkan\shaders\atmosphere.vert.spv">
+      <TargetPath>assets\vulkan\shaders\atmosphere.vert.spv</TargetPath>
+    </EpochRequiredRuntimeAsset>
+    <EpochRequiredRuntimeAsset Include="$(EpochRepoRoot)Engine\assets\vulkan\shaders\atmosphere.frag.spv">
+      <TargetPath>assets\vulkan\shaders\atmosphere.frag.spv</TargetPath>
+    </EpochRequiredRuntimeAsset>
+    <EpochRequiredRuntimeAsset Include="$(EpochRepoRoot)Engine\assets\vulkan\shaders\clouds.vert.spv">
+      <TargetPath>assets\vulkan\shaders\clouds.vert.spv</TargetPath>
+    </EpochRequiredRuntimeAsset>
+    <EpochRequiredRuntimeAsset Include="$(EpochRepoRoot)Engine\assets\vulkan\shaders\clouds.frag.spv">
+      <TargetPath>assets\vulkan\shaders\clouds.frag.spv</TargetPath>
+    </EpochRequiredRuntimeAsset>
+  </ItemGroup>
+  <Target Name="EpochVerifyRuntimeAssets" BeforeTargets="PrepareForBuild">
+    <Error Condition="!Exists('%(EpochRequiredRuntimeAsset.Identity)')" Text="Required Engine runtime asset is missing: %(EpochRequiredRuntimeAsset.Identity)" />
+  </Target>
+  <Target Name="EpochCopyRequiredRuntimeAssets" AfterTargets="Build" DependsOnTargets="EpochCopyProjectAssets;EpochVerifyRuntimeAssets">
+    <Copy SourceFiles="@(EpochRequiredRuntimeAsset)" DestinationFiles="@(EpochRequiredRuntimeAsset->'$(OutDir)%(TargetPath)')" SkipUnchangedFiles="true" />
+  </Target>
+  <ImportGroup Label="ExtensionTargets" />
+</Project>

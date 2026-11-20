@@ -27,10 +27,14 @@ class RuntimeProjectEnvironment(unittest.TestCase):
         scratch = Path(tempfile.mkdtemp(prefix="runtime-env-", dir=parent))
         try:
             registry = (ROOT / "Engine/src/editor/implementation/editor.project_registry.inl").read_text(encoding="utf-8")
+            editor = (ROOT / "Engine/modules/editor/editor.core.ixx").read_text(encoding="utf-8")
             legacy = (ROOT / "Engine/src/epoch/epoch.engine_legacy.cpp").read_text(encoding="utf-8")
             readers = definition(registry, "    [[nodiscard]] static std::string read_env_var(")
             readers += definition(legacy, "    [[nodiscard]] inline std::string read_environment_string(")
-            factory = definition(legacy, "        [[nodiscard]] std::unique_ptr<epochengine::scene::Scene> make_scene_from_id(std::string_view scene_id)\n        {")
+            signature = "        [[nodiscard]] std::unique_ptr<epochengine::scene::Scene> make_scene_from_id(\n"
+            declaration_start = legacy.index(signature)
+            declaration = legacy[declaration_start:legacy.index(";", declaration_start) + 1]
+            factory = definition(legacy, signature + "            std::string_view scene_id, bool can_return_to_editor)\n        {")
             project_factory = factory.split('            if (scene_id == "snake")', 1)[0] + "return {};\n}\n"
             # Native renderer construction is substituted. The actual payload
             # parser and project-factory branch decide whether construction is
@@ -55,19 +59,24 @@ namespace logger=epochengine::logger;
 constexpr std::string_view kEngineLog="contract";
 struct ProjectPlayScene : epochengine::scene::Scene {
     static inline unsigned created{};static inline std::string payload{};
-    explicit ProjectPlayScene(std::string_view value){++created;payload=value;}
+    static inline bool editorReturn{};
+    ProjectPlayScene(std::string_view value,bool canReturn){++created;payload=value;editorReturn=canReturn;}
 };
 '''
             selection += definition(legacy, "        struct ProjectSceneLaunchOptions", True)
-            selection += definition(legacy, "        [[nodiscard]] epochengine::previewgrid::CameraMode camera_mode_from_argument(")
+            camera = definition(editor, "    export [[nodiscard]] constexpr std::optional<previewgrid::CameraMode>\n"
+                                "        editor_project_camera_from_token(")
+            selection += "\nnamespace epochengine {\n" + camera.replace("export ", "", 1) + "\n}\n"
+            selection += "using epochengine::editor_project_camera_from_token;\n"
             selection += definition(legacy, "        [[nodiscard]] ProjectSceneLaunchOptions parse_project_scene_launch(")
-            selection += project_factory
+            selection += declaration + "\n" + project_factory
             source = scratch / "contract.cpp"
             source.write_text('''#include <cassert>
 #include <cstdlib>
 #include <string>
 #include <string_view>
 #include <memory>
+#include <optional>
 #include <source_location>
 import core.env;
 ''' + readers + selection + r'''
@@ -92,9 +101,11 @@ int main(){
     assert(!make_scene_from_id("project:unadmitted|camera=editor"));
     assert(ProjectPlayScene::created==0u&&logger::errors==1u);
     assert(make_scene_from_id("project:bound|camera=fps"));
-    assert(ProjectPlayScene::created==1u&&ProjectPlayScene::payload=="bound|camera=fps");
+    assert(ProjectPlayScene::created==1u&&ProjectPlayScene::payload=="bound|camera=fps"&&!ProjectPlayScene::editorReturn);
+    assert(make_scene_from_id("project:bound|camera=fps",true));
+    assert(ProjectPlayScene::created==2u&&ProjectPlayScene::editorReturn);
     assert(make_scene_from_id("project:")); // Established empty/default route remains available.
-    assert(ProjectPlayScene::created==2u&&logger::errors==1u);
+    assert(ProjectPlayScene::created==3u&&logger::errors==1u&&!ProjectPlayScene::editorReturn);
 }
 ''', encoding="utf-8")
             compiler = tool / "bin/Hostx64/x64/cl.exe"

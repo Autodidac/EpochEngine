@@ -187,13 +187,14 @@ namespace epochengine::project_gui_runtime
         }
     }
 
-    RuntimeFrame RuntimeSession::build_frame(Float2 viewport) noexcept
+    RuntimeFrame RuntimeSession::build_frame(Float2 viewport, Float2 origin) noexcept
     {
         RuntimeFrame frame{};
         frame.viewport = viewport;
+        frame.viewport_origin = origin;
         if (!valid())
             return frame;
-        if (!finite(viewport) || viewport.x <= 0.0f || viewport.y <= 0.0f)
+        if (!finite(viewport) || !finite(origin) || viewport.x <= 0.0f || viewport.y <= 0.0f)
         {
             frame.code = RuntimeCode::invalid_viewport;
             ++metrics_.rejected_operations;
@@ -202,9 +203,45 @@ namespace epochengine::project_gui_runtime
 
         try
         {
-            frame.scale = (std::min)(
-                viewport.x / artifact_.virtual_width,
-                viewport.y / artifact_.virtual_height);
+            const auto& root = artifact_.widgets[artifact_.root];
+            const auto& rootLayout = root.layout;
+            Float2 canvas{artifact_.virtual_width, artifact_.virtual_height};
+            const auto fit = [viewport](Float2 size) noexcept {
+                return (std::min)(viewport.x / size.x, viewport.y / size.y);
+            };
+            const auto childSize = [&](const asset::gui::Layout& layout) noexcept {
+                return Float2{
+                    layout.width_rule == asset::gui::SizeRule::fill
+                        ? (std::max)(0.0f, artifact_.virtual_width - rootLayout.padding.left
+                            - rootLayout.padding.right - layout.x)
+                        : clamp_extent(layout.width, layout.minimum_width, layout.maximum_width),
+                    layout.height_rule == asset::gui::SizeRule::fill
+                        ? (std::max)(0.0f, artifact_.virtual_height - rootLayout.padding.top
+                            - rootLayout.padding.bottom - layout.y)
+                        : clamp_extent(layout.height, layout.minimum_height, layout.maximum_height)};
+            };
+            bool stacked = false;
+            if (rootLayout.flow == asset::gui::LayoutFlow::responsive_columns)
+            {
+                Float2 stack{};
+                for (const auto childIndex : root.children)
+                {
+                    const auto& child = artifact_.widgets[childIndex];
+                    if (!child.visible) continue;
+                    const auto size = childSize(child.layout);
+                    stack.x = (std::max)(stack.x, size.x);
+                    stack.y += size.y + rootLayout.spacing;
+                }
+                if (stack.x > 0.0f && stack.y > 0.0f)
+                {
+                    stack.x += rootLayout.padding.left + rootLayout.padding.right
+                        + 2.0f * rootLayout.spacing;
+                    stack.y += rootLayout.padding.top + rootLayout.padding.bottom + rootLayout.spacing;
+                    stacked = fit(stack) > fit(canvas);
+                    if (stacked) canvas = stack;
+                }
+            }
+            frame.scale = fit(canvas);
             if (!std::isfinite(frame.scale) || frame.scale <= 0.0f)
             {
                 frame.code = RuntimeCode::invalid_viewport;
@@ -212,14 +249,13 @@ namespace epochengine::project_gui_runtime
                 return frame;
             }
             const Float2 content{
-                artifact_.virtual_width * frame.scale,
-                artifact_.virtual_height * frame.scale};
+                canvas.x * frame.scale, canvas.y * frame.scale};
             frame.offset = {
-                (viewport.x - content.x) * 0.5f,
-                (viewport.y - content.y) * 0.5f};
+                origin.x + (viewport.x - content.x) * 0.5f,
+                origin.y + (viewport.y - content.y) * 0.5f};
             frame.widgets.reserve(artifact_.widgets.size());
 
-            const Rect viewportClip{0.0f, 0.0f, viewport.x, viewport.y};
+            const Rect viewportClip{origin.x, origin.y, viewport.x, viewport.y};
             const Rect rootBounds{
                 frame.offset.x, frame.offset.y, content.x, content.y};
 
@@ -239,7 +275,7 @@ namespace epochengine::project_gui_runtime
                     .bounds = bounds,
                     .clip = effectiveClip,
                     .visible = visible,
-                    .enabled = source.enabled,
+                    .enabled = source.enabled && mutableState.action_enabled,
                     .focused = focused_ == index,
                     .accepts_pointer = source.accepts_pointer,
                     .name = source.name,
@@ -276,6 +312,24 @@ namespace epochengine::project_gui_runtime
                     || source.kind == asset::gui::WidgetKind::tab_set)
                 {
                     childClip = intersect(inheritedClip, bounds);
+                }
+
+                if (stacked && index == artifact_.root)
+                {
+                    const float spacing = rootLayout.spacing * scale;
+                    float y = contentBounds.y + spacing;
+                    for (const auto childIndex : source.children)
+                    {
+                        const auto& child = artifact_.widgets[childIndex];
+                        const auto size = childSize(child.layout);
+                        const float width = size.x * scale;
+                        const float height = size.y * scale;
+                        project(childIndex,
+                            {contentBounds.x + (contentBounds.width - width) * 0.5f,
+                                y, width, height}, childClip, visible);
+                        if (child.visible) y += height + spacing;
+                    }
+                    return;
                 }
 
                 if (source.kind == asset::gui::WidgetKind::tab_set)
@@ -434,6 +488,10 @@ namespace epochengine::project_gui_runtime
             return reject(RuntimeCode::invalid_artifact);
         if (!finite(point))
             return reject(RuntimeCode::invalid_value);
+        const auto& frame = last_frame_;
+        if (!contains({frame.viewport_origin.x, frame.viewport_origin.y,
+                frame.viewport.x, frame.viewport.y}, point))
+            return RuntimeCode::no_change;
 
         for (auto iterator = last_frame_.tab_headers.rbegin();
              iterator != last_frame_.tab_headers.rend(); ++iterator)
@@ -523,16 +581,25 @@ namespace epochengine::project_gui_runtime
         return RuntimeCode::no_change;
     }
 
-    bool RuntimeSession::pointer_captured(Float2 point) const noexcept
+    RuntimeCode RuntimeSession::pointer_press(Float2 point) noexcept
     {
-        if (!valid() || !last_frame_ || !finite(point))
-            return false;
-        for (auto iterator = last_frame_.tab_headers.rbegin();
-             iterator != last_frame_.tab_headers.rend(); ++iterator)
-        {
-            if (iterator->enabled && contains(iterator->bounds, point))
-                return true;
-        }
+        if (!valid() || !last_frame_)
+            return reject(RuntimeCode::invalid_artifact);
+        if (!finite(point))
+            return reject(RuntimeCode::invalid_value);
+        if (pointer_over_tab(point))
+            return RuntimeCode::no_change;
+        const auto* widget = captured_pointer_widget(point);
+        if (!widget)
+            return clear_focus();
+        if (widget->kind == asset::gui::WidgetKind::text_input
+            && artifact_.widgets[widget->index].focusable)
+            return focus(widget->id);
+        return RuntimeCode::no_change;
+    }
+
+    const WidgetView* RuntimeSession::captured_pointer_widget(Float2 point) const noexcept
+    {
         for (auto iterator = last_frame_.widgets.rbegin();
              iterator != last_frame_.widgets.rend(); ++iterator)
         {
@@ -541,10 +608,25 @@ namespace epochengine::project_gui_runtime
                 && contains(iterator->clip, point)
                 && contains(iterator->bounds, point))
             {
-                return true;
+                return &*iterator;
             }
         }
-        return false;
+        return nullptr;
+    }
+
+    bool RuntimeSession::pointer_over_tab(Float2 point) const noexcept
+    {
+        const auto& frame = last_frame_;
+        return contains({frame.viewport_origin.x, frame.viewport_origin.y,
+                   frame.viewport.x, frame.viewport.y}, point)
+            && std::any_of(frame.tab_headers.rbegin(), frame.tab_headers.rend(),
+            [point](const auto& header) { return header.enabled && contains(header.bounds, point); });
+    }
+
+    bool RuntimeSession::pointer_captured(Float2 point) const noexcept
+    {
+        return valid() && last_frame_ && finite(point)
+            && (pointer_over_tab(point) || captured_pointer_widget(point));
     }
     bool RuntimeSession::keyboard_captured() const noexcept
     {
@@ -554,7 +636,7 @@ namespace epochengine::project_gui_runtime
             return false;
         }
         const auto& widget = artifact_.widgets[focused_];
-        return widget.enabled && widget.focusable;
+        return widget.enabled && state_[focused_].action_enabled && widget.focusable;
     }
     RuntimeCode RuntimeSession::clear_focus() noexcept
     {
@@ -574,6 +656,46 @@ namespace epochengine::project_gui_runtime
         }
         catch (...) { return reject(RuntimeCode::allocation_failure); }
     }
+    RuntimeCode RuntimeSession::set_action_enabled(
+        asset::gui::WidgetId widget, bool enabled) noexcept
+    {
+        const auto index = index_of(widget);
+        if (!index)
+            return reject(RuntimeCode::invalid_widget);
+        const auto& source = artifact_.widgets[*index];
+        if (source.action.empty()
+            || (source.kind != asset::gui::WidgetKind::button
+                && source.kind != asset::gui::WidgetKind::image_button
+                && source.kind != asset::gui::WidgetKind::slider))
+        {
+            return reject(RuntimeCode::wrong_widget_kind);
+        }
+        if (state_[*index].action_enabled == enabled)
+            return RuntimeCode::no_change;
+        state_[*index].action_enabled = enabled;
+        if (!enabled)
+        {
+            if (focused_ == *index)
+            {
+                focused_ = asset::gui::invalid_widget_index;
+                ++metrics_.focus_changes;
+            }
+            std::erase_if(events_, [widget](const RuntimeEvent& event) {
+                return event.widget == widget;
+            });
+        }
+        // Capability changes can precede the next layout build. Old hit-test
+        // rectangles must not retain an enabled or focused action meanwhile.
+        for (auto& view : last_frame_.widgets)
+        {
+            if (view.id != widget)
+                continue;
+            view.enabled = source.enabled && enabled;
+            view.focused = view.index == focused_;
+        }
+        return RuntimeCode::ready;
+    }
+
     RuntimeCode RuntimeSession::activate_focused() noexcept
     {
         if (!valid())
@@ -583,7 +705,7 @@ namespace epochengine::project_gui_runtime
         const auto& widget = artifact_.widgets[focused_];
         if (!runtime_visible(focused_))
             return reject(RuntimeCode::hidden_widget);
-        if (!widget.enabled)
+        if (!widget.enabled || !state_[focused_].action_enabled)
             return reject(RuntimeCode::disabled_widget);
         if (!widget.focusable || (widget.kind != asset::gui::WidgetKind::button
             && widget.kind != asset::gui::WidgetKind::image_button))
@@ -608,7 +730,7 @@ namespace epochengine::project_gui_runtime
         const auto& source = artifact_.widgets[*index];
         if (!runtime_visible(*index))
             return reject(RuntimeCode::hidden_widget);
-        if (!source.enabled)
+        if (!source.enabled || !state_[*index].action_enabled)
             return reject(RuntimeCode::disabled_widget);
         if (!source.focusable)
             return reject(RuntimeCode::wrong_widget_kind);
@@ -637,7 +759,8 @@ namespace epochengine::project_gui_runtime
             for (std::uint32_t index = 0u; index < artifact_.widgets.size(); ++index)
             {
                 const auto& widget = artifact_.widgets[index];
-                if (runtime_visible(index) && widget.enabled && widget.focusable)
+                if (runtime_visible(index) && widget.enabled
+                    && state_[index].action_enabled && widget.focusable)
                     candidates.push_back(index);
             }
             if (candidates.empty())
@@ -702,6 +825,15 @@ namespace epochengine::project_gui_runtime
             .widget = tab.id,
             .related = artifact_.widgets[*pageIndex].id,
             .action = tab.action});
+    }
+
+    std::optional<std::string_view> RuntimeSession::text(
+        asset::gui::WidgetId widget) const noexcept
+    {
+        const auto index = index_of(widget);
+        if (!index || artifact_.widgets[*index].kind != asset::gui::WidgetKind::text_input)
+            return std::nullopt;
+        return state_[*index].text;
     }
 
     RuntimeCode RuntimeSession::set_text(
@@ -792,7 +924,7 @@ namespace epochengine::project_gui_runtime
             return reject(RuntimeCode::wrong_widget_kind);
         if (!std::isfinite(value))
             return reject(RuntimeCode::invalid_value);
-        if (!source.enabled)
+        if (!source.enabled || !state_[*index].action_enabled)
             return reject(RuntimeCode::disabled_widget);
         const double clamped = (std::clamp)(value, source.minimum, source.maximum);
         const double steps = std::round((clamped - source.minimum) / source.step);

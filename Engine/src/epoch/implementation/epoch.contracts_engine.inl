@@ -45,6 +45,32 @@
             && admittedCaps.indirect_draw && admittedCaps.max_sampled_images == 73
             && !admittedCaps.bindless_textures && !absentCaps.indirect_draw
             && absentCaps.max_sampled_images == 0);
+        bool indirectCapabilityTruth = true;
+        for (const auto backend : {epochengine::capability::BackendFamily::opengl,
+            epochengine::capability::BackendFamily::vulkan,
+            epochengine::capability::BackendFamily::directx12})
+        {
+            for (unsigned flags = 0; flags != 4; ++flags)
+            {
+                epochengine::Capabilities drawCaps{};
+                drawCaps.indirect_draw = (flags & 1u) != 0u;
+                drawCaps.multi_draw_indirect = (flags & 2u) != 0u;
+                const auto adapted = epochengine::capability::adapt_platform_capabilities(
+                    backend, epochengine::capability::Tier::portable_graphics,
+                    drawCaps, {}, epochengine::perf::tier::mobile_30,
+                    epochengine::capability::Status::present,
+                    epochengine::capability::evidence_mask(
+                        epochengine::capability::Evidence::build_contract,
+                        epochengine::capability::Evidence::pure_contract_test));
+                indirectCapabilityTruth = indirectCapabilityTruth
+                    && adapted.features.status(epochengine::capability::Feature::indirect_draw)
+                        == (flags != 0u ? epochengine::capability::Status::present
+                                        : epochengine::capability::Status::missing)
+                    && adapted.features.status(epochengine::capability::Feature::indirect_dispatch)
+                        == epochengine::capability::Status::missing;
+            }
+        }
+        check("platform.indirect_draw_dispatch_evidence", indirectCapabilityTruth);
         check(
             "core.format_portability",
             epochengine::format_text(
@@ -1249,24 +1275,39 @@
             static_cast<bool>(epochengine::scene_runtime::run_scene_runtime_contract_checks()));
         const auto toolSceneAcceptance = [&]()
         {
+            using epochengine::project::AuthoringSceneKind;
+            using epochengine::project::scene_acceptance_diagnostic;
             epochengine::scene::SceneSnapshot tool{};
             tool.project_id = "projectlauncher";
             tool.scene_id = "project:projectlauncher";
             tool.world_name = "LauncherWorkspace";
             tool.document_kind = "tool";
             tool.revision = 1u;
-            const bool emptyToolAccepted = epochengine::project::scene_acceptance_diagnostic(tool, false).empty();
-            const bool gameStillRequiresRuntime = !epochengine::project::scene_acceptance_diagnostic(tool, true).empty();
+            const bool emptyToolAccepted = scene_acceptance_diagnostic(tool, false, AuthoringSceneKind::tool).empty();
+            const bool gameStillRequiresRuntime = !scene_acceptance_diagnostic(tool, true, AuthoringSceneKind::tool).empty();
+            const bool editorRejectsTool = !scene_acceptance_diagnostic(tool, false, AuthoringSceneKind::editor).empty();
+            auto editor = tool;
+            editor.document_kind = "editor";
+            editor.world_name = "EditorWorkspace";
+            const bool editorAccepted = scene_acceptance_diagnostic(editor, false, AuthoringSceneKind::editor).empty();
+            const bool toolRejectsEditor = !scene_acceptance_diagnostic(editor, false, AuthoringSceneKind::tool).empty();
+            editor.scene_id.clear();
+            const bool invalidEditorRejected = !scene_acceptance_diagnostic(editor, false, AuthoringSceneKind::editor).empty();
             tool.document_kind = "game";
-            const bool mismatchedKindRejected = !epochengine::project::scene_acceptance_diagnostic(tool, false).empty();
+            const bool mismatchedKindRejected = !scene_acceptance_diagnostic(tool, false, AuthoringSceneKind::tool).empty();
             tool.document_kind = "tool";
             tool.scene_id.clear();
-            const bool invalidIdentityRejected = !epochengine::project::scene_acceptance_diagnostic(tool, false).empty();
+            const bool invalidIdentityRejected = !scene_acceptance_diagnostic(tool, false, AuthoringSceneKind::tool).empty();
             check("project.tool_scene_acceptance.empty_tool", emptyToolAccepted);
             check("project.tool_scene_acceptance.game_requires_runtime", gameStillRequiresRuntime);
             check("project.tool_scene_acceptance.kind_mismatch", mismatchedKindRejected);
             check("project.tool_scene_acceptance.invalid_identity", invalidIdentityRejected);
-            return emptyToolAccepted && gameStillRequiresRuntime && mismatchedKindRejected && invalidIdentityRejected;
+            check("project.editor_scene_acceptance.empty_editor", editorAccepted);
+            check("project.editor_scene_acceptance.kind_mismatch", editorRejectsTool && toolRejectsEditor);
+            check("project.editor_scene_acceptance.invalid_identity", invalidEditorRejected);
+            return emptyToolAccepted && gameStillRequiresRuntime && mismatchedKindRejected
+                && invalidIdentityRejected && editorAccepted && editorRejectsTool
+                && toolRejectsEditor && invalidEditorRejected;
         };
         check("project.tool_scene_acceptance", toolSceneAcceptance());
         check(
@@ -1779,6 +1820,7 @@
             std::string{"render.canvas2d.scene."}
                 + std::string{canvasSceneContract.stage},
             canvasSceneContract.passed);
+#if defined(EPOCH_USING_SOFTWARE_RENDERER) && EPOCH_USING_SOFTWARE_RENDERER == 1
         const auto softwareCanvasContract =
             epochengine::anativecontext::software_canvas2d_backend_contract_failure();
         check(
@@ -1787,6 +1829,7 @@
                     software_canvas2d_contract_failure_name(softwareCanvasContract)},
             softwareCanvasContract ==
                 epochengine::anativecontext::SoftwareCanvas2DContractFailure::none);
+#endif
         const auto projectAssetSpineContract =
             epochengine::project_contracts::run_asset_spine_contract();
         check(
@@ -1836,6 +1879,7 @@
             textureArtifactTransferContract == epochengine::texture_artifact::TransferContractFailure::none);
 #endif
         check("render.engine_arcade_screen_graph", engine_arcade_screen_graph_contract_ready());
+        check("render.graph_rejected_target", render_graph_rejected_target_contract_ready());
         check("render.render_surface_requires_rtt_asset", render_surface_requires_render_texture_asset_contract_ready());
         check("render.render_surface_rejects_mismatched_sampler", render_surface_rejects_mismatched_sampler_contract_ready());
         check("render.opengl_family_arcade_screen_graph", opengl_family_arcade_screen_graph_contract_ready());

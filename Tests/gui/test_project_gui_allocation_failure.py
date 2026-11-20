@@ -1,5 +1,6 @@
 """Allocation refusal cannot mutate or terminate the actual GUI session focus APIs."""
 from pathlib import Path
+from Tests.support.cpp import engine_module_source
 import hashlib
 import json
 import os
@@ -76,7 +77,7 @@ class ProjectGuiAllocationFailure(unittest.TestCase):
         identity=hashlib.sha256(code.encode()+owner.read_bytes()).hexdigest()[:12]
         lane=ROOT/"Artifacts/Reports/project-gui-allocation-oct28"/identity;lane.mkdir(parents=True,exist_ok=True)
         (lane/"fault.cpp").write_text(code,encoding="utf-8")
-        modules=[ROOT/"Engine/modules"/n for n in ("core.sha256.ixx","asset.gui_artifact.ixx","project.gui_runtime.ixx")]
+        modules=[engine_module_source(ROOT/"Engine/modules", n) for n in ("core.sha256.ixx","asset.gui_artifact.ixx","project.gui_runtime.ixx")]
         sources=[ROOT/"Engine/src/assets/gui/asset.gui_artifact.cpp",owner]
         (lane/"CMakeLists.txt").write_text('cmake_minimum_required(VERSION 3.30)\nproject(ProjectGuiAllocation LANGUAGES CXX)\n'
             +'add_executable(fault fault.cpp '+" ".join('"'+p.as_posix()+'"' for p in sources)+')\n'

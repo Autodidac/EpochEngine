@@ -18,13 +18,101 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class ProjectBuildConfiguration(unittest.TestCase):
+    def test_actual_failed_launch_and_wait_retirement(self):
+        if os.name != "nt": self.skipTest("Both Windows and portable owner branches on MSVC")
+        from Tests.support.cpp import compile_and_run
+        scene = (ROOT / "Engine/src/editor/editor.scene.cpp").read_text(encoding="utf-8")
+        core = (ROOT / "Engine/modules/editor/editor.core.ixx").read_text(encoding="utf-8")
+        worker = definition(scene, "    EditorProjectBuildResult editor_build_project(\n")
+        result = definition(core, "    export struct EditorProjectBuildResult", True).replace("export ", "", 1)
+        code = r'''
+#include <cassert>
+#include <chrono>
+#include <cstdint>
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
+#include <memory>
+#include <mutex>
+#include <optional>
+#include <stop_token>
+#include <string>
+#include <string_view>
+#include <vector>
+namespace fs=std::filesystem;
+RESULT
+namespace platform::child_process {
+enum class WindowMode{hidden};enum class LaunchCode{started,spawn_failed,busy};
+enum class WaitCode{exited,cancelled};enum class StopMode{force};
+struct LaunchRequest{fs::path executable,working_directory,merged_output_path;std::vector<std::string>arguments;std::string correlation_key,exclusive_group,display_name;WindowMode window_mode;bool append_output{},disconnect_standard_input{};};
+struct LaunchResult{LaunchCode code=LaunchCode::started;int handle=1;std::string message;
+ bool owns_new_process()const{return code==LaunchCode::started||code==LaunchCode::spawn_failed;}};
+struct Process{bool exit_code_valid=true;int exit_code=0;int handle=1;bool running{};bool active()const{return running;}};
+struct WaitResult{WaitCode code=WaitCode::exited;std::optional<Process>process=Process{};std::string message;};
+inline LaunchCode launch_code=LaunchCode::started;inline unsigned launches{},stops{},releases{},waits{};
+inline bool live{},missing{},stop_settles=true,cancelled{};
+LaunchResult launch_or_focus(const LaunchRequest&){++launches;return {launch_code};}
+std::optional<Process> active_in_group(std::string_view){return {};}
+int focus(int){return 0;}
+std::optional<Process> snapshot(int handle){assert(handle==1);if(missing)return {};Process p;p.running=live;return p;}
+WaitResult wait(int handle,std::stop_token,std::uint64_t timeout=0){assert(handle==1);++waits;if(timeout)assert(timeout==5'000'000'000ull);WaitResult r;if(cancelled)r.code=WaitCode::cancelled;return r;}
+int stop(int handle,StopMode){assert(handle==1);++stops;if(stop_settles)live=false;return 0;}
+bool release(int handle){assert(handle==1&&!live);++releases;return true;}
+}
+bool editor_project_build_configuration_supported(std::string_view v){return v=="Release";}
+std::optional<std::string> editor_project_build_configuration(std::string_view){return "Release";}
+fs::path resolve_project_root_path(const fs::path&p){return fs::absolute(p).lexically_normal();}
+fs::path generated_project_windows_build_script_path(const fs::path&p){return p/"build.ps1";}
+fs::path generated_project_linux_build_script_path(const fs::path&p){return p/"build.sh";}
+fs::path generated_project_output_path(const fs::path&p,std::string_view){return p/"product.exe";}
+fs::path generated_project_existing_output_path(const fs::path&p,std::string_view c){return generated_project_output_path(p,c);}
+fs::path reserve_generated_project_build_transcript(const fs::path&p,std::string_view,std::uint64_t n){auto log=p/("attempt-"+std::to_string(n)+".log");std::ofstream f(log);return log;}
+struct Profile{std::string id;};const Profile* find_project_profile_by_root(std::string_view){return nullptr;}
+EditorProjectBuildResult editor_ensure_project_shell(std::string_view){return {};}
+bool repair_generated_windows_child_project_build_files(const fs::path&){return true;}
+namespace windows_owner { WORKER }
+#undef _WIN32
+namespace portable_owner { WORKER }
+#define __ANDROID__ 1
+namespace android_owner { WORKER }
+#undef __ANDROID__
+#define _WIN32 1
+int main(){
+ const auto root=fs::current_path()/"owned-build-fixture";fs::create_directories(root);
+ for(const auto*f:{"build.ps1","build.sh","product.exe"}){std::ofstream out(root/f);out<<"fixture; never executed";}
+ for(bool portable:{false,true})for(int mode=0;mode<8;++mode){
+  namespace child=platform::child_process;
+  child::launch_code=mode==4?child::LaunchCode::busy:mode>=5?child::LaunchCode::started:child::LaunchCode::spawn_failed;
+  child::live=mode==1||mode==2||mode==4||mode==5;child::missing=mode==3;child::stop_settles=mode!=2;child::cancelled=mode==7;
+  child::stops=child::releases=child::waits=0;
+  const auto result=portable?portable_owner::editor_build_project(root.string(),{},"Release"):windows_owner::editor_build_project(root.string(),{},"Release");
+  assert(result.succeeded==(mode==6));assert(result.cancelled==(mode==7));
+  assert(result.workers_retired==(mode==0||mode==1||mode==4||mode==6||mode==7));
+  assert(child::stops==static_cast<unsigned>(mode==1||mode==2));
+  assert(child::releases==static_cast<unsigned>(mode==0||mode==1||mode==6||mode==7));
+  assert(child::waits==static_cast<unsigned>(mode==1||mode==2||mode>=5));
+ }
+ namespace child=platform::child_process;
+ child::launches=child::stops=child::releases=child::waits=0;
+ const auto android=android_owner::editor_build_project(root.string(),{},"Release");
+ assert(!android.succeeded&&!android.cancelled&&android.log_path.empty());
+ assert(android.summary.find("build_epoch_android_project.ps1")!=std::string::npos);
+ assert(child::launches==0&&child::stops==0&&child::releases==0&&child::waits==0);
+}
+'''.replace("RESULT", result).replace("WORKER", worker)
+        report = ROOT / "Artifacts/Reports/project-build-retirement"
+        report.mkdir(parents=True, exist_ok=True)
+        source = report / "contract.cpp"
+        source.write_text(code, encoding="utf-8")
+        compile_and_run(self, source, report)
+
     def test_actual_release_fallback_and_managed_logging_migration(self):
         from Tests.support.cpp import compile_and_run, dependency_include
         import time
 
         registry = (ROOT / "Engine/src/editor/implementation/editor.project_registry.inl").read_text(encoding="utf-8")
         scene = (ROOT / "Engine/src/editor/editor.scene.cpp").read_text(encoding="utf-8")
-        core = (ROOT / "Engine/modules/editor.core.ixx").read_text(encoding="utf-8")
+        core = (ROOT / "Engine/modules/editor/editor.core.ixx").read_text(encoding="utf-8")
         shell = (ROOT / "Engine/src/editor/implementation/editor.project_shell_generation.inl").read_text(encoding="utf-8")
         supported = definition(core, "    export [[nodiscard]] constexpr bool editor_project_build_configuration_supported(").replace("export ", "", 1)
         codec = definition(registry, "    [[nodiscard]] static std::optional<nlohmann::ordered_json>\n        parse_project_build_configuration_manifest(")
@@ -99,7 +187,7 @@ int main(int argc,char**argv) try {
         scene = (ROOT / "Engine/src/editor/editor.scene.cpp").read_text(encoding="utf-8")
         runtime = (ROOT / "Engine/src/editor/application/editor.application_project_runtime.inl").read_text(encoding="utf-8")
         paths = (ROOT / "Engine/src/editor/application/editor.application_runtime_source.inl").read_text(encoding="utf-8")
-        core = (ROOT / "Engine/modules/editor.core.ixx").read_text(encoding="utf-8")
+        core = (ROOT / "Engine/modules/editor/editor.core.ixx").read_text(encoding="utf-8")
         shell = (ROOT / "Engine/src/editor/implementation/editor.project_shell_generation.inl").read_text(encoding="utf-8")
         result_type = definition(core, "    export struct EditorProjectBuildResult", True).replace("export ", "", 1)
         supported = definition(core, "    export [[nodiscard]] constexpr bool editor_project_build_configuration_supported(").replace("export ", "", 1)
@@ -181,17 +269,20 @@ inline fs::path sdk;fs::path executable_dir(){return sdk;}fs::path find_epoch_re
 namespace platform {
 namespace filesystem=epochengine::platform::filesystem;
 namespace child_process {
-enum class WindowMode{hidden};enum class LaunchCode{started};enum class WaitCode{exited,cancelled};
+enum class WindowMode{hidden};enum class LaunchCode{started,spawn_failed,busy};enum class WaitCode{exited,cancelled};enum class StopMode{force};
 struct LaunchRequest{fs::path executable,working_directory,merged_output_path;std::vector<std::string>arguments;std::string correlation_key,exclusive_group,display_name;WindowMode window_mode;bool append_output{},disconnect_standard_input{};};
-struct LaunchResult{LaunchCode code=LaunchCode::started;int handle=1;std::string message;};
-struct Process{bool exit_code_valid=true;int exit_code=0;int handle=1;bool active()const{return false;}};
+struct LaunchResult{LaunchCode code=LaunchCode::started;int handle=1;std::string message;bool owns_new_process()const{return code==LaunchCode::started||code==LaunchCode::spawn_failed;}};
+struct Process{bool exit_code_valid=true;int exit_code=0;int handle=1;bool running{};bool active()const{return running;}};
 struct WaitResult{WaitCode code=WaitCode::exited;std::optional<Process>process=Process{};std::string message;};
-inline LaunchRequest last;inline unsigned launches{};
-LaunchResult launch_or_focus(const LaunchRequest& request){last=request;++launches;return {};}
-WaitResult wait(int,std::stop_token){return {};}
+inline LaunchRequest last;inline unsigned launches{},stops{},releases{},waits{};
+inline LaunchCode launch_code=LaunchCode::started;inline bool live{},missing{},stop_settles=true;
+LaunchResult launch_or_focus(const LaunchRequest& request){last=request;++launches;return {launch_code};}
+WaitResult wait(int,std::stop_token,std::uint64_t=0){++waits;return {};}
+std::optional<Process> snapshot(int handle){assert(handle==1);if(missing)return {};Process p;p.running=live;return p;}
+int stop(int handle,StopMode){assert(handle==1);++stops;if(stop_settles)live=false;return 0;}
 std::optional<Process> active_in_group(std::string_view){return {};}
 int focus(int){return 0;}
-bool release(int){return true;}
+bool release(int handle){assert(handle==1);++releases;assert(!live);return true;}
 }}
 struct Profile{std::string id="Fixture";};inline Profile profile;inline bool admitted=true;
 const Profile* find_project_profile_by_root(std::string_view){return admitted?&profile:nullptr;}
@@ -207,7 +298,7 @@ struct EditorState{
 std::string projectId="Fixture",projectRoot,activeScript,projectBuildConfiguration="Debug",projectBuildRequestedConfiguration,
 projectBuildProjectRoot,projectBuildStatus;
 std::uint64_t projectBuildProjectKey{},projectBuildLifecycleGeneration{};
-bool projectBuildPending{},scriptBuildPending{},aiContinuousBuildPending{};
+bool projectBuildPending{},projectBuildReusesReviewedArtifact{},scriptBuildPending{},aiContinuousBuildPending{};
 std::optional<Runtime>projectRuntimeSnapshot;
 project_lifecycle::EvidenceLedger projectLifecycle;
 core::sha256::Digest projectBuildAcceptedOutputDigest;
@@ -284,6 +375,21 @@ const auto launches=platform::child_process::launches;assert(!editor_build_proje
 const auto portableRelease=portable::generated_project_output_path(root,"Release");write(portableRelease,"portable artifact");
 const auto linux=portable::editor_build_project(root.string(),{},"Release");assert(linux.succeeded&&fs::path{linux.output_path}==portableRelease);
 assert(platform::child_process::last.arguments.size()==2&&platform::child_process::last.arguments.back()=="Release");
+// Execute both production platform branches against labeled child ownership ports.
+for(bool portableOwner:{false,true})for(int mode=0;mode<6;++mode){
+ namespace child=platform::child_process;
+ child::launch_code=mode==4?child::LaunchCode::busy:mode==5?child::LaunchCode::started:child::LaunchCode::spawn_failed;
+ child::live=mode==1||mode==2||mode==4||mode==5;child::missing=mode==3;child::stop_settles=mode!=2;
+ child::stops=child::releases=child::waits=0;
+ const auto failed=portableOwner?portable::editor_build_project(root.string(),{},"Release"):editor_build_project(root.string(),{},"Release");
+ assert(!failed.succeeded);
+ assert(failed.workers_retired==(mode==0||mode==1||mode==4));
+ assert(child::stops==static_cast<unsigned>(mode==1||mode==2));
+ assert(child::releases==static_cast<unsigned>(mode==0||mode==1));
+ assert(child::waits==static_cast<unsigned>(mode==1||mode==2||mode==5));
+}
+platform::child_process::launch_code=platform::child_process::LaunchCode::started;
+platform::child_process::live=platform::child_process::missing=false;platform::child_process::stop_settles=true;
 assert(portable::project_output_exe_path(root.string(),"Release")==portableRelease);
 EditorState state;state.projectRoot=root.string();state.projectBuildConfiguration="Release";
 core::path::sdk=fs::current_path()/"sdk";write(core::path::sdk/"Tools/MSVC/EpochOutputLayout.props","epoch.build-output-layout/v1");

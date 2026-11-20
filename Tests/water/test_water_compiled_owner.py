@@ -1,5 +1,6 @@
 """Compile the real water module implementation and an independent CPU consumer."""
 from pathlib import Path
+from Tests.support.cpp import engine_module_source
 import hashlib
 import json
 import os
@@ -44,7 +45,7 @@ class WaterCompiledOwner(unittest.TestCase):
                                     engine / "src/assets/texture/asset.texture_artifact.cpp"])
         consumer = engine / "src/water/water.surface_contract.cpp" if surface else CONSUMER
         implementation_paths = "\n".join(f'    "{path.as_posix()}"' for path in implementations)
-        module_paths = "\n".join(f'    "{(engine / "modules" / (name + ".ixx")).as_posix()}"' for name in modules)
+        module_paths = "\n".join(f'    "{(engine_module_source(engine / "modules", name + ".ixx")).as_posix()}"' for name in modules)
         (source / "CMakeLists.txt").write_text(f'''cmake_minimum_required(VERSION 3.28)
 cmake_policy(SET CMP0141 NEW)
 project(EpochWaterCompiledOwner LANGUAGES CXX)
@@ -62,7 +63,7 @@ target_compile_options(water_owners PUBLIC /sdl /permissive- /Zc:__cplusplus /ut
 add_executable(water_consumer "{consumer.as_posix()}")
 target_link_libraries(water_consumer PRIVATE water_owners)
 ''', encoding="utf-8")
-        paths = [*implementations, consumer, Path(__file__), *[engine / "modules" / (name + ".ixx") for name in modules]]
+        paths = [*implementations, consumer, Path(__file__), *[engine_module_source(engine / "modules", name + ".ixx") for name in modules]]
         hashes = lambda: {str(path.relative_to(ROOT)).replace("\\", "/"): hashlib.sha256(path.read_bytes()).hexdigest() for path in paths}
         before = hashes()
         invocations = []

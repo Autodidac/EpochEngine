@@ -13,7 +13,7 @@ ROOT=Path(__file__).resolve().parents[2]
 def fixture():
     windows=(ROOT/'Engine/src/epochgui/controls/gui.window_controls.inl').read_text(encoding='utf-8')
     gui=(ROOT/'Engine/src/epochgui/gui.engine.cpp').read_text(encoding='utf-8')
-    api=(ROOT/'Engine/modules/gui.engine.ixx').read_text(encoding='utf-8')
+    api=(ROOT/'Engine/modules/gui/gui.engine.ixx').read_text(encoding='utf-8')
     adapter=(ROOT/'Engine/src/epochgui/gui.docking_adapter.cpp').read_text(encoding='utf-8')
     base=queued_fixture().rsplit('int main(){',1)[0].replace('import epoch.gui.input;','import epoch.gui.input;\nimport epoch.gui;')
     base=base.replace('Vec2 contentMin{},contentMax{};bool insideWindow{};', 'Vec2 contentMin{},contentMax{},origin{},windowSize{};std::string windowKey;bool insideWindow{};')
@@ -121,14 +121,15 @@ void dimmed_window_tests(const std::shared_ptr<core::Context>& c){
   g_frame.insideWindow=true;g_frame.origin={20,30};g_frame.windowSize={80,60};g_frame.contentMin={26,36};g_frame.contentMax={94,84};
   draws.clear();const auto result=begin_floating_window(state,options);CHECK(result.begun);
   const std::size_t frameStart=dimmed?2u:1u;
-  CHECK(draws.size()==(dimmed?9u:4u));
+  CHECK(draws.size()==(dimmed?9u:8u));
   CHECK(draws[dimmed?1u:0u].sprite.id==99); // Window paints after its optional scrim.
   if(dimmed){
    const auto& scrim=draws[0];CHECK(scrim.sprite.id==8&&scrim.position.x==0&&scrim.position.y==0&&scrim.size.x==1000&&scrim.size.y==800&&scrim.in_clip&&scrim.layer==1);
-   for(std::size_t edge=0;edge<4;++edge){const auto& draw=draws[frameStart+edge];CHECK(draw.sprite.id==9&&draw.in_clip&&draw.layer==1);CHECK(draw.size.x==1||draw.size.y==1);}
-   CHECK(draws[frameStart].position.x==state.position.x&&draws[frameStart].position.y==state.position.y&&draws[frameStart].size.x==state.size.x);
-   CHECK(draws[frameStart+4].sprite.id==(light?2:1)); // Existing recognizable corner close mark.
   }
+  // Nonmodal Model Manager uses the same theme outline without a scrim or input capture.
+  for(std::size_t edge=0;edge<4;++edge){const auto& draw=draws[frameStart+edge];CHECK(draw.sprite.id==9&&draw.in_clip&&draw.layer==1);CHECK(draw.size.x==2||draw.size.y==2);}
+  CHECK(draws[frameStart].position.x==state.position.x&&draws[frameStart].position.y==state.position.y&&draws[frameStart].size.x==state.size.x);
+  CHECK(draws[frameStart+4].sprite.id==(light?2:1)); // Existing recognizable corner close mark.
   CHECK(g_frame.contentMin.x==106&&g_frame.contentMin.y==118&&g_frame.contentMax.x==394&&g_frame.contentMax.y==294);
  }
  palette.isLight=false;palette.captionUsesLightText=true;

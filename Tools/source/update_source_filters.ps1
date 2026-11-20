@@ -18,7 +18,11 @@ foreach ($node in @($doc.SelectNodes('/m:Project/m:ItemGroup/*[@Include]', $ns))
     $parts = $relative.Split('\')
     $folder = switch ($parts[0]) {
         'src' { 'Source Files\' + (($parts | Select-Object -Skip 1 | Select-Object -SkipLast 1) -join '\') }
-        'modules' { 'Module Files\' + (($parts[-1] -split '\.')[0]) }
+        'modules' {
+            $category = if ($parts.Count -gt 2) { $parts[1..($parts.Count - 2)] -join '\' }
+                        else { ($parts[-1] -split '\.')[0] }
+            'Module Files\' + $category
+        }
         'include' {
             if ($parts.Count -gt 2) { 'Public Headers\' + (($parts | Select-Object -Skip 1 | Select-Object -SkipLast 1) -join '\') }
             else { 'Public Headers\' + (($parts[-1] -split '\.')[0]) }

@@ -1023,6 +1023,68 @@
             return open_project_manifest_path(editor, ctx, selected.path);
         }
 
+#if defined(__ANDROID__) && defined(EPOCH_USING_SDL) && EPOCH_USING_SDL == 1
+        void poll_android_project_transfer(EditorState& editor)
+        {
+            if (!editor.pollProjectTransfer) return;
+
+            const std::string result = platform::android::ProjectTransferActivity{}.poll_transfer();
+            editor.pollProjectTransfer = result == "busy";
+            constexpr std::string_view imported = "imported:";
+            constexpr std::string_view importedWarning = "imported-warning:";
+            const bool durabilityWarning = result.starts_with(importedWarning);
+            auto& status = editor.projectTransferStatus;
+            if (result.starts_with(imported) || durabilityWarning)
+            {
+                const auto id = result.substr((durabilityWarning ? importedWarning : imported).size());
+                status = "The imported project ID is invalid.";
+                if (platform::android::valid_archive_project_id(id))
+                {
+                    const auto manifest = editor_projects_root() / id / "project.epoch.json";
+                    const auto admitted = editor_admit_project_manifest(manifest.generic_string());
+                    editor_refresh_project_profiles();
+                    if (admitted.succeeded && admitted.project_id == id)
+                    {
+                        editor.projectPickerId = id;
+                        status = durabilityWarning
+                            ? "Project imported, but storage could not confirm the save. Review before restarting."
+                            : "Project imported. Choose Open Selected to review it.";
+                    }
+                    else status = "The imported project could not be listed. " + admitted.summary;
+                }
+            }
+            else if (result == "cancelled") status = "Project import canceled.";
+            else if (result == "failed") status = "Project import failed. Check the archive and project name.";
+            else if (result == "exported") status = "Saved project ZIP exported.";
+            else if (result == "export-cancelled") status = "Project export canceled.";
+            else if (result == "export-failed-document-retained")
+                status = "Export failed. The selected location may contain an incomplete ZIP.";
+            else if (result == "export-failed")
+                status = "Export failed. Check the saved project and available storage.";
+            else return;
+            push_editor_log(editor, "[project] " + status);
+        }
+
+        void request_android_project_export(EditorState& editor)
+        {
+            namespace fs = std::filesystem;
+            const auto root = fs::path{editor.projectRoot}.lexically_normal();
+            if (!root.is_absolute() || root != editor_projects_root() / editor.projectId
+                || fs::path{editor.projectManifest}.lexically_normal() != root / "project.epoch.json"
+                || root.native().find_first_not_of(
+                    "/ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-") != std::string::npos)
+            {
+                editor.projectTransferStatus = "Open a saved Game or Tool from this Editor's Projects folder to export it.";
+                return;
+            }
+            const bool queued = platform::android::ProjectTransferActivity{}.request_export(editor.projectId, root.native());
+            editor.pollProjectTransfer = true;
+            editor.projectTransferStatus = queued
+                ? "Preparing saved project ZIP."
+                : "Could not start the project export.";
+        }
+#endif
+
         void draw_project_browser(
             EditorState& editor,
             const std::shared_ptr<core::Context>& ctx,
@@ -1032,6 +1094,41 @@
                 .sizing=gui::InlineButtonSizing::FitContent,
                 .alignment=gui::InlineButtonAlignment::Center,
                 .wrap=true, .available_width=width};
+#if defined(__ANDROID__) && defined(EPOCH_USING_SDL) && EPOCH_USING_SDL == 1
+            poll_android_project_transfer(editor);
+            const bool canExport = !editor.pollProjectTransfer
+                && (editor.projectKind == editor_project_kind_name(EditorProjectKind::Game)
+                    || editor.projectKind == editor_project_kind_name(EditorProjectKind::Tool))
+                && platform::android::valid_archive_project_id(editor.projectId)
+                && std::filesystem::path{editor.projectRoot}.is_absolute();
+            const std::array sessionActions{
+                gui::InlineButtonSpec{.label="Import Project ZIP...", .width=0.0f,
+                    .enabled=!editor.pollProjectTransfer},
+                gui::InlineButtonSpec{.label="Export Saved ZIP...", .width=0.0f, .enabled=canExport},
+                gui::InlineButtonSpec{.label="Close Project", .width=0.0f,
+                    .enabled=has_open_project(editor)}};
+            if (const auto action = gui::inline_button_row(sessionActions, 30.0f, 6.0f, row))
+            {
+                if (*action == 0u)
+                {
+                    const bool queued = platform::android::ProjectTransferActivity{}.request_import();
+                    editor.pollProjectTransfer = true;
+                    editor.projectTransferStatus = queued
+                        ? "Choose a project ZIP to import."
+                        : "Could not open Android's project file picker.";
+                }
+                else if (*action == 1u) request_android_project_export(editor);
+                else (void)editor_close_project(ctx);
+            }
+            if (!editor.projectTransferStatus.empty())
+                gui::wrapped_label(editor.projectTransferStatus, width);
+#elif defined(__ANDROID__)
+            const std::array sessionActions{
+                gui::InlineButtonSpec{.label="Close Project", .width=0.0f,
+                    .enabled=has_open_project(editor)}};
+            if (gui::inline_button_row(sessionActions, 30.0f, 6.0f, row))
+                (void)editor_close_project(ctx);
+#else
             const std::array sessionActions{
                 gui::InlineButtonSpec{.label="Open Project...", .width=0.0f},
                 gui::InlineButtonSpec{.label="Close Project", .width=0.0f,
@@ -1041,6 +1138,7 @@
                 if (*action == 0u) (void)open_project_manifest_from_dialog(editor, ctx);
                 else (void)editor_close_project(ctx);
             }
+#endif
 
             // Copy the selected identity and manifest before any admission can
             // rebuild the registry's string-view catalog. Selection alone never opens.
@@ -1071,7 +1169,14 @@
                 }
                 if (selectedIndex < roots.size()) gui::wrapped_label(roots[selectedIndex], width);
             }
-            else gui::wrapped_label("No saved projects found here. Open Project... lets you choose a project file elsewhere.", width);
+            else
+#if defined(__ANDROID__) && defined(EPOCH_USING_SDL) && EPOCH_USING_SDL == 1
+                gui::wrapped_label("No saved projects found. Use Import Project ZIP to add one.", width);
+#elif defined(__ANDROID__)
+                gui::wrapped_label("No saved projects found. Open a local manifest by path below.", width);
+#else
+                gui::wrapped_label("No saved projects found here. Open Project... lets you choose a project file elsewhere.", width);
+#endif
             const std::array catalogActions{
                 gui::InlineButtonSpec{.label="Open Selected", .width=0.0f, .enabled=selectedIndex < manifests.size()},
                 gui::InlineButtonSpec{.label="Refresh", .width=0.0f}};
@@ -1390,7 +1495,8 @@
         {
             std::string diagnostic;
             const bool saved = editor_set_project_run_settings(editor.projectRoot,
-                EditorProjectRunSettings{editor.projectRunBackend, editor.projectRunFrameLimitFps}, diagnostic);
+                EditorProjectRunSettings{editor.projectRunBackend, editor.projectRunFrameLimitFps,
+                    editor.projectScreenSpaceGuiEnabled, editor.projectCameraMode}, diagnostic);
             editor.projectStatus = std::move(diagnostic);
             push_editor_log(editor, std::string{"[project] "} + editor.projectStatus);
             if (!saved) editor.projectBuildStatus = editor.projectStatus;
@@ -1400,28 +1506,29 @@
         [[nodiscard]] std::span<const ProjectRunBackendChoice> project_run_backend_choices() noexcept
         {
 #if defined(_WIN32)
-            static constexpr std::array<ProjectRunBackendChoice, 6> kChoices{ {
+            static constexpr ProjectRunBackendChoice kChoices[]{
                 { "OpenGL single context", "opengl" },
                 { "DirectX single context", "directx" },
                 { "Vulkan single context", "vulkan" },
                 { "Raylib single context", "raylib" },
                 { "SDL single context", "sdl" },
-                { "SFML single context", "sfml" }
-            } };
+                { "SFML single context", "sfml" },
 #elif defined(__linux__)
-            static constexpr std::array<ProjectRunBackendChoice, 1> kChoices{ {
-                { "OpenGL single context", "opengl" }
-            } };
+            static constexpr ProjectRunBackendChoice kChoices[]{
+                { "OpenGL single context", "opengl" },
 #else
-            static constexpr std::array<ProjectRunBackendChoice, 5> kChoices{ {
+            static constexpr ProjectRunBackendChoice kChoices[]{
                 { "OpenGL single context", "opengl" },
                 { "Vulkan single context", "vulkan" },
                 { "Raylib single context", "raylib" },
                 { "SDL single context", "sdl" },
-                { "SFML single context", "sfml" }
-            } };
+                { "SFML single context", "sfml" },
 #endif
-            return { kChoices.data(), kChoices.size() };
+#if defined(EPOCH_USING_SOFTWARE_RENDERER)
+                { "Software (CPU)", "software" },
+#endif
+            };
+            return kChoices;
         }
 
         [[nodiscard]] std::string_view project_run_backend_label(std::string_view argument) noexcept
@@ -1914,8 +2021,11 @@
             return input::profile_preset_id(preset);
         }
 
-        [[nodiscard]] std::string_view project_camera_label(previewgrid::CameraMode mode) noexcept
+        [[nodiscard]] std::string_view project_camera_label(
+            std::optional<previewgrid::CameraMode> mode) noexcept
         {
+            if (!mode)
+                return "Automatic";
             for (const auto& choice : project_camera_choices())
             {
                 if (choice.mode == mode)
@@ -1926,16 +2036,42 @@
 
         [[nodiscard]] std::string_view project_camera_argument(previewgrid::CameraMode mode) noexcept
         {
-            switch (mode)
-            {
-            case previewgrid::CameraMode::FPS:
-                return "fps";
-            case previewgrid::CameraMode::Canvas2D:
-                return "canvas2d";
-            case previewgrid::CameraMode::Editor:
-            default:
-                return "editor";
-            }
+            return editor_project_camera_token(mode);
+        }
+
+        [[nodiscard]] previewgrid::CameraMode project_camera_for_run(const EditorState& editor) noexcept
+        {
+            const auto& profile = active_project_profile(editor);
+            return editor_resolve_project_run_camera(
+                profile.kind, !profile.tilemap_path.empty(), editor.projectCameraMode);
+        }
+
+        void draw_project_run_camera(EditorState& editor, std::string_view id, float width)
+        {
+            const auto choices = project_camera_choices();
+            std::array<std::string_view, 4> labels{"Automatic"};
+            for (std::size_t index = 0; index < choices.size(); ++index)
+                labels[index + 1] = choices[index].label;
+            const bool enabled = has_open_project(editor) && editor.projectId != "sandbox";
+            const auto selection = gui::select_box(gui::SelectBoxOptions{
+                .id = id,
+                .placeholder = "Project Run camera",
+                .selected = project_camera_label(editor.projectCameraMode),
+                .options = labels,
+                .size = {width, 30.0f},
+                .row_height = 28.0f,
+                .max_visible_options = labels.size(),
+                .enabled = enabled
+            });
+            if (!enabled || !selection.changed || !selection.selected_index
+                || *selection.selected_index >= labels.size())
+                return;
+            const auto index = *selection.selected_index;
+            const auto previous = editor.projectCameraMode;
+            editor.projectCameraMode = index == 0
+                ? std::nullopt : std::optional{choices[index - 1].mode};
+            if (editor.projectCameraMode != previous && !persist_project_run_settings(editor))
+                editor.projectCameraMode = previous;
         }
 
         [[nodiscard]] std::string vec3_text(const std::array<float, 3>& value)
@@ -1974,10 +2110,17 @@
 
         [[nodiscard]] std::string preview_zoom_text(const std::shared_ptr<core::Context>& ctx)
         {
-            if (!ctx)
-                return "13.5";
-
-            return epochengine::format_text("{:.1f}", epochengine::previewgrid::camera_distance_for(ctx.get()));
+            if (!ctx) return "No camera";
+            if (previewgrid::camera_mode_for(ctx.get()) == previewgrid::CameraMode::FPS)
+                return "Free camera";
+            const double distance = previewgrid::camera_distance_for(ctx.get());
+            if (!std::isfinite(distance) || distance < 0.0) return "Unavailable";
+            const auto label = previewgrid::editor_view_for(ctx.get()) == previewgrid::EditorView::Perspective
+                ? "Distance" : "Span";
+            if (distance >= 1.0e9) return epochengine::format_text("{} {:.1f}B units", label, distance / 1.0e9);
+            if (distance >= 1.0e6) return epochengine::format_text("{} {:.1f}M units", label, distance / 1.0e6);
+            if (distance >= 1.0e3) return epochengine::format_text("{} {:.1f}k units", label, distance / 1.0e3);
+            return epochengine::format_text("{} {:.1f} units", label, distance);
         }
 
         [[nodiscard]] std::string backend_ownership_model(const std::shared_ptr<core::Context>& ctx)

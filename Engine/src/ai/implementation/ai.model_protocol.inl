@@ -8,6 +8,8 @@
             InferenceWorkload workload, std::string_view input) noexcept
         {
             auto budget = inference_budget(workload);
+            if (!budget.valid() || workload == InferenceWorkload::application_assistance)
+                return budget;
             // Every role uses the same loaded context policy. A provider or
             // explicit operator capacity can reduce the default; chat and
             // authoring must not silently pack against an unrelated old limit.

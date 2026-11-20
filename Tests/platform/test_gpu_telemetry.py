@@ -12,13 +12,15 @@ from Tests.support.cpp import msvc_2022_root
 
 ROOT = Path(__file__).resolve().parents[2]
 OWNER = ROOT / "Engine/src/platform/platform.work_admission.cpp"
-MODULE = ROOT / "Engine/modules/platform.work_admission.ixx"
+MODULE = ROOT / "Engine/modules/platform/platform.work_admission.ixx"
 BOOTSTRAP = ROOT / "Engine/src/editor/application/editor.frame_bootstrap.inl"
+PACING_POLICY = ROOT / "Engine/src/editor/application/editor.application_runtime_diagnostics.inl"
+PACING_MODULE = ROOT / "Engine/dep/EpochPlatformEngine/modules/perf.tier.ixx"
 
 
 def consumer():
     source = OWNER.read_text(encoding="utf-8")
-    gui = (ROOT / "Engine/modules/gui.engine.ixx").read_text(encoding="utf-8")
+    gui = (ROOT / "Engine/modules/gui/gui.engine.ixx").read_text(encoding="utf-8")
     status_type = definition(gui, "    export struct StatusStripItem", True).replace("export ", "")
     tone = definition(gui, "    export enum class SemanticTone", True).replace("export ", "")
     backend = "\n".join(definition(source, marker, marker.endswith(" final")) for marker in (
@@ -26,15 +28,29 @@ def consumer():
         "        [[nodiscard]] GpuResourceSample read_nvml_resources(",
         "        struct NativeNvml final"))
     bootstrap = BOOTSTRAP.read_text(encoding="utf-8")
-    start = bootstrap.index("        const bool toolbarCpuValid =")
-    end = bootstrap.index("        // Keep status on the PRIMARY chrome row.", start)
-    presentation = bootstrap[start:end]
+    start = bootstrap.index("        const bool epochUsage =")
+    end = bootstrap.index("\n        }\n        else", start)
+    presentation = bootstrap[start:end].replace(
+        "platform::work_admission::sample_host_resources()", "observe_host()").replace(
+        "platform::work_admission::sample_epoch_resources()", "observe_epoch()").replace(
+        "std::thread::hardware_concurrency()", "hardwareThreads")
+    first = bootstrap.index("        constexpr std::size_t toolbarScopeIndex =")
+    storage = bootstrap[first:bootstrap.index("        if (editor.showTelemetry)", first)]
     toolbar = (ROOT / "Engine/src/editor/application/editor.frame_toolbar_dock_targets.inl").read_text(encoding="utf-8")
-    start = toolbar.index("        const std::span<const gui::StatusStripItem> resourceMinimumItems")
-    minimum = toolbar[start:toolbar.index("        const float minimumMenuReserve", start)]
+    start = toolbar.index("        const std::array essentialStatusItems")
+    minimum = toolbar[start:toolbar.index("        constexpr float toolbarZoneGap", start)]
     panel = (ROOT / "Engine/src/editor/systems/editor.systems_panel.cpp").read_text(encoding="utf-8")
     gpu_panel = definition(panel, "        void render_gpu_resources(")
-    return PREFIX + "\nnamespace gui {\n" + tone + "\n" + status_type + "\n" + WIDTH_PORT + PANEL_PORTS + "\n}\n" + PORTS + backend + gpu_panel + "\n" + PRESENTATION_PREFIX + presentation + minimum + PRESENTATION_CHECKS + MAIN
+    policy = PACING_POLICY.read_text(encoding="utf-8")
+    module = PACING_MODULE.read_text(encoding="utf-8")
+    pacing = "\nnamespace perf {\n" + definition(module, '    enum class tier', True) + "\n" + definition(
+        module, '    double target_fps_for(tier t) noexcept\n') + "\n}\n" + "\n".join(
+        definition(policy, marker) for marker in (
+            '        [[nodiscard]] static perf::tier recommended_editor_performance_tier(',
+            '        [[nodiscard]] static std::string recommended_support_tier('))
+    return (PREFIX + "\nnamespace gui {\n" + tone + "\n" + status_type + "\n" + WIDTH_PORT + PANEL_PORTS
+            + "\n}\n" + PORTS + backend + gpu_panel + PACING_PORT + pacing + "\n" + PRESENTATION_PREFIX
+            + storage + presentation + minimum + PRESENTATION_CHECKS + MAIN)
 
 
 PREFIX = r'''
@@ -43,6 +59,7 @@ PREFIX = r'''
 #include <array>
 #include <bit>
 #include <cmath>
+#include <cstdio>
 #include <cstdint>
 #include <cstring>
 // MSVC's template-instantiation C4702 in the existing formatter's terminal
@@ -52,9 +69,11 @@ PREFIX = r'''
 #include "core.format_text.hpp"
 #pragma warning(pop)
 #include <limits>
+#include <memory>
 #include <span>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <utility>
 #include <vector>
 #if __has_include(<nvml.h>)
@@ -81,11 +100,12 @@ import platform.work_admission;
 using epochengine::platform::work_admission::GpuResourceSample;
 using epochengine::platform::work_admission::GpuTelemetrySource;
 using epochengine::platform::work_admission::ResourceSample;
+using epochengine::platform::work_admission::EpochResourceSample;
 namespace platform=epochengine::platform;
 namespace epochengine {
 std::string GetEngineVersionString(){return "test";}
 }
-#define CHECK(condition) do {if(!(condition))return __LINE__;}while(false)
+#define CHECK(condition) do {if(!(condition)){std::fprintf(stderr,"GPU telemetry fixture line %d: %s\n",__LINE__,#condition);return __LINE__;}}while(false)
 '''
 
 WIDTH_PORT = r'''
@@ -155,41 +175,86 @@ BOOL WINAPI port_free(HMODULE){++port::free_calls;return TRUE;}
 #define FreeLibrary port_free
 '''
 
+PACING_PORT = r'''
+namespace core {
+enum class ContextType { None, OpenGL, Vulkan, RayLib, SFML, SDL, DirectX, Software };
+struct Window { std::string titleNarrow; };
+struct Context { ContextType type; Window* windowData; };
+}
+'''
+
 PRESENTATION_PREFIX = r'''
 namespace previewgrid {float camera_distance_for(const void*){return 13.5f;}}
-std::string renderer_name(const void*){return "OpenGL";}
+std::string renderer_name(const std::shared_ptr<core::Context>&){return "OpenGL";}
 std::string build_configuration_label(){return "fixture";}
-int check_toolbar(ResourceSample toolbarResources,std::string_view gpu,std::string_view vram,
-    gui::SemanticTone gpuTone,gui::SemanticTone memoryTone)
+int check_toolbar(ResourceSample host,std::string_view gpu,std::string_view vram,
+    gui::SemanticTone gpuTone,gui::SemanticTone memoryTone,std::string_view contextTitle="OpenGL 2",
+    std::string_view expectedContext="OpenGL 2", bool scoped=false, EpochResourceSample owned={},
+    std::string_view cpu="CPU 20%", std::string_view ram="RAM 50%", unsigned hardwareThreads=10u,
+    std::string_view expectedTier="Tier 4", std::string_view expectedSuggestedFps="120",
+    core::ContextType contextType=core::ContextType::OpenGL)
 {
- struct {double chromeFpsSample=60;bool chromeFpsMeasured=true;} editor;
+ struct {double chromeFpsSample=60;bool chromeFpsMeasured=true;bool showTelemetry=true;bool showEpochResourceUsage{};unsigned int telemetryDetail{};} editor;
+ editor.showEpochResourceUsage=scoped;
  const std::string_view toolbarArch="x64",toolbarCompiler="MSVC",toolbarOs="Windows";
- const std::string toolbarFps="60 FPS";const unsigned toolbarRunning=0,toolbarQueued=0;
- struct {unsigned idle_workers=4;} toolbarActivity;
- struct {const void* get() const{return nullptr;} operator const void*() const{return nullptr;}} ctx;
+ const std::string toolbarFpsFull="Editor 60 FPS",toolbarFpsCompact="Editor 60 FPS";
+ unsigned hostReads=0, epochReads=0, hostGpuReads=0;
+ const auto observe_host=[&]{++hostReads;return host;};
+ const auto observe_epoch=[&]{++epochReads;return owned;};
+ const auto observe_frame_gpu=[&]{++hostGpuReads;return host.gpu;};
+ const unsigned toolbarRunning=0,toolbarQueued=0;
+ struct {unsigned worker_count=4,idle_workers=4,running_tasks=0;} toolbarActivity;
+ core::Window window{std::string(contextTitle)};
+ const auto ctx=std::make_shared<core::Context>(core::Context{contextType,&window});
  const double chromeThrottle=0;
+ constexpr float telemetryToggleWidth=6.0f;
 '''
 PRESENTATION_CHECKS = r'''
- CHECK(toolbarStatusItems.size()==10);
- CHECK(resourceMinimumItems.size()==4&&resourceMinimumItems.data()==toolbarStatusItems.data());
- CHECK(minimumResourceWidth==24.0f);
+ CHECK(toolbarStatusItems.size()==11);
+ CHECK(essentialStatusItems[0].label==expectedContext&&essentialStatusItems[1].label=="Editor 60 FPS");
+ CHECK(minimumEssentialWidth>=telemetryToggleWidth);
  CHECK(toolbarStatusItems[2].label==gpu&&toolbarStatusItems[3].label==vram);
  CHECK(toolbarStatusItems[2].tone==gpuTone&&toolbarStatusItems[3].tone==memoryTone);
- CHECK(toolbarStatusItems[0].width_reference=="CPU 100%"&&toolbarStatusItems[1].width_reference=="RAM 100%");
+ CHECK(toolbarStatusItems[0].width_reference=="CPU 100%"
+    && toolbarStatusItems[1].width_reference=="RAM 100%");
  CHECK(toolbarStatusItems[2].width_reference=="GPU 100%");
  CHECK(toolbarStatusItems[3].width_reference==toolbarVramWidthReference);
  CHECK(toolbarStatusItems[2].compact_width_reference=="G 100%"&&toolbarStatusItems[3].minimal_width_reference=="V 100%");
  CHECK(toolbarStatusItems[2].compact_label=="G "+toolbarGpuPercent&&toolbarStatusItems[2].minimal_label==toolbarStatusItems[2].compact_label);
  CHECK(toolbarStatusItems[3].compact_label=="V "+toolbarVramPercent&&toolbarStatusItems[3].minimal_label==toolbarStatusItems[3].compact_label);
- CHECK(toolbarStatusItems[6].label=="60 FPS");
- CHECK(toolbarStatusItems[7].label.find("Queued")!=std::string_view::npos);
- CHECK(toolbarStatusItems[8].label=="OpenGL");
- CHECK(toolbarStatusItems[2].tooltip.find("process")!=std::string_view::npos);
- CHECK(toolbarStatusItems[3].tooltip.find("process")!=std::string_view::npos||!toolbarVramValid);
- if(toolbarGpu.source==GpuTelemetrySource::nvidia_nvml)
+ CHECK(toolbarStatusItems[toolbarFpsIndex].label=="Editor 60 FPS"
+    &&toolbarStatusItems[toolbarFpsIndex].compact_label=="Editor 60 FPS");
+ CHECK(toolbarStatusItems[toolbarTaskIndex].label=="Total 0 / Ready 4 / Queued 0");
+ CHECK(toolbarStatusItems[toolbarTaskIndex].compact_label==toolbarStatusItems[toolbarTaskIndex].label);
+ CHECK(toolbarStatusItems[toolbarTaskIndex].tooltip.find("Pool capacity: 4")!=std::string_view::npos);
+ CHECK(toolbarStatusItems[toolbarContextIndex].label==expectedContext);
+ const auto& tier=toolbarStatusItems[toolbarTierIndex];
+ CHECK(tier.label=="T"+std::string(expectedTier).substr(5));
+ CHECK(toolbarStatusItems[toolbarScopeIndex].label==(scoped?"Epoch":"Host"));
+ CHECK(toolbarStatusItems[toolbarScopeIndex].tooltip.find(scoped?"observed child processes":"entire PC")!=std::string_view::npos);
+ CHECK(tier.compact_label==tier.label&&tier.minimal_label==tier.compact_label);
+ CHECK(tier.tooltip.find("Suggested foreground Editor pacing")!=std::string_view::npos);
+ CHECK(tier.tooltip.find(std::string(expectedSuggestedFps)+" FPS")!=std::string_view::npos);
+ CHECK(tier.tooltip.find("current cap")!=std::string_view::npos&&tier.tooltip.find("renderer feature details")!=std::string_view::npos);
+ const std::string_view clickAction=scoped?"Host totals":"Epoch process usage";
+ for(std::size_t i=0;i<4;++i)CHECK(toolbarStatusItems[i].tooltip.find(clickAction)!=std::string_view::npos);
+ if(!scoped&&toolbarGpu.source==GpuTelemetrySource::nvidia_nvml)
   CHECK(toolbarStatusItems[2].tooltip.find("Whole-adapter load")!=std::string_view::npos);
- if(toolbarVramValid)CHECK(toolbarStatusItems[3].tooltip.find("Whole adapter")!=std::string_view::npos);
- CHECK(toolbarStatusItems[0].label=="CPU 20%"&&toolbarStatusItems[1].label=="RAM 50%");
+ if(!scoped&&toolbarVramValid)CHECK(toolbarStatusItems[3].tooltip.find("Whole adapter")!=std::string_view::npos);
+ if(scoped&&owned.process_count&&!owned.coverage_complete)
+  CHECK(toolbarStatusItems[0].tooltip.find("partial coverage")!=std::string_view::npos);
+ if(scoped&&toolbarGpu.source==GpuTelemetrySource::windows_pdh_process){
+  if(toolbarGpuValid){
+   CHECK(toolbarStatusItems[2].tooltip.find("Busiest attributed GPU engine")!=std::string_view::npos);
+   CHECK((toolbarStatusItems[2].tooltip.find("GPU counter coverage is partial")!=std::string_view::npos)==owned.gpu.activity_partial);
+  }
+  if(toolbarVramValid){
+   CHECK(toolbarStatusItems[3].tooltip.find("observed process allocations and adapter capacities")!=std::string_view::npos);
+   CHECK((toolbarStatusItems[3].tooltip.find("VRAM counter coverage is partial")!=std::string_view::npos)==owned.gpu.memory_partial);
+  }
+ }
+ CHECK(toolbarStatusItems[0].label==cpu&&toolbarStatusItems[1].label==ram);
+ CHECK(hostReads==(scoped?0u:1u)&&epochReads==(scoped?1u:0u)&&hostGpuReads==(scoped?0u:1u));
  return 0;
 }
 '''
@@ -242,6 +307,14 @@ int main(){
   ResourceSample observation{1,32ull<<30,16ull<<30,.2,true,true};
   using Tone=gui::SemanticTone;
   CHECK(check_toolbar(observation,"GPU --","VRAM --",Tone::neutral,Tone::neutral)==0);
+  CHECK(check_toolbar(observation,"GPU --","VRAM --",Tone::neutral,Tone::neutral,"","OpenGL")==0);
+  CHECK(check_toolbar(observation,"GPU --","VRAM --",Tone::neutral,Tone::neutral,"Diagnostics","OpenGL | Diagnostics")==0);
+  CHECK(check_toolbar(observation,"GPU --","VRAM --",Tone::neutral,Tone::neutral,"OpenGL 2","OpenGL 2",
+      false,{},"CPU 20%","RAM 50%",0u,"Tier 1","30")==0);
+  CHECK(check_toolbar(observation,"GPU --","VRAM --",Tone::neutral,Tone::neutral,"OpenGL 2","OpenGL 2",
+      false,{},"CPU 20%","RAM 50%",6u,"Tier 3","60")==0);
+  CHECK(check_toolbar(observation,"GPU --","VRAM --",Tone::neutral,Tone::neutral,"OpenGL 2","OpenGL 2",
+      false,{},"CPU 20%","RAM 50%",6u,"Tier 0","30",core::ContextType::Software)==0);
   observation.gpu.source=GpuTelemetrySource::nvidia_nvml;observation.gpu.busy_valid=true;
   observation.gpu.memory_valid=true;observation.gpu.adapter_count=1;observation.gpu.dedicated_total_bytes=16ull<<30;
   CHECK(check_toolbar(observation,"GPU 0%","VRAM 0.0/16.0 GiB",Tone::success,Tone::success)==0);
@@ -249,6 +322,25 @@ int main(){
   CHECK(check_toolbar(observation,"GPU 80%","VRAM 12.0/16.0 GiB",Tone::warning,Tone::warning)==0);
   observation.gpu.busy_fraction=.95;observation.gpu.dedicated_used_bytes=15ull<<30;
   CHECK(check_toolbar(observation,"GPU 95%","VRAM 15.0/16.0 GiB",Tone::error,Tone::error)==0);
+  EpochResourceSample owned{};
+  owned.process_count=3u;owned.total_memory_bytes=32ull<<30;owned.resident_memory_bytes=8ull<<30;
+  owned.cpu_busy_fraction=.08;owned.cpu_valid=true;owned.memory_valid=true;owned.coverage_complete=false;
+  CHECK(check_toolbar(observation,"GPU --","VRAM --",Tone::neutral,Tone::neutral,
+      "OpenGL 2","OpenGL 2",true,owned,"CPU 8%","RAM 25%")==0);
+  owned.coverage_complete=true;
+  owned.gpu.source=GpuTelemetrySource::windows_pdh_process;
+  owned.gpu.busy_valid=owned.gpu.memory_valid=true;
+  owned.gpu.busy_fraction=.23;
+  owned.gpu.dedicated_used_bytes=2ull<<30;
+  owned.gpu.dedicated_total_bytes=16ull<<30;
+  CHECK(check_toolbar(observation,"GPU 23%","VRAM 2.0/16.0 GiB",Tone::success,Tone::success,
+      "OpenGL 2","OpenGL 2",true,owned,"CPU 8%","RAM 25%")==0);
+  owned.gpu.activity_partial=true;
+  owned.gpu.memory_partial=true;
+  CHECK(check_toolbar(observation,"GPU 23%","VRAM 2.0/16.0 GiB",Tone::success,Tone::success,
+      "OpenGL 2","OpenGL 2",true,owned,"CPU 8%","RAM 25%")==0);
+  CHECK(check_toolbar(observation,"GPU --","VRAM --",Tone::neutral,Tone::neutral,
+      "OpenGL 2","OpenGL 2",true,{},"CPU --","RAM --")==0);
   observation.gpu.busy_fraction=(std::numeric_limits<double>::quiet_NaN)();observation.gpu.dedicated_total_bytes=0;
   CHECK(check_toolbar(observation,"GPU --","VRAM --",Tone::neutral,Tone::neutral)==0);
   gui::rows.clear();gui::messages.clear();render_gpu_resources({},320);CHECK(gui::rows.empty()&&gui::messages.size()==2);
@@ -258,10 +350,11 @@ int main(){
   CHECK(gui::rows[0].second=="Unavailable"&&gui::rows[2].second=="Unavailable"&&gui::rows[3].second=="Unavailable");
   CHECK(std::ranges::any_of(gui::messages,[](const auto& text){return text.find("All applications and driver use")!=std::string::npos;}));
 #if !EPOCH_ENABLE_NVIDIA_TELEMETRY
-  CHECK(!platform::work_admission::start_gpu_telemetry());
-  CHECK(platform::work_admission::stop_gpu_telemetry(0));
+  // Windows still owns the on-demand process sampler without NVML.
+  CHECK(platform::work_admission::start_gpu_telemetry());
   const auto unavailable=platform::work_admission::sample_host_resources();
   CHECK(unavailable.gpu.source==GpuTelemetrySource::unavailable&&!unavailable.gpu.busy_valid&&!unavailable.gpu.memory_valid);
+  CHECK(platform::work_admission::stop_gpu_telemetry(1'000));
 #endif
   return 0;
  }catch(...){return 250;}
@@ -308,8 +401,8 @@ target_compile_definitions(gpu_ports PRIVATE {flag})
         for key in ("TEMP", "TMP", "TMPDIR"):
             env[key] = str(tmp)
         invocations = []
-        owners = [OWNER, MODULE, BOOTSTRAP, ROOT/"Engine/include/engine.config.hpp", ROOT/"Engine/CMakeLists.txt",
-                  ROOT/"Engine/src/editor/systems/editor.systems_panel.cpp", ROOT/"Engine/modules/editor.systems_panel.ixx",
+        owners = [OWNER, MODULE, BOOTSTRAP, PACING_POLICY, PACING_MODULE, ROOT/"Engine/include/engine.config.hpp", ROOT/"Engine/CMakeLists.txt",
+                  ROOT/"Engine/src/editor/systems/editor.systems_panel.cpp", ROOT/"Engine/modules/editor/editor.systems_panel.ixx",
                   ROOT/"Tools/MSVC/EpochDiagnostics.props", Path(__file__)]
         hashes = lambda: {str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest() for path in owners}
         before = hashes()

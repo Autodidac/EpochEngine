@@ -5,6 +5,7 @@
 #ifdef _WIN32
 
 #include <windows.h>
+#include "../../platform/platform.process_observation.hpp"
 
 #include <algorithm>
 #include <cwctype>
@@ -15,6 +16,8 @@
 
 namespace epoch_ai::process::detail {
 namespace {
+
+namespace observation = epochengine::platform::process_observation;
 
 std::wstring widen(const std::string& text) {
     if (text.empty()) {
@@ -270,6 +273,9 @@ std::expected<Result, core::Error> run_windows(const Request& request, std::stop
         return std::unexpected(error);
     }
 
+    observation::Lease job_observation;
+    job_observation.attach(job, observation::TargetKind::job);
+
     if (request.on_started) {
         try { request.on_started(process.dwProcessId); } catch (...) {}
     }
@@ -307,6 +313,7 @@ std::expected<Result, core::Error> run_windows(const Request& request, std::stop
 
     // Successful parent exit does not imply its descendants released stdout.
     // Retire the owned tree before waiting for readers, preserving parent status.
+    job_observation.reset();
     close_if(job);
     stdout_reader.request_stop();
     stderr_reader.request_stop();

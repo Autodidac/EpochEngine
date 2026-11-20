@@ -36,6 +36,9 @@ namespace epoch_ai::controller {
 enum class TaskIntent { simple = 0, complex = 1, coding = 2 };
 [[nodiscard]] std::string_view to_string(TaskIntent intent) noexcept;
 [[nodiscard]] TaskIntent classify_task(std::string_view text);
+// A bounded informational/planning request may discuss code without requesting
+// its generation. This does not change task complexity or grant tool authority.
+[[nodiscard]] bool requests_advisory_response(std::string_view text);
 // Exclude quantitative and sensitive tasks from tiny-model handoff. They stay
 // on KeyMaker even if the text doesn't contain an obvious "math" keyword.
 [[nodiscard]] bool requires_foundation_reasoning(std::string_view text);
