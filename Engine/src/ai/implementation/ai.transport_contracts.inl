@@ -194,7 +194,7 @@
 
     bool model_request_cancellation_contract()
     {
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
         // Untrusted callers can cast a retired numeric workload even though its
         // API and transport implementation are absent from the public source.
         // Reject it before queue admission, model setup, or network dispatch.

@@ -9,6 +9,7 @@
 #include <string>
 #include <string_view>
 
+
 namespace epochengine::editor_update_modal
 {
     struct Vec2
@@ -119,6 +120,27 @@ namespace epochengine::editor_update_modal
     constexpr float kButtonStackGap = 8.0f;
     constexpr float kButtonBottomPad = 18.0f;
     constexpr float kButtonTopPad = 12.0f;
+
+    struct ActionButtonBounds
+    {
+        Vec2 position{};
+        Vec2 size{};
+    };
+
+    [[nodiscard]] constexpr ActionButtonBounds action_button_bounds(
+        const ActionStrip& strip, Vec2 origin, float contentWidth, std::size_t index) noexcept
+    {
+        if (index >= strip.count || index >= strip.widths.size())
+            return {};
+        if (strip.stacked)
+        {
+            origin.y += static_cast<float>(index) * (kButtonHeight + kButtonStackGap);
+            return {origin, {contentWidth, kButtonHeight}};
+        }
+        for (std::size_t previous = 0; previous < index; ++previous)
+            origin.x += strip.widths[previous] + kButtonGap;
+        return {origin, {strip.widths[index], kButtonHeight}};
+    }
 
     [[nodiscard]] inline Vec2 fit_modal_size(const Vec2 viewport, const Vec2 desired, const Vec2 minimum) noexcept
     {

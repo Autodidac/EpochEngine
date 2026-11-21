@@ -234,12 +234,14 @@ export namespace epoch::extensions::planetary_terrain::water
                     const auto output=(p+offset)*scale;
                     auto& vertex=vertices[vertex_base+layer+i];
                     vertex.position={static_cast<float>(output.x),static_cast<float>(output.y),static_cast<float>(output.z)};
-                    vertex.normal=sampled->normal;
                     const auto& bed = vertices[vertex_base+surface_indices[i]].position;
                     const double bed_radius = std::hypot(bed[0]/scale-offset.x, bed[1]/scale-offset.y,
                         bed[2]/scale-offset.z);
                     const float breaker_weight=blend_breaker?wave::spherical_water_edge_weight(*breaker_edges,
                         breaker,static_cast<std::uint32_t>(x),static_cast<std::uint32_t>(y),cells):breaker;
+                    vertex.normal=wave::spherical_shoaled_normal(sampled->normal,
+                        {direction.x,direction.y,direction.z},body.radius-bed_radius,radius-body.radius,
+                        breaker_weight*shore_tint_strength);
                     vertex.color = wave::spherical_surface_color(body.radius - bed_radius,
                         sampled->foam, spacing_meters, wave_length_meters, false, shore_tint_strength,
                         radius - body.radius,breaker_weight);

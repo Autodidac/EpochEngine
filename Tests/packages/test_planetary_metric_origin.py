@@ -80,9 +80,13 @@ int main(int argc,char** argv){
 class PlanetaryMetricOrigin(unittest.TestCase):
     def test_actual_wet_provider_far_origin_and_legacy_near_bytes(self):
         source = OWNER.read_text(encoding="utf-8-sig")
-        needle = "{camera_origin.x,camera_origin.y,camera_origin.z},true);"
+        # Reproduce the old unbounded camera origin at the provider's assembly
+        # boundary. Both producers still use the same mesh builder and codecs.
+        needle = "const auto coordinates=assembly::frame_for(state,metric_frame);"
         self.assertEqual(source.count(needle), 1)
-        legacy = source.replace(needle, "{camera_origin.x,camera_origin.y,camera_origin.z},false);")
+        legacy = source.replace(needle, """auto coordinates=assembly::frame_for(state,metric_frame);
+        if (coordinates && metric_frame)
+            coordinates->origin = state.request.camera - coordinates->world_center;""")
         identity = hashlib.sha256((source + CONSUMER).encode()).hexdigest()[:12]
         proof = ROOT / "Artifacts/Reports/planet-metric-origin87-nov07" / identity
         proof.mkdir(parents=True, exist_ok=True)
@@ -102,7 +106,7 @@ target_link_libraries(metric_origin PRIVATE epoch_planet_mesh_format)
 target_compile_features(metric_origin PRIVATE cxx_std_23)
 add_executable(legacy_origin "{(PACKAGE/'tools/planet.mesh_export.cpp').as_posix()}" planet.legacy_stream_export.cpp)
 target_include_directories(legacy_origin PRIVATE "{(PACKAGE/'tools').as_posix()}")
-target_link_libraries(legacy_origin PRIVATE EpochEngineExtensions::PlanetaryCore epoch_extension_planetary_clouds epoch_planet_mesh_format epoch_extension_planetary_water)
+target_link_libraries(legacy_origin PRIVATE EpochEngineExtensions::PlanetaryCore epoch_extension_planetary_clouds epoch_extension_planetary_cut_assembly epoch_planet_mesh_format epoch_extension_planetary_water)
 target_compile_features(legacy_origin PRIVATE cxx_std_23)
 target_compile_definitions(legacy_origin PRIVATE EPOCH_PLANET_HAS_WATER_EXTENSION=1)
 include("{(ROOT/'Engine/cmake/epoch_task_scheduler.cmake').as_posix()}")

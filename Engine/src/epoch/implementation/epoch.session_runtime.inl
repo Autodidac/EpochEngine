@@ -2534,11 +2534,12 @@
                     running = false;
                 }
 
+#if defined(_WIN32)
                 if (cli::smoke_requested
                     && cli::capture_requested
-                    && !smoke_capture_taken && frame_count >= smoke_capture_frame)
+                    && !smoke_capture_taken && frame_count >= smoke_capture_frame
+                    && mgr.GetParentWindow())
                 {
-#if defined(_WIN32)
                     if (!smoke_capture_armed)
                     {
                         prepare_parent_window_for_engine_capture(mgr);
@@ -2576,8 +2577,8 @@
                             running = false;
                         }
                     }
-#endif
                 }
+#endif
 
                 if (epochengine::core::cli::smoke_context_switch_requested
                     && smoke_context_switch_posted

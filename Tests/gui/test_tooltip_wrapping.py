@@ -2,6 +2,7 @@
 from pathlib import Path
 import hashlib
 import json
+import sys
 import unittest
 
 from Tests.build.test_opengl_sprite_stream import definition
@@ -11,6 +12,73 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class TooltipWrapping(unittest.TestCase):
+    def test_shipped_font_label_fits_after_dropdown_padding_round_trip(self):
+        source = (ROOT / 'Engine/src/epochgui/gui.engine.cpp').read_text(encoding='utf-8')
+        declarations = [
+            definition(source, '        struct DecodedUtf8Codepoint', True),
+            *[definition(source, '        [[nodiscard]] static ' + signature)
+              for signature in ('bool is_utf8_continuation_byte(', 'DecodedUtf8Codepoint decode_utf8_codepoint(',
+                                'char32_t safe_draw_codepoint(', 'std::optional<char32_t> next_drawable_char(',
+                                'float glyph_advance_with_kerning(', 'float measure_text_width(',
+                                'std::string fit_text_to_width(')],
+        ]
+        code = r'''
+#include <algorithm>
+#include <cmath>
+#include <cstdint>
+#include <fstream>
+#include <iterator>
+#include <limits>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <vector>
+#define STB_TRUETYPE_IMPLEMENTATION
+#include "stb_truetype.h"
+
+stbtt_fontinfo font{};
+float pixelScale{};
+float glyph_advance(char32_t ch, float scale) {
+    int advance{};
+    stbtt_GetCodepointHMetrics(&font, ch, &advance, nullptr);
+    return (pixelScale * advance) * scale;
+}
+float kerning_adjust(char32_t left, char32_t right, float scale) {
+    return (pixelScale * stbtt_GetCodepointKernAdvance(&font, left, right)) * scale;
+}
+float letter_spacing(float) { return 0.0f; }
+OWNERS
+
+int main(int argc, char** argv) {
+    if (argc != 2) return 1;
+    std::ifstream input(argv[1], std::ios::binary);
+    const std::vector<unsigned char> bytes{std::istreambuf_iterator<char>(input), {}};
+    if (bytes.empty() || !stbtt_InitFont(&font, bytes.data(), 0)) return 2;
+    pixelScale = stbtt_ScaleForPixelHeight(&font, 21.0f);
+    const std::string label = "Move: Select";
+    const float measured = measure_text_width(label, 1.0f);
+    // Closed select box reserves the 24px indicator, two 6px insets and 2px.
+    const float box = measured + 24.0f + 12.0f + 2.0f;
+    const float available = box - 12.0f - 2.0f - 24.0f;
+    if (std::nextafter(available, measured) != measured || available == measured) return 3;
+    if (fit_text_to_width(label, available, 1.0f) != label) return 4;
+    if (fit_text_to_width(label, available - 2.0f, 1.0f) != "Move: Sel...") return 5;
+    // A word boundary plus ellipsis gets the same fit tolerance as a full label.
+    const float prefix = measure_text_width("Move: ...", 1.0f);
+    if (fit_text_to_width(label, std::nextafter(prefix, 0.0f), 1.0f) != "Move: ...") return 6;
+    if (fit_text_to_width(label, prefix - 1.0f, 1.0f) != "Move:...") return 7;
+    if (!fit_text_to_width(label, 0.0f, 1.0f).empty()) return 8;
+}
+'''.replace('OWNERS', '\n'.join(declarations))
+        report = ROOT / 'Artifacts/Reports/text-fit-roundtrip' / hashlib.sha256(code.encode()).hexdigest()[:16] / sys.platform
+        report.mkdir(parents=True, exist_ok=True)
+        fixture = report / 'roundtrip.cpp'
+        fixture.write_text(code, encoding='utf-8')
+        results = compile_and_run(self, fixture, report,
+                                  args=(str(ROOT / 'Engine/assets/fonts/Roboto-Regular.ttf'),),
+                                  includes=(ROOT / 'Engine/src/stb',))
+        (report / 'results.json').write_text(json.dumps(results, indent=2), encoding='utf-8')
+
     def test_actual_wrapping_bounds_and_noninteractive_overlay(self):
         source = (ROOT / 'Engine/src/epochgui/gui.engine.cpp').read_text(encoding='utf-8')
         buttons = (ROOT / 'Engine/src/epochgui/controls/gui.buttons_images.inl').read_text(encoding='utf-8')

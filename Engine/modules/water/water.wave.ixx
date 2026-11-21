@@ -188,6 +188,29 @@ export namespace epochengine::water::wave
         return static_cast<float>(1.0-t*t*(3.0-2.0*t));
     }
 
+    // Give resolved shoaling crests a steeper face using the sampled bed and
+    // FFT lift. The displacement and wet polygon still own the actual shore.
+    [[nodiscard]] inline std::array<float,3> spherical_shoaled_normal(
+        const std::array<float,3>& normal,const std::array<double,3>& up,
+        double depth_meters,double crest_meters,float breaker_weight) noexcept
+    {
+        if(!std::isfinite(depth_meters)||!std::isfinite(crest_meters)
+            ||!std::isfinite(breaker_weight)||crest_meters<=0.0||breaker_weight<=0.0f
+            ||depth_meters>=14.0)return normal;
+        const double depth=std::clamp(depth_meters/14.0,0.0,1.0);
+        const double shoaling=1.0-depth*depth*(3.0-2.0*depth);
+        const double lift=std::clamp(crest_meters/(std::max)(depth_meters,0.6),0.0,1.0);
+        const double gain=0.85*shoaling*lift*(std::min)(breaker_weight,1.0f);
+        const double radial=normal[0]*up[0]+normal[1]*up[1]+normal[2]*up[2];
+        std::array<double,3> steepened{};
+        for(std::size_t i=0;i<steepened.size();++i)
+            steepened[i]=normal[i]+gain*(normal[i]-radial*up[i]);
+        const double length=std::hypot(steepened[0],steepened[1],steepened[2]);
+        if(!std::isfinite(length)||length<=0.0)return normal;
+        return {static_cast<float>(steepened[0]/length),static_cast<float>(steepened[1]/length),
+            static_cast<float>(steepened[2]/length)};
+    }
+
     [[nodiscard]] inline float spherical_water_edge_weight(const std::array<float,4>& edges,
         float interior,std::uint32_t x,std::uint32_t y,std::uint32_t last) noexcept
     {

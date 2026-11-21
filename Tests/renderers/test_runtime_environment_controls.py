@@ -8,6 +8,7 @@ import unittest
 from Tests.build.test_opengl_sprite_stream import definition
 from Tests.packages.test_planetary_stream_completion import condition
 from Tests.support.cpp import compile_and_run
+from Tools.source.owned_source_text import read_owned_source
 
 ROOT = Path(__file__).resolve().parents[2]
 OWNER = ROOT / "Engine/src/epoch/implementation/epoch.project_play_scene.inl"
@@ -15,11 +16,14 @@ OWNER = ROOT / "Engine/src/epoch/implementation/epoch.project_play_scene.inl"
 
 class RuntimeEnvironmentControls(unittest.TestCase):
     def test_actual_controls_cancel_and_wait_for_the_exact_view_cut(self):
-        source = OWNER.read_text(encoding="utf-8")
+        source = read_owned_source(OWNER, encoding="utf-8")
         methods = "\n".join(definition(source, marker) for marker in (
             "            [[nodiscard]] bool runtime_water_visibility_pending(",
             "            void set_runtime_water_visible(",
             "            void draw_runtime_environment_controls(",
+            "            [[nodiscard]] bool packaged_planetary_flight_enabled(",
+            "            [[nodiscard]] bool fixed_planetary_camera(",
+            "            [[nodiscard]] bool linked_wet_terrain(",
             "            void adopt_planetary_water_source(",
             "            void publish_planetary_stream_cut("))
         marker = "if((!m_planetaryPaused||runtime_water_visibility_pending()) &&"
@@ -32,12 +36,16 @@ class RuntimeEnvironmentControls(unittest.TestCase):
 #include <limits>
 #include <memory>
 #include <optional>
+#include <source_location>
 #include <string>
 #include <string_view>
 #include <unordered_map>
 #include <utility>
 #include <vector>
 namespace timing {using Clock=std::chrono::steady_clock;}
+struct Mesh{int identity;int key()const{return identity;}};
+namespace asset::texture {std::string content_hash_hex(int key){return std::to_string(key);}}
+namespace logger {template<class... T>void infof_loc(std::string_view,std::source_location,std::string_view,T&&...) {}}
 namespace project_planetary {
 struct Settings {std::string mode{"planet"};unsigned body_index{};bool ocean_surface{true},stream_lod{true};
  friend bool operator==(const Settings&,const Settings&)=default;};
@@ -49,9 +57,10 @@ bool stream_view_reusable(int a,int b){return a==b;}
 struct StreamResult{
  struct {bool ok{true},cancelled{};std::optional<int>mesh_frame{1};}operation;
  bool snapshot_ready{true};
- std::shared_ptr<int>snapshot=std::make_shared<int>(7);
+ std::shared_ptr<Mesh>snapshot=std::make_shared<Mesh>(7);
  std::shared_ptr<const int>patch_snapshot=std::make_shared<int>(8),water_appearance;
  std::optional<double>water_sample_seconds,water_edge_sample_seconds;
+ unsigned request_id{},draw{},maximum_level{},pending{};
 };
 }
 namespace project_planetary_snapshot {using Snapshot=int;}
@@ -73,6 +82,12 @@ struct Runtime{
   m_meshPlanetarySettings{project_planetary::Settings{}},m_planetaryRequestSettings{project_planetary::Settings{}};
  bool m_runtimeWaterVisible{true},m_runtimeCloudsVisible{true},m_hasPlanetRecipe{true},m_planetaryPublishedOcean{true};
  bool m_planetaryContinue{},m_planetaryFailed{},m_planetaryWaterSourceRefused{},m_planetaryPaused{},m_explorationController{};
+ bool m_planetaryWaterCatchUp{},m_linkedTerrain{};
+ struct Pose {project_planetary::Settings settings;bool allow_flight{};};
+ struct PackagedShoreline {bool allow_flight{};};
+ std::optional<Pose> m_packagedPlanetaryPose;
+ std::optional<PackagedShoreline> m_packagedShoreline;
+ std::shared_ptr<double> m_presentedLinkedWater;
  std::string m_runtimeViewStatus;std::unordered_map<unsigned,int>m_waterCaches{{0,1}};std::vector<Entity>m_entities;
  std::shared_ptr<Scheduler>m_planetaryScheduler=std::make_shared<Scheduler>();
  std::optional<int>m_planetaryPending{1},m_planetaryWaterPending{2};int m_planetaryCancellation{3},m_planetaryWaterCancellation{4};
@@ -81,10 +96,11 @@ struct Runtime{
  std::optional<double>m_planetaryWaterPublishedSeconds{2};timing::Clock::time_point m_planetaryNextTick{},m_planetaryWaterNextTick{};
  unsigned m_planetaryRequestBody{},m_planetaryEntity{7};std::optional<unsigned>m_planetaryLodBody;
  struct{unsigned anchor{};}m_explorationFrame;int m_planetaryView{1};
- std::unordered_map<unsigned,std::shared_ptr<int>>m_meshes;std::optional<int>m_planetaryMeshFrame;
+ std::unordered_map<unsigned,std::shared_ptr<Mesh>>m_meshes;std::optional<int>m_planetaryMeshFrame;
  std::shared_ptr<const int>m_planetaryWaterSource,m_planetaryWaterAppearance;
  void reset_planetary_water(bool){
-  m_planetaryWaterSource.reset();m_planetaryWaterPublishedSource.reset();m_planetaryWaterPublishedSeconds.reset();}
+  m_planetaryWaterSource.reset();m_planetaryWaterPublishedSource.reset();m_planetaryWaterPublishedSeconds.reset();
+  m_presentedLinkedWater.reset();m_planetaryWaterCatchUp=false;}
  ACTUAL_METHODS
  bool accept(Result result,bool admitted=true,bool initialWater=false){const int view=1;
   if(ACTUAL_OUTER){if(result.operation.ok&&!result.operation.cancelled&&result.snapshot_ready&&result.snapshot&&admitted)
@@ -133,6 +149,19 @@ int main(){
  CHECK(plain.m_planetaryScheduler->cancels.empty());
  Runtime clouds;gui::click=0;clouds.draw_runtime_environment_controls(160);CHECK(!clouds.m_runtimeCloudsVisible);
  gui::click=0;clouds.draw_runtime_environment_controls(160);CHECK(clouds.m_runtimeCloudsVisible);
+ // Packaged water is physically present but it cannot be toggled on the fixed camera.
+ Runtime packaged;packaged.m_packagedShoreline.emplace();gui::click=1;packaged.draw_runtime_environment_controls(160);
+ CHECK(packaged.fixed_planetary_camera()&&!gui::enabled[0]&&!gui::enabled[1]);
+ CHECK(gui::labels[1]=="Live Water: On"&&packaged.m_runtimeWaterVisible&&packaged.m_planetaryScheduler->cancels.empty());
+ packaged.m_packagedShoreline->allow_flight=true;packaged.draw_runtime_environment_controls(160);
+ CHECK(!packaged.fixed_planetary_camera()&&gui::enabled[0]&&!gui::enabled[1]);
+ // A linked wet cut holds its presented sample across source adoption.
+ Runtime linked;linked.m_linkedTerrain=true;linked.m_packagedPlanetaryPose.emplace();
+ linked.m_presentedLinkedWater=std::make_shared<double>(17.5);
+ linked.m_planetaryRequestWaterClock=linked.m_planetaryWaterClockGeneration-1u;
+ CHECK(!linked.accept(current));
+ linked.m_planetaryRequestWaterClock=linked.m_planetaryWaterClockGeneration;
+ CHECK(linked.accept(current)&&linked.m_planetaryWaterCatchUp&&linked.m_presentedLinkedWater&&*linked.m_presentedLinkedWater==17.5);
  Runtime invalid;project_planetary::admitted=false;invalid.set_runtime_water_visible(false);project_planetary::admitted=true;
  CHECK(invalid.m_runtimeWaterVisible&&invalid.m_planetarySettings->ocean_surface&&invalid.m_planetaryScheduler->cancels.empty());
  // A failed publication keeps the requested/actual distinction visible.

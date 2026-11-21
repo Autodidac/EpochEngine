@@ -6,7 +6,6 @@ import os
 import subprocess
 import time
 import unittest
-from Tests.build.test_opengl_sprite_stream import definition
 
 ROOT = Path(__file__).resolve().parents[2]
 PACKAGE = ROOT / "Engine/dep/EpochEngineExtensions/packages/planetary_terrain"
@@ -21,14 +20,17 @@ CODE = r'''
 #include <fstream>
 #include <limits>
 #include <memory>
+#include <set>
 #include <span>
 #include <string>
 #include <vector>
 import planet.terrain;
 import planet.streaming;
+import planet.cut_assembly;
 import asset.mesh_artifact;
 namespace core=epoch::extensions::planetary_terrain::core;
 namespace stream=epoch::extensions::planetary_terrain::streaming;
+namespace assembly=epoch::extensions::planetary_terrain::cut_assembly;
 namespace artifact=epochengine::asset::mesh;
 using V=core::DVec3;
 void check(bool value,int line){if(!value){std::fprintf(stderr,"Converted seam contract failed line %d\n",line);std::exit(87);}}
@@ -37,21 +39,6 @@ double dot(V a,V b){return a.x*b.x+a.y*b.y+a.z*b.z;}
 V cross(V a,V b){return {a.y*b.z-a.z*b.y,a.z*b.x-a.x*b.z,a.x*b.y-a.y*b.x};}
 V unit(V p){return p/core::length(p);}
 V point(const artifact::Vertex& p){return {p.position[0],p.position[1],p.position[2]};}
-int actual_conversion(const stream::State& state,std::vector<artifact::Vertex>& vertices,std::vector<std::uint32_t>& indices){
- const auto cut=stream::draw_cut(state);const double scale=10.0/state.world.body(state.request.body_index).radius;
- const V artifact_origin{};const bool with_deltas=false;
- struct PatchGeometry{std::vector<artifact::Vertex> vertices;std::vector<std::uint32_t> indices;std::vector<std::array<float,3>> deltas;};
- for(const auto tile:cut){
-  const auto* mesh=&stream::detail::find(state,tile)->mesh;
-  PatchGeometry result;
-  CONVERSION
-  result.indices.insert(result.indices.end(),mesh->indices.begin(),mesh->indices.end());
-  const auto base=static_cast<std::uint32_t>(vertices.size());
-  const auto& chunk=result;
-  APPEND
- }
- return 0;
-}
 std::uint32_t edge_vertex(unsigned edge,unsigned k,unsigned n){switch(edge){case 0:return k*(n+1);case 1:return k*(n+1)+n;case 2:return k;default:return n*(n+1)+k;}}
 std::size_t lower_vertex(const core::Mesh& mesh,std::size_t top,unsigned layer,unsigned n){
  const auto grid=std::size_t(n+1)*(n+1),per=grid+4*n;const auto& vertex=mesh.vertices[top];
@@ -72,16 +59,34 @@ struct Stats {std::uint64_t states{},mixedEdges{},cubeEdges{},oddSamples{},water
 void examine(stream::State& state,Stats& stats){
  const unsigned n=state.request.cells_per_tile;const auto grid=std::size_t(n+1)*(n+1),per=grid+4*n;
  const auto cut=stream::draw_cut(state);CHECK(!cut.empty());double coverage{};
- std::vector<std::size_t> offsets,indexOffsets;std::size_t offset{},indexOffset{};for(const auto key:cut){offsets.push_back(offset);indexOffsets.push_back(indexOffset);const auto& mesh=stream::detail::find(state,key)->mesh;offset+=mesh.vertices.size();indexOffset+=mesh.indices.size();coverage+=1.0/double(std::uint64_t{1}<<(2*key.level));}
+ const auto frame=assembly::frame_for(state,false);CHECK(frame);
+ assembly::Assembly assembled{state,*frame,{},false,false};CHECK(!assembled.begin());
+ std::vector<std::size_t> offsets,indexOffsets;
+ std::vector<std::vector<bool>> emitted;
+ std::vector<std::set<std::array<std::uint32_t,3>>> emittedTriangles;
+ for(const auto key:assembled.tiles()){
+  offsets.push_back(assembled.vertices());indexOffsets.push_back(assembled.indices());
+  const auto work=assembled.work_for(key);CHECK(work);
+  const auto chunk=assembled.prepare(*work,{});CHECK(chunk);
+  auto& used=emitted.emplace_back(chunk->vertices.size(),false);
+  for(const auto index:chunk->indices)used.at(index)=true;
+  auto& triangles=emittedTriangles.emplace_back();
+  for(std::size_t i=0;i<chunk->indices.size();i+=3)triangles.insert({chunk->indices[i],chunk->indices[i+1],chunk->indices[i+2]});
+  CHECK(!assembled.append(*work,*chunk));coverage+=1.0/double(std::uint64_t{1}<<(2*key.level));
+ }
  CHECK(std::abs(coverage-6.0)<1e-10);
- std::vector<artifact::Vertex> vertices;std::vector<std::uint32_t> indices;CHECK(actual_conversion(state,vertices,indices)==0&&vertices.size()==offset&&indices.size()==indexOffset);
- const auto built=artifact::build_artifact(vertices,indices);CHECK(built);const auto bytes=artifact::encode_artifact(*built.artifact);const auto decoded=artifact::decode_artifact(bytes);CHECK(decoded);
+ CHECK(std::ranges::equal(assembled.tiles(),cut));
+ const auto built=assembled.build();CHECK(built);const auto bytes=artifact::encode_artifact(*built.artifact);const auto decoded=artifact::decode_artifact(bytes);CHECK(decoded);
  const auto rendered=decoded.artifact->vertices();const auto renderedIndices=decoded.artifact->indices();const double scale=10.0/state.world.body(0).radius,tolerance=4.0*scale+8.0*std::numeric_limits<float>::epsilon()*10.0;
  for(std::size_t f=0;f<cut.size();++f){const auto fine=cut[f];const auto& fm=stream::detail::find(state,fine)->mesh;const auto neighbors=core::neighbors(fine);
-  for(std::size_t i=0;i<fm.indices.size();++i)CHECK(renderedIndices[indexOffsets[f]+i]==offsets[f]+fm.indices[i]);
   const unsigned layers=unsigned(fm.vertices.size()/per);CHECK(layers==1||layers==2);
+  const std::size_t landIndexCount=6*n*n+24*n;
+  for(std::size_t i=0;i<landIndexCount;++i)CHECK(renderedIndices[indexOffsets[f]+i]==offsets[f]+fm.indices[i]);
   for(unsigned layer=0;layer<layers;++layer){const auto start=layer*(6*n*n+24*n)+6*n*n,end=(layer+1)*(6*n*n+24*n);CHECK(end<=fm.indices.size());
-   for(std::size_t i=start;i<end;i+=3){const auto a=point(rendered[renderedIndices[indexOffsets[f]+i]]),b=point(rendered[renderedIndices[indexOffsets[f]+i+1]]),c=point(rendered[renderedIndices[indexOffsets[f]+i+2]]);
+   for(std::size_t i=start;i<end;i+=3){
+    const std::array triangle{fm.indices[i],fm.indices[i+1],fm.indices[i+2]};
+    if(layer&&!emittedTriangles[f].contains(triangle))continue;
+    const auto a=point(rendered[offsets[f]+triangle[0]]),b=point(rendered[offsets[f]+triangle[1]]),c=point(rendered[offsets[f]+triangle[2]]);
     const auto normal=cross(b-a,c-a);CHECK(core::finite(normal)&&core::length(normal)>1e-18);const auto radial=unit((a+b+c)/3.0),center=core::tile_direction(fine,.5,.5);const auto outward=radial*dot(center,radial)-center;
     ++stats.skirtTriangles;if(dot(normal,outward)< -1e-12)++stats.windingInward;
    }
@@ -94,7 +99,12 @@ void examine(stream::State& state,Stats& stats){
     RayHit closest;closest.residual=1e30;std::size_t ca{},cb{};
     for(unsigned ce=0;ce<4;++ce)for(unsigned j=0;j<n;++j){const auto a=layer*per+edge_vertex(ce,j,n),b=layer*per+edge_vertex(ce,j+1,n);const auto hit=ray_edge(direction,point(rendered[offsets[c]+a]),point(rendered[offsets[c]+b]));
      if(hit.valid&&hit.residual<closest.residual){closest=hit;ca=a;cb=b;}}
-    CHECK(closest.valid&&closest.residual<=tolerance);const auto lower=ray_edge(direction,point(rendered[offsets[c]+lower_vertex(cm,ca,layer,n)]),point(rendered[offsets[c]+lower_vertex(cm,cb,layer,n)]));CHECK(lower.valid&&lower.residual<=tolerance);
+    CHECK(closest.valid&&closest.residual<=tolerance);
+    const auto cla=lower_vertex(cm,ca,layer,n),clb=lower_vertex(cm,cb,layer,n);
+    // Shoreline clipping intentionally removes dry portions of water skirts.
+    // Test overlap only where both rendered cuts retain the water edge.
+    if(layer&&!(emitted[f][fv]&&emitted[f][fl]&&emitted[c][ca]&&emitted[c][cb]&&emitted[c][cla]&&emitted[c][clb]))continue;
+    const auto lower=ray_edge(direction,point(rendered[offsets[c]+cla]),point(rendered[offsets[c]+clb]));CHECK(lower.valid&&lower.residual<=tolerance);
     const double highFine=dot(fineTop,direction),lowFine=dot(fineLow,direction),lowCoarse=lower.radius,highCoarse=closest.radius;
     CHECK(lowFine<highFine&&lowCoarse<highCoarse);++stats.oddSamples;if(layer)++stats.waterSamples;
     stats.maxRadialGapMeters=std::max(stats.maxRadialGapMeters,std::abs(highFine-highCoarse)/scale);stats.maxResidualMeters=std::max(stats.maxResidualMeters,closest.residual/scale);
@@ -126,32 +136,31 @@ class PlanetaryExportSeams(unittest.TestCase):
             self.skipTest("Installed MSVC actual optional module CPU lane")
         if not (PACKAGE / "tools/planet.stream_export.cpp").is_file():
             self.skipTest("Reviewed optional planetary source not staged in this checkout")
-        exporter = (PACKAGE / "tools/planet.stream_export.cpp").read_text(encoding="utf-8")
-        snapshot = exporter[exporter.index("    int write_snapshot("):]
-        conversion = definition(snapshot, "for(const auto& vertex:mesh->vertices)")
-        begin = snapshot.index("vertices.insert(vertices.end(),chunk.vertices.begin(),chunk.vertices.end());")
-        end = snapshot.index("scratch_reserved-=job.scratch;", begin)
-        code = CODE.replace("CONVERSION", conversion).replace("APPEND", snapshot[begin:end])
         proof = ROOT / "Artifacts/Reports/planet-converted-seams-oct27"
         proof.mkdir(parents=True, exist_ok=True)
-        (proof / "consumer.cpp").write_text(code, encoding="utf-8")
-        owners = [PACKAGE / "upstream/EpochPlanet-0.2.3/src/core/world.cpp", PACKAGE / "upstream/EpochPlanet-0.2.3/src/core/terrain.cpp", ROOT / "Engine/src/assets/texture/asset.texture_artifact.cpp"]
-        modules = [PACKAGE / "modules/planet.terrain.ixx", PACKAGE / "modules/planet.streaming.ixx", ROOT / "Engine/modules/asset.mesh_artifact.ixx", ROOT / "Engine/modules/asset.texture_artifact.ixx"]
-        paths = lambda values: "\n".join('"'+p.as_posix()+'"' for p in values)
+        (proof / "consumer.cpp").write_text(CODE, encoding="utf-8")
+        owners = [PACKAGE / "upstream/EpochPlanet-0.2.3/src/core/world.cpp", PACKAGE / "upstream/EpochPlanet-0.2.3/src/core/terrain.cpp", ROOT / "Engine/src/assets/texture/asset.texture_artifact.cpp", PACKAGE / "CMakeLists.txt"]
+        modules = [PACKAGE / "modules" / filename for filename in ("planet.terrain.ixx", "planet.streaming.ixx", "planet.cut_assembly.ixx", "water.planetary.ixx")]
         (proof / "CMakeLists.txt").write_text(f'''cmake_minimum_required(VERSION 3.30)
+set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT Embedded)
 project(PlanetaryConvertedSeams LANGUAGES CXX)
-add_executable(converted_seams consumer.cpp {paths(owners)})
+set(EPOCH_ENGINE_SOURCE_ROOT "{ROOT.as_posix()}" CACHE PATH "" FORCE)
+set(EPOCH_PLANET_BUILD_MESH_EXPORT ON CACHE BOOL "" FORCE)
+set(EPOCH_PLANET_BUILD_WATER ON CACHE BOOL "" FORCE)
+set(EPOCH_PLANET_WATER_SOURCE_ROOT "{(PACKAGE.parent/'fft_ocean').as_posix()}" CACHE PATH "" FORCE)
+set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
+add_subdirectory("{PACKAGE.as_posix()}" planet)
+add_executable(converted_seams consumer.cpp)
 target_compile_features(converted_seams PRIVATE cxx_std_23)
 target_compile_options(converted_seams PRIVATE /utf-8 /EHsc)
-target_include_directories(converted_seams PRIVATE "{(PACKAGE/'upstream/EpochPlanet-0.2.3/include').as_posix()}")
-target_sources(converted_seams PRIVATE FILE_SET CXX_MODULES BASE_DIRS "{(PACKAGE/'modules').as_posix()}" "{(ROOT/'Engine/modules').as_posix()}" FILES {paths(modules)})
+target_link_libraries(converted_seams PRIVATE epoch_extension_planetary_cut_assembly)
 enable_testing()
 add_test(NAME actual_converted_static_seams COMMAND converted_seams "{proof.as_posix()}/measurements.json")
 set_tests_properties(actual_converted_static_seams PROPERTIES TIMEOUT 90)
 ''', encoding="utf-8")
-        identity = hashlib.sha256(code.encode()).hexdigest()[:12]
-        build = ROOT / "Artifacts/Intermediate/cmake/planet-converted-seams" / identity
-        commands = [["cmake", "-S", str(proof), "-B", str(build), "-G", "Visual Studio 17 2022", "-A", "x64"], ["cmake", "--build", str(build), "--config", "Release", "--parallel", "1"], ["ctest", "--test-dir", str(build), "-C", "Release", "--output-on-failure"]]
+        identity = hashlib.sha256(CODE.encode() + Path(__file__).read_bytes()).hexdigest()[:12]
+        build = ROOT / "Artifacts/Tests/pes" / identity
+        commands = [["cmake", "-S", str(proof), "-B", str(build), "-G", "Visual Studio 17 2022", "-A", "x64"], ["cmake", "--build", str(build), "--config", "Release", "--target", "converted_seams", "--parallel", "1"], ["ctest", "--test-dir", str(build), "-C", "Release", "--output-on-failure"]]
         runs = []
         for index, command in enumerate(commands):
             run = subprocess.run(command, cwd=proof, capture_output=True, text=True, timeout=180)
@@ -159,7 +168,7 @@ set_tests_properties(actual_converted_static_seams PROPERTIES TIMEOUT 90)
             log.write_text(run.stdout+run.stderr, encoding="utf-8")
             runs.append({"command": command, "exitCode": run.returncode, "log": str(log)})
             self.assertEqual(run.returncode, 0, run.stdout[-8000:]+run.stderr)
-        (proof / "result.json").write_text(json.dumps({"passed": True, "commands": runs, "scope": "Actual original world/terrain, actual bounded streaming and exporter conversion, actual v1 encode/decode; identity marker transform only. Static radial skirt overlap at six native-quality mixed2:1 face/corner cases; no GPU/clipping/native crack fix or geomorph timing proof.", "measurements": json.loads((proof / "measurements.json").read_text()), "sourceHashes": {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest() for p in owners+modules+[PACKAGE/'tools/planet.stream_export.cpp']}}, indent=2)+"\n", encoding="utf-8")
+        (proof / "result.json").write_text(json.dumps({"passed": True, "commands": runs, "scope": "Production cut assembly, terrain, streaming, water clipping and v1 encoding. Static radial skirt overlap on six mixed-LOD native-quality faces/corners, including retained wet edges. Identity transform and CPU geometry only.", "measurements": json.loads((proof / "measurements.json").read_text()), "sourceHashes": {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest() for p in owners+modules+[PACKAGE/'tools/planet.stream_export.cpp']}}, indent=2)+"\n", encoding="utf-8")
 
 
 if __name__ == "__main__":

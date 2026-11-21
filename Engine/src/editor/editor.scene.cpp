@@ -33,6 +33,7 @@
 // Engine/src/editor/editor.scene.cpp
 module;
 #include "epoch.build_layout.hpp"
+#include "core.format_text.hpp"
 #include "updater.distribution.hpp"
 
 #if defined(__ANDROID__)
@@ -147,7 +148,9 @@ import authoring.texture;
 import authoring.gui_document;
 import authoring.gui_compiler;
 import capability.profile;
+import editor.project_input_settings;
 import editor.project_textures;
+import gui.engine;
 import editor.tilemap_workspace;
 import epoch.gui.tile_workspace;
 import package.registry;
@@ -368,6 +371,253 @@ namespace
 #include "implementation/editor.project_shell_generation.inl"
 namespace epochengine
 {
+    namespace
+    {
+        [[nodiscard]] std::span<const epochengine::project_input::KeyCode>
+            project_key_choices() noexcept
+        {
+            using Key = epochengine::project_input::KeyCode;
+            static constexpr std::array<Key, 43> kChoices{
+                Key::a, Key::b, Key::c, Key::d, Key::e, Key::f, Key::g,
+                Key::h, Key::i, Key::j, Key::k, Key::l, Key::m, Key::n,
+                Key::o, Key::p, Key::q, Key::r, Key::s, Key::t, Key::u,
+                Key::v, Key::w, Key::x, Key::y, Key::z,
+                Key::space, Key::enter, Key::escape, Key::tab,
+                Key::backspace, Key::left, Key::right, Key::up, Key::down,
+                Key::left_control, Key::left_shift, Key::left_alt,
+                Key::left_super, Key::right_control, Key::right_shift,
+                Key::right_alt, Key::right_super};
+            return {kChoices.data(), kChoices.size()};
+        }
+
+        [[nodiscard]] std::string_view project_key_label(
+            std::uint16_t code) noexcept
+        {
+            return epochengine::project_input::key_code_name(
+                static_cast<epochengine::project_input::KeyCode>(code));
+        }
+
+        [[nodiscard]] std::span<
+            const epochengine::project_input::ControllerButton>
+            project_controller_button_choices() noexcept
+        {
+            using Button =
+                epochengine::project_input::ControllerButton;
+            static constexpr std::array<Button, 15> kChoices{
+                Button::south,
+                Button::east,
+                Button::west,
+                Button::north,
+                Button::back,
+                Button::guide,
+                Button::start,
+                Button::left_stick,
+                Button::right_stick,
+                Button::left_shoulder,
+                Button::right_shoulder,
+                Button::dpad_up,
+                Button::dpad_down,
+                Button::dpad_left,
+                Button::dpad_right};
+            return {kChoices.data(), kChoices.size()};
+        }
+
+        [[nodiscard]] std::span<
+            const epochengine::project_input::ControllerAxis>
+            project_controller_axis_choices() noexcept
+        {
+            using Axis = epochengine::project_input::ControllerAxis;
+            static constexpr std::array<Axis, 6> kChoices{
+                Axis::left_x,
+                Axis::left_y,
+                Axis::right_x,
+                Axis::right_y,
+                Axis::left_trigger,
+                Axis::right_trigger};
+            return {kChoices.data(), kChoices.size()};
+        }
+
+        [[nodiscard]] std::span<const std::string_view>
+            project_controller_slot_labels() noexcept
+        {
+            static constexpr std::array<std::string_view, 4> kLabels{
+                "Controller 1",
+                "Controller 2",
+                "Controller 3",
+                "Controller 4"};
+            return {kLabels.data(), kLabels.size()};
+        }
+
+        [[nodiscard]] std::string_view project_controller_slot_label(
+            std::uint8_t slot) noexcept
+        {
+            const auto labels = project_controller_slot_labels();
+            return slot < labels.size() ? labels[slot] : "Unavailable slot";
+        }
+
+        struct ProjectControllerDeadZoneChoice final
+        {
+            std::string_view label{};
+            std::uint16_t value_q15{};
+        };
+
+        [[nodiscard]] std::span<const ProjectControllerDeadZoneChoice>
+            project_controller_dead_zone_choices() noexcept
+        {
+            static constexpr std::array<ProjectControllerDeadZoneChoice, 8>
+                kChoices{{
+                    {"Off", 0u},
+                    {"5%", 1'638u},
+                    {"10%", 3'277u},
+                    {"12.5%", 4'096u},
+                    {"15%", 4'915u},
+                    {"20%", 6'553u},
+                    {"25%", 8'192u},
+                    {"30%", 9'830u}}};
+            return {kChoices.data(), kChoices.size()};
+        }
+
+        [[nodiscard]] std::string_view project_controller_dead_zone_label(
+            std::uint16_t value,
+            bool uniform) noexcept
+        {
+            if (!uniform)
+                return "Mixed values";
+            for (const auto& choice : project_controller_dead_zone_choices())
+            {
+                if (choice.value_q15 == value)
+                    return choice.label;
+            }
+            return "Custom";
+        }
+
+        [[nodiscard]] std::optional<std::size_t> select_project_binding_option(
+            std::string_view id, std::string_view placeholder,
+            std::string_view selected, std::span<const std::string_view> labels,
+            float centerWidth, std::size_t maxVisibleOptions)
+        {
+            const auto choice = gui::select_box(gui::SelectBoxOptions{
+                .id = id,
+                .placeholder = placeholder,
+                .selected = selected,
+                .options = labels,
+                .size = {(std::min)(centerWidth, 320.0f), 30.0f},
+                .row_height = 27.0f,
+                .max_visible_options = maxVisibleOptions});
+            if (choice.changed && choice.selected_index && *choice.selected_index < labels.size())
+                return choice.selected_index;
+            return std::nullopt;
+        }
+    }
+
+    [[nodiscard]] std::string project_controller_dead_zone_evidence(
+        std::uint16_t value,
+        bool uniform)
+    {
+        const std::string_view label =
+            project_controller_dead_zone_label(value, uniform);
+        if (label != "Custom")
+        {
+            return epochengine::format_text(
+                "{} (controller source)",
+                label);
+        }
+
+        const std::uint32_t roundedPercent =
+            (static_cast<std::uint32_t>(value) * 100u + 16'383u)
+            / 32'767u;
+        return epochengine::format_text(
+            "{}% custom (controller source)",
+            roundedPercent);
+    }
+
+    void draw_project_input_binding_controls(
+        const editor_project_input_settings::SettingsSnapshot& projectInput,
+        editor_project_input_settings::Controller& controller,
+        float centerWidth,
+        const std::function<void(const editor_project_input_settings::SettingsEvidence&)>& recordInputEdit)
+    {
+        const auto keyChoices = project_key_choices();
+        std::vector<std::string_view> keyLabels;
+        keyLabels.reserve(keyChoices.size());
+        for (const auto key : keyChoices)
+            keyLabels.emplace_back(project_input::key_code_name(key));
+
+        const auto buttonChoices = project_controller_button_choices();
+        std::vector<std::string_view> buttonLabels;
+        buttonLabels.reserve(buttonChoices.size());
+        for (const auto button : buttonChoices)
+            buttonLabels.emplace_back(project_input::controller_button_name(button));
+
+        const auto axisChoices = project_controller_axis_choices();
+        std::vector<std::string_view> axisLabels;
+        axisLabels.reserve(axisChoices.size());
+        for (const auto axis : axisChoices)
+            axisLabels.emplace_back(project_input::controller_axis_name(axis));
+
+        const auto slotLabels = project_controller_slot_labels();
+        using Device = project_input::BindingDevice;
+        const bool hasControllerAxis = std::any_of(projectInput.bindings.begin(), projectInput.bindings.end(),
+            [](const auto& binding) { return binding.device == Device::controller_axis; });
+        if (hasControllerAxis)
+        {
+            const auto deadZoneChoices = project_controller_dead_zone_choices();
+            std::vector<std::string_view> deadZoneLabels;
+            deadZoneLabels.reserve(deadZoneChoices.size());
+            for (const auto& choice : deadZoneChoices)
+                deadZoneLabels.emplace_back(choice.label);
+            if (const auto index = select_project_binding_option(
+                    "project-input-controller-dead-zone", "Controller dead zone",
+                    project_controller_dead_zone_label(projectInput.controller_dead_zone_q15,
+                        projectInput.uniform_controller_dead_zone), deadZoneLabels, centerWidth, 8))
+                recordInputEdit(controller.set_controller_dead_zone(deadZoneChoices[*index].value_q15));
+        }
+
+        for (const auto& binding : projectInput.bindings)
+        {
+            gui::label(binding.action_label);
+            gui::property_row("Device", binding.source_label, 132.0f);
+            switch (binding.device)
+            {
+            case Device::keyboard:
+            {
+                const auto suffix = std::to_string(binding.id.value);
+                if (const auto index = select_project_binding_option("project-input-key-" + suffix,
+                        "Choose project key", project_key_label(binding.code), keyLabels, centerWidth, 8))
+                    recordInputEdit(controller.rebind_keyboard(binding.id, keyChoices[*index]));
+                break;
+            }
+            case Device::controller_button:
+            {
+                const auto suffix = std::to_string(binding.id.value);
+                const auto button = static_cast<project_input::ControllerButton>(binding.code);
+                if (const auto index = select_project_binding_option("project-input-controller-button-" + suffix,
+                        "Choose controller button", project_input::controller_button_name(button),
+                        buttonLabels, centerWidth, 8))
+                    recordInputEdit(controller.rebind_controller_button(binding.id, buttonChoices[*index], binding.controller_slot));
+                if (const auto index = select_project_binding_option("project-input-controller-button-slot-" + suffix,
+                        "Choose controller", project_controller_slot_label(binding.controller_slot), slotLabels, centerWidth, 4))
+                    recordInputEdit(controller.rebind_controller_button(binding.id, button, static_cast<std::uint8_t>(*index)));
+                break;
+            }
+            case Device::controller_axis:
+            {
+                const auto suffix = std::to_string(binding.id.value);
+                const auto axis = static_cast<project_input::ControllerAxis>(binding.code);
+                if (const auto index = select_project_binding_option("project-input-controller-axis-" + suffix,
+                        "Choose controller axis", project_input::controller_axis_name(axis),
+                        axisLabels, centerWidth, 6))
+                    recordInputEdit(controller.rebind_controller_axis(binding.id, axisChoices[*index], binding.controller_slot));
+                if (const auto index = select_project_binding_option("project-input-controller-axis-slot-" + suffix,
+                        "Choose controller", project_controller_slot_label(binding.controller_slot), slotLabels, centerWidth, 4))
+                    recordInputEdit(controller.rebind_controller_axis(binding.id, axis, static_cast<std::uint8_t>(*index)));
+                break;
+            }
+            }
+        }
+    }
+
+
     std::filesystem::path editor_resolve_candidate_project_path(
         const std::filesystem::path& requested,
         bool allow_root)

@@ -244,6 +244,7 @@ int main(){
         code = code.replace('SHARED_ORIGIN_HELPER', shared_origin)
         cloud_frame_helpers = '\n'.join(definition(source, signature) for signature in (
             '        std::optional<GeneratedMeshFrame> admit_generated_mesh_frame(',
+            '        std::optional<GeneratedMeshFrame> admit_metric_stream_mesh_frame(',
             '        bool normalize_stream_cloud_frame('))
         code = code.replace('SHARED_CLOUD_FRAME_HELPERS', cloud_frame_helpers)
         proof = ROOT / 'Artifacts/Reports/cloud-inner-occluder-20261117/host-admission'

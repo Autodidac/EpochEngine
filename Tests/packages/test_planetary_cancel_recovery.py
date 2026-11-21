@@ -105,8 +105,9 @@ class PlanetaryCancelRecovery(unittest.TestCase):
             pending.extend(re.findall(r'^(?:export\s+)?import\s+([\w.:]+);', module_map[name].read_text(encoding='utf-8-sig'), re.M))
         modules = ' '.join('"' + module_map[name].as_posix() + '"' for name in sorted(closure))
         bases = ' '.join('"' + path.as_posix() + '"' for path in owners)
-        sources = ('Engine/src/render/render.preview_camera.cpp', 'Engine/src/render/render.preview_lighting.cpp', 'Engine/src/assets/texture/asset.texture_artifact.cpp',
-                   'Engine/src/authoring/texture/authoring.texture_document.cpp', 'Engine/src/authoring/texture/authoring.texture_residency.cpp')
+        sources = ('Engine/src/project/project.planetary_snapshot.cpp',
+                   'Engine/src/render/render.preview_camera.cpp', 'Engine/src/render/render.preview_lighting.cpp', 'Engine/src/assets/texture/asset.texture_artifact.cpp',
+                   'Engine/src/authoring/texture/authoring.texture_document.cpp', 'Engine/src/authoring/texture/authoring.texture_snapshot_codec.cpp', 'Engine/src/authoring/texture/authoring.texture_residency.cpp')
         source_list = ' '.join('"' + (ROOT / path).as_posix() + '"' for path in sources)
         (proof / 'CMakeLists.txt').write_text(f'''cmake_minimum_required(VERSION 3.30)
 set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT Embedded)

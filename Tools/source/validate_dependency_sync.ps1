@@ -17,11 +17,13 @@ try {
                 $portable.upstream_revision -cne $publishedRevision) {
                 throw "Published portable source pin differs from its published revision: $($dep.name)"
             }
-            $ownerRoot = (Resolve-Path -LiteralPath $dep.path).Path.TrimEnd('\')
+            $separator = [IO.Path]::DirectorySeparatorChar
+            $ownerRoot = (Resolve-Path -LiteralPath $dep.path).Path.TrimEnd($separator)
+            $pathComparison = if ($separator -eq '\') { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
             $expected = @()
             foreach ($entry in $portable.files) {
                 $file = [IO.Path]::GetFullPath((Join-Path $ownerRoot $entry.path))
-                if (!$file.StartsWith($ownerRoot + '\', [StringComparison]::OrdinalIgnoreCase)) { throw "Portable path escapes owner: $($entry.path)" }
+                if (!$file.StartsWith($ownerRoot + $separator, $pathComparison)) { throw "Portable path escapes owner: $($entry.path)" }
                 if (!(Test-Path -LiteralPath $file -PathType Leaf) -or (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash -ne $entry.sha256) { throw "Portable source hash differs: $($dep.name)/$($entry.path)" }
                 $expected += $entry.path
             }

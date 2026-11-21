@@ -44,6 +44,9 @@ CMakeLists.txt text eol=lf
 *.toml text eol=lf
 *.yml text eol=lf
 *.yaml text eol=lf
+*.java text eol=lf
+*.epoch text eol=lf
+*.LICENSE text eol=lf
 .gitattributes text eol=lf
 .gitignore text eol=lf
 

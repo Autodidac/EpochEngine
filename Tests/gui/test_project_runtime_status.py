@@ -11,6 +11,11 @@ ROOT = Path(__file__).resolve().parents[2]
 APPLICATION = ROOT / "Engine/src/editor/application"
 
 
+def project_action_policy():
+    frame = (APPLICATION / "editor.frame_project_runtime.inl").read_text(encoding="utf-8")
+    return frame[frame.index("#if defined(__ANDROID__)"):frame.index("        auto start_ai_project_test =")]
+
+
 class ProjectRuntimeStatus(unittest.TestCase):
     def test_assistant_compiler_diagnostic_belongs_to_observed_build(self):
         owner = (APPLICATION / "editor.frame_project_runtime.inl").read_text(encoding="utf-8")
@@ -339,6 +344,7 @@ bool start_ai_project_test(const std::filesystem::path&){++tests;return true;}
 struct Chat{void append_status(std::string_view){}};
 bool planetary_project_busy(const EditorState& editor){return editor.planetaryStreamPending||editor.planetaryAttachmentPending;}
 previewgrid::CameraMode project_camera_for_run(const EditorState& editor){return editor.projectCameraMode;}
+PROJECT_ACTION_POLICY
 START_BUILD
 void direct(EditorState& editor,bool inEditor=true,std::uint64_t requiredBuild=0,bool allowTerrainWait=false){
  LAUNCH
@@ -516,7 +522,7 @@ int main(){
  }
 }
 '''
-        for key, fragment in {"LIFECYCLE": lifecycle, "SETTLEMENT": settlement,
+        for key, fragment in {"LIFECYCLE": lifecycle, "SETTLEMENT": settlement, "PROJECT_ACTION_POLICY": project_action_policy(),
                               "START_BUILD": start, "LAUNCH": launch, "POLL": poll, "ASSISTANT": assistant,
                               "DEFERRED": deferred, "PLAY": play}.items():
             code = code.replace(key, fragment)

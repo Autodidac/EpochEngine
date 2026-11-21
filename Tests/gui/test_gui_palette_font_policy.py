@@ -17,6 +17,7 @@ GUI = ROOT/'Engine/src/epochgui'
 class PaletteFontPolicy(unittest.TestCase):
     def test_registered_light_metadata_drives_fonts_controls_and_native_policy(self):
         source = (GUI/'gui.engine.cpp').read_text(encoding='utf-8')
+        chrome = (GUI/'gui.window_theme.cpp').read_text(encoding='utf-8')
         text = (GUI/'controls/gui.text_controls.inl').read_text(encoding='utf-8')
         buttons = (GUI/'controls/gui.buttons_images.inl').read_text(encoding='utf-8')
         nodes = (GUI/'controls/gui.node_surface_controls.inl').read_text(encoding='utf-8')
@@ -38,9 +39,12 @@ class PaletteFontPolicy(unittest.TestCase):
             '        [[nodiscard]] static float content_available_width(',
             '        [[nodiscard]] static float measure_wrapped_text_height(',
             '        static float draw_wrapped_text(',
-            '    void publish_native_window_theme(',
+            ))
+        functions += '\n' + '\n'.join(definition(chrome, marker) for marker in (
+            '    void theme_detail::publish_native_window_variant(',
             '    NativeWindowChromePalette native_window_chrome_palette(',
             '    bool native_window_prefers_dark('))
+        functions += '\n' + definition(source, '    void publish_native_window_theme(')
         functions += '\n'+definition(source, '    bool rounded_rectangles_enabled(')
         functions += '\n'+definition(source, '        static void draw_caption_text(')
         functions += '\n'+definition(text, '    [[nodiscard]] static const GuiFontCache* semantic_text_font(')
@@ -80,6 +84,8 @@ inline void contract_require(bool value,int line) noexcept {if(!value)std::exit(
 struct Vec2 { float x{},y{}; };
 struct SpriteHandle { int id{}; bool is_valid() const noexcept {return id!=0;} };
 struct WidgetBounds { Vec2 position{},size{}; };
+namespace gui_lib { TRANSLUCENT_SURFACE }
+using Color=gui_lib::Rgba8;
 namespace font {struct Glyph;}
 struct GuiFontCache { int id{}; bool asset{true}; std::string fontName{}; const font::Glyph* fallbackGlyph{}; };
 THEME_VARIANT
@@ -111,6 +117,7 @@ std::atomic<ThemePreference> g_nativeWindowTheme{ThemePreference::Dark};
 std::atomic<ThemeVariant> g_publishedWindowVariant{ThemeVariant::DefaultDark};
 std::atomic<bool> g_cycleWindowDark{true};
 bool system_prefers_dark_palette() {return true;}
+namespace theme_detail {void publish_native_window_variant(ThemePreference, ThemeVariant, bool) noexcept;}
 struct NativeWindowChromePalette {std::uint8_t paletteId{};bool isLight{};std::uint32_t backgroundRgb{},captionRgb{},borderRgb{},textRgb{};};
 NativeWindowChromePalette native_window_chrome_palette() noexcept;
 namespace gui_lib {
@@ -345,6 +352,9 @@ int main() {
             color = re.search(r'loadCache\(\s*g_resources\.'+cache+r',\s*font::FontColor\{([^}]+)\}', source).group(1)
             main = main.replace(token, 'theme_detail::Rgb{'+color+'}')
         prefix = prefix.replace('ACTUAL_SPEC_HEADER', (GUI/'gui.theme_palette_spec.hpp').as_posix())
+        portable = (ROOT/'Engine/dep/EpochGui/modules/epoch.gui.ixx').read_text(encoding='utf-8')
+        prefix = prefix.replace('TRANSLUCENT_SURFACE',definition(portable,'    struct Rgba8',True)
+                                + '\n' + definition(portable,'    [[nodiscard]] inline Rgba8 translucent_surface('))
         parent = ROOT/'Artifacts/Reports/contract-tests'
         parent.mkdir(parents=True, exist_ok=True)
         scratch = Path(tempfile.mkdtemp(prefix='gui-palette-font-', dir=parent))

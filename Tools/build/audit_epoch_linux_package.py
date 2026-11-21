@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Audit staged Linux release bytes without extracting or publishing them."""
+"""Write portable Linux archive metadata and audit staged release bytes."""
 import argparse
 import hashlib
 import json
@@ -12,6 +12,35 @@ if __package__:
     from .audit_epoch_runtime_provenance import audit_binary
 else:
     from audit_epoch_runtime_provenance import audit_binary
+
+
+def runtime_mode(member, relative):
+    return 0o755 if member.isdir() or relative == ('epoch',) or relative[:1] == ('lib',) else 0o644
+
+
+def write_runtime_archive(stage, archive):
+    stage, archive = Path(stage), Path(archive)
+    if archive.parent.resolve() != stage.parent.resolve() or archive.name != stage.name + '.tar.gz':
+        raise ValueError("Archive must be beside its named staging directory")
+    def package_member(member):
+        relative = PurePosixPath(member.name).parts[1:]
+        if member.isdir() or member.isfile() or member.islnk():
+            member.mode = runtime_mode(member, relative)
+        elif not member.issym():
+            raise ValueError("Unsupported Linux runtime file type")
+        member.uid = member.gid = 0
+        member.uname = member.gname = 'root'
+        return member
+
+    pending = archive.with_name(archive.name + '.partial')
+    output = pending.open('xb')
+    try:
+        with output, tarfile.open(fileobj=output, mode='w:gz', dereference=False) as package:
+            package.add(stage, arcname=stage.name, filter=package_member)
+        pending.replace(archive)
+    except BaseException:
+        pending.unlink(missing_ok=True)
+        raise
 
 
 def audit(archive):
@@ -71,12 +100,13 @@ def audit(archive):
                     raise ValueError("Archive link escapes package")
             elif not member.isdir() and not member.isfile():
                 raise ValueError("Non-file runtime archive entry")
+            if (member.isdir() or member.isfile()) and member.mode != runtime_mode(member, path.parts[1:]):
+                raise ValueError("Incorrect Unix mode for runtime member: " + member.name)
             if member.name == prefix+'/epoch':
                 header = package.extractfile(member).read(20)
                 if len(header)!=20 or header[:6] != b'\x7fELF\x02\x01' or header[18:20] != b'\x3e\x00':
                     raise ValueError("Runtime is not an ELF x86-64 binary")
-            if (receipt['edition'] == 'epoch.public.github.v1' and member.isfile()
-                    and (member.name == prefix+'/epoch' or path.parts[1:2] == ('lib',))):
+            if member.isfile() and (member.name == prefix+'/epoch' or path.parts[1:2] == ('lib',)):
                 with package.extractfile(member) as stream:
                     audit_binary(stream, member.name)
             if member.name == prefix+'/epoch-distribution.json':
@@ -91,6 +121,10 @@ def audit(archive):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--archive', type=Path, required=True)
+    parser.add_argument('--create-from', type=Path, help='Write the archive from a verified staging directory')
     args = parser.parse_args()
-    result = audit(args.archive)
-    print('linux_package_audit.result=pass smoke='+result['runtime_smoke'])
+    if args.create_from:
+        write_runtime_archive(args.create_from, args.archive)
+    else:
+        result = audit(args.archive)
+        print('linux_package_audit.result=pass smoke='+result['runtime_smoke'])

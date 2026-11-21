@@ -205,8 +205,10 @@ Release builds and full contracts now pass, including child binding and ownershi
 links and legacy aliases reach it; the actual-owner accounting tests pass.
 
 Never remove a numbered GGUF shard as though it were an old version. Admit a
-complete set, reuse its actual cache identity and verify inactive ownership
-before a user-authorized migration. Discover known legacy weight locations
+complete set from one filename family in one snapshot. Cache status and model
+launch select the same loadable set. For partial downloads, status reports
+bytes for the largest single set. Verify inactive ownership before a
+user-authorized migration. Discover known legacy weight locations
 without copying private profiles or downloading a second complete set.
 
 ### Editor and project model ownership
@@ -219,6 +221,12 @@ and admitted library paths. Missing inputs lead back to the parent Model Manager
 they do not trigger child downloads, runtime copies or alternate-cache searches.
 A model-free project can still launch when no model or SDK is installed.
 These are input and lifecycle rules, not OS confinement or a new shared server.
+
+An application-bound inference configuration accepts only application assistance.
+The host rejects reuse for chat or project authoring before dispatch, including
+partially configured bindings. Project-script proposals still require an admitted
+project provider and review. The isolated CPU decode was verified for application
+assistance. [Decode receipt](../../../Artifacts/Reports/cpu-submit-1119/run-20261119T181708440Z-33744/result.json)
 
 Sharing files does not share a conversation or prove that memory was freed.
 The native manager's ownership lease covers all its resident model processes,
@@ -521,8 +529,15 @@ entire input lambda; the remaining status/session fields are unchanged by the di
 
 An explicit successful **Scan folder** remembers the canonical library folder in
 `native_storage::defaults().data_root/model_library.txt`. Rescan restores this
-bounded, versioned UTF-8 preference on its existing worker and scans it alongside
-the shared weights cache. Edition/candidate-private state remains separate from
+bounded, versioned UTF-8 preference on its existing worker. It scans the selected
+library first, then the shared weights cache, visiting each distinct root once.
+The last file within the entry budget still gets its header and shard checks.
+Cancelling discovery keeps the previous model list available.
+Library and GGUF filenames use UTF-8 through discovery, registration,
+reconnection, saved profiles and backend arguments. Removing a registration
+removes its manifest and any resulting empty profile directory. Other files
+in that directory stay in place.
+Edition/candidate-private state remains separate from
 shared immutable weights; a fresh candidate profile intentionally has no saved
 folder. An unavailable saved folder remains visible with the scanner diagnostic.
 The preference neither registers nor loads models; split-GGUF completeness and

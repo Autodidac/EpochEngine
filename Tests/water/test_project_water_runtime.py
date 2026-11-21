@@ -8,7 +8,7 @@ import subprocess
 import time
 import unittest
 from Tests.build.test_opengl_sprite_stream import definition
-from Tests.packages.test_planetary_mesh_admission import owner_function
+from Tests.packages.test_planetary_mesh_admission import owner_function, untimed_planetary_marker_state
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -67,6 +67,7 @@ import context.type;
 import core.time;
 import platform.child_process;
 import project.planetary;
+import project.planetary_snapshot;
 #define CHECK(...) do {if(!(__VA_ARGS__)) return __LINE__;} while(false)
 namespace epochengine::core {
 // The actual Context accessors/member are compiled verbatim. Native hooks are
@@ -84,7 +85,7 @@ using ProjectRuntimeEntity=scene_runtime::RuntimeEntity;
 HELPERS
 constexpr int m_runtimeViewportWidth=1280,m_runtimeViewportHeight=720;
 // This contract uses nonplanetary Water with no explicit frame camera.
-constexpr std::optional<double> m_planetaryWaterObservedSeconds{};
+PLANETARY_MARKER_STATE
 double runtime_depth_fit_aspect(){std::abort();}
 bool pump_runtime_planetary_frame(const void*,previewgrid::SceneFrameRequest,
  platform::child_process::MeshDrawMode,bool*){std::abort();}
@@ -160,7 +161,7 @@ int main(int argc,char** argv) {
   return proof.good()?0:94;
  } catch (...) {return 95;}
 }
-'''.replace('ACCESSORS',accessors).replace('CACHE_FIELD',cache_field).replace('FIELD',field).replace('PUBLICATION',publication).replace('HELPERS',helpers).replace('OWNER',owner).replace('SAMPLING',sampling)
+'''.replace('ACCESSORS',accessors).replace('CACHE_FIELD',cache_field).replace('FIELD',field).replace('PUBLICATION',publication).replace('HELPERS',helpers).replace('PLANETARY_MARKER_STATE',untimed_planetary_marker_state(play)).replace('OWNER',owner).replace('SAMPLING',sampling)
 
 
 class ProjectWaterRuntime(unittest.TestCase):
@@ -178,7 +179,7 @@ class ProjectWaterRuntime(unittest.TestCase):
             name=pending.pop()
             if name in selected:continue
             selected[name]=modules[name];pending+=re.findall(r'^(?:export )?import\s+([\w.]+);',modules[name].read_text(encoding='utf-8-sig'),re.M)
-        implementations=[ROOT/'Engine/src/render/render.preview_camera.cpp', ROOT/'Engine/src/render/render.preview_lighting.cpp',ROOT/'Engine/src/water/water.system.cpp',ROOT/'Engine/src/water/water.surface.cpp',ROOT/'Engine/src/assets/texture/asset.texture_artifact.cpp',ROOT/'Engine/dep/EpochPlatformEngine/src/core/core.time.cpp',ROOT/'Engine/src/authoring/texture/authoring.texture_document.cpp',ROOT/'Engine/src/authoring/texture/authoring.texture_residency.cpp']
+        implementations=[ROOT/'Engine/src/render/render.preview_camera.cpp', ROOT/'Engine/src/render/render.preview_lighting.cpp',ROOT/'Engine/src/water/water.system.cpp',ROOT/'Engine/src/water/water.surface.cpp',ROOT/'Engine/src/assets/texture/asset.texture_artifact.cpp',ROOT/'Engine/dep/EpochPlatformEngine/src/core/core.time.cpp',ROOT/'Engine/src/authoring/texture/authoring.texture_document.cpp', ROOT/'Engine/src/authoring/texture/authoring.texture_snapshot_codec.cpp',ROOT/'Engine/src/authoring/texture/authoring.texture_residency.cpp']
         paths=' '.join('"'+p.as_posix()+'"' for p in implementations)
         (report/'CMakeLists.txt').write_text(f'''cmake_minimum_required(VERSION 3.30)
 cmake_policy(SET CMP0141 NEW)

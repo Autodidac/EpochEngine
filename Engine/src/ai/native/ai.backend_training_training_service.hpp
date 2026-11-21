@@ -42,7 +42,7 @@ public:
     void end_inference();
 
     [[nodiscard]] json status() const;
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
     [[nodiscard]] bool running() const noexcept { return false; }
 #endif
 

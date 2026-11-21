@@ -206,30 +206,12 @@ namespace epochengine::updater
     export inline constexpr std::string_view EPOCH_SITE_BASE =
         "https://epoch.adamrushford.chatgpt.site";
 
-    export inline std::string PROJECT_SOURCE_DEVICE_START_URL()
-    {
 #if EPOCH_EDITION_PUBLIC
-        return {};
+    export inline std::string PROJECT_SOURCE_DEVICE_START_URL() { return {}; }
+    export inline std::string PROJECT_SOURCE_DEVICE_TOKEN_URL() { return {}; }
+    export inline std::string PROJECT_SOURCE_DEVICE_CHALLENGE_URL() { return {}; }
 #else
 #endif
-    }
-
-    export inline std::string PROJECT_SOURCE_DEVICE_TOKEN_URL()
-    {
-#if EPOCH_EDITION_PUBLIC
-        return {};
-#else
-#endif
-    }
-
-    export inline std::string PROJECT_SOURCE_DEVICE_CHALLENGE_URL()
-    {
-#if EPOCH_EDITION_PUBLIC
-        return {};
-#else
-#endif
-    }
-
 
     export inline std::string PROJECT_REPOSITORY_URL()
     {
@@ -377,7 +359,7 @@ namespace epochengine::updater
     export inline std::string PROJECT_ACTION_RUNS_API_URL()
     {
         return SITE_DISTRIBUTION ? std::string{ EPOCH_SITE_BASE } + "/api/epoch/actions/runs"
-            : std::string{GITHUB_API_BASE} + "Autodidac/EpochEngine/actions/runs";
+            : std::string{GITHUB_API_BASE} + "Autodidac/EpochEngine/actions/workflows/epoch-public.yml/runs";
     }
 
     export inline bool PROJECT_UPDATE_CHANNEL_ALLOWED(std::string_view version_url,

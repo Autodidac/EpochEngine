@@ -222,7 +222,7 @@ FIELDS = r'''
  previewgrid::CameraMode m_cameraMode{previewgrid::CameraMode::Editor};
  input::ProfilePreset m_inputProfile{input::ProfilePreset::EditorDefault};
  LOCAL_FIELD
- Controls m_explorationInput{};bool panel{};
+ Controls m_explorationInput{};bool panel{},m_packagedShoreline{};
  bool runtime_panel_captures_pointer(gui::Vec2)const{return panel;}
 '''
 MAIN = r'''
@@ -330,6 +330,9 @@ int main(int argc,char**argv){
  CHECK(std::abs(a.navigation(ctx.get(),false,true)[2]-16384.f/32767.f)<.0001f);
  const auto guiPlanet=a.planetary(ctx.get(),.016f,true,true);
  CHECK(std::abs(guiPlanet.forward-16384.0/32767.0)<.0001&&guiPlanet.command==project_planetary_runtime::Command::toggle_time_pause);
+ a.m_packagedShoreline=true;
+ CHECK(a.planetary(ctx.get(),.016f,true,true).command==project_planetary_runtime::Command::none);
+ a.m_packagedShoreline=false;
  for(const auto& pending:a.m_pendingGuiActions)CHECK(!pending);
  a.frame_input(ctx,true,.016f);CHECK(a.runtime_planar_axis(p::ActionSemantic::move_y,0)==0);
  CHECK(!p::find_action(a.m_projectActionFrame,p::ActionSemantic::jump,*a.m_projectInput)->pressed);

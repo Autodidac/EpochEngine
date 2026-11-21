@@ -38,6 +38,7 @@ CODE = r'''
 import planet.terrain;
 import planet.streaming;
 import planet.coverage;
+import planet.cut_assembly;
 import project.planetary;
 import project.planetary_snapshot;
 import asset.mesh_artifact;
@@ -51,6 +52,7 @@ namespace artifact=epochengine::asset::mesh;
 namespace patches=epochengine::project_planetary_snapshot;
 namespace project_planetary_snapshot=epochengine::project_planetary_snapshot;
 namespace coverage=epoch::extensions::planetary_terrain::coverage;
+namespace assembly=epoch::extensions::planetary_terrain::cut_assembly;
 namespace tasks=epochengine::editor_tasks;
 namespace mesh=artifact;
 namespace fs=std::filesystem;
@@ -73,14 +75,12 @@ planet::StreamResult parse_receipt(planet::Settings settings,planet::StreamView 
  operation.ok=true;return result;
 }
 int actual_conversion(const stream::State& state,core::TileKey key,std::vector<artifact::Vertex>& vertices,std::vector<std::uint32_t>& indices){
- const std::array cut{key};const double scale=1.0;
- const auto artifact_origin=state.request.camera-state.world.center(state.request.body_index,state.request.seconds);
- const std::vector exported{key};patches::Metadata metadata;const std::string_view patch_identity{};
+ const auto frame=assembly::frame_for(state,true);CHECK(frame);
  const auto limits=planet::artifact_limits(*planet::with_detail_preset({},planet::DetailPreset::fine));
- tasks::Scheduler scheduler{{.worker_count=4u,.retained_finished_nodes=32u}};
- WorkerActivity activity;
- const auto fail=[](std::string_view,std::size_t=0u,std::size_t=0u,int=0){return 5;};
- CONVERSION
+ assembly::Assembly assembler{state,*frame,limits,false,false};
+ const auto work=assembler.work_for(key);CHECK(work);
+ const auto patch=assembler.prepare(*work,{});CHECK(patch);
+ vertices=patch->vertices;indices=patch->indices;
  return 0;
 }
 bool options(std::vector<std::string> args,double& pixels,double& hysteresis,bool custom=true){
@@ -161,7 +161,7 @@ int main(int argc,char**argv){
  const auto generated=output/"custom";fs::create_directories(generated);
  tasks::Scheduler snapshot_scheduler{{.worker_count=4u,.retained_finished_nodes=32u}};
  WorkerActivity activity;
- CHECK(write_snapshot(generated,state,17,1,0,planet::artifact_limits(fine),{},"sha256:"+std::string(64,'a')+":"+std::string(64,'b'),snapshot_scheduler,activity,true)==0);
+ CHECK(write_snapshot(generated,state,17,1,0,planet::artifact_limits(fine),{},"sha256:"+std::string(64,'a')+":"+std::string(64,'b'),snapshot_scheduler,activity,true,false,{},{})==0);
  auto receipt=read_small(generated/"terrain.stream",4096);CHECK(receipt.starts_with("epoch.planet.stream.v7\n"));
  planet::StreamView view;view.request_id=17;
  const auto relative=(camera-state.world.center(0,0))*(10.0/state.world.body(0).radius);view.camera={relative.x,relative.y,relative.z};
@@ -191,7 +191,7 @@ int main(int argc,char**argv){
  const auto directed=output/"view";fs::create_directories(directed);
  state.request.view=core::TerrainView{{-direction.x,-direction.y,-direction.z},16.0/9.0};
  view.forward=std::array{-direction.x,-direction.y,-direction.z};
- CHECK(write_snapshot(directed,state,17,1,0,planet::artifact_limits(fine),{},"sha256:"+std::string(64,'a')+":"+std::string(64,'b'),snapshot_scheduler,activity,true)==0);
+ CHECK(write_snapshot(directed,state,17,1,0,planet::artifact_limits(fine),{},"sha256:"+std::string(64,'a')+":"+std::string(64,'b'),snapshot_scheduler,activity,true,false,{},{})==0);
  const auto directedReceipt=read_small(directed/"terrain.stream",4096);
  CHECK(directedReceipt.starts_with("epoch.planet.stream.v8\n"));
  CHECK(parse_receipt(fine,view,directedReceipt,true).operation.ok);
@@ -204,7 +204,7 @@ int main(int argc,char**argv){
  const auto up=unscaledUp/core::length(unscaledUp);
  state.request.view->up=up;view.up=std::array{up.x,up.y,up.z};
  CHECK(planet::valid_stream_up(view));
- CHECK(write_snapshot(footprint,state,17,1,0,planet::artifact_limits(fine),{},"sha256:"+std::string(64,'a')+":"+std::string(64,'b'),snapshot_scheduler,activity,true)==0);
+ CHECK(write_snapshot(footprint,state,17,1,0,planet::artifact_limits(fine),{},"sha256:"+std::string(64,'a')+":"+std::string(64,'b'),snapshot_scheduler,activity,true,false,{},{})==0);
  const auto footprintReceipt=read_small(footprint/"terrain.stream",4096);
  CHECK(footprintReceipt.starts_with("epoch.planet.stream.v9\n"));
  CHECK(parse_receipt(fine,view,footprintReceipt,true).operation.ok);
@@ -217,8 +217,9 @@ int main(int argc,char**argv){
  invalidUp=view;invalidUp.forward.reset();CHECK(!planet::valid_stream_up(invalidUp));
  view.up.reset();
  view.forward.reset();
- stream::State oldState{1337};oldState.request=request_for({});const auto oldOutput=output/"old";fs::create_directories(oldOutput);
- CHECK(write_snapshot(oldOutput,oldState,17,0,0,planet::artifact_limits({}),{},{},snapshot_scheduler,activity)==0);
+ stream::State oldState{1337};CHECK(stream::update(oldState,request_for({}))==stream::Status::ready);
+ const auto oldOutput=output/"old";fs::create_directories(oldOutput);
+ CHECK(write_snapshot(oldOutput,oldState,17,0,0,planet::artifact_limits({}),{},{},snapshot_scheduler,activity,false,false,{},{})==0);
  CHECK(parse_receipt({},view,read_small(oldOutput/"terrain.stream",4096)).operation.ok);
  std::ofstream measured(argv[3]);measured<<std::setprecision(17)<<"{\n\"earth_radius_meters\":6371000,\n\"moon_radius_meters\":1737000,\n\"balanced_maximum_level\":"<<unsigned(balancedLevel)
   <<",\n\"fine_maximum_level\":"<<unsigned(fineLevel)<<",\n\"fine_planned_leaves\":"<<fineLeaves<<",\n\"wet_retained_admission_bytes\":"<<wetRequired
@@ -245,21 +246,16 @@ class PlanetaryFineDetail(unittest.TestCase):
         code = code.replace("EXPORT_OPTIONS", definition(shared, "bool planet_export_options("))
         code = code.replace("WRITE_FRAME", 'constexpr std::array<std::string_view,5> planet_mode_names{"classic","tiled","hemisphere","planet","universe"};\n'
                             + definition(shared, "bool planet_write_mesh_frame("))
-        snapshot_source = exporter.replace('cloud_mesh={}', 'cloud_mesh=std::shared_ptr<const artifact::Artifact>()').replace(
-            'cloud_density={}', 'cloud_density=std::optional<epochengine::asset::cloud_volume::Recipe>()')
-        code = code.replace("WRITE_SNAPSHOT", definition(snapshot_source, "    int write_snapshot("))
+        code = code.replace("WRITE_SNAPSHOT", definition(exporter, "    int write_snapshot("))
         activity_start = exporter.index("    struct WorkerActivity")
         activity_end = exporter.index("    template<class T>", activity_start)
         code = code.replace("WORKER_ACTIVITY", exporter[activity_start:activity_end])
         code = code.replace("PARSE_RECEIPT", source[parser_start:parser_end])
-        assembly_start = exporter.index("            struct PatchGeometry", exporter.index("    int write_snapshot("))
-        assembly_end = exporter.index("            assembly_done=", assembly_start)
-        code = code.replace("CONVERSION", exporter[assembly_start:assembly_end])
         proof = ROOT / "Artifacts/Reports/planet-fine-detail-oct27"
         proof.mkdir(parents=True, exist_ok=True)
         (proof / "consumer.cpp").write_text(code, encoding="utf-8")
         owners = [PACKAGE / "upstream/EpochPlanet-0.2.3/src/core/world.cpp", PACKAGE / "upstream/EpochPlanet-0.2.3/src/core/terrain.cpp", ROOT / "Engine/src/assets/texture/asset.texture_artifact.cpp"]
-        modules = [PACKAGE / "modules/planet.terrain.ixx", PACKAGE / "modules/planet.streaming.ixx", ROOT / "Engine/modules/project/project.planetary.ixx", ROOT / "Engine/modules/asset.mesh_artifact.ixx", ROOT / "Engine/modules/asset.texture_artifact.ixx"]
+        modules = [PACKAGE / "modules/planet.terrain.ixx", PACKAGE / "modules/planet.streaming.ixx", PACKAGE / "modules/planet.cut_assembly.ixx", ROOT / "Engine/modules/project/project.planetary.ixx", ROOT / "Engine/modules/asset.mesh_artifact.ixx", ROOT / "Engine/modules/asset.texture_artifact.ixx"]
         modules.append(PACKAGE / "modules/planet.coverage.ixx")
         modules.append(PACKAGE / "modules/planet.clouds.ixx")
         modules.append(ROOT / "Engine/modules/project.planetary_snapshot.ixx")
@@ -269,6 +265,7 @@ class PlanetaryFineDetail(unittest.TestCase):
         paths = lambda values: "\n".join('"'+p.as_posix()+'"' for p in values)
         fixture = ROOT / "Artifacts/Runtime/TestData" / ("p" + f"{time.time_ns():x}"[-8:])
         (proof / "CMakeLists.txt").write_text(f'''cmake_minimum_required(VERSION 3.30)
+set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT Embedded)
 project(PlanetaryFineDetail LANGUAGES CXX)
 add_library(fine_owners STATIC {paths(owners)})
 target_compile_features(fine_owners PUBLIC cxx_std_23)
@@ -290,10 +287,10 @@ add_test(NAME actual_original_fine_detail COMMAND fine_detail "{fixture.as_posix
 add_test(NAME actual_settings_legacy_and_v5 COMMAND settings_contract)
 set_tests_properties(actual_original_fine_detail PROPERTIES TIMEOUT 30)
 ''', encoding="utf-8")
-        build = ROOT / "Artifacts/Intermediate/cmake/planet-fine-detail"
+        build = ROOT / "Artifacts/Tests/pfd"
         commands = [["cmake", "-S", str(proof), "-B", str(build), "-G", "Visual Studio 17 2022", "-A", "x64"]]
         for config in ("Debug", "Release"):
-            commands += [["cmake", "--build", str(build), "--config", config, "--parallel", "1"], ["ctest", "--test-dir", str(build), "-C", config, "--output-on-failure"]]
+            commands += [["cmake", "--build", str(build), "--config", config, "--parallel", "1", "--", "/nr:false", "/p:UseMultiToolTask=false", "/p:CL_MPCount=1"], ["ctest", "--test-dir", str(build), "-C", config, "--output-on-failure"]]
         runs = []
         for index, command in enumerate(commands):
             run = subprocess.run(command, cwd=proof, capture_output=True, text=True, timeout=180)

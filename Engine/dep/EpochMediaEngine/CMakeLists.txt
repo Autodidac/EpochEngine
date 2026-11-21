@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.28)
-project(EpochMediaEngine VERSION 0.1.1 LANGUAGES CXX)
+project(EpochMediaEngine VERSION 0.1.2 LANGUAGES CXX)
 add_library(epoch_media_engine STATIC
 )
 add_library(Epoch::MediaEngine ALIAS epoch_media_engine)

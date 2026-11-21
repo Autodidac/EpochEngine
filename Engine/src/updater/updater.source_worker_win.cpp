@@ -52,18 +52,29 @@ $markerText = [IO.File]::ReadAllText($markerFile)
 $markerDefines = [regex]::Matches($markerText, '(?m)^#define EPOCH_SOURCE_EDITION_PUBLIC ([01])\r?$')
 if ($markerText.Length -gt 4096 -or $markerDefines.Count -ne 1 -or
     $markerDefines[0].Groups[1].Value -cne $expectedEdition) { throw 'Source edition mismatch.' }
-if (-not [string]::IsNullOrEmpty($expectedPublicSourceVersion)) {
+if ($expectedEdition -ceq '0' -and $markerText -cmatch '(?m)^#define EPOCH_SOURCE_SELF_CODING 0\r?$') {
+    throw 'Owner runtime build input is not a full source update.'
+}
+if ($expectedEdition -ceq '1') {
     $projection = Get-Item -LiteralPath (Join-Path $admittedRoot 'source-projection.json') -ErrorAction Stop
     if ($projection.PSIsContainer -or $projection.Length -gt 4194304 -or
         ($projection.Attributes -band [IO.FileAttributes]::ReparsePoint) -or
         (Test-Path -LiteralPath (Join-Path $admittedRoot 'Engine/dep/EpochSelfCoding'))) {
         throw 'Public source projection identity is missing or private content is present.'
     }
-    $versionReader = Join-Path $admittedRoot 'Tools/build/get_epoch_version.ps1'
-    $versionModule = Join-Path $admittedRoot 'Engine/modules/epoch.version.ixx'
-    $sourceVersion = & $versionReader -VersionModule $versionModule
-    if ($sourceVersion -cne $expectedPublicSourceVersion) { throw 'Source differs from signed version.' }
 }
+$versionFile = Get-Item -LiteralPath (Join-Path $admittedRoot 'Engine/modules/epoch.version.ixx') -ErrorAction Stop
+if ($versionFile.PSIsContainer -or $versionFile.Length -gt 131072 -or
+    ($versionFile.Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Invalid source version module.' }
+$moduleText = [IO.File]::ReadAllText($versionFile.FullName)
+$parts = foreach ($part in 'MAJOR','MINOR','REVISION') {
+    $pattern = '(?m)^[ \t]*#[ \t]*define[ \t]+EPOCH_VERSION_' + $part + '_VALUE[ \t]+([0-9]{1,9})[ \t]*\r?$'
+    $definitions = [regex]::Matches($moduleText, $pattern)
+    if ($definitions.Count -ne 1) { throw 'Source version definition is missing or ambiguous.' }
+    [int]$definitions[0].Groups[1].Value
+}
+$format = if ($parts[0] -eq 0 -and $parts[1] -le 91) { '{0}.{1}.{2:D2}' } else { '{0}.{1}.{2}' }
+if (($format -f $parts[0],$parts[1],$parts[2]) -cne $expectedSourceVersion) { throw 'Source differs from signed version.' }
 Move-Item -LiteralPath $admittedRoot -Destination $sourceRoot -Force
 if (Test-Path -LiteralPath $stagingDir) { Remove-Item -LiteralPath $stagingDir -Recurse -Force }
 )epoch";
@@ -330,8 +341,8 @@ Invoke-SourceHandoff 'commit'
             << "$ProgressPreference = 'SilentlyContinue'\n"
             << "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12\n"
             << "$sourceUrl = '" << esc(public_source_url) << "'\n"
-            << "$expectedSourceSha = '" << esc(public_source_sha256) << "'\n"
-            << "$expectedPublicSourceVersion = '" << esc(public_source_version) << "'\n"
+            << "$expectedSourceSha = '" << esc(PUBLIC_DISTRIBUTION ? public_source_sha256 : prepared_source.archive_sha256) << "'\n"
+            << "$expectedSourceVersion = '" << esc(PUBLIC_DISTRIBUTION ? public_source_version : prepared_source.source_version) << "'\n"
             << "$expectedEdition = '" << (PUBLIC_DISTRIBUTION ? "1" : "0") << "'\n"
             << "$preparedSourceArchive = '" << esc(prepared_source.archive_path.string()) << "'\n"
             << "$preparedSourceCleanupRoot = '" << esc(prepared_source.cleanup_root.string()) << "'\n"
@@ -1047,8 +1058,8 @@ Invoke-SourceHandoff 'commit'
             << "} else {\n"
             << "  Write-Step 'INFO' 'Downloading latest " << PROJECT_SOURCE_ARCHIVE_LABEL() << ".'\n"
             << "  Invoke-DownloadWithFallback $sourceUrl $sourceFallbackUrls $sourceArchive 'Source snapshot download'\n"
-            << source_archive_digest_script()
             << "}\n"
+            << source_archive_digest_script()
             << "Test-Cancel\n"
             << "Expand-Archive -LiteralPath $sourceArchive -DestinationPath $stagingDir -Force\n"
             << "Test-Cancel\n"
@@ -1069,6 +1080,7 @@ Invoke-SourceHandoff 'commit'
             << "$editionDefines = [regex]::Matches($editionText, '(?m)^#define EPOCH_SOURCE_EDITION_PUBLIC ([01])\\r?$')\n"
             << "if ($editionText.Length -gt 4096 -or $editionDefines.Count -ne 1 -or $editionDefines[0].Groups[1].Value -ne '"
             << (PUBLIC_DISTRIBUTION ? "1" : "0") << "') { throw 'Source edition differs from the installed engine.' }\n"
+            << "if ($editionDefines[0].Groups[1].Value -ceq '0' -and $editionText -cmatch '(?m)^#define EPOCH_SOURCE_SELF_CODING 0\\r?$') { throw 'Owner runtime build input is not a full source update.' }\n"
             << "Write-Handoff 'INFO' 'Source snapshot downloaded and extracted.'\n"
             << "Test-Cancel\n"
             << "if (-not [string]::IsNullOrWhiteSpace($env:VCPKG_ROOT)) {\n"

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reject private build-path literals in public runtime executables and libraries."""
+"""Reject private build-path literals in distributed runtime executables and libraries."""
 import argparse
 from pathlib import Path
 import re
@@ -24,7 +24,7 @@ def audit_binary(stream, name):
                 or PRIVATE_BUILD_PATH.search(data.decode("utf-16-le", errors="replace"))
                 or PRIVATE_BUILD_PATH.search(data[1:].decode("utf-16-le", errors="replace"))):
             # Do not print the discovered private path in build or CI logs.
-            raise ValueError(f"Private build path in public runtime binary: {name}")
+            raise ValueError(f"Private build path in runtime binary: {name}")
         carry = data[-512:]
 
 

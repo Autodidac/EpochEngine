@@ -69,6 +69,8 @@ struct Lifecycle {struct Evidence {struct Generations {struct Selected{std::uint
 struct SourceTask {std::stop_source cancellation;};
 struct EditorState {
  FIELD
+ enum class PackageManagerPage { packages, ai_resources, examples };
+ PackageManagerPage packageManagerPage{PackageManagerPage::examples};
  std::optional<AiPackageRequest> aiPackageRequest;
  epochengine::editor::ai_chat_goal::ToolSequence aiGoalTools{};
  std::optional<bool> aiGoalPackageReceipt{};
@@ -92,6 +94,12 @@ struct EditorState {
 };
 std::uint64_t planetary_project_key(const EditorState& editor)noexcept{return editor.projectId=="GameProject"?11u:22u;}
 bool package_source_task_busy(const EditorState& editor){return editor.sourceBusy;}
+fs::path admittedTestRoot;
+bool project_ai_scope_allowed(std::string_view root){
+ if(root.empty())return true;
+ const auto relative=fs::weakly_canonical(fs::path{root}).lexically_relative(admittedTestRoot);
+ return !relative.empty()&&*relative.begin()!="..";
+}
 void push_editor_log(EditorState&,const std::string&){}
 fs::path resolve_editor_path(const fs::path& path){return path;}
 bool builtin_project_package_ready(std::string_view id){return id==package_registry::kEngineForestFactoryPackageId||id==package_registry::kEngineArcadePackageId;}
@@ -128,6 +136,7 @@ void complete_attachment(EditorState& editor){auto value=editor.planetaryAttachm
 
 int main(int argc,char**argv){
  CHECK(argc==2||argc==3);const fs::path base=fs::weakly_canonical(argv[1]);
+ admittedTestRoot=base;
  const auto repository=base/"fixture";const auto manifest=repository/"packages/planetary_terrain/package.epoch-package.json";
  write(repository/"LICENSE","Source-only test license evidence; not legal verification.");
  write(repository/"packages/_api/epoch_package_script_api.hpp","// Test API, never compiled.");
@@ -208,7 +217,7 @@ int main(int argc,char**argv){
  CHECK(fresh.requestedMainSurface==EditorMainSurface::Project);
  EditorState empty;CHECK(create_ai_project_from_tool(empty,call("project.create kind=tool coverage=none"),context));
  CHECK(createCalls==2&&createdKind==EditorProjectKind::Tool&&!empty.aiPackageRequest&&empty.generationCalls==0);
- CHECK(empty.aiToolStatus.find("nothing was built or run")!=std::string::npos);
+ CHECK(empty.aiToolStatus.find("Project shell created and opened.")!=std::string::npos);
  opened=false;CHECK(!create_ai_project_from_tool(empty,call("project.create kind=game coverage=none"),context));opened=true;
  CHECK(createCalls==3&&empty.aiToolStatus.find("could not open")!=std::string::npos);
  CHECK(!create_ai_project_from_tool(empty,call("project.create kind=game coverage=planet seed=3 radius_m=nan detail=fast ocean=on"),context));
@@ -226,6 +235,7 @@ int main(int argc,char**argv){
   CHECK(dispatch_ai_project_package_tool(editor,call("terrain.generate coverage="+mode+" seed=92"),context));
   CHECK(editor.aiPackageRequest&&editor.aiPackageRequest->phase==EditorState::AiPackageRequest::Phase::review&&editor.generationCalls==0);
   CHECK(editor.packageSourceReview->content_hash==reviewed.content_hash&&editor.showPackageManagerModal);
+  CHECK(editor.packageManagerPage==EditorState::PackageManagerPage::packages);
   CHECK(!fs::exists(fs::path{editor.projectRoot}/"Packages"));
   CHECK(ai_package_generation_awaiting_attachment(editor));
   // Explicit human Add & Generate action uses the actual existing attachment owner.
@@ -377,8 +387,9 @@ class AssistantPackageTools(unittest.TestCase):
         self.assertIn("state.aiPackageRequest.reset()",reset)
 
     def test_actual_typed_protocol_and_source_attachment(self):
-        proof=Path(os.environ.get("EPOCH_ASSISTANT_PACKAGE_REPORT",ROOT/"Artifacts/Reports/assistant-packages-update-oct28"))
+        proof=Path(os.environ.get("EPOCH_ASSISTANT_PACKAGE_REPORT",ROOT/"Artifacts/Reports/assistant-packages-update-oct28"/os.name))
         proof.mkdir(parents=True,exist_ok=True)
+        project_dir=ROOT/"Artifacts/apkg" if os.name=="nt" else proof/"projects"
         (proof/"host_contract.cpp").write_text(fixture(),encoding="utf-8")
         (proof/"protocol_contract.cpp").write_text(PROTOCOL,encoding="utf-8")
         names=("ai.mcp.ixx","core.sha256.ixx","package.registry.ixx","package.catalog.ixx","platform.filesystem.ixx","package.source_install.ixx",
@@ -405,8 +416,8 @@ if(MSVC)
 endif()
 enable_testing()
 add_test(NAME typed_package_protocol COMMAND protocol_contract)
-add_test(NAME typed_project_creation COMMAND host_contract "{(ROOT/'Artifacts/apkg').as_posix()}/create-$<CONFIG>-{token}" --creation-only)
-add_test(NAME approved_attachment_continuation COMMAND host_contract "{(ROOT/'Artifacts/apkg').as_posix()}/$<CONFIG>-{token}")
+add_test(NAME typed_project_creation COMMAND host_contract "{project_dir.as_posix()}/create-$<CONFIG>-{token}" --creation-only)
+add_test(NAME approved_attachment_continuation COMMAND host_contract "{project_dir.as_posix()}/$<CONFIG>-{token}")
 set_tests_properties(typed_package_protocol typed_project_creation approved_attachment_continuation PROPERTIES TIMEOUT 30)
 ''',encoding="utf-8")
         configure=["cmake","-S",str(proof),"-B",str(proof/"cmake")]

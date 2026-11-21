@@ -77,7 +77,7 @@ nlohmann::json to_json(const RuntimeModelProfile& profile) {
         {"source", std::string{to_string(profile.source)}},
         {"repo", profile.repo.empty() ? nlohmann::json(nullptr) : nlohmann::json(profile.repo)},
         {"quant", profile.quant.empty() ? nlohmann::json(nullptr) : nlohmann::json(profile.quant)},
-        {"local_path", profile.local_path.empty() ? nlohmann::json(nullptr) : nlohmann::json(profile.local_path.string())},
+        {"local_path", profile.local_path.empty() ? nlohmann::json(nullptr) : nlohmann::json(native_inputs::utf8(profile.local_path))},
         {"estimated_bytes", profile.estimated_bytes},
         {"profile_revision", profile.profile_revision},
         {"idle_timeout_minutes", profile.idle_timeout_minutes},
@@ -117,7 +117,7 @@ nlohmann::json to_json(const RuntimeModelProfile& profile) {
         {"speculative_enabled", profile.speculative_enabled},
         {"speculative_type", profile.speculative_type},
         {"speculative_repo", profile.speculative_repo.empty() ? nlohmann::json(nullptr) : nlohmann::json(profile.speculative_repo)},
-        {"speculative_model", profile.speculative_model.empty() ? nlohmann::json(nullptr) : nlohmann::json(profile.speculative_model.string())},
+        {"speculative_model", profile.speculative_model.empty() ? nlohmann::json(nullptr) : nlohmann::json(native_inputs::utf8(profile.speculative_model))},
         {"speculative_tokens", profile.speculative_tokens},
         {"enabled", profile.enabled},
         {"provider_model", runtime_model_uri(profile)},
@@ -154,7 +154,7 @@ RuntimeModelProfile runtime_model_from_json(const nlohmann::json& value) {
 
     profile.repo = string_value("repo");
     profile.quant = string_value("quant");
-    profile.local_path = string_value("local_path");
+    profile.local_path = native_inputs::path_from_utf8(string_value("local_path"));
     profile.estimated_bytes = value.value("estimated_bytes", std::uint64_t{});
     profile.profile_revision = value.value("profile_revision", 1U);
     profile.runtime_policy = string_value("runtime_policy", "recommended");
@@ -196,7 +196,7 @@ RuntimeModelProfile runtime_model_from_json(const nlohmann::json& value) {
     profile.speculative_enabled = value.value("speculative_enabled", false);
     profile.speculative_type = string_value("speculative_type", "draft-mtp");
     profile.speculative_repo = string_value("speculative_repo");
-    profile.speculative_model = string_value("speculative_model");
+    profile.speculative_model = native_inputs::path_from_utf8(string_value("speculative_model"));
     profile.speculative_tokens = value.value("speculative_tokens", 2U);
     profile.enabled = value.value("enabled", true);
     if (const auto idle = value.find("idle_timeout_minutes"); idle != value.end()) {
@@ -275,7 +275,7 @@ RuntimeModelProfile runtime_model_from_json(const nlohmann::json& value) {
             throw std::invalid_argument(
                 "Qwen MTP requires an independent local draft GGUF; external LM Studio models and repo guesses are not supported");
         }
-        auto extension = profile.speculative_model.extension().string();
+        auto extension = native_inputs::utf8(profile.speculative_model.extension());
         std::ranges::transform(extension, extension.begin(), [](unsigned char c) {
             return static_cast<char>(std::tolower(c));
         });

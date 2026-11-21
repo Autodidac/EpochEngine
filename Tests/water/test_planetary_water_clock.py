@@ -7,6 +7,8 @@ import unittest
 from Tests.platform.test_child_close_router import definition
 from Tests.packages.test_planetary_stream_completion import condition
 from Tests.support.cpp import compile_and_run
+from Tests.support.project_play_owners import host_with_worker_ports, worker_members, PLANET_TYPES, PLANET_WORKER
+from Tools.source.owned_source_text import read_owned_source
 
 ROOT = Path(__file__).resolve().parents[2]
 OWNER = ROOT / 'Engine/src/epoch/implementation/epoch.project_play_scene.inl'
@@ -44,6 +46,7 @@ struct SphericalWaterRange {float specular_scale{};};
 struct SphericalWaterAppearance {std::vector<SphericalWaterRange> ranges;int artifact_key{71};};
 struct Artifact {int key()const{return 71;}std::vector<int> vertices()const{return {1,2,3};}std::vector<int> indices()const{return {0,1,2};}};
 }
+namespace asset::texture {std::string content_hash_hex(int key){return std::to_string(key);}}
 namespace previewgrid {
 WATER_VIEW;
 struct Frame {struct Marker {std::shared_ptr<const asset::mesh::Artifact> mesh;};std::vector<Marker> markers;};
@@ -56,7 +59,8 @@ struct Evaluation {std::shared_ptr<const Tile> tile;explicit operator bool()cons
 struct Provider {virtual ~Provider()=default;virtual Evaluation evaluate(double,std::uint64_t,std::stop_token)=0;};
 }
 namespace project_planetary_snapshot {
-struct Snapshot {struct {double water_radius_meters{6371000};std::vector<int> water_vertices{1};struct {unsigned request_id{17};}identity;
+struct Snapshot {struct {double water_radius_meters{6371000};std::vector<int> water_vertices{1};
+ struct {unsigned request_id{17};std::string source_hash{"linked-terrain"},recipe_key{"linked-recipe"};}identity;
  std::shared_ptr<const asset::mesh::SphericalWaterAppearance> water_appearance;}metadata;std::shared_ptr<const asset::mesh::Artifact> artifact;
  std::uint64_t bytes{4096u};std::optional<double> water_sample_seconds;};
 struct SelectedCut {std::shared_ptr<const Snapshot> source;};
@@ -126,6 +130,7 @@ struct ShorelineSourceReview {};
 unsigned review_count{},recheck_count{},reject_recheck{},stop_recheck{};
 struct Settings {std::uint32_t body_index{2},cells_per_tile{16};bool ocean_surface{true},stream_lod{true};bool operator==(const Settings&)const=default;};
 PACKAGED_SHORELINE;
+PACKAGED_PLANETARY_POSE;
 using GeneratedMeshFrame=int;
 struct StreamView {bool reusable{true};};
 bool stream_view_reusable(const StreamView& view,const StreamView&){return view.reusable;}
@@ -137,7 +142,7 @@ WET_CURSOR;
 struct StreamResult {
  struct {bool ok{true},cancelled{};std::string message;std::optional<GeneratedMeshFrame> mesh_frame;}operation;
  bool snapshot_ready{true};
- unsigned pending{};
+ unsigned pending{},draw{},maximum_level{};
  std::uint64_t request_id{};
  std::shared_ptr<const asset::mesh::Artifact> snapshot;
  std::shared_ptr<const asset::mesh::SphericalWaterAppearance> water_appearance;
@@ -214,7 +219,10 @@ struct SchedulerPort {
   return Submission<decltype(function(stop))>{std::async(std::launch::async,[function=std::move(function),stop]()mutable{return function(stop);}),1};
  }
 };
-namespace project_planetary_runtime {struct Binding {std::string water_source_hash{"water-approved"};};auto admitted_project_binding(){return std::optional<Binding>{Binding{}};}}
+namespace project_planetary_runtime {
+struct Binding {std::string water_source_hash{"water-approved"},project_root{"owned"},project_id{"project-id"},source_hash{"linked-terrain"};};
+auto admitted_project_binding(){return std::optional<Binding>{Binding{}};}
+}
 struct ControllerPort {
  std::shared_ptr<FakeProvider> provider=std::make_shared<FakeProvider>();
  std::shared_ptr<const project_planetary_snapshot::WaterLatticeProvider> lattice=
@@ -280,11 +288,15 @@ struct Runtime {
  std::optional<project_planetary::Settings> m_planetaryRequestSettings{m_planetarySettings};
  std::optional<project_planetary::SourceGeneration> m_meshPlanetarySource{project_planetary::SourceGeneration{}};
  std::shared_ptr<const project_planetary::PackagedShoreline> m_packagedShoreline;
+ std::shared_ptr<const project_planetary::PackagedPlanetaryPose> m_packagedPlanetaryPose;
+ std::shared_ptr<const water::wave::Tile> m_presentedLinkedWater;
+ bool m_linkedTerrain{},m_linkedWaterWaitingForTerrain{};
  double m_packagedWaterElapsed{};
  std::optional<double> m_planetaryWaterPublishedSeconds;
  bool m_planetaryWaterCatchUp{};
  std::unordered_map<unsigned,std::shared_ptr<const asset::mesh::Artifact>> m_meshes;
- unsigned m_planetaryEntity{7};std::string m_projectRoot{"owned"},m_planetaryWaterStatus;bool m_planetaryWaterSourceRefused{};
+ unsigned m_planetaryEntity{7};std::string m_projectRoot{"owned"},m_projectId{"project-id"},m_planetaryWaterStatus;bool m_planetaryWaterSourceRefused{};
+ LINKED_WET
  void ensure_planetary_scheduler(){}
  bool planetary_mesh_frame_fits(const std::shared_ptr<const asset::mesh::Artifact>&,const std::optional<int>&){return true;}
  std::optional<previewgrid::SphericalWaterView> water_detail_for_cut(unsigned body_id,
@@ -329,6 +341,29 @@ struct Runtime {
 };
 #define CHECK(x) do{if(!(x))return __LINE__;}while(false)
 int main() {
+ {
+  Runtime linked;
+  auto pose=std::make_shared<project_planetary::PackagedPlanetaryPose>();
+  pose->planetary_source="linked-terrain";pose->fft_source="water-approved";pose->recipe_key="linked-recipe";
+  linked.m_linkedTerrain=true;linked.m_packagedPlanetaryPose=pose;
+  linked.m_planetarySettings->ocean_surface=false;pose->settings=*linked.m_planetarySettings;
+  auto provider=linked.m_explorationController->provider;
+  linked.pump_planetary_water();
+  CHECK(!linked.linked_wet_terrain()&&!linked.m_planetaryWaterPending&&provider->calls==0);
+  linked.m_planetarySettings->ocean_surface=true;pose->settings=*linked.m_planetarySettings;
+  linked.m_explorationFrame.seconds=2.0;
+  linked.m_linkedWaterWaitingForTerrain=true;linked.pump_planetary_water();
+  CHECK(linked.linked_wet_terrain()&&!linked.m_planetaryWaterPending&&provider->calls==0);
+  linked.m_linkedWaterWaitingForTerrain=false;linked.pump_planetary_water();
+  for(unsigned i=0;i<1000&&!linked.m_presentedLinkedWater;++i){
+   std::this_thread::sleep_for(std::chrono::milliseconds{1});linked.pump_planetary_water();}
+  CHECK(linked.m_presentedLinkedWater&&linked.m_presentedLinkedWater->seconds()==2.0&&provider->calls==1);
+  CHECK(!linked.m_planetaryWaterPublishedSource&&!linked.m_planetaryWaterPending);
+  auto foreign=std::make_shared<project_planetary_snapshot::Snapshot>();foreign->metadata.identity.recipe_key="foreign";
+  const auto wrong=Runtime::sample_planetary_water("owned",{},foreign,provider,*linked.m_planetarySettings,
+    2.0,"water-approved",0,0,{},nullptr,nullptr,pose.get());
+  CHECK(!wrong.source_current&&!wrong.mesh&&!wrong.linked_sample&&provider->calls==1);
+ }
  {
   Runtime playback;
   const auto previous=std::make_shared<const asset::mesh::Artifact>();
@@ -819,11 +854,12 @@ int main() {
 
 class PlanetaryWaterClock(unittest.TestCase):
     def test_actual_runtime_worker_clock_and_completion(self):
-        source = OWNER.read_text(encoding='utf-8')
-        result = definition(source, '            struct PlanetaryWaterResult final') + ';'
-        cut_type = definition(source, '            struct InitialPlanetaryWaterCut final') + ';'
-        worker = definition(source, '            [[nodiscard]] static PlanetaryWaterResult sample_planetary_water(')
-        prepare = definition(source, '            [[nodiscard]] static project_planetary::StreamResult prepare_initial_planetary_water_cut(')
+        source = host_with_worker_ports()
+        relocated = worker_members()
+        result = definition(relocated, '            struct PlanetaryWaterResult final') + ';'
+        cut_type = definition(relocated, '            struct InitialPlanetaryWaterCut final') + ';'
+        worker = definition(relocated, '            [[nodiscard]] static PlanetaryWaterResult sample_planetary_water(')
+        prepare = definition(relocated, '            [[nodiscard]] static project_planetary::StreamResult prepare_initial_planetary_water_cut(')
         display = definition(source, '            [[nodiscard]] std::uint64_t planetary_water_display_bytes(')
         clock = definition(source, '            void observe_planetary_water_clock(')
         apply_time = definition(source, '            bool apply_runtime_presentation(')
@@ -832,12 +868,13 @@ class PlanetaryWaterClock(unittest.TestCase):
         adopt = definition(source, '            void adopt_planetary_water_source(')
         pump = definition(source, '            void pump_planetary_water(')
         clock_sample = definition(source, '            [[nodiscard]] std::pair<double,double> planetary_water_clock_sample(')
-        marker = '                                     const bool transition_supported='
-        stage = source[source.index(marker):source.index('                                     if(!initialWater&&m_explorationController')]
-        stage += definition(source, 'if(!initialWater&&m_explorationController')
+        marker = 'const bool transition_supported='
+        start = source.index(marker)
+        stage = source[start:source.index(';', start) + 1]
+        stage += definition(source, 'if(!linked_wet_terrain()&&!initialWater&&m_explorationController')
         queue = definition(source, '                if(m_planetaryInitialWaterCut)\n')
         marker = definition(source, '                    if(body.id==m_planetaryLodBody&&marker.mesh')
-        preview = (ROOT / 'Engine/modules/render/render.preview_grid.ixx').read_text(encoding='utf-8')
+        preview = read_owned_source(ROOT / 'Engine/modules/render/render.preview_grid.ixx')
         water_view = definition(preview, '    export struct SphericalWaterView final').replace('export ', '', 1)
         shutdown = definition(source, '            void shutdown_planetary_runtime(')
         retire = definition(shutdown, '                try')[len('                try'):]
@@ -864,7 +901,9 @@ class PlanetaryWaterClock(unittest.TestCase):
         types=(ROOT/'Engine/modules/project/project.planetary.ixx').read_text(encoding='utf-8')
         code=code.replace('WET_CURSOR',definition(types,'    struct StreamWetCutCursor final'))
         code=code.replace('PACKAGED_SHORELINE',definition(types,'    struct PackagedShoreline final'))
-        code=code.replace('CONTINUATION_FUNCTIONS','\n'.join(definition(source,marker,marker.endswith(' final')) for marker in (
+        code=code.replace('PACKAGED_PLANETARY_POSE',definition(types,'    struct PackagedPlanetaryPose final'))
+        code=code.replace('LINKED_WET',definition(source,'            [[nodiscard]] bool linked_wet_terrain('))
+        code=code.replace('CONTINUATION_FUNCTIONS','\n'.join(definition(relocated,marker,marker.endswith(' final')) for marker in (
             '            static void prepare_planetary_wet_transition(',
             '            [[nodiscard]] static std::uint64_t planetary_cut_mesh_bytes(',
             '            static void report_planetary_wet_batch(',
@@ -877,7 +916,9 @@ class PlanetaryWaterClock(unittest.TestCase):
         fixture = report / 'clock.cpp'
         fixture.write_text(code, encoding='utf-8')
         proof = compile_and_run(self, fixture, report)
-        (report / 'result.json').write_text(json.dumps(proof, indent=2) + '\n')
+        (report / 'result.json').write_text(json.dumps({'checks':proof,'sources_sha256':{
+            str(path.relative_to(ROOT)):hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in (OWNER, PLANET_TYPES, PLANET_WORKER)}}, indent=2) + '\n')
 
     def test_actual_editor_sender_is_explicit_and_identity_bound(self):
         editor=(ROOT/'Engine/src/editor/application/editor.application_project_runtime.inl').read_text(encoding='utf-8')
