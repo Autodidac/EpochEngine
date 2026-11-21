@@ -33,6 +33,8 @@ A fresh project Run opens Output and invokes the selected configuration's
 incremental build before launch. Run focuses an already running project.
 For a selected attached mesh, **Scene Hierarchy** offers **Detach from Terrain** in
 its context menu. This keeps its world pose and makes the change undoable.
+In a narrow Scene Preview, **View** opens the camera projection menu and **Reset**
+restores the camera. The toolbar gives those controls priority over the distance readout.
 In **Main Scene → Scene Preview**, choose **Inspect LOD** from the camera view menu to move a
 separate camera over the last accepted planetary terrain detail. **Exit Inspect**
 restores the previous camera and resumes streaming. A selected object's move
@@ -491,6 +493,8 @@ Public signed runtime manifests require `epoch.public.github.v1`; historical
 signed releases are immutable. Development source always enters the authenticated
 acquisition path. Its public portfolio visibility is independent of private source
 access. Both edition builds and channel/access checks must pass before publication.
+The updater owns Development's Site authentication and device identity independently
+of the engine self-coding component. Public source omits both implementations.
 
 Public project assistance uses native/local/direct inference. Generic Codex CLI
 agent transport remains Development-only: read-only filesystem permission is not
@@ -729,10 +733,12 @@ every exported form.
   retained its predecessor for rollback and recorded no private key material.
   Current authorities belong to `Changes/active_pass.md`; these historical
   bytes must not be presented as the current release or re-published as new.
-- editor update checks must also prove the matching hosted build lane before
-  surfacing an update: Windows waits for `windows-msvc`, Linux waits for
-  `linux-clang-engine`, and pending/failing/missing job evidence withholds the
-  update affordance
+- Public source update discovery resolves the advertised source release tag to
+  its GitHub commit and checks that commit in the Public source workflow.
+  Windows waits for `windows-msvc` and Linux waits for `linux-clang-engine`
+  on the newest matching run. Pending, failing, unavailable or missing job
+  evidence withholds the source update. Signed packaged runtime verification
+  and the Development Site build lane retain their own checks.
 - editor update checks are automatic after the editor has loaded. The modal is
   shown for a newer current-platform package or a proven missing compatible
   package with the authorized fallback enabled. `Source Options...` separately

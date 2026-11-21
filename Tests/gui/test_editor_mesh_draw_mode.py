@@ -20,7 +20,7 @@ class EditorMeshDrawMode(unittest.TestCase):
   preview=(ROOT/'Engine/modules/render/render.preview_grid.ixx').read_text(encoding='utf-8')
   fields=state[state.index('            platform::child_process::MeshDrawMode viewportMeshDrawMode'):state.index('            input::ProfilePreset inputProfilePreset',state.index('            platform::child_process::MeshDrawMode viewportMeshDrawMode'))]
   layout=viewport[viewport.index('            bool showMeshDrawMode ='):viewport.index('            if (showSceneRun)',viewport.index('            bool showMeshDrawMode ='))]
-  caption_reservation=viewport[viewport.index('            const float runControlOffset ='):viewport.index('            const float runModeWidth =')]
+  caption_reservation=viewport[viewport.index('            const float runControlOffset ='):viewport.index('            bool showSceneRun =')]
   controls=viewport[viewport.index('            if (showMeshDrawMode)'):viewport.index('            ctx->set_scene_preview_mode(',viewport.index('            if (showMeshDrawMode)'))]
   begin=scene.index('        void publish_editor_preview_markers(')
   request=scene[scene.index('            // A mode change',begin):scene.index('            rebuild_editor_lighting(state);',begin)]
@@ -38,10 +38,12 @@ class EditorMeshDrawMode(unittest.TestCase):
    '    export enum class ButtonIcon','    export struct InlineButtonSpec','    export struct SegmentedButtonSpec',
    '    export enum class InlineButtonSizing','    export enum class InlineButtonAlignment',
    '    export struct InlineButtonRowOptions','    export struct SelectBoxOptions','    export struct SelectBoxResult'))
-  marker_type='\n'.join(definition(preview, '    export struct '+name, True).replace('export ','',1) for name in ('PlanetAtmosphere', 'ObjectMarker'))
+  marker_type='\n'.join(definition(preview, '    export struct '+name, True).replace('export ','',1) for name in ('PlanetAtmosphere', 'SphericalWaterView', 'ObjectMarker'))
   chrome=(ROOT/'Engine/src/epochgui/controls/gui.navigation_chrome.inl').read_text(encoding='utf-8')
   height_begin=chrome.index('        const bool hasText=')
   height_metric=chrome[height_begin:chrome.index('        std::vector<float> widths',height_begin)]
+  select=(ROOT/'Engine/src/epochgui/controls/gui.scroll_controls.inl').read_text(encoding='utf-8')
+  select_width=select[select.index('        const float requestedWidth ='):select.index('        const auto displayLabel =')]
   cpp=r'''
 #include <algorithm>
 #include <array>
@@ -71,7 +73,8 @@ struct MeshFrameLimits{unsigned frame_indices{},frame_bytes{};};
 enum class EditorView{Perspective,FreeOrthographic,Front,Back,Left,Right,Top,Bottom};
 EditorView editor_view_for(const core::Context*){return EditorView::Perspective;}
 std::string_view editor_view_name(EditorView){return "Perspective";}
-bool set_editor_view(const core::Context*,EditorView){return true;}
+std::optional<EditorView> appliedView;
+bool set_editor_view(const core::Context*,EditorView view){appliedView=view;return true;}
 void reset_camera(const core::Context*){}
 bool admit=true;std::vector<ObjectMarker> published;unsigned publications{};
 bool set_object_markers(const core::Context*,std::vector<ObjectMarker> value,MeshFrameLimits){++publications;if(!admit)return false;published=std::move(value);return true;}
@@ -133,9 +136,12 @@ void text(std::string_view){}
 enum class SemanticTone{muted};struct ContentClipScope{ContentClipScope(Vec2,Vec2){}};void status_label(std::string_view label,SemanticTone,Vec2 position){draws.push_back({position,{float(label.size())*8,fontHeight},std::string(label)});}
 void set_cursor(Vec2 value){cursor=value;}
 void panel_rect(Vec2,Vec2){}
-SelectBoxResult select_box(const SelectBoxOptions&o){draws.push_back({cursor,{o.size.x,(std::max)(o.size.y,fontHeight+10)},std::string(o.id)});
+std::string lastViewCaption;
+SelectBoxResult select_box(const SelectBoxOptions&o){const auto&options=o;const float availableWidth=10000.f;
+ SELECT_WIDTH
+ draws.push_back({cursor,{rowWidth,(std::max)(o.size.y,fontHeight+10)},std::string(o.id)});
  if(o.id=="scene-viewport-pointer-mode")pointerSymbol=o.closed_label;
- if(o.id=="scene-viewport-view-select"&&chooseView&&o.enabled)return {false,true,viewChoice};
+ if(o.id=="scene-viewport-view-select"){lastViewCaption=o.closed_label;if(chooseView&&o.enabled)return {false,true,viewChoice};}
  const bool mode=o.id=="scene-mesh-draw-mode";if(mode){++mode_calls;lastModeLabel=o.selected;modeEnabled=o.enabled;}else++camera_calls;
  return {mode&&choose,mode&&choose&&(o.enabled||illegal),mode&&choose?std::optional<std::size_t>{choice}:std::nullopt};}
 std::optional<std::size_t>inline_button_row(std::span<const InlineButtonSpec>items,float height,float,const InlineButtonRowOptions&){
@@ -149,7 +155,7 @@ int draw(EditorState&editor,float width,bool running,bool modal,bool run,bool ma
  editor.covered=running;editor.reserved=running;
  const auto ctx=std::make_shared<core::Context>();const gui::Vec2 scene_pos{20,40},scene_size{width,120};
  const bool sceneFits=width>=80,projectViewportMaximized=maximize,compiledProjectRunning=running;
- const bool menusBlockedByModal=modal,toolbarControlsBlockedByMenu=false;const float runButtonWidth=112,runModeWidth=100;
+ const bool menusBlockedByModal=modal,toolbarControlsBlockedByMenu=false,projectChildActionsAvailable=run;const float runButtonWidth=112;
  const bool workspaceShortcutInputAvailable=!modal;
  constexpr std::string_view sceneTitle{"Scene Preview"};
  CAPTION_RESERVATION
@@ -157,14 +163,23 @@ int draw(EditorState&editor,float width,bool running,bool modal,bool run,bool ma
  const std::array heightMetric{gui::InlineButtonSpec{.label="Viewport",.width=100.0f}};
  const float headerControlHeight=gui::inline_button_row_height(heightMetric,20.0f,0.0f,{.sizing=gui::InlineButtonSizing::FitContent});
  // Run eligibility matches the production threshold; its dispatch is separately tested.
- bool showSceneRun=run&&width>=runControlOffset+runButtonWidth+runModeWidth+12;
+ bool showSceneRun=run&&width>=runControlOffset+runButtonWidth+runModeSpace+12;
  struct{bool scene_input_captured{};struct{gui::Vec2 position,size;}scene_viewport;}result;
  result.scene_viewport={{scene_pos.x+2,scene_pos.y+30},{width-4,88}};
  LAYOUT
  gui::draws.clear();gui::disabled_reason.clear();
- if(showSceneRun)gui::draws.push_back({{scene_pos.x+runControlOffset,scene_pos.y+2},{216,20},"Run controls port"});
+ if(showSceneRun)gui::draws.push_back({{scene_pos.x+runControlOffset,scene_pos.y+2},{runButtonWidth+4.0f+runModeSpace,20},"Run controls port"});
  CONTROLS
  const auto view=std::find_if(gui::draws.begin(),gui::draws.end(),[](const auto&rect){return rect.label=="scene-viewport-view-select";});
+ const auto pointer=std::find_if(gui::draws.begin(),gui::draws.end(),[](const auto&rect){return rect.label=="scene-viewport-pointer-mode";});
+ const auto reset=std::find_if(gui::draws.begin(),gui::draws.end(),[](const auto&rect){return rect.label=="Reset"||rect.label=="Exit Inspect";});
+ if(view!=gui::draws.end()){
+  const auto next=pointer==gui::draws.end()?reset:pointer;
+  CHECK(next!=gui::draws.end()&&view->size.x>=96.0f&&std::abs(next->position.x-(view->position.x+view->size.x)-6.0f)<.01f);
+ }
+ if(pointer!=gui::draws.end()){
+  CHECK(reset!=gui::draws.end()&&pointer->size.x>=96.0f&&std::abs(reset->position.x-(pointer->position.x+pointer->size.x)-6.0f)<.01f);
+ }
  const auto distance=std::find_if(gui::draws.begin(),gui::draws.end(),[](const auto&rect){return rect.label=="Distance 1";});
  if(distance!=gui::draws.end()){
   CHECK(view!=gui::draws.end());
@@ -185,6 +200,19 @@ int draw(EditorState&editor,float width,bool running,bool modal,bool run,bool ma
  return 0;
 }
 int main(){using Mode=platform::child_process::MeshDrawMode;EditorState e,other;CHECK(e.viewportMeshDrawMode==Mode::shaded&&!e.viewportMeshDrawModeRequest);
+ gui::chooseView=true;gui::viewChoice=1;
+ CHECK(draw(e,320,false,false,false)==0&&gui::lastViewCaption=="View");
+ CHECK(previewgrid::appliedView==previewgrid::EditorView::FreeOrthographic);
+ CHECK(std::any_of(gui::draws.begin(),gui::draws.end(),[](const auto& rect){return rect.label=="Reset";}));
+ CHECK(draw(e,336,false,false,false)==0&&gui::lastViewCaption=="View");
+ CHECK(std::any_of(gui::draws.begin(),gui::draws.end(),[](const auto& rect){return rect.label=="scene-viewport-pointer-mode";}));
+ gui::fontHeight=58;gui::viewChoice=2;gui::lastViewCaption.clear();
+ CHECK(draw(e,900,false,false,true)==0&&gui::lastViewCaption=="View");
+ CHECK(previewgrid::appliedView==previewgrid::EditorView::Front);
+ CHECK(std::any_of(gui::draws.begin(),gui::draws.end(),[](const auto& rect){return rect.label=="Reset";}));
+ CHECK(std::none_of(gui::draws.begin(),gui::draws.end(),[](const auto& rect){return rect.label=="Distance 1";}));
+ gui::fontHeight=22;
+ gui::chooseView=false;
  gui::chooseView=true;gui::viewChoice=8;CHECK(draw(e,900,false,false,false)==0&&e.lodInspectionReturnCamera);
  gui::chooseView=false;gui::exitInspect=true;CHECK(draw(e,900,false,false,false)==0&&!e.lodInspectionReturnCamera);
  gui::exitInspect=false;e.scenePointerMode=ScenePointerMode::move_z;
@@ -239,11 +267,11 @@ int main(){using Mode=platform::child_process::MeshDrawMode;EditorState e,other;
  const auto requests=e.runtimeRequests;e.projectRuntimeSnapshot->runtime_control={Status::pending,Mode::solid};
  CHECK(draw(e,900,true,false,false)==0&&e.runtimeRequests==requests);
  cycleMeshMode=false;e.projectRuntimeSnapshot.reset();
- for(float fontHeight:{16.f,22.f,38.f,58.f})for(float width:{0.f,79.f,80.f,120.f,200.f,319.f,320.f,400.f,440.f,650.f,900.f})for(bool running:{false,true})for(bool run:{false,true})for(auto surface:{EditorMainSurface::Scene,EditorMainSurface::Game2D,EditorMainSurface::ForestFactory}){
+ for(float fontHeight:{16.f,22.f,38.f,58.f})for(float width:{0.f,79.f,80.f,120.f,200.f,319.f,320.f,335.f,336.f,337.f,400.f,440.f,650.f,900.f})for(bool running:{false,true})for(bool run:{false,true})for(auto surface:{EditorMainSurface::Scene,EditorMainSurface::Game2D,EditorMainSurface::ForestFactory}){
   gui::fontHeight=fontHeight;e.mainSurface=surface;gui::mode_calls=0;CHECK(draw(e,width,running,false,run)==0);}
  return 0;}
 '''
-  for name,value in {'HEIGHT_METRIC':height_metric,'FIELDS':fields,'MARKER_TYPE':marker_type,'REQUEST':request,'MATERIAL_MODE':material_mode,'MARKER':marker,'NEUTRAL_MODE':neutral,'PUBLISH':publish,'TYPES':gui_types,'LAYOUT':layout,'CONTROLS':controls,'CAPTION_RESERVATION':caption_reservation}.items():cpp=cpp.replace(name,value)
+  for name,value in {'SELECT_WIDTH':select_width,'HEIGHT_METRIC':height_metric,'FIELDS':fields,'MARKER_TYPE':marker_type,'REQUEST':request,'MATERIAL_MODE':material_mode,'MARKER':marker,'NEUTRAL_MODE':neutral,'PUBLISH':publish,'TYPES':gui_types,'LAYOUT':layout,'CONTROLS':controls,'CAPTION_RESERVATION':caption_reservation}.items():cpp=cpp.replace(name,value)
   lane=ROOT/'Artifacts/Reports/preview-contracts-oct31/mesh'/hashlib.sha256(cpp.encode()).hexdigest()[:12];lane.mkdir(parents=True,exist_ok=True)
   source=lane/'editor.mesh_draw_contract.cpp';source.write_text(cpp,encoding='utf-8')
   results=compile_and_run(self,source,lane)

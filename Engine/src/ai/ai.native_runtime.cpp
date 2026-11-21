@@ -1184,10 +1184,15 @@ void refresh_discovered_model_files(Service& current, std::stop_token stop) {
             current.discovery_root = chosen;
         }
     }
-    const std::array roots{paths.model_cache, chosen};
+    // Spend the shared scan budget on the operator's chosen library first.
+    const std::array roots{chosen, paths.model_cache};
     auto discovered = native_discovery::scan(roots, stop);
-    std::string status = discovered.cancelled ? "GGUF discovery cancelled"
-        : discovered.limited ? "GGUF discovery reached its limit; select a narrower folder"
+    if (discovered.cancelled || stop.stop_requested()) {
+        std::scoped_lock lock{current.state_mutex};
+        current.discovery_status = "GGUF discovery cancelled. Previous scan results retained.";
+        return;
+    }
+    std::string status = discovered.limited ? "GGUF discovery reached its limit; select a narrower folder"
         : "GGUF discovery complete";
     status += ": " + std::to_string(discovered.models.size()) + " model file groups. "
         + discovered.diagnostic;
@@ -1210,6 +1215,7 @@ bool refresh() {
                 if (current.published_host.load(std::memory_order_acquire)) {
                     update_metadata(current);
                     refresh_discovered_model_files(current, stop);
+                    if (stop.stop_requested()) return;
                     phase("Native model inventory refreshed; loaded models unchanged.");
                     return;
                 }
@@ -1221,6 +1227,7 @@ bool refresh() {
                     current.metadata = std::move(scanned);
                 }
                 refresh_discovered_model_files(current, stop);
+                if (stop.stop_requested()) return;
                 phase("Found " + std::to_string(count) +
                     " registered native models. Cache and residency are checked when loaded.");
             });
@@ -1251,6 +1258,7 @@ bool discover_model_files(std::filesystem::path root) {
                     platform::filesystem::atomic_replace_same_filesystem);
                 { std::scoped_lock lock{current.state_mutex}; current.discovery_root = std::move(resolved); }
                 refresh_discovered_model_files(current, stop);
+                if (stop.stop_requested()) return;
                 phase(saved ? "Existing model files scanned; folder saved. No model was registered or loaded."
                     : "Existing model files scanned; folder could not be saved and remains session-only. No model was registered or loaded.");
             });

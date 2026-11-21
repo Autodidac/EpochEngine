@@ -11,14 +11,16 @@ class MeshWireRotation(unittest.TestCase):
   owned=lambda marker,end=False:definition(source,marker,end).replace('export ','',1)
   types='struct MeshPaintView;\n'+owned('    export struct Vec3',True)+owned('    export [[nodiscard]] constexpr Vec3 visual_rgb(')+'\n'.join(owned(marker,True) for marker in (
    '    export struct Vertex','    export enum class ObjectPreviewPrimitive',
-   '    export struct ObjectPreviewGeometryRoute final','    export struct PreciseMeshTransform final','    export struct ObjectMarker'))
+   '    export struct ObjectPreviewGeometryRoute final','    export struct PreciseMeshTransform final',
+   '    export struct PlanetAtmosphere final','    export struct SphericalWaterView final','    export struct ObjectMarker'))
   helpers='\n'.join(owned(marker) for marker in (
    '    export [[nodiscard]] constexpr ObjectPreviewGeometryRoute object_preview_geometry_route(',
+   '    export [[nodiscard]] constexpr bool object_marker_requests_wireframe(',
    '    export [[nodiscard]] constexpr bool object_marker_uses_solid_fill(',
    '    export [[nodiscard]] inline Vec3 add(', '    export [[nodiscard]] inline Vec3 subtract(', '    export [[nodiscard]] inline Vec3 scale('))
   euler=owned('        [[nodiscard]] inline EulerRotation euler_rotation(')
   brace=euler.index('{');euler=euler[:brace+1]+' ++euler_calls;'+euler[brace+1:]
-  rotation=owned('        struct EulerRotation final',True)+euler+owned('        [[nodiscard]] inline Vec3 rotate_euler(')+owned('        [[nodiscard]] inline Vec3 mesh_vertex_position(')
+  rotation=owned('        struct EulerRotation final',True)+euler+owned('        [[nodiscard]] inline Vec3 rotate_euler(')+owned('        [[nodiscard]] inline Vec3 mesh_vertex_position(')+owned('        [[nodiscard]] inline Vec3 preview_box_half_extents(')
   wire=owned('        enum class MarkerLinePass',True)+owned('        [[nodiscard]] inline bool mesh_wire_requested(')+owned('        struct MeshWireEdges final',True)+owned('        [[nodiscard]] inline const MeshWireEdges* find_wire_edges(')+owned('        [[nodiscard]] inline std::vector<MeshWireEdges> build_wire_edges(')
   producer=owned('    inline std::vector<Vertex> detail::build_marker_lines(')
   before=producer.replace('detail::build_marker_lines(', 'detail::build_marker_lines_before(',1)
@@ -44,6 +46,7 @@ class MeshWireRotation(unittest.TestCase):
 // Immutable mesh-observation port. The tested code is the real line producer,
 // Euler helpers, edge indexing and marker routing; no mesh-import claim.
 namespace epochengine::asset::mesh{
+struct SphericalWaterAppearance;
 struct Vertex{std::array<float,3>position;};
 struct Artifact{std::vector<Vertex>v;std::vector<std::uint32_t>i;
 std::span<const Vertex>vertices()const{return v;}std::span<const std::uint32_t>indices()const{return i;}

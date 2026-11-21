@@ -4,7 +4,7 @@ import hashlib
 import json
 import os
 import subprocess
-from Tests.support.cpp import engine_module_source
+from Tests.support.cpp import configure_arguments, engine_module_source, executable
 ROOT = Path(__file__).resolve().parents[2]
 
 def run_gui_contract(test, name, code, extra_owners, scope, *, extra_sources=(), extra_modules=(), libraries=(), long_paths=False):
@@ -28,8 +28,8 @@ def run_gui_contract(test, name, code, extra_owners, scope, *, extra_sources=(),
     for owner in owners:
         digest.update(owner.read_bytes())
     identity = digest.hexdigest()[:12]
-    report = ROOT / "Artifacts/Reports" / name / identity
-    build = ROOT / "Artifacts/Intermediate/cmake" / name / identity
+    report = ROOT / "Artifacts/Reports" / name / os.name / identity
+    build = ROOT / "Artifacts/Intermediate/cmake" / name / os.name / identity
     report.mkdir(parents=True, exist_ok=True)
     temporary = report / "tmp"
     temporary.mkdir(exist_ok=True)
@@ -39,16 +39,16 @@ def run_gui_contract(test, name, code, extra_owners, scope, *, extra_sources=(),
         'add_executable(gui_contract consumer.cpp ' + " ".join('"' + p.as_posix() + '"' for p in sources) + ')\n'
         'target_compile_features(gui_contract PRIVATE cxx_std_23)\n'
         'set_property(TARGET gui_contract PROPERTY MSVC_DEBUG_INFORMATION_FORMAT Embedded)\n'
-        'target_compile_options(gui_contract PRIVATE /W3 /WX /utf-8 /EHsc)\n'
+        'if(MSVC)\n  target_compile_options(gui_contract PRIVATE /W3 /WX /utf-8 /EHsc)\nendif()\n'
         'target_sources(gui_contract PRIVATE FILE_SET CXX_MODULES BASE_DIRS "' + ROOT.as_posix() + '" FILES '
         + " ".join('"' + p.as_posix() + '"' for p in modules) + ')\n'
-        + ('target_link_libraries(gui_contract PRIVATE ' + ' '.join(libraries) + ')\n' if libraries else '')
-        + (f'target_link_options(gui_contract PRIVATE "/MANIFESTINPUT:{manifest.as_posix()}")\n' if long_paths else ''),
+        + ('target_link_libraries(gui_contract PRIVATE ' + ' '.join(libraries) + ')\n' if libraries and os.name == "nt" else '')
+        + (f'target_link_options(gui_contract PRIVATE "/MANIFESTINPUT:{manifest.as_posix()}")\n' if long_paths and os.name == "nt" else ''),
         encoding="utf-8")
-    commands = [["cmake", "-S", str(report), "-B", str(build), "-G", "Visual Studio 17 2022", "-A", "x64"]]
+    commands = [configure_arguments(report, build)]
     for configuration in ("Debug", "Release"):
         commands += [["cmake", "--build", str(build), "--config", configuration, "--parallel", "1"],
-                     [str(build / configuration / "gui_contract.exe")]]
+                     [str(executable(build, configuration, "gui_contract"))]]
     runs = []
     env = dict(os.environ, TEMP=str(temporary), TMP=str(temporary), TMPDIR=str(temporary), MSBUILDDISABLENODEREUSE="1")
     for index, command in enumerate(commands):

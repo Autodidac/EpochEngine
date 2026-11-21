@@ -31,6 +31,9 @@ class WaterShaderFootprint(unittest.TestCase):
         opengl = proof / 'opengl.frag'
         opengl.write_text(opengl_scene_fragment(), encoding='utf-8')
         vulkan = ROOT / 'Engine/assets/vulkan/shaders/frag.glsl'
+        roll_definition = r'float waterRolls\(.*?\n\}'
+        self.assertEqual(re.search(roll_definition, opengl.read_text(encoding='utf-8'), re.S)[0],
+                         re.search(roll_definition, vulkan.read_text(encoding='utf-8'), re.S)[0])
         commands = []
         for backend, source, options in (
             ('opengl', opengl, ['--target-env=opengl', '-fauto-map-locations', '-fauto-bind-uniforms']),
@@ -49,6 +52,9 @@ class WaterShaderFootprint(unittest.TestCase):
             water = function_body(assembly, symbol[1])
             main = function_body(assembly, '%main')
             self.assertNotRegex(water, r'\bOpDPd[xy]\w*\b')
+            rolls = re.search(r'OpName (%\S+) "waterRolls\(', assembly)
+            self.assertIsNotNone(rolls)
+            self.assertNotRegex(function_body(assembly, rolls[1]), r'\bOpDPd[xy]\w*\b')
             call = main.index(f'OpFunctionCall %v3float {symbol[1]}')
             self.assertIn('OpDPdx', main[:call])
             self.assertIn('OpDPdy', main[:call])

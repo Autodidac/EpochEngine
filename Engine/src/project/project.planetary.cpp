@@ -902,6 +902,18 @@ file(RENAME "${receipt_temporary}" "${runtime}/provider.identity")
             // first build must not create an unbound Editor-generation cache.
             // Generated applications get water.wave from EpochEngine.lib.
             // The separately built provider keeps its own wave archive.
+            constexpr std::string_view archiveDirectory="$(EpochPlanetBuild)\\$(EpochPlanetConfiguration)\\";
+            std::string explorationLibraries;
+            if(exploration)
+            {
+                explorationLibraries.append(archiveDirectory).append("epoch_extension_planetary_runtime.lib;");
+                // External MSBuild linking does not inherit CMake's static target dependencies.
+                // Older admitted providers can own these modules inside the runtime archive.
+                const auto providerBuild=read_small(project/dependency.relative_source_root/"CMakeLists.txt",64u*1024u);
+                for(const std::string_view library:{"epoch_extension_planetary_clouds","epoch_extension_planetary_cut_assembly"})
+                    if(providerBuild.contains("add_library("+std::string{library}+" STATIC)"))
+                        explorationLibraries.append(archiveDirectory).append(library).append(".lib;");
+            }
             const std::string linkInputs=dependency.content_hash+"|"+water.content_hash+"|"+std::string{editionId}
                 +"|"+planetary_msvc_toolset+"|"+planetary_msvc_environment;
             const std::string props = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
@@ -919,7 +931,7 @@ file(RENAME "${receipt_temporary}" "${runtime}/provider.identity")
                 "  <ItemDefinitionGroup>"
                 + (exploration ? std::string{"<ClCompile><PreprocessorDefinitions>EPOCH_PROJECT_PLANETARY_RUNTIME=1;%(PreprocessorDefinitions)</PreprocessorDefinitions></ClCompile>"} : std::string{}) +
                 "<Link><AdditionalDependencies>"
-                + (exploration ? std::string{"$(EpochPlanetBuild)\\$(EpochPlanetConfiguration)\\epoch_extension_planetary_runtime.lib;"} : std::string{}) +
+                + explorationLibraries +
                 (exploration && settings.ocean_surface ? std::string{
                     "$(EpochPlanetBuild)\\$(EpochPlanetConfiguration)\\epoch_extension_planetary_water.lib;"
                     "$(EpochPlanetBuild)\\water-extension\\$(EpochPlanetConfiguration)\\epoch_extension_water_fft.lib;"

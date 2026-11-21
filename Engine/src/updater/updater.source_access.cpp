@@ -7,35 +7,18 @@
 module;
 
 #include "updater.distribution.hpp"
-#include "updater.device_identity.hpp"
-
-#include <algorithm>
-#include <array>
-#include <atomic>
-#include <charconv>
-#include <chrono>
-#include <cstdint>
 #include <filesystem>
-#include <fstream>
-#include <iomanip>
-#include <limits>
-#include <mutex>
-#include <optional>
-#include <sstream>
 #include <string>
-#include <string_view>
-#include <thread>
-#include <utility>
-#include <vector>
 
 module updater.source_access;
 
-import epoch.version;
 import updater.config;
 
 #if EPOCH_EDITION_PUBLIC
 namespace epochengine::updater
 {
+    bool SourceAccessStatus::active() const noexcept { return false; }
+    bool SourceAccessStatus::awaiting_device_approval() const noexcept { return false; }
     SourceAccessStatus private_source_access_status() { return {}; }
     bool open_private_source_verification_page() { return false; }
     void cancel_private_source_access() noexcept {}
@@ -53,5 +36,4 @@ namespace epochengine::updater
             && PROJECT_SOURCE_DEVICE_CHALLENGE_URL().empty();
     }
 }
-#else
-#endif // EPOCH_EDITION_PUBLIC
+#endif

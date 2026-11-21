@@ -207,7 +207,7 @@ int main(){
 #include "CATALOG"
 namespace ai=epochengine::ai;
 #include "FORMAT_HEADER"
-struct EditorState {std::string aiModelCatalogSelection,aiModelCatalogApproval,packageInstallStatus,aiModelPendingDownloadDeletion,aiModelManagerFeedback;int aiModelManagerSection{};float packageInstallProgress{};bool packageModelInstall{},aiModelCatalogDetailsOpen{};};
+struct EditorState {std::string aiModelCatalogSelection,aiModelCatalogApproval,packageInstallStatus,aiModelPendingDownloadDeletion,aiModelManagerFeedback;int aiModelManagerSection{},aiModelManagerTab{3};float packageInstallProgress{};bool packageModelInstall{},aiModelCatalogDetailsOpen{};};
 struct NativeState {struct Model{std::string id;bool active{};};std::vector<Model> models;bool busy{};};
 unsigned downloads{},registrations{},cancellations{},warnings{},technicalLines{};bool ack{};std::optional<std::size_t> fixtureChoice;
 std::string click,captured;
@@ -248,6 +248,8 @@ ACTUAL
 #define CHECK(x) do{if(!(x))return __LINE__;}while(false)
 int main(){
  using namespace epoch_ai::model;EditorState editor;NativeState state;
+ editor.aiModelManagerSection=2;click="Model tiers & comparison";draw(editor,state);
+ CHECK(editor.aiModelManagerSection==0&&editor.aiModelManagerTab==4);
  click="Download pinned weights";draw(editor,state);CHECK(downloads==0&&registrations==0);
  fixtureChoice=0;click="Download pinned weights";draw(editor,state);CHECK(warnings&&downloads==0);
  ack=true;click="Download pinned weights";draw(editor,state);CHECK(downloads==1&&captured==catalog::offers()[0].id);
@@ -342,7 +344,7 @@ LABEL
  editor.packageModelInstall->totalBytes=0;editor.packageModelInstall->plan.artifacts={{8ull*1024*1024*1024}};footer(editor,state);
  CHECK(summary.find("8.00 GiB")!=std::string::npos&&summary.find('%')==std::string::npos);
  editor.packageModelInstall->cancelled=true;footer(editor,state);CHECK(summary.find("Stopping")!=std::string::npos);
- state.busy=true;clicked="Cancel Loading";footer(editor,state);CHECK(cancelLoads==1&&cancelDownloads==1);
+ state.busy=true;clicked="Cancel model operation";footer(editor,state);CHECK(cancelLoads==1&&cancelDownloads==1);
  clicked="Close Model Manager";footer(editor,state);CHECK(!editor.showAiModelManagerModal&&cancelLoads==1&&cancelDownloads==1);
 }
 '''

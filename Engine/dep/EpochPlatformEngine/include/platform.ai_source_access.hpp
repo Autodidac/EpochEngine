@@ -13,7 +13,7 @@ namespace epochengine::ai::source_access {
     for(unsigned char c:input)path.push_back(c=='\\'?'/' : c>='A'&&c<='Z'?char(c+32):char(c));
     path.push_back('/');
     constexpr std::array owners{
-        "/engine/dep/epochselfcoding/", "/engine/src/ai/native/",
+        "/engine/dep/epochselfcoding/", "/engine/src/updater/owner/", "/engine/src/ai/native/",
         "/engine/src/ai/implementation/", "/engine/src/editor/ai/",
         "/engine/include/ai/", "/engine/modules/ai/",
         "/engine/docs/security/", "/artifacts/", "/cache/", "/logs/",

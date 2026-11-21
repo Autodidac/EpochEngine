@@ -25,14 +25,18 @@ class GuiDockingAdapter(unittest.TestCase):
         report.mkdir(parents=True)
         sha = lambda path: hashlib.sha256(Path(path).read_bytes()).hexdigest()
         production = [ROOT / 'Engine/src/epochgui' / name for name in
-                      ('gui.engine.cpp', 'gui.docking_adapter.cpp', 'gui.clipboard.cpp')]
+                      ('gui.engine.cpp', 'gui.window_theme.cpp', 'gui.docking_adapter.cpp', 'gui.clipboard.cpp')]
         source_hashes = {str(path.relative_to(ROOT)): sha(path) for path in production}
         declarations = definition(production[0].read_text(encoding='utf-8'), 'namespace docking_adapter_detail')
         consumer = (ROOT / 'Tests/gui/gui.docking_adapter_contract.cpp').read_text(encoding='utf-8').replace('PRODUCTION_DECLARATIONS', declarations)
         outcomes = []
-        for configuration in ('Debug', 'Release'):
-            runtime = ROOT / 'Artifacts/Runtime/windows/development/x64' / configuration
-            intermediate = ROOT / 'Artifacts/Intermediate/msvc/development/x64' / configuration
+        artifact_root = Path(os.environ.get('EPOCH_GUI_CONTRACT_ARTIFACTS', ROOT / 'Artifacts')).resolve()
+        selected = os.environ.get('EPOCH_GUI_CONTRACT_CONFIGURATION')
+        configurations = (selected,) if selected else ('Debug', 'Release')
+        self.assertTrue(all(configuration in ('Debug', 'Release') for configuration in configurations))
+        for configuration in configurations:
+            runtime = artifact_root / 'Runtime/windows/development/x64' / configuration
+            intermediate = artifact_root / 'Intermediate/msvc/development/x64' / configuration
             cl_log = intermediate / 'EpochEngine/EpochEngine.tlog/CL.command.1.tlog'
             link_log = intermediate / 'EpochEditor/EpochEditor.tlog/link.command.1.tlog'
             if not cl_log.is_file() or not link_log.is_file():

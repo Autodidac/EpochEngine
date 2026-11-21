@@ -9,6 +9,7 @@ import time
 import unittest
 
 from Tests.platform.test_child_close_router import definition
+from Tests.packages.test_planetary_mesh_admission import untimed_planetary_marker_state
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -53,6 +54,7 @@ import asset.mesh_artifact;
 import asset.cloud_volume;
 import project.planetary;
 import project.planetary_runtime;
+import project.planetary_snapshot;
 import scene.snapshot;
 import scene.serializer;
 import scene.document;
@@ -89,6 +91,7 @@ constexpr int m_runtimeViewportWidth=1280,m_runtimeViewportHeight=720;
 // math below stay real while the asynchronous scheduler remains separate.
 bool pump_runtime_planetary_frame(const void*,previewgrid::SceneFrameRequest,platform::child_process::MeshDrawMode,bool*){std::abort();}
 double runtime_depth_fit_aspect() noexcept{return double(m_runtimeViewportWidth)/m_runtimeViewportHeight;}
+PLANETARY_MARKER_STATE
 RUNTIME_PUBLICATION
 #undef near
 class LegacyGroundCover final : public project_planetary_runtime::GroundCoverProvider {
@@ -114,10 +117,11 @@ public:
  std::optional<project_planetary::Settings> m_planetarySettings{project_planetary::Settings{}};
  std::shared_ptr<const epochengine::project_planetary_snapshot::Snapshot> m_planetaryWaterSource;
  std::shared_ptr<const asset::mesh::SphericalWaterAppearance> m_planetaryWaterAppearance;
+ std::optional<double> m_planetaryWaterObservedSeconds;
  struct RuntimeClock{double playhead_seconds{};};std::optional<RuntimeClock>m_runtimePresentation;
  bool m_runtimeCloudsVisible{true},m_runtimeCloudBackendUnavailable{};
  std::unordered_map<std::uint64_t,std::shared_ptr<const asset::mesh::Artifact>> m_meshes;
- std::vector<project_planetary_runtime::GroundCoverDrawPatch> m_groundCoverPatches;
+ GROUND_COVER_STATE m_groundCover;
  static std::uint64_t suppressed_planet(bool rebased,const std::vector<previewgrid::ObjectMarker>& planetaryMarkers,
   std::uint64_t m_planetaryEntity){return RUNTIME_SUPPRESSION;}
  RUNTIME_METHODS
@@ -432,8 +436,8 @@ int main(int argc,char**argv){
  const std::array<double,3> grassCameraLocal{1000,4,0};
  CHECK(grassProbe.exploration_camera(grassFrame));
  grassProbe.m_explorationPreview=project_planetary_runtime::preview_frame(grassFrame);
- grassProbe.m_groundCoverPatches.push_back({{1000,0,0},artifact.artifact});
- grassProbe.m_groundCoverPatches.push_back({{1000,80,0},artifact.artifact});
+ grassProbe.m_groundCover.patches.push_back({{1000,0,0},artifact.artifact});
+ grassProbe.m_groundCover.patches.push_back({{1000,80,0},artifact.artifact});
  std::vector<previewgrid::ObjectMarker> grassMarkers;
  grassProbe.place_ground_cover(grassMarkers,grassCameraLocal);
  CHECK(grassMarkers.size()==1&&grassMarkers.front().preciseTransform);
@@ -638,6 +642,9 @@ class PlanetarySceneUnits(unittest.TestCase):
         runtime_inverse = source["play"][start:end].replace("return;", "return {};")
         imported = definition(source["import"], "                if (mesh_frame)")
         code = CODE.replace("RUNTIME_PUBLICATION", publication).replace("RUNTIME_METHODS", methods).replace("RUNTIME_SUPPRESSION", suppression[1].strip())
+        ground_state = owner(source["play"], "            struct GroundCoverPreparation final")
+        code = code.replace("GROUND_COVER_STATE", ground_state + ";\n GroundCoverPreparation")
+        code = code.replace("PLANETARY_MARKER_STATE", untimed_planetary_marker_state(source["play"]))
         camera_start = source["play"].index("                const double sceneUnits=entity->mesh_asset&&entity->mesh_asset->coordinates")
         camera_end = source["play"].index("                if(m_explorationFrame.anchor!=result.frame.anchor)", camera_start)
         camera_policy = source["play"][camera_start:camera_end].replace("return;", "return {};")
@@ -666,6 +673,7 @@ class PlanetarySceneUnits(unittest.TestCase):
             "Engine/src/render/render.preview_camera.cpp", "Engine/src/render/render.preview_lighting.cpp",
             "Engine/src/assets/texture/asset.texture_artifact.cpp",
             "Engine/src/authoring/texture/authoring.texture_document.cpp",
+            "Engine/src/authoring/texture/authoring.texture_snapshot_codec.cpp",
             "Engine/src/authoring/texture/authoring.texture_residency.cpp")]
         implementation_hashes = {str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()
                                  for path in implementation_paths}

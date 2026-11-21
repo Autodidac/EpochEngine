@@ -33,7 +33,7 @@ struct Editor {TopMenu openMenu{},suppressedMenuHover{};bool showCommandMenu=tru
 struct TopMenuButton {TopMenu menu;};
 const std::array topMenus{TopMenuButton{TopMenu::File},TopMenuButton{TopMenu::Edit},TopMenuButton{TopMenu::Asset}};
 void frame(std::optional<std::size_t> hover,std::optional<std::size_t> press={},bool menusBlockedByModal=false,
-           std::optional<std::size_t> toggle={}){
+           std::optional<std::size_t> toggle={},std::size_t firstMenuIndex=1){
  struct {std::optional<std::size_t> hovered_left,selected_left;}chromeResult{hover,press};
  struct {std::optional<std::size_t> selected_index;}commandToggle{toggle};
  OWNER
@@ -59,6 +59,7 @@ int main(){
  frame(0,0);assert(editor.openMenu==TopMenu::None);
  editor.showCommandMenu=false;frame(1,1);assert(editor.openMenu==TopMenu::None);
  editor.showCommandMenu=true;frame(1,1,false,0);assert(editor.openMenu==TopMenu::None);
+ frame(0,0,false,{},0);assert(editor.openMenu==TopMenu::File);
 }
 '''.replace("OWNER", owner)
         forest_fixture.ForestPreviewActions()._compile_and_run(code)

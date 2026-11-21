@@ -93,17 +93,30 @@ class OutputLayout(unittest.TestCase):
             self.assertEqual(values['EpochOutputEdition'], edition)
             self.assertEqual(Path(values['OutDir']), root / 'Artifacts/Runtime/windows' / edition / 'x64/Release')
             # Run the actual asset target, not a modeled XML transformation.
-            assets = ('fonts/Roboto-Regular.ttf', 'vulkan/shaders/vert.spv')
-            for asset in assets:
-                target = root / 'Engine/assets' / asset
+            assets = ('fonts/Roboto-Regular.ttf', 'vulkan/shaders/vert.spv',
+                      'vulkan/shaders/clouds.vert.spv', 'vulkan/shaders/clouds.frag.spv')
+            inputs = {asset: Path('Engine/assets') / asset for asset in assets}
+            missing_assets = ['vulkan/shaders/clouds.frag.spv']
+            for source in inputs.values():
+                target = root / source
                 target.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copyfile(ROOT / 'Engine/assets' / asset, target)
-            result = subprocess.run([str(msbuild), str(project), '/nologo',
-                '/t:EpochStageSharedRuntimeAssets', '/verbosity:quiet'], capture_output=True, text=True)
+                shutil.copyfile(ROOT / source, target)
+            stage = [str(msbuild), str(project), '/nologo', '/t:EpochStageSharedRuntimeAssets', '/verbosity:quiet']
+            for missing in missing_assets:
+                source = inputs[missing]
+                (root / source).unlink()
+                result = subprocess.run(stage, capture_output=True, text=True)
+                self.assertNotEqual(result.returncode, 0, missing)
+                self.assertIn('MSB3030', result.stdout + result.stderr)
+                self.assertIn(source.name, result.stdout + result.stderr)
+                shutil.copyfile(ROOT / source, root / source)
+            result = subprocess.run(stage, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stdout[-2000:] + result.stderr)
-            for asset in assets:
+            for asset, source in inputs.items():
                 self.assertEqual((Path(values['OutDir']) / 'assets' / asset).read_bytes(),
-                                 (ROOT / 'Engine/assets' / asset).read_bytes())
+                                 (ROOT / source).read_bytes())
+            if edition == 'public':
+                self.assertFalse((Path(values['OutDir']) / 'assets/forest').exists())
 
     def test_editor_runtime_deployment_uses_selected_vcpkg_installation(self):
         msbuild = self.x64_msbuild()

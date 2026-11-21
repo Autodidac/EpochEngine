@@ -201,6 +201,7 @@ export namespace epochengine::openglstate
         GLint sceneWireLoc = -1;
         GLint scenePaintTableLoc = -1;
         GLint scenePaintRowsLoc = -1;
+        GLint sceneSprayLoc = -1;
         std::array<GLint,8> sceneAtmosphereLocs{-1,-1,-1,-1,-1,-1,-1,-1};
         std::array<GLint,6> sceneWaterLocs{-1,-1,-1,-1,-1,-1};
         GLuint scenePaintTable = 0;

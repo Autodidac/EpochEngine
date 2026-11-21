@@ -63,13 +63,13 @@
       "path": "Engine/dep/EpochMediaEngine",
       "mode": "engine_owned_media",
       "repository": "Autodidac/EpochMediaEngine",
-      "note": "Published baseline plus a local Clang contract include repair. Linux Release core contract passed. Native interaction and movie decoding remain open.",
-      "upstream_revision": "71ee101bb778eb28947d557f5f8fd3c5c655b375",
-      "upstream_tree": "7dee00788bd49b67e1764606967c4e516ab7f649",
+      "note": "Published standalone source. The timeline contract checks fractional-rate frame boundaries. The Windows GUI composition check passed. Native playback and movie decoding remain open.",
+      "upstream_revision": "250bda01225baf945765639409359df1eec7a9bd",
+      "upstream_tree": "a3234c3ca37346fb34f4bec26bd698b19e8b7a2c",
       "portable_source_manifest": "Engine/dep/EpochMediaEngine/portable_source_manifest.json",
-      "published_upstream_revision": "71ee101bb778eb28947d557f5f8fd3c5c655b375",
-      "publication_status": "local_unpublished_changes",
-      "version": "0.1.1"
+      "published_upstream_revision": "250bda01225baf945765639409359df1eec7a9bd",
+      "publication_status": "published_source",
+      "version": "0.1.2"
     }
   ]
 }

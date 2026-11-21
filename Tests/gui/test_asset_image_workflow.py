@@ -289,7 +289,7 @@ class AssetImageWorkflow(unittest.TestCase):
             "Engine/src/editor/editor.project_textures.cpp", "Engine/src/project/project.texture_library.cpp",
             "Engine/src/project/project.texture_pipeline.cpp", "Engine/src/project/project.texture_resources.cpp",
             "Engine/src/project/project.texture_source.cpp", "Engine/src/project/project.asset_registry.cpp",
-            "Engine/src/authoring/texture/authoring.texture_document.cpp", "Engine/src/authoring/texture/authoring.texture_residency.cpp",
+            "Engine/src/authoring/texture/authoring.texture_document.cpp", "Engine/src/authoring/texture/authoring.texture_snapshot_codec.cpp", "Engine/src/authoring/texture/authoring.texture_residency.cpp",
             "Engine/src/renderers/canvas2d/render.canvas2d_scene.cpp", "Engine/dep/EpochPlatformEngine/src/core/core.env.cpp",
             "Engine/src/platform/core.path.cpp", "Engine/dep/EpochPlatformEngine/src/core/core.log.cpp",
             "Engine/dep/EpochPlatformEngine/src/core/core.time.cpp")]

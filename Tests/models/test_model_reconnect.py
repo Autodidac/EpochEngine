@@ -1,5 +1,6 @@
 """Production reconnect guard and publication method; no runtime or model load."""
 from pathlib import Path
+import time
 import unittest
 from Tools.source.owned_source_text import definition
 from Tests.support.cpp import compile_and_run, dependency_include
@@ -13,7 +14,11 @@ class ModelReconnect(unittest.TestCase):
         owner=(ROOT/'Engine/src/editor/application/editor.application_models_attachments.inl').read_text(encoding='utf-8')
         block=owner[owner.index('                const auto selected = std::ranges::find_if(state.models,'):]
         block=block[:block.index('\n            }\n        }')]
+        fields = owner[owner.index('                const auto filename = ai::native_shared_inputs::utf8(file.path.filename());'):]
+        block = fields[:fields.index('                gui::semantic_block(filename,')] + block
         body=r'''
+#include "ai.native_shared_inputs.hpp"
+namespace ai = epochengine::ai;
 #include <algorithm>
 #include <array>
 #include <filesystem>
@@ -41,8 +46,8 @@ BLOCK
 }
 #define CHECK(x) do{if(!(x))return __LINE__;}while(false)
 int main(){
- Editor editor;State state{{{"hauhau","Hauhau-IQ3_M.gguf",false}},false};
- File matching{"new", "D:/models/Hauhau-IQ3_M.gguf"};gui::click=1;
+ Editor editor;State state{{{"hauhau","\xe6\xa3\xae-IQ3_M.gguf",false}},false};
+ File matching{"new", std::filesystem::path{u8"D:/models/\u68ee-IQ3_M.gguf"}};gui::click=1;
  render(editor,state,{"flash","D:/models/Flash.gguf"});CHECK(gui::count==1&&native::calls==0);
  render(editor,state,{"edge","D:/models/model-skeleton.gguf"});CHECK(gui::count==1&&native::calls==0);
  render(editor,state,matching);CHECK(gui::count==2&&gui::reconnectEnabled&&native::calls==1);
@@ -52,13 +57,14 @@ int main(){
  matching.complete=true;state.models[0].local_weights_filename.clear();render(editor,state,matching);CHECK(gui::count==1&&native::calls==1);
  state.models.clear();render(editor,state,matching);CHECK(gui::count==1&&native::calls==1);
  gui::click=0;render(editor,state,matching);CHECK(editor.aiRegisteredModelId=="new"&&editor.aiModelManagerSection==0);
+ CHECK(ai::native_shared_inputs::path_from_utf8(editor.aiRegisteredModelPath)==matching.path);
  return 0;
 }
 '''.replace('BLOCK',block)
         report=ROOT/'Artifacts/Reports/model-reconnect-ui-20261115'
         report.mkdir(parents=True,exist_ok=True)
         source=report/'contract.cpp';source.write_text(body,encoding='utf-8')
-        compile_and_run(self,source,report)
+        compile_and_run(self,source,report,includes=(ROOT/'Engine/src/ai',))
 
     def test_actual_metadata_reconnect_preserves_profile(self):
         owner = (NATIVE/'ai.backend_model_native_model_manager.cpp').read_text(encoding='utf-8')
@@ -68,8 +74,8 @@ int main(){
             '[[nodiscard]] std::expected<std::filesystem::path, std::string> normalize_local_gguf_path(',
             '[[nodiscard]] std::expected<std::filesystem::path, std::string> validate_model_reconnection('))
         method = definition(owner, 'std::expected<nlohmann::json, core::Error> NativeModelManager::reconnect_model_file(')
-        report = ROOT/'Artifacts/Reports/model-reconnect-20261115'
-        report.mkdir(parents=True, exist_ok=True)
+        report = ROOT/'Artifacts/Reports/model-reconnect-20261115'/str(time.time_ns())
+        report.mkdir(parents=True)
         body = r'''
 #include <algorithm>
 #include <cstdio>
@@ -105,9 +111,10 @@ int main(int argc,char** argv){
  if(argc!=2)return 1;namespace fs=std::filesystem;using namespace epoch_ai::model;
  const fs::path root=argv[1];fs::create_directories(root/"old");fs::create_directories(root/"new");
  RuntimeModelProfile original;original.id="selected";original.display_name="My model";original.source=ModelSourceKind::local_gguf;
- original.local_path=root/"old/model.gguf";original.context_tokens=8192;original.capability_tier="high";
+ const auto filename=fs::path{u8"\u68ee-model.gguf"};
+ original.local_path=root/"old"/filename;original.context_tokens=8192;original.capability_tier="high";
  original.behavior_labels={"uncensored"};original.threads=4;original.gpu_layers="7";
- const auto selected=root/"new/model.gguf";gguf(selected);
+ const auto selected=root/"new"/filename;gguf(selected);
  NativeModelManager manager;manager.profiles_={original};
  CHECK(!manager.reconnect_model_file("unknown",selected)&&manager.saves==0);
  manager.slots_[original.id]=1;CHECK(!manager.reconnect_model_file(original.id,selected)&&manager.saves==0);manager.slots_.clear();
@@ -119,8 +126,9 @@ int main(int argc,char** argv){
  manager.failSave=true;CHECK(!manager.reconnect_model_file(original.id,selected));CHECK(manager.profiles_[0].local_path==original.local_path);manager.failSave=false;
  manager.profiles_[0].estimated_bytes=1000000;CHECK(!manager.reconnect_model_file(original.id,selected));manager.profiles_[0]=original;
  const auto result=manager.reconnect_model_file(original.id,selected);CHECK(result&&manager.saves==1&&!result->at("loaded").get<bool>());
- auto expected=to_json(original);expected["local_path"]=fs::absolute(selected).lexically_normal().string();
+ auto expected=to_json(original);expected["local_path"]=native_inputs::utf8(fs::absolute(selected).lexically_normal());
  CHECK(to_json(manager.profiles_[0])==expected);
+ CHECK(runtime_model_from_json(nlohmann::json::parse(expected.dump())).local_path==fs::absolute(selected).lexically_normal());
  manager.profiles_[0]=original;manager.profiles_[0].local_path=root/"old/split-00001-of-00002.gguf";
  const auto first=root/"new/split-00001-of-00002.gguf",second=root/"new/split-00002-of-00002.gguf";
  gguf(first);CHECK(!manager.reconnect_model_file(original.id,first));
@@ -131,7 +139,7 @@ int main(int argc,char** argv){
 '''.replace('HELPERS', helpers).replace('METHOD', method)
         source=report/'contract.cpp'
         source.write_text(body,encoding='utf-8')
-        compile_and_run(self,source,report,args=lambda config:[report/config/'fixture'],
+        compile_and_run(self,source,report,args=lambda config:[report/'model-files'/config],
                         includes=[NATIVE,dependency_include(ROOT)])
 
 

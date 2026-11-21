@@ -38,6 +38,7 @@ module;
 #include <array>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <span>
@@ -51,6 +52,7 @@ export module editor.core;
 import capability.profile;
 import context.type;
 import core.context;
+import editor.project_input_settings;
 import gui.engine;
 import render.preview_grid;
 import scene.snapshot;
@@ -559,6 +561,13 @@ namespace epochengine
         int systems_task_pan{ 0 };
         previewgrid::CameraRigSnapshot camera{};
     };
+
+    [[nodiscard]] std::string project_controller_dead_zone_evidence(std::uint16_t value, bool uniform);
+    void draw_project_input_binding_controls(
+        const editor_project_input_settings::SettingsSnapshot& projectInput,
+        editor_project_input_settings::Controller& controller,
+        float centerWidth,
+        const std::function<void(const editor_project_input_settings::SettingsEvidence&)>& recordInputEdit);
 
     export EditorFrameResult editor_run(const std::shared_ptr<core::Context>& ctx);
     export EditorFrameResult editor_run_context_panel(const std::shared_ptr<core::Context>& ctx, std::string_view route_id);

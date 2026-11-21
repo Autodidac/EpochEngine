@@ -5,6 +5,7 @@ module;
 #include <atomic>
 #include <bit>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <source_location>
 #include <string_view>
@@ -34,7 +35,7 @@ export namespace epochengine::render_water_evidence
     }
 
     inline void record(const previewgrid::PublishedSceneFrame& frame,
-        std::string_view backend, bool detail_enabled) noexcept
+        std::string_view backend, bool detail_enabled, std::size_t frame_spray_points = 0) noexcept
     {
         if (!enabled() || !frame.solids || frame.water_source.terrain_request == 0u)
             return;
@@ -77,14 +78,14 @@ export namespace epochengine::render_water_evidence
                     "backend={} draw_us={} revision={} terrain_request={} artifact={} "
                     "appearance_ranges={} resolved_ranges={} appearance_signature={} detail_ranges={} detail_vertices={} "
                     "range_signature={} shader_detail={} sampled={} sample_s={:.6f} phase_s={:.6f} "
-                    "eye={:.9f},{:.9f},{:.9f} near={:.8f} far={:.8f}",
+                    "eye={:.9f},{:.9f},{:.9f} near={:.8f} far={:.8f} spray_sites={} frame_spray_points={}",
                     backend, stamp, frame.revision, frame.water_source.terrain_request,
                     asset::texture::content_hash_hex(water->artifact_key), water->ranges.size(),
                     resolved, appearance_signature, detail_ranges.size(), detail_vertices, range_signature, detail_enabled,
                     frame.water_source.sampled_seconds.has_value(),
                     frame.water_source.sampled_seconds.value_or(0.0), frame.water_detail_seconds.value_or(0.0),
                     frame.preciseNavigationEye[0], frame.preciseNavigationEye[1], frame.preciseNavigationEye[2],
-                    frame.camera.nearPlane, frame.camera.farPlane);
+                    frame.camera.nearPlane, frame.camera.farPlane, water->spray_count, frame_spray_points);
             }
         }
         catch (...) {}

@@ -44,6 +44,17 @@ export namespace epochengine::asset::mesh
     {
         ContentHash artifact_key{};
         std::vector<SphericalWaterRange> ranges{};
+        // Metric coastline candidates follow the admitted draw cut. This
+        // presentation data never enters the generic artifact or water sidecar.
+        struct SpraySite final
+        {
+            std::array<float,3> position{};
+            std::uint64_t cell{};
+            float strength{};
+        };
+        static constexpr std::size_t maximum_spray_sites=96u;
+        std::array<SpraySite,maximum_spray_sites> spray_sites{};
+        std::size_t spray_count{};
     };
     struct Limits final
     {

@@ -454,12 +454,15 @@ namespace epochengine::core::cli
 
     export inline void print_engine_info()
     {
-        detail::log_info(
-            std::string{ epochengine::GetEngineName() }
+        auto identity = std::string{ epochengine::GetEngineName() }
             + " v"
             + std::string{ epochengine::GetEngineVersion() }
             + " edition="
-            + std::string{ epochengine::updater::distribution::edition_id });
+            + std::string{ epochengine::updater::distribution::edition_id };
+#if !EPOCH_SOURCE_EDITION_PUBLIC && !EPOCH_SOURCE_SELF_CODING
+        identity += " build-profile=owner-runtime";
+#endif
+        detail::log_info(identity);
     }
 
     export inline ParseResult parse(const int argc, char* argv[])
