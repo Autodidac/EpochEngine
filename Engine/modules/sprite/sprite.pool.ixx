@@ -71,10 +71,11 @@ namespace epochengine::spritepool
     // Pool state (module-local singletons)
     // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-    export inline std::vector<std::uint8_t>  usedFlags;     // 0 = free, 1 = used
-    export inline std::vector<std::uint32_t> generations;  // generation per slot
+    constexpr std::size_t default_capacity = 2048;
+    export inline std::vector<std::uint8_t>  usedFlags(default_capacity); // 0 = free, 1 = used
+    export inline std::vector<std::uint32_t> generations(default_capacity);
     export inline std::atomic<std::size_t>   lastAllocIndex{ 0 };
-    export inline std::size_t                capacity = 0;
+    export inline std::size_t                capacity = default_capacity;
 
     // Optional async task graph
     inline taskgraph::TaskGraph* g_taskGraph = nullptr;
@@ -83,7 +84,7 @@ namespace epochengine::spritepool
     // Lifecycle
     // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-    export inline void initialize(std::size_t cap) noexcept
+    export inline void initialize(std::size_t cap = default_capacity) noexcept
     {
         capacity = cap;
         usedFlags.assign(capacity, 0);

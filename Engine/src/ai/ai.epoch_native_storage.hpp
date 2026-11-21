@@ -25,10 +25,10 @@ struct Paths final {
 
 [[nodiscard]] inline Paths under_epoch_root(const std::filesystem::path& epoch_root) {
     if (epoch_root.empty()) throw std::runtime_error("Epoch application-data root is empty");
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
     // Never import development conversations, approvals, workspace or memory.
     // Existing external weights remain selectable through explicit model paths.
-    const auto data = epoch_root / "AI" / "public" / "native";
+    const auto data = epoch_root / "AI" / (EPOCH_EDITION_PUBLIC ? "public" : "owner-runtime") / "native";
 #endif
     // Immutable downloaded weights are edition-neutral. Conversations, model
     // selections, approvals, workspaces and learning state remain under data.

@@ -153,7 +153,7 @@ enum class LogLevel { INFO };
 void cancel_android_touch(epochengine::core::Context*) { steps.push_back(touch); }
 bool keyboardHeld = true;
 void reset_android_keyboard() { keyboardHeld = false; }
-struct { void release() { steps.push_back(scene); } } s_androidSceneDepth;
+namespace android_scene { void release() { steps.push_back(scene); } }
 void release_canvas2d_presenter() { steps.push_back(canvas); }
 void destroy_arcade_screen_preview_target() { steps.push_back(arcade); }
 void register_sdl_atlas_uploader() { steps.push_back(register_atlas); }

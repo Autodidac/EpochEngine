@@ -241,7 +241,7 @@
                 return;
             }
 
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
             gui::label("Assistant settings");
             render_ai_model_picker(editor, inspectorWidth, "inspector-model-picker");
 #endif

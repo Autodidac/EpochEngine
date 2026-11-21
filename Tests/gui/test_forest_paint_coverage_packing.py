@@ -23,7 +23,7 @@ STANDALONE = r'''
 #include <vector>
 
 namespace epochengine {
-namespace asset::mesh { struct Artifact; }
+namespace asset::mesh { struct Artifact; struct SphericalWaterAppearance; }
 namespace visuals {
 struct Rgb { float r{},g{},b{}; };
 constexpr Rgb object_default() noexcept { return {}; }
@@ -203,6 +203,7 @@ class ForestPaintCoveragePacking(unittest.TestCase):
         module_text, transform_text = (value.decode("utf-8").replace("\r\n", "\n") for value in frozen.values())
         fields = "\n".join(definition(module_text, f"    export {marker}", True) for marker in (
             "struct Vec3\n", "enum class ObjectPreviewPrimitive", "struct PreciseMeshTransform final",
+            "struct PlanetAtmosphere final", "struct SphericalWaterView final",
             "struct ObjectMarker\n", "struct MeshPaintRegion final", "struct MeshPaintLasso final", "struct MeshPaintView final",
         ))
         default_color = definition(module_text, "    export [[nodiscard]] constexpr Vec3 visual_rgb(")

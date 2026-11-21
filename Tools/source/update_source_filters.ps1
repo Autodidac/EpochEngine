@@ -1,6 +1,8 @@
 param([switch]$Write)
 $ErrorActionPreference = 'Stop'
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
+. (Join-Path $PSScriptRoot '../build/epoch_package_layout.ps1')
+$edition = Get-EpochSourceEdition -RepoRoot $repo
 $target = Join-Path $repo 'Engine/Engine.vcxitems.filters'
 $original = [IO.File]::ReadAllText($target)
 [xml]$doc = $original
@@ -62,7 +64,18 @@ foreach ($folder in $filters) {
         try { $digest = $hash.ComputeHash([Text.Encoding]::UTF8.GetBytes($folder)) } finally { $hash.Dispose() }
         $id.InnerText = ([Guid]::new([byte[]]$digest[0..15])).ToString('B')
     }
-    $null = $filter.AppendChild($id); $null = $definitions.AppendChild($filter)
+    $null = $filter.AppendChild($id)
+    # Keep edition-specific folder definitions inside the same projection boundary as their items.
+    if ($edition.Directory -eq 'development' -and !$edition.OwnerRuntime -and
+        $folder.EndsWith('\updater\owner', [StringComparison]::Ordinal)) {
+        $region = 'owner_updater_' + (($folder -split '\\')[0] -replace ' ', '_').ToLowerInvariant() + '_filter'
+        $prefix = ' EPOCH_' + 'OWNER_SOURCE_'
+        $null = $definitions.AppendChild($doc.CreateComment($prefix + 'BEGIN: ' + $region + ' '))
+        $null = $definitions.AppendChild($filter)
+        $null = $definitions.AppendChild($doc.CreateComment($prefix + 'END: ' + $region + ' '))
+    } else {
+        $null = $definitions.AppendChild($filter)
+    }
 }
 $firstGroup = $doc.SelectSingleNode('/m:Project/m:ItemGroup', $ns)
 $null = $doc.DocumentElement.InsertBefore($definitions, $firstGroup)
@@ -74,9 +87,12 @@ $stream = [IO.MemoryStream]::new(); $writer = [Xml.XmlWriter]::Create($stream, $
 $doc.Save($writer); $writer.Dispose()
 $expected = [Text.Encoding]::UTF8.GetString($stream.ToArray()) + "`r`n"
 $stream.Dispose()
+# The source projection writes a single-quoted declaration and omits the final newline.
+$normalized = $original.Replace("<?xml version='1.0' encoding='utf-8'?>", '<?xml version="1.0" encoding="utf-8"?>')
 if ($Write) {
     [IO.File]::WriteAllText($target, $expected, [Text.UTF8Encoding]::new($false))
     Write-Output "Updated source filters: $($filters.Count) ownership folders."
-} elseif ($original -cne $expected) {
+} elseif ($normalized.Replace("`r`n", "`n").TrimEnd("`n") -cne
+          $expected.Replace("`r`n", "`n").TrimEnd("`n")) {
     throw 'Source filters differ from physical ownership. Run Tools/source/update_source_filters.ps1 -Write.'
 } else { Write-Output 'Source filters match physical ownership.' }

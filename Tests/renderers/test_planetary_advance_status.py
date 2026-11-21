@@ -1,7 +1,7 @@
 """Actual ProjectPlayScene advance ownership; recorded camera/provider ports, no window."""
 from pathlib import Path
 from Tests.support.cpp import compile_and_run
-from Tools.source.owned_source_text import definition
+from Tools.source.owned_source_text import definition, read_owned_source
 import hashlib
 import json
 import os
@@ -14,11 +14,12 @@ OWNER = ROOT / "Engine/src/epoch/implementation/epoch.project_play_scene.inl"
 
 
 def actual_advance():
-    source = OWNER.read_text(encoding="utf-8-sig")
+    source = read_owned_source(OWNER, encoding="utf-8-sig")
     start = source.index("            void advance_planetary_exploration(")
     end = source.index("            [[nodiscard]] std::vector<previewgrid::ObjectMarker>", start)
     return '\n'.join((definition(source, '            [[nodiscard]] bool packaged_planetary_flight_enabled()'),
-        definition(source, '            [[nodiscard]] bool fixed_planetary_camera()'), source[start:end]))
+        definition(source, '            [[nodiscard]] bool fixed_planetary_camera()'),
+        definition(source, '            [[nodiscard]] bool linked_wet_terrain()'), source[start:end]))
 
 
 def fixture(body):
@@ -86,7 +87,7 @@ struct Settings{bool original_sunlight{};};struct Mesh{std::optional<int> coordi
 namespace scene {using Vec3=std::array<float,3>;ACTUAL_WORLD_POSITION}
 struct Entity{std::optional<Mesh> mesh_asset{Mesh{}};std::optional<std::array<double,3>>position_anchor{};struct Transform{std::array<float,3> scale{1,1,1},position{},rotation{};}transform;};
 struct Scheduler{void cancel(int){}};
-struct PackagedPose{bool allow_flight{};};
+struct PackagedPose{struct {bool ocean_surface{};} settings;bool allow_flight{};};
 struct Probe {
  std::unique_ptr<project_planetary_runtime::Controller> m_explorationController{std::make_unique<project_planetary_runtime::Controller>()};
  std::optional<Settings> m_planetarySettings{Settings{}},m_meshPlanetarySettings{Settings{}};
@@ -98,6 +99,7 @@ struct Probe {
  std::string m_explorationStatus{"Saved exploration successfully."},m_explorationAdvanceStatus{};
  std::optional<int> m_planetaryPending{};Scheduler* m_planetaryScheduler{};int m_planetaryCancellation{};
  std::optional<PackagedPose> m_packagedShoreline{}, m_packagedPlanetaryPose{};
+ bool m_linkedTerrain{};
  double m_packagedWaterElapsed{};
  int m_entities{},m_meshes{},m_planetaryEntity{};Entity entity{};unsigned reconfigures{};
  bool runtime_panel_captures_pointer(gui::Vec2)const{return false;}
@@ -172,6 +174,12 @@ int main(){
  probe.m_projectActionFrame.pressed=true;advance();
  CHECK(controller.calls==calls+2&&controller.captures==2&&probe.m_packagedWaterElapsed>fixedElapsed);
  CHECK(controller.last.rise==1.0&&controller.last.command==project_planetary_runtime::Command::none);
+ probe.m_packagedShoreline.reset();probe.m_packagedPlanetaryPose.emplace();
+ probe.m_packagedPlanetaryPose->allow_flight=true;probe.m_linkedTerrain=true;
+ const double beforeLinked=probe.m_packagedWaterElapsed;
+ advance();CHECK(probe.m_packagedWaterElapsed==beforeLinked);
+ probe.m_packagedPlanetaryPose->settings.ocean_surface=true;
+ advance();CHECK(probe.m_packagedWaterElapsed>beforeLinked);
  return 0;
 }
 '''.replace("ACTUAL_ADVANCE", body).replace("ACTUAL_PRECISE_TYPES",precise.replace('export ','')).replace("ACTUAL_WORLD_POSITION",world_position)

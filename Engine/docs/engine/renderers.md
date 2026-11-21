@@ -124,6 +124,19 @@ narrows toward the rim from both above and below. Volumetric billows shift
 the column and erode the contour without perforating dense cores. The thinner
 upper deck has its own weather pattern, altitude band and shear.
 
+At coarse pixel footprints, the shared density uses existing wind-shaped
+lobes to extend and trim the weather contour, and widens its opacity ramp.
+Extensions stay below the dense-core band so a coarse sample cannot create
+an opaque body where a finer sample sees an open passage. The effect fades
+out at fine footprints and applies to CPU sampling, OpenGL, GLES and Vulkan.
+
+Cloud weather uses the same unsigned lattice hash on CPU and GPU. The Android
+12 emulator's SwiftShader 4.0.0.1 clamps single hexadecimal literals above
+`INT_MAX` to `0x7fffffff`. The shader assembles the four affected multipliers
+from 16-bit halves. Matched Android ground and interior captures recovered the
+desktop cloud openings and contrast. Physical-phone acceptance remains open.
+See `Artifacts/Reports/android-cloud-flight-1121/hash-parity/device-066d7b4f`.
+
 November 17 cloud depth fallback: a reviewed Planetary provider can deliver a
 conservative inner terrain radius through density v2 and snapshot v6. OpenGL
 clips the cloud view ray at the nearer of that sphere and sampled opaque depth.
@@ -812,6 +825,37 @@ narrows sun glints while suppressing direct highlights below the horizon.
 Vulkan consumes the same packet and marks water in its existing opaque stream.
 Debug and Release shared
 renderer checks, Vulkan geometry checks, and exact shader compilation passed.
+The November 20 shoreline pass steepens resolved rising FFT crests using the
+sampled bed depth and the shared boundary fade. The clipped shoreline and
+water positions use the same samples. Near-water OpenGL and Vulkan shade the
+same three rolling swell phases. Crossing waves vary crest strength and break
+up the surface whitecaps. Pixel footprint and eye distance fade the extra
+detail. CPU and GLES paths keep baked shoreline color and normals when the
+desktop shader is unavailable. The raster whitecaps are surface shading.
+Capability-based tier selection and native GPU timing remain open.
+Debug and Release shoreline and water-time checks passed. The saved
+Verdant coast Vulkan comparison at 4 m used the same project executable and
+pose, with only the scene fragment changed. Of 90,828 foreground-water
+samples, 20,395 changed by at least 5 RGB levels at the fixed time. All 3,306
+dry-land control pixels matched. The candidate also rendered at 1.25 seconds.
+This compares the fragment change under a 60 FPS cap. The CPU normal changes
+were checked separately by the same shoreline and water-time contracts.
+
+The planetary snapshot records up to 96 wet shoreline sites in the admitted
+water appearance. The shared preview resolves their body-relative positions
+at the current water time. Desktop OpenGL draws up to 24 soft spray particles
+with depth testing and depth writes disabled. Replaying a paused time
+reproduces the same particles. Underwater and orbital views skip the batch.
+Scene publication tracks the occupied emission sites independently of mesh
+identity. Enable `EPOCH_TRACE_WATER_FRAMES=1` to read `spray_sites` per water
+appearance and `frame_spray_points` per draw frame. The 4 m Verdant camera
+faced away from all 22 droplets at 0 s and all 6 at 1.25 s. Turning 63°
+toward the crest at 0 s brought the same 22 into view. The Windows OpenGL
+draw changed 221 pixels at 1264×761, with a peak RGB change of 9/255.
+Depth and framebuffer alpha matched before and after the draw.
+Vulkan and Android GLES currently draw surface foam only. Per-tier budgets,
+native frame cost and offshore breaking crests still need qualification.
+
 Native Windows OpenGL and Vulkan both rendered the same fixed shallows pose
 at 0 and 1.25 seconds. OpenGL reproduced both paused frames byte for byte.
 Vulkan rendered animated water before the atmospheric background was added.
@@ -872,6 +916,11 @@ organization and clear regions, ocean/land separation, surface material
 detail and shoreline highlights. For worlds with optional rings, check the
 planet's occlusion of the far ring and the near ring's coverage of the planet.
 Repeat with the same camera path to spot LOD seams and temporal flicker.
+The CPU and GPU cloud traces keep the same regional weather and dense cores
+across viewing distances. At coarse pixel footprints a wind-sheared noise
+sample shapes the thinner flanks of each front and reduces the influence of
+small lobes. Fine footprints skip that sample. Check a fixed orbit for tapered
+edges, then replay the same weather below and through both decks.
 
 ## Cross-API Mapping
 

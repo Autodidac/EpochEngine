@@ -126,7 +126,9 @@ int main(){
         self.assertLess(dispatch.index('editor.forestTerrainPainting = true'),dispatch.index('editor.requestedMainSurface = EditorMainSurface::ForestFactory'))
         self.assertIn('editor.forestPlacementCamera=previewgrid::camera_for(ctx.get())',dispatch)
         self.assertIn('editor.requestedMainSurface.value_or(editor.mainSurface)==EditorMainSurface::ForestFactory',runtime)
-        self.assertIn('current&&editor.aiToolExecution!="forest.paint"',runtime)
+        self.assertRegex(runtime,
+            r'if\s*\(\s*current\s*&&\s*editor\.aiToolExecution\s*!=\s*"forest\.paint"'
+            r'\s*&&\s*!ai::asset_generation_tool\(editor\.aiToolExecution\)')
         workspace=(OWNER/'editor.frame_workspace_docking.inl').read_text()
         forest=workspace.rsplit('case EditorMainSurface::ForestFactory:',1)[1].split('case EditorMainSurface::PlantLab:',1)[0]
         self.assertLess(forest.index('if (editor.forestTerrainPainting)'),forest.index('else if (editor.forestDesignCamera)'))

@@ -211,11 +211,11 @@ namespace {
     }
     static const std::regex split_pattern{R"((.*)-(\d{5})-of-(\d{5})\.gguf$)", std::regex::icase};
     std::smatch match;
-    const auto filename = first_shard.filename().string();
+    const auto filename = native_inputs::utf8(first_shard.filename());
     std::error_code ec;
     if (!std::regex_match(filename, match, split_pattern) || match.size() != 4) {
         const auto bytes = std::filesystem::file_size(first_shard, ec);
-        if (ec || bytes == 0) return std::unexpected("Local GGUF is empty or unreadable: " + first_shard.string());
+        if (ec || bytes == 0) return std::unexpected("Local GGUF is empty or unreadable: " + native_inputs::utf8(first_shard));
         return bytes;
     }
 
@@ -225,15 +225,15 @@ namespace {
     for (unsigned index = 1; index <= total; ++index) {
         char suffix[32]{};
         std::snprintf(suffix, sizeof(suffix), "-%05u-of-%05u.gguf", index, total);
-        const auto shard = first_shard.parent_path() / (prefix + suffix);
+        const auto shard = first_shard.parent_path() / native_inputs::path_from_utf8(prefix + suffix);
         ec.clear();
         if (!std::filesystem::is_regular_file(shard, ec) || ec) {
-            return std::unexpected("Missing GGUF shard: " + shard.string());
+            return std::unexpected("Missing GGUF shard: " + native_inputs::utf8(shard));
         }
         ec.clear();
         const auto bytes = std::filesystem::file_size(shard, ec);
         if (ec || bytes == 0) {
-            return std::unexpected("GGUF shard is empty or unreadable: " + shard.string());
+            return std::unexpected("GGUF shard is empty or unreadable: " + native_inputs::utf8(shard));
         }
         total_bytes += bytes;
     }
@@ -242,12 +242,12 @@ namespace {
 
 [[nodiscard]] std::expected<std::filesystem::path, std::string> normalize_local_gguf_path(
     const std::filesystem::path& raw_path) {
-    const auto cleaned = trim_path_text(raw_path.string());
+    const auto cleaned = trim_path_text(native_inputs::utf8(raw_path));
     if (cleaned.empty()) return std::unexpected("Local GGUF path is empty");
 
-    std::filesystem::path path{cleaned};
+    auto path = native_inputs::path_from_utf8(cleaned);
     const auto filename_lower = [&] {
-        auto value = path.filename().string();
+        auto value = native_inputs::utf8(path.filename());
         std::ranges::transform(value, value.begin(), [](unsigned char ch) {
             return static_cast<char>(std::tolower(ch));
         });
@@ -264,13 +264,13 @@ namespace {
 
     static const std::regex split_pattern{R"((.*)-(\d{5})-of-(\d{5})\.gguf$)", std::regex::icase};
     std::smatch match;
-    const auto filename = path.filename().string();
+    const auto filename = native_inputs::utf8(path.filename());
     if (std::regex_match(filename, match, split_pattern) && match.size() == 4) {
         const auto total = static_cast<unsigned>(std::stoul(match[3].str()));
         if (total == 0) return std::unexpected("Invalid split GGUF shard count");
         char suffix[32]{};
         std::snprintf(suffix, sizeof(suffix), "-%05u-of-%05u.gguf", 1U, total);
-        path = path.parent_path() / (match[1].str() + suffix);
+        path = path.parent_path() / native_inputs::path_from_utf8(match[1].str() + suffix);
     }
 
     std::error_code ec;
@@ -278,11 +278,11 @@ namespace {
     if (ec) normalized = path;
     normalized = normalized.lexically_normal();
     if (!std::filesystem::is_regular_file(normalized, ec) || ec) {
-        return std::unexpected("Local GGUF does not exist: " + normalized.string());
+        return std::unexpected("Local GGUF does not exist: " + native_inputs::utf8(normalized));
     }
     ec.clear();
     if (std::filesystem::file_size(normalized, ec) == 0 || ec) {
-        return std::unexpected("Local GGUF is empty or unreadable: " + normalized.string());
+        return std::unexpected("Local GGUF is empty or unreadable: " + native_inputs::utf8(normalized));
     }
 
     // Match the original QwenFlashRuntime behavior: a split-model override
@@ -304,7 +304,7 @@ namespace {
         return std::unexpected("The original model file still exists or its absence could not be verified. No profile was changed.");
     static const std::regex split_pattern{R"((.*)-(\d{5})-of-(\d{5})\.gguf$)", std::regex::icase};
     std::smatch match;
-    const auto selected_name = selected.filename().string();
+    const auto selected_name = native_inputs::utf8(selected.filename());
     if (std::regex_match(selected_name, match, split_pattern)
         && (std::stoul(match[3].str()) == 0u || std::stoul(match[3].str()) > 256u))
         return std::unexpected("Invalid or unsupported GGUF shard count.");
@@ -319,15 +319,15 @@ namespace {
         return std::unexpected("Missing, malformed or unsupported Qwen GGUF architecture metadata. No profile was changed.");
     // Every shard needs a valid GGUF header; nonempty filenames alone cannot
     // distinguish an interrupted download or an HTML error page from weights.
-    const auto name = normalized->filename().string();
+    const auto name = native_inputs::utf8(normalized->filename());
     if (std::regex_match(name, match, split_pattern)) {
         const auto count = std::stoul(match[3].str());
         for (unsigned i = 1u; i <= count; ++i) {
             const auto digits = std::to_string(i);
-            const auto shard = normalized->parent_path() / (match[1].str() + "-"
+            const auto shard = normalized->parent_path() / native_inputs::path_from_utf8(match[1].str() + "-"
                 + std::string(5u - digits.size(), '0') + digits + "-of-" + match[3].str() + ".gguf");
             gguf_metadata_detail::Reader reader{shard};
-            if (!reader.fields()) return std::unexpected("Invalid GGUF shard header: " + shard.string());
+            if (!reader.fields()) return std::unexpected("Invalid GGUF shard header: " + native_inputs::utf8(shard));
         }
     }
     const auto bytes = local_gguf_set_bytes(*normalized);
@@ -720,7 +720,17 @@ void NativeModelManager::cancel_installation() {
 }
 
 std::filesystem::path NativeModelManager::manifest_path(std::string_view id) const {
-    return catalog_root_ / normalize_id(id) / "manifest.json";
+    const auto key = normalize_id(id);
+    const auto stem = key.substr(0, key.find('.'));
+    if (key.empty() || key.back() == '.' || stem == "con" || stem == "prn" || stem == "aux" || stem == "nul"
+        || (stem.size() == 4 && (stem.starts_with("com") || stem.starts_with("lpt"))
+            && stem.back() >= '1' && stem.back() <= '9'))
+        throw std::invalid_argument("Invalid model profile directory name.");
+    const auto path = (std::filesystem::absolute(catalog_root_) / key / "manifest.json").lexically_normal();
+    if (!native_inputs::same_path(path, std::filesystem::weakly_canonical(path))
+        || std::filesystem::is_symlink(path.parent_path()) || std::filesystem::is_symlink(path))
+        throw std::invalid_argument("Model profile storage is redirected.");
+    return path;
 }
 
 void NativeModelManager::save_profile(const RuntimeModelProfile& profile, bool only_if_absent) const {
@@ -826,6 +836,8 @@ void NativeModelManager::seed_defaults() {
     // conversation tokens before compaction.
     auto existing_json = read_json(builtin_manifest);
     try {
+        if (existing_json.value("id", std::string{}) != qwen.id)
+            throw std::invalid_argument("Built-in model profile has a different identity.");
         const bool draft_repaired = repair_legacy_self_draft(existing_json);
         const bool offload_tuned = migrate_gpu_default_70(existing_json);
         const bool gpu90_tuned = migrate_gpu_default_90(existing_json);
@@ -944,9 +956,13 @@ void NativeModelManager::load_profiles_locked() {
     for (const auto& entry : std::filesystem::directory_iterator(catalog_root_, ec)) {
         if (ec) break;
         if (!entry.is_directory(ec) || ec) { ec.clear(); continue; }
-        auto manifest = read_json(entry.path() / "manifest.json");
-        if (!manifest.is_object() || !manifest.value("format", std::string{}).starts_with("engcoder.runtime-model.v")) continue;
         try {
+            const auto directory_id = native_inputs::utf8(entry.path().filename());
+            const auto expected = manifest_path(directory_id);
+            if (expected.parent_path().filename() != entry.path().filename()) continue;
+            auto manifest = read_json(expected);
+            if (!manifest.is_object() || !manifest.value("format", std::string{}).starts_with("engcoder.runtime-model.v")
+                || normalize_id(manifest.value("id", std::string{})) != directory_id) continue;
             const bool repaired = repair_legacy_self_draft(manifest);
             const bool rescaled = migrate_legacy_gpu_scale(manifest);
             const bool tuned = migrate_gpu_default_60(manifest);
@@ -1090,7 +1106,7 @@ std::expected<nlohmann::json, core::Error> NativeModelManager::reconnect_model_f
         const auto found = std::ranges::find_if(profiles_, [&](const auto& item) { return item.id == updated.id; });
         if (found != profiles_.end()) *found = updated;
         return nlohmann::json{{"model", runtime_model_uri(updated)}, {"reconnected", true},
-            {"local_path", updated.local_path.string()}, {"loaded", false},
+            {"local_path", native_inputs::utf8(updated.local_path)}, {"loaded", false},
             {"validation", "Filename and bounded GGUF metadata checked; tensor integrity and runtime compatibility are checked on explicit load."}};
     } catch (const std::exception& error) {
         return std::unexpected(core::Error{core::make_error_code(core::Errc::io_error), error.what()});
@@ -1110,7 +1126,7 @@ std::expected<nlohmann::json, core::Error> NativeModelManager::register_model(co
         profile.source = source == "local-gguf" ? ModelSourceKind::local_gguf : ModelSourceKind::hugging_face;
         profile.repo = spec.value("repo", std::string{});
         profile.quant = spec.value("quant", std::string{});
-        profile.local_path = spec.value("local_path", std::string{});
+        profile.local_path = native_inputs::path_from_utf8(spec.value("local_path", std::string{}));
         if (profile.source == ModelSourceKind::local_gguf && !profile.local_path.empty()) {
             auto normalized_local = normalize_local_gguf_path(profile.local_path);
             if (!normalized_local) throw std::invalid_argument(normalized_local.error());
@@ -1123,15 +1139,16 @@ std::expected<nlohmann::json, core::Error> NativeModelManager::register_model(co
             raw_id = profile.repo + (profile.quant.empty() ? std::string{} : "-" + profile.quant);
         }
         if (raw_id.empty() && profile.source == ModelSourceKind::local_gguf) {
-            raw_id = profile.local_path.stem().string();
+            raw_id = native_inputs::utf8(profile.local_path.stem());
         }
         profile.id = normalize_id(raw_id);
         profile.display_name = spec.value("display_name", std::string{});
         if (profile.display_name.empty()) {
             if (profile.source == ModelSourceKind::hugging_face) {
-                profile.display_name = profile.repo + (profile.quant.empty() ? std::string{} : " Ã‚Â· " + profile.quant);
+                profile.display_name = profile.repo;
+                if (!profile.quant.empty()) profile.display_name += " (" + profile.quant + ")";
             } else {
-                profile.display_name = profile.local_path.filename().string();
+                profile.display_name = native_inputs::utf8(profile.local_path.filename());
             }
         }
         profile.estimated_bytes = spec.value("estimated_bytes", std::uint64_t{});
@@ -1180,7 +1197,7 @@ std::expected<nlohmann::json, core::Error> NativeModelManager::register_model(co
         profile.speculative_enabled = spec.value("speculative_enabled", false);
         profile.speculative_type = spec.value("speculative_type", std::string{"draft-mtp"});
         profile.speculative_repo = spec.value("speculative_repo", std::string{});
-        profile.speculative_model = spec.value("speculative_model", std::string{});
+        profile.speculative_model = native_inputs::path_from_utf8(spec.value("speculative_model", std::string{}));
         profile.speculative_tokens = spec.value("speculative_tokens", 2U);
         profile.enabled = true;
         if (profile.id.empty()) throw std::invalid_argument("model id is required");
@@ -1253,7 +1270,7 @@ std::expected<nlohmann::json, core::Error> NativeModelManager::install(std::stri
     if (profile.source == ModelSourceKind::local_gguf) {
         return std::unexpected(core::Error{
             core::make_error_code(core::Errc::model_unavailable),
-            "Local GGUF file is not available: " + profile.local_path.string(),
+            "Local GGUF file is not available: " + native_inputs::utf8(profile.local_path),
         });
     }
 
@@ -1708,6 +1725,11 @@ std::expected<nlohmann::json, core::Error> NativeModelManager::remove(std::strin
     }
 
     std::error_code ec;
+    std::filesystem::path manifest;
+    try { manifest = manifest_path(profile->id); }
+    catch (const std::exception& error) {
+        return std::unexpected(core::Error{core::make_error_code(core::Errc::invalid_argument), error.what()});
+    }
     if (delete_cache) {
         auto deleted = delete_downloaded_weights(id_or_uri);
         if (!deleted) return std::unexpected(deleted.error());
@@ -1716,9 +1738,11 @@ std::expected<nlohmann::json, core::Error> NativeModelManager::remove(std::strin
     // weights may be deleted by explicit request. Report that distinction.
     const bool is_builtin = profile->id == "qwen3.8-flash-next-ud-q2-k-xl";
     if (!is_builtin) {
-        std::filesystem::remove_all(manifest_path(profile->id).parent_path(), ec);
+        std::filesystem::remove(manifest, ec);
         if (ec) return std::unexpected(core::Error{core::make_error_code(core::Errc::io_error),
             "Could not remove model profile: " + ec.message()});
+        // A registration owns its manifest. Other files in the folder may be user data.
+        std::filesystem::remove(manifest.parent_path(), ec); // succeeds only when empty
     }
     {
         std::scoped_lock lock(mutex_);

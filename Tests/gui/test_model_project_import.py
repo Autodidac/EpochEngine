@@ -84,9 +84,11 @@ def fixture():
 #include "core.format_text.hpp"
 import core.sha256;
 import platform.filesystem;
+import platform.child_process;
 import project.asset_registry;
 import project.texture_library;
 import project.planetary_runtime;
+import project.planetary_snapshot;
 import scene.document;
 import scene.snapshot;
 import scene.serializer;
@@ -150,8 +152,17 @@ bool runtime_forest_projection_admitted(const ProjectRuntimeEntity&){return true
 previewgrid::Vec3 runtime_marker_color_for_entity(const ProjectRuntimeEntity&,bool){return {1,1,1};}
 float runtime_marker_radius_for_entity(const ProjectRuntimeEntity&){return .5f;}
 previewgrid::ObjectPreviewPrimitive runtime_preview_primitive_for_entity(const ProjectRuntimeEntity&){return previewgrid::ObjectPreviewPrimitive::Cube;}
-constexpr int m_runtimeViewportWidth=800,m_runtimeViewportHeight=600;
-bool pump_runtime_planetary_frame(const void*,previewgrid::SceneFrameRequest,bool){std::abort();}
+// This model-only scene publishes object markers. Entering planetary streaming is a test failure.
+struct InactiveCut {
+ struct {std::uint64_t request_id{};std::optional<double> water_sample_seconds;} target;
+ bool displayed{};
+};
+const std::optional<InactiveCut> m_planetaryCutPlayback;
+const std::shared_ptr<const project_planetary_snapshot::Snapshot> m_planetaryWaterSource;
+const std::optional<double> m_planetaryWaterObservedSeconds,m_planetaryWaterPublishedSeconds;
+double runtime_depth_fit_aspect(){std::abort();}
+bool pump_runtime_planetary_frame(const void*,previewgrid::SceneFrameRequest,
+ platform::child_process::MeshDrawMode,bool*){std::abort();}
 MODEL_SURFACE_POSE
 FUNCTIONS
 std::string contents(const fs::path&p){std::ifstream in(p,std::ios::binary);return {std::istreambuf_iterator<char>{in},{}};}
@@ -219,7 +230,8 @@ int main(int argc,char**argv){
  std::unordered_map<std::uint64_t,std::shared_ptr<const asset::mesh::Artifact>> meshes{{importedId,importedGeometry}};
  std::unordered_map<std::uint64_t,std::shared_ptr<const previewgrid::MeshBaseColorBinding>> colors{{importedId,binding}};
  const auto runtimeEntities=runtime.projection()->entities();
- CHECK(publish_project_play_markers(&gl,runtimeEntities,&meshes,{}, {},0,false,{},&colors));
+ const auto shaded=platform::child_process::MeshDrawMode::shaded;
+ CHECK(publish_project_play_markers(&gl,runtimeEntities,&meshes,{}, {},0,shaded,{},&colors));
  const auto rendered=previewgrid::object_solid_frame_for(&gl);
  CHECK(std::any_of(rendered->markers.begin(),rendered->markers.end(),[](const auto&m){return m.marker.baseColorTexture&&m.textured&&!m.textured->empty();}));
  CHECK(!publish_project_play_markers(&gl,runtimeEntities,&meshes));
@@ -228,7 +240,7 @@ int main(int argc,char**argv){
  terrainMarker.baseColorTexture.reset();
  const std::array runtimeMarkers{terrainMarker,rendered->markers.back().marker};
  CHECK(runtimeMarkers.back().baseColorTexture);
- CHECK(publish_project_play_markers(&unsupported,runtimeEntities,&meshes,{},runtimeMarkers,0,false,{},&colors));
+ CHECK(publish_project_play_markers(&unsupported,runtimeEntities,&meshes,{},runtimeMarkers,0,shaded,{},&colors));
  const auto otherFrame=previewgrid::object_solid_frame_for(&unsupported);
  CHECK(otherFrame&&otherFrame->markers.size()==2);
  CHECK(std::none_of(otherFrame->markers.begin(),otherFrame->markers.end(),[](const auto& entry){return bool(entry.marker.baseColorTexture);}));
@@ -470,13 +482,13 @@ class ModelProjectImport(unittest.TestCase):
             for path in folder.rglob('*.ixx'):
                 text=path.read_text(encoding='utf-8-sig');match=re.search(r'^export module\s+([\w.:]+);',text,re.M)
                 if match:module_map[match.group(1)]=path
-        pending=['asset.model_import','asset.mesh_artifact','asset.texture_import','core.sha256','platform.filesystem','project.asset_registry','project.texture_library','project.planetary_runtime','scene.document','scene.serializer','scene.persistence','scene.runtime','scene.surface_alignment','editor.project_textures','render.preview_grid','authoring.texture_detail'];selected={}
+        pending=['asset.model_import','asset.mesh_artifact','asset.texture_import','core.sha256','platform.filesystem','platform.child_process','project.asset_registry','project.texture_library','project.planetary_runtime','scene.document','scene.serializer','scene.persistence','scene.runtime','scene.surface_alignment','editor.project_textures','render.preview_grid','authoring.texture_detail'];selected={}
         while pending:
             name=pending.pop()
             if name in selected or name in ('std','std.compat'):continue
             self.assertIn(name,module_map);selected[name]=module_map[name]
             pending+=re.findall(r'^(?:export )?import\s+([\w.]+);',selected[name].read_text(encoding='utf-8-sig'),re.M)
-        implementations=[ROOT/p for p in ('Engine/src/render/render.preview_camera.cpp', 'Engine/src/render/render.preview_lighting.cpp','Engine/src/assets/texture/asset.texture_artifact.cpp','Engine/src/assets/texture/asset.texture_import.cpp','Engine/src/assets/image.stb.cpp','Engine/src/assets/mesh/asset.model_import.cpp','Engine/src/project/project.asset_registry.cpp','Engine/src/project/project.texture_library.cpp','Engine/src/project/project.texture_source.cpp','Engine/src/project/project.texture_pipeline.cpp','Engine/src/project/project.texture_resources.cpp','Engine/src/authoring/texture/authoring.texture_document.cpp','Engine/src/authoring/texture/authoring.texture_residency.cpp','Engine/src/editor/editor.project_textures.cpp','Engine/src/renderers/canvas2d/render.canvas2d_scene.cpp','Engine/dep/EpochPlatformEngine/src/core/core.env.cpp','Engine/dep/EpochPlatformEngine/src/core/core.time.cpp')]
+        implementations=[ROOT/p for p in ('Engine/src/render/render.preview_camera.cpp', 'Engine/src/render/render.preview_lighting.cpp','Engine/src/assets/texture/asset.texture_artifact.cpp','Engine/src/assets/texture/asset.texture_import.cpp','Engine/src/assets/image.stb.cpp','Engine/src/assets/mesh/asset.model_import.cpp','Engine/src/project/project.asset_registry.cpp','Engine/src/project/project.texture_library.cpp','Engine/src/project/project.texture_source.cpp','Engine/src/project/project.texture_pipeline.cpp','Engine/src/project/project.texture_resources.cpp','Engine/src/authoring/texture/authoring.texture_document.cpp', 'Engine/src/authoring/texture/authoring.texture_snapshot_codec.cpp','Engine/src/authoring/texture/authoring.texture_residency.cpp','Engine/src/editor/editor.project_textures.cpp','Engine/src/renderers/canvas2d/render.canvas2d_scene.cpp','Engine/dep/EpochPlatformEngine/src/core/core.env.cpp','Engine/dep/EpochPlatformEngine/src/core/core.time.cpp')]
         includes=dependency_include(ROOT)
         (proof/'CMakeLists.txt').write_text(f'''cmake_minimum_required(VERSION 3.30)
 cmake_policy(SET CMP0141 NEW)

@@ -8,9 +8,46 @@ function Get-EpochSourceEdition {
         throw "Invalid physical source edition marker: $markerPath"
     }
     $isPublic = $Matches[1] -ceq '1'
+    $ownerRuntime = !$isPublic -and $marker -cmatch '(?m)^#define EPOCH_SOURCE_SELF_CODING 0\r?$'
     [pscustomobject]@{
         Id = $(if ($isPublic) { 'epoch.public.github.v1' } else { 'epoch.development.site.v1' })
         Directory = $(if ($isPublic) { 'public' } else { 'development' })
+        OwnerRuntime = $ownerRuntime
+    }
+}
+
+function Get-EpochRuntimePackageVersion {
+    param(
+        [Parameter(Mandatory)][string]$RepoRoot,
+        [Parameter(Mandatory)][ValidateSet('windows-x64','linux-x64')][string]$Platform,
+        [string]$RequestedVersion,
+        [switch]$SkipSourceOnly
+    )
+    $reader = Join-Path $RepoRoot 'Tools/build/get_epoch_version.ps1'
+    $module = Join-Path $RepoRoot 'Engine/modules/epoch.version.ixx'
+    $source = (& $reader -VersionModule $module).Trim()
+    $runtime = (& $reader -VersionModule $module -Platform $Platform).Trim()
+    if ($runtime -cne $source) {
+        if ($SkipSourceOnly -and !$RequestedVersion -and [version]$runtime -lt [version]$source) { return }
+        throw "Source $source pins the $Platform runtime at $runtime. Stage the runtime from its matching source."
+    }
+    if ($RequestedVersion -and $RequestedVersion -cne $runtime) {
+        throw "Requested release version $RequestedVersion differs from the $Platform runtime version $runtime."
+    }
+    return $runtime
+}
+
+function Assert-EpochRuntimeVersionOutput {
+    param(
+        [Parameter(Mandatory)][string]$Text,
+        [Parameter(Mandatory)][string]$Version,
+        [Parameter(Mandatory)]$Edition
+    )
+    $expected = "Epoch v$Version edition=$($Edition.Id)"
+    if ($Edition.OwnerRuntime) { $expected += ' build-profile=owner-runtime' }
+    $rows = [regex]::Matches($Text, '(?m)(?:^|[ \t])(?<identity>Epoch v[^\r\n]*)')
+    if ($rows.Count -ne 1 -or $rows[0].Groups['identity'].Value.TrimEnd() -cne $expected) {
+        throw "The staged executable must report exactly one matching identity: $expected"
     }
 }
 
@@ -56,6 +93,22 @@ function Get-EpochPackageOutputRoot {
     }
     # A caller cannot put public and private payloads in the same output tree.
     return Assert-EpochPackagePath -LiteralPath $OutputRoot -PackageRoot $editionRoot
+}
+
+function Copy-EpochBuiltVulkanShaders {
+    param(
+        [Parameter(Mandatory)][string]$RuntimeRoot,
+        [Parameter(Mandatory)][string]$Stage
+    )
+    $relative = 'assets/vulkan/shaders'
+    $built = Join-Path $RuntimeRoot $relative
+    $destination = Join-Path $Stage $relative
+    foreach ($asset in Get-ChildItem -LiteralPath $destination -File -Filter '*.spv') {
+        $shader = Join-Path $built $asset.Name
+        if (Test-Path -LiteralPath $shader -PathType Leaf) {
+            Copy-Item -LiteralPath $shader -Destination $asset.FullName -Force
+        }
+    }
 }
 
 function Remove-EpochPackageItem {
@@ -133,5 +186,78 @@ function Move-EpochPackageValidationEvidence {
             -not (Get-ChildItem -LiteralPath $directory -Force | Select-Object -First 1)) {
             Remove-Item -LiteralPath $directory -ErrorAction Stop
         }
+    }
+}
+
+function Update-EpochRuntimeChecksums {
+    param(
+        [Parameter(Mandatory)][string]$OutputRoot,
+        [Parameter(Mandatory)][string]$Edition,
+        [Parameter(Mandatory)][string]$Version,
+        [Parameter(Mandatory)][ValidateSet('windows-x64', 'linux-x64')][string]$Platform,
+        [switch]$Withdraw
+    )
+    if ($Version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+$' -or
+        $Edition -cnotin @('epoch.public.github.v1', 'epoch.development.site.v1')) {
+        throw 'Invalid runtime checksum identity.'
+    }
+    $names = [ordered]@{
+        'windows-x64' = "epoch_win10_x64_v$Version.zip"
+        'linux-x64' = "epoch_linux_x64_v$Version.tar.gz"
+    }
+    $index = Assert-EpochPackagePath -LiteralPath (Join-Path $OutputRoot "v${Version}_checksums.txt") -PackageRoot $OutputRoot
+    $mutex = [Threading.Mutex]::new($false, "Epoch.RuntimeChecksums.$Edition.$Version")
+    $locked = $false
+    try {
+        try { $locked = $mutex.WaitOne(60000) } catch [Threading.AbandonedMutexException] { $locked = $true }
+        if (!$locked) { throw 'Timed out waiting for the runtime checksum writer.' }
+        $previous = @()
+        if ([IO.File]::Exists($index)) { $previous = [IO.File]::ReadAllLines($index) }
+        elseif ($Withdraw) { return }
+        $lines = @()
+        foreach ($key in $names.Keys) {
+            if ($key -ceq $Platform -and $Withdraw) { continue }
+            $name = $names[$key]
+            # Only the stager that completed its own checks can add a new row.
+            if ($key -cne $Platform -and !($previous -cmatch ('^[0-9a-f]{64}  ' + [regex]::Escape($name) + '$'))) { continue }
+            $archive = Assert-EpochPackagePath -LiteralPath (Join-Path $OutputRoot $name) -PackageRoot $OutputRoot
+            $sidecar = Assert-EpochPackagePath -LiteralPath "$archive.sha256" -PackageRoot $OutputRoot
+            $receipt = Assert-EpochPackagePath -LiteralPath "$archive.build-validation.json" -PackageRoot $OutputRoot
+            $admitted = $false
+            if ([IO.File]::Exists($archive) -and [IO.File]::Exists($sidecar) -and [IO.File]::Exists($receipt)) {
+                $digest = (Get-FileHash -Algorithm SHA256 -LiteralPath $archive -ErrorAction Stop).Hash.ToLowerInvariant()
+                $row = "$digest  $name"
+                $proof = [IO.File]::ReadAllText($receipt) | ConvertFrom-Json -ErrorAction Stop
+                $proofPassed = if ($key -ceq 'windows-x64') {
+                    $failed = foreach ($check in @('version', 'edition', 'engine_contracts', 'flat_archive', 'notices', 'clean_payload')) {
+                        if ($proof.checks.$check -isnot [bool] -or !$proof.checks.$check) { $check }
+                    }
+                    $proof.schema -ceq 'epoch.release_validation.v1' -and $proof.platform -ceq $key -and
+                        !$failed -and $proof.bytes -eq (Get-Item -LiteralPath $archive).Length
+                } else {
+                    $proof.schema -ceq 'epoch.linux-package-validation.v1' -and $proof.archive_inventory -ceq 'pass' -and
+                        $proof.version_check -ceq 'pass' -and $proof.engine_contract -ceq 'pass' -and $proof.shared_libraries -ceq 'pass'
+                }
+                $admitted = $proofPassed -and $proof.edition -ceq $Edition -and $proof.version -ceq $Version -and
+                    $proof.artifact -ceq $name -and $proof.sha256 -ceq $digest -and
+                    ([IO.File]::ReadAllText($sidecar).TrimEnd([char]13, [char]10) -ceq $row) -and
+                    ($key -ceq $Platform -or $previous -ccontains $row)
+            }
+            if ($admitted) { $lines += $row }
+            elseif ($key -ceq $Platform) { throw "Missing or inconsistent validation evidence for $name." }
+        }
+        $pending = "$index.$([guid]::NewGuid().ToString('N')).partial"
+        try {
+            $content = if ($lines.Count) { ($lines -join "`n") + "`n" } else { '' }
+            [IO.File]::WriteAllText($pending, $content, [Text.Encoding]::ASCII)
+            if ([IO.File]::Exists($index)) {
+                [IO.File]::Replace($pending, $index, [System.Management.Automation.Language.NullString]::Value)
+            } else {
+                [IO.File]::Move($pending, $index)
+            }
+        } finally { [IO.File]::Delete($pending) }
+    } finally {
+        if ($locked) { $mutex.ReleaseMutex() }
+        $mutex.Dispose()
     }
 }

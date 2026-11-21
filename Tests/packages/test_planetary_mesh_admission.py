@@ -9,6 +9,7 @@ import unittest
 
 from Tests.build.test_opengl_sprite_stream import definition
 from Tests.packages.test_mesh_artifact_limits import CODE as GEOMETRY_CODE
+from Tests.support.project_play_owners import ASSETS
 
 ROOT = Path(__file__).resolve().parents[2]
 EDIT = ROOT / "Engine/src/editor/application/editor.application_asset_browsing.inl"
@@ -53,6 +54,7 @@ CODE = r'''
 import asset.mesh_artifact;
 import asset.texture_artifact;
 import project.planetary;
+import project.planetary_snapshot;
 import scene.snapshot;
 import scene.serializer;
 import scene.document;
@@ -186,6 +188,8 @@ public:
  std::unordered_map<std::uint64_t,std::shared_ptr<const previewgrid::MeshBaseColorBinding>> m_meshBaseColorTextures;
  std::optional<project_planetary::Settings> m_meshPlanetarySettings;
  std::optional<project_planetary::SourceGeneration> m_meshPlanetarySource;
+ std::shared_ptr<const epochengine::project_planetary::PackagedShoreline> m_packagedShoreline;
+ std::shared_ptr<const epochengine::project_planetary::PackagedPlanetaryPose> m_packagedPlanetaryPose;
  previewgrid::MeshFrameLimits m_meshFrameLimits;
  RUNTIME_FUNCTION
 };
@@ -198,7 +202,9 @@ float runtime_marker_radius_for_entity(const ProjectRuntimeEntity&){return 1;}
 // This fixture exercises normal mesh publication. The asynchronous camera
 // packet is a separate runtime boundary and must not run in this lane.
 constexpr int m_runtimeViewportWidth=1280,m_runtimeViewportHeight=720;
-bool pump_runtime_planetary_frame(const void*,previewgrid::SceneFrameRequest,platform::child_process::MeshDrawMode){std::abort();}
+double runtime_depth_fit_aspect() noexcept{return double(m_runtimeViewportWidth)/m_runtimeViewportHeight;}
+bool pump_runtime_planetary_frame(const void*,previewgrid::SceneFrameRequest,platform::child_process::MeshDrawMode,bool*){std::abort();}
+PLANETARY_MARKER_STATE
 PUBLICATION
 }
 int main(int argc,char** argv){
@@ -317,6 +323,19 @@ int main(int argc,char** argv){
 '''
 
 
+def untimed_planetary_marker_state(play):
+    member_names = (
+        'm_planetaryCutPlayback', 'm_planetaryWaterSource',
+        'm_planetaryWaterPublishedSeconds', 'm_planetaryWaterObservedSeconds',
+    )
+    fields = [next(line for line in play.splitlines() if name+'{' in line and line.endswith(';'))
+              for name in member_names]
+    playback = definition(play, '            struct PlanetaryCutPlayback final', True)
+    return ('namespace project_planetary_snapshot=epochengine::project_planetary_snapshot;\n'
+            + playback + '\n' + '\n'.join(fields)).replace(
+                'project_planetary::StreamResult', 'epochengine::project_planetary::StreamResult')
+
+
 class PlanetaryMeshAdmission(unittest.TestCase):
     def test_actual_editor_import_runtime_load_and_frame(self):
         if os.name != "nt":
@@ -334,6 +353,7 @@ class PlanetaryMeshAdmission(unittest.TestCase):
         geometry = GEOMETRY_CODE[GEOMETRY_CODE.index("struct Geometry"):GEOMETRY_CODE.index("int main(")]
         play = PLAY.read_text(encoding="utf-8")
         runtime = definition(play, "            void prepare_project_meshes(")
+        admission = definition(ASSETS.read_text(encoding='utf-8'), '    void admit(')
         legacy = (ROOT / "Engine/src/epoch/epoch.engine_legacy.cpp").read_text(encoding="utf-8")
         publication = "\n".join(owner_function(legacy,marker) for marker in (
             "[[nodiscard]] std::optional<epochengine::previewgrid::Vec3> project_play_position_for_origin(",
@@ -347,6 +367,9 @@ class PlanetaryMeshAdmission(unittest.TestCase):
         outliner = definition(outliner_source,
             '        if(editor.planetaryMeshPolicy&&!editor.planetaryMeshPolicy->generated_bodies.empty())')
         code = CODE.replace("GEOMETRY", geometry).replace("EDITOR_FUNCTIONS", functions).replace("RUNTIME_FUNCTION", runtime).replace("PUBLICATION", publication).replace('BODY_FILTER',body_filter).replace('BODY_OUTLINER',outliner).replace('BODY_CLICK',body_click)
+        code = code.replace('PLANETARY_MARKER_STATE', untimed_planetary_marker_state(play))
+        code = code.replace('class RuntimeProbe {',
+            'namespace project_play_assets {\n' + admission + '\n}\nclass RuntimeProbe {', 1)
         proof = ROOT / "Artifacts/Reports/planetary-mesh-admission-oct28" / str(time.time_ns())
         proof.mkdir(parents=True, exist_ok=True)
         (proof / "consumer.cpp").write_text(code, encoding="utf-8")
@@ -369,7 +392,7 @@ class PlanetaryMeshAdmission(unittest.TestCase):
             pending.extend(re.findall(r"^(?:export\s+)?import\s+([\w.:]+);", module_map[name].read_text(encoding="utf-8-sig"), re.M))
         module_paths = "\n".join('"'+module_map[name].as_posix()+'"' for name in sorted(modules))
         implementations = [ROOT / path for path in ("Engine/src/render/render.preview_camera.cpp", "Engine/src/render/render.preview_lighting.cpp","Engine/src/assets/texture/asset.texture_artifact.cpp",
-            "Engine/src/authoring/texture/authoring.texture_document.cpp", "Engine/src/authoring/texture/authoring.texture_residency.cpp")]
+            "Engine/src/authoring/texture/authoring.texture_document.cpp", "Engine/src/authoring/texture/authoring.texture_snapshot_codec.cpp", "Engine/src/authoring/texture/authoring.texture_residency.cpp")]
         fixture = ROOT / "Artifacts/Tests" / f"pma{time.time_ns():x}"
         (proof / "CMakeLists.txt").write_text(f'''cmake_minimum_required(VERSION 3.30)
 set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT Embedded)

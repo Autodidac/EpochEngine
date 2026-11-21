@@ -30,6 +30,8 @@ using SemanticTone=gui_lib::SemanticTone;
 struct SemanticPair{int accent=7,background=8;};SemanticPair active_semantic_pair(SemanticTone){return {};}
 float space_advance(float scale){return 4*scale;}constexpr float kButtonTextClipInset=2;
 // Neutral painting ports; pointer ownership is the tested production contract.
+struct AuthoredButtonStyle;
+bool draw_authored_button_face(const AuthoredButtonStyle&,Vec2,float,float,bool,bool,bool){std::abort();}
 void draw_button_icon(ButtonIcon,Vec2,Vec2){}
 void draw_button_tooltip(std::string_view,Vec2,float=0){}
 bool point_in_tooltip_capture(Vec2 point){return point_in_modal_input_capture(point);}

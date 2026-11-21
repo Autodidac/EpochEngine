@@ -25,10 +25,10 @@ stay at or below 4,000 physical lines. `Tools/source/validate_source_size.py` is
 the portable check; its PowerShell entry is `validate_source_size.ps1`. Shared
 tests enforce the same limit, including engine-owned dependency code. Exact
 third-party mirrors and generated build/runtime output are outside this rule.
-Feature-owned `.inl` files keep private state and definition order in their
-existing translation unit and appear under **Implementation Files** in MSVC.
-They improve physical ownership; they do not by themselves establish a separate
-library, repository or independently validated platform target.
+Existing `.inl` files appear under **Implementation Files** in MSVC.
+Group compiled units by subsystem on disk and mirror that path in MSVC filters.
+Edition-specific implementations belong in the edition-owned directory. Enroll
+them in both build graphs and exercise the Public and owner source projections.
 
 Prefer real module implementation units or owned `.cpp` files for new behavior.
 Do not split a large function into more textual includes just to pass the line

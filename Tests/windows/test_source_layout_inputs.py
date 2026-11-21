@@ -19,6 +19,8 @@ class SourceLayoutInputs(unittest.TestCase):
         engine = fixture / 'Engine'
         owner = engine / 'src' / 'editor' / 'application'
         owner.mkdir(parents=True)
+        (engine / 'include').mkdir()
+        shutil.copyfile(ROOT / 'Engine/include/epoch.edition.hpp', engine / 'include/epoch.edition.hpp')
         (owner / 'editor.example.inl').write_text('// fixture\n', encoding='utf-8')
         (engine / 'CMakeLists.txt').write_text('# fixture\n', encoding='utf-8')
         (engine / 'Engine.vcxitems.filters').write_text('<Project/>', encoding='utf-8')

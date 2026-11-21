@@ -231,17 +231,25 @@ export namespace epochengine
         if (w <= 0 || h <= 0 || maxVal <= 0 || maxVal > 255)
             throw std::runtime_error("Invalid PPM header: " + filepath.string());
 
-        // After maxVal there is a single whitespace byte before binary data.
-        // Consume exactly one char if it's whitespace; if not, still consume one to align.
+        const std::size_t rgbBytes = std::size_t(w) * std::size_t(h) * 3;
+        // The packaged P6 sprites use both LF and CRLF headers. Raster bytes
+        // can themselves be whitespace, including LF after a CR-only header.
         int c = f.get();
         if (c == EOF) throw std::runtime_error("Truncated PPM: " + filepath.string());
-        if (!std::isspace(static_cast<unsigned char>(c)))
+        if (c == '\r' && f.peek() == '\n')
+        {
+            const auto raster = f.tellg();
+            f.seekg(0, std::ios::end);
+            const bool hasLineFeed = (f.tellg() - raster) > static_cast<std::streamoff>(rgbBytes);
+            f.seekg(raster);
+            if (hasLineFeed) f.get();
+        }
+        else if (!std::isspace(static_cast<unsigned char>(c)))
         {
             // some writers don't include whitespace; treat this byte as first pixel channel
             f.unget();
         }
 
-        const std::size_t rgbBytes = std::size_t(w) * std::size_t(h) * 3;
         std::vector<std::uint8_t> raw(rgbBytes);
         f.read(reinterpret_cast<char*>(raw.data()), static_cast<std::streamsize>(raw.size()));
         if (f.gcount() != static_cast<std::streamsize>(raw.size()))

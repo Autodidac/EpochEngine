@@ -6,6 +6,7 @@ import os
 import subprocess
 import unittest
 from Tests.renderers.test_runtime_preview_controls import shortcut_fixture,actual_function
+from Tests.support.project_play_owners import HUD
 ROOT=Path(__file__).resolve().parents[2]
 OWNER=ROOT/"Engine/src/epoch/implementation/epoch.project_play_scene.inl"
 
@@ -18,7 +19,9 @@ class RuntimeControlsVisibility(unittest.TestCase):
         self.assertLess(admission.index("if (!runtime->valid())"),admission.index("m_runtimeControlsVisible = false;"))
         self.assertLess(admission.index("m_projectGuiAdapter ="),admission.index("m_runtimeControlsVisible = false;"))
         self.assertIn("bool m_runtimeControlsVisible{true};",source)
-        self.assertIn("if (!m_runtimeControlsVisible)\n                    draw_runtime_controls_restore();\n                else",source)
+        hidden=actual_function(source, "if (!m_runtimeControlsVisible)")
+        self.assertIn("draw_runtime_controls_restore();",hidden)
+        self.assertNotIn("Project Controls",hidden)
         self.assertIn("gui::ScopedInputSuppression controlsOwnInput{\n                        runtime_panel_captures_pointer(mouse_pos)};",source)
         self.assertIn("controls.position,\n                        controls.size);",source)
         self.assertIn("draw_runtime_controls_hide(controlsContentWidth);",source)
@@ -34,7 +37,9 @@ class RuntimeControlsVisibility(unittest.TestCase):
         for index,command in enumerate(commands):
             r=subprocess.run(command,cwd=ROOT,capture_output=True,text=True,timeout=90)
             (lane/f"lane-{index}.log").write_text(r.stdout+r.stderr,encoding="utf-8");runs.append({"command":command,"exit":r.returncode})
-            (lane/"result.json").write_text(json.dumps({"passed":r.returncode==0 and index==len(commands)-1,"owner_sha256":hashlib.sha256(OWNER.read_bytes()).hexdigest(),"commands":runs,
+            (lane/"result.json").write_text(json.dumps({"passed":r.returncode==0 and index==len(commands)-1,
+                "source_sha256":{str(path.relative_to(ROOT)):hashlib.sha256(path.read_bytes()).hexdigest()
+                    for path in (OWNER,HUD)},"commands":runs,
                 "scope":"Actual sole bounds/capture/wheel and Show/Hide button callers plus existing F2/F12 behavior. Responsive bounds at1393,400,180,20,1px; no GUI/renderer/native claim. Canonical GUI admission/source callers bound by explicit assertions."},indent=2),encoding="utf-8")
             self.assertEqual(r.returncode,0,r.stdout+r.stderr)
 

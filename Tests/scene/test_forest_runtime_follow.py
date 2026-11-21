@@ -7,12 +7,14 @@ import re
 import subprocess
 import unittest
 from Tests.packages.test_planetary_scene_units import CODE as UNITS_CODE, owner
+from Tests.packages.test_planetary_mesh_admission import untimed_planetary_marker_state
 
 ROOT = Path(__file__).resolve().parents[2]
 CODE = UNITS_CODE[:UNITS_CODE.index("// The real Windows translation unit")].replace(
     "#include <string>", "#include <string>\n#include <string_view>\n#include \"core.stl_types.hpp\"").replace(
     "import render.arcade;", "import render.arcade;\nimport forest.preview_mesh;\nimport forest.factory;\nimport core.log;") + r'''
 namespace forest=epochengine::forest;
+PLANETARY_MARKER_STATE
 #define near
 RUNTIME_PUBLICATION
 class RuntimeProbe {
@@ -297,6 +299,7 @@ class ForestRuntimeFollow(unittest.TestCase):
         self.assertLess(play.index("bool completeManagedFrame="), play.index("m_terrainAttachmentStatus=append_planetary_attached_markers"))
         self.assertNotIn("filesystem", methods)
         code = CODE.replace("RUNTIME_PUBLICATION", publication).replace("RUNTIME_METHODS", methods)
+        code = code.replace("PLANETARY_MARKER_STATE", untimed_planetary_marker_state(play))
         identity = hashlib.sha256(code.encode()).hexdigest()[:12]
         proof = ROOT / "Artifacts/Reports/forest-runtime-follow-nov01" / identity
         proof.mkdir(parents=True, exist_ok=True)
@@ -312,6 +315,7 @@ class ForestRuntimeFollow(unittest.TestCase):
         pending = re.findall(r"^import\s+([\w.]+);", code, re.M) + ["authoring.texture_detail"]
         impl = [ROOT / p for p in ("Engine/src/render/render.preview_camera.cpp", "Engine/src/render/render.preview_lighting.cpp","Engine/src/assets/texture/asset.texture_artifact.cpp",
             "Engine/src/authoring/texture/authoring.texture_document.cpp",
+            "Engine/src/authoring/texture/authoring.texture_snapshot_codec.cpp",
             "Engine/src/authoring/texture/authoring.texture_residency.cpp", "Engine/src/forest/forest.preview_mesh.cpp",
             "Engine/src/assets/texture/asset.texture_import.cpp", "Engine/src/assets/image.stb.cpp",
             "Engine/src/platform/core.path.cpp", "Engine/dep/EpochPlatformEngine/src/core/core.log.cpp",

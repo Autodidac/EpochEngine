@@ -43,7 +43,7 @@ module;
 #include "epoch.edition.hpp"
 #include "epoch.build_layout.hpp"
 #include <platform.ai_source_access.hpp>
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
 #include "ai/editor.ai_file_scope.hpp"
 #endif
 #include "ai/editor.ai_source_intent.hpp"
@@ -307,7 +307,10 @@ namespace epochengine
         poll_forest_surface_placement(editor);
         pump_planetary_stream(editor, ctx.get());
 #include "application/editor.frame_assistant_entry.inl"
-#include "application/editor.frame_source_dispatch.inl"
+        // Installed below after the other dispatcher callbacks. A theme
+        // request entered through Project Authoring must still use guarded
+        // source iteration rather than scene-only tool grammar.
+        std::function<bool(std::string_view)> start_engine_source_iteration;
         const auto stopCurrentWork = [&]()
             {
                 const bool hadShorelineImport = editor.modelShorelinePending.has_value();
@@ -347,7 +350,7 @@ namespace epochengine
                 // Interrupt the active transport immediately instead of waiting
                 // for the session controller to reach its next host stage.
                 const bool hadPendingModelRequest = chat.cancel_pending();
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
                 constexpr bool hadPendingCodexTurn = false;
 #endif
                 if (hadPendingModelRequest || hadPendingCodexTurn)
@@ -432,4 +435,4 @@ namespace epochengine
 #include "application/editor.frame_finish.inl"
     }
 
-} // namespace epochenginenamespace
+} // namespace epochengine

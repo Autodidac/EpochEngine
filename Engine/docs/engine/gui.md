@@ -788,6 +788,11 @@ tooltip reports pool capacity and external/Assistant activity separately; model
 GPU work never adds a pool worker. These are not all OS-thread counts.
 Host means the entire PC; Epoch means the Editor and observed child processes.
 Clicking any resource chip or the shared scope switches all four together.
+On Linux the Editor samples its own process and up to 32 direct children across
+64 threads once per second. The count reports the processes observed. Deeper
+descendants are outside that count. CPU needs two samples with the same process
+identities. RAM sums resident sets, including shared pages in each process.
+Unavailable GPU or VRAM counters display `--`.
 Normal FPS omits the Editor prefix; build, project-host and unfocused states
 remain explicit. Tier chips use T0-T4; pacing recommendations stay in the tooltip.
 The arrow stays before the status chips and its tooltip names the next stage.
@@ -795,18 +800,23 @@ It points right toward collapse while visible and left to expand from Hidden.
 Responsive width compression may omit lower-priority chips when space is tight.
 Layout schema 15 stores the stage, visibility and Host/Epoch scope. Earlier
 layouts default to Host. Schema 12 visibility restores Full or Hidden, and
-schema 13 Minimal/Hidden values migrate to stages 3/4. Context snapshots carry
-both the stage and scope. Optional toolbar resource and task polling is omitted in Minimal
-and Hidden; safety admission and resource monitoring retain their own lifecycle.
+schema 13 Minimal/Hidden values migrate to stages 3/4. A backend switch
+carries both stage and scope. Parking flushes pending layout changes. The
+replacement's first full Editor frame resumes saving for that application.
+Detached pane clones keep their layout in memory. Minimal and Hidden skip
+optional toolbar polling. Safety admission retains its own monitoring.
 
 November17 native979D58 acceptance verified the complete five-state cycle,
 resources surviving the second click, Host→Epoch switching all populated resource
 chips together, and Details access during prefill. Final observed state was
 Resources/Epoch; cross-restart/native multicontext persistence remains separate.
 
-The November 16 compact-toolbar checks passed Windows CPU consumers; shared
-label/layout logic has no Windows-only branch, but Linux native acceptance remains
-open. Calculator GUI regeneration also passed only the MSVC consumer. Its artifact
+The packaged Linux 0.91.13 Editor traversed all five stages and restored Minimal
+across two isolated sessions. Clicking CPU, RAM, GPU or VRAM switched the shared
+scope each time. Host CPU and RAM had readings. Linux Epoch readings displayed
+`--` for all four counters in this build. See `Artifacts/Reports/linux-resource-toolbar-1121`.
+
+The November 16 Calculator GUI regeneration check used the MSVC consumer. Its artifact
 library now uses short sibling staging names and the existing platform exclusive
 create/no-replace publication functions (POSIX uses O_EXCL/O_NOFOLLOW and link).
 The standalone CMake GUI-library contract explicitly owns platform.filesystem;

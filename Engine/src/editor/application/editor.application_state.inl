@@ -1496,7 +1496,7 @@
                 text = editor_gui_text::host_status(text);
                 if (text.empty())
                     return;
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
                 remember_activity("Project assistant", text);
 #endif
                 // Protocol/transport details belong to the turn's single system
@@ -1523,7 +1523,7 @@
                         }
                     }
                 }
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
                 constexpr bool engineWork = false;
 #endif
                 const bool failed = text.find("failed") != std::string::npos

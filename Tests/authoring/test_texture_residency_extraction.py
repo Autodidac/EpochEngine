@@ -44,12 +44,14 @@ int main(int argc,char** argv){
 
 class TextureResidencyExtraction(unittest.TestCase):
     def test_independent_residency_and_document_contracts(self):
-        relative = ["Engine/modules/asset.texture_artifact.ixx", "Engine/modules/authoring/authoring.texture.ixx",
-                    "Engine/modules/authoring/authoring.texture_detail.ixx",
-                    "Engine/src/assets/texture/asset.texture_artifact.cpp",
-                    "Engine/src/authoring/texture/authoring.texture_document.cpp",
-                    "Engine/src/authoring/texture/authoring.texture_residency.cpp",
-                    "Engine/src/authoring/texture/authoring.texture_contract.cpp"]
+        module_paths = ["Engine/modules/asset.texture_artifact.ixx", "Engine/modules/authoring/authoring.texture.ixx",
+                        "Engine/modules/authoring/authoring.texture_detail.ixx"]
+        residency_sources = ["Engine/src/assets/texture/asset.texture_artifact.cpp",
+                             "Engine/src/authoring/texture/authoring.texture_residency.cpp"]
+        document_sources = ["Engine/src/authoring/texture/authoring.texture_document.cpp",
+                            "Engine/src/authoring/texture/authoring.texture_snapshot_codec.cpp",
+                            "Engine/src/authoring/texture/authoring.texture_contract.cpp"]
+        relative = module_paths + residency_sources + document_sources
         identities = {name: hashlib.sha256((ROOT/name).read_bytes()).hexdigest() for name in relative}
         identity = hashlib.sha256((CONSUMER+json.dumps(identities, sort_keys=True)).encode()).hexdigest()[:12]
         report = ROOT/"Artifacts/Reports/texture-residency-extraction-oct28"/identity
@@ -57,10 +59,11 @@ class TextureResidencyExtraction(unittest.TestCase):
         report.mkdir(parents=True, exist_ok=True)
         (report/"consumer.cpp").write_text(CONSUMER, encoding="utf-8")
         path = lambda name: '"'+(ROOT/name).as_posix()+'"'
-        common = "\n".join(path(name) for name in relative[3:4]+relative[5:6])
-        full = common+"\n"+"\n".join(path(name) for name in relative[4:5]+relative[6:7])
-        modules = " ".join(path(name) for name in relative[:3])
+        common = "\n".join(path(name) for name in residency_sources)
+        full = common+"\n"+"\n".join(path(name) for name in document_sources)
+        modules = " ".join(path(name) for name in module_paths)
         (report/"CMakeLists.txt").write_text(f'''cmake_minimum_required(VERSION 3.30)
+set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT Embedded)
 project(TextureResidencyExtraction LANGUAGES CXX)
 add_executable(texture_contract consumer.cpp {full})
 add_executable(residency_only consumer.cpp {common})

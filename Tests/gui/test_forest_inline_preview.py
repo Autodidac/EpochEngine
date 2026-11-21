@@ -29,6 +29,7 @@ class ForestInlinePreview(unittest.TestCase):
             'struct EditorPreviewMeshCacheUsage',
             '[[nodiscard]] std::optional<EditorPreviewMeshCacheUsage> editor_preview_mesh_cache_usage(',
             '[[nodiscard]] bool restore_editor_preview_mesh(',
+            '[[nodiscard]] constexpr bool editor_mesh_mode_uses_base_color(',
             '[[nodiscard]] const std::shared_ptr<const asset::mesh::Artifact>& editor_forest_silhouette(',
             'void publish_editor_preview_markers(',
             '[[nodiscard]] bool painted_tree_uses_plant_lab(',
@@ -47,13 +48,9 @@ class ForestInlinePreview(unittest.TestCase):
         precise+='\n'+definition(camera_owner,'    [[nodiscard]] std::optional<PreciseMeshTransform> make_precise_mesh_transform(')
         camera_helpers=definition(preview,'    export [[nodiscard]] inline std::array<double,3> camera_world_eye(').replace('export ','')
         camera_helpers+='\n'+definition(preview,'    export [[nodiscard]] inline Vec3 camera_forward(').replace('export ','')
-        world_position=definition((ROOT/'Engine/modules/scene/scene.snapshot.ixx').read_text(encoding='utf-8').replace('anchor = {}','anchor'),
-            '    [[nodiscard]] inline std::optional<std::array<double, 3>> world_position(')
         input_reserved=definition((ROOT/'Engine/src/editor/application/editor.application_document_editing.inl').read_text(encoding='utf-8'),
             '        [[nodiscard]] bool editor_project_viewport_input_reserved(')
         paint_types=preview[preview.index("    // Presentation-only paint colors."):preview.index("    export struct SolidDrawMarker final")].replace("export ","")
-        forest_region=definition((ROOT/"Engine/modules/scene/scene.snapshot.ixx").read_text(encoding="utf-8"), "    struct SceneForestRegionInstance final",True)
-        paint_region=definition((ROOT/"Engine/modules/scene/scene.snapshot.ixx").read_text(encoding="utf-8"), "    struct SceneForestPaintRegion final",True)
         code=r'''
 #include "core.format_text.hpp"
 #include <algorithm>
@@ -79,12 +76,14 @@ import forest.preview_mesh;
 import project.lightning;
 import asset.mesh_artifact;
 import asset.cloud_volume;
+import scene.snapshot;
 void check(bool value,int line){if(!value){std::fprintf(stderr,"Forest inline contract failed line %d\n",line);std::exit(86);}}
 #define CHECK(...) check(static_cast<bool>((__VA_ARGS__)),__LINE__)
 namespace epochengine {
 using EditorMainSurface=EditorApplicationSurface;
 namespace core {enum class ScenePreviewMode {None,Editor};enum class ContextType{OpenGL,Other};struct Context {
  ContextType type{ContextType::OpenGL};
+ bool preview_density_clouds{};
  struct Viewport {int width=800,height=600;};Viewport scene_viewport()const{return {};}
 };}
 namespace render_arcade {struct Node{std::string_view name;};constexpr Node kScreenSceneNode{"screen"};}
@@ -108,7 +107,7 @@ namespace previewgrid {
  enum ObjectPreviewPrimitive { Cube,IndexedMesh,Light };
  struct MeshBaseColorBinding{};ACTUAL_PRECISE
  ACTUAL_PAINT_TYPES
- struct ObjectMarker {Vec3 position,color,scale,rotationDegrees;float radius{};ObjectPreviewPrimitive primitive{};bool selected{},editorOnly{},sampledRenderSurface{};std::shared_ptr<const asset::mesh::Artifact> mesh;bool wireframe{};std::shared_ptr<const MeshBaseColorBinding>baseColorTexture;std::optional<PreciseMeshTransform>preciseTransform;std::shared_ptr<const MeshPaintView>paintView;bool forestLighting{},unlit{},neutralSurface{};};
+ struct ObjectMarker {Vec3 position,color,scale,rotationDegrees;float radius{};ObjectPreviewPrimitive primitive{};bool selected{},editorOnly{},sampledRenderSurface{};std::shared_ptr<const asset::mesh::Artifact> mesh;bool wireframe{};std::shared_ptr<const MeshBaseColorBinding>baseColorTexture;std::optional<PreciseMeshTransform>preciseTransform;std::shared_ptr<const MeshPaintView>paintView;bool forestLighting{},unlit{},neutralSurface{};std::shared_ptr<const asset::mesh::SphericalWaterAppearance>sphericalWater;};
  struct Camera{Vec3 eye{},target{0,0,-1};render_camera::ProjectionKind projection{render_camera::ProjectionKind::perspective};struct {std::array<double,3>eye{};Vec3 forward{0,0,-1};}navigation;bool navigationValid{};float fovRadians{0.90f};};
  Camera camera_for(const core::Context*){return {};}
  Vec3 subtract(Vec3 a,Vec3 b){return {a.x-b.x,a.y-b.y,a.z-b.z};}Vec3 normalize(Vec3 a){return a;}
@@ -133,17 +132,14 @@ namespace previewgrid {
  bool publish_scene_frame(const core::Context*,const std::vector<ObjectMarker>&,Camera,const lighting::Frame&,MeshFrameLimits){assert(false);return false;}
  bool frame_initial_orbit_mesh(const core::Context*,const ObjectMarker&,float){assert(false);return false;}
 }
-namespace scene {using SceneObjectId=std::uint64_t;bool valid_scene_asset_path(std::string_view value){return value.starts_with("Assets/");}ACTUAL_FOREST_REGION
-constexpr size_t kMaximumForestPaintOutlinePoints=128u;
-ACTUAL_PAINT_REGION
-using Vec3=std::array<float,3>;struct SceneMeshCoordinates {double meters_per_unit{};std::array<double,3>source_origin_meters{};};ACTUAL_WORLD_POSITION}
 struct EditorEntity {
  std::string name,type,category;std::array<float,3> position{},rotation{},scale{1,1,1};
  bool visible{true},editorOnly{};scene::SceneObjectId sceneObjectId{};
  struct Mesh {std::uint64_t vertex_count{},index_count{};std::array<std::uint64_t,4> artifact_key{};std::string logical_path;std::optional<scene::SceneMeshCoordinates>coordinates{};};
  std::optional<scene::SceneForestRegionInstance> forestRegion;
  std::vector<scene::SceneForestPaintRegion> forestPaintRegions;
- std::optional<int> textureMaterial;
+ std::optional<scene::SceneTextureMaterialSnapshot> textureMaterial;
+ std::optional<scene::SceneTerrainAttachment> terrainAttachment;
  std::optional<Mesh> meshAsset;bool meshLoadAttempted{};std::shared_ptr<const asset::mesh::Artifact> meshSnapshot;std::shared_ptr<const previewgrid::MeshBaseColorBinding>meshBaseColorTexture;
  std::optional<std::array<double,3>>positionAnchor{};
  struct MeshFrame {double meters_per_unit{};std::array<double,3>source_origin_meters{};};std::optional<MeshFrame>meshSnapshotFrame{};
@@ -192,6 +188,7 @@ struct EditorState {
  std::optional<PlanetaryMeshPolicy>planetaryMeshPolicy;
  struct CloudLayer {std::shared_ptr<const asset::mesh::Artifact>artifact;std::array<double,3>center_meters{};double radius_meters{},wind_period_seconds{};std::optional<asset::cloud_volume::Recipe>density{};};
  std::optional<CloudLayer>planetaryStreamCloud;scene::SceneObjectId planetaryStreamEntity{};std::shared_ptr<const asset::mesh::Artifact>planetaryStreamSnapshot;
+ std::shared_ptr<const asset::mesh::SphericalWaterAppearance> planetaryStreamAppearance;
  struct{double playhead_seconds{};}timelineState;
  project_lightning::PreviewCache lightningPreview;
  std::shared_ptr<const asset::mesh::Artifact>temporalWaterMesh;double temporalWaterSampleTime{};
@@ -243,7 +240,7 @@ void reset_planetary_preview_publication(EditorState& state){
 bool pump_editor_planetary_preview(const core::Context*,EditorState&,previewgrid::SceneFrameRequest request,platform::child_process::MeshDrawMode){
  ++pumpCalls;lastPumpRequest=request;++previewgrid::publications;previewgrid::observed=std::move(request.markers);return true;}
 unsigned transactions{},saves{};bool saving=true;
-bool persist_forest_scene_mesh(EditorState&,std::vector<EditorEntity>&v){v[0].meshAsset=EditorEntity::Mesh{};v[0].textureMaterial=42;return true;}
+bool persist_forest_scene_mesh(EditorState&,std::vector<EditorEntity>&v){v[0].meshAsset=EditorEntity::Mesh{};v[0].textureMaterial.emplace().stable_key=42;return true;}
 bool publish_plant_lab_project_asset(EditorState&){return true;}
 bool save_editor_scene_snapshot(EditorState&){++saves;return saving;}
 bool synchronize_editor_scene_category(EditorState&s,std::string_view category,std::vector<EditorEntity>next,std::string_view,std::string_view){
@@ -449,13 +446,13 @@ int main(){
  const auto found=std::find_if(refresh.entities.begin(),refresh.entities.end(),[](auto&e){return e.sceneObjectId==1234;});assert(found!=refresh.entities.end());
  assert(found->position==refreshBefore.position&&found->rotation==refreshBefore.rotation&&found->scale==refreshBefore.scale&&found->positionAnchor==refreshBefore.positionAnchor);
  assert(found->forestRegion->region_id==region.region_id&&found->forestRegion->center_direction==region.center_direction);
- assert(found->textureMaterial==42&&found->meshSnapshot&&found->forestRegion->plant_revision==refresh.plantLabCompiled.sourceRevision);
+ assert(found->textureMaterial&&found->textureMaterial->stable_key==42&&found->meshSnapshot&&found->forestRegion->plant_revision==refresh.plantLabCompiled.sourceRevision);
  assert(refresh.entities.size()==3&&refresh.entities[0].sceneObjectId==terrain.sceneObjectId);
  saving=false;assert(refresh_forest_factory_instances(refresh)&&transactions==2&&refresh.plantLabStatus.find("saving failed")!=std::string::npos);
 
 
 }
-'''.replace('FUNCTIONS',functions).replace('CAMERA\n',camera+'\n').replace('ACTUAL_PRECISE',precise).replace('ACTUAL_CAMERA_HELPERS',camera_helpers).replace('ACTUAL_WORLD_POSITION',world_position).replace('ACTUAL_INPUT_RESERVED',input_reserved).replace('ACTUAL_PAINT_TYPES',paint_types).replace('ACTUAL_FOREST_REGION',forest_region).replace('ACTUAL_PAINT_REGION',paint_region).replace('ACTUAL_AREA_SELECTION',area_selection).replace('assert(', 'CHECK(')
+'''.replace('FUNCTIONS',functions).replace('CAMERA\n',camera+'\n').replace('ACTUAL_PRECISE',precise).replace('ACTUAL_CAMERA_HELPERS',camera_helpers).replace('ACTUAL_INPUT_RESERVED',input_reserved).replace('ACTUAL_PAINT_TYPES',paint_types).replace('ACTUAL_AREA_SELECTION',area_selection).replace('assert(', 'CHECK(')
         proof=ROOT/'Artifacts/Reports/preview-contracts-oct31/forest';proof.mkdir(parents=True,exist_ok=True)
         (proof/'consumer.cpp').write_text(code,encoding='utf-8')
         engine=(ROOT/'Engine').as_posix()

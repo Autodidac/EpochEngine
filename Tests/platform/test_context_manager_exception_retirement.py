@@ -24,7 +24,7 @@ class ContextManagerExceptionRetirement(unittest.TestCase):
         linux = (ROOT/'Engine/src/renderers/host/host.context_linux.cpp').read_text(encoding='utf-8')
         self.assertIn('StopAll();',definition(linux,'    MultiContextManager::~MultiContextManager() noexcept'))
         engine = (ROOT/'Engine/src/epoch/epoch.engine_legacy.cpp').read_text(encoding='utf-8')
-        interface = definition(engine,'    void RunEditorInterface()\n    {')
+        interface = definition(engine,'    static int run_editor_session()\n    {')
         catch = interface.index('catch (const std::exception& ex)')
         self.assertLess(interface.index('logger::get(engine::kEditorLog).log(',catch),interface.index('MessageBoxA(',catch))
         code = r'''

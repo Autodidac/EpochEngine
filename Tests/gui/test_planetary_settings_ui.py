@@ -26,9 +26,10 @@ def fixture():
     preflight=start[start.index('{')+1:start.index('            std::uint32_t seed{};')]
     # Execute the actual settings/budget/preset owner. No provider, renderer,
     # scheduler, process or file write is launched by this fixture.
-    begin=module.index('export namespace epochengine::project_planetary')
+    settings_type=definition(module,'    struct Settings final',True)
+    begin=module.index('    inline constexpr std::array<std::string_view, 5> modes')
     end=module.index('    struct SceneMeshBudget',begin)
-    settings=module[begin:end].replace('export namespace','namespace',1)+'}\n'
+    settings=settings_type+'\n'+module[begin:end]
     body=definition(view,'                    if (planetAttached)')
     options=definition(view,'                    const gui::InlineButtonRowOptions planetButtons',True)
     limits=definition(mesh,'    struct Limits final',True)
@@ -52,7 +53,7 @@ def fixture():
 namespace epochengine::asset::mesh {class Artifact;struct SphericalWaterAppearance;LIMITS}
 namespace epochengine::project_planetary_snapshot {struct Snapshot;SNAPSHOT_TYPES}
 namespace epochengine {template<class...Args>std::string format_text(std::string_view value,Args&&...){return std::string(value);}}
-SETTINGS
+namespace epochengine::project_planetary {SETTINGS}
 namespace project_planetary=epochengine::project_planetary;
 namespace epochengine::project_planetary {
 inline unsigned saves{};inline Settings saved;

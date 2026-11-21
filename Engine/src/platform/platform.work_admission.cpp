@@ -24,6 +24,11 @@ module;
 #include <vector>
 #include "../../include/engine.config.hpp"
 
+#if defined(__linux__)
+#include <filesystem>
+#include <unistd.h>
+#endif
+
 #if defined(_WIN32)
 #include "platform.process_observation.hpp"
 #include <dxgi.h>
@@ -1040,6 +1045,133 @@ namespace epochengine::platform::work_admission
         return cached_gpu_resources();
     }
 
+#if defined(__linux__)
+    namespace
+    {
+        struct LinuxProcessUsage final
+        {
+            pid_t pid{};
+            std::uint64_t started{}, ticks{}, resident_pages{};
+        };
+
+        // Each task's children file is kernel-owned. Check the PPID from the
+        // same stat record as its counters, since an enumerated PID can exit
+        // and be reused before the read. The start tick identifies successive
+        // incarnations across the two CPU measurements.
+        [[nodiscard]] std::optional<LinuxProcessUsage> read_linux_process(pid_t pid, pid_t editor)
+        {
+            std::ifstream file{"/proc/" + std::to_string(pid) + "/stat"};
+            std::array<char, 2048> data{};
+            file.read(data.data(), data.size());
+            if (file.bad() || file.gcount() == 0 || file.gcount() == static_cast<std::streamsize>(data.size())) return {};
+            const std::string_view record{data.data(), static_cast<std::size_t>(file.gcount())};
+            const auto name_end = record.rfind(')');
+            if (name_end == record.npos) return {};
+            std::istringstream fields{std::string{record.substr(name_end + 1)}};
+            char state{};
+            pid_t parent{};
+            if (!(fields >> state >> parent) || state == 'Z' || state == 'X'
+                || (pid != editor && parent != editor)) return {};
+            // Fields 5..13 and 16..21 include signed values we do not use.
+            std::string unused;
+            for (int i = 5; i <= 13; ++i) if (!(fields >> unused)) return {};
+            LinuxProcessUsage usage{pid};
+            std::uint64_t system{};
+            if (!(fields >> usage.ticks >> system) || !add_counter(usage.ticks, system)) return {};
+            for (int i = 16; i <= 21; ++i) if (!(fields >> unused)) return {};
+            std::int64_t pages{};
+            if (!(fields >> usage.started >> unused >> pages) || pages < 0) return {};
+            usage.resident_pages = static_cast<std::uint64_t>(pages);
+            return usage;
+        }
+
+        struct LinuxEpochFrame final
+        {
+            std::array<LinuxProcessUsage, 33> processes{};
+            std::size_t count{};
+            CpuTimes host{};
+        };
+
+        [[nodiscard]] LinuxEpochFrame read_linux_epoch(ResourceSample& host)
+        {
+            LinuxEpochFrame frame{};
+            const pid_t editor = ::getpid();
+            const auto self = read_linux_process(editor, editor);
+            if (!self) return frame;
+            frame.processes[frame.count++] = *self;
+            frame.host = read_resources(host);
+            // Direct children may be launched by any Editor thread. Do not walk
+            // the system process table or presume that grandchildren are owned.
+            std::error_code error;
+            auto task = std::filesystem::directory_iterator{"/proc/self/task", error};
+            unsigned inspected{};
+            for (unsigned n = 0; !error && task != std::filesystem::directory_iterator{}
+                && n < 64 && inspected < frame.processes.size() - 1; ++n, task.increment(error))
+            {
+                std::ifstream children{task->path() / "children"};
+                pid_t pid{};
+                while (inspected < frame.processes.size() - 1 && children >> pid)
+                {
+                    ++inspected;
+                    auto live = std::span{frame.processes}.first(frame.count);
+                    if (pid <= 0 || std::ranges::find(live, pid, &LinuxProcessUsage::pid) != live.end())
+                        continue;
+                    if (const auto usage = read_linux_process(pid, editor))
+                        frame.processes[frame.count++] = *usage;
+                }
+            }
+            return frame;
+        }
+
+        [[nodiscard]] EpochResourceSample sample_linux_epoch()
+        {
+            static std::mutex mutex;
+            static LinuxEpochFrame previous;
+            static EpochResourceSample cached;
+            const std::lock_guard lock{mutex};
+            const auto now = now_milliseconds();
+            if (cached.captured_at_ms && now >= cached.captured_at_ms && now - cached.captured_at_ms < 1000)
+                return cached;
+            ResourceSample host{};
+            const auto current = read_linux_epoch(host);
+            EpochResourceSample result{};
+            result.captured_at_ms = now;
+            result.process_count = static_cast<std::uint32_t>(current.count);
+            result.total_memory_bytes = host.total_memory_bytes;
+            const auto page_size = ::sysconf(_SC_PAGESIZE);
+            std::uint64_t pages{}, ticks{};
+            bool valid_pages = current.count && page_size > 0;
+            bool valid_ticks = current.count && current.count == previous.count
+                && current.host.valid && previous.host.valid && current.host.total > previous.host.total
+                && now >= cached.captured_at_ms && now - cached.captured_at_ms <= 5000;
+            auto prior = std::span{previous.processes}.first(previous.count);
+            for (const auto& proc : std::span{current.processes}.first(current.count))
+            {
+                valid_pages = valid_pages && add_counter(pages, proc.resident_pages);
+                const auto found = std::ranges::find(prior, proc.pid, &LinuxProcessUsage::pid);
+                valid_ticks = valid_ticks && found != prior.end() && found->started == proc.started
+                    && found->ticks <= proc.ticks && add_counter(ticks, proc.ticks - found->ticks);
+            }
+            if (valid_pages && host.total_memory_bytes
+                && pages <= (std::numeric_limits<std::uint64_t>::max)() / static_cast<unsigned long>(page_size))
+            {
+                result.resident_memory_bytes = pages * static_cast<unsigned long>(page_size);
+                result.memory_valid = result.resident_memory_bytes <= result.total_memory_bytes;
+            }
+            if (valid_ticks && ticks <= current.host.total - previous.host.total)
+            {
+                result.cpu_busy_fraction = static_cast<double>(ticks) / (current.host.total - previous.host.total);
+                result.cpu_valid = true;
+            }
+            // Direct observed processes only. RSS can count shared pages once
+            // per process; Linux GPU counters remain explicitly unavailable.
+            previous = current;
+            cached = result;
+            return result;
+        }
+    }
+#endif
+
     EpochResourceSample sample_epoch_resources() noexcept
     {
 #if defined(_WIN32)
@@ -1059,6 +1191,8 @@ namespace epochengine::platform::work_admission
                 return result;
             }
         }
+#elif defined(__linux__)
+        try { return sample_linux_epoch(); } catch (...) { return {}; }
 #endif
         return {};
     }

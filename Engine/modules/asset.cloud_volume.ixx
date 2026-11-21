@@ -160,8 +160,35 @@ export namespace epochengine::asset::cloud_volume
         const auto regional=(0.29*front+0.56*mass)/0.85;
         const auto lobe_weight=upper?0.15:detail::mix(0.27,0.04,
             detail::smooth(std::clamp((regional-0.47)/0.11,0.0,1.0)));
-        const auto weather=detail::mix(regional,lobes,lobe_weight);
-        const auto margin=weather-0.12*dry-((upper?0.752:0.725)-0.41*double(recipe.coverage));
+        const auto coarse_structure=detail::smooth(std::clamp((footprint-0.65)/2.0,0.0,1.0));
+        // Resolve a wind-sheared flank at the scale of the weather front.
+        // Its relief fades in without shifting the coordinates of either field.
+        double flank_weight=0.0,condensate=0.5;
+        if(coarse_structure>0.0)
+        {
+            const auto crosswind=surface[1]+17.0*bend+39.0*(regime-0.5)+28.0*(front-0.5);
+            const Point flank{(surface[0]-0.40*surface[2])/36.0,crosswind/5.5,
+                (surface[2]+0.40*surface[0])/34.0};
+            condensate=detail::filtered_noise(flank,deck_seed^0x464c414eu,footprint/5.5);
+            flank_weight=0.64*coarse_structure*(0.68+0.32*wet);
+        }
+        const auto weather=detail::mix(regional,lobes,lobe_weight*(1.0-0.55*coarse_structure));
+        auto margin=weather-0.12*dry-((upper?0.752:0.725)-0.41*double(recipe.coverage));
+        // Stretch the coarse edges with the wind-shaped lobes and preserve dense cores.
+        const auto coarse_weather=detail::smooth(std::clamp((footprint-0.36)/1.04,0.0,1.0));
+        const auto taper=1.0-detail::smooth(std::clamp((margin-0.018)/0.087,0.0,1.0));
+        // Wide footprints lose small lobes, so local moisture and the
+        // regional front shape the coarse outline.
+        const auto front_shape=1.05*(front-0.5)+0.62*(regime-0.5)-0.33*(mass-0.5);
+        const auto distant_streak=0.14*bend+0.38*(lobes-0.5)+0.66*(condensate-0.5)+front_shape;
+        const auto streak=detail::mix(0.48*bend+1.04*(lobes-0.5),distant_streak,coarse_structure);
+        const auto extension=(std::min)(0.14*(std::max)(streak,0.0),(std::max)(0.075-margin,0.0));
+        margin+=coarse_weather*(extension+0.14*taper*(std::min)(streak,0.0));
+        if(coarse_structure>0.0)
+        {
+            const auto core_guard=1.0-0.60*detail::smooth(std::clamp((margin-0.04)/0.15,0.0,1.0));
+            margin+=flank_weight*core_guard*(condensate-0.5)*0.32;
+        }
         if(margin<=0.0)return 0.0;
         const auto core=detail::smooth(std::clamp((margin-0.035)/0.13,0.0,1.0));
 
@@ -176,7 +203,8 @@ export namespace epochengine::asset::cloud_volume
         const auto billow=detail::filtered_noise(billows,deck_seed^0x42494c4cu,detail_footprint);
         const auto erosion=(1.0-core)*0.027*(1.0-billow);
         const auto eroded_margin=margin-erosion;
-        auto body=detail::smooth(std::clamp(eroded_margin/(upper?0.145:0.105),0.0,1.0));
+        const auto contour_width=(upper?0.145:0.105)+0.025*coarse_weather;
+        auto body=detail::smooth(std::clamp(eroded_margin/contour_width,0.0,1.0));
         double profile;
         if(upper)
         {
@@ -206,7 +234,13 @@ export namespace epochengine::asset::cloud_volume
             const auto edge_width=detail::mix(0.38,0.24,resolved);
             profile=1.0-detail::smooth(std::clamp(1.0+(cross_section-1.0)/edge_width,0.0,1.0));
         }
-        return body*profile*(upper?0.48:1.0)*(0.80+0.20*billow);
+        // A coarse column covers both cloud and gaps along its shoulders.
+        // Strong fronts stay optically thick as the shoulders thin out.
+        const auto organized=detail::smooth(std::clamp((0.72*regional+0.28*front-0.43)/0.30,0.0,1.0));
+        const auto column_relief=1.0-coarse_structure*(upper?0.79:0.78)*(1.0-organized);
+        const auto flank_relief=1.0-flank_weight*(1.0-detail::smooth(
+            std::clamp((condensate-0.12)/0.74,0.0,1.0)));
+        return body*profile*(upper?0.48:1.0)*(0.80+0.20*billow)*column_relief*flank_relief;
     }
 
     // Dense liquid-water cores have a higher extinction per metre. Keep the

@@ -708,7 +708,8 @@ namespace epochengine::project_planetary_snapshot
                 if(!depth||(!originally_wet&&*depth>0.0))return {};
                 const auto bed_radius=std::hypot(origin[0]+bed[0]/scale,origin[1]+bed[1]/scale,origin[2]+bed[2]/scale);
                 const auto weight=water::wave::spherical_water_edge_weight(breaker_edges,breaker,i%side,i/side,cells);
-                value.normal=sample->normal;
+                value.normal=water::wave::spherical_shoaled_normal(sample->normal,vertex.direction,
+                    radius-bed_radius,sampled_radius-radius,weight*tint);
                 value.color=water::wave::spherical_surface_color(radius-bed_radius,sample->foam,spacing,length,
                     false,tint,sampled_radius-radius,weight);
             }
@@ -1055,6 +1056,43 @@ namespace epochengine::project_planetary_snapshot
                 &&std::abs(a->depth-b->depth)<=maximum_relative_depth_change*(std::min)(std::abs(a->depth),std::abs(b->depth));
         }
 
+        void remember_shoreline_spray(asset::mesh::SphericalWaterAppearance& appearance,
+            const asset::mesh::Vertex& point,const std::array<double,3>& origin,
+            double meters_to_artifact,double radius,float detail) noexcept
+        {
+            if(detail<=0.0f)return;
+            std::array<double,3> body{};
+            double local_squared{};
+            for(std::size_t axis=0;axis<3u;++axis)
+            {
+                const double local=point.position[axis]/meters_to_artifact;
+                local_squared+=local*local;
+                body[axis]=origin[axis]+local;
+            }
+            const double distance=std::hypot(body[0],body[1],body[2]);
+            const double crest=distance-radius;
+            if(!std::isfinite(local_squared)||local_squared>75.0*75.0||!std::isfinite(crest)
+                ||crest<=0.025||crest>4.0||distance<1.0||distance>1e12)return;
+            double alignment{};
+            std::uint64_t cell=14695981039346656037ull;
+            for(std::size_t axis=0;axis<3u;++axis)
+            {
+                alignment+=point.normal[axis]*body[axis]/distance;
+                cell^=static_cast<std::uint64_t>(static_cast<std::int64_t>(std::floor(body[axis]*0.4)));
+                cell*=1099511628211ull;
+            }
+            const float strength=detail*static_cast<float>(std::clamp(crest/0.45,0.0,1.0)
+                *std::clamp((1.0-alignment)*8.0+0.25,0.25,1.0));
+            for(std::size_t index=0;index<appearance.spray_count;++index)
+                if(auto& current=appearance.spray_sites[index];current.cell==cell)
+                {
+                    if(strength>current.strength)current={point.position,cell,strength};
+                    return;
+                }
+            if(appearance.spray_count<appearance.spray_sites.size())
+                appearance.spray_sites[appearance.spray_count++]={point.position,cell,strength};
+        }
+
         bool moving_wet_corner(const DrawPatch& draw,std::span<const DrawPatch> cut,
             const std::shared_ptr<const Snapshot>& target,WetLatticeSamples* common,std::stop_token stop)
         {
@@ -1201,7 +1239,9 @@ namespace epochengine::project_planetary_snapshot
                     value.color=water::wave::spherical_surface_color(ocean_radius-bed_radius,
                         sampled->foam,spacing_meters,wave_length_meters,false,shore_tint_strength,
                         radius-ocean_radius,breaker_weight);
-                    value.normal=sampled->normal;vertices.push_back(value);
+                    value.normal=water::wave::spherical_shoaled_normal(sampled->normal,basis.direction,
+                        ocean_radius-bed_radius,radius-ocean_radius,breaker_weight*shore_tint_strength);
+                    vertices.push_back(value);
                 }
                 if(!admitted())return {};
                 const auto pos=[&](std::uint32_t id){const auto& point=vertices[id].position;return Point{point[0],point[1],point[2]};};
@@ -1222,6 +1262,9 @@ namespace epochengine::project_planetary_snapshot
                         depths[i]=*depth;
                     }
                     const auto polygon=water::wave::spherical_wet_polygon(depths);
+                    const bool surface=rendered&&range&&breaker>0.0f&&polygon.clipped
+                        &&std::ranges::all_of(triangle.water,[&](auto index){
+                            return source.metadata.water_vertices[index].surface_vertex==index;});
                     std::array<std::uint32_t,4> output{};
                     for(std::size_t corner=0;corner<polygon.count;++corner)
                     {
@@ -1249,6 +1292,7 @@ namespace epochengine::project_planetary_snapshot
                         for(unsigned axis=0;axis<2u;++axis)boundary.uv[axis]=static_cast<float>(std::lerp(double(av.uv[axis]),double(bv.uv[axis]),fraction));
                         output[corner]=static_cast<std::uint32_t>(vertices.size());
                         vertices.push_back(boundary);
+                        if(surface)remember_shoreline_spray(*rendered,boundary,ocean_origin,scale,ocean_radius,breaker);
                     }
                     for(std::size_t i=1u;i+1u<polygon.count;++i)
                     {
@@ -1754,8 +1798,18 @@ namespace epochengine::project_planetary_snapshot
                     const bool skirt=i>=6u*cells*cells;
                     const std::array water_corners{water_base+local[0],water_base+local[1],water_base+local[2]};
                     const std::array wet_depth{depth[surface_index(local[0])],depth[surface_index(local[1])],depth[surface_index(local[2])]};
+                    const auto first_boundary=vertices.size();
+                    const auto first_index=indices.size();
                     if(!append_wet_triangle(water_corners,wet_depth,vertices,indices,skirt))
                         return reject("invalid_wet_triangle",p.key);
+                    if(rendered&&!skirt&&indices.size()>first_index&&vertices.size()>first_boundary)
+                    {
+                        const auto& metric=target_->metadata;
+                        const float detail=breaker_scale(source.metadata,p,0.0f);
+                        for(auto index=first_boundary;index<vertices.size();++index)
+                            remember_shoreline_spray(*rendered,vertices[index],metric.water_origin_meters,
+                                metric.water_meters_to_artifact,metric.water_radius_meters,detail);
+                    }
                 }
                 if(indices.size()==water_indices_begin&&!water_range(source.metadata,p))
                 {

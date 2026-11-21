@@ -13,6 +13,20 @@ sampling, composition, capture, and teardown.
 
 ## Evidence Layers
 
+### Built-in Pacman scene
+
+From the packaged runtime directory, launch the Editor with
+`--editor --scene pacman --standalone --backend opengl`. With no input, the
+28 × 31 board places the gold player at (14, 23) and four ghosts in columns
+13–14, rows 14–15. Check the colors and positions in a captured frame.
+The bundled player and ghost share the same gold artwork. Walls and pellets
+share the same color chart.
+
+The repaired Public 0.91.13 candidates rendered all five actors and 114 border
+tiles on Windows and Linux OpenGL. The extracted Windows QA ZIP also passed a
+Software frame check at 208 sample positions. Removing a required sprite from
+a disposable copy made the Editor log its path and exit with status 1.
+
 ### Linux checks on GitHub
 
 The Public workflow builds the complete Engine with the pinned Clang toolchain.
