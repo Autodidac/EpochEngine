@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-MIT-NoSell
 #pragma once
+#include "ai.native_shared_inputs.hpp"
 #include <algorithm>
 #include <array>
 #include <charconv>
@@ -82,24 +83,30 @@ struct ScanResult final {
     const auto deadline = std::chrono::steady_clock::now() + limits.elapsed;
     std::size_t visited{};
     std::set<std::filesystem::path> seen;
+    std::set<std::filesystem::path> scanned_roots;
     const auto interrupted = [&] {
         if (stop.stop_requested()) { result.cancelled = true; return true; }
-        if (visited >= limits.entries || result.models.size() >= limits.candidates
-            || std::chrono::steady_clock::now() >= deadline) { result.limited = true; return true; }
+        if (std::chrono::steady_clock::now() >= deadline) { result.limited = true; return true; }
         return false;
     };
     for (const auto& root : roots) {
-        if (root.empty() || interrupted()) continue;
+        if (interrupted()) break;
+        if (root.empty()) continue;
         std::error_code error;
         const auto resolved = std::filesystem::weakly_canonical(root, error);
         if (error || !std::filesystem::is_directory(resolved, error)) {
-            result.diagnostic += "Folder unavailable: " + root.generic_string() + ". ";
+            result.diagnostic += "Folder unavailable: " + native_shared_inputs::utf8(root) + ". ";
             continue;
         }
+        if (!scanned_roots.insert(resolved).second) continue;
         auto iterator = std::filesystem::recursive_directory_iterator(resolved,
             std::filesystem::directory_options::skip_permission_denied, error);
         const auto end = std::filesystem::recursive_directory_iterator{};
         for (; !error && iterator != end && !interrupted(); iterator.increment(error)) {
+            if (visited >= limits.entries || result.models.size() >= limits.candidates) {
+                result.limited = true;
+                break;
+            }
             ++visited;
             const auto& item = *iterator;
             std::error_code item_error;
@@ -107,7 +114,7 @@ struct ScanResult final {
                 iterator.disable_recursion_pending();
             item_error.clear();
             if (!item.is_regular_file(item_error) || item_error) continue;
-            auto name = item.path().filename().string();
+            auto name = native_shared_inputs::utf8(item.path().filename());
             auto folded = name;
             std::transform(folded.begin(), folded.end(), folded.begin(), [](unsigned char c) {
                 return static_cast<char>(c >= 'A' && c <= 'Z' ? c + ('a' - 'A') : c);
@@ -131,11 +138,11 @@ struct ScanResult final {
                     || b.ptr != count_text.data() + count_text.size() || !index || index > count) continue;
                 candidate.shard_count = count;
                 prefix = name.substr(0, split - 5u);
-                candidate.path = item.path().parent_path() / (prefix + "00001" + name.substr(split));
+                candidate.path = item.path().parent_path() / native_shared_inputs::path_from_utf8(prefix + "00001" + name.substr(split));
             }
             const auto identity = std::filesystem::weakly_canonical(candidate.path, item_error);
             if (item_error || !seen.insert(identity).second) continue;
-            candidate.id = candidate.path.stem().string();
+            candidate.id = native_shared_inputs::utf8(candidate.path.stem());
             candidate.complete = candidate.shard_count <= 512u;
             if (candidate.complete) {
                 for (std::uint32_t shard = 1; shard <= candidate.shard_count; ++shard) {
@@ -144,7 +151,7 @@ struct ScanResult final {
                     if (!prefix.empty()) {
                         auto number = std::to_string(shard);
                         number.insert(0, 5u - number.size(), '0');
-                        path = item.path().parent_path() / (prefix + number + name.substr(split));
+                        path = item.path().parent_path() / native_shared_inputs::path_from_utf8(prefix + number + name.substr(split));
                     }
                     const auto size = std::filesystem::file_size(path, item_error);
                     if (item_error || size < 24u || size > std::numeric_limits<std::uint64_t>::max() - candidate.bytes) {

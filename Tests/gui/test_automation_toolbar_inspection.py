@@ -7,6 +7,7 @@ from Tests.build.test_opengl_sprite_stream import definition
 from Tests.support.cpp import compile_and_run
 
 ROOT = Path(__file__).resolve().parents[2]
+EDITION_HEADER = ROOT / 'Engine/include/epoch.edition.hpp'
 
 
 class AutomationToolbarInspection(unittest.TestCase):
@@ -81,13 +82,12 @@ int main(){
         owner=definition(source,'        [[nodiscard]] std::string preview_zoom_text(')
         code=r'''#include <memory>
 #include <string>
-#include <format>
+#include "core.format_text.hpp"
 #include <cmath>
 namespace core{struct Context{};}
 namespace previewgrid{enum class CameraMode{Editor,FPS};enum class EditorView{Perspective,Front};
 CameraMode mode=CameraMode::Editor;EditorView view=EditorView::Perspective;double distance=20756706;
 CameraMode camera_mode_for(void*){return mode;}EditorView editor_view_for(void*){return view;}double camera_distance_for(void*){return distance;}}
-namespace epochengine{template<class...T>std::string format_text(std::format_string<T...> f,T&&...args){return std::format(f,std::forward<T>(args)...);}}
 OWNER
 int main(){auto ctx=std::make_shared<core::Context>();
 if(preview_zoom_text(ctx)!="Distance 20.8M units")return 1;
@@ -97,7 +97,7 @@ if(preview_zoom_text({})!="No camera")return 4;return 0;}
 '''.replace('OWNER',owner)
         report=ROOT/'Artifacts/Reports/camera-readout'/str(time.time_ns());report.mkdir(parents=True)
         unit=report/'contract.cpp';unit.write_text(code)
-        records=compile_and_run(self,unit,report)
+        records=compile_and_run(self,unit,report,includes=(ROOT/'Engine/include',))
         (report/'result.json').write_text(json.dumps(records,indent=2))
 
     def test_header_overflow_and_short_dock(self):
@@ -233,6 +233,78 @@ int main(){
         records=compile_and_run(self,unit,report)
         (report/'result.json').write_text(json.dumps(records,indent=2))
 
+    def test_restored_primary_saves_scope_without_detached_or_parked_overwrite(self):
+        from Tests.gui.test_theme_persistence import contract_source
+        folder = ROOT / 'Engine/src/editor/application'
+        layout = (folder/'editor.application_layout_persistence.inl').read_text()
+        snapshot = (folder/'editor.application_context_snapshot.inl').read_text()
+        finish = (folder/'editor.frame_finish.inl').read_text()
+        lifecycle = (folder/'editor.application_context_lifecycle.inl').read_text()
+        state = (folder/'editor.application_state.inl').read_text()
+        base = contract_source().split('int main(', 1)[0]
+        members = state[state.index('            bool layoutPreferencesLoaded'):state.index('            EditorLayoutDrag layoutDrag')]
+        base = base.replace('struct EditorState {', 'struct EditorState {\n' + members)
+        real_restore = snapshot.split('EditorState& editor = storage.states[ctx];', 1)[1].split('editor.initialized =', 1)[0]
+        start = finish.index('        editor.layoutPreferencesApplication =')
+        primary_save = finish[start:finish.index('        ctx->set_gui_overlay_priority', start)]
+        park_start = lifecycle.index('persist_editor_layout_preferences(parked, true);')
+        parked_save = lifecycle[park_start:lifecycle.index('// Menu contexts', park_start)]
+        source = base + r'''
+#include <fstream>
+const char* editor_layout_preferences_path(EditorApplicationKind) { return "preferences.txt"; }
+void push_editor_log(EditorState&, const char*) {}
+unsigned writes{};
+bool fail_write{};
+bool write_editor_layout_preferences(const char* file, const std::string& layout) {
+    ++writes;
+    if (fail_write) return false;
+    return static_cast<bool>(std::ofstream(file, std::ios::binary) << layout);
+}
+PERSIST
+void full_frame(EditorState& editor) { PRIMARY }
+void restored(EditorState& editor) { RESTORE }
+int run_handoff(bool fail_park) {
+    writes = 0;
+    EditorState parked;
+    full_frame(parked);
+    parked.showEpochResourceUsage = true;
+    parked.telemetryDetail = 2;
+    fail_write = fail_park;
+    PARK
+    fail_write = false;
+    EditorState editor = parked;
+    restored(editor);
+    EditorState detached = editor;
+    detached.telemetryDetail = 1;
+    persist_editor_layout_preferences(detached, true);
+    CHECK(writes == 2);
+    editor.telemetryDetail = 3;
+    editor.showEpochResourceUsage = false;
+    full_frame(editor);
+    persist_editor_layout_preferences(parked, true);
+    persist_editor_layout_preferences(detached, true);
+    CHECK(writes == 3);
+    std::ifstream file("preferences.txt", std::ios::binary);
+    std::ostringstream saved;
+    saved << file.rdbuf();
+    EditorState reopened;
+    CHECK(decode_editor_layout_preferences(reopened, saved.str()));
+    CHECK(reopened.telemetryDetail == 3 && reopened.showTelemetry && !reopened.showEpochResourceUsage);
+    return 0;
+}
+int main() {
+    CHECK(run_handoff(false) == 0);
+    CHECK(run_handoff(true) == 0);
+}
+'''.replace('PERSIST', definition(layout, '        static void persist_editor_layout_preferences(')
+            ).replace('PRIMARY', primary_save).replace('RESTORE', real_restore).replace('PARK', parked_save)
+        report = ROOT/'Artifacts/Reports/telemetry-context-save'/str(time.time_ns())
+        report.mkdir(parents=True)
+        unit = report/'contract.cpp'
+        unit.write_text(source, encoding='utf-8')
+        records = compile_and_run(self, unit, report)
+        (report/'result.json').write_text(json.dumps(records, indent=2))
+
     def test_running_worker_labels_exclude_external_activity(self):
         source=(ROOT/'Engine/src/editor/application/editor.frame_bootstrap.inl').read_text(encoding='utf-8')
         begin=source.index('epochengine::format_text("Total {} / Ready {} / Queued {}"')
@@ -242,34 +314,45 @@ int main(){
         compact_begin=source.index('epochengine::format_text("Total {} / Ready {} / Queued {}"',compact)
         compact_end=source.index('),',compact_begin)+1
         self.assertEqual(expression,source[compact_begin:compact_end])
-        automation=(ROOT/'Engine/dep/EpochSelfCoding/integration/fragments/editor.private_editor_engine_workspace_surface_585d30cf.inl').read_text(encoding='utf-8')
-        summary=automation.index('gui::property_row("All work", ')
-        summary_begin=automation.index('epochengine::format_text(',summary)
-        summary_end=automation.index('),',summary_begin)+1
-        summary_expression=automation[summary_begin:summary_end]
+        public = '#define EPOCH_SOURCE_EDITION_PUBLIC 1' in EDITION_HEADER.read_text(encoding='utf-8').splitlines()
+        summary_expression = ''
+        if not public:
+            automation=(ROOT/'Engine/dep/EpochSelfCoding/integration/fragments/editor.private_editor_engine_workspace_surface_585d30cf.inl').read_text(encoding='utf-8')
+            summary=automation.index('gui::property_row("All work", ')
+            summary_begin=automation.index('epochengine::format_text(',summary)
+            summary_end=automation.index('),',summary_begin)+1
+            summary_expression=automation[summary_begin:summary_end]
         code=r"""
-#include <format>
+#include "core.format_text.hpp"
 #include <string>
 #include <cstdlib>
-namespace epochengine {template<class... T>std::string format_text(std::format_string<T...> fmt,T&&...args){return std::format(fmt,std::forward<T>(args)...);}}
 int main(){
  struct {unsigned worker_count=4,running_tasks=0,idle_workers=4;} toolbarActivity;
  unsigned toolbarQueued=0;
- const unsigned toolbarRunning=1; // A separate model is active; no pool worker is added.
+ [[maybe_unused]] const unsigned toolbarRunning=1; // A separate model is active; no pool worker is added.
  auto label=[&]{return EXPR;};
+#if CHECK_AUTOMATION_SUMMARY
  auto summary_label=[&]{
   const auto& taskActivity=toolbarActivity;
   const auto runningTasks=taskActivity.running_tasks,queuedTasks=toolbarQueued;
   return SUMMARY_EXPR;
  };
- if(label()!="Total 0 / Ready 4 / Queued 0"||summary_label()!=label())return 1;
+#endif
+ if(label()!="Total 0 / Ready 4 / Queued 0")return 1;
+#if CHECK_AUTOMATION_SUMMARY
+ if(summary_label()!=label())return 2;
+#endif
  toolbarActivity.running_tasks=2;toolbarActivity.idle_workers=2;toolbarQueued=3;
- if(label()!="Total 2 / Ready 2 / Queued 3"||summary_label()!=label())return 2;
+ if(label()!="Total 2 / Ready 2 / Queued 3")return 3;
+#if CHECK_AUTOMATION_SUMMARY
+ if(summary_label()!=label())return 4;
+#endif
 }
-""".replace('SUMMARY_EXPR',summary_expression).replace('EXPR',expression)
+""".replace('CHECK_AUTOMATION_SUMMARY', str(int(not public))).replace(
+            'SUMMARY_EXPR', summary_expression).replace('EXPR', expression)
         report=ROOT/'Artifacts/Reports/toolbar-running-workers'/str(time.time_ns())
         report.mkdir(parents=True);unit=report/'contract.cpp';unit.write_text(code)
-        records=compile_and_run(self,unit,report)
+        records=compile_and_run(self,unit,report,includes=(ROOT/'Engine/include',))
         (report/'result.json').write_text(json.dumps(records,indent=2))
 
     def test_five_stage_membership_and_narrow_drop(self):
@@ -311,9 +394,12 @@ int main(){for(unsigned telemetryDetail=0;telemetryDetail<5;++telemetryDetail){
         source = (folder / 'editor.frame_toolbar_dock_targets.inl').read_text()
         body = source[source.index('        const auto statusResult ='):source.index('        const float tab_y =')]
         private_marker = '// EPOCH_' + 'PRIVATE_SOURCE_'
-        private_start = body.index(private_marker + 'BEGIN:')
-        private_end = body.index(private_marker + 'END:', private_start)
-        body = body[:private_start] + body[body.index('\n', private_end):]
+        if '#define EPOCH_SOURCE_EDITION_PUBLIC 1' in EDITION_HEADER.read_text(encoding='utf-8').splitlines():
+            self.assertNotIn(private_marker, body)
+        else:
+            private_start = body.index(private_marker + 'BEGIN: editor_source_patch_clear_0')
+            private_end = body.index(private_marker + 'END: editor_source_patch_clear_0', private_start)
+            body = body[:private_start] + body[body.index('\n', private_end):]
         scope = 'template<class Draw>\n' + definition(
             (folder / 'editor.application_context_session.inl').read_text(),
             '        decltype(auto) render_automation_inspection(')

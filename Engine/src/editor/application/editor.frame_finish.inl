@@ -74,6 +74,8 @@
                     || editor_assistant_work_active(editor, chat) || editor.scriptBuildPending.has_value(),
                 std::memory_order_relaxed);
         frameTimer.mark_ui_done();
+        editor.layoutPreferencesApplication = editor.applicationKind;
+        editor.layoutPreferencesLoaded = true;
         persist_editor_layout_preferences(editor);
         ctx->set_gui_overlay_priority(editor.openMenu != TopMenu::None || editor.outlinerContextMenu.menu.popup.open || modal_visible_now() || floating_gui_visible() || gui::select_box_popup_open());
         (void)present_project_runtime_viewport(editor);

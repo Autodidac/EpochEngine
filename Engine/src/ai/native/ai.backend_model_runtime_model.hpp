@@ -16,12 +16,14 @@
 #include <vector>
 
 #include "../ai.native_multimodel_gpu_budget.hpp"
+#include "../ai.native_shared_inputs.hpp"
 #include "../ai.model_behavior.hpp"
 #include "../ai.model_capability.hpp"
 
 #include <nlohmann/json.hpp>
 
 namespace epoch_ai::model {
+namespace native_inputs = epochengine::ai::native_shared_inputs;
 
 // Normalize the shipped legacy label consistently in metadata-only and live views.
 // Operator-assigned names and unrelated model identities are preserved verbatim.
@@ -325,14 +327,14 @@ private:
         for (std::filesystem::directory_iterator it{directory, ec}, end;
             !ec && it != end && visited++ < 128u; it.increment(ec))
         {
-            auto name = it->path().filename().string();
+            auto name = native_inputs::utf8(it->path().filename());
             for (auto& ch : name) if (ch >= 'A' && ch <= 'Z') ch += 'a' - 'A';
             if (!is_vision_projector_filename(name) || !name.ends_with(".gguf")) continue;
             const auto marker = name.find("mmproj");
             if (marker != 0u) {
                 auto prefix = name.substr(0u, marker);
                 while (!prefix.empty() && (prefix.back() == '.' || prefix.back() == '-' || prefix.back() == '_')) prefix.pop_back();
-                auto modelName = model.filename().string();
+                auto modelName = native_inputs::utf8(model.filename());
                 for (auto& ch : modelName) if (ch >= 'A' && ch <= 'Z') ch += 'a' - 'A';
                 if (prefix.empty() || !modelName.starts_with(prefix) || modelName.size() <= prefix.size()
                     || (modelName[prefix.size()] != '.' && modelName[prefix.size()] != '-' && modelName[prefix.size()] != '_')) continue;
@@ -547,7 +549,7 @@ struct RuntimeModelProfile {
 [[nodiscard]] inline epochengine::ai::model_behavior::Classification behavior_for(
     const RuntimeModelProfile& profile)
 {
-    const auto local = profile.local_path.generic_string();
+    const auto local = native_inputs::utf8(profile.local_path);
     const std::array<std::string_view, 4> identities{profile.id, profile.display_name, profile.repo, local};
     return epochengine::ai::model_behavior::classify(identities, profile.behavior_labels, profile.tags);
 }

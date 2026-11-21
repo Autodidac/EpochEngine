@@ -598,7 +598,7 @@
                         editor.aiToolStatus = "project.open refused: choose one unchanged host-listed project ID. No arbitrary path was opened.";
                         return false;
                     }
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
                     if (!project_ai_scope_allowed(profile->root_path))
                     {
                         editor.aiToolStatus = "project.open refused: this project is outside Public project assistance scope.";

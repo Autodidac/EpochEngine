@@ -1245,7 +1245,7 @@
                     + std::to_string(editor.projectWorkspaceSection);
             }
             const bool centerHasNestedSourceEditor =
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
                 false
 #endif
                 || editor.mainSurface == EditorMainSurface::AssetGeneration
@@ -1933,279 +1933,8 @@
                                         + editor.projectInputSettingsStatus);
                             };
 
-                        const auto keyChoices = project_key_choices();
-                        std::vector<std::string_view> keyChoiceLabels{};
-                        keyChoiceLabels.reserve(keyChoices.size());
-                        for (const auto key : keyChoices)
-                        {
-                            keyChoiceLabels.emplace_back(
-                                epochengine::project_input::key_code_name(key));
-                        }
-
-                        const auto buttonChoices =
-                            project_controller_button_choices();
-                        std::vector<std::string_view> buttonChoiceLabels{};
-                        buttonChoiceLabels.reserve(buttonChoices.size());
-                        for (const auto button : buttonChoices)
-                        {
-                            buttonChoiceLabels.emplace_back(
-                                epochengine::project_input::
-                                    controller_button_name(button));
-                        }
-
-                        const auto axisChoices =
-                            project_controller_axis_choices();
-                        std::vector<std::string_view> axisChoiceLabels{};
-                        axisChoiceLabels.reserve(axisChoices.size());
-                        for (const auto axis : axisChoices)
-                        {
-                            axisChoiceLabels.emplace_back(
-                                epochengine::project_input::
-                                    controller_axis_name(axis));
-                        }
-                        const auto slotLabels =
-                            project_controller_slot_labels();
-
-                        const bool hasControllerAxis = std::any_of(
-                            projectInput.bindings.begin(),
-                            projectInput.bindings.end(),
-                            [](const editor_project_input_settings::BindingView& binding)
-                            {
-                                return binding.device
-                                    == project_input::BindingDevice::controller_axis;
-                            });
-                        if (hasControllerAxis)
-                        {
-                            const auto deadZoneChoices =
-                                project_controller_dead_zone_choices();
-                            std::vector<std::string_view> deadZoneLabels{};
-                            deadZoneLabels.reserve(deadZoneChoices.size());
-                            for (const auto& choice : deadZoneChoices)
-                                deadZoneLabels.emplace_back(choice.label);
-                            const auto deadZoneSelect = gui::select_box(
-                                gui::SelectBoxOptions{
-                                    .id = "project-input-controller-dead-zone",
-                                    .placeholder = "Controller dead zone",
-                                    .selected =
-                                        project_controller_dead_zone_label(
-                                            projectInput
-                                                .controller_dead_zone_q15,
-                                            projectInput
-                                                .uniform_controller_dead_zone),
-                                    .options =
-                                        std::span<const std::string_view>{
-                                            deadZoneLabels.data(),
-                                            deadZoneLabels.size()},
-                                    .size = {
-                                        (std::min)(centerWidth, 320.0f),
-                                        30.0f},
-                                    .row_height = 27.0f,
-                                    .max_visible_options = 8});
-                            if (deadZoneSelect.changed
-                                && deadZoneSelect.selected_index
-                                && *deadZoneSelect.selected_index
-                                    < deadZoneChoices.size())
-                            {
-                                recordInputEdit(
-                                    editor.projectInputSettings
-                                        ->set_controller_dead_zone(
-                                            deadZoneChoices[
-                                                *deadZoneSelect.selected_index]
-                                                .value_q15));
-                            }
-                        }
-
-                        for (const auto& binding : projectInput.bindings)
-                        {
-                            gui::label(binding.action_label);
-                            gui::property_row(
-                                "Device",
-                                binding.source_label,
-                                132.0f);
-                            switch (binding.device)
-                            {
-                            case project_input::BindingDevice::keyboard:
-                            {
-                                const auto bindingSelect = gui::select_box(
-                                    gui::SelectBoxOptions{
-                                        .id = "project-input-key-"
-                                            + std::to_string(
-                                                binding.id.value),
-                                        .placeholder = "Choose project key",
-                                        .selected =
-                                            project_key_label(binding.code),
-                                        .options =
-                                            std::span<const std::string_view>{
-                                                keyChoiceLabels.data(),
-                                                keyChoiceLabels.size()},
-                                        .size = {
-                                            (std::min)(centerWidth, 320.0f),
-                                            30.0f},
-                                        .row_height = 27.0f,
-                                        .max_visible_options = 8});
-                                if (bindingSelect.changed
-                                    && bindingSelect.selected_index
-                                    && *bindingSelect.selected_index
-                                        < keyChoices.size())
-                                {
-                                    recordInputEdit(
-                                        editor.projectInputSettings
-                                            ->rebind_keyboard(
-                                                binding.id,
-                                                keyChoices[
-                                                    *bindingSelect
-                                                        .selected_index]));
-                                }
-                                break;
-                            }
-                            case project_input::BindingDevice::controller_button:
-                            {
-                                const auto sourceSelect = gui::select_box(
-                                    gui::SelectBoxOptions{
-                                        .id =
-                                            "project-input-controller-button-"
-                                            + std::to_string(
-                                                binding.id.value),
-                                        .placeholder =
-                                            "Choose controller button",
-                                        .selected =
-                                            epochengine::project_input::
-                                                controller_button_name(
-                                                    static_cast<
-                                                        epochengine::
-                                                            project_input::
-                                                                ControllerButton>(
-                                                        binding.code)),
-                                        .options =
-                                            std::span<const std::string_view>{
-                                                buttonChoiceLabels.data(),
-                                                buttonChoiceLabels.size()},
-                                        .size = {
-                                            (std::min)(centerWidth, 320.0f),
-                                            30.0f},
-                                        .row_height = 27.0f,
-                                        .max_visible_options = 8});
-                                if (sourceSelect.changed
-                                    && sourceSelect.selected_index
-                                    && *sourceSelect.selected_index
-                                        < buttonChoices.size())
-                                {
-                                    recordInputEdit(
-                                        editor.projectInputSettings
-                                            ->rebind_controller_button(
-                                                binding.id,
-                                                buttonChoices[
-                                                    *sourceSelect
-                                                        .selected_index],
-                                                binding.controller_slot));
-                                }
-                                const auto slotSelect = gui::select_box(
-                                    gui::SelectBoxOptions{
-                                        .id =
-                                            "project-input-controller-button-slot-"
-                                            + std::to_string(
-                                                binding.id.value),
-                                        .placeholder = "Choose controller",
-                                        .selected =
-                                            project_controller_slot_label(
-                                                binding.controller_slot),
-                                        .options = slotLabels,
-                                        .size = {
-                                            (std::min)(centerWidth, 320.0f),
-                                            30.0f},
-                                        .row_height = 27.0f,
-                                        .max_visible_options = 4});
-                                if (slotSelect.changed
-                                    && slotSelect.selected_index
-                                    && *slotSelect.selected_index
-                                        < slotLabels.size())
-                                {
-                                    recordInputEdit(
-                                        editor.projectInputSettings
-                                            ->rebind_controller_button(
-                                                binding.id,
-                                                static_cast<project_input::ControllerButton>(
-                                                    binding.code),
-                                                static_cast<std::uint8_t>(
-                                                    *slotSelect.selected_index)));
-                                }
-                                break;
-                            }
-                            case project_input::BindingDevice::controller_axis:
-                            {
-                                const auto sourceSelect = gui::select_box(
-                                    gui::SelectBoxOptions{
-                                        .id =
-                                            "project-input-controller-axis-"
-                                            + std::to_string(
-                                                binding.id.value),
-                                        .placeholder =
-                                            "Choose controller axis",
-                                        .selected =
-                                            epochengine::project_input::
-                                                controller_axis_name(
-                                                    static_cast<
-                                                        epochengine::
-                                                            project_input::
-                                                                ControllerAxis>(
-                                                        binding.code)),
-                                        .options =
-                                            std::span<const std::string_view>{
-                                                axisChoiceLabels.data(),
-                                                axisChoiceLabels.size()},
-                                        .size = {
-                                            (std::min)(centerWidth, 320.0f),
-                                            30.0f},
-                                        .row_height = 27.0f,
-                                        .max_visible_options = 6});
-                                if (sourceSelect.changed
-                                    && sourceSelect.selected_index
-                                    && *sourceSelect.selected_index
-                                        < axisChoices.size())
-                                {
-                                    recordInputEdit(
-                                        editor.projectInputSettings
-                                            ->rebind_controller_axis(
-                                                binding.id,
-                                                axisChoices[
-                                                    *sourceSelect
-                                                        .selected_index],
-                                                binding.controller_slot));
-                                }
-                                const auto slotSelect = gui::select_box(
-                                    gui::SelectBoxOptions{
-                                        .id =
-                                            "project-input-controller-axis-slot-"
-                                            + std::to_string(
-                                                binding.id.value),
-                                        .placeholder = "Choose controller",
-                                        .selected =
-                                            project_controller_slot_label(
-                                                binding.controller_slot),
-                                        .options = slotLabels,
-                                        .size = {
-                                            (std::min)(centerWidth, 320.0f),
-                                            30.0f},
-                                        .row_height = 27.0f,
-                                        .max_visible_options = 4});
-                                if (slotSelect.changed
-                                    && slotSelect.selected_index
-                                    && *slotSelect.selected_index
-                                        < slotLabels.size())
-                                {
-                                    recordInputEdit(
-                                        editor.projectInputSettings
-                                            ->rebind_controller_axis(
-                                                binding.id,
-                                                static_cast<project_input::ControllerAxis>(
-                                                    binding.code),
-                                                static_cast<std::uint8_t>(
-                                                    *slotSelect.selected_index)));
-                                }
-                                break;
-                            }
-                            }
-                        }
+                        draw_project_input_binding_controls(projectInput,
+                            *editor.projectInputSettings, centerWidth, recordInputEdit);
 
                         const auto actionSnapshot =
                             editor.projectInputSettings->snapshot();
@@ -3646,7 +3375,7 @@
             case EditorMainSurface::Timeline:
                 render_timeline_workspace(editor, centerWidth, render_timeline_time_controls);
                 break;
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
             case EditorMainSurface::AISandbox:
             {
                 gui::wrapped_label("Ask about your project, plan a scene change, or choose a model connection. Engine source tools are available in the Development edition.", centerWidth);
@@ -3737,14 +3466,14 @@
                         const bool commandsAvailable = !menusBlockedByModal && !toolbarControlsBlockedByMenu;
                         const std::array actions{
                             gui::InlineButtonSpec{
-                                .label=running ? "Stop" : "Run In Editor", .width=118.0f,
+                                .label=running ? "Stop" : "Run In Editor",
                                 .enabled=running || (!building && !automationInputReserved)},
-                            gui::InlineButtonSpec{
-                                .label="Cancel Build", .width=108.0f, .enabled=building},
-                            gui::InlineButtonSpec{.label="Show Output", .width=108.0f}};
+                            gui::InlineButtonSpec{.label="Show Output"},
+                            gui::InlineButtonSpec{.label="Cancel Build"}};
+                        const auto visibleActions = std::span{actions}.first(building ? 3u : 2u);
                         const auto selected = render_automation_inspection(automationBackgroundInput,
                             commandsAvailable, [&]() {
-                                return gui::inline_button_row(actions, 28.0f, 6.0f,
+                                return gui::inline_button_row(visibleActions, 28.0f, 6.0f,
                                     {.sizing=gui::InlineButtonSizing::FitContent,
                                      .wrap=true, .available_width=centerWidth});
                             });
@@ -3757,10 +3486,10 @@
                                 show_project_run_output();
                                 play_active_context(true);
                             }
-                            else if (*selected == 1u && building)
-                                (void)cancel_project_build(editor);
-                            else if (*selected == 2u)
+                            else if (*selected == 1u)
                                 show_project_run_output();
+                            else if (*selected == 2u && building)
+                                (void)cancel_project_build(editor);
                         }
                         if (editor.projectBuildPending)
                             gui::label(project_build_activity_label(editor));

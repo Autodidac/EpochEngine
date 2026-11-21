@@ -2001,9 +2001,12 @@ namespace epochengine::ai
             effective.best_of = 1u;
             effective.gpu_layers = 0;
         }
-        else
+        else if (effective.application_isolation || effective.application_model_identity
+            || !effective.application_protocol.empty())
         {
-            effective.application_isolation.reset();
+            out.text = "This model configuration is bound to application assistance. Select a provider admitted for this request.";
+            out.terminal_failure = ModelTerminalFailure::request_rejected;
+            return out;
         }
         bool codingRequest = project_script_request(workload, user_input);
         if (codingRequest) {

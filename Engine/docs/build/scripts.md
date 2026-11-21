@@ -254,10 +254,19 @@ clean materialization of the reviewed source tree. Record the Git tree ID
 and the printed payload SHA-256 for each edition. Supply that edition's value
 with `--expected-payload-sha256` when creating the ZIP. This verifies the
 projected file names and bytes before writing and complements the ZIP checksum.
+Source packaging reserves the sibling `.partial` file exclusively. A failed
+write preserves the previous ZIP. If a partial file already exists, check
+which job owns it before retrying.
 
 1. Record the intended source version, the existing runtime version for each
    edition and platform, and which release pointers the delivery will advance.
    Use the same source version for the matching Public and Development snapshots.
+   For an updater test release, place the source one revision above the packaged
+   runtime on both channels. Download the actual runtime package for each edition,
+   extract it into a fresh install and run its ordinary update check. Record the
+   discovered version, selected repository, verified archive digest and version
+   after rebuild. A Public download mirrored on the Site still exercises GitHub.
+   Test the authenticated channel from the owner portal's Site-bound runtime.
 2. Change the source version literals in `Engine/modules/epoch.version.ixx` and
    all four Windows resource fields in `Engine/resource/WinResource.rc`
    (`FILEVERSION`, `PRODUCTVERSION`, `FileVersion` and `ProductVersion`).
@@ -265,13 +274,20 @@ projected file names and bytes before writing and complements the ZIP checksum.
    Read the formatted version with `Tools/build/get_epoch_version.ps1` and
    verify the Windows resource strings and built executable report that value.
    Packaged version overrides are inputs for the platform and runtime release
-   being staged. Confirm the active runtime versions independently of the source.
+   being staged. Windows and Linux staging require matching source and platform
+   versions before copying files. Both check the exact version, edition and
+   owner-runtime profile emitted together by the staged executable. A source
+   update may pin an earlier runtime without producing another runtime archive.
+   For each shipped Vulkan shader, staging uses the SPIR-V from the runtime
+   build when available and otherwise keeps the checked-in fallback.
 3. Update the owner README's current-source text, the changelog and the release
    notes. Regenerate the Public README and `source-projection.json` from the
    reviewed source. Its source badge, alt text and source tag link come from the
    resource's `ProductVersion`. Its runtime badge and link follow GitHub's latest
    stable release. Read back the README on GitHub's default branch, including
-   the badge image, alt text and link targets.
+   the badge image, alt text and link targets. Match feature badges to the
+   edition being downloaded. Identify the build and project in new screenshot
+   captions and preserve the dates or versions on archived captures.
 4. Freeze the two reviewed commits. Match each tag or Site source entry, archive
    filename, checksum sidecar and receipt to its exact edition, version, commit
    and tree. Mark a GitHub source-only release as a prerelease so the latest
@@ -279,6 +295,9 @@ projected file names and bytes before writing and complements the ZIP checksum.
    versioned Public source ZIP and its signed `epoch-release-integrity.json`
    to that exact tag before advertising the source version on `main`. Verify
    that the version module, signed source row, ZIP and archive tree agree.
+   Epoch's installed updater verifies the release manifest against its trusted
+   public key. The signature covers the release version, download locations and
+   archive hashes. Owner sign-in on the Site controls access to private downloads.
    For a runtime release, also check the embedded distribution identity,
    platform asset names, signed integrity document and updater discovery. Verify
    the source and runtime links on GitHub, the Public Site and the owner portal.
@@ -404,6 +423,8 @@ Before publishing a Windows packaged runtime zip:
   `x64/Release` folders, headless smoke executables, or
   legacy executable aliases in the public runtime package
 - copy the required backend DLLs beside `EpochEditor.exe`
+- check the assembled executable and DLLs for private build paths before launching
+  either distributable edition. The archive readback repeats this check.
 - copy the full VC143 CRT payload from
   `C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Redist\MSVC\<version>\x64\Microsoft.VC143.CRT\`
   into the release folder so clean Windows machines do not need a separate

@@ -21,6 +21,7 @@ env:
 
 jobs:
   windows:
+    name: windows-msvc
     runs-on: windows-2022
     timeout-minutes: 240
     env:
@@ -129,6 +130,7 @@ jobs:
             Artifacts/Packages/public/v${{ steps.package.outputs.version }}/epoch_win10_x64_v${{ steps.package.outputs.version }}.zip.build-validation.json
 
   linux:
+    name: linux-clang-engine
     runs-on: ubuntu-22.04
     timeout-minutes: 180
     env:

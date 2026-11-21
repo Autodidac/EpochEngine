@@ -148,6 +148,19 @@
                 cursorY += 36.0f;
             }
             emitWrapped(editor_update_modal::cache_text(flags), 8.0f);
+            const auto drawCancelAction = [&](float width)
+            {
+                if (sourceWorkerRunning)
+                {
+                    if (gui::button("Cancel Update", {width, buttonHeight}))
+                        request_editor_source_update_cancel(editor);
+                }
+                else if (!updateRunning && !restartReady && gui::button("Cancel", {width, buttonHeight}))
+                {
+                    editor.showUpdateConfirmModal = false;
+                    push_editor_log(editor, "[command] Update canceled.");
+                }
+            };
             const std::string actionText = editor_update_modal::action_text(flags);
             emitWrapped(actionText, 8.0f);
             if (actionStripStacked)
@@ -156,18 +169,7 @@
                 if (showCancelButton)
                 {
                     gui::set_cursor({ contentX, stackedButtonY });
-                    if (sourceWorkerRunning)
-                    {
-                        if (gui::button("Cancel Update", { contentWidth, buttonHeight }))
-                        {
-                            request_editor_source_update_cancel(editor);
-                        }
-                    }
-                    else if (!updateRunning && !restartReady && gui::button("Cancel", { contentWidth, buttonHeight }))
-                    {
-                        editor.showUpdateConfirmModal = false;
-                        push_editor_log(editor, "[command] Update canceled.");
-                    }
+                    drawCancelAction(contentWidth);
                     stackedButtonY += buttonHeight + buttonStackGap;
                 }
                 const std::string primaryUpdateLabel = restartReady
@@ -217,18 +219,8 @@
             else
             {
                 gui::set_cursor({ contentX, buttonY });
-                if (showCancelButton && sourceWorkerRunning)
-                {
-                    if (gui::button("Cancel Update", { cancelButtonWidth, buttonHeight }))
-                    {
-                        request_editor_source_update_cancel(editor);
-                    }
-                }
-                else if (showCancelButton && !updateRunning && !restartReady && gui::button("Cancel", { 120.0f, buttonHeight }))
-                {
-                    editor.showUpdateConfirmModal = false;
-                    push_editor_log(editor, "[command] Update canceled.");
-                }
+                if (showCancelButton)
+                    drawCancelAction(cancelButtonWidth);
 
                 const float primaryButtonX = showCancelButton
                     ? (std::min)(contentRight - primaryButtonWidth, contentX + cancelButtonWidth + buttonGap)
@@ -287,13 +279,9 @@
             const float contentX = modalPos.x + modalContentInset;
             const float contentRight = modalPos.x + modalSize.x - modalContentInset;
             const float contentWidth = (std::max)(1.0f, contentRight - contentX);
-            constexpr float buttonHeight = 30.0f;
-            constexpr float buttonGap = 16.0f;
-            constexpr float buttonStackGap = 8.0f;
             const editor_update_modal::ActionStrip sourceActionStrip =
                 editor_update_modal::source_action_strip(contentWidth);
             const float sourceActionStripHeight = sourceActionStrip.height;
-            const bool sourceActionStripStacked = sourceActionStrip.stacked;
             const float actionBaseY = modalPos.y + modalSize.y - sourceActionStripHeight - editor_update_modal::kButtonBottomPad;
             const float contentBottom = (std::max)(modalPos.y + 64.0f, actionBaseY - editor_update_modal::kButtonTopPad);
             gui::begin_modal_window(gui::ModalWindowOptions{
@@ -319,61 +307,32 @@
                 gui::wrapped_label(text, contentWidth);
                 cursorY += textHeight + 12.0f;
             }
-            const float actionX = contentX;
-            float actionY = actionBaseY;
-            if (sourceActionStripStacked)
+            std::size_t actionIndex{};
+            const auto sourceButton = [&](std::string_view label)
             {
-                gui::set_cursor({ actionX, actionY });
-                if (gui::button("Back", { contentWidth, buttonHeight }))
-                {
-                    editor.showSourceUpdateConfirmModal = false;
-                    editor.showUpdateConfirmModal = true;
-                }
-                actionY += buttonHeight + buttonStackGap;
-                gui::set_cursor({ actionX, actionY });
-                if (gui::button("Build / Update From Source", { contentWidth, buttonHeight }))
-                {
-                    editor.showSourceUpdateConfirmModal = false;
-                    editor.showUpdateConfirmModal = true;
-                    push_editor_log(editor, "[command] Authorized source build confirmed.");
-                    start_editor_source_update_install(editor);
-                }
-                actionY += buttonHeight + buttonStackGap;
-                gui::set_cursor({ actionX, actionY });
-                if (gui::button("Download Source Project", { contentWidth, buttonHeight }))
-                {
-                    editor.showSourceUpdateConfirmModal = false;
-                    editor.showUpdateConfirmModal = true;
-                    push_editor_log(editor, "[command] Project source code download confirmed.");
-                    start_editor_project_source_code_download(editor);
-                }
+                const auto bounds = editor_update_modal::action_button_bounds(
+                    sourceActionStrip, {contentX, actionBaseY}, contentWidth, actionIndex++);
+                gui::set_cursor({bounds.position.x, bounds.position.y});
+                return gui::button(label, {bounds.size.x, bounds.size.y});
+            };
+            const auto showUpdateActions = [&]()
+            {
+                editor.showSourceUpdateConfirmModal = false;
+                editor.showUpdateConfirmModal = true;
+            };
+            if (sourceButton("Back"))
+                showUpdateActions();
+            if (sourceButton("Build / Update From Source"))
+            {
+                showUpdateActions();
+                push_editor_log(editor, "[command] Authorized source build confirmed.");
+                start_editor_source_update_install(editor);
             }
-            else
+            if (sourceButton("Download Source Project"))
             {
-                gui::set_cursor({ actionX, actionY });
-                if (gui::button("Back", { 104.0f, buttonHeight }))
-                {
-                    editor.showSourceUpdateConfirmModal = false;
-                    editor.showUpdateConfirmModal = true;
-                }
-                float sourceButtonX = actionX + 104.0f + buttonGap;
-                gui::set_cursor({ sourceButtonX, actionY });
-                if (gui::button("Build / Update From Source", { 208.0f, buttonHeight }))
-                {
-                    editor.showSourceUpdateConfirmModal = false;
-                    editor.showUpdateConfirmModal = true;
-                    push_editor_log(editor, "[command] Authorized source build confirmed.");
-                    start_editor_source_update_install(editor);
-                }
-                sourceButtonX += 208.0f + buttonGap;
-                gui::set_cursor({ sourceButtonX, actionY });
-                if (gui::button("Download Source Project", { 220.0f, buttonHeight }))
-                {
-                    editor.showSourceUpdateConfirmModal = false;
-                    editor.showUpdateConfirmModal = true;
-                    push_editor_log(editor, "[command] Project source code download confirmed.");
-                    start_editor_project_source_code_download(editor);
-                }
+                showUpdateActions();
+                push_editor_log(editor, "[command] Project source code download confirmed.");
+                start_editor_project_source_code_download(editor);
             }
             gui::end_modal_window();
         }

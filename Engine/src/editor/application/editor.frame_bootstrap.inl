@@ -98,7 +98,7 @@
                 chat.completionGeneration;
             const AiDeferredRequestKind completedKind =
                 chat.latestCompletionRequestKind;
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
             constexpr bool sourceCompletion = false;
 #endif
             if (completedKind == AiDeferredRequestKind::Authoring)
@@ -534,7 +534,7 @@
                 || editor.editorSettingsWindow.resizing))
             || (editor.showAiModelManagerModal && (editor.aiModelManagerWindow.dragging
                 || editor.aiModelManagerWindow.resizing));
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
         constexpr bool nativeToolApprovalModalVisible = false;
 #endif
         const gui::Vec2 aboutModalSize = fit_modal_size({600.0f, 416.0f}, {360.0f, 260.0f});

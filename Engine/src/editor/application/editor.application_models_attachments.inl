@@ -316,7 +316,7 @@
             gui::wrapped_label("Search a model folder or drive without downloading or loading anything. "
                 "Split GGUF shards are grouped; incomplete sets cannot be registered here.", width);
             if (!state.discovery_root.empty())
-                gui::wrapped_label("Current library folder: " + state.discovery_root.generic_string(), width);
+                gui::wrapped_label("Current library folder: " + ai::native_shared_inputs::utf8(state.discovery_root), width);
             gui::label("Search folder / drive");
             (void)gui::edit_box(editor.aiModelSearchRoot, {width, 30.0f}, 2048u, false);
             if (const auto action = gui::inline_button_row(std::array{
@@ -326,15 +326,16 @@
                 if (*action == 0u) {
                     const auto selected = platform::filesystem::open_file_dialog(
                         L"Select a GGUF in the folder to search", L"GGUF model", L"*.gguf", {});
-                    if (selected.accepted) editor.aiModelSearchRoot = selected.path.parent_path().generic_string();
-                } else (void)native::discover_model_files(std::filesystem::path{
-                    std::u8string{editor.aiModelSearchRoot.begin(), editor.aiModelSearchRoot.end()}});
+                    if (selected.accepted) editor.aiModelSearchRoot = ai::native_shared_inputs::utf8(selected.path.parent_path());
+                } else (void)native::discover_model_files(ai::native_shared_inputs::path_from_utf8(editor.aiModelSearchRoot));
             }
             if (!state.discovery_status.empty()) gui::wrapped_label(state.discovery_status, width);
             for (const auto& file : state.discovered_models) {
-                gui::semantic_block(file.path.filename().string(), file.complete
+                const auto filename = ai::native_shared_inputs::utf8(file.path.filename());
+                const auto path = ai::native_shared_inputs::utf8(file.path);
+                gui::semantic_block(filename, file.complete
                     ? gui::SemanticTone::info : gui::SemanticTone::warning, width);
-                gui::wrapped_label(file.path.generic_string(), width);
+                gui::wrapped_label(path, width);
                 gui::wrapped_label(epochengine::format_text("{:.2f} GiB | {} shard(s) | {}",
                     static_cast<double>(file.bytes) / (1024.0 * 1024.0 * 1024.0), file.shard_count, file.status), width);
                 const auto selected = std::ranges::find_if(state.models,
@@ -343,7 +344,7 @@
                 const std::string reconnect = "Reconnect " + nativeModelId + " to this file";
                 const bool reconnectMatches = selected != state.models.end()
                     && !selected->local_weights_filename.empty()
-                    && file.path.filename().generic_string() == selected->local_weights_filename;
+                    && filename == selected->local_weights_filename;
                 const std::array actions{
                         gui::InlineButtonSpec{.label=use, .enabled=file.complete && !state.busy},
                         gui::InlineButtonSpec{.label=reconnect, .enabled=file.complete && !state.busy
@@ -352,9 +353,9 @@
                         std::span{actions}.first(reconnectMatches ? 2u : 1u), 28.0f, 6.0f, layout)) {
                     if (*action == 0u) {
                         editor.aiRegisteredModelId = file.id;
-                        editor.aiRegisteredModelPath = file.path.generic_string();
+                        editor.aiRegisteredModelPath = path;
                         editor.aiModelManagerSection = 0; editor.aiModelManagerTab = 0;
-                    } else (void)native::reconnect_model_file(nativeModelId, file.path.generic_string());
+                    } else (void)native::reconnect_model_file(nativeModelId, path);
                 }
             }
         }
@@ -786,7 +787,7 @@
                 }
                 if(!queued)push_editor_log(editor,"[Local Models] Request rejected: busy or invalid model ID");
             }
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
             constexpr std::string_view tabs[]{"Models","Roles","Guidance"};
             if (editor.aiSetupTab == 2 || editor.aiSetupTab == 3) editor.aiSetupTab = 0;
 #endif
@@ -794,7 +795,7 @@
             for(std::size_t n=0;n<tabButtons.size();++n)tabButtons[n]={.label=tabs[n],.width=0.0f};
             if(const auto tab=gui::inline_button_row(tabButtons,28.0f,4.0f)) {
                 editor.aiSetupTab=static_cast<int>(*tab);
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
                 if (editor.aiSetupTab == 2) editor.aiSetupTab = 4;
 #endif
             }
@@ -897,7 +898,7 @@
             if (!hostImage && !ai::source_access::permits_file(path, attachmentRoot))
             { chat.append_status("Attachment is not admitted for model access."); return false; }
             std::error_code ec;
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
             const bool textAllowed = editor_ai_file_scope::allows_text(path,
                 core::path::find_epoch_repo_root(core::path::executable_dir()));
             if (!textAllowed)
@@ -957,7 +958,7 @@
                 chat.append_status("Image attached: " + path.filename().string() + ". Send requires an image-capable model.");
                 return true;
             }
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
             if (!textAllowed)
             { chat.append_status("Engine source attachment was refused; no text was admitted to the model."); return false; }
 #endif
@@ -1095,7 +1096,7 @@
             }
             // Connection modes are not System 1 or subagent roles. Keep stored
             // selection indices and transports stable across upgrades.
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
             constexpr std::string_view methods[]{"Local Models", "Local API", "Direct GGUF runtime"};
             if (editor.aiMethodSelection > 2) editor.aiMethodSelection = -1;
 #endif
@@ -1106,7 +1107,7 @@
                     && !editor.aiDirectRuntimePending
                     && editor.aiChatQueuedMethodSelection<0});
             if(method.changed&&method.selected_index){
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
                 {
 #endif
                     editor.aiMethodSelection=static_cast<int>(*method.selected_index);
@@ -1135,7 +1136,7 @@
                 "Local Models: use the built-in Epoch model manager and the local native serving runtime. Choose this for installed Qwen Next Flash weights.",
                 "Local API: connect to an OpenAI-compatible server, including LM Studio. The server manages model loading and memory.",
                 "Direct GGUF runtime: run compatible GGUF weights using the discovered direct local runtime instead of an API server.",
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
             };
 #endif
             if (editor.aiMethodSelection>=0 && editor.aiMethodSelection<5)

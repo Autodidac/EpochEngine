@@ -314,6 +314,7 @@ export namespace epochengine::openglpreview
         state.sceneWireLoc = -1;
         state.scenePaintTableLoc = -1;
         state.scenePaintRowsLoc = -1;
+        state.sceneSprayLoc = -1;
         state.sceneAtmosphereLocs.fill(-1);
         state.sceneWaterLocs.fill(-1);
         state.scenePaintTable = 0;
@@ -362,12 +363,14 @@ layout(location = 0) in vec3 aPos;
 layout(location = 1) in vec3 aColor;
 uniform mat4 uMvp;
 uniform bool uAtmospherePass;
+uniform bool uSprayPass;
 out vec3 vColor;
 out vec3 vDrawPosition;
 noperspective out vec3 vWireBarycentric;
 void main() {
     vec2 screen = vec2(gl_VertexID == 1 ? 3.0 : -1.0, gl_VertexID == 2 ? 3.0 : -1.0);
     gl_Position = uAtmospherePass ? vec4(screen, 0.0, 1.0) : uMvp * vec4(aPos, 1.0);
+    if (uSprayPass) gl_PointSize = aColor.x;
     vColor = aColor;
     vDrawPosition = uAtmospherePass ? vec3(screen,0.0) : aPos;
     int corner = gl_VertexID % 3;
@@ -381,6 +384,7 @@ uniform bool uWireEdges;
 uniform sampler2D uPaintTable;
 uniform int uPaintRows;
 uniform bool uAtmospherePass;
+uniform bool uSprayPass;
 uniform float uWaterScale;
 uniform vec3 uWaterCenter,uWaterEye;
 uniform vec4 uWaterSun,uWaterWaves[15],uWaterSlopes[3];
@@ -405,6 +409,39 @@ vec3 waterReflection(vec3 up, vec3 normal, vec3 eye, vec4 sun) {
                        smoothstep(0.04, 0.28, sunElevation));
     return sky * (0.25 + 0.75 * daylight) * fresnel + sunTint * specular * masking * visibleSun;
 }
+// Sharpen the front of the long swells. Neighboring phases give a crest
+// both broad gaps and broken edges, and every foam term follows its phase.
+float waterRolls(vec3 phase, vec3 phaseSine, vec3 phaseCosine, vec3 dx, vec3 dy,
+                 vec3 waveX, vec3 waveY, vec3 waveZ, float strength, inout vec3 slope) {
+    vec3 waves[3] = vec3[3](waveX, waveY, waveZ);
+    const vec3 steepness = vec3(0.080, 0.115, 0.165);
+    float foam = 0.0;
+    for (int i = 0; i < 3; ++i) {
+        int transverse = (i + 1) % 3;
+        int crossing = (i + 2) % 3;
+        vec3 wave = waves[i];
+        float footprint = abs(dot(wave, dx)) + abs(dot(wave, dy));
+        float resolved = 1.0 - smoothstep(0.65, 2.45, footprint);
+        float s = phaseSine[i], c = phaseCosine[i];
+        float group = 0.60 * phaseCosine[transverse] + 0.40 * phaseSine[crossing];
+        float envelope = 0.30 + 0.70 * smoothstep(-0.60, 0.65, group);
+        float front = 0.80 * c + 0.52 * s * c + 0.22 * (1.0 - 2.0 * s * s);
+        slope += normalize(wave) * (front * steepness[i] * envelope * resolved * strength);
+        // Whitecap fragments trail the sharp front and vanish before the
+        // fine pattern becomes smaller than a pixel.
+        float height = 0.80 * s + 0.26 * s * s + 0.22 * s * c;
+        if (height <= 0.91 || group <= 0.45 || footprint >= 0.70) continue;
+        float whiten = (1.0 - smoothstep(0.20, 0.70, footprint)) * smoothstep(0.45, 0.84, group);
+        float lip = smoothstep(0.91, 1.06, height);
+        float edge = abs(dot(waves[transverse] - 2.0 * waves[crossing], dx))
+                   + abs(dot(waves[transverse] - 2.0 * waves[crossing], dy));
+        float breakup = (1.0 - smoothstep(0.28, 0.90, edge))
+                     * smoothstep(0.25, 0.85, sin(phase[transverse] - 2.0 * phase[crossing]));
+        foam = max(foam, whiten * lip * mix(0.22, 1.0, breakup));
+    }
+    return foam * strength;
+}
+
 vec3 waterDetail(vec3 base, vec3 dx, vec3 dy) {
     vec3 p=vDrawPosition*uWaterScale;
     vec3 toEye=(uWaterEye-vDrawPosition)*uWaterScale;
@@ -417,18 +454,13 @@ vec3 waterDetail(vec3 base, vec3 dx, vec3 dy) {
                        dot(directionZ,p)+uWaterWaves[14].w);
     vec3 up=normalize(p-uWaterCenter),eye=toEye/distanceToEye;
     vec3 warpRate=cos(longPhase);
-    // Resolve the longer swells independently of the short crest spectrum.
+    vec3 drift=sin(longPhase);
     vec3 slope=vec3(0.0);
-    for(int i=0;i<3;++i) {
-        vec3 wave=uWaterWaves[12+i].xyz;
-        float footprint=abs(dot(wave,dx))+abs(dot(wave,dy));
-        float resolved=1.0-smoothstep(0.65,2.45,footprint);
-        slope+=normalize(wave)*(warpRate[i]*resolved*0.048*swellStrength);
-    }
+    float foam=waterRolls(longPhase,drift,warpRate,dx,dy,directionX,directionY,directionZ,
+                         swellStrength,slope);
     float rippleStrength=1.0-smoothstep(40.0,135.0,distanceToEye);
     if(rippleStrength>0.0) {
         const vec3 warpX=vec3(0.27,0.13,-0.21),warpY=vec3(0.11,-0.23,-0.19),warpZ=vec3(0.15,0.09,0.18);
-        vec3 drift=sin(longPhase);
         vec3 warped=p+warpX*drift.x+warpY*drift.y+warpZ*drift.z;
         dx+=warpX*(dot(directionX,dx)*warpRate.x)
             +warpY*(dot(directionY,dx)*warpRate.y)+warpZ*(dot(directionZ,dx)*warpRate.z);
@@ -449,11 +481,13 @@ vec3 waterDetail(vec3 base, vec3 dx, vec3 dy) {
             slope+=gradient/length(wave.xyz)*(cos(dot(wave.xyz,warped)+wave.w)*crest*resolved*crestEnvelope*rippleStrength);
         }
     }
-    if(dot(slope,slope)==0.0) return base;
+    if(dot(slope,slope)==0.0&&foam==0.0) return base;
     vec3 normal=normalize(up-(slope-up*dot(up,slope)));
     // The opaque base already includes the broad reflection.
     vec3 delta=waterReflection(up,normal,eye,uWaterSun)-waterReflection(up,up,eye,uWaterSun);
-    return clamp(base+delta,0.0,1.0);
+    float daylight=smoothstep(-0.10,0.38,dot(up,uWaterSun.xyz))*uWaterSun.w;
+    vec3 foamColor=mix(vec3(0.15,0.21,0.24),vec3(0.64,0.74,0.75),daylight);
+    return mix(clamp(base+delta,0.0,1.0),foamColor,foam*0.40);
 }
 vec3 forestCoverage(vec3 base) {
     if (uPaintRows <= 0) return base;
@@ -503,6 +537,12 @@ vec3 forestCoverage(vec3 base) {
     return base;
 }
 void main() {
+    if (uSprayPass) {
+        vec2 offset = (gl_PointCoord - vec2(0.5)) * vec2(2.25, 2.0);
+        float shape = 1.0 - smoothstep(0.06, 1.0, dot(offset, offset));
+        outColor = vec4(mix(vec3(0.36,0.48,0.54), vec3(0.88,0.95,0.98), vColor.z), vColor.y*shape);
+        return;
+    }
     if (uAtmospherePass) {
         outColor=skyAtmosphere(vDrawPosition.xy);
         if(outColor.a<=0.0)discard;
@@ -635,6 +675,7 @@ void main() {
         state.sceneWireLoc = glGetUniformLocation(state.sceneShader, "uWireEdges");
         state.scenePaintTableLoc = glGetUniformLocation(state.sceneShader, "uPaintTable");
         state.scenePaintRowsLoc = glGetUniformLocation(state.sceneShader, "uPaintRows");
+        state.sceneSprayLoc = glGetUniformLocation(state.sceneShader, "uSprayPass");
         constexpr std::array skyNames{"uAtmospherePass","uSkyEye","uSkyForward","uSkyRight",
             "uSkyUp","uSkySun","uSkyThickness","uSkySunVisible"};
         for(std::size_t index=0;index<skyNames.size();++index)
@@ -1185,6 +1226,54 @@ void main() {
         ScopedForestCoverage& operator=(const ScopedForestCoverage&) = delete;
     };
 
+    inline std::size_t render_shoreline_spray(const previewgrid::PublishedSceneFrame& scene,
+        openglstate::OpenGL4State& state,const detail::Mat4& mvp,int viewport_height)
+    {
+        if(state.sceneSprayLoc<0||!state.sceneMarkerVao||!state.sceneMarkerVbo)return 0u;
+        const auto batch=previewgrid::shoreline_spray_for(scene,viewport_height,
+            previewgrid::ShorelineSprayBatch::desktop_portable_budget);
+        if(batch.size==0u)return 0u;
+        const bool blend=glIsEnabled(GL_BLEND)==GL_TRUE;
+        const bool depth=glIsEnabled(GL_DEPTH_TEST)==GL_TRUE;
+        const bool point_size=glIsEnabled(GL_PROGRAM_POINT_SIZE)==GL_TRUE;
+        GLboolean depth_write{};
+        GLint depth_func{},src_rgb{},dst_rgb{},src_alpha{},dst_alpha{},equation_rgb{},equation_alpha{};
+        glGetBooleanv(GL_DEPTH_WRITEMASK,&depth_write);
+        glGetIntegerv(GL_DEPTH_FUNC,&depth_func);
+        glGetIntegerv(GL_BLEND_SRC_RGB,&src_rgb);
+        glGetIntegerv(GL_BLEND_DST_RGB,&dst_rgb);
+        glGetIntegerv(GL_BLEND_SRC_ALPHA,&src_alpha);
+        glGetIntegerv(GL_BLEND_DST_ALPHA,&dst_alpha);
+        glGetIntegerv(GL_BLEND_EQUATION_RGB,&equation_rgb);
+        glGetIntegerv(GL_BLEND_EQUATION_ALPHA,&equation_alpha);
+        glEnable(GL_BLEND);
+        glEnable(GL_DEPTH_TEST);
+        glEnable(GL_PROGRAM_POINT_SIZE);
+        glDepthMask(GL_FALSE);
+        glDepthFunc(GL_LEQUAL);
+        glBlendEquationSeparate(GL_FUNC_ADD,GL_FUNC_ADD);
+        glBlendFuncSeparate(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA,GL_ZERO,GL_ONE);
+        glUseProgram(state.sceneShader);
+        glUniformMatrix4fv(state.sceneMvpLoc,1,GL_FALSE,mvp.data());
+        glUniform1i(state.sceneSprayLoc,GL_TRUE);
+        glBindVertexArray(state.sceneMarkerVao);
+        glBindBuffer(GL_ARRAY_BUFFER,state.sceneMarkerVbo);
+        glBufferData(GL_ARRAY_BUFFER,static_cast<GLsizeiptr>(batch.size*sizeof(batch.points[0])),
+            batch.points.data(),GL_DYNAMIC_DRAW);
+        glDrawArrays(GL_POINTS,0,static_cast<GLsizei>(batch.size));
+        glUniform1i(state.sceneSprayLoc,GL_FALSE);
+        glBlendFuncSeparate(src_rgb,dst_rgb,src_alpha,dst_alpha);
+        glBlendEquationSeparate(equation_rgb,equation_alpha);
+        glDepthMask(depth_write);
+        glDepthFunc(static_cast<GLenum>(depth_func));
+        if(!blend)glDisable(GL_BLEND);
+        if(!depth)glDisable(GL_DEPTH_TEST);
+        if(!point_size)glDisable(GL_PROGRAM_POINT_SIZE);
+        ++state.meshDrawCallsSubmitted;
+        state.meshUploadBytesSubmitted+=batch.size*sizeof(batch.points[0]);
+        return batch.size;
+    }
+
     inline void render_mesh_wire_preview(const epochengine::previewgrid::MeshWireDrawFrame& frame,
         epochengine::openglstate::OpenGL4State& state, const detail::Mat4& mvp)
     {
@@ -1731,6 +1820,7 @@ void main() {
             const auto solidGeometry = solidFrame->geometry;
 
             const auto& solidVertices = *solidGeometry;
+            bool drew_water_detail = false;
             if (solidVertices.size() >= 3 && state.sceneMarkerVao && state.sceneMarkerVbo)
             {
                 ScopedForestCoverage coverage{state,*solidFrame};
@@ -1769,8 +1859,7 @@ void main() {
                     draw(first,solidVertices.size()-first);
                 }
                 else draw(0u,solidVertices.size());
-                if(matchedScene)
-                    epochengine::render_water_evidence::record(*matchedScene,"opengl",detail.has_value());
+                drew_water_detail = detail.has_value();
                 state.meshTrianglesSubmitted+=solidVertices.size()/3u;
                 state.meshUploadBytesSubmitted+=solidVertices.size()*sizeof(solidVertices[0]);
             }
@@ -1792,6 +1881,8 @@ void main() {
 
             if(matchedScene)
             {
+                const auto spray_points = render_shoreline_spray(*matchedScene,state,mvp,viewportHeight);
+                epochengine::render_water_evidence::record(*matchedScene,"opengl",drew_water_detail,spray_points);
                 const bool cloudRendered=openglcloud::render(state.cloudVolume,*matchedScene,viewportX,glViewportY,
                     viewportWidth,viewportHeight);
                 if(passProbe)(void)passProbe->read(cloudRendered?"cloud-complete":"cloud-refused");

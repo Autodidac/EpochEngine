@@ -60,18 +60,7 @@ $repo = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 . (Join-Path $repo 'Tools\build\epoch_package_layout.ps1')
 $edition = Get-EpochSourceEdition -RepoRoot $repo
 $packageRoot = Join-Path $repo 'Artifacts\Packages'
-$versionScript = Join-Path $repo 'Tools\build\get_epoch_version.ps1'
-Require-Path -Path $versionScript -Label 'Epoch version reader'
-$sourceVersion = (& $versionScript -VersionModule (Join-Path $repo 'Engine\modules\epoch.version.ixx')).Trim()
-if ([string]::IsNullOrWhiteSpace($Version)) {
-    $Version = $sourceVersion
-}
-elseif ($Version -cne $sourceVersion) {
-    throw "Requested release version $Version does not match source version $sourceVersion."
-}
-if ($Version -notmatch '^\d+\.\d+\.\d+$') {
-    throw 'Release version must contain only three numeric components.'
-}
+$Version = Get-EpochRuntimePackageVersion -RepoRoot $repo -Platform 'linux-x64' -RequestedVersion $Version
 
 $engine = Join-Path $repo 'Engine'
 if ([string]::IsNullOrWhiteSpace($BinaryRoot)) {
@@ -122,8 +111,6 @@ $stageName = "epoch_linux_x64_v$Version"
 $stage = Join-Path $resolvedOutput $stageName
 $tarball = Join-Path $resolvedOutput "$stageName.tar.gz"
 $checksum = Join-Path $resolvedOutput "v$Version`_checksums.txt"
-$windowsZipName = "epoch_win10_x64_v$Version.zip"
-$windowsZip = Join-Path $resolvedOutput $windowsZipName
 $verifyLogs = Join-Path $resolvedOutput ("verify_$stageName`_logs/" + [guid]::NewGuid().ToString('N'))
 foreach ($target in @($stage, $tarball, $verifyLogs)) {
     $resolvedTarget = [System.IO.Path]::GetFullPath($target)
@@ -133,6 +120,7 @@ foreach ($target in @($stage, $tarball, $verifyLogs)) {
 }
 
 Remove-EpochPackageItem -LiteralPath $stage -PackageRoot $packageRoot -Recurse
+Update-EpochRuntimeChecksums -OutputRoot $resolvedOutput -Edition $edition.Id -Version $Version -Platform linux-x64 -Withdraw
 Remove-EpochPackageItem -LiteralPath $tarball -PackageRoot $packageRoot
 New-Item -ItemType Directory -Path $stage -Force | Out-Null
 New-Item -ItemType Directory -Path $verifyLogs -Force | Out-Null
@@ -142,13 +130,7 @@ if (Test-Path -LiteralPath (Join-Path $binaryRoot 'lib')) {
     Copy-Item -LiteralPath (Join-Path $binaryRoot 'lib') -Destination (Join-Path $stage 'lib') -Recurse -Force
 }
 Copy-Item -LiteralPath $assets -Destination (Join-Path $stage 'assets') -Recurse -Force
-foreach ($shader in 'clouds.vert.spv', 'clouds.frag.spv') {
-    $relative = "assets\vulkan\shaders\$shader"
-    $builtShader = Join-Path $binaryRoot $relative
-    if (Test-Path -LiteralPath $builtShader -PathType Leaf) {
-        Copy-Item -LiteralPath $builtShader -Destination (Join-Path $stage $relative) -Force
-    }
-}
+Copy-EpochBuiltVulkanShaders -RuntimeRoot $binaryRoot -Stage $stage
 Copy-Item -LiteralPath $license -Destination (Join-Path $stage 'LICENSE') -Force
 Copy-Item -LiteralPath $readme -Destination (Join-Path $stage 'README.md') -Force
 & $noticeScript -RepoRoot $repo -VcpkgInstalledRoot $vcpkgInstalled -Destination $stage
@@ -209,9 +191,7 @@ if [[ -z "$max_glibcxx" || "$(printf '%s\n' 'GLIBCXX_3.4.30' "$max_glibcxx" | so
 fi
 printf 'shared_library_resolution.result=pass glibc=%s glibcxx=%s runpath=%s\n' "$max_glibc" "$max_glibcxx" "$runpath"
 
-version_output="$(EPOCH_LOG_DIR='__LOGS__' ./epoch --version)"
-printf '%s\n' "$version_output" | grep -F 'Epoch v__VERSION__' >/dev/null
-printf '%s\n' "$version_output" | grep -F 'edition=__EDITION__' >/dev/null
+EPOCH_LOG_DIR='__LOGS__' ./epoch --version > '__LOGS__/version.txt'
 EPOCH_LOG_DIR='__LOGS__' ./epoch --engine-contract-self-test | grep -F 'engine_contract_self_test.result=pass' >/dev/null
 printf 'engine_contract.result=pass version=%s\n' '__VERSION__'
 __RUNTIME_SMOKE__
@@ -220,7 +200,6 @@ $validationScript = $validationScript.Replace('__STAGE__', $stageWsl)
 $validationScript = $validationScript.Replace('__BUILD_ROOT__', $binaryRootWsl)
 $validationScript = $validationScript.Replace('__LOGS__', $verifyLogsWsl)
 $validationScript = $validationScript.Replace('__VERSION__', $Version)
-$validationScript = $validationScript.Replace('__EDITION__', $edition.Id)
 $runtimeSmoke = if ($SkipRuntimeSmoke) {
     "printf '%s\n' 'Linux packaged runtime smoke explicitly skipped; package remains build/contract proven only.'"
 }
@@ -234,6 +213,8 @@ $runtimeSmoke = $runtimeSmoke.Replace('__LOGS__', $verifyLogsWsl)
 $validationScript = $validationScript.Replace('__RUNTIME_SMOKE__', $runtimeSmoke)
 
 Invoke-LinuxScript -Script $validationScript -Label 'Linux staged-package validation'
+$versionText = Get-Content -LiteralPath (Join-Path $verifyLogs 'version.txt') -Raw
+Assert-EpochRuntimeVersionOutput -Text $versionText -Version $Version -Edition $edition
 
 # Validation paths can still create executable-local runtime artifacts before
 # their environment override is consumed. Preserve them outside the payload.
@@ -246,20 +227,6 @@ $archiveScript = "set -euo pipefail; tar -C '$outWsl' -czf '$tarWsl' '$stageName
 Invoke-LinuxScript -Script $archiveScript -Label 'Linux release archive validation'
 
 $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $tarball).Hash.ToLowerInvariant()
-$lines = @()
-if (Test-Path -LiteralPath $windowsZip) {
-    $windowsHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $windowsZip).Hash.ToLowerInvariant()
-    $lines += "$windowsHash  $windowsZipName"
-}
-else {
-    $lines += Get-Content -LiteralPath $checksum -ErrorAction SilentlyContinue |
-        Where-Object { $_ -and ($_ -notmatch [regex]::Escape("$stageName.tar.gz") + '$') }
-}
-$lines += "$hash  $stageName.tar.gz"
-[System.IO.File]::WriteAllLines($checksum, $lines, [System.Text.Encoding]::ASCII)
-
-Get-Item -LiteralPath $tarball, $checksum | Select-Object FullName, Length
-
 # The machine-readable receipt describes only checks that completed above.
 $validation = [ordered]@{
     schema = 'epoch.linux-package-validation.v1'
@@ -284,4 +251,6 @@ if ($LASTEXITCODE -ne 0) {
     [IO.File]::WriteAllText("$tarball.build-validation.json", ($validation | ConvertTo-Json), [Text.UTF8Encoding]::new($false))
     throw 'Linux package audit failed; no artifact is admitted for upload.'
 }
+Update-EpochRuntimeChecksums -OutputRoot $resolvedOutput -Edition $edition.Id -Version $Version -Platform linux-x64
+Get-Item -LiteralPath $tarball, $checksum | Select-Object FullName, Length
 Write-Host "package_inventory.result=pass artifact=$stageName.tar.gz sha256=$hash"

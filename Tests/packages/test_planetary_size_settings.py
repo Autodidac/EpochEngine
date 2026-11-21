@@ -332,6 +332,12 @@ class PlanetarySizeSettings(unittest.TestCase):
         installation = msvc_2022_root()
         self.assertIsNotNone(installation, 'The retained producer fixture requires VS 2022 MSBuild')
         msbuild = installation / 'MSBuild/Current/Bin/MSBuild.exe'
+        marker = (ROOT/'Engine/include/epoch.edition.hpp').read_text(encoding='utf-8').splitlines()
+        public = '#define EPOCH_SOURCE_EDITION_PUBLIC 1' in marker
+        if not public:
+            self.assertIn('#define EPOCH_SOURCE_EDITION_PUBLIC 0', marker)
+        runtime_edition = 'public' if public else 'development'
+        source_edition = b'epoch.public.github.v1' if public else b'epoch.development.site.v1'
         runs=[]
         def run(command, expected=0, timeout=60):
             result=subprocess.run([str(x) for x in command],cwd=ROOT,capture_output=True,text=True,timeout=timeout)
@@ -350,7 +356,7 @@ class PlanetarySizeSettings(unittest.TestCase):
             producer.parent.mkdir(parents=True);shutil.copy2(self._stage_provider,producer)
             command=['cmake',f'-DEPOCH_PLANET_PROVIDER={producer}',f'-DEPOCH_PLANET_CONFIGURATION={config}','-P',script]
             run(command)
-            runtime=packages/'.runtime/planetary_terrain/development'
+            runtime=packages/'.runtime/planetary_terrain'/runtime_edition
             original=runtime/f'{config}-{first[7:19]}'
             before={p.name:p.read_bytes() for p in original.iterdir()}
             legacy=runtime/config;legacy.mkdir()
@@ -419,8 +425,8 @@ class PlanetarySizeSettings(unittest.TestCase):
         identity=(cache/'build.identity').read_bytes()
         self.assertIn(project.resolve().as_posix().encode(),identity)
         self.assertIn(ROOT.resolve().as_posix().encode(),identity)
-        self.assertIn(b'epoch.development.site.v1',identity)
-        runtime=list((packages/'.runtime/planetary_terrain/development').glob('Release-*/provider.identity'))
+        self.assertIn(source_edition,identity)
+        runtime=list((packages/'.runtime/planetary_terrain'/runtime_edition).glob('Release-*/provider.identity'))
         self.assertEqual(len(runtime),1)
         self.assertIn(b'configuration=Release',runtime[0].read_bytes())
         # Reuse is exact. A foreign identity cannot be silently adopted or
@@ -439,9 +445,11 @@ class PlanetarySizeSettings(unittest.TestCase):
             project=base/'project';packages=project/'Packages'
             emitted=ET.parse(packages/'epoch.dependencies.props').getroot()
             dependencies=next(emitted.iter(ns+'AdditionalDependencies')).text
-            expected_libraries=('epoch_extension_planetary_water.lib','epoch_extension_water_fft.lib',
+            expected_runtime_libraries=('epoch_extension_planetary_runtime.lib','epoch_extension_planetary_clouds.lib',
+                'epoch_extension_planetary_cut_assembly.lib')
+            expected_water_libraries=('epoch_extension_planetary_water.lib','epoch_extension_water_fft.lib',
                 'epoch_extension_fft_ocean.lib')
-            for library in expected_libraries:self.assertIn(library,dependencies)
+            for library in expected_runtime_libraries+expected_water_libraries:self.assertIn(library,dependencies)
             self.assertNotIn('epoch_water_wave.lib',dependencies)
             source=project/'wet.link_contract.cpp'
             source.write_text('extern "C" bool epoch_install_planetary_runtime(const char*,const char*) noexcept;\n'
@@ -485,7 +493,7 @@ class PlanetarySizeSettings(unittest.TestCase):
             if config=='Release':
                 negative=copy.deepcopy(emitted)
                 link=next(negative.iter(ns+'AdditionalDependencies'))
-                link.text=';'.join(part for part in link.text.split(';') if not any(library in part for library in expected_libraries))
+                link.text=';'.join(part for part in link.text.split(';') if not any(library in part for library in expected_water_libraries))
                 negative_props=packages/'wet-link-negative.props'
                 ET.ElementTree(negative).write(negative_props,encoding='utf-8',xml_declaration=True)
                 negative_project=packages/'wet-link-negative.vcxproj';linked_project(negative_project,negative_props)
@@ -509,6 +517,7 @@ class PlanetarySizeSettings(unittest.TestCase):
             "        bool source_supports_mesh_frame(", "        bool source_supports_original_sunlight(", "        std::string real_text(",
             "        void append_size_arguments(", "        std::string stream_cache_identity(",
             "        std::optional<GeneratedMeshFrame> admit_generated_mesh_frame(",
+            "        std::optional<GeneratedMeshFrame> admit_metric_stream_mesh_frame(",
             "        bool normalize_stream_cloud_frame(",
             "        std::optional<fs::path> ordinary_directory(", "        std::optional<fs::path> project_directory(", "        bool write_owned(",
             "        std::optional<std::string> recipe_guard(", "        std::string water_source_requirement(", "        bool save_settings_observed(",

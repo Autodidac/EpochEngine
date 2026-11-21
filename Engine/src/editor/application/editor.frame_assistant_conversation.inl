@@ -445,7 +445,7 @@
         // readiness directly. A remote API exposes no reliable residency
         // signal; allow up to six seconds after confirmation to finish loading
         // rather than sending into a freshly selected endpoint immediately.
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
         if (editor.aiMethodSelection > 2) editor.aiMethodSelection = -1;
 #endif
         const auto queuedNative = epochengine::ai::native_runtime::snapshot(false);
@@ -474,7 +474,7 @@
             .transport = queuedTransport,
             .selected = queuedNative.selected,
             .loaded = queuedNative.loaded,
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
             .busy = editor.aiMethodSelection == 0 && queuedNative.busy,
             .confirmed = ai::is_model_use_confirmed(),
             .inventory_pending = editor.aiModelInventoryPending.has_value(),

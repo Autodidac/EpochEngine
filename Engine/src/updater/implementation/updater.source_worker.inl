@@ -1956,22 +1956,23 @@
         }
 
         [[nodiscard]] inline bool source_snapshot_matches(
-            const std::filesystem::path& root, const std::string_view signed_public_version)
+            const std::filesystem::path& root, const std::string_view expected_version)
         {
-            if (root.empty() || !source_tree_matches_edition(root)) return false;
-            if (!PUBLIC_DISTRIBUTION) return signed_public_version.empty();
+            if (expected_version.empty() || root.empty() || !source_tree_matches_edition(root)) return false;
             std::error_code ec;
-            const auto manifest = root / "source-projection.json";
+            if (PUBLIC_DISTRIBUTION)
+            {
+                const auto manifest = root / "source-projection.json";
+                if (!std::filesystem::is_regular_file(manifest, ec) || ec
+                    || std::filesystem::is_symlink(manifest, ec) || ec
+                    || std::filesystem::file_size(manifest, ec) > 4u * 1024u * 1024u || ec
+                    || std::filesystem::exists(root / "Engine/dep/EpochSelfCoding", ec) || ec) return false;
+            }
             const auto version = root / SOURCE_VERSION_FILE_NAME();
-            if (signed_public_version.empty()
-                || !std::filesystem::is_regular_file(manifest, ec) || ec
-                || std::filesystem::is_symlink(manifest, ec) || ec
-                || std::filesystem::file_size(manifest, ec) > 4u * 1024u * 1024u || ec
-                || !std::filesystem::is_regular_file(version, ec) || ec
+            if (!std::filesystem::is_regular_file(version, ec) || ec
                 || std::filesystem::is_symlink(version, ec) || ec
-                || std::filesystem::file_size(version, ec) > 128u * 1024u || ec
-                || std::filesystem::exists(root / "Engine/dep/EpochSelfCoding", ec) || ec) return false;
-            return extract_version_string(read_text_file(version)) == signed_public_version;
+                || std::filesystem::file_size(version, ec) > 128u * 1024u || ec) return false;
+            return parse_public_source_module_version(read_text_file(version)) == expected_version;
         }
 
         [[nodiscard]] inline bool env_flag_enabled(const char* name)

@@ -21,7 +21,7 @@
                 return false;
             }
 
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
             if (!project_ai_scope_allowed(editor.projectRoot))
             {
                 chat.append_status("Choose a game or application project. Engine source is unavailable to this edition's assistant.");
@@ -32,7 +32,7 @@
             chat.statusRequestKind = requestKind;
             if (requestKind == AiDeferredRequestKind::Chat)
                 chat.append_user_message(display, display);
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
             constexpr bool needsCodingChoice = false;
 #endif
             // Request preparation can restore preferences, initialize a provider or

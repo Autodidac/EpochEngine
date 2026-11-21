@@ -795,9 +795,11 @@ It points right toward collapse while visible and left to expand from Hidden.
 Responsive width compression may omit lower-priority chips when space is tight.
 Layout schema 15 stores the stage, visibility and Host/Epoch scope. Earlier
 layouts default to Host. Schema 12 visibility restores Full or Hidden, and
-schema 13 Minimal/Hidden values migrate to stages 3/4. Context snapshots carry
-both the stage and scope. Optional toolbar resource and task polling is omitted in Minimal
-and Hidden; safety admission and resource monitoring retain their own lifecycle.
+schema 13 Minimal/Hidden values migrate to stages 3/4. A backend switch
+carries both stage and scope. Parking flushes pending layout changes. The
+replacement's first full Editor frame resumes saving for that application.
+Detached pane clones keep their layout in memory. Minimal and Hidden skip
+optional toolbar polling. Safety admission retains its own monitoring.
 
 November17 native979D58 acceptance verified the complete five-state cycle,
 resources surviving the second click, Host→Epoch switching all populated resource

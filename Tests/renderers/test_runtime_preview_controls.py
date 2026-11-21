@@ -5,12 +5,14 @@ import os
 import re
 import subprocess
 import unittest
+from Tools.source.owned_source_text import read_owned_source
+from Tests.support.project_play_owners import host_with_worker_ports, worker_members, hud_functions
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
 def wire_fixture():
-    source = (ROOT / "Engine/modules/render/render.preview_grid.ixx").read_text(encoding="utf-8-sig")
+    source = read_owned_source(ROOT / "Engine/modules/render/render.preview_grid.ixx", encoding="utf-8-sig")
     baseline = actual_function(source, "inline std::vector<Vertex> detail::build_marker_solids(")
     baseline = baseline.replace("detail::build_marker_solids(", "baseline_marker_solids(")
     baseline = baseline.replace("std::vector<TexturedVertex>* textured, bool wire_depth,std::vector<WaterDetailRange>* water_detail)",
@@ -45,7 +47,7 @@ def wire_fixture():
     baseline = baseline.replace("source.normal[2] / marker.scale.z}, rotation));",
         "source.normal[2] / marker.scale.z}, marker.rotationDegrees));")
     baseline = "namespace baseline_detail { using namespace epochengine::previewgrid;\n" + private_helpers + "\n}\n" + baseline
-    play = (ROOT / "Engine/src/epoch/implementation/epoch.project_play_scene.inl").read_text(encoding="utf-8-sig")
+    play = read_owned_source(ROOT / "Engine/src/epoch/implementation/epoch.project_play_scene.inl", encoding="utf-8-sig")
     exploration_begin = play.index("            void advance_planetary_exploration(")
     exploration_camera_begin = play.index("                auto camera=previewgrid::camera_for(context);", exploration_begin)
     exploration_camera = play[exploration_camera_begin:play.index("                camera.farPlane=", exploration_camera_begin)]
@@ -1898,7 +1900,7 @@ def actual_function(source, signature):
 
 
 def source_receipt_fixture():
-    play = globals().get('SOURCE_RECEIPT_PLAY') or (ROOT / 'Engine/src/epoch/implementation/epoch.project_play_scene.inl').read_text(encoding='utf-8-sig')
+    play = (globals().get('SOURCE_RECEIPT_PLAY') or host_with_worker_ports()).replace('project_planetary_play::', '')
     planet = globals().get('SOURCE_RECEIPT_PLANET') or (ROOT / 'Engine/src/project/project.planetary.cpp').read_text(encoding='utf-8-sig')
     pump = actual_function(play, '            void pump_planetary_runtime(')
     adopt_water = actual_function(play, '            void adopt_planetary_water_source(').replace(
@@ -1908,14 +1910,19 @@ def source_receipt_fixture():
             '            struct RuntimeSceneFrameResult final',
             '            struct PlanetaryFramePublication final',
             '            struct PlanetaryCutPlayback final',
+            '            [[nodiscard]] bool linked_wet_terrain(',
+            '            [[nodiscard]] bool planetary_stream_source_matches(',
             '            void publish_planetary_stream_cut(', '            bool pump_planetary_cut_playback(',
             '            [[nodiscard]] bool planetary_wet_frame_committed(',
             '            [[nodiscard]] bool planetary_wet_frames_fit(',
             '            void restore_planetary_cut_playback('))
-    changed = actual_function(play, '            [[nodiscard]] static bool planetary_view_changed(')
+    change_owner = play if 'static bool planetary_view_changed(' in play else worker_members()
+    changed = actual_function(change_owner, '            [[nodiscard]] static bool planetary_view_changed(')
     start = planet.index('            if(cancellation.stop_requested()||!source_generation_is_current(project_root,*admitted,cancellation)', planet.index('    StreamResult stream_step('))
     end = planet.index('            operation.ok = true;', start) + len('            operation.ok = true;')
     final = planet[start:end].replace('!source_generation_is_current(', '!project_planetary::source_generation_is_current(')
+    runtime_api = read_owned_source(ROOT / 'Engine/modules/project.planetary_runtime.ixx')
+    terrain_view = actual_function(runtime_api, '    struct TerrainView final')
     code = r'''
 #include <algorithm>
 #include <array>
@@ -1936,19 +1943,23 @@ def source_receipt_fixture():
 #include <string>
 #include <thread>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 import asset.mesh_artifact;
+import asset.texture_artifact;
 import project.planetary;
 import project.planetary_snapshot;
 import render.preview_grid;
 import scene.snapshot;
 import editor.task_scheduler;
+import water.wave;
 namespace fs=std::filesystem;
 namespace asset=epochengine::asset;
 namespace previewgrid=epochengine::previewgrid;
 namespace project_planetary_snapshot=epochengine::project_planetary_snapshot;
 namespace scene=epochengine::scene;
 namespace editor_tasks=epochengine::editor_tasks;
+namespace water=epochengine::water;
 namespace timing {using Clock=std::chrono::steady_clock;}
 namespace platform::child_process {enum class MeshDrawMode{solid,wireframe,shaded};}
 namespace core {struct Context {};}
@@ -2005,17 +2016,20 @@ StreamResult stream_step(const fs::path& root,Settings settings,StreamView view,
 struct Transform {std::array<float,3>position{},rotation{},scale{1,1,1};};
 struct Entity {std::uint64_t source_id{7};Transform transform;std::optional<scene::SceneMeshSnapshot>mesh_asset;bool visible()const{return true;}};
 namespace project_planetary_runtime {
-struct Binding {std::string water_source_hash;};
+struct Binding {bool ocean_surface{};std::string project_root,project_id,source_hash,water_source_hash;};
 std::optional<Binding> admitted_project_binding(){return {};}
+ACTUAL_TERRAIN_VIEW;
+struct TerrainProvider {};
 }
 struct RuntimeStreamProbe {
- fs::path root;std::string m_projectRoot;
+ fs::path root;std::string m_projectRoot,m_projectId;
  std::vector<Entity>m_entities{Entity{}};
  std::optional<project_planetary::Settings>m_planetarySettings{project_planetary::Settings{}},m_planetaryRequestSettings;
  std::optional<project_planetary::SourceGeneration>m_meshPlanetarySource;
  struct Preview {std::array<double,3>camera{0,0,26.5};std::optional<std::array<double,3>>forward{{0,0,-1}},up{{0,1,0}};};
  std::optional<Preview>m_explorationPreview{Preview{}};
- struct {double seconds{};std::uint32_t anchor{};}m_explorationFrame;
+ struct {double seconds{};std::uint32_t anchor{};
+  std::array<double,3> camera{},forward{},up{};}m_explorationFrame;
  struct Controller {
   std::shared_ptr<int> water_provider()const{return {};}
   std::shared_ptr<const project_planetary_snapshot::WaterLatticeProvider> water_lattice_provider()const{return {};}
@@ -2023,6 +2037,14 @@ struct RuntimeStreamProbe {
  std::shared_ptr<Controller> m_explorationController{std::make_shared<Controller>()};
  bool m_planetaryPaused{},m_planetaryFailed{},m_planetaryContinue{true};
  bool m_planetaryPublishedOcean{};
+ bool m_packagedShoreline{},m_linkedWaterWaitingForTerrain{},m_planetaryWaterCatchUp{};
+ std::shared_ptr<const project_planetary::PackagedPlanetaryPose> m_packagedPlanetaryPose;
+ std::shared_ptr<project_planetary_runtime::TerrainProvider> m_linkedTerrain;
+ std::shared_ptr<const water::wave::Tile> m_presentedLinkedWater;
+ static project_planetary::StreamResult linked_terrain_step(project_planetary_runtime::TerrainProvider&,
+     const project_planetary_runtime::TerrainView&,std::stop_token){
+  throw std::logic_error("Source receipt fixture unexpectedly started a linked provider");
+ }
  std::optional<project_planetary::GeneratedMeshFrame>m_planetaryMeshFrame;
  std::optional<std::uint32_t>m_planetaryLodBody;
  std::shared_ptr<const epochengine::project_planetary_snapshot::Snapshot>m_planetaryWaterSource;
@@ -2171,11 +2193,12 @@ int main(){
 }
 '''
     return (code.replace('FINAL_ADMISSION', final).replace('ACTUAL_CHANGED', changed)
+            .replace('ACTUAL_TERRAIN_VIEW', terrain_view)
             .replace('ACTUAL_ADOPT_WATER', adopt_water).replace('ACTUAL_PLAYBACK', playback).replace('ACTUAL_PUMP', pump))
 
 
 def shortcut_fixture():
-    owner = (ROOT / "Engine/src/epoch/implementation/epoch.project_play_scene.inl").read_text(encoding="utf-8-sig")
+    owner = read_owned_source(ROOT / "Engine/src/epoch/implementation/epoch.project_play_scene.inl", encoding="utf-8-sig")
     functions = "\n".join(actual_function(owner, signature) for signature in (
         "void update_runtime_view_shortcuts(", "void finish_runtime_screenshot(",
         "void finish_runtime_mesh_display(", "[[nodiscard]] float runtime_panel_height(",
@@ -2183,9 +2206,12 @@ def shortcut_fixture():
         "void draw_runtime_controls_restore(", "void draw_runtime_controls_hide(",
         "static void apply_runtime_inspection_light(", "[[nodiscard]] std::string_view runtime_terrain_activity(",
         "[[nodiscard]] int consume_runtime_navigation_wheel("))
+    hud = hud_functions('[[nodiscard]] gui::WidgetBounds runtime_panel_bounds(',
+        'void draw_runtime_controls_restore(', 'void draw_runtime_controls_hide(')
     return r'''
 #include <array>
 #include <cstdint>
+#include <cstdio>
 #include <algorithm>
 #include <optional>
 #include <source_location>
@@ -2228,6 +2254,7 @@ namespace platform::child_process {
  inline unsigned acknowledgements{};inline bool lastPublished{};inline MeshDrawMode lastMode{};
  void acknowledge_runtime_mesh_command(const RuntimeMeshCommand&,bool published,MeshDrawMode mode){++acknowledgements;lastPublished=published;lastMode=mode;}
 }
+''' + hud + r'''
 struct ActualOwner {
  bool m_editorRuntimeControlled{};std::optional<platform::child_process::RuntimeMeshCommand> m_ownedRuntimeMeshCommand{};
  platform::child_process::MeshDrawMode m_meshDrawMode{platform::child_process::MeshDrawMode::shaded};
@@ -2244,7 +2271,7 @@ struct ActualOwner {
  int m_screenshotAfterFrames{};std::string m_screenshotStatus{};
 ''' + functions + r'''
 };
-#define CHECK(value) do {if(!(value))return __LINE__;}while(false)
+#define CHECK(value) do {if(!(value)){std::fprintf(stderr,"Runtime shortcut check failed at line %d: %s\n",__LINE__,#value);return 1;}}while(false)
 int main(){
  using Mode=platform::child_process::MeshDrawMode;
  ActualOwner owner;core::Context context;
@@ -2325,9 +2352,13 @@ int main(){
  CHECK(inspected.revision==normal.revision&&!owner.m_runtimeInspectionLight);
  CHECK(owner.runtime_panel_height()<=580&&owner.runtime_panel_height()>0);
  owner.m_runtimeGuiBounds.size.y=450;CHECK(owner.runtime_panel_height()<=402);
- CHECK(owner.runtime_panel_captures_pointer({24,24}));
- CHECK(owner.runtime_panel_captures_pointer({454,24+owner.runtime_panel_height()}));
- CHECK(!owner.runtime_panel_captures_pointer({23.9f,24})&&!owner.runtime_panel_captures_pointer({454.1f,24}));
+ const auto panel=owner.runtime_panel_bounds();
+ const float right=panel.position.x+panel.size.x,bottom=panel.position.y+panel.size.y;
+ CHECK(owner.runtime_panel_captures_pointer(panel.position));
+ CHECK(owner.runtime_panel_captures_pointer({right-0.1f,bottom-0.1f}));
+ CHECK(!owner.runtime_panel_captures_pointer({right,panel.position.y}));
+ CHECK(!owner.runtime_panel_captures_pointer({panel.position.x,bottom}));
+ CHECK(!owner.runtime_panel_captures_pointer({panel.position.x-0.1f,panel.position.y}));
  CHECK(!owner.runtime_panel_captures_pointer({24,std::numeric_limits<float>::quiet_NaN()}));
  gui::captured=false;CHECK(owner.consume_runtime_navigation_wheel({900,900},false)==0&&gui::consumed==0&&gui::wheel==7);
  owner.m_explorationController=false;
@@ -2338,8 +2369,8 @@ int main(){
  CHECK(owner.consume_runtime_navigation_wheel({900,900},false)==0&&gui::consumed==2);
  owner.m_runtimeGuiBounds.size.y=20;CHECK(owner.runtime_panel_height()==1);
  const auto tiny=owner.runtime_panel_bounds();
- CHECK(owner.runtime_panel_captures_pointer({tiny.position.x,tiny.position.y+tiny.size.y}));
- CHECK(!owner.runtime_panel_captures_pointer({tiny.position.x,tiny.position.y+tiny.size.y+0.1f}));
+ CHECK(owner.runtime_panel_captures_pointer({tiny.position.x,tiny.position.y+tiny.size.y-0.1f}));
+ CHECK(!owner.runtime_panel_captures_pointer({tiny.position.x,tiny.position.y+tiny.size.y}));
  owner.m_runtimeGuiBounds.size.y=720;owner.m_runtimeControlsVisible=false;
  const auto compact=owner.runtime_panel_bounds();CHECK(compact.position.x==1096&&compact.position.y==24&&compact.size.x==160&&compact.size.y==32);
  CHECK(!owner.runtime_panel_captures_pointer({24,24})&&!owner.runtime_panel_captures_pointer({100,200}));
@@ -2377,12 +2408,12 @@ class RuntimePreviewControls(unittest.TestCase):
         begin = source.index("            void advance_planetary_exploration(")
         end = source.index("            [[nodiscard]] std::vector<previewgrid::ObjectMarker>", begin)
         body = source[begin:end]
-        keyboard = re.search(r"^\s*(controls\.yaw=.*;)$", body, re.M)
-        mouse = re.search(r"^\s*(controls\.yaw[+-]=.*;)$", body, re.M)
+        keyboard = re.search(r"^\s*(controls\.yaw\s*[+-]?=\s*[^;]*axis\(input::Action::LookRight[^;]*;)$", body, re.M)
+        mouse = re.search(r"^\s*(controls\.yaw\s*[+-]?=\s*[^;]*mouse\.x[^;]*;)$", body, re.M)
         self.assertIsNotNone(keyboard)
         self.assertIsNotNone(mouse)
         keyboard, mouse = keyboard.group(1), mouse.group(1)
-        proof = ROOT / "build/validation/planetary-look-direction-oct27"
+        proof = ROOT / "build/validation/planetary-look-direction-oct27" / os.name
         proof.mkdir(parents=True, exist_ok=True)
         code = r'''
 #include <cmath>
@@ -2480,7 +2511,7 @@ add_test(NAME planetary_look_direction COMMAND yaw_contract)
         (proof / "CMakeLists.txt").write_text(f'''cmake_minimum_required(VERSION 3.30)
 set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT Embedded)
 project(RuntimePreview LANGUAGES CXX)
-add_executable(wire_contract preview.wire_contract.cpp "{(ROOT / 'Engine/src/render/render.preview_camera.cpp').as_posix()}" "{(ROOT / 'Engine/src/render/render.preview_lighting.cpp').as_posix()}" "{(ROOT / 'Engine/src/assets/texture/asset.texture_artifact.cpp').as_posix()}" "{(ROOT / 'Engine/src/authoring/texture/authoring.texture_document.cpp').as_posix()}" "{(ROOT / 'Engine/src/authoring/texture/authoring.texture_residency.cpp').as_posix()}")
+add_executable(wire_contract preview.wire_contract.cpp "{(ROOT / 'Engine/src/render/render.preview_camera.cpp').as_posix()}" "{(ROOT / 'Engine/src/render/render.preview_lighting.cpp').as_posix()}" "{(ROOT / 'Engine/src/assets/texture/asset.texture_artifact.cpp').as_posix()}" "{(ROOT / 'Engine/src/authoring/texture/authoring.texture_document.cpp').as_posix()}" "{(ROOT / 'Engine/src/authoring/texture/authoring.texture_snapshot_codec.cpp').as_posix()}" "{(ROOT / 'Engine/src/authoring/texture/authoring.texture_residency.cpp').as_posix()}")
 target_sources(wire_contract PRIVATE FILE_SET CXX_MODULES BASE_DIRS {bases} FILES {modules})
 target_include_directories(wire_contract PRIVATE "{(ROOT / 'Engine/include').as_posix()}")
 if(MSVC)
@@ -2489,7 +2520,7 @@ endif()
 include("{(ROOT / 'Engine/cmake/epoch_task_scheduler.cmake').as_posix()}")
 epoch_admit_task_scheduler(wire_contract "{ROOT.as_posix()}")
 add_executable(shortcut_contract runtime.shortcuts_contract.cpp)
-add_executable(source_receipt_contract runtime.source_receipt_contract.cpp "{(ROOT / 'Engine/src/project/project.planetary_snapshot.cpp').as_posix()}" "{(ROOT / 'Engine/src/render/render.preview_camera.cpp').as_posix()}" "{(ROOT / 'Engine/src/render/render.preview_lighting.cpp').as_posix()}" "{(ROOT / 'Engine/src/assets/texture/asset.texture_artifact.cpp').as_posix()}" "{(ROOT / 'Engine/src/authoring/texture/authoring.texture_document.cpp').as_posix()}" "{(ROOT / 'Engine/src/authoring/texture/authoring.texture_residency.cpp').as_posix()}")
+add_executable(source_receipt_contract runtime.source_receipt_contract.cpp "{(ROOT / 'Engine/src/project/project.planetary_snapshot.cpp').as_posix()}" "{(ROOT / 'Engine/src/render/render.preview_camera.cpp').as_posix()}" "{(ROOT / 'Engine/src/render/render.preview_lighting.cpp').as_posix()}" "{(ROOT / 'Engine/src/assets/texture/asset.texture_artifact.cpp').as_posix()}" "{(ROOT / 'Engine/src/authoring/texture/authoring.texture_document.cpp').as_posix()}" "{(ROOT / 'Engine/src/authoring/texture/authoring.texture_snapshot_codec.cpp').as_posix()}" "{(ROOT / 'Engine/src/authoring/texture/authoring.texture_residency.cpp').as_posix()}")
 target_sources(source_receipt_contract PRIVATE FILE_SET CXX_MODULES BASE_DIRS {bases} FILES {modules})
 target_include_directories(source_receipt_contract PRIVATE "{(ROOT / 'Engine/include').as_posix()}")
 target_link_libraries(source_receipt_contract PRIVATE Epoch::TaskScheduler)

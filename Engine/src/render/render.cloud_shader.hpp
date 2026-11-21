@@ -16,6 +16,7 @@ namespace epochengine::rendercloudshader
     inline constexpr std::string_view vertex_source=R"glsl(out vec2 vUv;
 void main(){vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2);vUv=p;gl_Position=vec4(p*2.0-1.0,0.0,1.0);}
 )glsl";
+    // Adjacent raw literals keep each part inside MSVC's string literal limit.
     inline constexpr std::string_view cloud_trace_source=R"glsl(#ifndef EPOCH_VULKAN_CLOUD
 in vec2 vUv;
 uniform sampler2D uDepth;
@@ -39,8 +40,17 @@ uniform float uRadius,uWorldRadius,uBase,uThickness,uNoiseScale,uCoverage,uExtin
 uniform float uViewOccluderRadius;
 uniform uint uSeed;
 #endif
-uint hashWord(uint v){v^=v>>16u;v*=0x7feb352du;v^=v>>15u;v*=0x846ca68bu;return v^(v>>16u);}
-float lattice(ivec3 p,uint seed){uint v=uint(p.x)*0x8da6b343u^uint(p.y)*0xd8163841u^uint(p.z)*0xcb1ab31fu^seed;return float(hashWord(v)>>8u)/16777215.0;}
+// The Android 12 emulator's GLES compiler misreads unsigned literals above
+// INT_MAX. Assemble the exact CPU lattice multipliers from 16-bit halves.
+uint hashWord(uint v){
+ v^=v>>16u;v*=0x7feb352du;v^=v>>15u;v*=((0x846cu<<16u)|0xa68bu);return v^(v>>16u);
+}
+float lattice(ivec3 p,uint seed){
+ uint v=uint(p.x)*((0x8da6u<<16u)|0xb343u)
+       ^uint(p.y)*((0xd816u<<16u)|0x3841u)
+       ^uint(p.z)*((0xcb1au<<16u)|0xb31fu)^seed;
+ return float(hashWord(v)>>8u)/16777215.0;
+}
 float noiseValue(vec3 p,uint seed){
  ivec3 c=ivec3(floor(p));vec3 f=fract(p);f=f*f*(3.0-2.0*f);
  return mix(mix(mix(lattice(c,seed),lattice(c+ivec3(1,0,0),seed),f.x),mix(lattice(c+ivec3(0,1,0),seed),lattice(c+ivec3(1,1,0),seed),f.x),f.y),
@@ -94,8 +104,32 @@ float cloudDensity(vec3 local,float footprint,float rayFootprint){
  float lobes=filteredNoise(outline,deckSeed^0x4c4f4245u,footprint/lobeAcross);
  float regional=(0.29*front+0.56*mass)/0.85;
  float lobeWeight=upper?0.15:mix(0.27,0.04,smoothstep(0.47,0.58,regional));
- float weather=mix(regional,lobes,lobeWeight);
+ float coarseStructure=smoothstep(0.65,2.65,footprint);
+ // Keep the optical flank anchored to the same front at all distances.
+ float flankWeight=0.0,condensate=0.5;
+ if(coarseStructure>0.0){
+  float crosswind=surface.y+17.0*bend+39.0*(regime-0.5)+28.0*(front-0.5);
+  vec3 flank=vec3((surface.x-0.40*surface.z)/36.0,crosswind/5.5,
+                  (surface.z+0.40*surface.x)/34.0);
+  condensate=filteredNoise(flank,deckSeed^0x464c414eu,footprint/5.5);
+  flankWeight=0.64*coarseStructure*(0.68+0.32*wet);
+ }
+ float weather=mix(regional,lobes,lobeWeight*(1.0-0.55*coarseStructure));
  float margin=weather-0.12*dry-((upper?0.752:0.725)-0.41*uCoverage);
+ // Stretch the coarse edges with the wind-shaped lobes and preserve dense cores.
+ float coarseWeather=smoothstep(0.36,1.4,footprint);
+ float taper=1.0-smoothstep(0.018,0.105,margin);
+ // Wide footprints lose small lobes. Local moisture and the regional
+ // front carry the contour shape at that scale.
+ float frontShape=1.05*(front-0.5)+0.62*(regime-0.5)-0.33*(mass-0.5);
+ float distantStreak=0.14*bend+0.38*(lobes-0.5)+0.66*(condensate-0.5)+frontShape;
+ float streak=mix(0.48*bend+1.04*(lobes-0.5),distantStreak,coarseStructure);
+ float extension=min(0.14*max(streak,0.0),max(0.075-margin,0.0));
+ margin+=coarseWeather*(extension+0.14*taper*min(streak,0.0));
+ if(coarseStructure>0.0){
+  float coreGuard=1.0-0.60*smoothstep(0.04,0.19,margin);
+  margin+=flankWeight*coreGuard*(condensate-0.5)*0.32;
+ }
  if(margin<=0.0)return 0.0;
  float core=smoothstep(0.035,0.165,margin);
 
@@ -107,7 +141,7 @@ float cloudDensity(vec3 local,float footprint,float rayFootprint){
  float billow=filteredNoise(billows,deckSeed^0x42494c4cu,detailFootprint);
  float erosion=(1.0-core)*0.027*(1.0-billow);
  float erodedMargin=margin-erosion;
- float body=smoothstep(0.0,upper?0.145:0.105,erodedMargin);
+ float body=smoothstep(0.0,(upper?0.145:0.105)+0.025*coarseWeather,erodedMargin);
  float profile;
  if(upper){
   float cap=0.80+0.10*core+0.08*billow;
@@ -130,7 +164,12 @@ float cloudDensity(vec3 local,float footprint,float rayFootprint){
   float edgeWidth=mix(0.38,0.24,resolved);
   profile=1.0-smoothstep(1.0-edgeWidth,1.0,crossSection);
  }
- return body*profile*(upper?0.48:1.0)*(0.80+0.20*billow);
+ // A coarse column covers both cloud and gaps along its shoulders. Use
+ // regional organization to keep the strongest fronts optically thick.
+ float organized=smoothstep(0.43,0.73,0.72*regional+0.28*front);
+ float columnRelief=1.0-coarseStructure*(upper?0.79:0.78)*(1.0-organized);
+ float flankRelief=1.0-flankWeight*(1.0-smoothstep(0.12,0.86,condensate));
+ return body*profile*(upper?0.48:1.0)*(0.80+0.20*billow)*columnRelief*flankRelief;
 }
 float cloudExtinction(vec3 local,float footprint,float rayFootprint){
  float density=cloudDensity(local,footprint,rayFootprint);
@@ -197,7 +236,8 @@ vec3 cloudIllumination(vec3 samplePosition,vec3 ray,float footprint,float localE
  vec3 ambient=uAmbient*(1.0+clamp(opening,-0.55,0.55)*lower*resolved*daylight);
  return ambient+directColor*(exposure*airTransmission*sunVisibility*(0.25+0.75*facing)*phase);
 }
-float viewDepth(float z){float n=uNearFar.x,f=uNearFar.y;return uOrthographic?mix(n,f,z):n*f/(f*(1.0-z)+n*z);}
+)glsl"
+R"glsl(float viewDepth(float z){float n=uNearFar.x,f=uNearFar.y;return uOrthographic?mix(n,f,z):n*f/(f*(1.0-z)+n*z);}
 float cloudStepLength(float total,float thickness){
 #if defined(EPOCH_VULKAN_CLOUD)
  // The Vulkan subpass traces every output pixel. Bound the initial tier's

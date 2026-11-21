@@ -145,7 +145,7 @@ class PreviewDepthFrustum(unittest.TestCase):
         (report / "CMakeLists.txt").write_text(f'''cmake_minimum_required(VERSION 3.30)
 set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT Embedded)
 project(PreviewDepthFrustum LANGUAGES CXX)
-add_executable(depth_contract "{source.as_posix()}" "{camera_source.as_posix()}" {lighting_source} "{(ROOT / 'Engine/src/assets/texture/asset.texture_artifact.cpp').as_posix()}" "{(ROOT / 'Engine/src/authoring/texture/authoring.texture_document.cpp').as_posix()}")
+add_executable(depth_contract "{source.as_posix()}" "{camera_source.as_posix()}" {lighting_source} "{(ROOT / 'Engine/src/assets/texture/asset.texture_artifact.cpp').as_posix()}" "{(ROOT / 'Engine/src/authoring/texture/authoring.texture_document.cpp').as_posix()}" "{(ROOT / 'Engine/src/authoring/texture/authoring.texture_snapshot_codec.cpp').as_posix()}")
 target_compile_features(depth_contract PRIVATE cxx_std_23)
 target_sources(depth_contract PRIVATE FILE_SET CXX_MODULES BASE_DIRS {roots} FILES {modules})
 target_include_directories(depth_contract PRIVATE "{(ROOT / 'Engine').as_posix()}" "{(ROOT / 'Engine/include').as_posix()}" "{(ROOT / 'Engine/src').as_posix()}")

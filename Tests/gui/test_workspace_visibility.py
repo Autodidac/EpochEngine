@@ -13,6 +13,8 @@ class WorkspaceVisibility(unittest.TestCase):
   outliner=(ROOT/'Engine/src/editor/application/editor.frame_outliner.inl').read_text(encoding='utf-8')
   policy=outliner[outliner.index('            const bool fullGuiAuthoring ='):
                   outliner.index('            gui::section_heading(fullGuiAuthoring')]
+  policy+=outliner[outliner.index('            const bool toolGuiAuthoring ='):
+                   outliner.index('            gui::wrapped_label(',outliner.index('            const bool toolGuiAuthoring ='))]
   tabs=outliner[outliner.index('            if (widgetAuthoring)'):
                 outliner.index('            const std::array documentHistoryActions')]
   palette=definition(outliner,'            if (widgetAuthoring && editor.guiAuthoringSection == 0u)')

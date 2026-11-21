@@ -120,7 +120,7 @@ void MultiplexProvider::record_inference(std::string_view model, std::string_vie
 }
 
 bool MultiplexProvider::is_model_resident(std::string_view model) const {
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
     if (is_internal_model(model)) return false;
 #endif
     return !is_native_runtime_model(model) || native_models_.model_loaded(model);
@@ -276,7 +276,7 @@ std::expected<ModelResponse, core::Error> MultiplexProvider::complete(const Mode
         return result;
     }
 
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
     return std::unexpected(core::Error{core::make_error_code(core::Errc::model_unavailable),
         "This model runtime is unavailable in this edition. Select a loaded local model or configured provider."});
 #endif
@@ -353,7 +353,7 @@ std::expected<ModelResponse, core::Error> MultiplexProvider::complete_stream(
         return finish(external_.complete_stream(translated, observed_callback));
     }
 
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
     return std::unexpected(core::Error{core::make_error_code(core::Errc::model_unavailable),
         "This model runtime is unavailable in this edition. Select a loaded local model or configured provider."});
 #endif
@@ -404,7 +404,7 @@ std::expected<json, core::Error> MultiplexProvider::prepare(std::string_view mod
             {"context_reserve_tokens", profile->context_reserve_tokens},
             {"compact_trigger_ratio", profile->compact_trigger_ratio},
             {"compact_target_ratio", profile->compact_target_ratio},
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
             {"harness", "native-inference"},
 #endif
         };
@@ -429,7 +429,7 @@ std::expected<json, core::Error> MultiplexProvider::prepare(std::string_view mod
             {"management", "external-provider"}
         };
     }
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
     return std::unexpected(core::Error{core::make_error_code(core::Errc::model_unavailable),
         "This model runtime is unavailable in this edition. Select a loaded local model or configured provider."});
 #endif
@@ -444,7 +444,7 @@ std::expected<json, core::Error> MultiplexProvider::residency() {
 }
 
 std::expected<json, core::Error> MultiplexProvider::release_idle() {
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
     return json{{"native", native_models_.describe()},
         {"management", "Native residency is controlled by Model Manager"}};
 #endif

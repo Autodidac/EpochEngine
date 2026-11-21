@@ -1425,7 +1425,7 @@
             {editor.packageSourceStatus="Review the current installed version and explicitly choose Update Project Source.";return;}
             if (editor.aiPackageRequest)
             {
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
                 if (!project_ai_scope_allowed(editor.projectRoot))
                 {
                     finish_ai_project_package_request(editor, "Package attachment refused: this is no longer an admitted application project.");
@@ -3733,7 +3733,7 @@
                 editor.aiToolStatus = ai_project_package_catalog(editor);
                 return true;
             }
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
             if (!project_ai_scope_allowed(editor.projectRoot))
             {
                 editor.aiToolStatus = "Package tools need an ordinary game or application project. Engine source is outside this scope.";
@@ -3928,7 +3928,7 @@
                 finish_ai_project_package_request(editor, "Package request cancelled or its project changed. No terrain build was started.");
                 return;
             }
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
             if (!project_ai_scope_allowed(editor.projectRoot))
             {
                 finish_ai_project_package_request(editor, "Package continuation refused: this is no longer an admitted application project.");

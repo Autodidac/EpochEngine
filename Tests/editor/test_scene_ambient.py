@@ -38,7 +38,7 @@ def fixture():
     project = (APP / "editor.application_project_documents.inl").read_text(encoding="utf-8")
     restore = project.index("            const bool loadedScene = load_editor_scene_snapshot(state);")
     functions += "\nvoid restore_selected_scene(EditorState& state){\n" + project[
-        restore:project.index("            synchronize_editor_selection(state);", restore)] + "\n}\n"
+        restore:project.index("            // Software projects open their screen-space authoring workspace.", restore)] + "\n}\n"
     return r'''
 #include <algorithm>
 #include <array>

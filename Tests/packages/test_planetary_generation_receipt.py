@@ -17,8 +17,13 @@ class PlanetaryGenerationReceipt(unittest.TestCase):
         source = owner.read_text(encoding="utf-8-sig")
         receipt = source[source.index("        enum class MeshGenerationReceiptVersion"):
                          source.index("        std::optional<fs::path> generation_build_directory")]
-        checks = source[source.index("    bool source_generation_is_current("):
-                        source.index("    Result generate(")]
+        checks = "\n".join(definition(source, signature) for signature in (
+            "        std::optional<fs::path> current_source_root(",
+            "    bool source_generation_is_current(",
+            "    bool mesh_generation_is_current(",
+            "    std::optional<Settings> mesh_generation_settings(",
+            "    std::vector<GeneratedBody> mesh_generation_bodies(",
+        ))
         assets = (ROOT / "Engine/src/assets/texture/asset.texture_artifact.cpp").read_text()
         stable_hash = assets[assets.index("        constexpr std::uint64_t kFnvPrime"):
                              assets.index("        [[nodiscard]] constexpr bool checked_add(")]

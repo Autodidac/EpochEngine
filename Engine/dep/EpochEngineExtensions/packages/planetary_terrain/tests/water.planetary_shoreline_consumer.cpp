@@ -25,6 +25,17 @@ int main(int argc,char** argv){
  CHECK(argc==2);std::ofstream report{argv[1]};
  using epochengine::water::wave::spherical_surface_color;
  using epochengine::water::wave::spherical_specular_scale;
+ using epochengine::water::wave::spherical_shoaled_normal;
+ constexpr std::array crest{0.6f,0.8f,0.0f};
+ constexpr V up{0.0,1.0,0.0};
+ const auto shoaled=spherical_shoaled_normal(crest,up,2.0,1.2,1.0f);
+ const auto transition=spherical_shoaled_normal(crest,up,2.0,1.2,0.35f);
+ CHECK(shoaled[0]>transition[0]&&transition[0]>crest[0]&&shoaled[1]>0.0f);
+ CHECK(std::abs(std::hypot(shoaled[0],shoaled[1],shoaled[2])-1.0f)<1e-6f);
+ CHECK(spherical_shoaled_normal(crest,up,14.0,1.2,1.0f)==crest);
+ CHECK(spherical_shoaled_normal(crest,up,2.0,-1.2,1.0f)==crest);
+ CHECK(spherical_shoaled_normal(crest,up,2.0,1.2,0.0f)==crest);
+ CHECK(spherical_shoaled_normal(crest,up,2.0,NAN,1.0f)==crest);
  CHECK(spherical_specular_scale(1.0,128.0)==1.0f);
  CHECK(spherical_specular_scale(8.0,128.0)==1.0f);
  CHECK(spherical_specular_scale(20.0,128.0)==0.5f);

@@ -152,7 +152,7 @@
         };
         // Popover content is rendered above the composer; no separate toolbar
         // consumes the conversation's vertical space.
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
         constexpr bool engineWorkActive = false;
         constexpr bool selfCodingPaused = false;
         constexpr bool showEngineTask = false;
@@ -265,7 +265,7 @@
         if (editor.aiMethodSelection < 0 && nativeReadiness.selected
             && nativeReadiness.loaded && editor.aiChatQueuedMethodSelection < 0)
             (void)select_native_chat_transport(editor);
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
         constexpr bool codexReady = false;
         constexpr bool codexBusy = false;
 #endif
@@ -435,7 +435,7 @@
                 .tone = editor.aiMethodSelection == residentPickerMethods[i]
                     && (residentPickerMethods[i] == 0
                         ? residentPickerIds[i] == nativeReadiness.model
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
                         : true)
 #endif
                     ? gui::SemanticTone::info : gui::SemanticTone::neutral});
@@ -513,7 +513,7 @@
         {
             // Visible before Send, including an idle/unsent draft. The model
             // picker is an explicit override; conditional review never replaces it.
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
             const auto projectTool = editor.aiToolPlan && !editor.aiToolPlanApplied && ai_chat_confirmation(chat.input).has_value()
                 ? std::string_view{editor.aiToolPlan.plan.call.tool} : ai::local_project_request_tool(chat.input);
             if (ai::asset_review_tool(projectTool))
@@ -663,7 +663,7 @@
                 }
                 else
                 {
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
                 {
 #endif
                         (void)epochengine::ai::native_runtime::select_for_epoch_requests(false);
@@ -715,7 +715,7 @@
         {
             // The reusable composer returns the flat action index unchanged.
             std::size_t action = *r.composer_menu_action_index;
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
             constexpr std::size_t visibleActions[]{0u,1u,2u,3u,4u,5u,6u,7u,11u,12u,14u};
             if (action >= std::size(visibleActions)) return;
             action = visibleActions[action];
@@ -803,7 +803,7 @@
         // One routing path for keyboard Send, text, and finalized voice.
         // Important: while working, typed text MUST NOT invoke Stop merely
         // because the send icon previously served as Stop for an empty draft.
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
         const auto submitLiveInstruction = [&](std::string_view instruction, bool) -> bool
         {
             const auto clean = trim_ai_command(instruction);
@@ -873,7 +873,7 @@
             if (!chat.draftReferenceImages.empty() && (editor.aiMethodSelection >= 2 || codexImageRoute)
                 && !selectedCodexAcceptsImages)
             {
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
                 chat.append_status("Images are attached. Select a confirmed image-capable Native or Local API model before sending. Your prompt and images are retained.");
 #endif
                 return;
