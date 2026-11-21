@@ -24,7 +24,7 @@ import xml.etree.ElementTree as ET
 from posixpath import normpath
 
 WORKFLOW = '.github/workflows/epoch-public.yml'
-WORKFLOW_SHA256 = 'eb5708c961a21b5936ec6a7f936e4691c03fe4212dbe6bef23a7a89acfdc7873'
+WORKFLOW_SHA256 = 'e355c1ce3221655b55a7503f47629b801a38537f7f9a86a08a3ca7f87b185d0e'
 MANIFEST = 'source-projection.json'
 # Exact root outputs from local CPU measurements, never source or release data.
 # Keep this list shared with the exporter; do not hide similarly named source.
@@ -246,12 +246,14 @@ REVIEWED_ASSET_TOOLS = {
 DEVELOPMENT_ONLY_MODEL_TOOLS = frozenset({'tools/models/edge0/benchmark_windows.py'})
 OWNER_ONLY_UPDATER_ROOT = 'engine/src/updater/owner/'
 REVIEWED_README_MEDIA = {
+    'Images/readme/linux-platformer-authoring-v09113.png': 'a26245b8b810ef27cbc791f93568a344d891bca3a6a6d70a79a07c208e8a5518',
+    'Images/readme/windows-calculator-authoring-v09113.png': '68dd02e5e5dd68f1f5eab75dd9e3fb12a9f4dee71e671a7564525f6b10e04ec3',
     'Images/readme/windows-world-project-v090185.png': 'bd38e19fba78a8185367db697376cfdfe1da6542c51124ce6f1d692f74cfc72b',
     'Images/readme/windows-calculator-authoring-v09114.png': '8f1b742d959a3c40bf9a02daf0714a5f88c1f7f0f530f49f0f2f88196734f559',
     'Images/readme/linux-calculator-authoring-v09114.png': 'b3d9fad04d2f3c40e857a23cb6ff8534ce4e705df82c79081a8e33e5cec8c812',
 }
 LOCAL_README_IMAGE = re.compile(
-    rb'''(?:!\[[^\]\r\n]*\]\(\s*<?|<img\b[^>]*?\s+src\s*=\s*["'])'''
+    rb'''(?:!?\[[^\]\r\n]*\]\(\s*<?|<img\b[^>]*?\s+src\s*=\s*["'])'''
     rb'''((?:\./)?Images/readme/[^\s<>"')]+)''', re.IGNORECASE)
 
 
@@ -407,6 +409,7 @@ def forbidden_path(name: str) -> bool:
 
 
 PUBLIC_WINDOWS_RUNTIME_UPLOAD = b"""      - name: Return audited Windows runtime only
+        if: steps.package.outputs.version != ''
         uses: actions/upload-artifact@v4
         with:
           name: epoch-public-windows-runtime
@@ -421,6 +424,7 @@ PUBLIC_WINDOWS_RUNTIME_UPLOAD = b"""      - name: Return audited Windows runtime
   linux:
 """
 PUBLIC_LINUX_RUNTIME_UPLOAD = b"""      - name: Return audited Linux runtime only
+        if: steps.package.outputs.version != ''
         uses: actions/upload-artifact@v4
         with:
           name: epoch-public-linux-runtime

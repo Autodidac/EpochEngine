@@ -9,6 +9,32 @@ ROOT = Path(__file__).resolve().parents[2]
 
 class PackageValidationScratch(unittest.TestCase):
     @unittest.skipUnless(shutil.which("pwsh"), "PowerShell is required for the runtime packager")
+    def test_source_only_workflow_skips_only_older_platform_pins(self):
+        parent = ROOT / "build/contract-tests"
+        parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=parent, prefix="package-version-") as directory:
+            root = Path(directory)
+            reader = Path("Tools/build/get_epoch_version.ps1")
+            (root / reader.parent).mkdir(parents=True)
+            shutil.copyfile(ROOT / reader, root / reader)
+            module = root / "Engine/modules/epoch.version.ixx"
+            module.parent.mkdir(parents=True)
+            driver = root / "check.ps1"
+            driver.write_text("param($helper, $root)\n$ErrorActionPreference = 'Stop'\n. $helper\n"
+                              "Get-EpochRuntimePackageVersion -RepoRoot $root -Platform linux-x64 -SkipSourceOnly\n")
+            for pin, expected_exit, output in ((13, 0, ""), (14, 0, "0.91.14"), (15, 1, "")):
+                with self.subTest(pin=pin):
+                    module.write_text("".join(
+                        f"#define EPOCH_{prefix}VERSION_{part}_VALUE {value}\n"
+                        for prefix, revision in (("", 14), ("LINUX_PACKAGED_", pin))
+                        for part, value in (("MAJOR", 0), ("MINOR", 91), ("REVISION", revision))))
+                    result = subprocess.run(["pwsh", "-NoProfile", "-File", str(driver),
+                                             str(ROOT / "Tools/build/epoch_package_layout.ps1"), str(root)],
+                                            capture_output=True, text=True, timeout=20)
+                    self.assertEqual(result.returncode, expected_exit, result.stderr)
+                    self.assertEqual(result.stdout.strip(), output)
+
+    @unittest.skipUnless(shutil.which("pwsh"), "PowerShell is required for the runtime packager")
     def test_staging_uses_built_shaders_and_preserves_fallbacks(self):
         parent = ROOT / "build/contract-tests"
         parent.mkdir(parents=True, exist_ok=True)

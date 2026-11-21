@@ -109,7 +109,12 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $version = (& ./Tools/build/get_epoch_version.ps1).Trim()
+          . ./Tools/build/epoch_package_layout.ps1
+          $version = Get-EpochRuntimePackageVersion -RepoRoot $PWD -Platform windows-x64 -SkipSourceOnly
+          if (!$version) {
+            python Tools/build/verify_public_source.py
+            exit $LASTEXITCODE
+          }
           if ($version -cnotmatch '^\d+\.\d+\.\d+$') { throw 'Invalid release version' }
           ./Tools/build/stage_epoch_windows_release.ps1 -Version $version `
             -ReleaseOutputRoot "$PWD/Artifacts/Runtime/cmake/windows-msvc-debug/Release"
@@ -118,6 +123,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           "version=$version" >> $env:GITHUB_OUTPUT
       - name: Return audited Windows runtime only
+        if: steps.package.outputs.version != ''
         uses: actions/upload-artifact@v4
         with:
           name: epoch-public-windows-runtime
@@ -240,12 +246,17 @@ jobs:
         id: package
         run: |
           set -euo pipefail
-          version="$(pwsh -NoProfile -File Tools/build/get_epoch_version.ps1)"
+          version="$(pwsh -NoProfile -Command '. ./Tools/build/epoch_package_layout.ps1; Get-EpochRuntimePackageVersion -RepoRoot $PWD -Platform linux-x64 -SkipSourceOnly')"
+          if [[ -z "$version" ]]; then
+            python Tools/build/verify_public_source.py
+            exit 0
+          fi
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a pwsh -NoProfile -File Tools/build/stage_epoch_linux_release.ps1 -Configuration Clang-Release
           python Tools/build/verify_public_source.py
           echo "version=$version" >> "$GITHUB_OUTPUT"
       - name: Return audited Linux runtime only
+        if: steps.package.outputs.version != ''
         uses: actions/upload-artifact@v4
         with:
           name: epoch-public-linux-runtime

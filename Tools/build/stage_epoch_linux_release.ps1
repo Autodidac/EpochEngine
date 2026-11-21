@@ -121,7 +121,6 @@ foreach ($target in @($stage, $tarball, $verifyLogs)) {
 
 Remove-EpochPackageItem -LiteralPath $stage -PackageRoot $packageRoot -Recurse
 Update-EpochRuntimeChecksums -OutputRoot $resolvedOutput -Edition $edition.Id -Version $Version -Platform linux-x64 -Withdraw
-Remove-EpochPackageItem -LiteralPath $tarball -PackageRoot $packageRoot
 New-Item -ItemType Directory -Path $stage -Force | Out-Null
 New-Item -ItemType Directory -Path $verifyLogs -Force | Out-Null
 
@@ -142,8 +141,8 @@ Require-Path -Path (Join-Path $stage 'lib\libvulkan.so.1') -Label 'Packaged Vulk
 
 $stageWsl = To-LinuxPath $stage
 $binaryRootWsl = To-LinuxPath $binaryRoot
-$outWsl = To-LinuxPath $resolvedOutput
 $tarWsl = To-LinuxPath $tarball
+$archiveToolWsl = To-LinuxPath (Join-Path $repo 'Tools/build/audit_epoch_linux_package.py')
 $verifyLogsWsl = To-LinuxPath $verifyLogs
 $graphicsRunnerWsl = To-LinuxPath (Join-Path $repo 'Tools/build/run_linux_graphics_smoke.py')
 
@@ -223,7 +222,7 @@ Move-EpochPackageValidationEvidence -Stage $stage -VerifyLogs $verifyLogs -Packa
 Write-EpochRuntimeDistribution -Stage $stage -Edition $edition.Id -Version $Version
 
 Assert-EpochRuntimeHasNoModelWeights -Stage $stage
-$archiveScript = "set -euo pipefail; tar -C '$outWsl' -czf '$tarWsl' '$stageName'; tar -tzvf '$tarWsl' '$stageName/epoch' '$stageName/epoch-distribution.json' '$stageName/assets/fonts/Roboto-Regular.ttf' '$stageName/THIRD_PARTY_NOTICES.txt' '$stageName/THIRD_PARTY_COMPONENTS.json'; if tar -tzf '$tarWsl' | grep -E '/(logs|cache)/'; then echo 'Release archive must not include generated logs or runtime cache.' >&2; exit 1; fi"
+$archiveScript = "set -euo pipefail; python3 -B '$archiveToolWsl' --create-from '$stageWsl' --archive '$tarWsl'; tar -tzvf '$tarWsl' '$stageName/epoch' '$stageName/epoch-distribution.json' '$stageName/assets/fonts/Roboto-Regular.ttf' '$stageName/THIRD_PARTY_NOTICES.txt' '$stageName/THIRD_PARTY_COMPONENTS.json'; if tar -tzf '$tarWsl' | grep -E '/(logs|cache)/'; then echo 'Release archive must not include generated logs or runtime cache.' >&2; exit 1; fi"
 Invoke-LinuxScript -Script $archiveScript -Label 'Linux release archive validation'
 
 $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $tarball).Hash.ToLowerInvariant()

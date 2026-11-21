@@ -1,7 +1,7 @@
 # Epoch - Creative Software And Game Engine
 
 <p align="center">
-  <a href="https://github.com/Autodidac/EpochEngine/releases/tag/v0.91.13"><img src="https://img.shields.io/badge/Current_Public_Source-v0.91.13-1F7A4C?style=for-the-badge" alt="Current Public source v0.91.13" /></a>
+  <a href="https://github.com/Autodidac/EpochEngine/releases/tag/v0.91.14"><img src="https://img.shields.io/badge/Current_Public_Source-v0.91.14-1F7A4C?style=for-the-badge" alt="Current Public source v0.91.14" /></a>
   <a href="https://github.com/Autodidac/EpochEngine/releases/latest"><img src="https://img.shields.io/github/v/release/Autodidac/EpochEngine?label=Published%20Windows%2FLinux%20runtime&amp;style=for-the-badge&amp;color=2C6A8A" alt="Published Windows/Linux runtime" /></a>
 </p>
 
@@ -56,7 +56,7 @@ actions before applying them.
 
 ## Current Snapshot
 
-This source checkpoint is [**0.91.13**](https://github.com/Autodidac/EpochEngine/releases/tag/v0.91.13).
+This source checkpoint is [**0.91.14**](https://github.com/Autodidac/EpochEngine/releases/tag/v0.91.14).
 The [latest stable runtime release](https://github.com/Autodidac/EpochEngine/releases/latest)
 contains the Windows and Linux packages and their validation results.
 Public releases and source updates use this GitHub repository without account
@@ -67,6 +67,10 @@ pairing. Each edition accepts only its own update channel.
 ![Calculator layout in the Windows Public Editor](Images/readme/windows-calculator-authoring-v09114.png)
 
 The Basic AI-Enabled Calculator opens as an editable 52-widget document. Epoch 0.91.14 is shown in the Windows Software renderer and in the [Linux OpenGL authoring view](Images/readme/linux-calculator-authoring-v09114.png).
+
+[Windows OpenGL authoring in the 0.91.13 runtime](Images/readme/windows-calculator-authoring-v09113.png) shows the widget hierarchy and placement controls for the same saved Calculator.
+
+The [2D Platformer in the Linux 0.91.13 Tile Map editor](Images/readme/linux-platformer-authoring-v09113.png) shows the saved Ground layer with PlayerSpawn selected above the collision floor.
 
 ![Close-up of the Earth-scale world project running inside Epoch Editor on Windows](Images/readme/windows-world-project-v090185.png)
 

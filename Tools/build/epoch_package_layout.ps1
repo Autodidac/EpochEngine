@@ -20,13 +20,15 @@ function Get-EpochRuntimePackageVersion {
     param(
         [Parameter(Mandatory)][string]$RepoRoot,
         [Parameter(Mandatory)][ValidateSet('windows-x64','linux-x64')][string]$Platform,
-        [string]$RequestedVersion
+        [string]$RequestedVersion,
+        [switch]$SkipSourceOnly
     )
     $reader = Join-Path $RepoRoot 'Tools/build/get_epoch_version.ps1'
     $module = Join-Path $RepoRoot 'Engine/modules/epoch.version.ixx'
     $source = (& $reader -VersionModule $module).Trim()
     $runtime = (& $reader -VersionModule $module -Platform $Platform).Trim()
     if ($runtime -cne $source) {
+        if ($SkipSourceOnly -and !$RequestedVersion -and [version]$runtime -lt [version]$source) { return }
         throw "Source $source pins the $Platform runtime at $runtime. Stage the runtime from its matching source."
     }
     if ($RequestedVersion -and $RequestedVersion -cne $runtime) {

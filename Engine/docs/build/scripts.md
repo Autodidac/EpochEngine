@@ -445,6 +445,13 @@ Before publishing a Windows packaged runtime zip:
 
 Before publishing a Linux/WSL2 asset:
 
+- The stager records Unix permissions when writing the archive. Directories,
+  the Editor and bundled libraries receive mode `0755`. Ordinary data receives
+  `0644`. The audit checks these modes on Windows-mounted storage too, and scans
+  both editions' packaged executables and libraries for private build paths.
+- On both desktop platforms Public CI builds and tests source updates. It stages
+  and uploads a runtime only when the platform pin matches the source version.
+  A pin ahead of the source fails the job.
 - Use `stage_epoch_linux_release.ps1 -SoftwareOpenGLSmoke` for the required
   offscreen graphics test. The bounded software-renderer test runs without
   separate approval and records evidence for the exact staged executable.
