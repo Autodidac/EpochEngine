@@ -107,8 +107,8 @@
     },
     {
       "path": "include/platform.ai_source_access.hpp",
-      "sha256": "27388aeb4c764a97ca7983f2e7b1e071953a39e71b37465b3e906f47aa3472ee",
-      "bytes": 3451
+      "sha256": "fa7224bed53e21bab985640c77e2ee8da1a776ca85cde50fc0296afda3acf0f6",
+      "bytes": 3481
     },
     {
       "path": "modules/context.admission.ixx",
@@ -380,6 +380,11 @@
   "validation": "Independent Windows/Linux Debug/Release CPU CI passed. Native appearance, main merge/tag/release remain separate gates.",
   "pending_changes": [
     {
+      "path": "include/platform.ai_source_access.hpp",
+      "published_sha256": "27388aeb4c764a97ca7983f2e7b1e071953a39e71b37465b3e906f47aa3472ee",
+      "sha256": "fa7224bed53e21bab985640c77e2ee8da1a776ca85cde50fc0296afda3acf0f6"
+    },
+    {
       "path": "modules/platform.window.ixx",
       "published_sha256": "a3e3c02fc02fb23f468ceb20c4f2c88f477bb2936024304bd21cac05a35cca32",
       "sha256": "c2888d30e7c6ed865fa253a9a9146c5a3cc52c0215f7ef7fcaa93522aeb9705e"
@@ -390,5 +395,5 @@
       "sha256": "b5e03fcd0ba31ad85a9e1effae122acf02f13fe5bb5d4d149148f18e090620d2"
     }
   ],
-  "note": "Pinned audited candidate and published revision identities remain unchanged. Pending source adds monitor-confined horizontal edge double-click; CPU geometry checks pass, standalone/native and Engine integration acceptance pending. published_sha256 fields retain the pre-change pinned candidate file baseline, not a new publication."
+  "note": "Pinned audited candidate and published revision identities remain unchanged. Pending source adds monitor-confined horizontal edge double-click and protects updater-owned source from model file tools; CPU geometry checks pass, standalone/native and Engine integration acceptance pending. published_sha256 fields retain the pre-change pinned candidate file baseline, not a new publication."
 }

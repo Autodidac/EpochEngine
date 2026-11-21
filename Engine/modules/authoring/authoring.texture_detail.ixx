@@ -173,4 +173,86 @@ export namespace epochengine::authoring::texture::detail
         result = left * right;
         return true;
     }
+
+    void hash_canvas(
+        StableHash& hash,
+        const CanvasDescriptor& descriptor) noexcept
+    {
+        hash.add_integral(descriptor.width);
+        hash.add_integral(descriptor.height);
+        hash.add_integral(descriptor.tile_extent);
+        hash.add_integral(descriptor.mip_count);
+        hash.add_integral(descriptor.format);
+        hash.add_integral(descriptor.color_space);
+        hash.add_integral(descriptor.schema_version);
+    }
+
+    void hash_layer_descriptor(
+        StableHash& hash,
+        const LayerDescriptor& descriptor) noexcept
+    {
+        hash.add_string(descriptor.name);
+        hash.add_integral(descriptor.role);
+        hash.add_integral(descriptor.blend);
+        hash.add_integral(descriptor.opacity);
+        hash.add_integral(descriptor.transform.offset_x_pixels);
+        hash.add_integral(descriptor.transform.offset_y_pixels);
+        hash.add_integral(descriptor.transform.mirror_x);
+        hash.add_integral(descriptor.transform.mirror_y);
+        hash.add_integral(descriptor.filter.brightness);
+        hash.add_integral(descriptor.filter.grayscale);
+        hash.add_integral(descriptor.filter.invert);
+        hash.add_integral(descriptor.mask.source.index);
+        hash.add_integral(descriptor.mask.source.generation);
+        hash.add_integral(descriptor.mask.strength);
+        hash.add_integral(descriptor.mask.invert);
+        hash.add_integral(descriptor.visible);
+        hash.add_integral(descriptor.locked);
+    }
+
+    [[nodiscard]] bool valid_limits(const DocumentLimits& limits) noexcept
+    {
+        return limits.maximum_dimension != 0
+            && limits.maximum_tile_extent != 0
+            && limits.maximum_mip_count != 0
+            && limits.maximum_layers != 0
+            && limits.maximum_sparse_tiles != 0
+            && limits.maximum_canonical_tile_bytes >= 4
+            && limits.maximum_stroke_samples != 0
+            && limits.maximum_tiles_per_stroke != 0
+            && limits.maximum_layer_name_bytes != 0
+            && limits.maximum_brush_radius_subpixels != 0;
+    }
+
+    [[nodiscard]] bool valid_layer_descriptor(
+        const LayerDescriptor& descriptor,
+        const DocumentLimits& limits) noexcept
+    {
+        const std::int64_t maximumOffset =
+            static_cast<std::int64_t>(limits.maximum_dimension);
+        if (descriptor.name.empty()
+            || descriptor.name.size() > limits.maximum_layer_name_bytes
+            || (descriptor.role != LayerRole::content
+                && descriptor.role != LayerRole::mask)
+            || descriptor.transform.offset_x_pixels < -maximumOffset
+            || descriptor.transform.offset_x_pixels > maximumOffset
+            || descriptor.transform.offset_y_pixels < -maximumOffset
+            || descriptor.transform.offset_y_pixels > maximumOffset
+            || descriptor.filter.brightness < -255
+            || descriptor.filter.brightness > 255)
+        {
+            return false;
+        }
+        if (descriptor.role == LayerRole::mask)
+        {
+            return !descriptor.mask.source
+                && descriptor.mask.strength == 65'535u
+                && !descriptor.mask.invert
+                && descriptor.blend == BlendMode::normal
+                && descriptor.opacity == 65'535u
+                && descriptor.transform == LayerTransformDescriptor{}
+                && descriptor.filter == LayerFilterDescriptor{};
+        }
+        return true;
+    }
 }

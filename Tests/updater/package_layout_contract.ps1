@@ -24,6 +24,19 @@ try {
 }
 catch { $rejected = $true }
 if (-not $rejected) { throw 'Custom output crossed editions.' }
+$public = [pscustomobject]@{ Id = 'epoch.public.github.v1'; OwnerRuntime = $false }
+$owner = [pscustomobject]@{ Id = 'epoch.development.site.v1'; OwnerRuntime = $true }
+$publicRow = 'Epoch v0.91.13 edition=epoch.public.github.v1'
+$ownerRow = 'Epoch v0.91.13 edition=epoch.development.site.v1 build-profile=owner-runtime'
+Assert-EpochRuntimeVersionOutput -Text "12:00 [INFO] CommandLine: $publicRow" -Version '0.91.13' -Edition $public
+Assert-EpochRuntimeVersionOutput -Text $ownerRow -Version '0.91.13' -Edition $owner
+foreach ($wrong in @($publicRow.Replace('0.91.13','0.91.130'), "$publicRow.extra", "$publicRow build-profile=owner-runtime",
+                     "$publicRow`n$ownerRow", $ownerRow)) {
+    $rejected = $false
+    try { Assert-EpochRuntimeVersionOutput -Text $wrong -Version '0.91.13' -Edition $public }
+    catch { $rejected = $true }
+    if (!$rejected) { throw "Accepted the wrong release identity: $wrong" }
+}
 foreach ($name in @('windows', 'linux')) {
     $path = Join-Path $repo "Tools\build\stage_epoch_$($name)_release.ps1"
     $errors = $null
@@ -34,7 +47,7 @@ foreach ($name in @('windows', 'linux')) {
     }, $true)
     if ($unchecked.Count) { throw "Stager bypasses checked deletion helper: $path" }
     $text = [System.IO.File]::ReadAllText($path)
-    if ($text.IndexOf('edition=') -lt 0 -or $text.IndexOf('edition=') -gt $text.IndexOf('Write-EpochRuntimeDistribution')) {
+    if ($text.IndexOf('Assert-EpochRuntimeVersionOutput') -lt 0 -or $text.IndexOf('Assert-EpochRuntimeVersionOutput') -gt $text.IndexOf('Write-EpochRuntimeDistribution')) {
         throw "Stager writes identity before checking embedded binary edition: $path"
     }
 }

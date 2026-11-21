@@ -9,6 +9,7 @@
 #include <iomanip>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <span>
 #include <stop_token>
 #include <string>

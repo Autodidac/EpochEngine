@@ -1,6 +1,5 @@
 """Real provider samples and actual host query orchestration; CPU only."""
 from pathlib import Path
-from Tests.support.cpp import engine_module_source
 import hashlib
 import json
 import os
@@ -205,28 +204,30 @@ class PlanetarySurfaceQuery(unittest.TestCase):
         proof=ROOT/'Artifacts/Reports/planet-surface-query-oct31'/identity
         proof.mkdir(parents=True,exist_ok=True)
         (proof/'consumer.cpp').write_text(code,encoding='utf-8')
-        modules=[PACKAGE/'modules'/name for name in ('planet.terrain.ixx','planet.coverage.ixx','planet.streaming.ixx','planet.clouds.ixx')]
-        modules += [engine_module_source(ROOT/'Engine/modules', name) for name in ('asset.mesh_artifact.ixx','asset.texture_artifact.ixx','asset.cloud_volume.ixx','project.planetary.ixx','project.planetary_snapshot.ixx','water.wave.ixx')]
-        owners=[PACKAGE/'upstream/EpochPlanet-0.2.3/src/core/world.cpp',PACKAGE/'upstream/EpochPlanet-0.2.3/src/core/terrain.cpp',ROOT/'Engine/src/assets/texture/asset.texture_artifact.cpp',ROOT/'Engine/src/project/project.planetary_snapshot.cpp']
-        quoted=lambda paths:'\n'.join('"'+p.as_posix()+'"' for p in paths)
+        settings=ROOT/'Engine/modules/project/project.planetary.ixx'
         (proof/'CMakeLists.txt').write_text(f'''cmake_minimum_required(VERSION 3.30)
 set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT Embedded)
 project(PlanetSurfaceQuery LANGUAGES CXX)
-add_library(owners STATIC {quoted(owners)})
-target_compile_features(owners PUBLIC cxx_std_23)
-target_compile_options(owners PUBLIC /sdl /utf-8 /permissive- /Zc:__cplusplus /EHsc)
-target_include_directories(owners PUBLIC "{(PACKAGE/'upstream/EpochPlanet-0.2.3/include').as_posix()}")
-target_sources(owners PUBLIC FILE_SET CXX_MODULES BASE_DIRS "{(PACKAGE/'modules').as_posix()}" "{(ROOT/'Engine/modules').as_posix()}" FILES {quoted(modules)})
+set(EPOCH_ENGINE_SOURCE_ROOT "{ROOT.as_posix()}" CACHE PATH "" FORCE)
+set(EPOCH_PLANET_BUILD_MESH_EXPORT ON CACHE BOOL "" FORCE)
+set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
+add_subdirectory("{PACKAGE.as_posix()}" planet)
+add_library(surface_settings STATIC)
+target_compile_features(surface_settings PUBLIC cxx_std_23)
+target_link_libraries(surface_settings PUBLIC epoch_planet_mesh_format)
+target_sources(surface_settings PUBLIC FILE_SET CXX_MODULES FILES "{settings.as_posix()}"
+    BASE_DIRS "{settings.parent.as_posix()}")
 add_executable(surface_consumer consumer.cpp)
-add_executable(surface_provider "{provider.as_posix()}" "{(PACKAGE/'tools/planet.stream_export.cpp').as_posix()}")
-target_link_libraries(surface_consumer PRIVATE owners)
-target_link_libraries(surface_provider PRIVATE owners)
-include("{(ROOT/'Engine/cmake/epoch_task_scheduler.cmake').as_posix()}")
-epoch_admit_task_scheduler(surface_provider "{ROOT.as_posix()}")
+target_compile_options(surface_consumer PRIVATE /EHsc)
+target_link_libraries(surface_consumer PRIVATE surface_settings EpochEngineExtensions::PlanetaryCore)
 ''',encoding='utf-8')
-        build=ROOT/'Artifacts/Intermediate/cmake/planet-surface-query'/identity
+        build=ROOT/'Artifacts/Tests/psq'/identity
         run_root=Path(tempfile.mkdtemp(prefix='run-', dir=proof))
-        source_paths=owners+modules+[host,provider,PACKAGE/'tools/planet.stream_export.cpp',Path(__file__)]
+        source_paths=[host,settings,Path(__file__),ROOT/'Engine/src/project/project.planetary_snapshot.cpp',
+                      ROOT/'Engine/src/assets/texture/asset.texture_artifact.cpp',PACKAGE/'CMakeLists.txt',
+                      *sorted((PACKAGE/'modules').glob('*.ixx')),*sorted((PACKAGE/'tools').glob('*.cpp')),
+                      *sorted((PACKAGE/'tools').glob('*.hpp')),
+                      *sorted((PACKAGE/'upstream/EpochPlanet-0.2.3/src/core').glob('*.cpp'))]
         pins={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in source_paths}
         runs=[]
         def run(command,expected=0):
@@ -238,10 +239,10 @@ epoch_admit_task_scheduler(surface_provider "{ROOT.as_posix()}")
             return result
         run(['cmake','-S',str(proof),'-B',str(build),'-G','Visual Studio 17 2022','-A','x64'])
         for config in ('Debug','Release'):
-            run(['cmake','--build',str(build),'--config',config,'--parallel','1'])
+            run(['cmake','--build',str(build),'--config',config,'--target','surface_consumer','epoch_planet_mesh_export','--parallel','1'])
             data=run_root/config;data.mkdir()
             run([str(build/config/'surface_consumer.exe'),str(data),str(provider)])
-            binary=build/config/'surface_provider.exe'
+            binary=build/'planet'/config/'epoch_planet_mesh_export.exe'
             receipt=data/'cli.surface'
             run([str(binary),'--surface-query',str(receipt),'1337','0','0','6371000','1','0','0','42'])
             packet=receipt.read_text();self.assertIn('request_id=42\nstatus=ready\n',packet)

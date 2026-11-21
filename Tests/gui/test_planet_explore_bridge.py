@@ -44,10 +44,10 @@ REQUIRED
 void reset(EditorState& editor){editor={};launches=fallbacks=0;embeddedLaunch=false;logs.clear();project_planetary::required={};}
 #define CHECK(condition) do {if(!(condition))return __LINE__;}while(false)
 int main(){
- EditorState editor;reset(editor);invoke(editor);
+ EditorState editor;reset(editor);editor.projectStatus="Retained runtime status";invoke(editor);
  CHECK(launches==1&&embeddedLaunch&&fallbacks==0);
- CHECK(editor.projectStatus==project_planetary::required.message&&project_planetary::observedRoot=="project");
- CHECK(logs.size()==1);
+ CHECK(project_planetary::observedRoot=="project");
+ CHECK(editor.projectStatus=="Retained runtime status"&&logs.empty()); // The launched build owns its status.
  // A failed provider admission cannot fall through to the ordinary preview.
  reset(editor);project_planetary::required.ok=false;invoke(editor);
  CHECK(launches==0&&fallbacks==0&&editor.projectBuildStatus==project_planetary::required.message);

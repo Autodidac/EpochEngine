@@ -776,7 +776,7 @@
                 return;
             }
             state.aiLastManualDiagnosticsExport = now;
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
             (void)surface;
             const auto archive = editor_ai_session_diagnostics::bundle_engine(
                 std::filesystem::path{ai::default_evidence_paths().workspace_root});

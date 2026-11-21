@@ -24,11 +24,14 @@ import xml.etree.ElementTree as ET
 from posixpath import normpath
 
 WORKFLOW = '.github/workflows/epoch-public.yml'
-WORKFLOW_SHA256 = 'f59d8c47d219350057e47636742f554edbbe04651826ff2e0767d12950d9e29d'
+WORKFLOW_SHA256 = 'e355c1ce3221655b55a7503f47629b801a38537f7f9a86a08a3ca7f87b185d0e'
 MANIFEST = 'source-projection.json'
 # Exact root outputs from local CPU measurements, never source or release data.
 # Keep this list shared with the exporter; do not hide similarly named source.
-GENERATED_ROOT_FILES = frozenset({'solid-benchmark-debug.json', 'solid-progress.txt'})
+GENERATED_ROOT_FILES = frozenset({
+    'solid-benchmark-debug.json', 'solid-progress.txt',
+    'parallel-streaming-result.json', 'parallel-streaming-failure.txt',
+})
 # Operator-supplied reference artwork is usable locally, but its recorded
 # provenance has not cleared redistribution. Keep the native procedural fallback.
 HELD_REFERENCE_ASSETS = frozenset({
@@ -241,11 +244,16 @@ REVIEWED_ASSET_TOOLS = {
 # This host benchmark imports the private task metrics and operator fixture
 # paths. The portable Edge0 loader, model catalog and kernels stay Public.
 DEVELOPMENT_ONLY_MODEL_TOOLS = frozenset({'tools/models/edge0/benchmark_windows.py'})
+OWNER_ONLY_UPDATER_ROOT = 'engine/src/updater/owner/'
 REVIEWED_README_MEDIA = {
+    'Images/readme/linux-platformer-authoring-v09113.png': 'a26245b8b810ef27cbc791f93568a344d891bca3a6a6d70a79a07c208e8a5518',
+    'Images/readme/windows-calculator-authoring-v09113.png': '68dd02e5e5dd68f1f5eab75dd9e3fb12a9f4dee71e671a7564525f6b10e04ec3',
     'Images/readme/windows-world-project-v090185.png': 'bd38e19fba78a8185367db697376cfdfe1da6542c51124ce6f1d692f74cfc72b',
+    'Images/readme/windows-calculator-authoring-v09114.png': '8f1b742d959a3c40bf9a02daf0714a5f88c1f7f0f530f49f0f2f88196734f559',
+    'Images/readme/linux-calculator-authoring-v09114.png': 'b3d9fad04d2f3c40e857a23cb6ff8534ce4e705df82c79081a8e33e5cec8c812',
 }
 LOCAL_README_IMAGE = re.compile(
-    rb'''(?:!\[[^\]\r\n]*\]\(\s*<?|<img\b[^>]*?\s+src\s*=\s*["'])'''
+    rb'''(?:!?\[[^\]\r\n]*\]\(\s*<?|<img\b[^>]*?\s+src\s*=\s*["'])'''
     rb'''((?:\./)?Images/readme/[^\s<>"')]+)''', re.IGNORECASE)
 
 
@@ -361,7 +369,7 @@ def forbidden_path(name: str) -> bool:
         return True
     if name.casefold() in GENERATED_ROOT_FILES:
         return True
-    if name.casefold().startswith('engine/dep/epochselfcoding/'):
+    if name.casefold().startswith(('engine/dep/epochselfcoding/', OWNER_ONLY_UPDATER_ROOT)):
         return True
     if any(part.casefold() == 'selfiteration' for part in path.parts):
         return True
@@ -401,6 +409,7 @@ def forbidden_path(name: str) -> bool:
 
 
 PUBLIC_WINDOWS_RUNTIME_UPLOAD = b"""      - name: Return audited Windows runtime only
+        if: steps.package.outputs.version != ''
         uses: actions/upload-artifact@v4
         with:
           name: epoch-public-windows-runtime
@@ -415,6 +424,7 @@ PUBLIC_WINDOWS_RUNTIME_UPLOAD = b"""      - name: Return audited Windows runtime
   linux:
 """
 PUBLIC_LINUX_RUNTIME_UPLOAD = b"""      - name: Return audited Linux runtime only
+        if: steps.package.outputs.version != ''
         uses: actions/upload-artifact@v4
         with:
           name: epoch-public-linux-runtime
@@ -506,7 +516,7 @@ def check(root: Path, manifest: dict, names: set[str], verify_hashes: bool = Tru
             raise RuntimeError('Private training-mutation API refused')
         if next(private_native_coding_api_matches(name, text), None) is not None:
             raise RuntimeError('Private native coding/source-worker API refused')
-        if ('EPOCH_'+'PRIVATE_SOURCE_') in text or ('EPOCH_'+'PUBLIC_SOURCE_') in text:
+        if re.search(r'EPOCH_(PRIVATE|PUBLIC|OWNER)_SOURCE_', text):
             raise RuntimeError('Unprojected edition region refused')
         for match in IMPORT.finditer(text):
             if match.group(1) not in modules:

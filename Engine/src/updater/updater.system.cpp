@@ -1682,6 +1682,7 @@ namespace epochengine::updater
             system_detail::BuildStatusResult platform_build{};
             std::string platform_build_url;
             std::string platform_build_job_name;
+            std::string platform_build_source_version;
         };
 
         [[nodiscard]] inline std::mutex& mutex()
@@ -1744,19 +1745,21 @@ namespace epochengine::updater
 
     [[nodiscard]] inline system_detail::BuildStatusResult check_platform_build_status_once_per_run(
         const std::string& runs_api_url,
-        const std::string& job_name)
+        const std::string& job_name,
+        const std::string& source_version)
     {
         std::lock_guard lock{ update_discovery_cache::mutex() };
         auto& cache = update_discovery_cache::cache();
         if (cache.platform_build_cached
             && cache.platform_build_url == runs_api_url
-            && cache.platform_build_job_name == job_name)
+            && cache.platform_build_job_name == job_name
+            && cache.platform_build_source_version == source_version)
         {
             system_detail::log_info("Using cached platform build status for this run.");
             return cache.platform_build;
         }
 
-        auto fresh_status = system_detail::check_platform_build_status(runs_api_url, job_name);
+        auto fresh_status = system_detail::check_platform_build_status(runs_api_url, job_name, source_version);
         if (system_detail::build_status_failure_is_transient(fresh_status))
         {
             system_detail::log_info(
@@ -1768,6 +1771,7 @@ namespace epochengine::updater
         cache.platform_build_cached = true;
         cache.platform_build_url = runs_api_url;
         cache.platform_build_job_name = job_name;
+        cache.platform_build_source_version = source_version;
         return cache.platform_build;
     }
 
@@ -2101,15 +2105,13 @@ namespace epochengine::updater
                 || !lowercase_hex_commit(source.commit)
                 || (source.archive_format != "zip" && source.archive_format != "tar.gz"))
                 return false;
-            const auto archive_digest = system_detail::sha256_file_hex(
-                source.archive_path);
-            if (!archive_digest)
+            if (!core::sha256::from_hex(source.archive_sha256))
                 return false;
             const std::string receipt =
                 "schema=epoch.source.authority.v1\nsource_version="
                 + source.source_version + "\ncommit=" + source.commit
                 + "\narchive_format=" + source.archive_format
-                + "\narchive_sha256=" + *archive_digest + "\n";
+                + "\narchive_sha256=" + source.archive_sha256 + "\n";
             const auto path = root / ".epoch-source-authority";
             const auto temporary = root / ".epoch-source-authority.tmp";
             std::ofstream out{temporary, std::ios::binary | std::ios::trunc};
@@ -2285,6 +2287,13 @@ namespace epochengine::updater
 
         fs::remove_all(staging_dir, ec);
         ec.clear();
+        if (authorized_source.ok && !system_detail::verify_sha256(archive_path, authorized_source.archive_sha256))
+        {
+            cleanup_authorized_source();
+            result.status_message = "Project source download differs from its signed digest.";
+            system_detail::log_error(result.status_message);
+            return result;
+        }
         if (!extract_archive(archive_path.string(), staging_dir.string()))
         {
             fs::remove_all(staging_dir, ec);
@@ -2295,7 +2304,8 @@ namespace epochengine::updater
         }
 
         const fs::path extracted_root = system_detail::source_snapshot_root(staging_dir);
-        if (!system_detail::source_snapshot_matches(extracted_root, public_source.version))
+        const auto& expected_version = PUBLIC_DISTRIBUTION ? public_source.version : authorized_source.source_version;
+        if (!system_detail::source_snapshot_matches(extracted_root, expected_version))
         {
             fs::remove_all(staging_dir, ec);
             cleanup_authorized_source();
@@ -3066,10 +3076,10 @@ namespace epochengine::updater
                 std::filesystem::copy_options::overwrite_existing,
                 ec);
             cleanup_prepared_source();
-            if (ec)
+            if (ec || !system_detail::verify_sha256(archive_path, prepared_source.archive_sha256))
             {
                 system_detail::log_error(
-                    "The Linux source updater could not claim the authorized source archive.");
+                    "The Linux source updater could not verify the authorized source archive after copying.");
                 return false;
             }
             system_detail::log_info("Using process-authorized AES-GCM verified source snapshot.");
@@ -3091,7 +3101,8 @@ namespace epochengine::updater
         }
 
         const std::filesystem::path extracted_root = system_detail::source_snapshot_root(staging_dir);
-        if (!system_detail::source_snapshot_matches(extracted_root, public_source.version))
+        const auto& expected_version = PUBLIC_DISTRIBUTION ? public_source.version : prepared_source.source_version;
+        if (!system_detail::source_snapshot_matches(extracted_root, expected_version))
         {
             system_detail::log_error("Source snapshot root, edition or signed version is invalid.");
             return false;
@@ -3291,7 +3302,8 @@ namespace epochengine::updater
         {
             const auto build_status = check_platform_build_status_once_per_run(
                 channel.platform_build_status_url,
-                channel.platform_build_job_name);
+                channel.platform_build_job_name,
+                source_status.remote);
 
             result.platform_build_checked = build_status.checked;
             result.platform_build_ok = build_status.ok;
@@ -3315,7 +3327,7 @@ namespace epochengine::updater
                     && source_status.update_available
                     && !packaged_status.update_available;
 
-                if (source_only_update && transient_build_status_failure)
+                if (!PUBLIC_DISTRIBUTION && source_only_update && transient_build_status_failure)
                 {
                     result.update_available = true;
                     result.source_update_available = true;

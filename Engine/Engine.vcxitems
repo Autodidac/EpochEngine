@@ -65,13 +65,11 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.frame_outliner.inl" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.frame_packages_about.inl" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.frame_project_runtime.inl" />
-    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.frame_source_dispatch.inl" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.frame_toolbar_dock_targets.inl" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.frame_viewport.inl" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.frame_workspace_docking.inl" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\epochgui\controls\gui.assistant_console.inl" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\epochgui\controls\gui.buttons_images.inl" />
-    <ClInclude Include="$(MSBuildThisFileDirectory)src\epochgui\controls\gui.context_roles.inl" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\epochgui\controls\gui.frame_lifecycle.inl" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\epochgui\controls\gui.navigation_chrome.inl" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\epochgui\controls\gui.node_surface_controls.inl" />
@@ -81,13 +79,12 @@
     <ProjectCapability Include="SourceItemsFromImports" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="$(MSBuildThisFileDirectory)src\authoring\texture\implementation\authoring.texture_binary_codec.inl" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\implementation\editor.scene_commands.inl" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\implementation\editor.project_registry.inl" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\implementation\editor.project_shell_generation.inl" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\epoch\implementation\epoch.contracts_renderer.inl" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\epoch\implementation\epoch.contracts_engine.inl" />
-    <ClInclude Include="$(MSBuildThisFileDirectory)src\epoch\implementation\epoch.contracts_project.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\epoch\epoch.project_validation.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\epoch\implementation\epoch.session_editor_launcher.inl" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\epoch\implementation\epoch.project_play_scene.inl" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\epoch\implementation\epoch.session_runtime.inl" />
@@ -103,7 +100,7 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\host\implementation\host.window_interaction.inl" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\host\implementation\host.render_loop.inl" />
     <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\host\implementation\host.native_dispatch.inl" />
-    <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\sdl\sdl.cloud_volume.inl" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\sdl\sdl.android_scene.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)include\engine.config.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)include\updater.distribution.hpp" />
     <ClInclude Include="$(MSBuildThisFileDirectory)include\updater.runtime_identity.hpp" />
@@ -592,6 +589,9 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\sfml\core.context_sfml.cpp">
       <AdditionalOptions>/bigobj /Zm2000 /GL- %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\sdl\sdl.android_scene.cpp">
+      <ExcludedFromBuild>true</ExcludedFromBuild>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\sdl\core.context_sdl.cpp">
       <AdditionalOptions>/bigobj /Zm2000 /GL- %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
@@ -653,6 +653,8 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch\epoch.engine_legacy.cpp">
       <AdditionalOptions>/bigobj /Zm2000 /GL- %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch\epoch.artifact_acceptance.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch\epoch.project_validation.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\updater\updater.device_identity.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\updater\updater.source_access.cpp">
       <AdditionalOptions>/bigobj /Zm2000 /Ob0 /GL- %(AdditionalOptions)</AdditionalOptions>
@@ -667,8 +669,10 @@
       <Optimization>Disabled</Optimization>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\epochgui\gui.engine.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\epochgui\gui.window_theme.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\epochgui\gui.docking_adapter.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\epochgui\gui.clipboard.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\epochgui\gui.context_roles.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\scripts\scripting.compiler_engine.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\platform\utility.filewatch.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\epochgui\font.renderer.cpp" />
@@ -733,6 +737,12 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.asset_registry.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.forest_library.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.planetary.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.planetary_play.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.play_assets.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.play_hud.cpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\project\project.planetary_play.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\project\project.play_assets.hpp" />
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\project\project.play_hud.hpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.planetary_snapshot.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.texture_resources.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.texture_library.cpp" />
@@ -760,6 +770,7 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\assets\texture\asset.texture_artifact.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\assets\texture\asset.texture_import.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\authoring\texture\authoring.texture_document.cpp" />
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\authoring\texture\authoring.texture_snapshot_codec.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\authoring\texture\authoring.texture_residency.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\assets\tilemap\asset.tilemap_artifact.cpp" />
     <ClCompile Include="$(MSBuildThisFileDirectory)src\assets\gui\asset.gui_artifact.cpp" />
@@ -883,10 +894,6 @@
     <EpochImplementationFragment Include="$(MSBuildThisFileDirectory)src\renderers\host\implementation\*.inl">
       <Owner>$(MSBuildThisFileDirectory)src\renderers\host\host.context_win.cpp</Owner>
       <ObjectFile>$(IntDir)host.context_win.obj</ObjectFile>
-    </EpochImplementationFragment>
-    <EpochImplementationFragment Include="$(MSBuildThisFileDirectory)src\authoring\texture\implementation\*.inl">
-      <Owner>$(MSBuildThisFileDirectory)src\authoring\texture\authoring.texture_document.cpp</Owner>
-      <ObjectFile>$(IntDir)authoring.texture_document.obj</ObjectFile>
     </EpochImplementationFragment>
   </ItemGroup>
   <Import Project="$(MSBuildThisFileDirectory)..\Tools\MSVC\EpochImplementationInputs.targets" />

@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 class SignedDiscovery(unittest.TestCase):
     def test_actual_public_and_development_admission(self):
+        if os.name != "nt": self.skipTest("Installed Windows MSVC CPU lane")
         from Tools.source.owned_source_text import definition
         source=(ROOT/'Engine/src/updater/implementation/updater.release_integrity.inl').read_text(encoding='utf-8')
         parser=source[:source.index('        [[nodiscard]] inline std::optional<std::vector<unsigned char>>')]
@@ -32,9 +33,19 @@ class SignedDiscovery(unittest.TestCase):
         self.assertIn('run_source_update_command(channel, false, false, honor_env_silent)',command)
         self.assertIn('check_source_version_once_per_run(',command)
         version=(ROOT/'Engine/modules/epoch.version.ixx').read_text(encoding='utf-8').split('export module epoch.version;',1)[0].replace('module;', '').replace('../include/epoch.edition.hpp', (ROOT/'Engine/include/epoch.edition.hpp').as_posix())
-        code = version + '\nstatic_assert(EPOCH_WINDOWS_PACKAGED_VERSION_REVISION_VALUE == EPOCH_VERSION_REVISION_VALUE);\nstatic_assert(EPOCH_LINUX_PACKAGED_VERSION_REVISION_VALUE == EPOCH_VERSION_REVISION_VALUE);\nstatic_assert(EPOCH_MACOS_PACKAGED_VERSION_REVISION_VALUE == (EPOCH_EDITION_PUBLIC ? EPOCH_VERSION_REVISION_VALUE : 30));\n' + code
+        reader = ROOT / 'Tools/build/get_epoch_version.ps1'
+        version_module = ROOT / 'Engine/modules/epoch.version.ixx'
+        asserts = []
+        for platform, token in (('windows-x64', 'WINDOWS'), ('linux-x64', 'LINUX'), ('macos-arm64', 'MACOS')):
+            observed = subprocess.run(['pwsh', '-NoProfile', '-File', str(reader), '-VersionModule',
+                                      str(version_module), '-Platform', platform], capture_output=True, text=True, timeout=15)
+            self.assertEqual(observed.returncode, 0, observed.stdout + observed.stderr)
+            actual = tuple(map(int, observed.stdout.strip().split('.')))
+            self.assertEqual(len(actual), 3)
+            for component, value in zip(('MAJOR', 'MINOR', 'REVISION'), actual):
+                asserts.append(f'static_assert(EPOCH_{token}_PACKAGED_VERSION_{component}_VALUE == {value});')
+        code = version + '\n' + '\n'.join(asserts) + '\n' + code
         code += '\n#undef EPOCH_WINDOWS_PACKAGED_VERSION_REVISION_VALUE\n#undef EPOCH_LINUX_PACKAGED_VERSION_REVISION_VALUE\n#define EPOCH_OVERRIDE_WINDOWS_PACKAGED_VERSION_REVISION 191\n#define EPOCH_OVERRIDE_LINUX_PACKAGED_VERSION_REVISION 192\n' + version + '\nstatic_assert(EPOCH_WINDOWS_PACKAGED_VERSION_REVISION_VALUE == 191);\nstatic_assert(EPOCH_LINUX_PACKAGED_VERSION_REVISION_VALUE == 192);\n'
-        if os.name != 'nt': self.skipTest('Installed Windows MSVC CPU lane')
         toolsets=msvc_2022_toolsets()
         kitroot=Path('C:/Program Files (x86)/Windows Kits/10');kits=windows_sdk_includes(kitroot)
         if not toolsets or not kits:self.skipTest('MSVC/SDK required')

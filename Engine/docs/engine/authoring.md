@@ -184,6 +184,10 @@ current in-memory identity without rewriting operator source; later explicit
 serialization emits schema 3. Truncated, mismatched, stale-mask, future, or
 integrity-broken sources fail atomically.
 
+`authoring.texture_snapshot_codec.cpp` owns the byte format and migration.
+`authoring.texture_document.cpp` owns editable state, snapshot validation,
+and restoration.
+
 ## Compiled Texture And Residency
 
 Compilation produces logical artifacts such as channel/mip/tile data and content

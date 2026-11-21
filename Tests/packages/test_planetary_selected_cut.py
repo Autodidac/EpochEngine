@@ -42,8 +42,11 @@ struct Result {
  std::shared_ptr<const mesh::SphericalWaterAppearance> water_appearance;
 };
 Result actual_worker(const mesh::Result& decoded,const p::Metadata& metadata,p::Limits patchLimits,
- std::stop_token cancellation={},bool metricTransport=false,std::array<double,3> sourceOrigin={}) {
+ std::stop_token cancellation={},bool metricTransport=false,std::array<double,3> sourceOrigin={},
+ std::optional<double> verifiedSampleSeconds=std::nullopt) {
  Result result;struct {std::string message;} operation;
+ const bool providerWater=verifiedSampleSeconds.has_value();
+ const epochengine::project_planetary::Settings settings{.ocean_surface=providerWater};
  const auto encoded=p::encode(metadata,*decoded.artifact,patchLimits);
  auto packet=p::DecodedSnapshot::read(encoded,decoded.artifact,metadata.identity,patchLimits,cancellation,
     metricTransport?std::optional{sourceOrigin}:std::nullopt);
@@ -270,7 +273,7 @@ class SelectedCut(unittest.TestCase):
     @unittest.skipUnless(os.name=='nt','This lane uses the installed Windows/MSVC production module toolchain')
     def test_actual_worker_selected_cut_and_legacy_morph(self):
         owner=(ROOT/'Engine/src/project/project.planetary.cpp').read_text(encoding='utf-8')
-        first=owner.index('                    auto selected=std::move(*packet).materialize_selected(cancellation);')
+        first=owner.index('                    auto selected=std::move(*packet).materialize_selected(')
         end='                    result.water_appearance=std::move(selected.water_appearance);'
         last=owner.index(end,first)+len(end)
         code=CODE.replace('ACTUAL_WORKER',owner[first:last])

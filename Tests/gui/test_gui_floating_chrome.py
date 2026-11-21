@@ -34,7 +34,7 @@ struct SpriteHandle {int id{};bool is_valid()const{return id!=0;}};
 struct Glyph {SpriteHandle handle;Vec2 size_px{10,14};};
 struct FontCache {bool asset=true;Glyph glyph;};
 struct Resources {FontCache font{true,{{1}}},darkTextFont{true,{{2}}},statusErrorFont{true,{{3}}},statusErrorLightFont{true,{{4}}};}g_resources;
-struct Palette {bool isLight{},captionUsesLightText=true;SpriteHandle textFieldActive{6},buttonHover{7},modalScrim{8},headingAccent{9};}palette;
+struct Palette {bool isLight{},captionUsesLightText=true;SpriteHandle textFieldActive{6},buttonHover{7},modalScrim{8},buttonActive{9};}palette;
 const Palette& active_palette(){return palette;}void ensure_resources(){}
 const Glyph* lookup_glyph_from_cache(const FontCache& font,char32_t){return font.asset?&font.glyph:nullptr;}
 const Glyph* lookup_shadow_glyph(char32_t){return nullptr;}
@@ -127,7 +127,7 @@ void dimmed_window_tests(const std::shared_ptr<core::Context>& c){
    const auto& scrim=draws[0];CHECK(scrim.sprite.id==8&&scrim.position.x==0&&scrim.position.y==0&&scrim.size.x==1000&&scrim.size.y==800&&scrim.in_clip&&scrim.layer==1);
   }
   // Nonmodal Model Manager uses the same theme outline without a scrim or input capture.
-  for(std::size_t edge=0;edge<4;++edge){const auto& draw=draws[frameStart+edge];CHECK(draw.sprite.id==9&&draw.in_clip&&draw.layer==1);CHECK(draw.size.x==2||draw.size.y==2);}
+  for(std::size_t edge=0;edge<4;++edge){const auto& draw=draws[frameStart+edge];CHECK(draw.sprite.id==palette.buttonHover.id&&draw.in_clip&&draw.layer==1);CHECK(draw.size.x==1||draw.size.y==1);}
   CHECK(draws[frameStart].position.x==state.position.x&&draws[frameStart].position.y==state.position.y&&draws[frameStart].size.x==state.size.x);
   CHECK(draws[frameStart+4].sprite.id==(light?2:1)); // Existing recognizable corner close mark.
   CHECK(g_frame.contentMin.x==106&&g_frame.contentMin.y==118&&g_frame.contentMax.x==394&&g_frame.contentMax.y==294);

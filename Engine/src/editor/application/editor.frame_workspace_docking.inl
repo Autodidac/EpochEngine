@@ -223,7 +223,7 @@
                 editor.surfaceSettleFrames = 1;
                 editor.workspaceTab = EditorWorkspaceTab::AI;
                 editor.aiWorkspaceDomain = AiWorkspaceDomain::Control;
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
                 push_editor_log(editor, "[automation] Automation workspace opened.");
 #endif
                 break;

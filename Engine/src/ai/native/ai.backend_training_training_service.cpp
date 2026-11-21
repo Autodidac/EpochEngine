@@ -10,7 +10,7 @@
 #include <thread>
 
 
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
 namespace epoch_ai::training {
 // Public retains inference lease accounting for the existing host/agent
 // lifecycle, without a worker, corpus, backend discovery or mutation API.

@@ -12,6 +12,7 @@ import subprocess
 import unittest
 from Tests.build.test_opengl_sprite_stream import definition
 from Tests.support.cpp import compile_and_run, msvc_2022_toolsets, windows_sdk_includes
+from Tools.source.owned_source_text import read_owned_source
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -73,8 +74,9 @@ class RebasedPreviewConsumers(unittest.TestCase):
         start = descriptor.index('const auto previewCamera =')
         camera_read = descriptor[start:descriptor.index(';', start)+1]
         module_path = 'Engine/modules/render/render.preview_grid.ixx'
-        module = (ROOT/module_path).read_text(encoding='utf-8')
-        packet = definition(module, '    export struct PublishedSceneFrame', True).replace('export ', '')
+        module = read_owned_source(ROOT/module_path)
+        packet = '\n'.join(definition(module, marker, True).replace('export ', '') for marker in (
+            '    export struct WaterFrameSource final', '    export struct PublishedSceneFrame final'))
         cloud_recipe = (ROOT/'Engine/modules/asset.cloud_volume.ixx').read_text(encoding='utf-8')
         cloud = ('namespace asset::cloud_volume {\n' + definition(cloud_recipe, '    struct Recipe final', True) + '\n}\n')
         cloud += 'namespace previewgrid {\n' + definition(module, '    export struct CloudVolume final', True).replace('export ', '') + '\n}\n'
@@ -106,6 +108,7 @@ class RebasedPreviewConsumers(unittest.TestCase):
 #include <cstdlib>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <span>
 #include <string_view>
@@ -182,17 +185,18 @@ struct UploadOwner {
 };
 }
 int main(){
- auto a=std::make_shared<PublishedSceneFrame>();a->camera.eye.x=11;a->revision=1;
+ auto a=std::make_shared<PublishedSceneFrame>();a->camera.eye.x=11;a->revision=1;a->water_source={17,2.5};
  auto solids=std::make_shared<SolidDrawFrame>();
  solids->geometry=std::make_shared<const std::vector<previewgrid::Vertex>>(3,previewgrid::Vertex{{1,2,3},{1,1,1}});a->solids=solids;
  solids->water_detail_ranges.push_back({0,3});
  a->lines=std::make_shared<const std::vector<previewgrid::Vertex>>(2,previewgrid::Vertex{{4,5,6},{1,1,1}});
  a->markers.push_back({{7,8,9},{2,2,2}});a->wire=std::make_shared<const MeshWireDrawFrame>();
- auto b=std::make_shared<PublishedSceneFrame>(*a);b->camera.eye.x=99;b->revision=2;
+ auto b=std::make_shared<PublishedSceneFrame>(*a);b->camera.eye.x=99;b->revision=2;b->water_source={18,3.5};
  auto other=std::make_shared<SolidDrawFrame>();other->geometry=std::make_shared<const std::vector<previewgrid::Vertex>>(6);b->solids=other;
  first=a;second=b;
  @@RUN_READERS@@
  published=first;const auto retained=scene_frame_for(nullptr);published=second;
+ CHECK(retained->water_source.terrain_request==17&&retained->water_source.sampled_seconds==2.5);
  auto vertices=vulkanconsumer::preview_vertices_for(nullptr,retained);
  auto indices=vulkanconsumer::preview_indices_for(nullptr,retained);
  CHECK(vertices.size()==9&&indices.size()==11);

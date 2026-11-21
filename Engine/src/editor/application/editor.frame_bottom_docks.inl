@@ -324,7 +324,7 @@
             renderDockStatusPanel("assets", dockLines);
             break;
         }
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
         case EditorWorkspaceTab::AI:
         {
             const std::vector<std::string> dockLines{

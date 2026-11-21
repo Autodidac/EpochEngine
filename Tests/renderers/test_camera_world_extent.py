@@ -514,6 +514,7 @@ set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT Embedded)
 project(CameraWorldExtent LANGUAGES CXX)
 add_executable(camera_world_extent "{source.as_posix()}" "{(ROOT / 'Engine/src/render/render.preview_camera.cpp').as_posix()}" "{(ROOT / 'Engine/src/render/render.preview_lighting.cpp').as_posix()}" "{(ROOT/'Engine/src/assets/texture/asset.texture_artifact.cpp').as_posix()}"
  "{(ROOT/'Engine/src/authoring/texture/authoring.texture_document.cpp').as_posix()}"
+ "{(ROOT/'Engine/src/authoring/texture/authoring.texture_snapshot_codec.cpp').as_posix()}"
  "{(ROOT/'Engine/src/authoring/texture/authoring.texture_residency.cpp').as_posix()}")
 target_compile_features(camera_world_extent PRIVATE cxx_std_23)
 target_compile_options(camera_world_extent PRIVATE /W3 /WX /utf-8)

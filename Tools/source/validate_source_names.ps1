@@ -3,13 +3,17 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot '../build/epoch_package_layout.ps1')
+$edition = Get-EpochSourceEdition -RepoRoot $RepoRoot
 $roots = @(
     (Join-Path $RepoRoot "Engine\modules"),
     (Join-Path $RepoRoot "Engine\src"),
     (Join-Path $RepoRoot "Engine\include"),
-    (Join-Path $RepoRoot "Engine\dep\EpochPlatformEngine"),
-    (Join-Path $RepoRoot "Engine\dep\EpochSelfCoding")
+    (Join-Path $RepoRoot "Engine\dep\EpochPlatformEngine")
 )
+if ($edition.Directory -eq 'development' -and !$edition.OwnerRuntime) {
+    $roots += Join-Path $RepoRoot 'Engine/dep/EpochSelfCoding'
+}
 $extensions = @(".cpp", ".hpp", ".h", ".ixx", ".inl")
 $ignoredFragments = @("\third_party\", "\stb\", "\Bin\", "\bin\")
 # Retain exact published canonical Platform native paths; do not exempt new files.

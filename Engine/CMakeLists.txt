@@ -52,6 +52,13 @@ option(EPOCH_ENABLE_AUTHORING_METRICS "Gate document, history, cache, GPU, and e
 option(EPOCH_ENABLE_PHYSICAL_AUDIO "Compile the renderer-independent physical audio adapter." ON)
 option(EPOCH_ENABLE_PHYSICAL_INPUT "Compile the renderer-independent physical controller adapter." ON)
 option(EPOCH_BINARY_ONLY_DISTRIBUTION "Compile Epoch without authorized source download or source-rebuild lanes." OFF)
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/include/epoch.edition.hpp"
+     _epoch_owner_runtime_marker REGEX "^#define EPOCH_SOURCE_SELF_CODING 0$")
+if(_epoch_owner_runtime_marker)
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/dep/EpochSelfCoding" OR EPOCH_BINARY_ONLY_DISTRIBUTION)
+        message(FATAL_ERROR "Owner runtime requires the projected source graph and authenticated updates.")
+    endif()
+endif()
 option(EPOCH_ALLOW_GCC_MODULE_ENGINE "Opt into the experimental full-engine GCC modules build on Linux." OFF)
 set(EPOCH_GLAD_PROVIDER "auto" CACHE STRING "Select the OpenGL loader provider: auto, vcpkg, or bundled.")
 set_property(CACHE EPOCH_GLAD_PROVIDER PROPERTY STRINGS auto vcpkg bundled)
@@ -335,7 +342,8 @@ if(BUILD_TESTING)
         src/render/render.preview_camera.cpp
         src/render/render.preview_lighting.cpp
         src/assets/texture/asset.texture_artifact.cpp
-        src/authoring/texture/authoring.texture_document.cpp)
+        src/authoring/texture/authoring.texture_document.cpp
+        src/authoring/texture/authoring.texture_snapshot_codec.cpp)
     target_sources(epoch_mesh_artifact_contract PRIVATE
         FILE_SET epoch_mesh_artifact_modules TYPE CXX_MODULES
             BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/modules
@@ -763,8 +771,12 @@ set(EPOCH_MACOS_PACKAGED_VERSION_OVERRIDE_REVISION "" CACHE STRING "Override pac
 
 set(EPOCH_SOURCES
     src/epoch/epoch.engine_legacy.cpp
+    src/epoch/epoch.artifact_acceptance.cpp
+    src/epoch/epoch.project_validation.cpp
     src/updater/updater.device_identity.cpp
+    
     src/updater/updater.source_access.cpp
+    
     src/updater/updater.system.cpp
     src/updater/updater.source_worker_win.cpp
     src/epoch/epoch.build_validation.cpp
@@ -874,8 +886,10 @@ set(EPOCH_SOURCES
     src/renderers/raylib/core.context_raylib.cpp
     src/renderers/raylib/raylib.api.cpp
     src/epochgui/gui.engine.cpp
+    src/epochgui/gui.window_theme.cpp
     src/epochgui/gui.docking_adapter.cpp
     src/epochgui/gui.clipboard.cpp
+    src/epochgui/gui.context_roles.cpp
     src/scripts/scripting.compiler_engine.cpp
     src/editor/editor.application.cpp
     src/editor/editor.scene.cpp
@@ -936,6 +950,9 @@ set(EPOCH_SOURCES
     src/project/project.asset_registry.cpp
     src/project/project.forest_library.cpp
     src/project/project.planetary.cpp
+    src/project/project.planetary_play.cpp
+    src/project/project.play_assets.cpp
+    src/project/project.play_hud.cpp
     src/project/project.planetary_snapshot.cpp
     src/project/project.texture_resources.cpp
     src/project/project.texture_library.cpp
@@ -1028,13 +1045,11 @@ set(EPOCH_EDITOR_IMPLEMENTATION_PARTS
     src/editor/application/editor.frame_outliner.inl
     src/editor/application/editor.frame_packages_about.inl
     src/editor/application/editor.frame_project_runtime.inl
-    src/editor/application/editor.frame_source_dispatch.inl
     src/editor/application/editor.frame_toolbar_dock_targets.inl
     src/editor/application/editor.frame_viewport.inl
     src/editor/application/editor.frame_workspace_docking.inl
     src/epochgui/controls/gui.assistant_console.inl
     src/epochgui/controls/gui.buttons_images.inl
-    src/epochgui/controls/gui.context_roles.inl
     src/epochgui/controls/gui.frame_lifecycle.inl
     src/epochgui/controls/gui.navigation_chrome.inl
     src/epochgui/controls/gui.node_surface_controls.inl
@@ -1047,13 +1062,11 @@ set_source_files_properties(${EPOCH_EDITOR_IMPLEMENTATION_PARTS}
 list(APPEND EPOCH_SOURCES ${EPOCH_EDITOR_IMPLEMENTATION_PARTS})
 
 set(EPOCH_DOMAIN_IMPLEMENTATION_PARTS
-    src/authoring/texture/implementation/authoring.texture_binary_codec.inl
     src/editor/implementation/editor.scene_commands.inl
     src/editor/implementation/editor.project_registry.inl
     src/editor/implementation/editor.project_shell_generation.inl
     src/epoch/implementation/epoch.contracts_renderer.inl
     src/epoch/implementation/epoch.contracts_engine.inl
-    src/epoch/implementation/epoch.contracts_project.inl
     src/epoch/implementation/epoch.session_editor_launcher.inl
     src/epoch/implementation/epoch.project_play_scene.inl
     src/epoch/implementation/epoch.session_runtime.inl
@@ -1090,6 +1103,7 @@ if(EPOCH_ENABLE_AUTHORING_PLATFORM AND EPOCH_ENABLE_TEXTURE_EDITOR)
     list(APPEND EPOCH_SOURCES
         src/authoring/texture/authoring.texture_document.cpp
         src/authoring/texture/authoring.texture_residency.cpp
+        src/authoring/texture/authoring.texture_snapshot_codec.cpp
     )
 endif()
 if(EPOCH_ENABLE_AUTHORING_PLATFORM AND EPOCH_ENABLE_TILEMAP_EDITOR)
@@ -1218,8 +1232,9 @@ if(MSVC)
     # interface and ordinary updater orchestration remain lean.
     set_source_files_properties(
         src/updater/updater.source_access.cpp
-    src/updater/updater.system.cpp
-    src/updater/updater.source_worker_win.cpp
+        
+        src/updater/updater.system.cpp
+        src/updater/updater.source_worker_win.cpp
         PROPERTIES
             COMPILE_OPTIONS "/bigobj;/Zm2000;/Od;/Ob0;/GL-"
     )
@@ -1725,6 +1740,7 @@ if(EPOCH_SDL_ACTIVE OR EPOCH_PHYSICAL_AUDIO_ACTIVE OR EPOCH_PHYSICAL_INPUT_ACTIV
 
     if(EPOCH_SDL_ACTIVE AND EPOCH_SDL3_AVAILABLE)
         if(ANDROID)
+            target_sources(epoch PRIVATE src/renderers/sdl/sdl.android_scene.cpp)
             target_link_libraries(epoch PRIVATE GLESv3)
         endif()
         find_package(SDL3_image CONFIG QUIET)
@@ -2708,6 +2724,7 @@ if(BUILD_TESTING)
     src/assets/texture/asset.texture_artifact.cpp
             src/authoring/texture/authoring.texture_document.cpp
             src/authoring/texture/authoring.texture_residency.cpp
+            src/authoring/texture/authoring.texture_snapshot_codec.cpp
             src/authoring/texture/authoring.texture_contract.cpp
         )
         target_sources(epoch_authoring_texture_contract PRIVATE

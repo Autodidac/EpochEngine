@@ -99,6 +99,7 @@ int main() {
                 "Engine/src/project/project.asset_registry.cpp",
                 "Engine/src/assets/texture/asset.texture_artifact.cpp",
                 "Engine/src/authoring/texture/authoring.texture_document.cpp",
+                "Engine/src/authoring/texture/authoring.texture_snapshot_codec.cpp",
                 "Engine/src/authoring/texture/authoring.texture_residency.cpp",
             ),
             extra_modules=(

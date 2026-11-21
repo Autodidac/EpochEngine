@@ -142,11 +142,14 @@ int main(){
         struct Menu {float x{},width{92.0f};};
         std::vector<Menu> topMenus(2);
         struct {std::vector<gui_lib::Rect> left_bounds;gui_lib::Rect left_overflow;} chromeResult;
-        chromeResult.left_bounds={{{0,0},{118,32}},{{118,0},{48,32}},{{0,0},{0,0}}};
+        for (const std::size_t firstMenuIndex : {0u, 1u}) {
+        chromeResult.left_bounds={{{118,0},{48,32}},{{0,0},{0,0}}};
+        if (firstMenuIndex) chromeResult.left_bounds.insert(chromeResult.left_bounds.begin(),gui_lib::Rect{{0,0},{118,32}});
         chromeResult.left_overflow={{166,0},{82,32}};
 COMPACT_BOUNDS
         CHECK(topMenus[0].x==118&&topMenus[0].width==48);
         CHECK(topMenus[1].x==166&&topMenus[1].width==82);
+        }
     }
     CHECK(popup_layout_contract()==0);
     Context ctx;g_frame.ctx=&ctx;
