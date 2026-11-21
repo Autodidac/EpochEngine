@@ -31,9 +31,10 @@ class WaterShaderFootprint(unittest.TestCase):
         opengl = proof / 'opengl.frag'
         opengl.write_text(opengl_scene_fragment(), encoding='utf-8')
         vulkan = ROOT / 'Engine/assets/vulkan/shaders/frag.glsl'
-        roll_definition = r'float waterRolls\(.*?\n\}'
-        self.assertEqual(re.search(roll_definition, opengl.read_text(encoding='utf-8'), re.S)[0],
-                         re.search(roll_definition, vulkan.read_text(encoding='utf-8'), re.S)[0])
+        for function in ('waterRolls', 'breakingWhitewater'):
+            definition = rf'float {function}\(.*?\n\}}'
+            self.assertEqual(re.search(definition, opengl.read_text(encoding='utf-8'), re.S)[0],
+                             re.search(definition, vulkan.read_text(encoding='utf-8'), re.S)[0])
         commands = []
         for backend, source, options in (
             ('opengl', opengl, ['--target-env=opengl', '-fauto-map-locations', '-fauto-bind-uniforms']),

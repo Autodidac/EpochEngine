@@ -1,0 +1,11 @@
+# Stage only the bundled arcade images. Keep the paths used by the game modules.
+if(NOT IS_ABSOLUTE "${EPOCH_ARCADE_DESTINATION}")
+    message(FATAL_ERROR "Arcade staging requires an absolute destination")
+endif()
+set(source "${CMAKE_CURRENT_LIST_DIR}/../assets/games")
+file(GLOB_RECURSE images LIST_DIRECTORIES false RELATIVE "${source}" "${source}/*.ppm")
+foreach(image IN LISTS images)
+    get_filename_component(directory "${EPOCH_ARCADE_DESTINATION}/${image}" DIRECTORY)
+    file(MAKE_DIRECTORY "${directory}")
+    file(COPY_FILE "${source}/${image}" "${EPOCH_ARCADE_DESTINATION}/${image}" ONLY_IF_DIFFERENT)
+endforeach()

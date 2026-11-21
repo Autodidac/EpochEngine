@@ -28,6 +28,24 @@ int main(int argc,char** argv){
  using epochengine::water::wave::spherical_shoaled_normal;
  constexpr std::array crest{0.6f,0.8f,0.0f};
  constexpr V up{0.0,1.0,0.0};
+ // View the same known swell edge-on and from above. At the northern pole
+ // the XZ field dominates. Its crest, shoulder and trough lie 4 m apart.
+ std::vector<epochengine::water::wave::Sample> field(32*32);
+ for(unsigned z=0;z<32;++z)for(unsigned x=0;x<32;++x)
+     field[z*32+x].height=static_cast<float>(std::cos(x*0.39269908169872415));
+ const auto tile=epochengine::water::wave::Tile::create(32,32.0,0.0,std::move(field),1024*1024);
+ CHECK(tile);
+ constexpr double radius=6371000;
+ const auto elevation=[&](double x){
+     const V ray{x/radius,std::sqrt(1.0-(x/radius)*(x/radius)),0.0};
+     const auto s=epochengine::water::wave::spherical_sample(*tile,ray,radius,0.0);
+     return s?std::hypot(s->position_meters[0],s->position_meters[1],s->position_meters[2])-radius:NAN;
+ };
+ CHECK(elevation(0.0)>1.19&&elevation(4.0)<-0.19&&elevation(8.0)>-0.81);
+ CHECK(std::abs(elevation(0.0)-elevation(8.0)-2.0)<1e-5);
+ double mean_elevation{};
+ for(unsigned i=0;i<32;++i)mean_elevation+=elevation(i)/32.0;
+ CHECK(std::abs(mean_elevation)<1e-5);
  const auto shoaled=spherical_shoaled_normal(crest,up,2.0,1.2,1.0f);
  const auto transition=spherical_shoaled_normal(crest,up,2.0,1.2,0.35f);
  CHECK(shoaled[0]>transition[0]&&transition[0]>crest[0]&&shoaled[1]>0.0f);
@@ -57,13 +75,23 @@ int main(int argc,char** argv){
  CHECK(shallow_crest[0]-shallow[0]>deep_crest[0]-deep[0]+0.04f);
  CHECK(spherical_surface_color(2.0,0.95f,100.0,128.0)==shallow);
  const auto quiet_shore=spherical_surface_color(0.65,0.0f,1.49,128.0);
- CHECK(spherical_surface_color(0.65,0.0f,1.49,128.0,false,1.0f,0.6)[0]>quiet_shore[0]+0.1f);
+ const auto steep=epochengine::water::wave::spherical_face_incline_squared(crest,up);
+ CHECK(steep>0.35&&steep<0.37);
+ CHECK(spherical_surface_color(0.65,0.0f,1.49,128.0,false,1.0f,0.6,{},steep)[0]>quiet_shore[0]+0.30f);
+ CHECK(spherical_surface_color(0.65,0.0f,1.49,128.0,false,1.0f,0.6,{},0.0)==quiet_shore);
+ CHECK(spherical_surface_color(-1.5,0.0f,1.49,128.0,false,1.0f,0.7,{},steep)
+    ==spherical_surface_color(-1.5,0.0f,1.49,128.0));
  CHECK(spherical_surface_color(0.65,0.0f,1.49,128.0,false,1.0f,-0.6)==quiet_shore);
  CHECK(spherical_surface_color(0.65,0.0f,1.49,128.0,false,1.0f,1.0)==quiet_shore);
  CHECK(spherical_surface_color(0.65,0.45f,1.49,128.0,false,1.0f,1.0)
     ==spherical_surface_color(0.65,0.45f,1.49,128.0));
- CHECK(spherical_surface_color(0.65,0.0f,2.15,128.0,false,1.0f,0.6)[0]>quiet_shore[0]);
- CHECK(spherical_surface_color(0.65,0.0f,3.0,128.0,false,1.0f,0.6)==quiet_shore);
+ CHECK(spherical_surface_color(0.65,0.0f,2.15,128.0,false,1.0f,0.6,{},steep)[0]>quiet_shore[0]);
+ CHECK(spherical_surface_color(0.65,0.0f,3.0,128.0,false,1.0f,0.6,{},steep)==quiet_shore);
+ const auto quiet_beach=spherical_surface_color(-0.4,0.0f,1.49,128.0);
+ const auto runup=spherical_surface_color(-0.4,0.0f,1.49,128.0,false,1.0f,0.7);
+ CHECK(runup[0]>quiet_beach[0]+0.30f);
+ CHECK(spherical_surface_color(-0.4,0.0f,1.49,128.0,false,1.0f,-0.5)==quiet_beach);
+ CHECK(spherical_surface_color(-0.4,0.0f,1.49,128.0,false,1.0f,0.7,0.0f)==quiet_beach);
  CHECK(spherical_surface_color(0.65,0.0f,64.0,128.0,false,1.0f,0.6)==quiet_shore);
  CHECK(spherical_surface_color(100.0,0.0f,1.49,128.0,false,1.0f,1.0)==deep);
  CHECK(spherical_surface_color(0.0,0.0f,3.0,128.0,true)[0]>spherical_surface_color(0.0,0.0f,3.0,128.0)[0]);
@@ -86,8 +114,8 @@ int main(int argc,char** argv){
  CHECK(spherical_water_edge_weight(breaker_edges,1.0f,14u,8u,16u)>
        spherical_water_edge_weight(breaker_edges,1.0f,15u,8u,16u));
  CHECK(spherical_water_edge_weight(breaker_edges,1.0f,13u,8u,16u)==1.0f);
- CHECK(spherical_surface_color(0.65,0.0f,fine_size,128.0,false,1.0f,0.6,breaker_edges[1])
-    ==spherical_surface_color(0.65,0.0f,coarse_size,128.0,false,1.0f,0.6));
+ CHECK(spherical_surface_color(0.65,0.0f,fine_size,128.0,false,1.0f,0.6,breaker_edges[1],steep)
+    ==spherical_surface_color(0.65,0.0f,coarse_size,128.0,false,1.0f,0.6,{},steep));
  w::Surface water;std::uint64_t surface_crossings{},skirt_crossings{},shared_crossings{},old_disagreements{};double maximum_error{};
  for(const double seconds:{0.0,1.25}){
  CHECK(water.evaluate(1337,seconds));
@@ -191,7 +219,8 @@ int main(int argc,char** argv){
    {vertex.color[0],vertex.color[1],vertex.color[2]}});
  }
  auto wedgeIndices=wedgeSource.indices;
- CHECK(water.evaluate(1337,0.0));
+ // At this phase the shaped swell cuts the first 4% of the saved edge.
+ CHECK(water.evaluate(1337,14.0/60.0));
  CHECK(water.apply_patch(wedgeVertices,wedgeIndices,0,0,wedgeSource,body,wedgeTile,16,
   1.0,wedgeOffset,32u*1024u*1024u));
  constexpr std::uint32_t dry=395u,wet=396u,opposite=413u;

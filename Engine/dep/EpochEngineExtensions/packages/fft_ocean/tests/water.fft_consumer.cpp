@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <fstream>
 #include <limits>
+#include <memory>
 #include <stop_token>
 #include <vector>
 #include "epoch/extensions/fft_ocean/fft_ocean.hpp"
@@ -36,6 +37,11 @@ int main(int argc,char** argv)
     auto first=evaluator.evaluate(settings,3.25);CHECK(first&&!first.reused);
     const auto firstHash=hash(*first.tile);
     CHECK(evaluator.evaluate(settings,3.25).reused);
+    auto rolling=settings;rolling.spectralDisplacement=true;
+    const auto swell=evaluator.evaluate(rolling,3.25);
+    CHECK(swell&&!swell.reused&&hash(*swell.tile)!=firstHash);
+    CHECK(evaluator.evaluate(rolling,3.25).reused);
+    CHECK(!evaluator.evaluate(settings,3.25).reused);
     p::OceanTile actual{settings};CHECK(actual.evaluateAbsolute(3.25));
     CHECK(first.tile->samples().size()==actual.samples().size());
     for(std::size_t i=0;i<actual.samples().size();++i)

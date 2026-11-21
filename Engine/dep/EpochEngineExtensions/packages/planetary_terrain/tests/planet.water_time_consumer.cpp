@@ -458,7 +458,7 @@ int main(int argc,char** argv)
   const auto spacing=std::hypot(double(a[0])-b[0],double(a[1])-b[1],double(a[2])-b[2]);CHECK(spacing>0&&spacing<1.0);
   report<<"fine_level=20 spacing_meters="<<spacing<<" local_metric_frame=1\n";break;
  }
- fft::Settings settings;settings.seed=1337;fft::Evaluator evaluator;
+ auto settings=ocean::swell_settings(1337);fft::Evaluator evaluator;
  const bool needs_edge_blend=p::requires_water_edge_resample(source);
  std::shared_ptr<const m::Artifact> zero;
  for(const auto seconds:{0.0,1.25,0.0})

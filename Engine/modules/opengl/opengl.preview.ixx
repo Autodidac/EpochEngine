@@ -386,7 +386,8 @@ uniform int uPaintRows;
 uniform bool uAtmospherePass;
 uniform bool uSprayPass;
 uniform float uWaterScale;
-uniform vec3 uWaterCenter,uWaterEye;
+uniform vec3 uWaterCenter;
+uniform vec4 uWaterEye;
 uniform vec4 uWaterSun,uWaterWaves[15],uWaterSlopes[3];
 out vec4 outColor;
 vec3 waterReflection(vec3 up, vec3 normal, vec3 eye, vec4 sun) {
@@ -442,9 +443,27 @@ float waterRolls(vec3 phase, vec3 phaseSine, vec3 phaseCosine, vec3 dx, vec3 dy,
     return foam * strength;
 }
 
+// Recover elevation from the short eye-to-surface vector. Subtracting two
+// planet-sized float radii loses the relief that distinguishes a crest.
+float breakingWhitewater(float eyeAltitude, vec3 radial, vec3 toEye, vec3 phase,
+                         vec3 dx, vec3 dy, float strength, float rippleFoam) {
+    vec3 up = normalize(radial);
+    vec3 eyeUp = normalize(radial + toEye);
+    float elevation = eyeAltitude - dot(toEye, up + eyeUp) / max(0.001, 1.0 + dot(up, eyeUp));
+    float lip = smoothstep(0.35, 1.05, elevation);
+    float resolved = 1.0 - smoothstep(0.18, 0.80, max(length(dx), length(dy)));
+    if (lip <= 0.0 || resolved <= 0.0) return 0.0;
+    // Long connected sections travel with each elevated ridge. Shorter
+    // crossing ripples fray the edges and leave gaps along the lip.
+    float band = sin(phase.y + 0.75 * sin(phase.z));
+    float strands = sin(2.0 * phase.x + phase.y + 0.85 * sin(phase.z - phase.x));
+    float patches = smoothstep(-0.25, 0.55, 0.62 * band + 0.38 * strands);
+    return resolved * lip * max(rippleFoam, strength * patches);
+}
+
 vec3 waterDetail(vec3 base, vec3 dx, vec3 dy) {
     vec3 p=vDrawPosition*uWaterScale;
-    vec3 toEye=(uWaterEye-vDrawPosition)*uWaterScale;
+    vec3 toEye=(uWaterEye.xyz-vDrawPosition)*uWaterScale;
     float distanceToEye=length(toEye);
     float swellStrength=1.0-smoothstep(75.0,210.0,distanceToEye);
     if(distanceToEye<1e-4||swellStrength<=0.0) return base;
@@ -458,6 +477,7 @@ vec3 waterDetail(vec3 base, vec3 dx, vec3 dy) {
     vec3 slope=vec3(0.0);
     float foam=waterRolls(longPhase,drift,warpRate,dx,dy,directionX,directionY,directionZ,
                          swellStrength,slope);
+    foam=breakingWhitewater(uWaterEye.w,p-uWaterCenter,toEye,longPhase,dx,dy,swellStrength,foam);
     float rippleStrength=1.0-smoothstep(40.0,135.0,distanceToEye);
     if(rippleStrength>0.0) {
         const vec3 warpX=vec3(0.27,0.13,-0.21),warpY=vec3(0.11,-0.23,-0.19),warpZ=vec3(0.15,0.09,0.18);
@@ -487,7 +507,7 @@ vec3 waterDetail(vec3 base, vec3 dx, vec3 dy) {
     vec3 delta=waterReflection(up,normal,eye,uWaterSun)-waterReflection(up,up,eye,uWaterSun);
     float daylight=smoothstep(-0.10,0.38,dot(up,uWaterSun.xyz))*uWaterSun.w;
     vec3 foamColor=mix(vec3(0.15,0.21,0.24),vec3(0.64,0.74,0.75),daylight);
-    return mix(clamp(base+delta,0.0,1.0),foamColor,foam*0.40);
+    return mix(clamp(base+delta,0.0,1.0),foamColor,foam*0.70);
 }
 vec3 forestCoverage(vec3 base) {
     if (uPaintRows <= 0) return base;
@@ -1843,7 +1863,7 @@ void main() {
                 if(detail)
                 {
                     glUniform3f(water[1],detail->center_meters.x,detail->center_meters.y,detail->center_meters.z);
-                    glUniform3f(water[2],detail->eye.x,detail->eye.y,detail->eye.z);
+                    glUniform4f(water[2],detail->eye.x,detail->eye.y,detail->eye.z,detail->eye_altitude_meters);
                     glUniform4f(water[3],detail->sun.x,detail->sun.y,detail->sun.z,detail->sunlight);
                     glUniform4fv(water[4],static_cast<GLsizei>(detail->waves.size()),detail->waves.front().data());
                     glUniform4fv(water[5],static_cast<GLsizei>(detail->slopes.size()),detail->slopes.front().data());

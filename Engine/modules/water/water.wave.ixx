@@ -70,6 +70,7 @@ export namespace epochengine::water::wave
                 ||!std::isfinite(seconds)||std::abs(seconds)>=1e12
                 ||samples.size()!=std::size_t(resolution)*resolution
                 ||samples.capacity()>maximum_bytes/sizeof(Sample))return {};
+            double square_sum{},peak{};
             for(const auto& sample:samples)
             {
                 for(const auto value:{sample.height,sample.displacement_x,sample.displacement_z,
@@ -79,8 +80,14 @@ export namespace epochengine::water::wave
                     +double(sample.normal[1])*sample.normal[1]+double(sample.normal[2])*sample.normal[2];
                 if(std::abs(norm-1.0)>1e-4||sample.normal[1]<=0.0f
                     ||sample.foam<0.0f||sample.foam>1.0f)return {};
+                const double height=sample.height;
+                square_sum+=height*height;
+                peak=(std::max)(peak,std::abs(height));
             }
-            try { return std::shared_ptr<const Tile>{new Tile{resolution,length_meters,seconds,std::move(samples)}}; }
+            const double mean_square=square_sum/samples.size();
+            const double curvature=peak>0.0?(std::min)(12.566370614359172/length_meters,0.4/peak):0.0;
+            try { return std::shared_ptr<const Tile>{new Tile{resolution,length_meters,seconds,
+                std::move(samples),mean_square,curvature}}; }
             catch(...) { return {}; }
         }
 
@@ -90,6 +97,12 @@ export namespace epochengine::water::wave
         [[nodiscard]] std::uint64_t payload_bytes() const noexcept
         { return samples_.capacity()*sizeof(Sample); }
         [[nodiscard]] std::span<const Sample> samples() const noexcept { return samples_; }
+
+        // Bound second harmonic for a swell spanning half the periodic tile.
+        // Subtracting the tile mean square preserves its mean node elevation.
+        // The curvature limit keeps the profile monotone even in a steep sea.
+        [[nodiscard]] double rolling_height(double height) const noexcept
+        { return height+swell_curvature_*(height*height-mean_square_height_); }
 
         [[nodiscard]] std::optional<Sample> sample(double x_meters,double z_meters,double seconds) const noexcept
         {
@@ -125,11 +138,14 @@ export namespace epochengine::water::wave
         }
 
     private:
-        Tile(std::uint32_t resolution,double length,double seconds,std::vector<Sample> samples) noexcept
-            :resolution_(resolution),length_(length),seconds_(seconds),samples_(std::move(samples)){}
+        Tile(std::uint32_t resolution,double length,double seconds,std::vector<Sample> samples,
+            double mean_square,double curvature) noexcept
+            :resolution_(resolution),length_(length),seconds_(seconds),samples_(std::move(samples)),
+             mean_square_height_(mean_square),swell_curvature_(curvature){}
         std::uint32_t resolution_{};
         double length_{},seconds_{};
         std::vector<Sample> samples_{};
+        double mean_square_height_{},swell_curvature_{};
     };
 
     enum class Code : std::uint8_t {ready,cancelled,invalid,limit_exceeded,evaluation_failed};
@@ -279,14 +295,23 @@ export namespace epochengine::water::wave
         return polygon;
     }
 
+    // Squared sine of the face angle relative to the local tangent plane.
+    [[nodiscard]] inline double spherical_face_incline_squared(
+        const std::array<float,3>& normal,const std::array<double,3>& up) noexcept
+    {
+        const double cosine=normal[0]*up[0]+normal[1]*up[1]+normal[2]*up[2];
+        return std::clamp(1.0-cosine*cosine,0.0,1.0);
+    }
+
     // Fade foam with lattice spacing so coarse bays cannot turn white.
     [[nodiscard]] inline std::array<float,3> spherical_surface_color(
         double depth_meters, float crest_foam, double spacing_meters,
         double wave_length_meters, bool shoreline = false, float shore_tint_strength = 1.0f,
-        double wave_crest_meters = 0.0, std::optional<float> breaker_resolution = {}) noexcept
+        double wave_crest_meters = 0.0, std::optional<float> breaker_resolution = {},
+        double face_incline_squared = 0.0) noexcept
     {
         constexpr std::array deep{0.015f, 0.085f, 0.12f};
-        constexpr std::array shallow{0.038f, 0.235f, 0.212f};
+        constexpr std::array shallow{0.085f, 0.32f, 0.285f};
         constexpr std::array foam_color{0.64f, 0.77f, 0.78f};
         const auto smooth_falloff = [](double distance, double range) {
             const double t = std::clamp(distance / range, 0.0, 1.0);
@@ -297,20 +322,33 @@ export namespace epochengine::water::wave
         const float crest_strength = std::lerp(0.28f, 0.46f, shallows_breaking);
         // A crest can break over a shallow bed even when open-ocean slope
         // contributes zero foam. Use the sampled lift above mean sea level.
-        const double crest_to_depth = std::isfinite(wave_crest_meters)
-            ? wave_crest_meters / (std::max)(depth_meters, 0.35) : 0.0;
+        const double lift = std::isfinite(wave_crest_meters) ? wave_crest_meters : 0.0;
+        const double crest_to_depth = lift / (std::max)(depth_meters, 0.35);
         const float breaking_start = 1.0f - smooth_falloff(crest_to_depth - 0.32, 0.32);
         // Limit fresh whitewater to the breaking front. A positive swell
         // behind it can cover an entire shallow patch without breaking again.
         const float breaking_band = breaking_start * smooth_falloff(crest_to_depth - 0.82, 0.54);
         const float breaker_spacing = breaker_resolution ? *breaker_resolution : spherical_breaker_scale(spacing_meters);
-        const float breaker_foam = breaker_spacing * shallows_breaking * breaking_band;
-        const float sampled_foam = (std::max)(std::clamp(crest_foam, 0.0f, 1.0f), breaker_foam);
+        // Follow the advancing wet edge over the beach. Only a lifted wave
+        // leaves this wash. Its position uses the same bed and surface that
+        // clip the mesh, so an offshore trough cannot paint the beach white.
+        const float runup = (1.0f - smooth_falloff(lift - 0.10, 0.48))
+            * smooth_falloff(depth_meters + lift, 1.0);
+        // A breaking lip carries more whitewater than the wind-driven foam
+        // offshore. Fold depth into this term once so it fades into the shelf.
+        // A gently rising shoal can meet the depth ratio over an entire bay.
+        // Only a steep face or a compressed crest supplies fresh breaker foam.
+        const float steep_face=1.0f-smooth_falloff(face_incline_squared-0.0144,0.1156-0.0144);
+        const float breaking_face=(std::max)(steep_face,std::clamp(crest_foam,0.0f,1.0f));
+        const float wet_edge=smooth_falloff(-(depth_meters+lift),0.25);
+        const float breaker_foam = breaker_spacing * shallows_breaking * wet_edge
+            * (std::max)(0.76f * breaking_band * breaking_face, 0.88f * runup);
+        const float sampled_foam = crest_strength * std::clamp(crest_foam, 0.0f, 1.0f);
         // Keep the existing footprint fade for both foam sources. Clipping
         // interpolates the resulting color on new shoreline vertices.
         const float foam = shoreline
             ? 0.58f * smooth_falloff(spacing_meters, 9.0)
-            : crest_strength * sampled_foam * smooth_falloff(spacing_meters, wave_length_meters / 8.0);
+            : (std::max)(sampled_foam, breaker_foam) * smooth_falloff(spacing_meters, wave_length_meters / 8.0);
         std::array<float,3> color{};
         for (std::size_t i = 0; i < color.size(); ++i)
             color[i] = std::lerp(std::lerp(deep[i], shallow[i], shallows), foam_color[i], foam);
@@ -335,7 +373,8 @@ export namespace epochengine::water::wave
                 {n[0]*radius_meters,n[1]*radius_meters,n[2]*radius_meters},seconds);
             if(!projections)return {};
             const auto* yz=&(*projections)[0];const auto* xz=&(*projections)[1];const auto* xy=&(*projections)[2];
-            const double height=weight[0]*yz->height+weight[1]*xz->height+weight[2]*xy->height;
+            const double height=weight[0]*tile.rolling_height(yz->height)
+                +weight[1]*tile.rolling_height(xz->height)+weight[2]*tile.rolling_height(xy->height);
             std::array<double,3> displacement{
                 weight[1]*xz->displacement_x+weight[2]*xy->displacement_x,
                 weight[0]*yz->displacement_x+weight[2]*xy->displacement_z,

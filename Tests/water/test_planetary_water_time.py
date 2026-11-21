@@ -30,7 +30,9 @@ class PlanetaryWaterTime(unittest.TestCase):
         for name in ('TEMP','TMP','TMPDIR'):env[name]=str(temporary)
         default_build = ROOT/'Artifacts/Intermediate/cmake'/('planetary-water-time-nov01' if windows else 'planetary-water-time-linux')
         build=Path(os.environ.get('EPOCH_PLANET_TEST_BUILD',default_build))
+        ocean=package.parent/'fft_ocean'
         paths=[ROOT/'Engine/modules/project.planetary_snapshot.ixx',ROOT/'Engine/src/project/project.planetary_snapshot.cpp',
+            ocean/'src/fft_ocean.cpp',ocean/'include/epoch/extensions/fft_ocean/fft_ocean.hpp',ocean/'modules/water.fft.ixx',
             ROOT/'Engine/modules/water/water.wave.ixx',package/'modules/water.planetary.ixx',package/'tools/planet.stream_export.cpp',
             package/'tests/planet.water_time_consumer.cpp',package/'CMakeLists.txt',Path(__file__)]
         hashes=lambda:{str(p.relative_to(ROOT)).replace('\\','/'):hashlib.sha256(p.read_bytes()).hexdigest()for p in paths}

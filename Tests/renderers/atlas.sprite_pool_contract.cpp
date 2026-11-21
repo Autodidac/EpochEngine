@@ -2,6 +2,7 @@
 #include <array>
 #include <cstdint>
 #include <filesystem>
+#include <fstream>
 #include <optional>
 #include <string>
 #include <tuple>
@@ -17,19 +18,23 @@ import sprite.registry;
 int main(int argc, char** argv)
 {
     using namespace epochengine;
-    if (argc != 2) return 12;
+    if (argc != 3) return 12;
     const auto image = a_loadImage(std::filesystem::path(argv[1]));
-    const std::array<std::uint8_t, 4> yellow{255, 204, 51, 255};
-    if (image.width != 4 || image.height != 4 || image.channels != 4 || image.pixels.size() != 64) return 13;
-    for (std::size_t i = 0; i < image.pixels.size(); ++i)
-        if (image.pixels[i] != yellow[i % yellow.size()]) return 14;
+    if (image.width <= 0 || image.height <= 0 || image.channels != 4 ||
+        image.pixels.size() != std::size_t(image.width) * image.height * 4) return 13;
+    std::ifstream reference(argv[2], std::ios::binary);
+    for (const auto channel : image.pixels)
+        if (reference.get() != channel) return 14;
+    if (!reference || reference.peek() != std::ifstream::traits_type::eof()) return 14;
     for (const auto& filename : {"lf.ppm", "cr.ppm", "crlf.ppm"}) {
         const auto probe = a_loadImage(filename);
         if (probe.width != 1 || probe.height != 1 || probe.channels != 4 ||
             probe.pixels != std::vector<std::uint8_t>{10, 32, 9, 255}) return 15;
     }
     // Follow the standalone game's first-use path in a fresh process.
-    if (!atlasmanager::create_atlas({.name = "pacman_atlas", .width = 4, .height = 4}))
+    const auto width = static_cast<std::uint32_t>(image.width);
+    const auto height = static_cast<std::uint32_t>(image.height);
+    if (!atlasmanager::create_atlas({.name = "pacman_atlas", .width = width, .height = height}))
         return 1;
     auto* registrar = atlasmanager::get_registrar("pacman_atlas");
     if (!registrar) return 2;
@@ -42,7 +47,7 @@ int main(int argc, char** argv)
     std::string name;
     if (first->atlasIndex != static_cast<std::uint32_t>(atlas.get_index()) ||
         !atlas.try_get_entry_info(static_cast<int>(first->localIndex), region, &name) ||
-        name != "pacman" || region.width != 4 || region.height != 4) return 5;
+        name != "pacman" || region.width != width || region.height != height) return 5;
     if (registrar->register_atlas_sprites_by_image("pacman", image.pixels, image.width, image.height, atlas) != first ||
         atlas.entry_count() != 1 || atlas.snapshot_pixels().pixels != image.pixels) return 6;
     atlasmanager::registry.remove("pacman");

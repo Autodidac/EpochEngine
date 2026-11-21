@@ -75,7 +75,8 @@ export namespace epochengine::water::fft
                 &&a.windSpeedMetersPerSecond==b.windSpeedMetersPerSecond
                 &&a.windDirectionRadians==b.windDirectionRadians&&a.amplitude==b.amplitude
                 &&a.choppiness==b.choppiness&&a.normalStrength==b.normalStrength
-                &&a.foamSlopeThreshold==b.foamSlopeThreshold&&a.gravity==b.gravity&&a.seed==b.seed;
+                &&a.foamSlopeThreshold==b.foamSlopeThreshold&&a.gravity==b.gravity&&a.seed==b.seed
+                &&a.spectralDisplacement==b.spectralDisplacement;
         }
         std::optional<Settings> settings_{};
         std::shared_ptr<const wave::Tile> tile_{};

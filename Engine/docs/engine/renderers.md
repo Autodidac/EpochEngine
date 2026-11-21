@@ -841,6 +841,22 @@ dry-land control pixels matched. The candidate also rendered at 1.25 seconds.
 This compares the fragment change under a 60 FPS cap. The CPU normal changes
 were checked separately by the same shoreline and water-time contracts.
 
+Planetary water shapes the displaced FFT mesh before deriving its normals.
+A bounded second harmonic raises crests and broadens troughs while preserving
+the periodic lattice's mean sampled elevation. The project water clock and LOD
+parents use the same surface. Planetary Terrain selects spectral horizontal
+displacement so the water moves toward a crest on both faces. On the resolved
+shoreline the ratio of crest height to bed depth supplies the potential for a breaker.
+The mesh introduces whitewater where the face steepens or the horizontal orbits
+compress. Shore wash draws from the instantaneous water column above the bed.
+OpenGL 3.3 and Vulkan use the camera altitude supplied by
+the shared preview to recover the rendered wave height and confine whitecaps
+to lifted crests. Distance and pixel footprint attenuate fine foam.
+The November 21 visual target is an incoming swell that interrupts the horizon
+from water level. From above, its lip should break in sections and leave ragged
+foam in the shallows. Compare both cameras on the same coast and clock.
+A moving boat's wake is a separate effect.
+
 The planetary snapshot records up to 96 wet shoreline sites in the admitted
 water appearance. The shared preview resolves their body-relative positions
 at the current water time. Desktop OpenGL draws up to 24 soft spray particles

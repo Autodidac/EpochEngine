@@ -21,6 +21,13 @@ The implementation builds a deterministic Phillips-style initial spectrum,
 evolves it over time, performs a 2D inverse FFT, and derives displacement,
 normals, and foam hints for preview/render integration.
 
+Enable `OceanSettings::spectralDisplacement` for rolling waves. The extension
+derives horizontal travel from the direction and phase of each height mode,
+so the two faces converge toward the crest. It packs both horizontal components
+into one additional inverse FFT and reuses the height transform's scratch space.
+Setting choppiness to zero skips the extra transform. The default standalone
+mode retains the original slope-based displacement for existing callers.
+
 ## Bounded evaluation
 
 `admit(settings, limits)` validates settings before allocation and reports vector
@@ -38,5 +45,6 @@ gravity and normal strength. Invalid sampling coordinates return a neutral sampl
 The evaluator still uses absolute time and the original spectrum/FFT arithmetic;
 it does not accumulate foam history. There is no cancellation callback in this
 synchronous bounded API, no GPU compute implementation and no caustic lighting.
-Planetary Water settings, spherical sampling and renderer integration remain
-separate unfinished work.
+The Planetary Terrain extension selects spectral displacement for both initial
+mesh generation and timed water updates. Its shared water sampler owns spherical
+projection, shoreline clipping inputs and LOD transitions.

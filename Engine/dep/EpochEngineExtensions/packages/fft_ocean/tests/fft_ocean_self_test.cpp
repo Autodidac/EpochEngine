@@ -5,8 +5,10 @@
 #include <array>
 #include <bit>
 #include <cmath>
+#include <complex>
 #include <cstddef>
 #include <limits>
+#include <numbers>
 #include <utility>
 
 namespace ocean = epoch::extensions::fft_ocean;
@@ -75,6 +77,28 @@ namespace
         }
         return true;
     }
+
+    // Measure height and horizontal travel independently from the emitted grid.
+    // A crestward orbit leads height by a quarter-cycle in each spatial mode.
+    bool matches_orbit(const ocean::OceanTile& tile, int kx, int kz)
+    {
+        const int n = static_cast<int>(tile.resolution());
+        std::complex<double> height{}, dx{}, dz{};
+        for (int z = 0; z < n; ++z)
+            for (int x = 0; x < n; ++x)
+            {
+                const auto basis = std::polar(1.0 / (n * n),
+                    -2.0 * std::numbers::pi * (kx * x + kz * z) / n);
+                const auto& sample = tile.samples()[z * n + x];
+                height += basis * double(sample.heightMeters);
+                dx += basis * double(sample.displacementXMeters);
+                dz += basis * double(sample.displacementZMeters);
+            }
+        const double length = std::hypot(kx, kz);
+        const std::complex<double> lead{0.0, length > 0 ? tile.settings().choppiness / length : 0.0};
+        return std::abs(dx - lead * height * double(kx == n/2 ? 0 : kx)) < 0.00002
+            && std::abs(dz - lead * height * double(kz == n/2 ? 0 : kz)) < 0.00002;
+    }
 }
 
 int main()
@@ -93,6 +117,20 @@ int main()
         CHECK(tile.evaluate(3.25f));
         const auto first=hash(tile.samples());
         CHECK(matches_reference(tile.samples(), forwardReference));
+        auto rolling = settings;
+        rolling.spectralDisplacement = true;
+        ocean::OceanTile swell{rolling, {512, admission.memory.evaluationPeakBytes}};
+        CHECK(swell.evaluate(3.25f));
+        for (const auto mode : std::array{std::pair{0,0}, std::pair{1,0}, std::pair{0,1},
+                 std::pair{-2,1}, std::pair{1,16}, std::pair{16,-3}, std::pair{16,16}})
+            CHECK(matches_orbit(swell, mode.first, mode.second));
+        for (std::size_t i = 0; i < tile.samples().size(); ++i)
+            CHECK(swell.samples()[i].heightMeters == tile.samples()[i].heightMeters);
+        rolling.choppiness = 0;
+        CHECK(swell.reset(rolling));
+        CHECK(swell.evaluateAbsolute(-3.25));
+        for (const auto& sample : swell.samples())
+            CHECK(sample.displacementXMeters == 0 && sample.displacementZMeters == 0);
 #if defined(_MSC_VER) && !defined(__clang__)
         CHECK(first==17368026875614010600ull); // Retained MSVC Debug and Release bytes.
 #endif

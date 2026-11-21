@@ -158,6 +158,14 @@ export namespace epoch::extensions::planetary_terrain::water
         catch(...){return false;}
     }
 
+    [[nodiscard]] inline fft::Settings swell_settings(std::uint32_t seed) noexcept
+    {
+        fft::Settings settings;
+        settings.seed=seed;
+        settings.spectralDisplacement=true;
+        return settings;
+    }
+
     class Surface final
     {
     public:
@@ -166,8 +174,7 @@ export namespace epoch::extensions::planetary_terrain::water
         [[nodiscard]] bool evaluate(std::uint32_t seed,double seconds,
             std::uint64_t maximum_bytes=4u*1024u*1024u,std::stop_token stop={}) noexcept
         {
-            fft::Settings settings;settings.seed=seed;
-            const auto result=evaluator_.evaluate(settings,seconds,maximum_bytes,stop);
+            const auto result=evaluator_.evaluate(swell_settings(seed),seconds,maximum_bytes,stop);
             if(!result)return false;
             tile_=result.tile;return true;
         }
@@ -244,7 +251,8 @@ export namespace epoch::extensions::planetary_terrain::water
                         breaker_weight*shore_tint_strength);
                     vertex.color = wave::spherical_surface_color(body.radius - bed_radius,
                         sampled->foam, spacing_meters, wave_length_meters, false, shore_tint_strength,
-                        radius - body.radius,breaker_weight);
+                        radius - body.radius,breaker_weight,wave::spherical_face_incline_squared(
+                            sampled->normal,{direction.x,direction.y,direction.z}));
                     if(parent_delta)
                     {
                         std::array<float,3> delta{};

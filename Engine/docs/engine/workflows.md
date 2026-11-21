@@ -2626,6 +2626,12 @@ a second game manager. New games should extend the shared registration/factory
 and grid/input/resource owners, consolidating duplicated ID declarations where
 needed, rather than copying gameplay into every generated project.
 
+Launch `--editor --scene pacman --standalone` to open the 28 × 31 board
+directly. The player starts at (14, 23), with four ghosts near the center.
+The working tree has distinct player, ghost, pellet and wall sprites.
+Cabinet rendering and gameplay acceptance remain open. See the
+[native rendering checks](renderer_checks.md#built-in-pacman-scene).
+
 Minesweeper contains mine/count grids, left-click reveal and win/mine exit paths.
 The current scene sends an unrevealed zero into the existing flood routine. Its
 Debug and Release actual-owner fixture passed on November 17, covering the seed

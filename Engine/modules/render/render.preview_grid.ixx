@@ -631,7 +631,7 @@ namespace epochengine::previewgrid
         std::array<std::array<float,4>,water_crest_wave_count/4u> slopes{{
             {0.082f,0.087f,0.081f,0.089f}, {0.078f,0.083f,0.076f,0.080f}, {0.064f,0.071f,0.063f,0.068f}}};
         Vec3 center_meters{}, eye{}, sun{};
-        float meters_per_unit{}, sunlight{};
+        float meters_per_unit{}, sunlight{}, eye_altitude_meters{};
     };
     export [[nodiscard]] inline std::optional<WaterDetailParameters> water_detail_for(
         const PublishedSceneFrame& scene) noexcept
@@ -682,6 +682,7 @@ namespace epochengine::previewgrid
         }
         result.center_meters={static_cast<float>(-offset[0]),static_cast<float>(-offset[1]),static_cast<float>(-offset[2])};
         result.eye=eye;
+        result.eye_altitude_meters=static_cast<float>(height);
         result.meters_per_unit=static_cast<float>(scale);
         for(const auto& entry:scene.solids->lighting.lights)
         {

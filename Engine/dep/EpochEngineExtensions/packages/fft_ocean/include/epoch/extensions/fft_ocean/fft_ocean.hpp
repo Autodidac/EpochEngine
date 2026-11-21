@@ -22,6 +22,7 @@ namespace epoch::extensions::fft_ocean
         float foamSlopeThreshold = 0.72f;
         float gravity = 9.80665f;
         std::uint32_t seed = 0xE903'F00Du;
+        bool spectralDisplacement = false;
     };
 
     struct OceanSample

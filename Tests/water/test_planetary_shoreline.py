@@ -55,8 +55,9 @@ target_link_libraries(cache_consumer PRIVATE epoch_extension_planetary_water)
 target_link_options(cache_consumer PRIVATE "/MANIFEST:EMBED" "/MANIFESTINPUT:{ROOT.as_posix()}/Engine/resource/epoch.manifest")
 '''
         (source/'CMakeLists.txt').write_text(cmake_text,encoding='utf-8')
-        paths=[Path(__file__),consumer,cache_consumer,package/'modules/water.planetary.ixx',
-            package/'upstream/EpochPlanet-0.2.3/src/core/terrain.cpp',package/'CMakeLists.txt']
+        paths=[Path(__file__),consumer,cache_consumer,ROOT/'Engine/modules/water/water.wave.ixx',package/'modules/water.planetary.ixx',
+            package/'upstream/EpochPlanet-0.2.3/src/core/terrain.cpp',package/'CMakeLists.txt',
+            ocean/'src/fft_ocean.cpp',ocean/'include/epoch/extensions/fft_ocean/fft_ocean.hpp',ocean/'modules/water.fft.ixx']
         hashes=lambda:{str(p.relative_to(ROOT)).replace('\\','/'):hashlib.sha256(p.read_bytes()).hexdigest() for p in paths}
         before=hashes(); verdict={'passed':False,'source_sha256':before,'cache_sha256':cache_before,'invocations':[],'gpu_or_model_started':False}
         def run(name,cmd,timeout=120):

@@ -711,7 +711,8 @@ namespace epochengine::project_planetary_snapshot
                 value.normal=water::wave::spherical_shoaled_normal(sample->normal,vertex.direction,
                     radius-bed_radius,sampled_radius-radius,weight*tint);
                 value.color=water::wave::spherical_surface_color(radius-bed_radius,sample->foam,spacing,length,
-                    false,tint,sampled_radius-radius,weight);
+                    false,tint,sampled_radius-radius,weight,
+                    water::wave::spherical_face_incline_squared(sample->normal,vertex.direction));
             }
             if(stop.stop_requested())return {};
             const auto inserted=common.water.emplace(key,std::move(vertices));
@@ -1238,7 +1239,8 @@ namespace epochengine::project_planetary_snapshot
                     }
                     value.color=water::wave::spherical_surface_color(ocean_radius-bed_radius,
                         sampled->foam,spacing_meters,wave_length_meters,false,shore_tint_strength,
-                        radius-ocean_radius,breaker_weight);
+                        radius-ocean_radius,breaker_weight,
+                        water::wave::spherical_face_incline_squared(sampled->normal,basis.direction));
                     value.normal=water::wave::spherical_shoaled_normal(sampled->normal,basis.direction,
                         ocean_radius-bed_radius,radius-ocean_radius,breaker_weight*shore_tint_strength);
                     vertices.push_back(value);

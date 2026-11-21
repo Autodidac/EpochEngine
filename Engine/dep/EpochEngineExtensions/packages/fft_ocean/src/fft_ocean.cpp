@@ -330,29 +330,70 @@ namespace epoch::extensions::fft_ocean
                 }
             }
 
+            if (settings_.spectralDisplacement && settings_.choppiness > 0.0f)
+            {
+                // Each horizontal orbit is a quarter-cycle ahead of its height.
+                // Pack Dx + i*Dz into the same scratch array used for height.
+                // Odd derivatives vanish on their own self-conjugate Nyquist axis.
+                for (std::uint32_t z = 0; z < n; ++z)
+                {
+                    const int kz = z < n / 2 ? int(z) : int(z) - int(n);
+                    for (std::uint32_t x = 0; x < n; ++x)
+                    {
+                        const int kx = x < n / 2 ? int(x) : int(x) - int(n);
+                        const float k = std::sqrt(float(kx * kx + kz * kz));
+                        const auto index = std::size_t(z) * n + x;
+                        const Complex direction{z == n / 2 ? 0.0f : float(-kz),
+                                                x == n / 2 ? 0.0f : float(kx)};
+                        spatial[index] = k > 0.0f ? frequencyDomain_[index] * (direction / k) : Complex{};
+                    }
+                }
+                inverse_fft_2d(spatial, n);
+                for (std::size_t i = 0; i < nextSamples.size(); ++i)
+                {
+                    nextSamples[i].displacementXMeters = spatial[i].real() * spectrumToMeters * settings_.choppiness;
+                    nextSamples[i].displacementZMeters = spatial[i].imag() * spectrumToMeters * settings_.choppiness;
+                }
+            }
+
             const float cellSize = length / static_cast<float>(n);
             for (std::uint32_t z = 0u; z < n; ++z)
             {
                 for (std::uint32_t x = 0u; x < n; ++x)
                 {
                     OceanSample& out = nextSamples[z * n + x];
-                    const float hL = nextSamples[wrappedIndex(static_cast<std::int32_t>(x) - 1, static_cast<std::int32_t>(z))].heightMeters;
-                    const float hR = nextSamples[wrappedIndex(static_cast<std::int32_t>(x) + 1, static_cast<std::int32_t>(z))].heightMeters;
-                    const float hD = nextSamples[wrappedIndex(static_cast<std::int32_t>(x), static_cast<std::int32_t>(z) - 1)].heightMeters;
-                    const float hU = nextSamples[wrappedIndex(static_cast<std::int32_t>(x), static_cast<std::int32_t>(z) + 1)].heightMeters;
-
-                    const float slopeX = (hR - hL) / (2.0f * cellSize);
-                    const float slopeZ = (hU - hD) / (2.0f * cellSize);
+                    const auto& left = nextSamples[wrappedIndex(int(x)-1, int(z))];
+                    const auto& right = nextSamples[wrappedIndex(int(x)+1, int(z))];
+                    const auto& down = nextSamples[wrappedIndex(int(x), int(z)-1)];
+                    const auto& up = nextSamples[wrappedIndex(int(x), int(z)+1)];
+                    const float span = 2.0f * cellSize;
+                    const float slopeX = (right.heightMeters - left.heightMeters) / span;
+                    const float slopeZ = (up.heightMeters - down.heightMeters) / span;
                     const float invLength = 1.0f / std::sqrt(slopeX * slopeX + settings_.normalStrength * settings_.normalStrength + slopeZ * slopeZ);
                     if (!std::isfinite(invLength) || invLength <= 0.0f)
                         return {OceanCode::non_finite_output};
 
-                    out.displacementXMeters = -slopeX * settings_.choppiness;
-                    out.displacementZMeters = -slopeZ * settings_.choppiness;
+                    if (!settings_.spectralDisplacement)
+                    {
+                        out.displacementXMeters = -slopeX * settings_.choppiness;
+                        out.displacementZMeters = -slopeZ * settings_.choppiness;
+                    }
                     out.normalX = -slopeX * invLength;
                     out.normalY = settings_.normalStrength * invLength;
                     out.normalZ = -slopeZ * invLength;
                     out.foam = clamp01((std::sqrt(slopeX * slopeX + slopeZ * slopeZ) - settings_.foamSlopeThreshold) * 4.0f);
+                    if (settings_.spectralDisplacement && settings_.choppiness > 0.0f)
+                    {
+                        // The Jacobian measures how much horizontal surface area
+                        // remains. Converging orbits can whiten even a level crest.
+                        const float xx = (right.displacementXMeters-left.displacementXMeters)/span;
+                        const float zx = (right.displacementZMeters-left.displacementZMeters)/span;
+                        const float xz = (up.displacementXMeters-down.displacementXMeters)/span;
+                        const float zz = (up.displacementZMeters-down.displacementZMeters)/span;
+                        const float area = (1.0f+xx)*(1.0f+zz)-xz*zx;
+                        const float compression = 1.0f-area;
+                        out.foam = std::max(out.foam, clamp01((compression-0.5f*settings_.foamSlopeThreshold)*3.0f));
+                    }
                     for (const float value : {out.heightMeters, out.displacementXMeters, out.displacementZMeters,
                         out.normalX, out.normalY, out.normalZ, out.foam})
                         if (!std::isfinite(value)) return {OceanCode::non_finite_output};

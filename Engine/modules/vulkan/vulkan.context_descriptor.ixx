@@ -447,7 +447,7 @@ namespace epochengine::vulkancontext
             {
                 ubo.water_center_scale = {detail->center_meters.x, detail->center_meters.y,
                     detail->center_meters.z, detail->meters_per_unit};
-                ubo.water_eye = {detail->eye.x, detail->eye.y, detail->eye.z, 0.0f};
+                ubo.water_eye = {detail->eye.x, detail->eye.y, detail->eye.z, detail->eye_altitude_meters};
                 ubo.water_sun = {detail->sun.x, detail->sun.y, detail->sun.z, detail->sunlight};
                 for (std::size_t i = 0; i < ubo.water_waves.size(); ++i)
                 {

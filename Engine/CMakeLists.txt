@@ -2117,6 +2117,15 @@ target_sources(epoch PRIVATE
         BASE_DIRS ${EPOCH_MODULE_DIR}
         FILES ${EPOCH_ACTIVE_MODULE_FILES}
 )
+if(NOT EPOCH_BUILD_STATIC_RUNTIME)
+    # The normal Editor build must stage art changes even when no relink is needed.
+    add_custom_target(epoch_arcade_assets
+        COMMAND "${CMAKE_COMMAND}"
+            "-DEPOCH_ARCADE_DESTINATION=$<TARGET_FILE_DIR:epoch>/assets/games"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/epoch_stage_arcade_assets.cmake"
+        VERBATIM)
+    add_dependencies(epoch epoch_arcade_assets)
+endif()
 if(_epoch_managed_output AND NOT EPOCH_BUILD_STATIC_RUNTIME)
     # Configure-time shader/font/private assets must survive Intermediate cleanup.
     add_custom_command(TARGET epoch POST_BUILD

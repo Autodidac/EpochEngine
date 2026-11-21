@@ -81,7 +81,7 @@ class OutputLayout(unittest.TestCase):
         # Evaluate the SAME production props against both physical edition markers.
         for edition, value in (('development', 0), ('public', 1)):
             root = self.edition_fixture(edition, value)
-            project = root / 'output.proj'
+            project = root / 'EpochEditor.proj'
             project.write_text('<Project><PropertyGroup><Platform>x64</Platform>'
                 '<Configuration>Release</Configuration><ProjectName>Actual</ProjectName>'
                 '<ConfigurationType>Application</ConfigurationType></PropertyGroup>'
@@ -96,12 +96,18 @@ class OutputLayout(unittest.TestCase):
             assets = ('fonts/Roboto-Regular.ttf', 'vulkan/shaders/vert.spv',
                       'vulkan/shaders/clouds.vert.spv', 'vulkan/shaders/clouds.frag.spv')
             inputs = {asset: Path('Engine/assets') / asset for asset in assets}
+            game_root = ROOT / 'Engine/assets/games'
+            game_images = sorted(game_root.rglob('*.ppm'))
+            self.assertIn(game_root / 'apacmanlike/pacman.ppm', game_images)
+            for image in game_images:
+                inputs[image.relative_to(game_root.parent).as_posix()] = image.relative_to(ROOT)
             missing_assets = ['vulkan/shaders/clouds.frag.spv']
             for source in inputs.values():
                 target = root / source
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(ROOT / source, target)
-            stage = [str(msbuild), str(project), '/nologo', '/t:EpochStageSharedRuntimeAssets', '/verbosity:quiet']
+            stage = [str(msbuild), str(project), '/nologo', '/t:EpochStageSharedRuntimeAssets',
+                     '/p:VULKAN_SDK=', '/verbosity:quiet']
             for missing in missing_assets:
                 source = inputs[missing]
                 (root / source).unlink()

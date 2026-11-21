@@ -1502,6 +1502,10 @@ int main() {
   shifted.render_origin={257.0,0.0,-17.0};
   shifted.camera.eye.x-=257.0f;shifted.camera.eye.z+=17.0f;
   const auto shiftedWave=preview::water_detail_for(shifted);CHECK(shiftedWave);
+  CHECK(std::abs(shiftedWave->eye_altitude_meters-originalWave->eye_altitude_meters)<0.0001f);
+  const auto eye=waterFrame->camera.eye;
+  const auto altitude=std::hypot(double(eye.x)-2.0,double(eye.y)+20.0,double(eye.z))-20.0;
+  CHECK(std::abs(originalWave->eye_altitude_meters-altitude)<0.0001);
   for(std::size_t i=0;i<originalWave->waves.size();++i){
    const auto& first=originalWave->waves[i];const auto& second=shiftedWave->waves[i];
    const double a=2.0*first[0]+first[3];

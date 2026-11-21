@@ -424,8 +424,7 @@ namespace epoch::extensions::planetary_terrain::exploration_runtime
 #if defined(EPOCH_PLANET_HAS_WATER_EXTENSION)
                 if(binding.ocean_surface)
                 {
-                    epochengine::water::fft::Settings settings;settings.seed=binding.seed;
-                    water_=std::make_shared<epochengine::water::fft::Implementation>(settings);
+                    water_=std::make_shared<epochengine::water::fft::Implementation>(water::swell_settings(binding.seed));
                     water_lattice_=std::make_shared<const OriginalWaterLattice>(binding);
                 }
 #endif

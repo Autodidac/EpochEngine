@@ -71,6 +71,24 @@ float waterRolls(vec3 phase, vec3 phaseSine, vec3 phaseCosine, vec3 dx, vec3 dy,
     return foam * strength;
 }
 
+// Recover elevation from the short eye-to-surface vector. Subtracting two
+// planet-sized float radii loses the relief that distinguishes a crest.
+float breakingWhitewater(float eyeAltitude, vec3 radial, vec3 toEye, vec3 phase,
+                         vec3 dx, vec3 dy, float strength, float rippleFoam) {
+    vec3 up = normalize(radial);
+    vec3 eyeUp = normalize(radial + toEye);
+    float elevation = eyeAltitude - dot(toEye, up + eyeUp) / max(0.001, 1.0 + dot(up, eyeUp));
+    float lip = smoothstep(0.35, 1.05, elevation);
+    float resolved = 1.0 - smoothstep(0.18, 0.80, max(length(dx), length(dy)));
+    if (lip <= 0.0 || resolved <= 0.0) return 0.0;
+    // Long connected sections travel with each elevated ridge. Shorter
+    // crossing ripples fray the edges and leave gaps along the lip.
+    float band = sin(phase.y + 0.75 * sin(phase.z));
+    float strands = sin(2.0 * phase.x + phase.y + 0.85 * sin(phase.z - phase.x));
+    float patches = smoothstep(-0.25, 0.55, 0.62 * band + 0.38 * strands);
+    return resolved * lip * max(rippleFoam, strength * patches);
+}
+
 vec3 waterDetail(vec3 linearBase, vec3 dx, vec3 dy) {
     float waterScale = ubo.waterCenterScale.w;
     vec3 p = drawPosition * waterScale;
@@ -91,6 +109,8 @@ vec3 waterDetail(vec3 linearBase, vec3 dx, vec3 dy) {
     vec3 slope = vec3(0.0);
     float foam = waterRolls(longPhase, drift, warpRate, dx, dy, directionX, directionY, directionZ,
                             swellStrength, slope);
+    foam = breakingWhitewater(ubo.waterEye.w, p - ubo.waterCenterScale.xyz, toEye, longPhase,
+                              dx, dy, swellStrength, foam);
     float rippleStrength = 1.0 - smoothstep(40.0, 135.0, distanceToEye);
     if (rippleStrength > 0.0) {
         const vec3 warpX = vec3(0.27, 0.13, -0.21);
@@ -125,7 +145,7 @@ vec3 waterDetail(vec3 linearBase, vec3 dx, vec3 dy) {
     vec3 base = pow(clamp(linearBase, 0.0, 1.0), vec3(1.0 / 2.2));
     float daylight = smoothstep(-0.10, 0.38, dot(up, ubo.waterSun.xyz)) * ubo.waterSun.w;
     vec3 foamColor = mix(vec3(0.15, 0.21, 0.24), vec3(0.64, 0.74, 0.75), daylight);
-    vec3 adjusted = mix(clamp(base + delta, 0.0, 1.0), foamColor, foam * 0.40);
+    vec3 adjusted = mix(clamp(base + delta, 0.0, 1.0), foamColor, foam * 0.70);
     return pow(adjusted, vec3(2.2));
 }
 

@@ -56,6 +56,10 @@
       <EpochSharedRuntimeAssets Include="$(EpochRepositoryRoot)Engine\assets\fonts\**\*">
         <AssetDirectory>fonts\</AssetDirectory>
       </EpochSharedRuntimeAssets>
+      <EpochSharedRuntimeAssets Condition="'$(MSBuildProjectName)'=='EpochEditor'"
+                                Include="$(EpochRepositoryRoot)Engine\assets\games\**\*.ppm">
+        <AssetDirectory>games\</AssetDirectory>
+      </EpochSharedRuntimeAssets>
       <EpochSharedRuntimeAssets Include="$(EpochRepositoryRoot)Engine\assets\vulkan\**\*"
                                 Exclude="$(_EpochVulkanCloudSources)clouds.vert.spv;$(_EpochVulkanCloudSources)clouds.frag.spv">
         <AssetDirectory>vulkan\</AssetDirectory>

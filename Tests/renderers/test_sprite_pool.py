@@ -1,6 +1,7 @@
 """Compile and run standalone atlas registration and sprite pool lifetime using the production modules."""
 import os
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 import unittest
@@ -33,6 +34,15 @@ class SpritePool(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="sp-", dir=parent) as folder:
             work = Path(folder)
             build = work / "build"
+            player = engine / "assets/games/apacmanlike/pacman.ppm"
+            header = re.compile(rb"P6\r?\n(\d+) (\d+)\r?\n255\r?\n")
+            content = player.read_bytes()
+            match = header.match(content)
+            self.assertIsNotNone(match)
+            pixels = content[match.end():]
+            self.assertEqual(len(pixels), int(match[1]) * int(match[2]) * 3)
+            reference = work / "player.rgba"
+            reference.write_bytes(b"".join(pixels[i:i+3] + b"\xff" for i in range(0, len(pixels), 3)))
             for name, ending in (("lf", b"\n"), ("cr", b"\r"), ("crlf", b"\r\n")):
                 (work / (name + ".ppm")).write_bytes(ending.join((b"P6", b"1 1", b"255", bytes((10, 32, 9)))))
             env = dict(os.environ, TMP=folder, TEMP=folder, TMPDIR=folder,
@@ -51,7 +61,7 @@ target_sources(sprite_pool PRIVATE FILE_SET CXX_MODULES BASE_DIRS "{engine.as_po
             commands = [configure_arguments(work, build)]
             for config in ("Debug", "Release"):
                 commands += [["cmake", "--build", str(build), "--config", config, "--parallel", "1"],
-                             [str(executable(build, config, "sprite_pool")), str(engine / "assets/games/apacmanlike/pacman.ppm")]]
+                             [str(executable(build, config, "sprite_pool")), str(player), str(reference)]]
             for command in commands:
                 result = subprocess.run(command, cwd=work, env=env, capture_output=True, text=True, timeout=180)
                 self.assertEqual(result.returncode, 0, f"{command}:\n{result.stdout}{result.stderr}")
