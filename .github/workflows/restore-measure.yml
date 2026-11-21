@@ -1,0 +1,17 @@
+name: Measure Windows source update dependency space
+on:
+  push:
+    branches: [codex/measure-windows-restore-8470014e]
+permissions:
+  contents: read
+jobs:
+  measure:
+    runs-on: windows-2022
+    timeout-minutes: 130
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Measure a cold dependency restore
+        run: python -B .github/scripts/measure_restore.py
