@@ -6,16 +6,6 @@
 #include "updater.device_identity.hpp"
 #include "updater.distribution.hpp"
 
-#include <algorithm>
-#include <array>
-#include <cstdint>
-#include <cstdlib>
-#include <filesystem>
-#include <fstream>
-#include <system_error>
-#include <utility>
-#include <vector>
-
 #if EPOCH_EDITION_PUBLIC
 namespace epochengine::updater::device_identity
 {
@@ -26,7 +16,4 @@ namespace epochengine::updater::device_identity
     void clear_registered_device_id() noexcept {}
     std::string_view protection_name(KeyProtection) noexcept { return "Unavailable"; }
 }
-#else
-import core.path;
-
-#endif // EPOCH_EDITION_PUBLIC
+#endif

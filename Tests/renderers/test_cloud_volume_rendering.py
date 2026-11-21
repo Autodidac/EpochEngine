@@ -2,6 +2,7 @@
 from pathlib import Path
 import json,os,re,subprocess,time,unittest
 from Tests.build.test_opengl_sprite_stream import definition
+from Tools.build.generate_vulkan_cloud_shader import extract_cloud_trace
 ROOT=Path(__file__).resolve().parents[2]
 CLOUD_SHADER_OWNER=ROOT/'Engine/src/render/render.cloud_shader.hpp'
 
@@ -12,6 +13,97 @@ def desktop_cloud_shader_source():
                   lambda branch:branch.group(1) or '',source,flags=re.S|re.M)
 
 class CloudVolumeRendering(unittest.TestCase):
+    def test_portable_weather_lattice_matches_cpu(self):
+        from Tests.support.cpp import compile_and_run
+        cloud = extract_cloud_trace(CLOUD_SHADER_OWNER.read_text(encoding="utf-8"))
+        shader = definition(cloud, "uint hashWord(") + "\n" + definition(cloud, "float lattice(")
+        # API 31 SwiftShader 4 clamps larger source literals to INT_MAX.
+        for literal in re.findall(r'\b0x([0-9a-fA-F]+)[uU]\b', shader):
+            self.assertLessEqual(int(literal, 16), 0x7fffffff)
+        source = (ROOT / "Engine/modules/asset.cloud_volume.ixx").read_text(encoding="utf-8")
+        cpu = definition(source, "inline std::uint32_t hash(") + "\n" + definition(source, "inline double lattice(")
+        fixture = ROOT / "Artifacts/Reports/cloud-lattice" / str(time.time_ns())
+        fixture.mkdir(parents=True)
+        unit = fixture / "cloud.lattice.cpp"
+        unit.write_text("""
+#include <cmath>
+#include <cstdint>
+#include <initializer_list>
+namespace cpu {
+""" + cpu + """
+}
+using uint = std::uint32_t;
+struct ivec3 { int x, y, z; };
+""" + shader + """
+int main() {
+    for (int y = -75; y < 108; ++y) {
+        for (int x = -43; x < 46; ++x) {
+            for (uint seed : {0u, 2989955058u, 0xffffffffu}) {
+                if (std::abs(lattice({x, y, -22}, seed) - cpu::lattice(x, y, -22, seed)) > 6e-8)
+                    return 1;
+            }
+        }
+    }
+}
+""", encoding="utf-8")
+        compile_and_run(self, unit, fixture)
+
+    def test_android_cloud_frame_can_recover_without_recreating_context(self):
+        from Tests.support.cpp import compile_and_run
+        owner = ROOT / 'Engine/src/renderers/sdl/sdl.android_scene.cpp'
+        source = owner.read_text(encoding='utf-8')
+        start = source.index('namespace preview = epochengine::previewgrid;', source.index('bool begin('))
+        end = source.index('glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING', start)
+        # Exercise admission on one persistent pass with a stand-in for GLES sample count.
+        # The next GL query marks entry into rendering; no framebuffer is needed here.
+        code = r'''
+#include <algorithm>
+#include <cstdint>
+#include <optional>
+#include <vector>
+namespace epochengine::previewgrid {
+struct Marker { bool wireframe{}; };
+struct Scene { std::vector<bool> clouds{true}; std::vector<Marker> markers; int camera{}; };
+std::optional<int> cloud_volume_view(bool admitted, int) {
+    return admitted ? std::optional{1} : std::nullopt;
+}
+}
+using GLint = int;
+constexpr int GL_SAMPLES = 0;
+int sampleCount{};
+void glGetIntegerv(int, GLint* result) { *result = sampleCount; }
+struct Pass {
+    bool failed_{};
+    bool refuse(const char*) { failed_ = true; return false; }
+    bool begin(const epochengine::previewgrid::Scene& scene, int width, int height) {
+        ADMISSION
+        return true;
+    }
+};
+int main() {
+    Pass pass;
+    epochengine::previewgrid::Scene scene;
+    if (!pass.begin(scene, 800, 600)) return 1;
+    scene.clouds.push_back(true);
+    if (pass.begin(scene, 800, 600)) return 2;
+    scene.clouds = {false};
+    if (pass.begin(scene, 800, 600)) return 3;
+    scene.clouds = {true};
+    if (pass.begin(scene, 4000, 4000)) return 4;
+    sampleCount = 4;
+    if (pass.begin(scene, 800, 600)) return 5;
+    sampleCount = 0;
+    if (!pass.begin(scene, 800, 600)) return 6;
+    pass.failed_ = true;
+    return pass.begin(scene, 800, 600) ? 7 : 0;
+}
+'''.replace('ADMISSION', source[start:end])
+        report = ROOT / 'Artifacts/Reports/android-cloud-admission' / str(time.time_ns())
+        report.mkdir(parents=True)
+        fixture = report / 'cloud.admission.cpp'
+        fixture.write_text(code, encoding='utf-8')
+        compile_and_run(self, fixture, report)
+
     def test_actual_preview_pass_readback_restores_gl_state(self):
         from Tests.support.cpp import compile_and_run
         import hashlib
@@ -183,7 +275,7 @@ int main(){
         import hashlib
         owner=CLOUD_SHADER_OWNER
         native=desktop_cloud_shader_source()
-        fragment=native.split('inline constexpr std::string_view cloud_trace_source=R"glsl(',1)[1].split(')glsl";',1)[0]
+        fragment=extract_cloud_trace(native)
         illumination=definition(fragment,'vec3 cloudIllumination(')
         self.assertIn('vec3 illumination=cloudIllumination(samplePosition,ray,footprint,extinction);',fragment)
         illumination=re.sub(r'(?<![\w.])(\d+\.\d+)(?![\w.])',r'\1f',illumination)
@@ -316,7 +408,7 @@ int main(){
         owner=CLOUD_SHADER_OWNER
         native=desktop_cloud_shader_source()
         fragment=native.split('inline constexpr std::string_view fragment_source=R"glsl(',1)[1].split(')glsl";',1)[0]
-        tracer=native.split('inline constexpr std::string_view cloud_trace_source=R"glsl(',1)[1].split(')glsl";',1)[0]
+        tracer=extract_cloud_trace(native)
         composite=native.split('inline constexpr std::string_view composite_source=R"glsl(',1)[1].split(')glsl";',1)[0]
         body=definition(fragment,'void main(){').split('{',1)[1]
         setup=body[:body.index('// Derivatives must')]
@@ -413,7 +505,9 @@ Snapshot expected_ray(ivec2 pixel){
 double sphere_entry(const Snapshot& s,double radius){
  const std::array<double,3> o{s.origin.x,s.origin.y,s.origin.z};
  std::array<double,3> d{s.ray.x,s.ray.y,s.ray.z};double norm{};
- for(double v:d)norm+=v*v;norm=std::sqrt(norm);for(double& v:d)v/=norm;
+ for(double v:d)norm+=v*v;
+ norm=std::sqrt(norm);
+ for(double& v:d)v/=norm;
  double t{};for(unsigned a=0;a<3;++a)t-=o[a]*d[a];
  double square{};for(unsigned a=0;a<3;++a){const double v=o[a]+d[a]*t;square+=v*v;}
  if(square>=radius*radius)return std::numeric_limits<double>::infinity();
@@ -552,12 +646,12 @@ int main(){
         end=source.index('\n fraction=vec2(',start)
         # GLSL integer/vector arithmetic here runs independently on each axis.
         bracket=source[start:end].replace('ivec2','int').replace('vec2','float')
-        sdl=(ROOT/'Engine/src/renderers/sdl/sdl.cloud_volume.inl').read_text(encoding='utf-8')
+        sdl=(ROOT/'Engine/src/renderers/sdl/sdl.android_scene.cpp').read_text(encoding='utf-8')
         self.assertIn('cloudTraceDepthPixel(tracePixel,depthSize,uTraceSize)', source)
         self.assertIn('glViewport(window.x, window.y, window.width, window.height)', sdl)
         self.assertIn('texture(cloudColor, GL_RGBA8, grid_.width, grid_.height,', sdl)
         grid=sdl[sdl.index('    static constexpr int maxTracePixels'):
-                 sdl.index('    [[nodiscard]] TraceRegion trace_region')]
+                 sdl.index('[[nodiscard]] TraceRegion trace_region')]
         edge=re.sub(r'\b(\d+\.\d+)\b',r'\1f',definition(source,'float cloudTraceEdgeFraction('))
         code=r'''
 #include <algorithm>
@@ -644,7 +738,7 @@ int main(){
         import hashlib
         owner=CLOUD_SHADER_OWNER
         native=owner.read_text(encoding='utf-8')
-        fragment=native.split('inline constexpr std::string_view cloud_trace_source=R"glsl(',1)[1].split(')glsl";',1)[0]
+        fragment=extract_cloud_trace(native)
         sphere=definition(fragment,'bool sphere(')
         depth=definition(fragment,'float viewDepth(')
         begin=fragment.index('float rayProjection=')
@@ -658,7 +752,7 @@ int main(){
         self.assertIn('if(depth==1.0&&!uOrthographic&&uCloudAtmosphereThickness>0.0)',fragment)
         # Only GLSL syntax is lowered. The actual native clipping/intersection
         # expressions execute as float, including the sky-depth decision.
-        sphere=sphere.replace('out vec2 interval','vec2& interval').replace('interval=interval.yx','std::swap(interval.x,interval.y)')
+        sphere=sphere.replace('out vec2 interval','vec2& interval').replace('interval=interval.yx;','std::swap(interval.x,interval.y);\n ')
         intervals=intervals.replace('return vec4(0.0);','return {};')
         owners='\n'.join((sphere,depth,'Result trace(vec3 origin,vec3 ray,float depth){\n'+intervals+
             '\nreturn {first,second,firstLength,secondLength,total};\n}',
@@ -1051,7 +1145,7 @@ int main(){
          closure.add(name);pending+=re.findall(r'^(?:export\s+)?import\s+([\w.:]+);',module_map[name].read_text(encoding='utf-8-sig'),re.M)
         paths='\n'.join('"'+module_map[name].as_posix()+'"' for name in sorted(closure))
         bases=' '.join('"'+owner.as_posix()+'"' for owner in owners)
-        sources=' '.join('"'+(repo/p).as_posix()+'"' for p in ['Engine/src/render/render.preview_camera.cpp', 'Engine/src/render/render.preview_lighting.cpp','Engine/src/assets/texture/asset.texture_artifact.cpp','Engine/src/authoring/texture/authoring.texture_document.cpp','Engine/src/authoring/texture/authoring.texture_residency.cpp'])
+        sources=' '.join('"'+(repo/p).as_posix()+'"' for p in ['Engine/src/render/render.preview_camera.cpp', 'Engine/src/render/render.preview_lighting.cpp','Engine/src/assets/texture/asset.texture_artifact.cpp','Engine/src/authoring/texture/authoring.texture_document.cpp', 'Engine/src/authoring/texture/authoring.texture_snapshot_codec.cpp','Engine/src/authoring/texture/authoring.texture_residency.cpp'])
         (report/'CMakeLists.txt').write_text(f'''cmake_minimum_required(VERSION 3.30)
         set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT Embedded)
         project(CloudPacketContract LANGUAGES CXX)

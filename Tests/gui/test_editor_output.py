@@ -27,7 +27,7 @@ class EditorOutput(unittest.TestCase):
 #include <array>
 #include <cstdint>
 #include <filesystem>
-#include <format>
+#include "core.format_text.hpp"
 #include <optional>
 #include <span>
 #include <string>
@@ -48,7 +48,6 @@ namespace editor_ai_session_diagnostics{
 std::filesystem::path fallback_engine_root(){return{};}
 bool record_engine(const std::filesystem::path&,std::string_view,std::string_view,std::string_view){++archived;return true;}}
 HELPERS
-namespace epochengine{template<class...T>std::string format_text(std::format_string<T...> format,T&&... args){return std::format(format,std::forward<T>(args)...);}}
 namespace platform::child_process{
 enum class ProcessState{running,stop_requested};
 struct ProcessSnapshot{ProcessState state{};std::uint64_t platform_process_id{},runtime_ns{};};
@@ -130,7 +129,7 @@ int main(){
 '''.replace('ENUM',enum).replace('HELPERS',helpers).replace('HEADER',header).replace('CHOICE',choice).replace('ACTIVE_STATUS',active_status)
   proof=ROOT/'Artifacts/Reports/editor-output-oct29'/hashlib.sha256(code.encode()).hexdigest()[:12];proof.mkdir(parents=True,exist_ok=True)
   cpp=proof/'output.cpp';cpp.write_text(code,encoding='utf-8')
-  results=compile_and_run(self,cpp,proof)
+  results=compile_and_run(self,cpp,proof,includes=(ROOT/'Engine/include',))
   (proof/'result.json').write_text(json.dumps({'passed':True,'cases':results,'scope':'Actual log/category/search/cache/Run-detail owner and actual Output header/render choice with named GUI/archive ports; no native GUI/disk archive claim.'},indent=2),encoding='utf-8')
 
 if __name__=='__main__':unittest.main()

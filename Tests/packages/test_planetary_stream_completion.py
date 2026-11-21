@@ -3,6 +3,7 @@ from pathlib import Path
 from Tests.support.cpp import engine_module_source
 from Tests.platform.test_child_close_router import definition
 from Tests.support.cpp import compile_and_run
+from Tools.source.owned_source_text import read_owned_source
 import hashlib
 import json
 import os
@@ -169,19 +170,16 @@ int main(){using namespace project_planetary;Editor editor;
         (proof/'result.json').write_text(json.dumps(result,indent=2)+'\n')
 
     def test_moving_view_and_actual_completion_guards(self):
+        from Tests.support.project_play_owners import host_with_worker_ports, worker_members
         runtime_path = ROOT / 'Engine/src/epoch/implementation/epoch.project_play_scene.inl'
         editor_path = ROOT / 'Engine/src/editor/application/editor.application_packages_creation.inl'
-        runtime, editor = runtime_path.read_text(), editor_path.read_text()
+        runtime, editor = host_with_worker_ports(), editor_path.read_text(encoding='utf-8')
         outer = condition(runtime, 'if((!m_planetaryPaused||runtime_water_visibility_pending()) &&')
         outer = '(!m_planetaryPaused||runtime_water_visibility_pending()) &&' + outer
         successful = condition(runtime, 'if(result.operation.ok &&!result.operation.cancelled')
         successful = 'result.operation.ok &&!result.operation.cancelled' + successful
-        source = condition(runtime, 'if(m_meshPlanetarySource\n')
-        source = 'm_meshPlanetarySource\n' + source
-        # The disk/source verifier is a recorded port. Preserve its actual guard
-        # and call arguments; filesystem verification has its own owner consumer.
-        source = source[:source.index('&&result.snapshot->vertices()')]
-        source = source.replace('project_planetary::source_generation_is_current', 'source_is_current')
+        source = definition(runtime, '            [[nodiscard]] bool planetary_stream_source_matches(')
+        linked_wet = definition(runtime, '            [[nodiscard]] bool linked_wet_terrain(')
         begin = editor.index('const bool current = enabled &&', editor.index('void pump_planetary_stream('))
         current = editor[begin + len('const bool current = '):editor.index(';', begin)]
         success = condition(editor, 'else if (current && streamed.operation.ok &&')
@@ -192,7 +190,7 @@ int main(){using namespace project_planetary;Editor editor;
         source_editor = 'editor_planetary_stream_identity_matches(editor,*entityAt)' + source_editor
         source_editor = source_editor[:source_editor.index('&&streamed.snapshot->vertices()')]
         source_editor = source_editor.replace('project_planetary::mesh_generation_is_current', 'generation_is_current')
-        stationary = definition(runtime, '            [[nodiscard]] static bool planetary_view_changed(')
+        stationary = definition(worker_members(), '            [[nodiscard]] static bool planetary_view_changed(')
         time_reusable = definition(editor, '        [[nodiscard]] bool planetary_preview_time_reusable(')
         def statement(text, marker):
             start = text.index(marker)
@@ -203,7 +201,7 @@ int main(){using namespace project_planetary;Editor editor;
         runtime_ready = statement(runtime, 'if(!m_planetaryFailed&&(result.pending!=0u||planetary_view_changed(view,m_planetaryView)))')
         runtime_retarget = statement(runtime, 'if(result.operation.ok&&!result.operation.cancelled')
         editor_retarget = definition(editor, 'else if (enabled && viewValid && streamed.operation.ok && !streamed.operation.cancelled')
-        expressions = dict(runtime_outer=outer, runtime_success=successful, runtime_source=source,
+        expressions = dict(runtime_outer=outer, runtime_success=successful,
                            editor_current=current, editor_success=success,
                            editor_cancelled=cancelled, editor_source=source_editor)
         proof = ROOT / 'Artifacts/Reports/planet-moving-completion-oct27'
@@ -220,6 +218,8 @@ int main(){using namespace project_planetary;Editor editor;
 #include <optional>
 #include <string>
 import project.planetary;
+import project.planetary_snapshot;
+import asset.mesh_artifact;
 import planet.streaming;
 namespace project_planetary=epochengine::project_planetary;
 namespace planet=project_planetary;
@@ -231,7 +231,6 @@ struct TimelineState {double playhead_seconds{},playback_rate{1.0};bool playing{
 TIME_REUSABLE
 #define CHECK(x) do {if(!(x)) return __LINE__;}while(false)
 struct Source {bool current{true};std::filesystem::path project_root{"project"};std::string project_manifest{"manifest"},content_hash{"hash"};};
-bool source_is_current(const std::filesystem::path&,const Source& value){return value.current;}
 std::filesystem::path resolve_editor_path(const std::filesystem::path& value){return value;}
 bool generation_is_current(const std::filesystem::path&,const Source& value,const planet::Settings&,const planet::MeshGenerationIdentity&){return value.current;}
 struct MeshRef {std::string artifact_key{"fixed"};};
@@ -265,6 +264,12 @@ struct Editor {
 std::string planetary_project_key(const Editor&){return "identity";}
 bool editor_planetary_mesh_policy_current(const Editor& editor){return editor.source_current;}
 bool editor_planetary_stream_identity_matches(const Editor& editor,const Entity&){return editor.identity_current&&editor.planetaryMeshPolicy&&editor.planetaryMeshPolicy->generated_mesh.has_value();}
+namespace project_planetary_runtime {
+struct Binding {bool ocean_surface{};std::filesystem::path project_root{"project"};
+ std::string project_id{"identity"},source_hash{"linked"},water_source_hash{"water"};};
+std::optional<Binding> binding{Binding{}};
+const auto& admitted_project_binding(){return binding;}
+}
 struct Fixture {
  bool m_planetaryPaused{},m_explorationController{true};
  bool initialWater{};
@@ -277,7 +282,13 @@ struct Fixture {
  std::uint64_t m_planetarySequence{1};
  planet::StreamResult result;
  std::optional<Source> m_meshPlanetarySource{Source{}};
- std::string m_projectRoot{"project"};
+ std::filesystem::path m_projectRoot{"project"};
+ std::string m_projectId{"identity"};
+ bool m_linkedTerrain{};
+ struct Pose {planet::Settings settings;std::string planetary_source{"linked"},fft_source{"water"},recipe_key{"recipe"};};
+ std::optional<Pose> m_packagedPlanetaryPose;
+ struct PublishedWater {double time{};double seconds()const{return time;}};
+ std::optional<PublishedWater> m_presentedLinkedWater;
  Editor editor;
  MeshRef mesh;
  Entity entity{.meshAsset=&mesh};
@@ -294,7 +305,9 @@ struct Fixture {
   editor.planetaryStreamView=m_planetaryView;desiredView=view;
   streamed=result;}
  STATIONARY
- bool runtime_accepts(){return (RUNTIME_OUTER)&&(RUNTIME_SUCCESS)&&(RUNTIME_SOURCE);}
+ LINKED_WET
+ SOURCE_MATCHES
+ bool runtime_accepts(){return (RUNTIME_OUTER)&&(RUNTIME_SUCCESS)&&planetary_stream_source_matches(result);}
  bool editor_accepts(){const auto* entityAt=&entity;const auto* admittedSettings=&actualSettings;
   const bool current=(EDITOR_CURRENT);
   return !(EDITOR_CANCELLED)&&(EDITOR_SUCCESS)&&(EDITOR_SOURCE);}
@@ -392,6 +405,19 @@ int main(){
  {Fixture f;f.result.verified_source->project_root="foreign";CHECK(!f.runtime_accepts());}
  {Fixture f;f.result.verified_source->project_manifest="changed";CHECK(!f.runtime_accepts());}
  {Fixture f;f.result.verified_source->content_hash="changed";CHECK(!f.runtime_accepts());}
+ // The provider-bound land lane accepts the approved build without an FFT receipt.
+ // The wet lane needs a matching water result in addition to that same build.
+ {Fixture f;f.m_linkedTerrain=true;f.result.verified_source.reset();
+  f.m_planetarySettings->ocean_surface=false;f.m_planetaryRequestSettings=f.m_planetarySettings;
+  f.m_packagedPlanetaryPose=Fixture::Pose{*f.m_planetarySettings};
+  CHECK(f.runtime_accepts());f.m_projectId="other";CHECK(!f.runtime_accepts());f.m_projectId="identity";
+  f.m_packagedPlanetaryPose->planetary_source="changed";CHECK(!f.runtime_accepts());
+  f.m_packagedPlanetaryPose->planetary_source="linked";
+  f.m_planetarySettings->ocean_surface=true;f.m_planetaryRequestSettings=f.m_planetarySettings;
+  f.m_packagedPlanetaryPose->settings=*f.m_planetarySettings;
+  project_planetary_runtime::binding->ocean_surface=true;
+  CHECK(f.linked_wet_terrain()&&!f.runtime_accepts());
+  project_planetary_runtime::binding->ocean_surface=false;}
  {Fixture f;f.editor.identity_current=false;CHECK(!f.editor_accepts());}
  {Fixture f;f.editor.planetaryMeshPolicy.reset();CHECK(!f.editor_accepts());}
  {Fixture f;f.editor.planetaryMeshPolicy->generated_mesh.reset();CHECK(!f.editor_accepts());}
@@ -431,6 +457,7 @@ int main(){
 }
 '''
         code = code.replace('STATIONARY', stationary).replace('TIME_REUSABLE',time_reusable)
+        code = code.replace('LINKED_WET',linked_wet).replace('SOURCE_MATCHES',source)
         for key, value in dict(editor_backoff=editor_backoff, editor_ready=editor_ready,
                                runtime_backoff=runtime_backoff, runtime_ready=runtime_ready,
                                editor_retarget=editor_retarget, runtime_retarget=runtime_retarget).items():

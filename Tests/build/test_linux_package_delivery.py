@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 class LinuxPackageDelivery(unittest.TestCase):
     def fixture(self, folder, extra=None, marker_edition='epoch.public.github.v1',
-                runtime_body=b''):
+                runtime_body=b'', mode_override=None):
         version='0.90.183'; prefix='epoch_linux_x64_v'+version
         archive=Path(folder)/(prefix+'.tar.gz')
         elf=bytearray(20);elf[:6]=b'\x7fELF\x02\x01';elf[18:20]=b'\x3e\x00'
@@ -25,7 +25,10 @@ class LinuxPackageDelivery(unittest.TestCase):
                 'edition':marker_edition,'version':version}).encode()}
         with tarfile.open(archive,'w:gz') as tar:
             for name,data in files.items():
-                entry=tarfile.TarInfo(prefix+'/'+name);entry.size=len(data);tar.addfile(entry,io.BytesIO(data))
+                entry=tarfile.TarInfo(prefix+'/'+name);entry.size=len(data)
+                entry.mode = (mode_override if mode_override is not None else
+                              (0o755 if name == 'epoch' else 0o644))
+                tar.addfile(entry,io.BytesIO(data))
             if extra:
                 entry=tarfile.TarInfo(prefix+'/'+extra);entry.size=1;tar.addfile(entry,io.BytesIO(b'x'))
         digest=hashlib.sha256(archive.read_bytes()).hexdigest()
@@ -53,13 +56,21 @@ class LinuxPackageDelivery(unittest.TestCase):
             data['runtime_smoke']='not_run';receipt.write_text(json.dumps(data))
             with self.assertRaises(ValueError):audit.audit(archive)
 
-    def test_public_runtime_rejects_private_build_paths_in_both_formats(self):
+    def test_distributed_runtimes_reject_private_build_paths_in_both_formats(self):
         parent=ROOT/'build/contract-tests'
         parent.mkdir(parents=True,exist_ok=True)
         with tempfile.TemporaryDirectory(dir=parent,prefix='runtime-provenance-') as folder:
             private=b'/mnt/c/' + b'Users/Local Builder/release/lib/ossl-modules'
             with self.assertRaisesRegex(ValueError, 'Private build path'):
                 audit.audit(self.fixture(folder,runtime_body=private))
+            owner = 'epoch.development.site.v1'
+            archive = self.fixture(folder, marker_edition=owner, runtime_body=private)
+            receipt = Path(str(archive) + '.build-validation.json')
+            metadata = json.loads(receipt.read_text())
+            metadata['edition'] = owner
+            receipt.write_text(json.dumps(metadata))
+            with self.assertRaisesRegex(ValueError, 'Private build path'):
+                audit.audit(archive)
             hosted=b'/home/' + b'runner/work/epoch/Engine/a.ixx'
             audit.audit(self.fixture(folder,runtime_body=hosted))
             runtime=Path(folder)/'EpochEditor.exe'
@@ -72,6 +83,33 @@ class LinuxPackageDelivery(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'driver.dll') as error:
                 audit_windows_runtime(Path(folder))
             self.assertNotIn('Local Builder', str(error.exception))
+
+    def test_archive_assigns_linux_modes_independently_of_staging_filesystem(self):
+        parent = ROOT / 'build/contract-tests'
+        parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=parent, prefix='linux-modes-') as folder:
+            archive = self.fixture(folder, mode_override=0o777)
+            with self.assertRaisesRegex(ValueError, 'Incorrect Unix mode'):
+                audit.audit(archive)
+            stage = Path(folder) / archive.name.removesuffix('.tar.gz')
+            (stage / 'lib').mkdir(parents=True)
+            files = {'epoch': b'program', 'lib/engine.so': b'library', 'LICENSE': b'license'}
+            for name, data in files.items():
+                (stage / name).write_bytes(data)
+            audit.write_runtime_archive(stage, archive)
+            with tarfile.open(archive) as package:
+                self.assertEqual(package.getmember(stage.name).mode, 0o755)
+                for name, data in files.items():
+                    member = package.getmember(stage.name + '/' + name)
+                    self.assertEqual(member.mode, 0o644 if name == 'LICENSE' else 0o755)
+                    self.assertEqual(package.extractfile(member).read(), data)
+            previous = archive.read_bytes()
+            pending = archive.with_name(archive.name + '.partial')
+            pending.write_bytes(b'another writer')
+            with self.assertRaises(FileExistsError):
+                audit.write_runtime_archive(stage, archive)
+            self.assertEqual(archive.read_bytes(), previous)
+            self.assertEqual(pending.read_bytes(), b'another writer')
 
     def test_only_reviewed_platform_artifact_uploads_are_admitted(self):
         template = ROOT/'Tools/build/public_ci_workflow.yml'

@@ -12,3 +12,16 @@
 #ifndef EPOCH_EDITION_PUBLIC
 #define EPOCH_EDITION_PUBLIC EPOCH_SOURCE_EDITION_PUBLIC
 #endif
+
+// Source projection may remove engine self-coding without changing update identity.
+#ifdef EPOCH_SOURCE_SELF_CODING
+#error Epoch self-coding capability comes from the physical source tree
+#endif
+#define EPOCH_SOURCE_SELF_CODING (1 - EPOCH_SOURCE_EDITION_PUBLIC)
+#if EPOCH_SOURCE_EDITION_PUBLIC && EPOCH_SOURCE_SELF_CODING
+#error Public Epoch source cannot include engine self-coding
+#endif
+#if !EPOCH_SOURCE_EDITION_PUBLIC && !EPOCH_SOURCE_SELF_CODING \
+    && defined(EPOCH_BINARY_ONLY_DISTRIBUTION) && EPOCH_BINARY_ONLY_DISTRIBUTION
+#error Owner runtime requires the authenticated source updater
+#endif

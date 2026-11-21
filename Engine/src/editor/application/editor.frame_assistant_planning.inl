@@ -139,7 +139,7 @@
                 return false;
             }
 
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
             if (editor_ai_source_intent::requires_engine_source(request))
                 return start_engine_source_iteration(request);
             if (!project_ai_scope_allowed(editor.projectRoot))
@@ -829,7 +829,7 @@
             editor.aiDeferredDispatchQueued = false;
             editor.showAiModelConsentModal = false;
 
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
             const auto workload = requestKind == AiDeferredRequestKind::Authoring
                 || requestKind == AiDeferredRequestKind::Tooling
                     ? ai::InferenceWorkload::authoring : ai::InferenceWorkload::chat;
@@ -1306,10 +1306,10 @@
                 return AiChatIntent::ProjectChat;
             return std::nullopt;
         };
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
         start_engine_source_iteration = [&](std::string_view) -> bool
         {
-            chat.append_status("This edition assists your projects. Engine source editing is available only in the Development edition. No request was sent.");
+            chat.append_status("Project assistance is available. This build cannot send requests to edit engine source.");
             return true;
         };
 #endif
@@ -1324,7 +1324,7 @@
             }
             if (editor_ai_source_intent::requests_chat_only(input))
                 intent = AiChatIntent::ProjectChat;
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
             if (editor_ai_source_intent::requires_engine_source(input))
                 return start_engine_source_iteration(input);
             if (!project_ai_scope_allowed(editor.projectRoot))
@@ -1333,7 +1333,7 @@
                 return false;
             }
 #endif
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
             chat.statusRequestKind = AiDeferredRequestKind::Chat;
 #endif
             switch (intent)
@@ -1422,7 +1422,7 @@
             const bool toolPlanAwaitingApproval = editor.aiToolPlan
                 && !editor.aiToolPlanApplied;
             const bool toolTestPending = editor.aiToolTestPending.has_value();
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
             constexpr bool sourceActionPending = false;
 #endif
             if (toolTestPending)

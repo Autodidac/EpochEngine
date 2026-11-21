@@ -41,6 +41,8 @@ def check_source(root: Path, expected: str) -> None:
     if not (root / 'Engine/CMakeLists.txt').is_file():
         raise RuntimeError('Source root lacks the engine build definition')
     if expected == 'epoch.development.site.v1':
+        if '#define EPOCH_SOURCE_SELF_CODING 0' in text.splitlines():
+            raise RuntimeError('Development projects require the full source profile')
         return
 
     manifest_file = root / 'source-projection.json'

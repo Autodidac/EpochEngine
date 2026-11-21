@@ -133,6 +133,12 @@ int main(){
  host.queue_project_gui_action({.kind=rt::EventKind::activated,.action="pause"});CHECK(host.m_pendingGuiActions[4]);
  host.m_gameplayRuntime=std::make_unique<GameplayPort>();
  CHECK(host.project_gui_action_available("jump")&&host.project_gui_action_available("pause"));
+ host.m_packagedShoreline.emplace();
+ CHECK(host.project_gui_action_available("pause"));
+ host.m_packagedShoreline->allow_flight=true;
+ host.refresh_project_gui_actions();
+ CHECK(host.m_projectGuiRuntime->focus(pause)==rt::RuntimeCode::disabled_widget);
+ CHECK(host.project_gui_action_available("jump"));
  CHECK(!host.project_gui_action_available("editor.return"));
  host.m_canReturnToEditor=true;
  CHECK(host.project_gui_action_available("editor.return")&&!host.project_gui_action_available("unknown"));
@@ -195,6 +201,8 @@ struct Owner{
  std::unique_ptr<rt::RuntimeSession>m_projectGuiRuntime;
  std::unique_ptr<GameplayPort>m_gameplayRuntime;
  std::optional<GameplayPort::Profile>m_projectInput;
+ struct ShorelinePort{bool allow_flight{};};
+ std::optional<ShorelinePort>m_packagedShoreline;
  bool m_explorationController{},m_canReturnToEditor{};
  struct Input{project_planetary_runtime::Command command{};}m_explorationInput;
  std::string m_projectGuiStatus,m_projectRoot;bool guiLoaded{};

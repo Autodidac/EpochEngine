@@ -7,6 +7,7 @@ import subprocess
 import unittest
 
 from Tests.build.test_opengl_sprite_stream import definition
+from Tests.support.project_play_owners import HUD
 
 ROOT = Path(__file__).resolve().parents[2]
 CONTROL = ROOT / "Engine/modules/gui/gui.frame_limit_control.ixx"
@@ -123,9 +124,11 @@ class LiveFrameLimit(unittest.TestCase):
         owner = (ROOT / "Engine/src/epoch/implementation/epoch.project_play_scene.inl").read_text(encoding="utf-8")
         header = owner[owner.index("                        draw_runtime_controls_hide(controlsContentWidth);"):]
         self.assertLess(header.index("draw_runtime_frame_limit(ctx, controlsContentWidth)"), header.index("gui::begin_scroll_area"))
-        adapter = definition(owner, "            void draw_runtime_frame_limit(")
+        dispatch = definition(owner, "            void draw_runtime_frame_limit(")
+        self.assertIn('project_play_hud::draw_runtime_frame_limit(ctx,contentWidth,m_runtimeFrameLimitEdits)', dispatch)
+        adapter = definition(HUD.read_text(encoding='utf-8'), "    void draw_runtime_frame_limit(")
         self.assertIn("ctx && ctx->windowData ? &ctx->windowData->editorFramePacingOverride : nullptr", adapter)
-        self.assertIn("m_runtimeFrameLimitEdits[ctx.get()]", adapter)
+        self.assertIn("edits[ctx.get()]", adapter)
         self.assertNotIn("persist_", adapter)
         self.assertNotIn("editorThrottleHz", adapter)
         for flag in ("frame_limit_fps", "frame_limit_explicit", "frame_vsync_requested"):

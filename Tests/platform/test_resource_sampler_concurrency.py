@@ -3,6 +3,7 @@ from pathlib import Path
 import hashlib
 import json
 import os
+import sys
 import time
 import unittest
 
@@ -308,6 +309,69 @@ def types():
 
 
 class ResourceSamplerConcurrency(unittest.TestCase):
+    @unittest.skipUnless(sys.platform.startswith("linux"), "Linux procfs native telemetry")
+    def test_linux_epoch_cpu_rss_and_owned_child(self):
+        report = ROOT / "Artifacts/Reports/linux-epoch-process-sample" / str(time.time_ns())
+        report.mkdir(parents=True)
+        declarations = ("namespace epochengine::platform::work_admission {\n"
+            + "enum class GpuTelemetrySource : std::uint8_t { unavailable, nvidia_nvml, windows_pdh_process };\n"
+            + types() + "\nstd::uint64_t now_milliseconds() noexcept;\n}\n")
+        source = OWNER.read_text(encoding="utf-8")
+        body = source.replace("module;", "", 1).replace("module platform.work_admission;", declarations, 1)
+        fixture = report / "consumer.cpp"
+        fixture.write_text(body + r'''
+#include <cassert>
+#include <csignal>
+#include <sys/prctl.h>
+#include <sys/wait.h>
+int main() {
+    using namespace epochengine::platform::work_admission;
+    using namespace std::chrono_literals;
+    const auto first = sample_epoch_resources();
+    assert(first.process_count == 1 && first.memory_valid && first.resident_memory_bytes > 0);
+    assert(!first.cpu_valid && !first.coverage_complete && !first.gpu.busy_valid && !first.gpu.memory_valid);
+    assert(!read_linux_process(getppid(), getpid()));
+    int ready[2]; assert(pipe(ready) == 0);
+    const auto editor = getpid();
+    pid_t child = -1;
+    std::atomic_bool quit{};
+    // Keep the launching task alive while procfs is enumerated.
+    std::thread launcher([&] {
+        child = fork(); assert(child >= 0);
+        if (!child) {
+            if (prctl(PR_SET_PDEATHSIG, SIGKILL) || getppid() != editor) _exit(2);
+            static volatile char resident[16 * 1024 * 1024];
+            for (std::size_t i = 0; i < sizeof resident; i += 4096) resident[i] = 1;
+            if (write(ready[1], "y", 1) != 1) _exit(3);
+            for (;;) (void)getpid();
+        }
+        while (!quit.load()) std::this_thread::sleep_for(10ms);
+    });
+    char started{}; assert(read(ready[0], &started, 1) == 1);
+    const auto cached = sample_epoch_resources();
+    assert(cached.captured_at_ms == first.captured_at_ms && cached.process_count == 1);
+    std::this_thread::sleep_for(1100ms);
+    const auto added = sample_epoch_resources();
+    assert(added.process_count == 2 && !added.cpu_valid && added.memory_valid);
+    assert(added.resident_memory_bytes >= first.resident_memory_bytes + 12 * 1024 * 1024);
+    std::this_thread::sleep_for(1100ms);
+    const auto busy = sample_epoch_resources();
+    assert(busy.cpu_valid && busy.cpu_busy_fraction > 0 && busy.cpu_busy_fraction <= 1);
+    assert(!busy.gpu.busy_valid && !busy.gpu.memory_valid && !busy.coverage_complete);
+    quit = true; launcher.join(); assert(kill(child, SIGKILL) == 0); assert(waitpid(child, nullptr, 0) == child);
+    close(ready[0]); close(ready[1]);
+    std::this_thread::sleep_for(1100ms);
+    const auto retired = sample_epoch_resources();
+    assert(retired.process_count == 1 && !retired.cpu_valid && retired.memory_valid);
+    std::this_thread::sleep_for(1100ms);
+    assert(sample_epoch_resources().cpu_valid);
+}
+''', encoding="utf-8")
+        records = compile_and_run(self, fixture, report, includes=(OWNER.parent,))
+        (report / "result.json").write_text(json.dumps({"owner_sha256": hashlib.sha256(OWNER.read_bytes()).hexdigest(),
+            "invocations": records, "observed": "Editor and direct child CPU and RSS, churn warmup, unavailable GPU"},
+            indent=2) + "\n", encoding="utf-8")
+
     def test_counterfactual_actual_owner(self):
         source = OWNER.read_text(encoding="utf-8")
         if "bool start_gpu_telemetry(" in source:

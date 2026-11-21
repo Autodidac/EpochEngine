@@ -38,6 +38,39 @@ vec3 waterReflection(vec3 up, vec3 normal, vec3 eye, vec4 sun) {
     return sky * (0.25 + 0.75 * daylight) * fresnel + sunTint * specular * masking * visibleSun;
 }
 
+// Sharpen the front of the long swells. Neighboring phases give a crest
+// both broad gaps and broken edges, and every foam term follows its phase.
+float waterRolls(vec3 phase, vec3 phaseSine, vec3 phaseCosine, vec3 dx, vec3 dy,
+                 vec3 waveX, vec3 waveY, vec3 waveZ, float strength, inout vec3 slope) {
+    vec3 waves[3] = vec3[3](waveX, waveY, waveZ);
+    const vec3 steepness = vec3(0.080, 0.115, 0.165);
+    float foam = 0.0;
+    for (int i = 0; i < 3; ++i) {
+        int transverse = (i + 1) % 3;
+        int crossing = (i + 2) % 3;
+        vec3 wave = waves[i];
+        float footprint = abs(dot(wave, dx)) + abs(dot(wave, dy));
+        float resolved = 1.0 - smoothstep(0.65, 2.45, footprint);
+        float s = phaseSine[i], c = phaseCosine[i];
+        float group = 0.60 * phaseCosine[transverse] + 0.40 * phaseSine[crossing];
+        float envelope = 0.30 + 0.70 * smoothstep(-0.60, 0.65, group);
+        float front = 0.80 * c + 0.52 * s * c + 0.22 * (1.0 - 2.0 * s * s);
+        slope += normalize(wave) * (front * steepness[i] * envelope * resolved * strength);
+        // Whitecap fragments trail the sharp front and vanish before the
+        // fine pattern becomes smaller than a pixel.
+        float height = 0.80 * s + 0.26 * s * s + 0.22 * s * c;
+        if (height <= 0.91 || group <= 0.45 || footprint >= 0.70) continue;
+        float whiten = (1.0 - smoothstep(0.20, 0.70, footprint)) * smoothstep(0.45, 0.84, group);
+        float lip = smoothstep(0.91, 1.06, height);
+        float edge = abs(dot(waves[transverse] - 2.0 * waves[crossing], dx))
+                   + abs(dot(waves[transverse] - 2.0 * waves[crossing], dy));
+        float breakup = (1.0 - smoothstep(0.28, 0.90, edge))
+                     * smoothstep(0.25, 0.85, sin(phase[transverse] - 2.0 * phase[crossing]));
+        foam = max(foam, whiten * lip * mix(0.22, 1.0, breakup));
+    }
+    return foam * strength;
+}
+
 vec3 waterDetail(vec3 linearBase, vec3 dx, vec3 dy) {
     float waterScale = ubo.waterCenterScale.w;
     vec3 p = drawPosition * waterScale;
@@ -54,20 +87,15 @@ vec3 waterDetail(vec3 linearBase, vec3 dx, vec3 dy) {
     vec3 up = normalize(p - ubo.waterCenterScale.xyz);
     vec3 eye = toEye / distanceToEye;
     vec3 warpRate = cos(longPhase);
-    // Resolve the longer swells independently of the short crest spectrum.
+    vec3 drift = sin(longPhase);
     vec3 slope = vec3(0.0);
-    for (int i = 0; i < 3; ++i) {
-        vec3 wave = ubo.waterWaves[12 + i].xyz;
-        float footprint = abs(dot(wave, dx)) + abs(dot(wave, dy));
-        float resolved = 1.0 - smoothstep(0.65, 2.45, footprint);
-        slope += normalize(wave) * (warpRate[i] * resolved * 0.048 * swellStrength);
-    }
+    float foam = waterRolls(longPhase, drift, warpRate, dx, dy, directionX, directionY, directionZ,
+                            swellStrength, slope);
     float rippleStrength = 1.0 - smoothstep(40.0, 135.0, distanceToEye);
     if (rippleStrength > 0.0) {
         const vec3 warpX = vec3(0.27, 0.13, -0.21);
         const vec3 warpY = vec3(0.11, -0.23, -0.19);
         const vec3 warpZ = vec3(0.15, 0.09, 0.18);
-        vec3 drift = sin(longPhase);
         vec3 warped = p + warpX * drift.x + warpY * drift.y + warpZ * drift.z;
         dx += warpX * (dot(directionX, dx) * warpRate.x)
             + warpY * (dot(directionY, dx) * warpRate.y) + warpZ * (dot(directionZ, dx) * warpRate.z);
@@ -88,14 +116,16 @@ vec3 waterDetail(vec3 linearBase, vec3 dx, vec3 dy) {
                    * (cos(dot(wave.xyz, warped) + wave.w) * crest * resolved * crestEnvelope * rippleStrength);
         }
     }
-    if (dot(slope, slope) == 0.0) return linearBase;
+    if (dot(slope, slope) == 0.0 && foam == 0.0) return linearBase;
     vec3 normal = normalize(up - (slope - up * dot(up, slope)));
     // The opaque base already includes the broad reflection. Calculate the
     // shared display-space adjustment and restore Vulkan's linear output.
     vec3 delta = waterReflection(up, normal, eye, ubo.waterSun)
                - waterReflection(up, up, eye, ubo.waterSun);
     vec3 base = pow(clamp(linearBase, 0.0, 1.0), vec3(1.0 / 2.2));
-    vec3 adjusted = clamp(base + delta, 0.0, 1.0);
+    float daylight = smoothstep(-0.10, 0.38, dot(up, ubo.waterSun.xyz)) * ubo.waterSun.w;
+    vec3 foamColor = mix(vec3(0.15, 0.21, 0.24), vec3(0.64, 0.74, 0.75), daylight);
+    vec3 adjusted = mix(clamp(base + delta, 0.0, 1.0), foamColor, foam * 0.40);
     return pow(adjusted, vec3(2.2));
 }
 

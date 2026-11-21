@@ -14,6 +14,7 @@ import subprocess
 from validate_source_size import CPP_EXTENSIONS, linked
 
 ROOTS = {"Engine", "Tools", "Tests", "Changes", "ReleaseNotes", "Images", ".github"}
+SOURCE_BUILD_DIRS = {"Engine/docs/build", "Engine/src/build", "Tests/build", "Tools/build"}
 GENERATED = {".git", ".codex", ".agents", "artifacts", "cache", "caches", "logs",
              "captures", "projects", "node_modules", "vcpkg_installed", "__pycache__",
              "bin", "built", "x64", "x86", "debug", "release", "releasewithdebuginfo"}
@@ -52,8 +53,7 @@ def in_scope(relative):
     for index, part in enumerate(parts[:-1]):
         if part.lower() in GENERATED:
             return False
-        if part.lower() == "build" and tuple(parts[:index + 1]) not in {
-                ("Tools", "build"), ("Engine", "src", "build"), ("Engine", "docs", "build")}:
+        if part.lower() == "build" and "/".join(parts[:index + 1]) not in SOURCE_BUILD_DIRS:
             return False
     return True
 
@@ -155,7 +155,7 @@ def collect(root, additional_archives=(), release_directory="Artifacts/Runtime/w
             "source_version": version, "version_error": version_error, "git_head": head, "branch": git(root, "branch", "--show-current").decode().strip(),
             "dirty_files_before": dirty_before, "dirty_files_after": dirty_count(root),
             "scope": {"roots": sorted(ROOTS), "include_root_files": True, "file_selection": "git cached + nonignored untracked; existing physical files only",
-                      "generated_directory_exclusions": sorted(GENERATED), "build_directory_exceptions": ["Tools/build", "Engine/src/build", "Engine/docs/build"],
+                      "generated_directory_exclusions": sorted(GENERATED), "build_directory_exceptions": sorted(SOURCE_BUILD_DIRS),
                       "dependency_authority": "Engine/dep/dependencies.json", "line_definition": "Physical lines (LF-delimited, final unterminated line counts); nonblank excludes whitespace-only lines. Comments, directives and embedded templates count; this is not executable/logical LOC. No include expansion or content deduplication.",
                       "archive_directories_nonrecursive": archive_dirs, "release_directory": release_directory},
             "repository_files": totals(files), "first_party_cpp_including_tests": totals(cpp),

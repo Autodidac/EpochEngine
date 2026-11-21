@@ -13,15 +13,6 @@
     <Filter Include="Implementation Files\ai\implementation">
       <UniqueIdentifier>{c659c028-dfcd-2ecd-1114-4f4c1494442d}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Implementation Files\authoring">
-      <UniqueIdentifier>{8063479a-524e-61a4-3d75-d9178af3646a}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Implementation Files\authoring\texture">
-      <UniqueIdentifier>{37e65662-b034-76aa-8e8c-e7f0ec4e4ea6}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Implementation Files\authoring\texture\implementation">
-      <UniqueIdentifier>{b03fe8f5-59b6-0f9c-3069-60bec90455d2}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Implementation Files\editor">
       <UniqueIdentifier>{df3c4cf2-34c9-db3f-251a-879ebf84eb92}</UniqueIdentifier>
     </Filter>
@@ -51,9 +42,6 @@
     </Filter>
     <Filter Include="Implementation Files\renderers\host\implementation">
       <UniqueIdentifier>{23bcab57-68b4-6633-716a-88b826a5d95b}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Implementation Files\renderers\sdl">
-      <UniqueIdentifier>{7fd81a58-58ce-1c37-6a29-da4b5287a0cc}</UniqueIdentifier>
     </Filter>
     <Filter Include="Implementation Files\updater">
       <UniqueIdentifier>{f692a16c-c2e5-2d23-36ed-31a8c0d86bae}</UniqueIdentifier>
@@ -85,6 +73,9 @@
     <Filter Include="Internal Headers\platform">
       <UniqueIdentifier>{653f199b-916d-edef-fbfe-26cc22922c1d}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Internal Headers\project">
+      <UniqueIdentifier>{80be0b30-8ec7-00b7-0b48-2fd09f2a4ef0}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Internal Headers\render">
       <UniqueIdentifier>{79765d47-1aa0-f550-a7a7-8ac9dec53a76}</UniqueIdentifier>
     </Filter>
@@ -102,6 +93,9 @@
     </Filter>
     <Filter Include="Internal Headers\renderers\opengl">
       <UniqueIdentifier>{497f2b78-81f5-4624-f5c9-c3e2c2cc4628}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Internal Headers\renderers\sdl">
+      <UniqueIdentifier>{76071a2f-2a37-865f-58a6-0ae3b37a8bbe}</UniqueIdentifier>
     </Filter>
     <Filter Include="Internal Headers\renderers\vulkan">
       <UniqueIdentifier>{2deb13f6-fd86-7022-4e7d-2aa530456edf}</UniqueIdentifier>
@@ -1267,6 +1261,9 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\opengl\core.context_opengl.cpp">
       <Filter>Source Files\renderers\opengl</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\sdl\sdl.android_scene.cpp">
+      <Filter>Source Files\renderers\sdl</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\renderers\sdl\core.context_sdl.cpp">
       <Filter>Source Files\renderers\sdl</Filter>
     </ClCompile>
@@ -1387,6 +1384,12 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch\epoch.engine_legacy.cpp">
       <Filter>Source Files\epoch</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch\epoch.artifact_acceptance.cpp">
+      <Filter>Source Files\epoch</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\epoch\epoch.project_validation.cpp">
+      <Filter>Source Files\epoch</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\updater\updater.device_identity.cpp">
       <Filter>Source Files\updater</Filter>
     </ClCompile>
@@ -1402,10 +1405,16 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\epochgui\gui.engine.cpp">
       <Filter>Source Files\epochgui</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\epochgui\gui.window_theme.cpp">
+      <Filter>Source Files\epochgui</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\epochgui\gui.docking_adapter.cpp">
       <Filter>Source Files\epochgui</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\epochgui\gui.clipboard.cpp">
+      <Filter>Source Files\epochgui</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\epochgui\gui.context_roles.cpp">
       <Filter>Source Files\epochgui</Filter>
     </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\scripts\scripting.compiler_engine.cpp">
@@ -1830,6 +1839,24 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.planetary_snapshot.cpp">
       <Filter>Source Files\project</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.planetary_play.cpp">
+      <Filter>Source Files\project</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.play_assets.cpp">
+      <Filter>Source Files\project</Filter>
+    </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\project\project.play_hud.cpp">
+      <Filter>Source Files\project</Filter>
+    </ClCompile>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\project\project.planetary_play.hpp">
+      <Filter>Internal Headers\project</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\project\project.play_assets.hpp">
+      <Filter>Internal Headers\project</Filter>
+    </ClInclude>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\project\project.play_hud.hpp">
+      <Filter>Internal Headers\project</Filter>
+    </ClInclude>
     <ClCompile Include="$(MSBuildThisFileDirectory)modules\project\project.lifecycle.ixx">
       <Filter>Module Files\project</Filter>
     </ClCompile>
@@ -2067,6 +2094,9 @@
     <ClCompile Include="$(MSBuildThisFileDirectory)src\authoring\texture\authoring.texture_residency.cpp">
       <Filter>Source Files\authoring\texture</Filter>
     </ClCompile>
+    <ClCompile Include="$(MSBuildThisFileDirectory)src\authoring\texture\authoring.texture_snapshot_codec.cpp">
+      <Filter>Source Files\authoring\texture</Filter>
+    </ClCompile>
     <ClCompile Include="$(MSBuildThisFileDirectory)src\assets\tilemap\asset.tilemap_artifact.cpp">
       <Filter>Source Files\assets\tilemap</Filter>
     </ClCompile>
@@ -2233,9 +2263,6 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.frame_project_runtime.inl">
       <Filter>Implementation Files\editor\application</Filter>
     </ClInclude>
-    <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.frame_source_dispatch.inl">
-      <Filter>Implementation Files\editor\application</Filter>
-    </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\application\editor.frame_toolbar_dock_targets.inl">
       <Filter>Implementation Files\editor\application</Filter>
     </ClInclude>
@@ -2249,9 +2276,6 @@
       <Filter>Implementation Files\epochgui\controls</Filter>
     </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)src\epochgui\controls\gui.buttons_images.inl">
-      <Filter>Implementation Files\epochgui\controls</Filter>
-    </ClInclude>
-    <ClInclude Include="$(MSBuildThisFileDirectory)src\epochgui\controls\gui.context_roles.inl">
       <Filter>Implementation Files\epochgui\controls</Filter>
     </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)src\epochgui\controls\gui.frame_lifecycle.inl">
@@ -2272,9 +2296,6 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)src\epochgui\controls\gui.window_controls.inl">
       <Filter>Implementation Files\epochgui\controls</Filter>
     </ClInclude>
-    <ClInclude Include="$(MSBuildThisFileDirectory)src\authoring\texture\implementation\authoring.texture_binary_codec.inl">
-      <Filter>Implementation Files\authoring\texture\implementation</Filter>
-    </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)src\editor\implementation\editor.scene_commands.inl">
       <Filter>Implementation Files\editor\implementation</Filter>
     </ClInclude>
@@ -2290,8 +2311,8 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)src\epoch\implementation\epoch.contracts_engine.inl">
       <Filter>Implementation Files\epoch\implementation</Filter>
     </ClInclude>
-    <ClInclude Include="$(MSBuildThisFileDirectory)src\epoch\implementation\epoch.contracts_project.inl">
-      <Filter>Implementation Files\epoch\implementation</Filter>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\epoch\epoch.project_validation.hpp">
+      <Filter>Internal Headers\epoch</Filter>
     </ClInclude>
     <ClInclude Include="$(MSBuildThisFileDirectory)src\epoch\implementation\epoch.session_editor_launcher.inl">
       <Filter>Implementation Files\epoch\implementation</Filter>
@@ -2340,8 +2361,8 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\host\implementation\host.native_dispatch.inl">
       <Filter>Implementation Files\renderers\host\implementation</Filter>
     </ClInclude>
-    <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\sdl\sdl.cloud_volume.inl">
-      <Filter>Implementation Files\renderers\sdl</Filter>
+    <ClInclude Include="$(MSBuildThisFileDirectory)src\renderers\sdl\sdl.android_scene.hpp">
+      <Filter>Internal Headers\renderers\sdl</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

@@ -132,7 +132,7 @@
             return editor.aiWorkToken != 0u;
         }
 
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
         [[nodiscard]] bool ai_source_native_work_active(const EditorState& editor, const AiChat& chat) noexcept
         {
             return chat.pending || chat.worker.joinable() || chat.requestRetirementFailed

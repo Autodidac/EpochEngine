@@ -1,9 +1,8 @@
 # Android bring-up
 
-Android is the first mobile priority. The saved Calculator runs on x86_64
-Android 12 (API 31) and Android 16 (API 36) emulators. Portrait touch passed on
-both. The Android 16 lane also verified the software keyboard. The ARM64
-phone test remains open.
+Android 12 (API 31, x86_64) is the retained emulator. Calculator portrait
+touch passed on Android 12 and on the former Android 16 emulator, which also
+verified the software keyboard. The ARM64 phone test remains open.
 
 ## Verified toolchain and emulator
 
@@ -470,6 +469,25 @@ band contrast by 29.5% on the Android 12 emulator against the same saved
 pose and assets. The physical phone and cloud interior still need visual
 review.
 [Native coastal comparison](../../../../Artifacts/Reports/cloud-resolve-1120/device-489b9c31/coast-pixels.json).
+
+The SDL Android scene pass owns opaque depth, sky and cloud composition in
+`sdl.android_scene.cpp`. An unsupported viewport or cloud body skips the
+current frame's volume. The next eligible frame can draw it in the same GLES
+context. Shader or framebuffer failure still disables the pass until reset.
+The Android 12 x86_64 coastal replay completed a 180-patch cut and presented
+30 cloud frames at 77.1 ms mean and 86.4 ms p95 on SwiftShader. This camera
+still shows horizontal bands below the clouds. Physical-device timing is open.
+[Coastal replay](../../../../Artifacts/Reports/android-scene-final-1120/device-242efcfc/result.json).
+
+The Android 12 flight with the revised shared density shader crossed the
+cloud shell in one process. Its 30 orbital present intervals averaged
+80.1 ms (p95 106.0 ms) on SwiftShader. The three captures show broad white
+patches over coarse terrain from orbit, nearly uniform grey inside the cloud
+and faint horizontal shading when looking up from below. The saved flight
+exceeded the mobile wet-terrain profile and drew its fallback surface mesh.
+Cloud appearance and physical-phone performance remain open.
+[Flight views](../../../../Artifacts/Reports/android-cloud-flight-1121/device-deb10795/flight-contact.png),
+[layer and timing records](../../../../Artifacts/Reports/android-cloud-flight-1121/device-deb10795/cloud-readback.json).
 
 ## Run the Editor as an Android project
 

@@ -38,6 +38,7 @@ class BundledProjectExampleImport(unittest.TestCase):
                                 "    export struct EditorProjectExample", True).replace("export ", "")
         example = ROOT / "Engine/examples/BasicSoftwareExampleCalculator"
         platformer = ROOT / "Engine/examples/PlatformerExample2D"
+        distribution = ROOT / "Engine/include/updater.distribution.hpp"
         code = r'''
 #include <algorithm>
 #include <array>
@@ -51,13 +52,11 @@ class BundledProjectExampleImport(unittest.TestCase):
 #include <string>
 #include <string_view>
 #include <vector>
+#include "DISTRIBUTION_HEADER"
 import platform.filesystem;
 namespace fs = std::filesystem;
 #define CHECK(x) do { if (!(x)) return __LINE__; } while (false)
 namespace epochengine {
-namespace updater::distribution {
-constexpr std::string_view edition_id = "epoch.development.site.v1";
-}
 DESCRIPTOR
 struct EditorProjectAdmissionResult {
     bool succeeded{};
@@ -118,6 +117,15 @@ int verify() {
     known_id = id;
     CHECK(!editor_import_bundled_project_example(id).succeeded && !fs::exists(destination));
     known_id.clear();
+    const auto manifestPath = source / kProjectExampleManifest;
+    const auto originalManifest = read_bytes(manifestPath);
+    auto foreignManifest = originalManifest;
+    replace_all(foreignManifest, updater::distribution::edition_id,
+        updater::distribution::public_edition ? "epoch.development.site.v1" : "epoch.public.github.v1");
+    CHECK(foreignManifest != originalManifest);
+    std::ofstream{manifestPath, std::ios::binary} << foreignManifest;
+    CHECK(!editor_import_bundled_project_example(id).succeeded && admissions == 0u && !fs::exists(destination));
+    std::ofstream{manifestPath, std::ios::binary} << originalManifest;
     deny_admission = true;
     CHECK(!editor_import_bundled_project_example(id).succeeded && !fs::exists(destination));
     deny_admission = false;
@@ -158,7 +166,8 @@ int verify() {
 int main() { return epochengine::verify(); }
 '''.replace("DESCRIPTOR", descriptor).replace("HELPERS", helpers).replace("OWNERS", bodies
         ).replace("EXAMPLE_DIR", example.as_posix()).replace("PLATFORMER_DIR", platformer.as_posix())
+        code = code.replace("DISTRIBUTION_HEADER", distribution.as_posix())
         run_gui_contract(self, "bundled-project-example-import", code,
-                         [scene, shell, registry, module, Path(__file__)],
+                         [scene, shell, registry, module, distribution, distribution.with_name("epoch.edition.hpp"), Path(__file__)],
                          "Real example file transaction and build binding, with manifest admission stubbed",
                          extra_modules=("platform.filesystem.ixx",), libraries=("ole32", "shell32"))

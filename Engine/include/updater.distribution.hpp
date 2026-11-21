@@ -42,6 +42,14 @@ namespace epochengine::updater::distribution
             || bytes.find(key, pos + key.size()) != bytes.npos
             || !bytes.substr(pos).starts_with(source_marker)) return false;
         const auto end = pos + source_marker.size();
-        return end == bytes.size() || bytes[end] == '\r' || bytes[end] == '\n';
+        if (end != bytes.size() && bytes[end] != '\r' && bytes[end] != '\n') return false;
+        // The local Site runtime staging tree shares the channel, but cannot update source.
+        if (!public_edition)
+        {
+            constexpr std::string_view runtime_only = "#define EPOCH_SOURCE_SELF_CODING 0";
+            const auto profile = bytes.find(runtime_only);
+            if (profile != bytes.npos && (profile == 0u || bytes[profile - 1u] == '\n')) return false;
+        }
+        return true;
     }
 }

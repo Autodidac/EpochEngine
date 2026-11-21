@@ -32,7 +32,7 @@ namespace {
 } // namespace
 
 
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
 struct RuntimeHost::Impl {
     explicit Impl(core::Config initial_config)
         : config(std::move(initial_config)),
@@ -157,7 +157,7 @@ std::expected<json, core::Error> RuntimeHost::load_native_model(
     const auto deadline=std::chrono::steady_clock::now()+std::chrono::minutes{30};
     auto endpoint = local_path_override.empty()
         ? impl_->native_models.prepare(id_or_uri,deadline,cancellation,gpu_offload_cap_percent)
-        : impl_->native_models.prepare_with_local_override(id_or_uri, std::filesystem::path{local_path_override},deadline,cancellation);
+        : impl_->native_models.prepare_with_local_override(id_or_uri, epochengine::ai::native_shared_inputs::path_from_utf8(local_path_override),deadline,cancellation);
     if (!endpoint) return std::unexpected(endpoint.error());
     const auto configured_foundation = impl_->models.foundation_model();
     const auto effective_foundation = impl_->model.resolve_model_hint(configured_foundation);

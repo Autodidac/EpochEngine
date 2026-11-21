@@ -436,6 +436,10 @@
         it->second.previewMode = core::ScenePreviewMode::Editor;
         it->second.viewportCameraMode = epochengine::previewgrid::CameraMode::Editor;
         lock.unlock();
+        // Flush the departing Editor's final clicks before a new primary writes
+        // this application's layout. Parked contexts can outlive their successor.
+        persist_editor_layout_preferences(parked, true);
+        parked.layoutPreferencesLoaded = false;
         // Menu contexts still receive the existing time-snapshot owner tick.
         // Stop admission now, then drain only ready results there without a UI
         // sleep, scheduler join, source edit, or loss of the saved project goal.
@@ -465,7 +469,7 @@
         auto& state = it->second;
         state.timeSnapshot = snapshot;
         update_passive_context_scoring(storage, state, ctx, snapshot, passiveObservation);
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
         lock.unlock();
 #endif
     }

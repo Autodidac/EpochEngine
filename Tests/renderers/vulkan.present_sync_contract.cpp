@@ -14,7 +14,7 @@ constexpr bool VK_TRUE=true;
 namespace mock {
 inline int next=100,allocations{},failAt=-1,waits{},resets{},submits{},presents{},recreates{};
 inline int signal{},presentWait{},submittedFence{},waitedFence{},acquireSemaphore{};
-inline int uniformUpdates{},commandRecords{};
+inline int uniformUpdates{},commandRecords{},cloudSwapchainResets{};
 inline unsigned image=2;
 inline bool invalidReuse{},idle{};
 inline bool invalidDescriptorFree{};
@@ -73,6 +73,7 @@ struct DescriptorSetsResource {
 };
 struct Application {
  static constexpr unsigned kMaxFramesInFlight=2;
+ unsigned maxFramesInFlight{kMaxFramesInFlight};
  Device backing;Device* device=&backing;Queue graphicsQueue,presentQueue;
  std::vector<int> swapChainImages{1,2,3};std::vector<vk::UniqueSemaphore> renderFinishedSemaphores;
  std::vector<std::unique_ptr<int>> imageAvailableSemaphores,inFlightFences,commandBuffers;
@@ -80,6 +81,7 @@ struct Application {
  bool presentModeReady=true,resize{},stopped{};unsigned currentFrame{},nextImageCount=2;int cam{},previewSceneFrame{};
  std::unordered_map<int,int> guiContexts;
  Resource framebuffers,depthImageView,depthImage,depthImageMemory,arcadeScreenPipeline,
+ atmospherePipeline,atmospherePipelineLayout,
  solidGraphicsPipeline,graphicsPipeline,pipelineLayout,renderPass,swapChainImageViews,
  uniformBuffers,uniformBuffersMemory,uniformBuffersMapped;
  DescriptorPoolResource descriptorPool;
@@ -95,6 +97,7 @@ struct Application {
  }
  void updateGuiUniformBuffer(unsigned){}void recordCommandBuffer(unsigned){++mock::commandRecords;}
  void destroyArcadeRenderTarget(){}void reset_gui_swapchain_state(int){}
+ void resetCloudSwapchainState(){++mock::cloudSwapchainResets;}
  void createPresentSyncObjects();void cleanupSwapChain();void drawFrame();
  // Fake swapchain/device boundary; production cleanup and allocator run unchanged.
  void recreateSwapChain(){++mock::recreates;mock::idle=true;mock::pending.clear();
@@ -126,6 +129,7 @@ int main(){
  mock::acquireResult=vk::Result::eErrorOutOfDateKHR;mock::image=99;app.drawFrame();
  CHECK(mock::submits==oldSubmits&&mock::resets==oldResets&&app.currentFrame==oldFrame);
  CHECK(mock::recreates==1&&mock::idle&&app.renderFinishedSemaphores.size()==2&&mock::live.size()==2);
+ CHECK(mock::cloudSwapchainResets==1);
  CHECK(!mock::invalidDescriptorFree);
  for(int old:oldPool)CHECK(!mock::live.contains(old));
  mock::acquireResult=vk::Result::eSuccess;mock::image=1;app.drawFrame();

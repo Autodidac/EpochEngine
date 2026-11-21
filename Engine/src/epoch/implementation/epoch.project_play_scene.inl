@@ -925,7 +925,7 @@
                 finish_runtime_screenshot(ctx.get());
                 finishPhase(5u);
                 if(measureFrame)
-                    record_runtime_frame_evidence(frameStarted,frameIntervalMilliseconds,framePhaseMilliseconds,mouse_pos,
+                    project_play_hud::record_runtime_frame_evidence(m_runtimeFrameEvidence,frameStarted,frameIntervalMilliseconds,framePhaseMilliseconds,mouse_pos,
                         m_explorationController?m_explorationMouseHeld:
                             (m_lookState.orbiting||m_lookState.panning||m_lookState.dollying||m_lookState.flying),
                         m_planetaryPending.has_value()||m_planetaryInitialWaterCut.has_value()
@@ -936,75 +936,6 @@
             }
 
         private:
-            struct RuntimeFrameEvidence final
-            {
-                timing::Clock::time_point began{};
-                std::array<double,6> phase_maximum{};
-                double interval_sum{},interval_maximum{},work_sum{},work_maximum{},mouse_delta_maximum{};
-                double previous_log_milliseconds{};
-                std::uint32_t frames{},intervals{},moving_frames{},looking_frames{},lod_pending_frames{},display_pending_frames{},reports{};
-                gui::Vec2 last_mouse{};
-                bool has_mouse{},slowest_moving{},slowest_looking{},longest_interval_moving{},longest_interval_looking{};
-            };
-            void record_runtime_frame_evidence(timing::Clock::time_point started,double interval,
-                const std::array<double,6>& phases,gui::Vec2 mouse,bool looking,bool lodPending,bool displayPending) noexcept
-            {
-                auto& evidence=m_runtimeFrameEvidence;
-                if(evidence.reports>=24u)return;
-                if(evidence.frames==0u)evidence.began=started;
-                const double delta=evidence.has_mouse?std::hypot(double(mouse.x-evidence.last_mouse.x),
-                    double(mouse.y-evidence.last_mouse.y)):0.0;
-                evidence.last_mouse=mouse;evidence.has_mouse=true;
-                const bool moving=delta>0.0;
-                ++evidence.frames;
-                if(interval>0.0&&std::isfinite(interval))
-                {
-                    ++evidence.intervals;evidence.interval_sum+=interval;
-                    if(interval>evidence.interval_maximum)
-                    {evidence.interval_maximum=interval;evidence.longest_interval_moving=moving;evidence.longest_interval_looking=looking;}
-                }
-                evidence.moving_frames+=moving;evidence.looking_frames+=looking;
-                evidence.lod_pending_frames+=lodPending;evidence.display_pending_frames+=displayPending;
-                evidence.mouse_delta_maximum=(std::max)(evidence.mouse_delta_maximum,delta);
-                double work{};
-                for(std::size_t phase=0u;phase<phases.size();++phase)
-                {work+=phases[phase];evidence.phase_maximum[phase]=(std::max)(evidence.phase_maximum[phase],phases[phase]);}
-                evidence.work_sum+=work;
-                if(work>evidence.work_maximum)
-                {evidence.work_maximum=work;evidence.slowest_moving=moving;evidence.slowest_looking=looking;}
-                const auto finished=timing::Clock::now();
-                if(finished-evidence.began<std::chrono::seconds{5})return;
-                // Keep the bounded evidence budget for interaction or stalls;
-                // an idle project must not exhaust it before the flight test.
-                const bool report=evidence.reports==0u||evidence.moving_frames||evidence.looking_frames
-                    ||evidence.interval_maximum>=50.0||evidence.work_maximum>=50.0;
-                if(report)try
-                {
-                    // Owner work is elapsed time inside this update, including any
-                    // waits. It is distinct from renderer FPS and OS CPU accounting.
-                    auto& log=logger::get("Engine.Project");
-                    log.logf(logger::LogLevel::INFO,std::source_location::current(),
-                        "Scene owner #{}: {} turns; interval avg/max {:.2f}/{:.2f} ms; work avg/max {:.2f}/{:.2f} ms; prior log {:.2f} ms.",
-                        evidence.reports+1u,evidence.frames,evidence.interval_sum/(std::max)(1u,evidence.intervals),
-                        evidence.interval_maximum,evidence.work_sum/evidence.frames,evidence.work_maximum,evidence.previous_log_milliseconds);
-                    log.logf(logger::LogLevel::INFO,std::source_location::current(),
-                        "Scene owner phase max ms: input/gameplay {:.2f}, exploration {:.2f}, LOD/water {:.2f}, display {:.2f}, GUI/navigation {:.2f}, present {:.2f}.",
-                        evidence.phase_maximum[0],evidence.phase_maximum[1],evidence.phase_maximum[2],
-                        evidence.phase_maximum[3],evidence.phase_maximum[4],evidence.phase_maximum[5]);
-                    log.logf(logger::LogLevel::INFO,std::source_location::current(),
-                        "Scene owner input: moved/look {}/{}; max delta {:.1f}px; peak work moved/look={}/{}; peak interval moved/look={}/{}; pending LOD/display={}/{}.",
-                        evidence.moving_frames,evidence.looking_frames,evidence.mouse_delta_maximum,
-                        evidence.slowest_moving,evidence.slowest_looking,evidence.longest_interval_moving,
-                        evidence.longest_interval_looking,evidence.lod_pending_frames,evidence.display_pending_frames);
-                }
-                catch(...){} // Evidence must not interrupt input or publication.
-                const double logMilliseconds=report
-                    ?std::chrono::duration<double,std::milli>(timing::Clock::now()-finished).count():evidence.previous_log_milliseconds;
-                const auto reports=evidence.reports+static_cast<std::uint32_t>(report);
-                evidence={};evidence.reports=reports;evidence.began=finished;
-                evidence.previous_log_milliseconds=logMilliseconds;
-                evidence.last_mouse=mouse;evidence.has_mouse=true;
-            }
             static void apply_runtime_inspection_light(lighting::LightingFrame& frame) noexcept
             {
                 // This is a transient inspection override, never authored light
@@ -1102,33 +1033,9 @@
 
             void draw_reach_objective() const
             {
-                if (!m_reachObjective.objective()) return;
-                std::string text;
-                if (m_reachTargetName.empty())
-                    text = "Objective target unavailable";
-                else if (m_reachObjective.completed())
-                    text = "Objective complete · " + m_reachTargetName;
-                else
-                {
-                    text = "Reach " + m_reachTargetName;
-                    if (const auto distance = m_reachObjective.distance(); distance)
-                        text += epochengine::format_text("\n{:.1f} m away", *distance);
-                    else if (m_explorationController && m_explorationFrame.mode != project_planetary_runtime::TravelMode::walk)
-                        text += "\nLand and switch to Walk";
-                }
-                const auto& safe = m_runtimeGuiBounds;
-                const float width = (std::max)(1.0f, (std::min)(400.0f, safe.size.x - 32.0f));
-                const float textWidth = (std::max)(1.0f, width - 20.0f);
-                const float height = gui::measure_wrapped_label_height(text, textWidth) + 16.0f;
-                const gui::Vec2 origin{safe.position.x + (std::max)(0.0f, safe.size.x - width - 16.0f),
-                    safe.position.y + (std::max)(0.0f, safe.size.y - height - 16.0f)};
-                const auto cursor = gui::cursor_position();
-                gui::panel_rect(origin, {width, height});
-                gui::set_cursor({origin.x + 10.0f, origin.y + 8.0f});
-                gui::wrapped_label(text, textWidth);
-                gui::set_cursor(cursor);
+                project_play_hud::draw_reach_objective(m_runtimeGuiBounds,m_reachObjective,m_reachTargetName,
+                    m_explorationController&&m_explorationFrame.mode!=project_planetary_runtime::TravelMode::walk);
             }
-
             static void focus_project_spawn(const void* context,
                 const epochengine::scene_runtime::CompiledSceneProjection& projection) noexcept
             {
@@ -1248,18 +1155,7 @@
 
             void draw_flight_touch() const
             {
-                const auto bounds = flight_touch_bounds();
-                if (!bounds) return;
-                gui::begin_window("", bounds->position, bounds->size, false, false);
-                {
-                    gui::ContentClipScope clip(bounds->position,
-                        {bounds->position.x + bounds->size.x, bounds->position.y + bounds->size.y});
-                    gui::set_cursor(bounds->position);
-                    (void)gui::button("Ascend", {108.0f, bounds->size.y});
-                    gui::set_cursor({bounds->position.x + 112.0f, bounds->position.y});
-                    (void)gui::button("Descend", {108.0f, bounds->size.y});
-                }
-                gui::end_window();
+                if(const auto bounds=flight_touch_bounds())project_play_hud::draw_flight_touch(*bounds);
             }
 #endif
 #if defined(__ANDROID__) && defined(EPOCH_USING_SDL) && EPOCH_USING_SDL == 1
@@ -1288,86 +1184,25 @@
 
             [[nodiscard]] gui::WidgetBounds runtime_panel_bounds() const noexcept
             {
-                const auto& safe = m_runtimeGuiBounds;
-                const float width = std::isfinite(safe.size.x) ? (std::max)(1.0f, safe.size.x) : 1.0f;
-                const float height = std::isfinite(safe.size.y) ? (std::max)(1.0f, safe.size.y) : 1.0f;
-                const float inset = (std::min)(24.0f,((std::min)(width,height)-1.0f)*0.5f);
-                const float availableWidth = (std::max)(1.0f,width-2.0f*inset);
-                const float availableHeight = (std::max)(1.0f,height-2.0f*inset);
-                if (m_runtimeControlsVisible)
-                    return {{safe.position.x + inset, safe.position.y + inset},{(std::min)(430.0f,availableWidth),
-                        (std::min)(runtime_panel_height(),availableHeight)}};
-                const float toggleWidth = (std::min)(m_explorationController ? 108.0f : 160.0f, availableWidth);
-                const float toggleHeight = (std::min)(m_explorationController ? 28.0f : 32.0f, availableHeight);
-                return {{safe.position.x + width - inset - toggleWidth, safe.position.y + inset},
-                    {toggleWidth,toggleHeight}};
+                return project_play_hud::runtime_panel_bounds(m_runtimeGuiBounds,m_runtimeControlsVisible,
+                    bool(m_explorationController),m_runtimeControlsVisible?runtime_panel_height():0.0f);
             }
-
             void draw_planetary_flight_status() const
             {
-                const auto& safe = m_runtimeGuiBounds;
-                if (!m_explorationController || !m_explorationFrame.valid
-                    || !std::isfinite(safe.size.x) || !std::isfinite(safe.size.y)) return;
-
-                constexpr float margin = 16.0f;
-                float availableWidth = safe.size.x - 2.0f * margin;
-                if (m_reachObjective.objective())
-                    availableWidth -= (std::min)(400.0f, availableWidth) + margin;
-                const float width = (std::min)(340.0f, availableWidth);
-                if (width < 128.0f) return;
-
-                // Exploration publishes validated frames, including the active body and motion.
-                const auto& frame = m_explorationFrame;
-                const auto bodies = std::span{frame.bodies}.first(frame.body_count);
-                const auto body = std::ranges::find_if(bodies, [&](const auto& entry) { return entry.id == frame.anchor; });
-                if (body == bodies.end()) return;
-                const auto mode = frame.mode == project_planetary_runtime::TravelMode::walk ? "Walk"
-                    : frame.mode == project_planetary_runtime::TravelMode::cruise ? "Cruise" : "Flight";
-                const auto altitude = std::abs(frame.altitude) >= 1000.0
-                    ? epochengine::format_text("{:.1f} km", frame.altitude / 1000.0)
-                    : epochengine::format_text("{:.0f} m", frame.altitude);
-                const auto text = m_planetaryStartupDeadline ? std::string{"Preparing nearby terrain"}
-                    : epochengine::format_text("{} · {}\nAltitude {}  |  Speed {:.0f} m/s",mode,body->name,altitude,frame.speed);
-                const float textWidth = width - 24.0f;
-                const float height = gui::measure_wrapped_label_height(text, textWidth) + 16.0f;
-                if (height + 2.0f * margin > safe.size.y) return;
-
-                gui::begin_overlay_window("Flight status",
-                    {safe.position.x + margin, safe.position.y + safe.size.y - height - margin},
-                    {width, height}, false);
-                gui::wrapped_label(text, textWidth);
-                gui::end_window();
+                if(m_explorationController)project_play_hud::draw_planetary_flight_status(m_runtimeGuiBounds,
+                    m_explorationFrame,bool(m_reachObjective.objective()),bool(m_planetaryStartupDeadline));
             }
             void draw_runtime_controls_restore()
             {
-                const auto bounds = runtime_panel_bounds();
-                gui::begin_window("",bounds.position,bounds.size,false,false);
-                {
-                    gui::ContentClipScope clip(bounds.position,
-                        {bounds.position.x+bounds.size.x,bounds.position.y+bounds.size.y});
-                    gui::set_cursor(bounds.position);
-                    if (gui::button("Controls",bounds.size))
-                        m_runtimeControlsVisible = true;
-                }
-                gui::end_window();
+                project_play_hud::draw_runtime_controls_restore(runtime_panel_bounds(),m_runtimeControlsVisible);
             }
             void draw_runtime_controls_hide(float contentWidth)
             {
-                if (gui::button("Hide Controls", {(std::min)(120.0f,contentWidth),24.0f}))
-                    m_runtimeControlsVisible = false;
+                project_play_hud::draw_runtime_controls_hide(contentWidth,m_runtimeControlsVisible);
             }
             void draw_runtime_frame_limit(const std::shared_ptr<core::Context>& ctx, float contentWidth)
             {
-                const auto requestedMode = cli::frame_vsync_requested ? perf::frame_pacing_mode::vsync
-                    : cli::frame_limit_fps > 0.0 ? perf::frame_pacing_mode::target_hz
-                    : perf::frame_pacing_mode::uncapped;
-                const auto startup = perf::select_frame_pacing_policy(requestedMode,
-                    cli::frame_limit_fps, cli::frame_limit_explicit,
-                    !cli::parented_mode && !cli::editor_requested && !cli::run_menu_loop);
-                auto* pacing = ctx && ctx->windowData ? &ctx->windowData->editorFramePacingOverride : nullptr;
-                gui::label("Foreground FPS (this run)");
-                (void)gui::live_frame_limit_control("project-runtime-frame-limit", startup, pacing,
-                    m_runtimeFrameLimitEdits[ctx.get()], contentWidth);
+                project_play_hud::draw_runtime_frame_limit(ctx,contentWidth,m_runtimeFrameLimitEdits);
             }
             [[nodiscard]] bool runtime_water_visibility_pending() const noexcept
             {
@@ -2321,26 +2156,8 @@
                 m_planetaryWaterAppearance.reset();
             }
 
-            struct PlanetaryWaterResult final
-            {
-                std::shared_ptr<const project_planetary_snapshot::Snapshot> source{};
-                std::shared_ptr<const asset::mesh::Artifact> mesh{};
-                std::shared_ptr<const asset::mesh::SphericalWaterAppearance> appearance{};
-                std::shared_ptr<const water::wave::Tile> linked_sample{};
-                std::uint32_t body{};
-                std::uint64_t clock_generation{};
-                double seconds{};
-                double worker_seconds{};
-                bool source_current{},cancelled{},reaches_live_clock{};
-            };
-            struct InitialPlanetaryWaterCut final
-            {
-                project_planetary::StreamResult stream;
-                std::shared_ptr<water::wave::Provider> provider;
-                std::string water_source_hash;
-                std::shared_ptr<const project_planetary_snapshot::Snapshot> previous;
-                std::shared_ptr<const project_planetary_snapshot::WaterLatticeProvider> lattice_provider;
-            };
+            using PlanetaryWaterResult = project_planetary_play::PlanetaryWaterResult;
+            using InitialPlanetaryWaterCut = project_planetary_play::InitialPlanetaryWaterCut;
             struct PlanetaryCutPlayback final
             {
                 project_planetary::StreamResult target;
@@ -2706,346 +2523,6 @@
                     &&bytes<=budget.cache_bytes&&indices<=budget.frame_indices
                     &&previewgrid::mesh_frame_admitted(frame,m_meshFrameLimits);
             }
-            [[nodiscard]] static PlanetaryWaterResult sample_planetary_water(
-                const std::filesystem::path& root,const project_planetary::SourceGeneration& identity,
-                std::shared_ptr<const project_planetary_snapshot::Snapshot> source,
-                const std::shared_ptr<water::wave::Provider>& provider,
-                const project_planetary::Settings& settings,double seconds,
-                std::string_view water_source_hash,std::uint64_t clock_generation,
-                std::uint64_t retained_display_bytes,std::stop_token stop,
-                std::shared_ptr<const water::wave::Tile>* retained_tile=nullptr,
-                const project_planetary::PackagedShoreline* packaged=nullptr,
-                const project_planetary::PackagedPlanetaryPose* linked_pose=nullptr)
-            {
-                const auto started=timing::Clock::now();
-                PlanetaryWaterResult result{.source=std::move(source),.body=settings.body_index,
-                    .clock_generation=clock_generation,.seconds=seconds};
-                if(stop.stop_requested()){result.cancelled=true;return result;}
-                const auto current_source=[&] {
-                    if(packaged)return result.source==packaged->selection.source
-                        &&settings.body_index==packaged->settings.body_index&&water_source_hash==packaged->fft_source;
-                    if(linked_pose)return settings==linked_pose->settings&&water_source_hash==linked_pose->fft_source
-                        &&(!result.source||(result.source->metadata.identity.source_hash==linked_pose->planetary_source
-                            &&result.source->metadata.identity.recipe_key==linked_pose->recipe_key));
-                    if(!project_planetary::source_generation_is_current(root,identity,stop))return false;
-                    const auto water=package_source::load_project_attachment(root,"fft_ocean",stop);
-                    return water.source_attached()&&water.content_hash==water_source_hash;
-                };
-                if((!result.source&&!linked_pose)||!provider||!std::isfinite(seconds)||!current_source())
-                {
-                    result.cancelled=stop.stop_requested();
-                    return result;
-                }
-                result.source_current=true;
-                // The packaged cut retains the budget it was decoded with.
-                auto limits=project_planetary::snapshot_transition_limits(packaged?packaged->settings:settings);
-                if(retained_display_bytes>=limits.maximum_retained_bytes)return result;
-                limits.maximum_retained_bytes-=retained_display_bytes;
-                const auto wave_budget=(std::min<std::uint64_t>)(limits.maximum_transient_bytes,64ull*1024u*1024u);
-                const auto wave=provider->evaluate(seconds,wave_budget,stop);
-                if(wave&&wave.tile&&wave.tile->seconds()==seconds)
-                {
-                    if(result.source)result.mesh=project_planetary_snapshot::resample_water(
-                        *result.source,*wave.tile,limits,stop,&result.appearance);
-                    if(linked_pose&&(!result.source||result.mesh))result.linked_sample=wave.tile;
-                }
-                result.cancelled=stop.stop_requested();
-                result.source_current=!result.cancelled&&current_source();
-                if(!result.source_current)
-                {
-                    result.mesh.reset();
-                    result.appearance.reset();
-                    result.linked_sample.reset();
-                }
-                else if(retained_tile&&result.mesh)*retained_tile=wave.tile;
-                result.worker_seconds=std::chrono::duration<double>(timing::Clock::now()-started).count();
-                return result;
-            }
-            [[nodiscard]] static project_planetary::StreamResult prepare_initial_planetary_water_cut(
-                const std::filesystem::path& root,const project_planetary::Settings& settings,
-                InitialPlanetaryWaterCut cut,std::uint64_t clock_generation,
-                std::uint64_t retained_display_bytes,std::stop_token stop)
-            {
-                auto& stream=cut.stream;
-                std::shared_ptr<const water::wave::Tile> retained_tile;
-                if(stream.water_edge_sample_seconds)
-                {
-                    const auto seconds=*stream.water_edge_sample_seconds;
-                    auto sample=sample_planetary_water(root,*stream.verified_source,stream.patch_snapshot,
-                        cut.provider,settings,seconds,cut.water_source_hash,clock_generation,
-                        retained_display_bytes,stop,&retained_tile);
-                    stream.water_edge_sample_seconds.reset();
-                    if(!sample.source_current||sample.cancelled||!sample.mesh||!sample.appearance
-                        ||sample.appearance->artifact_key!=sample.mesh->key())
-                    {
-                        stream.snapshot_ready=false;
-                        stream.operation.ok=false;
-                        stream.operation.cancelled=sample.cancelled;
-                        stream.operation.message=sample.cancelled
-                            ?"Terrain shoreline preparation was cancelled. The previous terrain remains visible."
-                            :"Terrain shoreline preparation could not finish. The previous terrain remains visible.";
-                        return std::move(stream);
-                    }
-                    stream.snapshot=std::move(sample.mesh);
-                    stream.water_appearance=std::move(sample.appearance);
-                    stream.water_sample_seconds=sample.seconds;
-                }
-                if(cut.previous&&stream.snapshot&&stream.water_sample_seconds&&!stop.stop_requested())
-                {
-                    std::shared_ptr<const project_planetary::ShorelineSourceReview> review;
-                    if(stream.verified_source&&project_planetary::stream_recipe_is_current(root,stream.verified_recipe))
-                        review=project_planetary::review_shoreline_sources(root,*stream.verified_source,cut.water_source_hash,stop);
-                    if(!review)
-                    {
-                        stream.snapshot_ready=false;
-                        stream.operation.ok=false;
-                        stream.operation.cancelled=stop.stop_requested();
-                        stream.operation.message="Terrain or water source changed during shoreline preparation. The previous terrain remains visible.";
-                        return std::move(stream);
-                    }
-                    prepare_planetary_wet_transition(stream,std::move(cut.previous),review,
-                        settings,retained_display_bytes,stop,cut.provider,std::move(cut.lattice_provider),
-                        std::move(retained_tile));
-                    if(!shoreline_inputs_are_current(root,stream,*review,stop))
-                    {
-                        stream.snapshot_ready=false;
-                        stream.operation.ok=false;
-                        stream.wet_transition.clear();
-                        stream.wet_cursor.reset();
-                        stream.operation.cancelled=stop.stop_requested();
-                        stream.operation.message="Terrain or water source changed during shoreline preparation. The previous terrain remains visible.";
-                    }
-                }
-                if(stop.stop_requested())stream.operation.cancelled=true;
-                return std::move(stream);
-            }
-            static void prepare_planetary_wet_transition(project_planetary::StreamResult& stream,
-                std::shared_ptr<const project_planetary_snapshot::Snapshot> previous,
-                std::shared_ptr<const project_planetary::ShorelineSourceReview> review,
-                const project_planetary::Settings& settings,
-                std::uint64_t retained_display_bytes,
-                std::stop_token stop,const std::shared_ptr<water::wave::Provider>& provider,
-                std::shared_ptr<const project_planetary_snapshot::WaterLatticeProvider> lattice_provider,
-                std::shared_ptr<const water::wave::Tile> retained_tile)
-            {
-                namespace patches=project_planetary_snapshot;
-                if(!stream.patch_snapshot||stream.patch_snapshot->water_sample_seconds!=stream.water_sample_seconds)
-                {
-                    report_planetary_wet_batch(stream,*previous,"sample_mismatch",{},0u);
-                    return;
-                }
-                const auto limits=project_planetary::snapshot_transition_limits(settings);
-                patches::Transition transition{limits};
-                if(!transition.admit(previous,stop,patches::InitialCut::selected_patches))
-                {
-                    report_planetary_wet_batch(stream,*previous,"previous_cut_rejected",{},0u);
-                    return;
-                }
-                if(!transition.admit(stream.patch_snapshot,stop))
-                {
-                    report_planetary_wet_batch(stream,*previous,"target_cut_rejected",{},0u);
-                    return;
-                }
-                if(transition.settled())
-                {
-                    report_planetary_wet_batch(stream,*previous,"same_topology",{},0u);
-                    return;
-                }
-                if(transition.needs_retained_water_sample())
-                {
-                    const auto old_bytes=patches::retained_snapshot_bytes(*previous);
-                    const auto target_bytes=patches::retained_snapshot_bytes(*stream.patch_snapshot);
-                    const auto held_bytes=retained_display_bytes+planetary_cut_mesh_bytes(
-                        stream.snapshot==stream.patch_snapshot->artifact?nullptr:stream.snapshot,
-                        stream.water_appearance==stream.patch_snapshot->metadata.water_appearance?nullptr:stream.water_appearance);
-                    if(!retained_tile&&provider&&held_bytes+target_bytes<limits.maximum_retained_bytes)
-                    {
-                        const auto wave_budget=(std::min<std::uint64_t>)({limits.maximum_transient_bytes,64ull*1024u*1024u,
-                            limits.maximum_retained_bytes-held_bytes-target_bytes});
-                        const auto sample=provider->evaluate(*stream.water_sample_seconds,wave_budget,stop);
-                        if(sample)retained_tile=sample.tile;
-                    }
-                    const auto external=held_bytes>=old_bytes?held_bytes-old_bytes:held_bytes;
-                    if(!transition.prepare_retained_water(settings.cells_per_tile,std::move(retained_tile),
-                        std::move(lattice_provider),external,stop))
-                    {
-                        report_planetary_wet_batch(stream,*previous,
-                            stop.stop_requested()?"cancelled":"retained_sample_unavailable",{},0u);
-                        return;
-                    }
-                }
-                stream.wet_cursor.emplace(project_planetary::StreamWetCutCursor{
-                    std::move(transition),std::move(previous),std::move(review)});
-                ShorelineBatchTiming evidence;
-                prepare_planetary_wet_batch(stream,settings,retained_display_bytes,stop,evidence);
-            }
-
-            [[nodiscard]] static std::uint64_t planetary_cut_mesh_bytes(
-                const std::shared_ptr<const asset::mesh::Artifact>& mesh,
-                const std::shared_ptr<const asset::mesh::SphericalWaterAppearance>& appearance) noexcept
-            {
-                return (mesh ? std::uint64_t(mesh->vertices().size())*sizeof(asset::mesh::Vertex)
-                    +std::uint64_t(mesh->indices().size())*sizeof(std::uint32_t)+64u : 0u)
-                    +(appearance ? sizeof(asset::mesh::SphericalWaterAppearance)
-                        +appearance->ranges.capacity()*sizeof(asset::mesh::SphericalWaterRange) : 0u);
-            }
-            static void report_planetary_wet_batch(const project_planetary::StreamResult& stream,
-                const project_planetary_snapshot::Snapshot& previous,std::string_view outcome,
-                std::optional<project_planetary_snapshot::TileKey> patch,unsigned steps)
-            {
-                if(!render_water_evidence::enabled())return;
-                const auto key=patch.value_or(project_planetary_snapshot::TileKey{});
-                logger::infof_loc("Engine.Planet",std::source_location::current(),
-                    "Shoreline preparation: request={} previous={} outcome={} has_patch={} face={} level={} x={} y={} steps={} frames={}",
-                    stream.request_id,previous.metadata.identity.request_id,outcome,patch.has_value(),
-                    unsigned(key.face),unsigned(key.level),key.x,key.y,steps,stream.wet_transition.size());
-            }
-            struct ShorelineBatchTiming final
-            {
-                bool enabled{};
-                double check_before_ms{},advance_ms{},mesh_ms{},rollover_ms{},rejected_mesh_ms{},check_after_ms{};
-
-                [[nodiscard]] static double milliseconds(timing::Clock::duration elapsed) noexcept
-                {
-                    return std::chrono::duration<double,std::milli>(elapsed).count();
-                }
-                template<class Action>
-                auto measure(double& elapsed,Action&& action) const
-                {
-                    if(!enabled)return action();
-                    const auto started=timing::Clock::now();
-                    auto result=action();
-                    elapsed+=milliseconds(timing::Clock::now()-started);
-                    return result;
-                }
-            };
-            static void prepare_planetary_wet_batch(project_planetary::StreamResult& stream,
-                const project_planetary::Settings& settings,std::uint64_t retained_display_bytes,std::stop_token stop,
-                ShorelineBatchTiming& evidence)
-            {
-                namespace patches=project_planetary_snapshot;
-                constexpr std::size_t maximum_frames=4u;
-                constexpr unsigned maximum_steps=128u;
-                auto& cursor=*stream.wet_cursor;
-                auto& frames=stream.wet_transition;
-                frames.clear();
-                frames.reserve(maximum_frames);
-                auto held_bytes=retained_display_bytes+planetary_cut_mesh_bytes(
-                    stream.snapshot==stream.patch_snapshot->artifact?nullptr:stream.snapshot,
-                    stream.water_appearance==stream.patch_snapshot->metadata.water_appearance?nullptr:stream.water_appearance);
-                const auto previous_bytes=patches::retained_snapshot_bytes(*cursor.previous);
-                std::string_view outcome="staged";
-                bool finished{};
-                patches::WetTransitionFailure wet_failure;
-                while(frames.size()<maximum_frames&&!stop.stop_requested())
-                {
-                    if(cursor.steps>=maximum_steps)
-                    {
-                        outcome="step_limit";finished=true;break;
-                    }
-                    auto& next=cursor.transition;
-                    if(!cursor.materialization_pending&&!evidence.measure(evidence.advance_ms,[&] {
-                        return next.advance_wet(.05,false,stop,&wet_failure);
-                    }))
-                    {
-                        outcome=wet_failure.reason.empty()?"transition_did_not_advance":wet_failure.reason;
-                        finished=true;break;
-                    }
-                    if(next.settled())
-                    {
-                        ++cursor.steps;
-                        outcome="settled";finished=true;break;
-                    }
-                    const bool retains_previous=std::ranges::any_of(next.draw(),
-                        [&](const auto& draw){return draw.snapshot==cursor.previous;});
-                    const auto external_bytes=retains_previous&&held_bytes>=previous_bytes
-                        ?held_bytes-previous_bytes:held_bytes;
-                    project_planetary::StreamCutFrame frame;
-                    double mesh_ms{};
-                    frame.mesh=evidence.measure(mesh_ms,[&] {
-                        return next.materialize_wet(settings.cells_per_tile,*stream.water_sample_seconds,
-                            stop,&frame.appearance,external_bytes,&wet_failure);
-                    });
-                    if(!frame.mesh)
-                    {
-                        if(wet_failure.reason=="output_retained_budget"&&!frames.empty())
-                        {
-                            // Retry this phase once those staged meshes retire.
-                            evidence.rollover_ms+=mesh_ms;
-                            cursor.materialization_pending=true;
-                            outcome="budget_rollover";
-                            break;
-                        }
-                        evidence.rejected_mesh_ms+=mesh_ms;
-                        outcome=wet_failure.reason.empty()?"wet_geometry_rejected":wet_failure.reason;
-                        finished=true;break;
-                    }
-                    evidence.mesh_ms+=mesh_ms;
-                    cursor.materialization_pending=false;
-                    ++cursor.steps;
-                    held_bytes+=planetary_cut_mesh_bytes(frame.mesh,frame.appearance);
-                    frames.push_back(std::move(frame));
-                }
-                if(stop.stop_requested())
-                {
-                    stream.operation.cancelled=true;
-                    stream.wet_transition.clear();
-                    stream.wet_cursor.reset();
-                    return;
-                }
-                report_planetary_wet_batch(stream,*cursor.previous,outcome,wet_failure.patch,cursor.steps);
-                if(finished&&outcome!="settled")
-                    stream.operation.message+="\nShoreline transition unavailable for this terrain cut.";
-                if(finished)stream.wet_cursor.reset();
-            }
-            [[nodiscard]] static bool shoreline_inputs_are_current(const std::filesystem::path& root,
-                const project_planetary::StreamResult& stream,const project_planetary::ShorelineSourceReview& review,
-                std::stop_token stop)
-            {
-                return !stop.stop_requested()&&stream.verified_source
-                    &&project_planetary::stream_recipe_is_current(root,stream.verified_recipe)
-                    &&project_planetary::shoreline_sources_are_current(root,*stream.verified_source,review,stop);
-            }
-            [[nodiscard]] static project_planetary::StreamResult continue_planetary_wet_cut(
-                const std::filesystem::path& root,const project_planetary::Settings& settings,
-                project_planetary::StreamResult stream,std::uint64_t retained_display_bytes,std::stop_token stop,
-                std::optional<timing::Clock::time_point> queued_at)
-            {
-                ShorelineBatchTiming evidence{.enabled=queued_at.has_value()};
-                const auto started=evidence.enabled?timing::Clock::now():timing::Clock::time_point{};
-                const auto first_step=stream.wet_cursor->steps;
-                // A settled batch releases the cursor. Its final source check still owns the review.
-                const auto review=stream.wet_cursor->source_review;
-                bool current{};
-                if(review&&evidence.measure(evidence.check_before_ms,[&] {
-                    return shoreline_inputs_are_current(root,stream,*review,stop);
-                }))
-                {
-                    prepare_planetary_wet_batch(stream,settings,retained_display_bytes,stop,evidence);
-                    current=evidence.measure(evidence.check_after_ms,[&] {
-                        return shoreline_inputs_are_current(root,stream,*review,stop);
-                    });
-                }
-                if(queued_at)
-                    logger::infof_loc("Engine.Planet",std::source_location::current(),
-                        "Shoreline batch timing: request={} first_step={} frames={} source_current={} worker_start_us={} "
-                        "queue_ms={:.3f} check_before_ms={:.3f} advance_ms={:.3f} mesh_ms={:.3f} "
-                        "rollover_ms={:.3f} rejected_mesh_ms={:.3f} check_after_ms={:.3f} worker_ms={:.3f}",
-                        stream.request_id,first_step,stream.wet_transition.size(),current,
-                        std::chrono::duration_cast<std::chrono::microseconds>(started.time_since_epoch()).count(),
-                        evidence.milliseconds(started-*queued_at),evidence.check_before_ms,evidence.advance_ms,
-                        evidence.mesh_ms,evidence.rollover_ms,evidence.rejected_mesh_ms,evidence.check_after_ms,
-                        evidence.milliseconds(timing::Clock::now()-started));
-                if(current)return stream;
-                stream.operation.cancelled=stop.stop_requested();
-                stream.operation.ok=false;
-                stream.operation.message=stream.operation.cancelled
-                    ?"Shoreline transition cancelled. The previous terrain remains visible."
-                    :"Shoreline transition stopped because its approved source changed.";
-                stream.wet_transition.clear();
-                stream.wet_cursor.reset();
-                return stream;
-            }
             void publish_planetary_stream_cut(project_planetary::StreamResult& result)
             {
                 const auto linked_sample=m_presentedLinkedWater;
@@ -3071,42 +2548,6 @@
                     m_presentedLinkedWater=linked_sample;
                     m_planetaryWaterCatchUp=true;
                 }
-            }
-
-            static project_planetary::StreamResult linked_terrain_step(
-                project_planetary_runtime::TerrainProvider& provider,
-                const project_planetary_runtime::TerrainView& view,std::stop_token stop)
-            {
-                using Status=project_planetary_runtime::TerrainStatus;
-                const auto batch=provider.step(view,stop);
-                project_planetary::StreamResult result;
-                result.request_id=batch.request_id;
-                result.waiting_for_worker=batch.status==Status::busy;
-                result.operation.cancelled=batch.status==Status::cancelled||stop.stop_requested();
-                if(result.operation.cancelled)
-                {result.operation.message="Terrain detail cancelled. The previous mesh is retained.";return result;}
-                result.operation.ok=batch.status==Status::ready||batch.status==Status::pending;
-                result.snapshot_ready=batch.status==Status::ready&&bool(batch.artifact);
-                if(result.snapshot_ready)
-                {
-                    result.snapshot=batch.artifact;
-                    result.operation.mesh_frame=project_planetary::GeneratedMeshFrame{1.0,batch.source_origin_meters};
-                    result.patch_snapshot=batch.aquatic_source;
-                    result.water_appearance=batch.water_appearance;
-                    if(batch.aquatic_source)result.water_sample_seconds=batch.aquatic_source->water_sample_seconds;
-                }
-                result.built=static_cast<std::uint32_t>(batch.built);
-                result.pending=static_cast<std::uint32_t>(batch.pending);
-                result.draw=static_cast<std::uint32_t>(batch.draw_patches);
-                result.maximum_level=batch.maximum_level;
-                result.operation.message=batch.status==Status::capacity
-                    ?"Linked terrain fits neither the current residency nor mesh budget. The previous mesh is retained."
-                    :result.operation.ok||result.waiting_for_worker?"Terrain detail follows the current camera."
-                    :"Linked terrain could not assemble the requested cut. The previous mesh is retained.";
-                if(!batch.failure.empty())
-                    logger::infof_loc("Engine.Planet",std::source_location::current(),
-                        "Linked terrain request {} stopped at {}.",view.request_id,batch.failure);
-                return result;
             }
 
             [[nodiscard]] bool linked_wet_terrain()const noexcept
@@ -3263,7 +2704,7 @@
                 publish_planetary_stream_cut(result);
                 m_planetaryWaterCatchUp=m_planetaryWaterPublishedSeconds.has_value();
                 m_planetaryStatus=std::move(result.operation.message);
-                m_planetaryContinue=result.pending!=0u||planetary_view_changed(view,m_planetaryView);
+                m_planetaryContinue=result.pending!=0u||project_planetary_play::planetary_view_changed(view,m_planetaryView);
                 m_planetaryNextTick=now;
                 return true;
             }
@@ -3292,7 +2733,7 @@
                 const auto& shown=m_meshes.at(m_planetaryEntity);
                 // Keep the rollback display and the current display charged
                 // while a worker prepares its next intermediate batch.
-                retained+=planetary_cut_mesh_bytes(
+                retained+=project_planetary_play::planetary_cut_mesh_bytes(
                     playback.previous_mesh==shown||playback.previous_mesh==previous.artifact
                         ||playback.previous_mesh==target.patch_snapshot->artifact?nullptr:playback.previous_mesh,
                     playback.previous_appearance==m_planetaryWaterAppearance
@@ -3308,7 +2749,7 @@
                     ?std::optional{timing::Clock::now()}:std::nullopt;
                 auto submitted=m_planetaryScheduler->submit_cancellable("Prepare next shoreline batch",
                     [root,settings,work=std::move(work),retained,queued_at](std::stop_token stop) mutable {
-                        return continue_planetary_wet_cut(root,settings,std::move(work),retained,stop,queued_at);
+                        return project_planetary_play::continue_planetary_wet_cut(root,settings,std::move(work),retained,stop,queued_at);
                     });
                 m_planetaryCancellation=submitted.cancellation;
                 m_planetaryPending.emplace(std::move(submitted.completion));
@@ -3563,7 +3004,7 @@
                     auto submission=m_planetaryScheduler->submit_cancellable("Animate project FFT ocean",
                         [root,identity,source,expected_source,provider,settings,seconds,water_source_hash,clock_generation,
                             retained_display_bytes,packaged,linked_pose,reaches_live_clock](std::stop_token stop) {
-                            auto result=sample_planetary_water(root,identity,source,provider,settings,seconds,
+                            auto result=project_planetary_play::sample_planetary_water(root,identity,source,provider,settings,seconds,
                                 water_source_hash,clock_generation,retained_display_bytes,stop,nullptr,packaged.get(),linked_pose.get());
                             result.source=expected_source;
                             result.reaches_live_clock=reaches_live_clock;
@@ -3575,28 +3016,6 @@
                 }
                 catch(...)
                 {m_planetaryWaterNextTick=now+std::chrono::seconds{1};m_planetaryWaterStatus="Ocean animation could not be queued. The previous surface is retained.";}
-            }
-
-            [[nodiscard]] static bool planetary_view_changed(const project_planetary::StreamView& current,
-                const project_planetary::StreamView& previous) noexcept
-            {
-                const double radius=std::sqrt(current.camera[0]*current.camera[0]
-                    +current.camera[1]*current.camera[1]+current.camera[2]*current.camera[2]);
-                const double epsilon=std::clamp(std::abs(radius-10.0)*0.05,0.00001,0.025);
-                if(current.viewport_height!=previous.viewport_height
-                    ||std::abs(current.vertical_fov-previous.vertical_fov)>0.001
-                    ||current.forward.has_value()!=previous.forward.has_value()
-                    ||current.up.has_value()!=previous.up.has_value()
-                    ||std::abs(current.aspect_ratio-previous.aspect_ratio)>0.001) return true;
-                if(current.forward&&previous.forward)
-                    for(std::size_t axis=0;axis<3u;++axis)
-                        if(std::abs((*current.forward)[axis]-(*previous.forward)[axis])>0.01)return true;
-                if(current.up&&previous.up)
-                    for(std::size_t axis=0;axis<3u;++axis)
-                        if(std::abs((*current.up)[axis]-(*previous.up)[axis])>0.01)return true;
-                for(std::size_t axis=0;axis<3u;++axis)
-                    if(std::abs(current.camera[axis]-previous.camera[axis])>epsilon) return true;
-                return false;
             }
 
             void pump_planetary_runtime(const core::Context* context,int width,int height)
@@ -3685,7 +3104,7 @@
                             }
                             auto submission=m_planetaryScheduler->submit_cancellable("Prepare project shoreline",
                                 [root,settings,cut=std::move(cut),clock_generation,retained](std::stop_token stop) mutable {
-                                    return prepare_initial_planetary_water_cut(root,settings,std::move(cut),
+                                    return project_planetary_play::prepare_initial_planetary_water_cut(root,settings,std::move(cut),
                                         clock_generation,retained,stop);
                                 });
                             m_planetaryCancellation=submission.cancellation;
@@ -3790,8 +3209,8 @@
                                     }
                                 }
                                 if(!m_planetaryFailed)m_planetaryStatus=std::move(result.operation.message);
-                                m_planetaryContinue=result.pending!=0u||planetary_view_changed(view,m_planetaryView);
-                                if(!m_planetaryFailed&&(result.pending!=0u||planetary_view_changed(view,m_planetaryView)))
+                                m_planetaryContinue=result.pending!=0u||project_planetary_play::planetary_view_changed(view,m_planetaryView);
+                                if(!m_planetaryFailed&&(result.pending!=0u||project_planetary_play::planetary_view_changed(view,m_planetaryView)))
                                     m_planetaryNextTick=now;
                             }
                             else if(result.waiting_for_worker ||result.operation.cancelled)
@@ -3832,7 +3251,7 @@
                 }
                 if(m_planetaryPending ||((m_planetaryPaused||!m_planetarySettings->stream_lod)&&!runtime_water_visibility_pending())
                     ||m_planetaryFailed ||now<m_planetaryNextTick) return;
-                if(!m_planetaryContinue &&!planetary_view_changed(view,m_planetaryView)) return;
+                if(!m_planetaryContinue &&!project_planetary_play::planetary_view_changed(view,m_planetaryView)) return;
                 if(m_planetarySequence==std::numeric_limits<std::uint64_t>::max()) return;
                 if(linked_wet_terrain())
                 {
@@ -3860,7 +3279,7 @@
                         m_presentedLinkedWater};
                     auto submission=m_planetaryScheduler->submit_cancellable("Stream project planetary terrain",
                         [root,settings,view,linked_view,provider=m_linkedTerrain](std::stop_token stop){
-                            if(provider)return linked_terrain_step(*provider,linked_view,stop);
+                            if(provider)return project_planetary_play::linked_terrain_step(*provider,linked_view,stop);
                             return project_planetary::stream_step(root,settings,view,stop);
                         });
                     m_planetaryCancellation=submission.cancellation;
@@ -4414,77 +3833,10 @@
                 if(active_android_planetary_pose.root==m_projectRoot&&active_android_planetary_pose.project_id==m_projectId)
                     m_packagedPlanetaryPose=active_android_planetary_pose.data;
 #endif
-                const auto settings=project_planetary::load_settings(root);
-                if(m_packagedShoreline)m_meshPlanetarySettings=m_packagedShoreline->settings;
-                else if(m_packagedPlanetaryPose)m_meshPlanetarySettings=m_packagedPlanetaryPose->settings;
-                else if(settings)
-                {
-                    const auto attached=package_source::load_project_attachment(root,"planetary_terrain");
-                    if(attached.source_attached())
-                    {
-                        const auto source=project_planetary::capture_source_generation(root,attached.content_hash);
-                        if(source&&project_planetary::source_generation_is_current(root,*source))
-                        {m_meshPlanetarySettings=settings;m_meshPlanetarySource=source;}
-                    }
-                }
-                const auto budget=m_meshPlanetarySettings
-                    ?project_planetary::scene_mesh_budget(*m_meshPlanetarySettings):project_planetary::SceneMeshBudget{};
-                m_meshFrameLimits={budget.frame_indices,budget.frame_bytes};
-                std::uint64_t mesh_bytes{}, mesh_indices{},ordinary_bytes{},ordinary_indices{};
-                std::optional<editor_project_textures::ProjectTextureController> textures;
-                for (const auto& entity : m_entities)
-                {
-                    if (!entity.mesh_asset) continue;
-                    const bool planetary=entity.category=="Planetary Terrain"&&m_meshPlanetarySettings.has_value();
-                    const auto& reference = *entity.mesh_asset;
-                    const std::uint64_t bytes = 64u + std::uint64_t(reference.vertex_count) * sizeof(asset::mesh::Vertex)
-                        + std::uint64_t(reference.index_count) * sizeof(std::uint32_t);
-                    if (m_meshes.size() >= 64u || bytes>budget.cache_bytes-(std::min)(budget.cache_bytes,mesh_bytes)
-                        || reference.index_count>budget.frame_indices-(std::min)(budget.frame_indices,mesh_indices)
-                        || (!planetary&&(bytes>std::uint64_t{16u}*1024u*1024u-(std::min)(std::uint64_t{16u}*1024u*1024u,ordinary_bytes)
-                            ||reference.index_count>196'608u-(std::min)(std::uint64_t{196'608u},ordinary_indices))))
-                    {
-                        logger::get("Engine.Assets").log(logger::LogLevel::WARN, "Project mesh residency or geometry budget exceeded; mesh was not loaded.", std::source_location::current());
-                        continue;
-                    }
-                    auto limits=planetary?budget.artifact:asset::mesh::Limits{};
-                    limits.maximum_bytes=(std::min)(limits.maximum_bytes,budget.cache_bytes-mesh_bytes);
-                    auto loaded = asset::mesh::read_project_artifact(root, reference.logical_path, {reference.artifact_key},limits);
-                    if (!loaded || loaded.artifact->vertices().size() != reference.vertex_count
-                        || loaded.artifact->indices().size() != reference.index_count)
-                    {
-                        logger::get("Engine.Assets").log(logger::LogLevel::WARN, "Project mesh failed file/content admission: " + reference.logical_path, std::source_location::current());
-                        continue;
-                    }
-                    m_meshes.emplace(entity.source_id, std::move(loaded.artifact));
-                    if (entity.texture_material)
-                    {
-                        if (!textures) textures.emplace(m_projectId, root);
-                        const auto& material = *entity.texture_material;
-                        auto resolved = (material.alpha == scene::SceneTextureAlphaMode::opaque
-                            || material.alpha == scene::SceneTextureAlphaMode::cutout)
-                            ? textures->resolve_scene_material(material) : editor_project_textures::ResolvedTextureMaterial{};
-                        if (resolved && resolved.artifact)
-                        {
-                            auto binding = std::make_shared<previewgrid::MeshBaseColorBinding>(
-                                previewgrid::MeshBaseColorBinding{std::move(resolved.artifact),resolved.logical,resolved.sampler,
-                                    material.alpha == scene::SceneTextureAlphaMode::cutout,material.alpha_cutoff,
-                                    !material.logical_path.starts_with("Textures/Forest/reference_bark_foliage_v1")
-                                        && !material.logical_path.starts_with("Textures/Forest/project_bark_foliage_")});
-                            if (previewgrid::valid_mesh_base_color_binding(*binding))
-                                m_meshBaseColorTextures.emplace(entity.source_id,std::move(binding));
-                        }
-                        if (!m_meshBaseColorTextures.contains(entity.source_id))
-                        {
-                            m_runtimeViewStatus = "Textured mesh drawing refused: its exact opaque/cutout base-color texture is unavailable.";
-                            logger::get("Engine.Assets").log(logger::LogLevel::WARN,
-                                m_runtimeViewStatus + " " + material.logical_path,std::source_location::current());
-                        }
-                    }
-                    mesh_bytes += bytes;
-                    mesh_indices += reference.index_count;
-                    if(!planetary){ordinary_bytes+=bytes;ordinary_indices+=reference.index_count;}
-                }
+                const auto* packagedSettings=m_packagedShoreline?&m_packagedShoreline->settings:
+                    m_packagedPlanetaryPose?&m_packagedPlanetaryPose->settings:nullptr;
+                project_play_assets::admit(root,m_projectId,m_entities,packagedSettings,m_meshPlanetarySettings,m_meshPlanetarySource,
+                    m_meshFrameLimits,m_meshes,m_meshBaseColorTextures,m_runtimeViewStatus);
             }
             std::unordered_map<std::uint64_t, std::shared_ptr<const asset::mesh::Artifact>> m_meshes{};
             std::unordered_map<const void*,ProjectPlayWaterCache> m_waterCaches{};
@@ -4628,7 +3980,7 @@
             epochengine::lighting::LightHandle m_sunlightHandle{};
             timing::Clock::time_point m_lastFrame{};
             timing::Clock::time_point m_lastFrameEntry{};
-            RuntimeFrameEvidence m_runtimeFrameEvidence{};
+            project_play_hud::RuntimeFrameEvidence m_runtimeFrameEvidence{};
             bool m_hasLastFrame{ false };
             epochengine::previewgrid::CameraMode m_cameraMode{ epochengine::previewgrid::CameraMode::Editor };
             input::ProfilePreset m_inputProfile{ input::ProfilePreset::EditorDefault };

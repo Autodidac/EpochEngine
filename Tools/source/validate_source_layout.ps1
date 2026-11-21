@@ -1,5 +1,7 @@
 param([string]$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path)
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot '../build/epoch_package_layout.ps1')
+$edition = Get-EpochSourceEdition -RepoRoot $RepoRoot
 $failures = [Collections.Generic.List[string]]::new()
 $src = Join-Path $RepoRoot 'Engine/src'
 foreach ($file in Get-ChildItem -LiteralPath $src -File) {
@@ -53,7 +55,9 @@ if (Test-Path -LiteralPath $examples -PathType Container) {
     }
 }
 # The extracted platform library is a first-party source owner, not a mirror.
-foreach ($owner in @('EpochPlatformEngine', 'EpochAudioEngine', 'EpochMediaEngine', 'EpochSelfCoding')) {
+$owners = @('EpochPlatformEngine', 'EpochAudioEngine', 'EpochMediaEngine')
+if ($edition.Directory -eq 'development' -and !$edition.OwnerRuntime) { $owners += 'EpochSelfCoding' }
+foreach ($owner in $owners) {
 $dependencyRoot = Join-Path $RepoRoot "Engine/dep/$owner"
 $ownerProjects = @("$owner.vcxproj", "$owner.vcxproj.filters")
 if ($owner -eq 'EpochSelfCoding') { $ownerProjects += @('EpochSelfCodingIntegration.vcxitems', 'EpochSelfCodingIntegration.vcxitems.filters') }

@@ -120,6 +120,7 @@ struct EditorEntity {
  std::optional<scene::SceneMeshSnapshot>meshAsset;
  std::optional<std::array<double,3>>positionAnchor;
  std::optional<scene::SceneForestRegionInstance>forestRegion;
+ std::vector<scene::SceneForestPaintRegion>forestPaintRegions;
  std::optional<scene::SceneTerrainAttachment>terrainAttachment;
  std::shared_ptr<const int>meshSnapshot;bool meshLoadAttempted{};
 };

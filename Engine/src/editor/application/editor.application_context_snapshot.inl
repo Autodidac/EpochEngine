@@ -183,6 +183,11 @@
         auto& storage = editor_storage();
         std::scoped_lock lock(storage.mutex);
         EditorState& editor = storage.states[ctx];
+        // The target may become a detached pane, or its promotion may fail.
+        // A full Editor frame claims the restored layout after promotion.
+        editor.layoutPreferencesLoaded = false;
+        editor.layoutPreferencesSnapshot.clear();
+        editor.layoutPreferencesNextCheck = {};
         editor.initialized = true;
         editor.planetaryInitialFramePending = false;
         editor.openMenu = TopMenu::None;

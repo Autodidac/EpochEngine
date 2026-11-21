@@ -49,7 +49,9 @@ class GeneratedProjectDependencies(unittest.TestCase):
             "    [[nodiscard]] static constexpr std::string_view generated_windows_msbuild_candidates("))
         fragments += definition((ROOT / "Engine/src/editor/implementation/editor.project_registry.inl").read_text(encoding="utf-8"),
             "    [[nodiscard]] static std::string to_windows_path(")
-        fragments += definition(source, "    inline constexpr std::array<std::string_view, 9> generated_child_runtime_assets", True)
+        asset_declaration = next(line for line in source.splitlines()
+                                 if line.startswith("    inline constexpr ") and line.endswith(" generated_child_runtime_assets{"))
+        fragments += definition(source, asset_declaration.removesuffix("{"), True)
         fragments += definition(source, "    inline constexpr std::array<std::array<std::string_view, 2>, 8> generated_child_runtime_notices", True)
         fragments += definition(source, "    [[nodiscard]] static std::string generated_child_runtime_notices_msbuild(")
         fragments += definition(source, "    [[nodiscard]] static std::string generated_child_runtime_assets_msbuild(")

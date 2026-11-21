@@ -38,8 +38,6 @@ module;
 #include <SDL3/SDL_video.h>
 #if defined(__ANDROID__)
 #include <GLES3/gl3.h>
-#include <src/render/render.atmosphere_shader.hpp>
-#include <src/render/render.cloud_shader.hpp>
 #endif
 #endif
 
@@ -67,14 +65,15 @@ import render.canvas2d_runtime;
 import render.device;
 import render.device_sdl;
 import render.context_frame;
-#if defined(__ANDROID__)
-import render.lighting;
-import render.preview_atmosphere;
-#endif
 import package.registry;
 import sdl.renderer;
 import sdl.state;
 import sdl.textures;
+
+#if defined(__ANDROID__)
+#include "sdl.android_scene.hpp"
+namespace android_scene = epochengine::sdlcontext::android_scene;
+#endif
 
 namespace
 {
@@ -98,348 +97,6 @@ namespace
 #if defined(__ANDROID__)
     SDL_GLContext s_androidRendererContext{};
 
-    [[nodiscard]] GLuint compile_android_preview_shader(GLenum stage, std::string_view shared,
-        std::string_view body, const char* logTag)
-    {
-        using epochengine::rendercloudshader::gles_header;
-        const auto shader = glCreateShader(stage);
-        if (!shader) return 0;
-        const std::array sources{gles_header.data(), shared.data(), body.data()};
-        const std::array lengths{GLint(gles_header.size()), GLint(shared.size()), GLint(body.size())};
-        glShaderSource(shader, body.empty() ? 2 : 3, sources.data(), lengths.data());
-        glCompileShader(shader);
-        GLint compiled{};
-        glGetShaderiv(shader, GL_COMPILE_STATUS, &compiled);
-        if (compiled) return shader;
-        std::array<char, 2048> log{};
-        glGetShaderInfoLog(shader, log.size(), nullptr, log.data());
-        epochengine::logger::error(logTag, log.data());
-        glDeleteShader(shader);
-        return 0;
-    }
-
-    [[nodiscard]] GLuint make_android_fullscreen_program(std::string_view fragmentShared,
-        std::string_view fragmentBody, const char* logTag)
-    {
-        const auto vertex = compile_android_preview_shader(GL_VERTEX_SHADER,
-            epochengine::rendercloudshader::vertex_source, {}, logTag);
-        const auto pixel = vertex ? compile_android_preview_shader(GL_FRAGMENT_SHADER,
-            fragmentShared, fragmentBody, logTag) : 0;
-        const auto program = vertex && pixel ? glCreateProgram() : 0;
-        if (program)
-        {
-            glAttachShader(program, vertex);
-            glAttachShader(program, pixel);
-            glLinkProgram(program);
-        }
-        if (vertex) glDeleteShader(vertex);
-        if (pixel) glDeleteShader(pixel);
-        if (!program) return 0;
-        GLint linked{};
-        glGetProgramiv(program, GL_LINK_STATUS, &linked);
-        if (linked) return program;
-        std::array<char, 2048> log{};
-        glGetProgramInfoLog(program, log.size(), nullptr, log.data());
-        epochengine::logger::error(logTag, log.data());
-        glDeleteProgram(program);
-        return 0;
-    }
-
-    class AndroidPlanetarySky final
-    {
-    public:
-        void release() noexcept
-        {
-            if (program_) glDeleteProgram(program_);
-            if (triangle_) glDeleteVertexArrays(1, &triangle_);
-        }
-
-        void draw(const epochengine::previewgrid::PlanetAtmosphereView& atmosphere,
-            int width, int height, bool space)
-        {
-            if (failed_) return;
-            if (!program_ && !initialize())
-            {
-                failed_ = true;
-                epochengine::logger::error("SDL.Sky", "Android sky shader initialization failed.");
-                return;
-            }
-
-            GLint previousArray{};
-            glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &previousArray);
-            std::array<GLint, 6> previousBlend{};
-            glGetIntegerv(GL_BLEND_SRC_RGB, &previousBlend[0]);
-            glGetIntegerv(GL_BLEND_DST_RGB, &previousBlend[1]);
-            glGetIntegerv(GL_BLEND_SRC_ALPHA, &previousBlend[2]);
-            glGetIntegerv(GL_BLEND_DST_ALPHA, &previousBlend[3]);
-            glGetIntegerv(GL_BLEND_EQUATION_RGB, &previousBlend[4]);
-            glGetIntegerv(GL_BLEND_EQUATION_ALPHA, &previousBlend[5]);
-            glBindVertexArray(triangle_);
-            glDisable(GL_DEPTH_TEST);
-            glDisable(GL_CULL_FACE);
-            glEnable(GL_BLEND);
-            glBlendEquationSeparate(GL_FUNC_ADD, GL_FUNC_ADD);
-            glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ZERO, GL_ONE);
-            glUseProgram(program_);
-            const auto vector = [&](std::size_t uniform, epochengine::previewgrid::Vec3 value) {
-                glUniform3f(locations_[uniform], value.x, value.y, value.z);
-            };
-            vector(0, atmosphere.observer);
-            vector(1, atmosphere.forward);
-            vector(2, atmosphere.right);
-            vector(3, atmosphere.up);
-            vector(4, atmosphere.sun);
-            glUniform1f(locations_[5], atmosphere.thickness);
-            glUniform1i(locations_[6], atmosphere.sun_visible);
-            glDrawArrays(GL_TRIANGLES, 0, 3);
-            glDisable(GL_BLEND);
-            glBlendFuncSeparate(previousBlend[0], previousBlend[1], previousBlend[2], previousBlend[3]);
-            glBlendEquationSeparate(previousBlend[4], previousBlend[5]);
-            glBindVertexArray(static_cast<GLuint>(previousArray));
-            if (glGetError() != GL_NO_ERROR)
-            {
-                failed_ = true;
-                epochengine::logger::error("SDL.Sky", "Android sky draw failed.");
-                return;
-            }
-            if (width != loggedWidth_ || height != loggedHeight_)
-            {
-                loggedWidth_ = width;
-                loggedHeight_ = height;
-                using namespace epochengine;
-                const auto& eye = atmosphere.observer;
-                logger::get("SDL.Sky").logf(logger::LogLevel::INFO, std::source_location::current(),
-                    "Android planetary sky drawn: viewport={}x{} radius_ratio={:.6f} thickness={:.6f} solar_disk={} space={}.",
-                    width, height, std::hypot(eye.x, eye.y, eye.z), atmosphere.thickness,
-                    atmosphere.sun_visible, space);
-            }
-        }
-
-    private:
-        [[nodiscard]] bool initialize()
-        {
-            constexpr std::string_view body = R"glsl(in vec2 vUv;
-out vec4 outColor;
-void main() {
-    outColor=skyAtmosphere(vUv*2.0-1.0);
-    if (outColor.a<=0.0) discard;
-}
-)glsl";
-            program_ = make_android_fullscreen_program(
-                epochengine::renderatmosphereshader::fragment_shared, body, "SDL.Sky");
-            if (!program_) return false;
-            glGenVertexArrays(1, &triangle_);
-            constexpr std::array names{"uSkyEye", "uSkyForward", "uSkyRight", "uSkyUp",
-                "uSkySun", "uSkyThickness", "uSkySunVisible"};
-            for (std::size_t i = 0; i < names.size(); ++i)
-                locations_[i] = glGetUniformLocation(program_, names[i]);
-            return triangle_ != 0;
-        }
-
-        GLuint program_{}, triangle_{};
-        std::array<GLint, 7> locations_{};
-        int loggedWidth_{}, loggedHeight_{};
-        bool failed_{};
-    };
-
-    using PreviewVertex = epochengine::previewgrid::Vertex;
-    using PreviewGeometry = std::vector<PreviewVertex>;
-#include "sdl.cloud_volume.inl"
-
-    // SDL's 2D geometry drops Z. Draw the existing opaque scene batch into
-    // the SDL window's GLES depth buffer before SDL composites the overlays.
-    class AndroidSceneDepth final
-    {
-    public:
-        void release() noexcept
-        {
-            if (context_ && context_ == SDL_GL_GetCurrentContext())
-            {
-                clouds_.release();
-                sky_.release();
-                if (buffer_) glDeleteBuffers(1, &buffer_);
-                if (program_) glDeleteProgram(program_);
-            }
-            *this = {};
-        }
-
-        void pause_presentation() noexcept { clouds_.pause_presentation(); }
-        void observe_present() { clouds_.observe_present(); }
-
-        [[nodiscard]] bool draw(const epochengine::core::RenderViewport& viewport,
-            const epochengine::previewgrid::Mat4& mvp,
-            const epochengine::previewgrid::PublishedSceneFrame& scene, bool densityClouds)
-        {
-            const auto& geometry = scene.solids->geometry;
-            if (geometry->empty() || (failed_ && context_ == SDL_GL_GetCurrentContext())
-                || SDL_GetRenderTarget(s_renderer)
-                || geometry->size() > static_cast<std::size_t>((std::numeric_limits<GLsizei>::max)())
-                || !SDL_FlushRenderer(s_renderer) || SDL_GL_GetCurrentWindow() != s_window)
-                return false;
-
-            const auto context = SDL_GL_GetCurrentContext();
-            if (!context) return false;
-            if (context_ != context)
-            {
-                release();
-                context_ = context;
-                GLint depthBits{};
-                glGetIntegerv(GL_DEPTH_BITS, &depthBits);
-                if (depthBits < 16 || !build_program()) return disable();
-                epochengine::logger::get("SDL").logf(epochengine::logger::LogLevel::INFO,
-                    std::source_location::current(), "Android opaque scene depth active ({} bits).", depthBits);
-            }
-
-            float left{}, top{}, right{}, bottom{};
-            if (!SDL_RenderCoordinatesToWindow(s_renderer, static_cast<float>(viewport.x),
-                    static_cast<float>(viewport.y), &left, &top)
-                || !SDL_RenderCoordinatesToWindow(s_renderer, static_cast<float>(viewport.x + viewport.width),
-                    static_cast<float>(viewport.y + viewport.height), &right, &bottom)
-                || s_width <= 0 || s_height <= 0 || !std::isfinite(left)
-                || !std::isfinite(top) || !std::isfinite(right) || !std::isfinite(bottom))
-                return false;
-            const auto pixel = [](float coordinate, int logical, int drawable) {
-                return static_cast<GLint>(std::lround((std::clamp)(coordinate, 0.0f,
-                    static_cast<float>(logical)) * drawable / logical));
-            };
-            const auto x = pixel(left, s_width, s_framebufferWidth);
-            const auto y = s_framebufferHeight - pixel(bottom, s_height, s_framebufferHeight);
-            const auto width = pixel(right, s_width, s_framebufferWidth) - x;
-            const auto height = s_framebufferHeight - pixel(top, s_height, s_framebufferHeight) - y;
-            if (width <= 0 || height <= 0) return false;
-
-            const float aspect = static_cast<float>(viewport.width) / viewport.height;
-            const auto atmosphere = scene.camera.projection == epochengine::render_camera::ProjectionKind::perspective
-                ? epochengine::previewgrid::planet_atmosphere_view(scene, aspect) : std::nullopt;
-            const bool cloudTarget = densityClouds && clouds_.begin(scene, aspect, width, height, atmosphere);
-            glBindBuffer(GL_ARRAY_BUFFER, buffer_);
-            if (uploaded_.lock() != geometry)
-            {
-                glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(geometry->size() * sizeof(PreviewVertex)),
-                    geometry->data(), GL_STATIC_DRAW);
-                if (glGetError() != GL_NO_ERROR)
-                {
-                    glBindBuffer(GL_ARRAY_BUFFER, 0);
-                    if (cloudTarget) clouds_.restore();
-                    return disable();
-                }
-                uploaded_ = geometry;
-            }
-
-            const int drawX = cloudTarget ? 0 : x;
-            const int drawY = cloudTarget ? 0 : y;
-            glViewport(drawX, drawY, width, height);
-            glScissor(drawX, drawY, width, height);
-            glEnable(GL_SCISSOR_TEST);
-            glDepthMask(GL_TRUE);
-            glDepthFunc(GL_LESS);
-            glClearDepthf(1.0f);
-            const bool clearBackground = cloudTarget || atmosphere.has_value();
-            if (clearBackground)
-            {
-                const auto background = epochengine::previewgrid::scene_clear_color(&scene);
-                glClearColor(background[0], background[1], background[2], background[3]);
-            }
-            glClear(clearBackground ? GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT : GL_DEPTH_BUFFER_BIT);
-            if (atmosphere) sky_.draw(*atmosphere, width, height, scene.space_background);
-            glEnable(GL_DEPTH_TEST);
-            glDisable(GL_BLEND);
-            glEnable(GL_CULL_FACE);
-            glFrontFace(GL_CW);
-            glUseProgram(program_);
-            glUniformMatrix4fv(mvp_, 1, GL_FALSE, (cloudTarget ? clouds_.projection_view() : mvp).data());
-            bind_vertices(position_, offsetof(PreviewVertex, position));
-            bind_vertices(color_, offsetof(PreviewVertex, color));
-            glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(geometry->size()));
-
-            // The SDL flush invalidated its viewport, scissor, blend and
-            // program cache. Restore depth/culling and the two private inputs,
-            // which its 2D renderer does not reset between draw batches.
-            glDisableVertexAttribArray(position_);
-            glDisableVertexAttribArray(color_);
-            glBindBuffer(GL_ARRAY_BUFFER, 0);
-            glDisable(GL_DEPTH_TEST);
-            glDisable(GL_CULL_FACE);
-            glFrontFace(GL_CCW);
-            if (glGetError() != GL_NO_ERROR)
-            {
-                if (cloudTarget) clouds_.restore();
-                return disable();
-            }
-            if (cloudTarget && !clouds_.composite(x, y))
-                return draw(viewport, mvp, scene, false);
-            return true;
-        }
-
-    private:
-        static constexpr GLuint position_ = 6;
-        static constexpr GLuint color_ = 7;
-        SDL_GLContext context_{};
-        GLuint program_{};
-        GLuint buffer_{};
-        GLint mvp_ = -1;
-        bool failed_{};
-        std::weak_ptr<const PreviewGeometry> uploaded_{};
-        AndroidCloudVolume clouds_{};
-        AndroidPlanetarySky sky_{};
-
-        [[nodiscard]] bool disable()
-        {
-            failed_ = true;
-            epochengine::logger::error("SDL", "Android scene depth unavailable. Using SDL geometry.");
-            return false;
-        }
-
-        static void bind_vertices(GLuint attribute, std::size_t offset) noexcept
-        {
-            glEnableVertexAttribArray(attribute);
-            glVertexAttribPointer(attribute, 3, GL_FLOAT, GL_FALSE, sizeof(PreviewVertex),
-                reinterpret_cast<const void*>(offset));
-        }
-
-        [[nodiscard]] static GLuint compile_shader(GLenum type, const char* source) noexcept
-        {
-            const auto shader = glCreateShader(type);
-            if (!shader) return 0;
-            glShaderSource(shader, 1, &source, nullptr);
-            glCompileShader(shader);
-            GLint compiled{};
-            glGetShaderiv(shader, GL_COMPILE_STATUS, &compiled);
-            if (compiled) return shader;
-            glDeleteShader(shader);
-            return 0;
-        }
-
-        [[nodiscard]] bool build_program() noexcept
-        {
-            const auto vertex = compile_shader(GL_VERTEX_SHADER,
-                "attribute vec3 a_position; attribute vec3 a_color; uniform mat4 u_mvp;"
-                "varying mediump vec3 v_color;"
-                "void main(){gl_Position=u_mvp*vec4(a_position,1.0);v_color=a_color;}");
-            const auto fragment = compile_shader(GL_FRAGMENT_SHADER,
-                "varying mediump vec3 v_color; void main(){gl_FragColor=vec4(clamp(v_color,0.0,1.0),1.0);}");
-            if (vertex && fragment) program_ = glCreateProgram();
-            if (program_)
-            {
-                glAttachShader(program_, vertex);
-                glAttachShader(program_, fragment);
-                glBindAttribLocation(program_, position_, "a_position");
-                glBindAttribLocation(program_, color_, "a_color");
-                glLinkProgram(program_);
-            }
-            if (vertex) glDeleteShader(vertex);
-            if (fragment) glDeleteShader(fragment);
-            if (!program_) return false;
-            GLint linked{};
-            glGetProgramiv(program_, GL_LINK_STATUS, &linked);
-            if (!linked) return false;
-            mvp_ = glGetUniformLocation(program_, "u_mvp");
-            glGenBuffers(1, &buffer_);
-            return mvp_ >= 0 && buffer_ != 0;
-        }
-    };
-
-    AndroidSceneDepth s_androidSceneDepth{};
     std::atomic_bool s_androidBackgrounded{false};
     std::atomic_bool s_androidCancelInput{false};
     bool s_androidLifecycleWatch = false;
@@ -652,7 +309,7 @@ void main() {
         epochengine::sdlcontext::sdl_renderer.renderer = nullptr;
 
 #if defined(__ANDROID__)
-        s_androidSceneDepth.release();
+        android_scene::release();
         s_androidRendererContext = nullptr;
         reset_android_keyboard();
         stop_android_text_input();
@@ -1579,7 +1236,8 @@ void main() {
 
         const auto& solidVertices = *solidGeometry;
 #if defined(__ANDROID__)
-        const bool drewDepth = matchedScene && s_androidSceneDepth.draw(viewport, mvp,
+        const bool drewDepth = matchedScene && android_scene::draw(
+            {s_renderer, s_window, s_width, s_height, s_framebufferWidth, s_framebufferHeight}, viewport, mvp,
             *matchedScene, ctx->preview_density_clouds);
 #else
         constexpr bool drewDepth = false;
@@ -2108,7 +1766,7 @@ void main() {
     void release_android_render_targets(epochengine::core::Context& ctx)
     {
         cancel_android_touch(&ctx);
-        s_androidSceneDepth.release();
+        android_scene::release();
         release_canvas2d_presenter();
         destroy_arcade_screen_preview_target();
     }
@@ -2773,7 +2431,7 @@ void main() {
         if (!state.surfaceLifecycle.rendering_allowed())
         {
 #if defined(__ANDROID__)
-            s_androidSceneDepth.pause_presentation();
+            android_scene::pause_presentation();
 #endif
             if (ctx->windowData)
             {
@@ -2811,7 +2469,7 @@ void main() {
             return false;
         }
 #if defined(__ANDROID__)
-        s_androidSceneDepth.observe_present();
+        android_scene::observe_present();
 #endif
         if (ctx->windowData && presentation.present_succeeded)
         {

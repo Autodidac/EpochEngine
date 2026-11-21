@@ -765,7 +765,6 @@
         const float contentHeight = (std::max)(0.0f, height - titleBarHeight - topBorderHeight - border);
         const float contentWidth = (std::max)(0.0f, width - border * 2.0f);
 
-        const core::RenderPath renderPath = render_path_for_context(g_frame.ctx);
         const bool needsViewportFallback = !backend_owns_scene_viewport(g_frame.ctx);
 
         if (needsViewportFallback && contentWidth > 0.0f && contentHeight > 0.0f)
@@ -781,7 +780,7 @@
 
             const float previewScale = 1.15f;
             const float lineHeight = line_advance_amount(previewScale);
-            draw_text_line(std::string(viewport_fallback_name(g_frame.ctx)) + " Preview", cardX + 16.0f, cardY + 16.0f, previewScale);
+            draw_text_line("Scene Preview", cardX + 16.0f, cardY + 16.0f, previewScale);
             draw_text_line("Scene output pending backend pass", cardX + 16.0f, cardY + 16.0f + lineHeight + 10.0f, kFontScale);
             draw_text_line("GUI remains live in this viewport", cardX + 16.0f, cardY + 16.0f + lineHeight * 2.0f + 18.0f, kFontScale);
         }

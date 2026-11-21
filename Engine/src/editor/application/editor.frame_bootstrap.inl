@@ -98,7 +98,7 @@
                 chat.completionGeneration;
             const AiDeferredRequestKind completedKind =
                 chat.latestCompletionRequestKind;
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
             constexpr bool sourceCompletion = false;
 #endif
             if (completedKind == AiDeferredRequestKind::Authoring)
@@ -534,7 +534,7 @@
                 || editor.editorSettingsWindow.resizing))
             || (editor.showAiModelManagerModal && (editor.aiModelManagerWindow.dragging
                 || editor.aiModelManagerWindow.resizing));
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
         constexpr bool nativeToolApprovalModalVisible = false;
 #endif
         const gui::Vec2 aboutModalSize = fit_modal_size({600.0f, 416.0f}, {360.0f, 260.0f});
@@ -1103,7 +1103,8 @@
                             ? "" : " with partial coverage");
                 toolbarCpuDetail = (toolbarCpuValid ? "Share of host CPU time. " : "Process CPU usage unavailable. ") + coverage;
                 toolbarRamDetail = toolbarRamValid ? epochengine::format_text(
-                    "{:.1f} GiB in current working sets. {}", static_cast<double>(usedRamBytes) / bytesPerGiB, coverage)
+                    "{:.1f} GiB resident across processes. Shared pages can count more than once. {}",
+                    static_cast<double>(usedRamBytes) / bytesPerGiB, coverage)
                     : "Process RAM usage unavailable. " + coverage;
                 toolbarGpuDetail = (toolbarGpuValid
                     ? "Busiest attributed GPU engine across observed processes. "

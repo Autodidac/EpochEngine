@@ -674,7 +674,7 @@
             return source;
         }
 
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
         [[nodiscard]] bool project_ai_scope_allowed(std::string_view projectRoot)
         {
             if (projectRoot.empty()) return true; // Plain chat can have no project context.
@@ -716,7 +716,7 @@
                 if(count>=64u)break;
                 if(profile.manifest_path.empty()||profile.root_path.empty()
                     ||(profile.kind!=EditorProjectKind::Game&&profile.kind!=EditorProjectKind::Tool))continue;
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
                 if(!project_ai_scope_allowed(profile.root_path))continue;
 #endif
                 const ai::McpToolCall openCall{.tool="project.open",
@@ -735,7 +735,7 @@
         {
             editor.aiProjectScriptDraft.clear();
             editor.aiProjectScriptPreimage.clear();
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
             if (!project_ai_scope_allowed(editor.projectRoot))
             {
                 editor.aiAuthoringStatus = "Choose a game or application project. This edition cannot read engine source for AI assistance.";
@@ -778,7 +778,7 @@
                 && error == std::errc::no_such_file_or_directory) error.clear();
             if (error) return false;
             const bool existed = std::filesystem::exists(targetStatus);
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
             if (!editor_ai_file_scope::allows_text(target,
                     core::path::find_epoch_repo_root(core::path::executable_dir())))
             {

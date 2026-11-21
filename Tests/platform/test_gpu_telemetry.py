@@ -23,6 +23,7 @@ def consumer():
     gui = (ROOT / "Engine/modules/gui/gui.engine.ixx").read_text(encoding="utf-8")
     status_type = definition(gui, "    export struct StatusStripItem", True).replace("export ", "")
     tone = definition(gui, "    export enum class SemanticTone", True).replace("export ", "")
+    icon = definition(gui, "    export enum class ButtonIcon", True).replace("export ", "")
     backend = "\n".join(definition(source, marker, marker.endswith(" final")) for marker in (
         "        struct NvmlFunctions final",
         "        [[nodiscard]] GpuResourceSample read_nvml_resources(",
@@ -48,7 +49,7 @@ def consumer():
         definition(policy, marker) for marker in (
             '        [[nodiscard]] static perf::tier recommended_editor_performance_tier(',
             '        [[nodiscard]] static std::string recommended_support_tier('))
-    return (PREFIX + "\nnamespace gui {\n" + tone + "\n" + status_type + "\n" + WIDTH_PORT + PANEL_PORTS
+    return (PREFIX + "\nnamespace gui {\n" + tone + "\n" + icon + "\n" + status_type + "\n" + WIDTH_PORT + PANEL_PORTS
             + "\n}\n" + PORTS + backend + gpu_panel + PACING_PORT + pacing + "\n" + PRESENTATION_PREFIX
             + storage + presentation + minimum + PRESENTATION_CHECKS + MAIN)
 

@@ -12,6 +12,7 @@ import unittest
 
 from Tests.build.test_opengl_sprite_stream import definition
 from Tests.gui.test_edit_box_scrolling import fixture as gui_fixture
+from Tests.support.project_play_owners import HUD, hud_functions
 
 ROOT = Path(__file__).resolve().parents[2]
 PLAY = ROOT / "Engine/src/epoch/implementation/epoch.project_play_scene.inl"
@@ -119,6 +120,8 @@ void draw_text_line(std::string_view text,float x,float y,float scale){
         "            void draw_runtime_controls_restore()", "            void draw_runtime_controls_hide(",
         "            [[nodiscard]] bool runtime_water_visibility_pending()",
         "            void draw_runtime_environment_controls(", "            void draw_planetary_exploration_controls("))
+    hud_owners = hud_functions('[[nodiscard]] gui::WidgetBounds runtime_panel_bounds(',
+        'void draw_planetary_flight_status(', 'void draw_runtime_controls_restore(', 'void draw_runtime_controls_hide(')
     after_planetary_load = source.index("                prepare_planetary_runtime();\n") + len("                prepare_planetary_runtime();\n")
     hud_defaults = source[after_planetary_load:source.index("                prepare_gameplay();", after_planetary_load)]
     return base + r'''
@@ -154,7 +157,10 @@ WINDOW_OWNERS
 namespace project_planetary_runtime {
 enum class TravelMode{walk,cruise,flight};
 enum class Command{orbit,land,toggle_cruise,toggle_walk,toggle_gravity,toggle_level_assist,toggle_time_pause,cycle_time_rate};
+struct Body{unsigned id;std::string name;};
+struct Frame{unsigned body_count{2},anchor{1},target{2};TravelMode mode{};double altitude{1.8},speed{0},seconds{0},time_scale{1};bool valid{true},gravity_enabled{true},level_assist{true};std::array<Body,2>bodies{{{1,"VERDANT"},{2,"MOON"}}};};
 }
+PLAY_HUD_OWNERS
 struct Settings{bool ocean_surface{true};std::string mode{"planet"};};
 struct ExplorationController{std::string encode_session(){return{};}};
 struct ExplorationSession{bool ok{};std::string message;};
@@ -167,14 +173,15 @@ struct Scene {
  std::optional<Settings>m_planetarySettings{Settings{}},m_meshPlanetarySettings{Settings{}};
  std::optional<ExplorationController>m_explorationController{ExplorationController{}};
  std::optional<int>m_planetaryStartupDeadline;
+ bool m_packagedShoreline{},m_packagedPlanetaryPose{};
+ bool fixed_planetary_camera()const{return m_packagedPlanetaryPose;}
  std::optional<Scheduler>m_planetaryScheduler;std::optional<int>m_planetaryPending;
  bool m_planetaryFailed{},m_planetaryPaused{},m_planetaryContinue{},m_runtimeInspectionLight{},m_runtimeCloudsVisible{true},m_runtimeWaterVisible{true},m_hasPlanetRecipe{true},m_planetaryPublishedOcean{true};
  bool m_planetaryInitialWaterCut{},m_planetaryPreparingInitialWater{},m_planetaryCutPlayback{};
  int m_planetaryEntity{1},m_planetaryCancellation{},m_planetaryNextTick{},m_screenshotAfterFrames{};
  std::string m_projectName{"Runtime"},m_projectRoot,m_runtimeViewStatus,m_terrainAttachmentStatus,m_screenshotStatus,m_planetaryStatus,m_planetaryWaterStatus,m_explorationStatus,m_explorationAdvanceStatus;
  std::optional<int>m_meshPlanetarySource;ExplorationSession m_explorationSession;
- struct Body{unsigned id;std::string name;};
- struct Frame{unsigned body_count{2},anchor{1},target{2};project_planetary_runtime::TravelMode mode{};double altitude{1.8},speed{0},seconds{0},time_scale{1};bool valid{true},gravity_enabled{true},level_assist{true};std::array<Body,2>bodies{{{1,"VERDANT"},{2,"MOON"}}};}m_explorationFrame;
+ project_planetary_runtime::Frame m_explorationFrame;
  struct ReachObjective{bool active{};bool objective()const{return active;}}m_reachObjective;
  struct Input{unsigned selected_body{};project_planetary_runtime::Command command{};double speed_multiplier{};}m_explorationInput;
  struct Entity{std::string type;bool visible()const{return true;}};std::array<Entity,1>m_entities{{{"Water"}}};
@@ -194,7 +201,8 @@ struct Scene {
 CASES
 '''.replace("EXTRA_API", extra_api).replace("FONT_OWNERS", font_owners).replace("TEXT_OWNERS", text_owners).replace(
         "NAV_OWNERS", nav_owners).replace("WINDOW_OWNERS", window_owners).replace("RUNTIME_OWNERS", runtime_owners).replace(
-        "HUD_PREFIX", hud_prefix(source)).replace("HUD_DEFAULTS", hud_defaults).replace("CASES", CASES)
+        "HUD_PREFIX", hud_prefix(source)).replace("HUD_DEFAULTS", hud_defaults).replace(
+        "PLAY_HUD_OWNERS", hud_owners).replace("CASES", CASES)
 
 
 CASES = r'''
@@ -519,6 +527,7 @@ class RuntimeHud(unittest.TestCase):
                 "temporary_root": str(temporary),
                 "scope": "Actual runtime HUD layout, scroll anchoring, planetary Controls reveal and read-only flight status, and stable top-layer glyphs during changing time and terrain status. Records GUI glyph placement with font and sprite ports. Excludes native window, renderer and model.",
                 "owner_sha256": hashlib.sha256(source.encode()).hexdigest(),
+                "compiled_owner_sha256": hashlib.sha256(HUD.read_bytes()).hexdigest(),
                 "runs": runs}, indent=2) + "\n", encoding="utf-8")
             self.assertEqual(completed.returncode, expected_exit, completed.stdout[-7000:] + completed.stderr[-1500:])
             if expected_exit:

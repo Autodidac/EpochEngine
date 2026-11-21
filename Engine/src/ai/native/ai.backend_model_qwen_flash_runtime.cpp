@@ -16,7 +16,8 @@
 #include <fstream>
 #include <functional>
 #include <httplib.h>
-#include <set>
+#include <map>
+#include <tuple>
 #include <regex>
 #include <sstream>
 #include <system_error>
@@ -111,7 +112,7 @@ private:
 [[nodiscard]] bool uses_flash_expert_streaming(const RuntimeModelProfile& profile) {
     using epochengine::ai::thinking::is_flash_next;
     return is_flash_next(profile.id) || is_flash_next(profile.repo)
-        || (profile.source == ModelSourceKind::local_gguf && is_flash_next(profile.local_path.filename().string()));
+        || (profile.source == ModelSourceKind::local_gguf && is_flash_next(native_inputs::utf8(profile.local_path.filename())));
 }
 
 [[nodiscard]] bool model_size_is_plausible(const RuntimeModelProfile& profile, std::uint64_t bytes) {
@@ -142,17 +143,17 @@ struct LocalGgufInspection {
     }
     std::error_code ec;
     if (!std::filesystem::is_regular_file(first_shard, ec) || ec) {
-        result.error = "Local GGUF does not exist: " + first_shard.string();
+        result.error = "Local GGUF does not exist: " + native_inputs::utf8(first_shard);
         return result;
     }
 
     static const std::regex split_pattern{R"((.*)-(\d{5})-of-(\d{5})\.gguf$)", std::regex::icase};
     std::smatch match;
-    const auto filename = first_shard.filename().string();
+    const auto filename = native_inputs::utf8(first_shard.filename());
     if (!std::regex_match(filename, match, split_pattern) || match.size() != 4) {
         const auto bytes = std::filesystem::file_size(first_shard, ec);
         if (ec || bytes == 0) {
-            result.error = "Local GGUF is empty or unreadable: " + first_shard.string();
+            result.error = "Local GGUF is empty or unreadable: " + native_inputs::utf8(first_shard);
             return result;
         }
         result.complete = true;
@@ -168,16 +169,16 @@ struct LocalGgufInspection {
     for (unsigned index = 1; index <= total; ++index) {
         char suffix[32]{};
         std::snprintf(suffix, sizeof(suffix), "-%05u-of-%05u.gguf", index, total);
-        const auto shard = first_shard.parent_path() / (prefix + suffix);
+        const auto shard = first_shard.parent_path() / native_inputs::path_from_utf8(prefix + suffix);
         ec.clear();
         if (!std::filesystem::is_regular_file(shard, ec) || ec) {
-            result.error = "Missing GGUF shard: " + shard.string();
+            result.error = "Missing GGUF shard: " + native_inputs::utf8(shard);
             return result;
         }
         ec.clear();
         const auto bytes = std::filesystem::file_size(shard, ec);
         if (ec || bytes == 0) {
-            result.error = "GGUF shard is empty or unreadable: " + shard.string();
+            result.error = "GGUF shard is empty or unreadable: " + native_inputs::utf8(shard);
             return result;
         }
         result.bytes += bytes;
@@ -202,7 +203,7 @@ void append_unique_cache_root(
         auto resolved_existing = std::filesystem::weakly_canonical(existing, existing_error);
         if (existing_error) resolved_existing = existing;
 #ifdef _WIN32
-        return lower(resolved_existing.string()) == lower(resolved_candidate.string());
+        return lower(native_inputs::utf8(resolved_existing)) == lower(native_inputs::utf8(resolved_candidate));
 #else
         return resolved_existing == resolved_candidate;
 #endif
@@ -983,13 +984,13 @@ std::vector<std::string> QwenFlashRuntime::build_arguments(
 
     if (profile.source == ModelSourceKind::local_gguf) {
         if (!inspect_local_gguf(profile.local_path).complete) return {};
-        add("-m", profile.local_path.string());
+        add("-m", native_inputs::utf8(profile.local_path));
     } else if (const auto cached = cached_model_path(profile); !cached.empty()) {
         // Prefer an already-complete model from any recognized shared/legacy
         // cache. Launching the first shard directly prevents llama.cpp from
         // initiating a second download merely because Epoch AI's configured
         // cache root differs from the runtime that originally fetched it.
-        add("-m", cached.string());
+        add("-m", native_inputs::utf8(cached));
     } else {
         // Model acquisition belongs to the explicit installer, never Load or Send.
         return {};
@@ -1003,7 +1004,7 @@ std::vector<std::string> QwenFlashRuntime::build_arguments(
         ? profile.local_path : cached_model_path(profile);
     if (const auto projector = matching_cached_vision_projector(modelPath); !projector.empty())
     {
-        add("--mmproj", projector.string());
+        add("--mmproj", native_inputs::utf8(projector));
         // Keep image encoding out of the coding model's GPU weight budget.
         args.emplace_back("--no-mmproj-offload");
     }
@@ -1088,7 +1089,7 @@ std::vector<std::string> QwenFlashRuntime::build_arguments(
         if (!profile.speculative_repo.empty() || profile.speculative_model.empty()
             || !std::filesystem::is_regular_file(profile.speculative_model, error) || error)
             return {};
-        add("--spec-draft-model", profile.speculative_model.string());
+        add("--spec-draft-model", native_inputs::utf8(profile.speculative_model));
         add("--spec-type", profile.speculative_type.empty() ? "draft-mtp" : profile.speculative_type);
         add("--spec-draft-n-max", std::to_string(std::max<std::uint32_t>(1, profile.speculative_tokens)));
     }
@@ -1779,6 +1780,106 @@ std::string QwenFlashRuntime::active_model_id() const {
     return active_model_id_;
 }
 
+namespace {
+struct CachedGgufSet {
+    std::filesystem::path first;
+    std::uint64_t bytes{};
+    std::size_t files{};
+    std::size_t expected{};
+    bool all_nonempty{true};
+
+    [[nodiscard]] bool complete() const {
+        return !first.empty() && all_nonempty && files == (expected == 0 ? 1 : expected);
+    }
+
+    [[nodiscard]] bool installed(const RuntimeModelProfile& profile) const {
+        return complete() && model_size_is_plausible(profile, bytes);
+    }
+};
+
+struct CachedRepoInspection {
+    CachedGgufSet model;
+    std::uint64_t storage_bytes{};
+    std::size_t gguf_files{};
+};
+
+[[nodiscard]] CachedRepoInspection inspect_cached_repo(const std::filesystem::path& root,
+    const RuntimeModelProfile& profile, bool count_storage) {
+    CachedRepoInspection result;
+    const auto quant = lower(profile.quant);
+    static const std::regex split_pattern{R"(-([0-9]+)-of-([0-9]+)\.gguf$)", std::regex::icase};
+    std::map<std::filesystem::path, CachedGgufSet> sets;
+    std::vector<std::pair<std::filesystem::path, std::uintmax_t>> stored;
+    std::error_code ec;
+    for (std::filesystem::recursive_directory_iterator it(root,
+             std::filesystem::directory_options::skip_permission_denied, ec), end;
+         !ec && it != end; it.increment(ec)) {
+        const auto& entry = *it;
+        std::error_code file_error;
+        if (!entry.is_regular_file(file_error)) continue;
+        const auto size = entry.file_size(file_error);
+        if (file_error) continue;
+
+        if (count_storage) {
+            // HF snapshots can link to the same blob through symlinks or hardlinks.
+            const bool counted = std::ranges::any_of(stored, [&](const auto& known) {
+                std::error_code equivalent_error;
+                return known.second == size && std::filesystem::equivalent(known.first, entry.path(), equivalent_error);
+            });
+            if (!counted) {
+                stored.emplace_back(entry.path(), size);
+                result.storage_bytes += size;
+            }
+        }
+
+        const auto raw = native_inputs::utf8(entry.path().filename());
+        const auto name = lower(raw);
+        if (!name.ends_with(".gguf")) continue;
+        ++result.gguf_files;
+        if (name.find("mmproj") != std::string::npos || name.find(quant) == std::string::npos) continue;
+
+        std::filesystem::path first = entry.path();
+        std::size_t expected = 0;
+        bool is_first = true;
+        std::smatch split;
+        if (std::regex_search(raw, split, split_pattern)) {
+            const auto number = split[1].str();
+            const auto total = split[2].str();
+            if (number.size() > 5 || total.size() > 5) continue;
+            const auto index = std::stoul(number);
+            expected = std::stoul(total);
+            if (index == 0 || index > expected) continue;
+            is_first = index == 1;
+            // Preserve the snapshot directory, prefix and naming convention.
+            // All padded shard numbers use the width of their total.
+            const bool padded = total.front() == '0' || total.size() == 5;
+            if (padded && number.size() != total.size()) continue;
+            if (!padded && number != std::to_string(index)) continue;
+            const std::string one = padded ? std::string(total.size() - 1, '0') + "1" : "1";
+            auto first_name = raw;
+            first_name.replace(split.position(1), number.size(), one);
+            first = first.parent_path() / native_inputs::path_from_utf8(first_name);
+        }
+        auto& set = sets[first];
+        set.expected = expected;
+        set.bytes += size;
+        ++set.files;
+        set.all_nonempty = set.all_nonempty && size > 0;
+        if (is_first) set.first = first;
+    }
+    // Prefer complete loadable split weights, then complete single files.
+    // When only partial sets exist, show progress for the most complete one.
+    const auto rank = [&](const CachedGgufSet& set) {
+        const bool installed = set.installed(profile);
+        return std::tuple{installed, installed && set.expected != 0, installed ? std::uint64_t{} : set.bytes};
+    };
+    for (const auto& [path, set] : sets) {
+        if (rank(set) > rank(result.model) || result.model.files == 0) result.model = set;
+    }
+    return result;
+}
+} // namespace
+
 std::filesystem::path QwenFlashRuntime::cache_repo_root(const RuntimeModelProfile& profile) const {
     return repo_root_for_cache(config_.model_cache_root, profile);
 }
@@ -1791,74 +1892,11 @@ std::filesystem::path QwenFlashRuntime::cached_model_path(const RuntimeModelProf
             : std::filesystem::path{};
     }
 
-    struct SplitCandidate {
-        std::filesystem::path path;
-        std::size_t index{};
-        std::size_t total{};
-        std::uint64_t bytes{};
-    };
-
-    const auto quant = lower(profile.quant);
-    const std::regex split_pattern{R"(-(\d+)-of-(\d+)\.gguf$)", std::regex::icase};
     for (const auto& cache_root : config_.shared_model_inputs_bound
              ? std::vector<std::filesystem::path>{config_.model_cache_root}
              : candidate_model_cache_roots(config_.model_cache_root)) {
-        const auto root = repo_root_for_cache(cache_root, profile);
-        std::error_code ec;
-        if (!std::filesystem::is_directory(root, ec) || ec) continue;
-
-        std::vector<SplitCandidate> splits;
-        std::vector<std::filesystem::path> single_files;
-        for (const auto& entry : std::filesystem::recursive_directory_iterator(
-                 root, std::filesystem::directory_options::skip_permission_denied, ec)) {
-            if (ec) break;
-            if (!entry.is_regular_file(ec) || ec) { ec.clear(); continue; }
-            const auto raw_name = entry.path().filename().string();
-            const auto name = lower(raw_name);
-            if (!name.ends_with(".gguf") || (!quant.empty() && name.find(quant) == std::string::npos)) continue;
-
-            std::smatch match;
-            if (std::regex_search(raw_name, match, split_pattern) && match.size() == 3) {
-                try {
-                    const auto bytes = entry.file_size(ec);
-                    if (ec) { ec.clear(); continue; }
-                    splits.push_back({
-                        entry.path(),
-                        static_cast<std::size_t>(std::stoull(match[1].str())),
-                        static_cast<std::size_t>(std::stoull(match[2].str())),
-                        bytes,
-                    });
-                } catch (...) {}
-            } else {
-                single_files.push_back(entry.path());
-            }
-        }
-
-        if (!splits.empty()) {
-            const auto expected = splits.front().total;
-            std::set<std::size_t> indices;
-            std::uint64_t split_bytes = 0;
-            for (const auto& split : splits) {
-                if (split.total == expected && indices.insert(split.index).second) {
-                    split_bytes += split.bytes;
-                }
-            }
-            if (expected > 0 && indices.size() >= expected && model_size_is_plausible(profile, split_bytes)) {
-                const auto first = std::ranges::find_if(splits, [expected](const SplitCandidate& split) {
-                    return split.total == expected && split.index == 1;
-                });
-                if (first != splits.end()) return first->path;
-            }
-        }
-
-        if (!single_files.empty()) {
-            std::ranges::sort(single_files);
-            for (const auto& file : single_files) {
-                const auto bytes = std::filesystem::file_size(file, ec);
-                if (!ec && model_size_is_plausible(profile, bytes)) return file;
-                ec.clear();
-            }
-        }
+        const auto cache = inspect_cached_repo(repo_root_for_cache(cache_root, profile), profile, false);
+        if (cache.model.installed(profile)) return cache.model.first;
     }
     return {};
 }
@@ -1871,7 +1909,7 @@ nlohmann::json QwenFlashRuntime::cache_status(const RuntimeModelProfile& profile
             {"installed", size_plausible},
             {"cached_bytes", inspection.bytes},
             {"expected_bytes", profile.estimated_bytes},
-            {"path", profile.local_path.string()},
+            {"path", native_inputs::utf8(profile.local_path)},
             {"matching_gguf_files", inspection.shard_count},
             {"split_expected", inspection.expected_shards},
             {"split_complete", inspection.complete},
@@ -1880,8 +1918,6 @@ nlohmann::json QwenFlashRuntime::cache_status(const RuntimeModelProfile& profile
         };
     }
 
-    const auto quant = lower(profile.quant);
-    const std::regex split_pattern{R"(-(\d+)-of-(\d+)\.gguf$)", std::regex::icase};
     nlohmann::json best = {
         {"installed", false},
         {"cached_bytes", 0},
@@ -1892,8 +1928,8 @@ nlohmann::json QwenFlashRuntime::cache_status(const RuntimeModelProfile& profile
         {"split_complete", false},
         {"size_plausible", false},
         {"expected_bytes", profile.estimated_bytes},
-        {"path", cache_repo_root(profile).string()},
-        {"configured_root", config_.model_cache_root.string()},
+        {"path", native_inputs::utf8(cache_repo_root(profile))},
+        {"configured_root", native_inputs::utf8(config_.model_cache_root)},
     };
     std::uint64_t best_cached_bytes = 0;
     bool best_installed = false;
@@ -1903,71 +1939,19 @@ nlohmann::json QwenFlashRuntime::cache_status(const RuntimeModelProfile& profile
              ? std::vector<std::filesystem::path>{config_.model_cache_root}
              : candidate_model_cache_roots(config_.model_cache_root)) {
         const auto root = repo_root_for_cache(cache_root, profile);
-        std::uint64_t model_bytes = 0;
-        std::uint64_t storage_bytes = 0;
-        std::vector<std::pair<std::filesystem::path, std::uint64_t>> stored_files;
-        std::set<std::pair<std::string, std::uint64_t>> unique_matching_files;
-        std::size_t gguf_files = 0;
-        std::size_t matching_gguf_files = 0;
-        std::size_t split_expected = 0;
-        std::set<std::size_t> split_indices;
-        std::error_code ec;
-
-        if (std::filesystem::is_directory(root, ec) && !ec) {
-            for (const auto& entry : std::filesystem::recursive_directory_iterator(
-                     root, std::filesystem::directory_options::skip_permission_denied, ec)) {
-                if (ec) break;
-                if (!entry.is_regular_file(ec) || ec) { ec.clear(); continue; }
-                const auto raw_name = entry.path().filename().string();
-                const auto name = lower(raw_name);
-                const auto size = entry.file_size(ec);
-                if (ec) { ec.clear(); continue; }
-                // HF snapshots name the same blob through symlinks; imported
-                // caches may instead use hardlinks. Count each file identity
-                // once, while still inspecting every logical GGUF filename.
-                std::error_code identity_error;
-                auto identity = std::filesystem::canonical(entry.path(), identity_error);
-                if (identity_error) identity = entry.path().lexically_normal();
-                const bool accounted = std::ranges::any_of(stored_files, [&](const auto& known) {
-                    if (known.second != size) return false;
-                    if (known.first == identity) return true;
-                    std::error_code equivalent_error;
-                    return std::filesystem::equivalent(known.first, identity, equivalent_error) && !equivalent_error;
-                });
-                if (!accounted) {
-                    stored_files.emplace_back(std::move(identity), size);
-                    storage_bytes += size;
-                }
-                if (name.ends_with(".gguf")) {
-                    ++gguf_files;
-                    const bool matches = quant.empty() || name.find(quant) != std::string::npos;
-                    if (matches) {
-                        const auto [_, inserted] = unique_matching_files.emplace(raw_name, size);
-                        if (inserted) {
-                            ++matching_gguf_files;
-                            model_bytes += size;
-                        }
-                        std::smatch split;
-                        if (std::regex_search(raw_name, split, split_pattern) && split.size() == 3) {
-                            try {
-                                const auto index = static_cast<std::size_t>(std::stoull(split[1].str()));
-                                const auto total = static_cast<std::size_t>(std::stoull(split[2].str()));
-                                split_indices.insert(index);
-                                split_expected = std::max(split_expected, total);
-                            } catch (...) {}
-                        }
-                    }
-                }
-                ec.clear();
-            }
-        }
-
-        const bool split_complete = split_expected == 0 || split_indices.size() >= split_expected;
+        const auto cache = inspect_cached_repo(root, profile, true);
+        const auto& model = cache.model;
+        const auto model_bytes = model.bytes;
+        const auto matching_gguf_files = model.files;
+        const auto split_expected = model.expected;
+        const bool split_complete = model.complete();
         const bool size_plausible = model_size_is_plausible(profile, model_bytes);
-        const bool installed = matching_gguf_files > 0 && split_complete && size_plausible;
+        const bool installed = model.installed(profile);
+        const auto storage_bytes = cache.storage_bytes;
+        const auto gguf_files = cache.gguf_files;
         roots.push_back({
-            {"root", cache_root.string()},
-            {"repo_path", root.string()},
+            {"root", native_inputs::utf8(cache_root)},
+            {"repo_path", native_inputs::utf8(root)},
             {"cached_bytes", model_bytes},
             {"expected_bytes", profile.estimated_bytes},
             {"split_complete", split_complete},
@@ -1975,7 +1959,8 @@ nlohmann::json QwenFlashRuntime::cache_status(const RuntimeModelProfile& profile
             {"installed", installed},
         });
 
-        if ((installed && !best_installed) || (installed == best_installed && model_bytes > best_cached_bytes)) {
+        if (!best_installed && (installed || model_bytes > best_cached_bytes
+            || (!best.contains("cache_root") && storage_bytes > 0))) {
             best_installed = installed;
             best_cached_bytes = model_bytes;
             best = {
@@ -1988,9 +1973,9 @@ nlohmann::json QwenFlashRuntime::cache_status(const RuntimeModelProfile& profile
                 {"split_complete", split_complete},
                 {"size_plausible", size_plausible},
                 {"expected_bytes", profile.estimated_bytes},
-                {"path", root.string()},
-                {"cache_root", cache_root.string()},
-                {"configured_root", config_.model_cache_root.string()},
+                {"path", native_inputs::utf8(root)},
+                {"cache_root", native_inputs::utf8(cache_root)},
+                {"configured_root", native_inputs::utf8(config_.model_cache_root)},
             };
         }
     }

@@ -176,8 +176,12 @@ engine action copies to the clipboard. Save that captured image explicitly and
 verify the saved file. A target-window capture is a fallback.
 
 For scripted world captures use `--capture --capture-frame 900` and verify
-terrain residency in the captured frame. The number is counted per backend
-window. It leaves the separately timed Windows parent-window smoke proof alone.
+terrain residency in the captured frame. On a fixed OpenGL orbit, compare the
+last two one-second geometry submission reports before the capture timestamp.
+Both should show the expected settled triangle and draw counts for that pose.
+Keep an early frame separately when investigating streaming latency. The number is counted per backend
+window. Standalone Windows captures use the requested window size. A parented
+smoke run also captures the docked grid on its separate schedule.
 For the OpenGL pass probe, set `EPOCH_OPENGL_PREVIEW_SAMPLE_RADIUS` to the
 camera distance divided by the body radius. `EPOCH_OPENGL_PREVIEW_SAMPLE_PIXEL`
 adds one viewport-relative `x,y` sample measured from the bottom left.
@@ -198,6 +202,12 @@ one full Editor image showing the actual authoring workflow. Wait for accepted
 terrain and texture residency; a settled frame is required even if FPS is high.
 Record cloud visibility, camera/location, simulation time and the selected view
 mode. Wireframe intentionally omits the cloud composition.
+
+For Windows/Android cloud comparisons, match the saved exploration pose bytes,
+body, seed and simulation time. An interactive Android descent documents flight.
+Its layer log reports crossings and can retain the same entry after the camera
+turns. Use a separately pinned ground or in-cloud pose for the corresponding
+comparison. Record viewport aspect and trace resolution with each image.
 
 The current OpenGL density path is owned by `opengl.cloud_volume`, using the
 `asset.cloud_volume` recipe delivered by the optional Planetary provider in a

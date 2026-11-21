@@ -3,6 +3,7 @@ from pathlib import Path
 import shutil
 import tempfile
 import unittest
+from Tests.gui.test_project_runtime_status import project_action_policy
 from Tests.support.cpp import compile_and_run
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -78,6 +79,7 @@ int main(){
 #include <string>
 #include <string_view>
 #include <vector>
+PROJECT_ACTION_POLICY
 enum class EditorMainSurface {ForestFactory,Scene,Project};
 enum class EditorCommand {None,OpenContextWindow};
 struct Context {int type=7;};
@@ -376,6 +378,7 @@ int main(){for(float width:{160.0f,320.0f,900.0f})for(bool project:{false,true})
 #include <optional>
 #include <string>
 #include <string_view>
+PROJECT_ACTION_POLICY
 enum class EditorMainSurface { Scene,PlantLab,Project };
 enum class EditorCommand { None,OpenContextWindow };
 struct Context { int type=7; };
@@ -461,6 +464,8 @@ int main() {
         self._compile_and_run(source)
 
     def _compile_and_run(self, source):
+        if 'PROJECT_ACTION_POLICY' in source:
+            source = source.replace('PROJECT_ACTION_POLICY', project_action_policy())
         # A failing CPU contract must return its generated line, not open a CRT
         # assertion dialog over the operator's running Editor.
         source = source.replace('#include <cassert>', '#include <cassert>\n#include <cstdlib>\n#undef assert\n#define assert(condition) do { if(!(condition)) std::_Exit(__LINE__); } while(false)')

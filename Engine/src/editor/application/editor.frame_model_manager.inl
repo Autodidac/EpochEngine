@@ -12,7 +12,7 @@
                 editor.aiModelManagerOpenLogged = true;
                 editor.aiModelManagerWindow.open = true;
                 editor.aiModelManagerAutoRescanPending = true;
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
                 push_editor_log(editor, "[ai-models] Model Manager opened; scheduling asynchronous read-only native rescan.");
 #endif
             }
@@ -52,7 +52,7 @@
             if (suggestionsVisible && !editor.aiSuggestionScanStarted
                 && !editor.aiSuggestionScanPending)
             {
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
                 push_editor_log(editor, "[ai-models] Model Manager: starting passive API endpoint scan.");
 #endif
                 editor.aiSuggestionScanStarted = true;
@@ -81,7 +81,7 @@
                 try
                 {
                     editor.aiSuggestedModels = editor.aiSuggestionScanPending->get();
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
                     push_editor_log(editor, "[ai-models] Model Manager: passive scan results received.");
 #endif
                     editor.aiSelectedSuggestion = 0u;
@@ -90,21 +90,21 @@
                 }
                 catch (const std::exception& ex)
                 {
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
                     push_editor_log(editor, "[ai-models] Model Manager: scan returned a C++ exception.");
 #endif
                     editor.aiSuggestionScanStatus = std::string{"Scan failed: "} + ex.what();
                 }
                 catch (...)
                 {
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
                     push_editor_log(editor, "[ai-models] Model Manager: scan returned an unknown exception.");
 #endif
                     editor.aiSuggestionScanStatus = "Scan failed: unknown endpoint error.";
                 }
                 editor.aiSuggestionScanPending.reset();
             }
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
             constexpr std::string_view managerSections[]{
                 "Models & Runtimes", "System 1 & Subagents", "Agent Routing"};
             if (editor.aiModelManagerSection >= 3) editor.aiModelManagerSection = 0;
@@ -1272,7 +1272,7 @@
                         30.0f, 6.0f, managerActionLayout))
                 {
                     ++editor.aiChatUserModelSelectionRevision;
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
                         const bool allowed = true;
 #endif
                     if (allowed)
@@ -1321,7 +1321,7 @@
                     }
                     else
                     {
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
                         const bool allowed = true;
 #endif
                         const bool accepted = allowed && epochengine::ai::select_direct_runtime(
@@ -1386,7 +1386,7 @@
         else if (editor.aiModelManagerOpenLogged)
         {
             editor.aiModelManagerOpenLogged = false;
-#if EPOCH_EDITION_PUBLIC
+#if !EPOCH_SOURCE_SELF_CODING
             push_editor_log(editor, "[ai-models] Model Manager closed; passive scan may still finish.");
 #endif
         }

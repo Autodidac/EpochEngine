@@ -37,18 +37,7 @@ $repo = [System.IO.Path]::GetFullPath($RepoRoot)
 . (Join-Path $repo 'Tools\build\epoch_package_layout.ps1')
 $edition = Get-EpochSourceEdition -RepoRoot $repo
 $packageRoot = Join-Path $repo 'Artifacts\Packages'
-$versionScript = Join-Path $repo 'Tools\build\get_epoch_version.ps1'
-Require-Path -Path $versionScript -Label 'Epoch version reader'
-$sourceVersion = (& $versionScript -VersionModule (Join-Path $repo 'Engine\modules\epoch.version.ixx')).Trim()
-if ([string]::IsNullOrWhiteSpace($Version)) {
-    $Version = $sourceVersion
-}
-elseif ($Version -cne $sourceVersion) {
-    throw "Requested release version $Version does not match source version $sourceVersion."
-}
-if ($Version -notmatch '^\d+\.\d+\.\d+$') {
-    throw 'Release version must contain only three numeric components.'
-}
+$Version = Get-EpochRuntimePackageVersion -RepoRoot $repo -Platform 'windows-x64' -RequestedVersion $Version
 $OutputRoot = Get-EpochPackageOutputRoot -RepoRoot $repo -Edition $edition.Directory -Version $Version -OutputRoot $OutputRoot
 
 $releaseOutput = if ([string]::IsNullOrWhiteSpace($ReleaseOutputRoot)) {
@@ -110,7 +99,6 @@ if ([string]::IsNullOrWhiteSpace($crtPayload)) {
 Require-Path -Path $crtPayload -Label 'VC143 CRT payload'
 
 Remove-EpochPackageItem -LiteralPath $stage -PackageRoot $packageRoot -Recurse
-Remove-EpochPackageItem -LiteralPath $zip -PackageRoot $packageRoot
 New-Item -ItemType Directory -Path $stage -Force | Out-Null
 
 Copy-Item -LiteralPath (Join-Path $releaseOutput 'EpochEditor.exe') -Destination $stage -Force
@@ -119,16 +107,16 @@ if (Test-Path -LiteralPath (Join-Path $vcpkgInstalled 'bin')) {
 }
 Copy-FileSet -Source $releaseOutput -Destination $stage
 Copy-FileSet -Source $crtPayload -Destination $stage
+if ($edition.Directory -ceq 'public' -or $edition.OwnerRuntime) {
+    & python -B (Join-Path $repo 'Tools/build/audit_epoch_runtime_provenance.py') --windows-runtime $stage
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Windows runtime contains an unapproved build path. Check the executable and dependency inputs before packaging.'
+    }
+}
 Copy-Item -LiteralPath (Join-Path $repo 'README.md') -Destination $stage -Force
 Copy-Item -LiteralPath (Join-Path $repo 'LICENSE') -Destination $stage -Force
 Copy-Item -LiteralPath $assets -Destination (Join-Path $stage 'assets') -Recurse -Force
-foreach ($shader in 'clouds.vert.spv', 'clouds.frag.spv') {
-    $relative = "assets\vulkan\shaders\$shader"
-    $builtShader = Join-Path $releaseOutput $relative
-    if (Test-Path -LiteralPath $builtShader -PathType Leaf) {
-        Copy-Item -LiteralPath $builtShader -Destination (Join-Path $stage $relative) -Force
-    }
-}
+Copy-EpochBuiltVulkanShaders -RuntimeRoot $releaseOutput -Stage $stage
 & $noticeScript -RepoRoot $repo -VcpkgInstalledRoot $vcpkgInstalled -Destination $stage
 
 $versionOut = Join-Path $verifyLogs 'version_stdout.txt'
@@ -162,13 +150,7 @@ if (Test-Path -LiteralPath $versionErr) {
     $versionText += Get-Content -LiteralPath $versionErr -Raw
 }
 Write-Host $versionText.Trim()
-if ($versionText -notmatch [regex]::Escape("Epoch v$Version")) {
-    throw "Staged Windows package reports the wrong version. Expected Epoch v$Version."
-}
-
-if ($versionText -notmatch ('(?:^|\s)edition=' + [regex]::Escape($edition.Id) + '(?:\s|$)')) {
-    throw 'Staged binary edition does not match its physical source edition.'
-}
+Assert-EpochRuntimeVersionOutput -Text $versionText -Version $Version -Edition $edition
 Write-EpochRuntimeDistribution -Stage $stage -Edition $edition.Id -Version $Version
 
 $contractData = Join-Path $verifyLogs 'engine-contracts'
@@ -196,6 +178,8 @@ if ($contractProcess.ExitCode -ne 0 -or
 
 Move-EpochPackageValidationEvidence -Stage $stage -VerifyLogs $verifyLogs -PackageRoot $packageRoot
 Assert-EpochRuntimeHasNoModelWeights -Stage $stage
+Update-EpochRuntimeChecksums -OutputRoot $OutputRoot -Edition $edition.Id -Version $Version -Platform windows-x64 -Withdraw
+Remove-EpochPackageItem -LiteralPath $zip -PackageRoot $packageRoot
 Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip -Force
 
 $verifyRoot = Join-Path $OutputRoot "verify_$stageName"
@@ -215,7 +199,7 @@ foreach ($generatedRoot in @('logs', 'cache', 'build', 'Artifacts')) {
         throw "Release archive contains a generated runtime directory: $generatedRoot"
     }
 }
-if ($edition.Directory -ceq 'public') {
+if ($edition.Directory -ceq 'public' -or $edition.OwnerRuntime) {
     & python -B (Join-Path $repo 'Tools/build/audit_epoch_runtime_provenance.py') --windows-runtime $verifyRoot
     if ($LASTEXITCODE -ne 0) {
         throw 'Windows package provenance audit failed. No artifact is admitted for upload.'
@@ -225,10 +209,7 @@ Remove-EpochPackageItem -LiteralPath $verifyRoot -PackageRoot $packageRoot -Recu
 
 $hash = Get-FileHash -Algorithm SHA256 -LiteralPath $zip
 $checksumLine = ('{0}  {1}' -f $hash.Hash.ToLowerInvariant(), (Split-Path -Leaf $hash.Path)) + "`n"
-[System.IO.File]::WriteAllText($checksumFile, $checksumLine, [System.Text.Encoding]::ASCII)
-
 Get-Item -LiteralPath $zip | Select-Object FullName, Length
-Get-Content -LiteralPath $checksumFile
 [System.IO.File]::WriteAllText(($zip + '.sha256'), $checksumLine, [System.Text.Encoding]::ASCII)
 $validation = [ordered]@{
     schema = 'epoch.release_validation.v1'
@@ -243,4 +224,6 @@ $validation = [ordered]@{
 }
 [System.IO.File]::WriteAllText(($zip + '.build-validation.json'),
     (($validation | ConvertTo-Json -Depth 4) + "`n"), [System.Text.UTF8Encoding]::new($false))
+Update-EpochRuntimeChecksums -OutputRoot $OutputRoot -Edition $edition.Id -Version $Version -Platform windows-x64
+Get-Content -LiteralPath $checksumFile
 Write-Host "package_inventory.result=pass artifact=$stageName.zip sha256=$($hash.Hash.ToLowerInvariant())"
