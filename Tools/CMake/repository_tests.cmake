@@ -10,15 +10,10 @@ find_package(Python3 COMPONENTS Interpreter QUIET)
 if(Python3_Interpreter_FOUND)
     add_test(NAME epoch_python_contracts
         COMMAND "${Python3_EXECUTABLE}" -X utf8 "${_epoch_repository_root}/Tools/run_tests.py" --verbose)
-    # Nested Windows fixtures configure MSVC graphs and compile both Debug and
-    # Release. Keep their own process deadlines and allow headroom for the full
-    # suite after discovering every installed Visual Studio edition.
-    set(_epoch_python_timeout 1200)
-    if(WIN32)
-        set(_epoch_python_timeout 2400)
-    endif()
+    # The full Python suite compiles nested native fixtures on both Linux and
+    # Windows. Each fixture keeps its own subprocess deadlines.
     set_tests_properties(epoch_python_contracts PROPERTIES
-        WORKING_DIRECTORY "${_epoch_repository_root}" TIMEOUT "${_epoch_python_timeout}")
+        WORKING_DIRECTORY "${_epoch_repository_root}" TIMEOUT 2400)
 endif()
 
 foreach(_epoch_fixture IN ITEMS
